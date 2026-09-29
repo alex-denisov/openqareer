@@ -64,7 +64,15 @@ export function readLinkedinPoolExecutorConfig(
   if (mode !== 'warmup' && mode !== 'active_search' && mode !== 'scout_pool') {
     throw new Error('linkedin_pool_executor_mode_invalid');
   }
+  if (mode !== 'warmup' && !isHighVolumeAllowed(environment)) {
+    throw new Error('linkedin_pool_executor_high_volume_not_allowed');
+  }
   return { enabled: true, accountId, timezone, mode };
+}
+
+/** Режимы выше `warmup` (150–500 страниц в сутки) включаются отдельным явным флагом владельца. */
+function isHighVolumeAllowed(environment: NodeJS.ProcessEnv): boolean {
+  return environment.OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME?.trim().toLowerCase() === 'true';
 }
 
 export function isLinkedinExecutorWithinHours(now: Date, timezone: string): boolean {

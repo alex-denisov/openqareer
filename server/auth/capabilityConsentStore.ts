@@ -41,8 +41,10 @@ export function ensureCapabilityConsentsSchema(database: DatabaseSync): void {
   database.exec(CAPABILITY_CONSENTS_SCHEMA);
 }
 
-function mapRow(row: CapabilityConsentRow): CapabilityConsentRecord {
-  const cap = isCandidateCapability(row.capability) ? row.capability : ('profile_activity' as CandidateCapability);
+/** Строка с неизвестной возможностью (другая версия кода) не выдаётся за другую. */
+function mapRow(row: CapabilityConsentRow): CapabilityConsentRecord | null {
+  const cap = row.capability;
+  if (!isCandidateCapability(cap)) return null;
   return {
     id: row.id,
     userId: row.user_id,
@@ -143,7 +145,7 @@ export function listCapabilityConsents(
           ORDER BY granted_at ASC`,
       )
       .all(userId, capability) as unknown as readonly CapabilityConsentRow[];
-    return rows.map(mapRow);
+    return rows.map(mapRow).filter((record): record is CapabilityConsentRecord => record !== null);
   }
   const rows = database
     .prepare(
@@ -153,7 +155,7 @@ export function listCapabilityConsents(
         ORDER BY granted_at ASC`,
     )
     .all(userId) as unknown as readonly CapabilityConsentRow[];
-  return rows.map(mapRow);
+  return rows.map(mapRow).filter((record): record is CapabilityConsentRecord => record !== null);
 }
 
 export function deleteCapabilityConsentsForUser(database: DatabaseSync, userId: string): number {
@@ -161,6 +163,21 @@ export function deleteCapabilityConsentsForUser(database: DatabaseSync, userId: 
   const result = database
     .prepare('DELETE FROM candidate_capability_consents WHERE user_id = ?')
     .run(userId);
+  return Number(result.changes);
+}
+
+/** Самоудаление: у кандидата есть строка в users; запись под id кандидата тоже уходит. */
+export function deleteCapabilityConsentsForCandidate(
+  database: DatabaseSync,
+  candidateId: string,
+): number {
+  ensureCapabilityConsentsSchema(database);
+  const result = database
+    .prepare(
+      `DELETE FROM candidate_capability_consents
+        WHERE user_id = ? OR user_id IN (SELECT id FROM users WHERE candidate_id = ?)`,
+    )
+    .run(candidateId, candidateId);
   return Number(result.changes);
 }
 
@@ -228,6 +245,10 @@ export class SqliteCapabilityConsentStore {
 
   listConsents(userId: string, capability?: CandidateCapability): readonly CapabilityConsentRecord[] {
     return listCapabilityConsents(this.database, userId, capability);
+  }
+
+  deleteForCandidate(candidateId: string): number {
+    return deleteCapabilityConsentsForCandidate(this.database, candidateId);
   }
 
   deleteForUser(userId: string): number {

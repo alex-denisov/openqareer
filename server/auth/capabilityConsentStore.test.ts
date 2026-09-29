@@ -211,4 +211,32 @@ describe('SqliteCapabilityConsentStore', () => {
     expect(store.listConsents('usr-active-old')).toHaveLength(1);
     expect(store.listConsents('usr-recent')).toHaveLength(1);
   });
+
+  it('самоудаление кандидата уносит согласия и под id пользователя, и под id кандидата', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE users (id TEXT PRIMARY KEY, candidate_id TEXT)');
+    db.prepare('INSERT INTO users (id, candidate_id) VALUES (?, ?)').run('usr-9', 'cand-9');
+    const store = new SqliteCapabilityConsentStore(db);
+    store.recordConsent({ userId: 'usr-9', capability: 'profile_activity', versionId: 'v1' });
+    store.recordConsent({ userId: 'cand-9', capability: 'digital_footprint', versionId: 'v1' });
+    store.recordConsent({ userId: 'usr-other', capability: 'profile_activity', versionId: 'v1' });
+
+    expect(store.deleteForCandidate('cand-9')).toBe(2);
+    expect(store.listConsents('usr-9')).toHaveLength(0);
+    expect(store.listConsents('cand-9')).toHaveLength(0);
+    expect(store.listConsents('usr-other')).toHaveLength(1);
+  });
+
+  it('строка с неизвестной возможностью не выдаётся за другую', () => {
+    const db = new DatabaseSync(':memory:');
+    const store = new SqliteCapabilityConsentStore(db);
+    store.recordConsent({ userId: 'usr-1', capability: 'profile_activity', versionId: 'v1' });
+    db.prepare(
+      `INSERT INTO candidate_capability_consents (id, user_id, capability, version_id, granted_at, revoked_at)
+       VALUES ('x', 'usr-1', 'future_capability', 'v9', '2026-09-29T00:00:00.000Z', NULL)`,
+    ).run();
+    expect(store.listConsents('usr-1').map((record) => record.capability)).toEqual([
+      'profile_activity',
+    ]);
+  });
 });

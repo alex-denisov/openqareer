@@ -160,6 +160,23 @@ describe('LinkedIn pool executor controls', () => {
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'invalid_mode',
       }),
     ).toThrow('linkedin_pool_executor_mode_invalid');
+    const highVolumeEnvironment = {
+      OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
+      OPENQAREER_LINKEDIN_POOL_EXECUTOR_ACCOUNT_ID: '11111111-1111-4111-8111-111111111111',
+      OPENQAREER_LINKEDIN_POOL_EXECUTOR_TIMEZONE: 'Europe/Moscow',
+      OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
+      OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
+      OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'scout_pool',
+    };
+    expect(() => readLinkedinPoolExecutorConfig(highVolumeEnvironment)).toThrow(
+      'linkedin_pool_executor_high_volume_not_allowed',
+    );
+    expect(
+      readLinkedinPoolExecutorConfig({
+        ...highVolumeEnvironment,
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME: 'true',
+      }),
+    ).toMatchObject({ enabled: true, mode: 'scout_pool' });
     expect(
       readLinkedinPoolExecutorConfig({
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_ENABLED: 'true',
@@ -182,6 +199,7 @@ describe('LinkedIn pool executor controls', () => {
         OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
         OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'active_search',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME: 'true',
       }),
     ).toEqual({
       enabled: true,
@@ -197,6 +215,7 @@ describe('LinkedIn pool executor controls', () => {
         OPENQAREER_TELEGRAM_BOT_TOKEN: 'token',
         OPENQAREER_TELEGRAM_OWNER_CHAT_ID: '1',
         OPENQAREER_LINKEDIN_POOL_EXECUTOR_MODE: 'scout_pool',
+        OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME: 'true',
       }),
     ).toEqual({
       enabled: true,

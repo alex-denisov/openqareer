@@ -58,9 +58,10 @@ export function savePoolCompanyRecruiter(
   const db = pool.getDatabase();
   ensureCompanyRecruitersSchema(db);
   const currentTime = new Date().toISOString();
-  const observedAt = recruiter.observedAt && !Number.isNaN(Date.parse(recruiter.observedAt))
-    ? recruiter.observedAt > currentTime ? currentTime : recruiter.observedAt
-    : currentTime;
+  const parsedObservedAt = recruiter.observedAt ? Date.parse(recruiter.observedAt) : Number.NaN;
+  const observedAt = Number.isNaN(parsedObservedAt)
+    ? currentTime
+    : new Date(Math.min(parsedObservedAt, Date.parse(currentTime))).toISOString();
   const existing = db.prepare(`
     SELECT id, observed_at FROM linkedin_pool_company_recruiters
     WHERE company_name = ? COLLATE NOCASE AND linkedin_url = ?

@@ -58,27 +58,9 @@ function validateConsentSubmission(
   return { versionId: parsed.data.versionId };
 }
 
+/** Согласие даёт только вошедший пользователь: токен кандидата без строки в users не годится. */
 function resolveUserId(deps: RouteDeps, request: FastifyRequest): string | null {
-  const principal = authenticateSession(request, deps.authService, deps.config);
-  if (principal?.userId) {
-    return principal.userId;
-  }
-  const authorization = request.headers.authorization;
-  if (authorization?.startsWith('Bearer ')) {
-    const token = authorization.slice('Bearer '.length).trim();
-    const candidate = deps.candidateStore.authenticate(token);
-    if (candidate) {
-      if (deps.capabilityConsentStore) {
-        const db = deps.capabilityConsentStore.getDatabase();
-        const row = db
-          .prepare('SELECT id FROM users WHERE candidate_id = ?')
-          .get(candidate.id) as { id: string } | undefined;
-        if (row?.id) return row.id;
-      }
-      return candidate.id;
-    }
-  }
-  return null;
+  return authenticateSession(request, deps.authService, deps.config)?.userId ?? null;
 }
 
 function resolveCapability(request: FastifyRequest, reply: FastifyReply): CandidateCapability | null {
@@ -219,6 +201,15 @@ async function handleDeleteConsent(
 export function registerCapabilityConsentRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.get('/api/v1/me/consents', withDeps(deps, handleListConsents));
   app.get('/api/v1/me/consents/:capability', withDeps(deps, handleGetConsent));
-  app.post('/api/v1/me/consents/:capability', withDeps(deps, handlePostConsent));
-  app.delete('/api/v1/me/consents/:capability', withDeps(deps, handleDeleteConsent));
+  const mutationLimit = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
+  app.post(
+    '/api/v1/me/consents/:capability',
+    mutationLimit,
+    withDeps(deps, handlePostConsent),
+  );
+  app.delete(
+    '/api/v1/me/consents/:capability',
+    mutationLimit,
+    withDeps(deps, handleDeleteConsent),
+  );
 }

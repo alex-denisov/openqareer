@@ -236,6 +236,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
   candidateStore.deleteCandidate(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
   recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
