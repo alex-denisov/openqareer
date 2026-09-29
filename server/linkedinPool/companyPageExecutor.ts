@@ -208,7 +208,7 @@ export class LinkedinPoolCompanyPageExecutor {
     if (!companyName) return report('no_target');
 
     if (dailyUsage.pageCount > 0) {
-      await this.waitBetweenPages('read');
+      await this.waitBetweenPages(detectCadencePageKind(linkedinCompanySearchUrl(companyName)));
       if (this.stopped) return report('stopped');
       const midDecision = (this.decideFn ?? decide)(plan, this.now(), dailyUsage.pageCount, config.timezone);
       if (midDecision.status !== 'run') return report(midDecision.status);
@@ -271,13 +271,13 @@ export class LinkedinPoolCompanyPageExecutor {
     const companyUrl = parseLinkedinCompanySearchPageHtml(search.html ?? '', companyName);
     if (!companyUrl) return report('processed', 1, 0);
 
-    await this.waitBetweenPages('skim');
+    const peopleUrl = `${companyUrl}/people/`;
+    await this.waitBetweenPages(detectCadencePageKind(peopleUrl));
     if (this.stopped) return report('stopped', 1, 0);
     if (!this.config.enabled) return report('disabled', 1, 0);
     const midDecision = (this.decideFn ?? decide)(plan, this.now(), pagesBefore + 1, this.config.timezone);
     if (midDecision.status !== 'run') return report(midDecision.status, 1, 0);
 
-    const peopleUrl = `${companyUrl}/people/`;
     const people = await this.readPage(page, peopleUrl, 'company_people', hash);
     if (people.status !== 'ready') return this.handlePageFailure(people, 2);
     const candidates = parseLinkedinCompanyPeoplePageHtml(people.html ?? '');

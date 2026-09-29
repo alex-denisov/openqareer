@@ -247,7 +247,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     expect(browserFactory).not.toHaveBeenCalled();
   });
 
-  it('reads one company, waits 20–60 seconds between pages, then stores only recruiter fields', async () => {
+  it('reads one company, waits a page-kind dwell (read 9–18 s before the people list), then stores only recruiter fields', async () => {
     const repository = createRepository();
     const account = await createReadyAccount(repository, 'pool-one@example.test');
     seedCompany(repository);
@@ -273,7 +273,7 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     expect(fake.navigated).toHaveLength(2);
     expect(fake.navigated[0]).toContain('/search/results/companies/');
     expect(fake.navigated[1]).toBe('https://www.linkedin.com/company/northwind-group/people/');
-    expect(wait).toHaveBeenCalledWith(5_500, expect.any(AbortSignal));
+    expect(wait).toHaveBeenCalledWith(13_500, expect.any(AbortSignal));
     const rows = repository
       .getDatabase()
       .prepare('SELECT company_name, full_name, role_title, linkedin_url FROM linkedin_pool_company_recruiters')

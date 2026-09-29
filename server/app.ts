@@ -44,7 +44,6 @@ import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
 import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
-
 interface BuildAppOptions {
   config: ServerConfig;
   coachProvider: CoachProvider;
@@ -72,7 +71,6 @@ interface BuildAppOptions {
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
-
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
   /**
@@ -245,19 +243,10 @@ function createUploadStaging(): UploadStaging {
   });
 }
 
-function assembleRouteDeps(options: BuildAppOptions, services: AppServices): RouteDeps {
+/** Репозитории кандидата: переданные снаружи или созданные на базе сервера. */
+function createCandidateRepositories(options: BuildAppOptions) {
   const { config } = options;
   return {
-    config,
-    authService: options.authService,
-    candidateStore: options.candidateStore,
-    uploadStaging: createUploadStaging(),
-    coachProvider: options.coachProvider,
-    importProfile: options.importProfile ?? importPublicProfileUrl,
-    resumeStructurer: options.resumeStructurer,
-    roleNamer: options.roleNamer,
-    campaignRoleModel: options.campaignRoleModel,
-    coverLetterWriter: options.coverLetterWriter,
     recruiterContactsRepo:
       options.recruiterContactsRepo ??
       new SqliteRecruiterContactsRepository({ databasePath: config.databasePath }),
@@ -265,16 +254,51 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
       options.candidateReputationRepo ??
       new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
     searchConsentRepo:
-      options.searchConsentRepo ?? new SqliteSearchConsentRepository({ databasePath: config.databasePath }),
+      options.searchConsentRepo ??
+      new SqliteSearchConsentRepository({ databasePath: config.databasePath }),
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
-    ...(options.linkedinPool ? { linkedinPool: options.linkedinPool } : {}),
+  };
+}
+
+function assembleRouteDeps(options: BuildAppOptions, services: AppServices): RouteDeps {
+  const {
+    config,
+    authService,
+    candidateStore,
+    coachProvider,
+    importProfile = importPublicProfileUrl,
+    resumeStructurer,
+    roleNamer,
+    campaignRoleModel,
+    coverLetterWriter,
+    linkedinPool,
+    searchVacancies = searchHhVacancies,
+    hhCrawlSettings,
+    runtimeMemory,
+    matchedPoolPrecompute,
+  } = options;
+
+  return {
+    config,
+    authService,
+    candidateStore,
+    uploadStaging: createUploadStaging(),
+    coachProvider,
+    importProfile,
+    resumeStructurer,
+    roleNamer,
+    campaignRoleModel,
+    coverLetterWriter,
+    ...createCandidateRepositories(options),
+    ...(linkedinPool ? { linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
-    searchVacancies: options.searchVacancies ?? searchHhVacancies,
-    ...(options.hhCrawlSettings ? { hhCrawlSettings: options.hhCrawlSettings } : {}),
-    ...(options.runtimeMemory ? { runtimeMemory: options.runtimeMemory } : {}),
-    ...(options.matchedPoolPrecompute ? { matchedPoolPrecompute: options.matchedPoolPrecompute } : {}),
+
+    searchVacancies,
+    ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
+    ...(runtimeMemory ? { runtimeMemory } : {}),
+    ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
     ...services,
   };
 }
