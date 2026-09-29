@@ -130,6 +130,19 @@ export async function saveCandidateCampaign(
   return readData<CampaignMetaView>(response);
 }
 
+export async function updateCampaignRoles(
+  roles: readonly (string | { readonly id: string; readonly title: string })[],
+  currentCampaign?: CampaignMetaView,
+  signal?: AbortSignal,
+): Promise<CampaignMetaView> {
+  const base = currentCampaign ?? (await getCandidateCampaign(signal));
+  return saveCandidateCampaign({
+    roles,
+    regions: base.regions.value,
+    remoteOnly: base.remoteOnly ?? false,
+  });
+}
+
 export async function getCandidateCampaign(signal?: AbortSignal): Promise<CampaignMetaView> {
   const response = await apiFetch('/api/v1/candidate/campaign', {
     signal: apiRequestSignal(signal, API_READ_TIMEOUT_MS),

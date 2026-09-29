@@ -51,8 +51,17 @@ export function useVacancyCampaignActions(
     save([...roles, role.title], regions, remoteOnly, role.title);
   const addRegion = (region: CandidateRegion) => save(roles, [...regions, region], remoteOnly);
   const toggleRemote = () => save(roles, regions, !remoteOnly);
+  const addCustomRole = (title: string): Promise<boolean> => {
+    const trimmed = title.trim();
+    if (!trimmed || roles.length >= 10 || roles.includes(trimmed)) return Promise.resolve(false);
+    return save([...roles, trimmed], regions, remoteOnly, trimmed);
+  };
+  const removeRole = (title: string): Promise<boolean> => {
+    const nextRoles = roles.filter((r) => r !== title);
+    return save(nextRoles, regions, remoteOnly);
+  };
 
-  return { saving, error, addAdjacentRole, addRegion, toggleRemote };
+  return { saving, error, addAdjacentRole, addRegion, toggleRemote, addCustomRole, removeRole };
 }
 
 function roleChoices(

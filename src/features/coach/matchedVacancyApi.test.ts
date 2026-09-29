@@ -32,3 +32,37 @@ describe('saveCandidateCampaign', () => {
     });
   });
 });
+
+describe('updateCampaignRoles', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('updates campaign roles using base campaign regions and remoteOnly', async () => {
+    const { updateCampaignRoles } = await import('./matchedVacancyApi');
+    const baseCampaign = {
+      roles: { value: ['VP Tech'], origin: 'explicit' as const },
+      regions: { value: ['eu'], origin: 'explicit' as const },
+      remoteOnly: true,
+    };
+    const responseData = {
+      roles: { value: ['VP Tech', 'Head of Product'], origin: 'explicit' },
+      regions: { value: ['eu'], origin: 'explicit' },
+      remoteOnly: true,
+    };
+    const spy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: responseData }), { status: 200 }),
+    );
+
+    const updated = await updateCampaignRoles(['VP Tech', 'Head of Product'], baseCampaign);
+    expect(updated).toEqual(responseData);
+    expect(spy).toHaveBeenCalledWith('/api/v1/candidate/campaign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roles: ['VP Tech', 'Head of Product'],
+        regions: ['eu'],
+        remoteOnly: true,
+      }),
+    });
+  });
+});
+
