@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Check } from '@phosphor-icons/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Info, List, MagnifyingGlass, MapTrifold, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
+import type { VacancySubscription } from '../coach/coachApi';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
-import { vacancyAge } from './vacancyFilters';
-import { VacancyDetailPanel } from './VacancyDetailPanel';
+import { VacancyRow } from './VacancyRow';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
@@ -16,28 +16,20 @@ import { PageHeader } from '../shell/PageHeader';
 import type { PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
+import { pluralRu } from '../../../shared/pluralRu';
+import { VacancyMapView } from './VacancyMapView';
+import { SavedSearchesPanel } from './SavedSearchesPanel';
 import {
   VacanciesFilters,
-  VacanciesList,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
 
-const EMPTY_STATE: VacanciesScreenState = { roles: [], regions: [], remoteOnly: false };
-
-/**
- * «Вакансии» (B248/B250) — верх экрана и список пула.
- *
- * Роль кампании и её гипотезы, уровень кандидата и счётчик по каждой роли уже
- * едут с первой страницей пула (B247, срез 2); экран их только показывает и
- * фильтрует список тем же признаком `titleMatchesRole`, что и сервер, чтобы
- * баннер и список не расходились в счёте.
- */
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
   readonly onNavigate: (destination: PathDestination) => void;
 }
 
-interface VacanciesScreenProps {
+export interface VacanciesScreenProps {
   readonly matched: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly campaign?: CampaignMetaView;
@@ -47,7 +39,6 @@ interface VacanciesScreenProps {
   readonly failureSourceLabel?: string;
   readonly onRetry?: () => void;
   readonly now?: string;
-  /** B248 §2 — тот же индикатор пути, что и на остальных экранах кампании. */
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
   readonly onMarkAlreadyApplied?: (
@@ -61,9 +52,9 @@ interface VacanciesScreenProps {
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
-  /** B297: окно сетевого контакта. Без обработчика вакансия остаётся тупиком —
-   * смотреть контакты и писать было негде. */
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
+  readonly subscriptions?: readonly VacancySubscription[];
+  readonly onRefreshSubscriptions?: () => Promise<void>;
 }
 
 function extractBoardRegions(campaign?: CampaignMetaView) {
@@ -79,6 +70,13 @@ function extractBoardRegions(campaign?: CampaignMetaView) {
   };
 }
 
+function initialSelectedId(matched: readonly MatchedVacancyItem[]): string | undefined {
+  if (typeof window !== 'undefined' && window.innerWidth > 640) {
+    return matched[0]?.cluster.id;
+  }
+  return undefined;
+}
+
 function useVacanciesScreenBoard(
   matched: readonly MatchedVacancyItem[],
   campaign: CampaignMetaView | undefined,
@@ -86,26 +84,32 @@ function useVacanciesScreenBoard(
 ) {
   const { roles, regions, suggestedRegions } = extractBoardRegions(campaign);
   const [state, setState] = useState<VacanciesScreenState>({
-    ...EMPTY_STATE,
+    roles: [],
     regions,
     remoteOnly: campaign?.remoteOnly ?? false,
   });
-  const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
-  const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
+    initialSelectedId(matched),
+  );
+
+  useEffect(() => {
+    if (selectedId === undefined && matched.length > 0) {
+      setSelectedId(initialSelectedId(matched));
+    }
+  }, [matched, selectedId]);
 
   useEffect(() => {
     if (!campaign) return;
     const effectiveRegions = extractBoardRegions(campaign).regions;
-    setState((current) => ({
+    setState((current: VacanciesScreenState) => ({
       ...current,
-      roles: current.roles.filter((role) => campaign.roles.value.includes(role)),
+      roles: current.roles.filter((role: string) => campaign.roles.value.includes(role)),
       regions: current.regions.length > 0 ? current.regions : effectiveRegions,
       remoteOnly: campaign?.remoteOnly ?? false,
     }));
   }, [campaign]);
 
   const filtered = useMemo(() => filterByScreenState(matched, state, now), [matched, state, now]);
-  const effectiveId = selectedId ?? filtered[0]?.cluster.id;
 
   return {
     roles,
@@ -114,20 +118,344 @@ function useVacanciesScreenBoard(
     state,
     setState,
     filtered,
-    effectiveId,
-    selectedItem: filtered.find((item) => item.cluster.id === effectiveId),
+    selectedId,
+    setSelectedId,
+    toggleSelect: (id: string) => {
+      setSelectedId((prev) => (prev === id ? undefined : id));
+    },
     roleHypotheses: campaign?.roleHypotheses ?? [],
     primaryRole: state.roles[0] ?? roles[0],
-    mobileDetailOpen,
-    onSelect: (id: string) => {
-      setSelectedId(id);
-      setMobileDetailOpen(true);
-    },
-    onBack: () => setMobileDetailOpen(false),
   };
 }
 
-export function VacanciesScreen(input: VacanciesScreenProps) {
+function ViewSwitch({
+  viewMode,
+  onChange,
+}: {
+  readonly viewMode: 'list' | 'map';
+  readonly onChange: (mode: 'list' | 'map') => void;
+}) {
+  return (
+    <div className="view-switch" role="tablist" aria-label="Режим просмотра">
+      <button
+        type="button"
+        className={viewMode === 'list' ? 'is-active' : ''}
+        role="tab"
+        aria-selected={viewMode === 'list'}
+        onClick={() => onChange('list')}
+      >
+        <List size={16} aria-hidden="true" />
+        <span>Список</span>
+      </button>
+      <button
+        type="button"
+        className={viewMode === 'map' ? 'is-active' : ''}
+        role="tab"
+        aria-selected={viewMode === 'map'}
+        onClick={() => onChange('map')}
+      >
+        <MapTrifold size={16} aria-hidden="true" />
+        <span>Карта</span>
+      </button>
+    </div>
+  );
+}
+
+function VacanciesSkeletonStack() {
+  return (
+    <div className="skeleton-stack" aria-live="polite" aria-busy="true">
+      <p className="list-hint">Загружаем подборку по кампании…</p>
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+      <div className="skeleton-row" />
+    </div>
+  );
+}
+
+function VacanciesErrorState({
+  failureSourceLabel,
+  onRetry,
+}: {
+  readonly failureSourceLabel?: string;
+  readonly onRetry?: () => void;
+}) {
+  return (
+    <div className="state-panel is-error vacancies-state" role="alert">
+      <span className="state-icon" aria-hidden="true">
+        <Warning size={20} />
+      </span>
+      <h3>Не удалось загрузить подборку</h3>
+      <p>
+        Не удалось загрузить общий пул вакансий. {failureSourceLabel ?? 'Площадка hh.ru не ответила.'} Роль и
+        география сохранены.
+      </p>
+      {onRetry ? (
+        <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
+          Повторить
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VacanciesEmptyPoolState({
+  primaryRole,
+  onRetry,
+}: {
+  readonly primaryRole?: string;
+  readonly onRetry?: () => void;
+}) {
+  return (
+    <div className="state-panel vacancies-state">
+      <span className="state-icon" aria-hidden="true">
+        <MagnifyingGlass size={20} />
+      </span>
+      <h3>{primaryRole ? `По роли ${primaryRole} пока нет вакансий` : 'Для подбора не выбрана роль'}</h3>
+      <p>
+        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить регионы или
+        включить удалённый поиск.
+      </p>
+      {onRetry ? (
+        <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
+          Обновить подбор
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function VacanciesEmptyFilterState({
+  totalCount,
+  onReset,
+}: {
+  readonly totalCount: number;
+  readonly onReset: () => void;
+}) {
+  return (
+    <div className="state-panel vacancies-filter-empty">
+      <span className="state-icon" aria-hidden="true">
+        <MagnifyingGlass size={20} />
+      </span>
+      <h3>По этим фильтрам ничего нет</h3>
+      <p>
+        В пуле {totalCount} вакансий — под текущие фильтры не подошла ни одна. Ослабьте фильтры или
+        сохраните запрос, чтобы получать новые совпадения по расписанию.
+      </p>
+      <button
+        type="button"
+        className="btn btn-secondary vacancies-btn vacancies-reset"
+        onClick={onReset}
+      >
+        Сбросить фильтры
+      </button>
+    </div>
+  );
+}
+
+interface ListContentProps {
+  readonly items: readonly MatchedVacancyItem[];
+  readonly total: number;
+  readonly now: string;
+  readonly selectedId?: string;
+  readonly onToggleSelect: (id: string) => void;
+  readonly applications?: VacanciesScreenProps['applications'];
+  readonly onMarkAlreadyApplied?: VacanciesScreenProps['onMarkAlreadyApplied'];
+  readonly onScheduleInterview?: VacanciesScreenProps['onScheduleInterview'];
+  readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenResponses?: () => void;
+  readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
+}
+
+function VacanciesListHeader({ totalCount }: { readonly totalCount: number }) {
+  return (
+    <div className="list-head vacancies-list-head">
+      <span className="list-hint vacancies-list-hint">
+        {`${pluralRu(totalCount, [
+          'вакансия',
+          'вакансии',
+          'вакансий',
+        ])} · показаны совпадающие по роли и уровню`}
+      </span>
+      <span className="fit-legend">
+        Совпадение: роль · уровень · география
+        <button
+          type="button"
+          className="info-btn"
+          aria-label="Как устроен порядок и что значит «в базе»"
+          title="Порядок задаёт сервер: сначала роль, уровень и география, затем совпавшие требования; фантомные и сомнительные вакансии ниже, с причиной. «В базе» — дни с первого сбора записи, а не дата публикации."
+        >
+          <Info size={16} aria-hidden="true" />
+        </button>
+      </span>
+    </div>
+  );
+}
+
+function VacanciesListContent(props: ListContentProps) {
+  const {
+    items,
+    total,
+    now,
+    selectedId,
+    onToggleSelect,
+    applications,
+    onMarkAlreadyApplied,
+    onScheduleInterview,
+    onOpenNetworking,
+    onOpenResponses,
+    onAddToProfile,
+  } = props;
+
+  return (
+    <div className="vacancies-list-container">
+      <VacanciesListHeader totalCount={total || items.length} />
+
+      <ul className="vac-list">
+        {items.map((item) => (
+          <VacancyRow
+            key={item.cluster.id}
+            item={item}
+            now={now}
+            isSelected={selectedId === item.cluster.id}
+            onSelect={() => onToggleSelect(item.cluster.id)}
+            applications={applications}
+            onMarkAlreadyApplied={onMarkAlreadyApplied}
+            onScheduleInterview={onScheduleInterview}
+            onOpenNetworking={onOpenNetworking}
+            onOpenResponses={onOpenResponses}
+            onAddToProfile={onAddToProfile}
+          />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SavedSearchesSection({
+  open,
+  subscriptions,
+  onClose,
+  onRefresh,
+}: {
+  readonly open: boolean;
+  readonly subscriptions?: readonly VacancySubscription[];
+  readonly onClose: () => void;
+  readonly onRefresh?: () => Promise<void>;
+}) {
+  if (!open) return null;
+  return (
+    <div className="filters-panel is-expanded" aria-label="Сохранённые поиски">
+      <div className="filters-panel-head">
+        <h3>Сохранённые поиски</h3>
+        <button type="button" className="filters-reset" onClick={onClose}>
+          Свернуть
+        </button>
+      </div>
+      <SavedSearchesPanel
+        subscriptions={subscriptions ?? []}
+        onRefresh={onRefresh ?? (async () => {})}
+      />
+    </div>
+  );
+}
+
+function VacanciesMainBody(props: {
+  readonly loading: boolean;
+  readonly failed: boolean;
+  readonly failureSourceLabel?: string;
+  readonly onRetry?: () => void;
+  readonly matchedLength: number;
+  readonly primaryRole?: string;
+  readonly total: number;
+  readonly filtered: readonly MatchedVacancyItem[];
+  readonly viewMode: 'list' | 'map';
+  readonly onResetFilters: () => void;
+  readonly listProps: ListContentProps;
+  readonly selectedCity?: string;
+  readonly onSelectCity: (city?: string) => void;
+}) {
+  if (props.loading) return <VacanciesSkeletonStack />;
+  if (props.failed) {
+    return (
+      <VacanciesErrorState
+        failureSourceLabel={props.failureSourceLabel}
+        onRetry={props.onRetry}
+      />
+    );
+  }
+  if (props.matchedLength === 0) {
+    return <VacanciesEmptyPoolState primaryRole={props.primaryRole} onRetry={props.onRetry} />;
+  }
+  if (props.filtered.length === 0) {
+    return (
+      <VacanciesEmptyFilterState
+        totalCount={props.total || props.matchedLength}
+        onReset={props.onResetFilters}
+      />
+    );
+  }
+  if (props.viewMode === 'map') {
+    return (
+      <VacancyMapView
+        items={props.filtered}
+        selectedCity={props.selectedCity}
+        onSelectCity={props.onSelectCity}
+      />
+    );
+  }
+  return <VacanciesListContent {...props.listProps} />;
+}
+
+function VacanciesFiltersSection({
+  board,
+  actions,
+  candidateLevel,
+  onOpenProfile,
+  subscriptionsCount,
+  savedSearchesOpen,
+  onToggleSavedSearches,
+  onReset,
+}: {
+  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
+  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
+  readonly candidateLevel?: string | null;
+  readonly onOpenProfile?: VacanciesScreenProps['onOpenProfile'];
+  readonly subscriptionsCount?: number;
+  readonly savedSearchesOpen: boolean;
+  readonly onToggleSavedSearches: () => void;
+  readonly onReset: () => void;
+}) {
+  return (
+    <VacanciesFilters
+      state={board.state}
+      onChange={board.setState}
+      onReset={onReset}
+      roleHypotheses={board.roleHypotheses}
+      campaignRoles={board.roles}
+      regions={board.regions}
+      suggestedRegions={board.suggestedRegions}
+      candidateLevel={candidateLevel ?? undefined}
+      onAddCustomRole={(role) => actions.addCustomRole(role)}
+      savedSearchesCount={subscriptionsCount}
+      savedSearchesOpen={savedSearchesOpen}
+      onToggleSavedSearches={onToggleSavedSearches}
+      onOpenProfileLevel={
+        onOpenProfile
+          ? () =>
+              onOpenProfile({
+                requirement: candidateLevel ?? '',
+                vacancyId: 'level',
+                vacancyTitle: candidateLevel ?? '',
+                vacancyCompany: '',
+              })
+          : undefined
+      }
+    />
+  );
+}
+
+function useVacanciesScreenState(input: VacanciesScreenProps) {
   const { campaign, matched, now: providedNow } = input;
   const now = providedNow ?? new Date().toISOString();
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
@@ -137,18 +465,115 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
     onRetry: input.onRetry,
   });
   const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster']>();
-  const openNetworking = (vacancy: MatchedVacancyItem['cluster']) => setOutreachVacancy(vacancy);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [savedSearchesOpen, setSavedSearchesOpen] = useState(false);
+
+  const resetFilters = () =>
+    board.setState({ roles: [], regions: board.regions, remoteOnly: false, selectedCity: undefined });
+
+  return {
+    now,
+    activeCampaign,
+    board,
+    actions,
+    outreachVacancy,
+    setOutreachVacancy,
+    viewMode,
+    setViewMode,
+    savedSearchesOpen,
+    setSavedSearchesOpen,
+    resetFilters,
+  };
+}
+
+function buildListProps(
+  input: VacanciesScreenProps,
+  screenState: ReturnType<typeof useVacanciesScreenState>,
+): ListContentProps {
+  return {
+    items: screenState.board.filtered,
+    total: input.total || screenState.board.filtered.length,
+    now: screenState.now,
+    selectedId: screenState.board.selectedId,
+    onToggleSelect: screenState.board.toggleSelect,
+    applications: input.applications,
+    onMarkAlreadyApplied: input.onMarkAlreadyApplied,
+    onScheduleInterview: input.onScheduleInterview,
+    onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
+    onOpenResponses: input.onOpenResponses,
+    onAddToProfile: input.onOpenProfile,
+  };
+}
+
+function VacanciesScreenContent({
+  input,
+  screenState,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+}) {
+  const { board, actions, activeCampaign, savedSearchesOpen, setSavedSearchesOpen, resetFilters, viewMode } =
+    screenState;
 
   return (
-    <>
-      <VacanciesScreenView
-        input={input}
-        activeCampaign={activeCampaign}
-        now={now}
+    <div className="vacancies-content">
+      <VacancyHypothesisSection campaign={activeCampaign} board={board} actions={actions} />
+      <VacanciesFiltersSection
         board={board}
         actions={actions}
-        onOpenNetworking={openNetworking}
+        candidateLevel={input.candidateLevel}
+        onOpenProfile={input.onOpenProfile}
+        subscriptionsCount={input.subscriptions?.length}
+        savedSearchesOpen={savedSearchesOpen}
+        onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}
+        onReset={resetFilters}
       />
+      <SavedSearchesSection
+        open={savedSearchesOpen}
+        subscriptions={input.subscriptions}
+        onClose={() => setSavedSearchesOpen(false)}
+        onRefresh={input.onRefreshSubscriptions}
+      />
+      <VacanciesMainBody
+        loading={Boolean(input.loading)}
+        failed={Boolean(input.failed)}
+        failureSourceLabel={input.failureSourceLabel}
+        onRetry={input.onRetry}
+        matchedLength={input.matched.length}
+        primaryRole={board.primaryRole}
+        total={input.total ?? input.matched.length}
+        filtered={board.filtered}
+        viewMode={viewMode}
+        onResetFilters={resetFilters}
+        selectedCity={board.state.selectedCity}
+        onSelectCity={(city) => board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }))}
+        listProps={buildListProps(input, screenState)}
+      />
+    </div>
+  );
+}
+
+export function VacanciesScreen(input: VacanciesScreenProps) {
+  const screenState = useVacanciesScreenState(input);
+  const { board, viewMode, setViewMode, outreachVacancy, setOutreachVacancy } = screenState;
+
+  return (
+    <div className="vacancies-screen">
+      <PageHeader
+        kicker={board.primaryRole ? `Кампания · ${board.primaryRole}` : 'Кампания'}
+        title="Вакансии"
+        description="Отклик оформляется здесь, без перехода на площадку."
+        right={<ViewSwitch viewMode={viewMode} onChange={setViewMode} />}
+      />
+
+      {input.pathIndicator ? (
+        <nav className="path-strip" aria-label="Путь кампании">
+          <CareerPathIndicator steps={input.pathIndicator.steps} onNavigate={input.pathIndicator.onNavigate} />
+        </nav>
+      ) : null}
+
+      <VacanciesScreenContent input={input} screenState={screenState} />
+
       {outreachVacancy ? (
         <DesktopOutreachModal
           isOpen
@@ -163,53 +588,6 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
           }}
         />
       ) : null}
-    </>
-  );
-}
-
-function VacanciesScreenView({
-  input,
-  activeCampaign,
-  now,
-  board,
-  actions,
-  onOpenNetworking,
-}: {
-  readonly input: VacanciesScreenProps;
-  readonly activeCampaign?: CampaignMetaView;
-  readonly now: string;
-  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
-  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
-  readonly onOpenNetworking: (vacancy: MatchedVacancyItem['cluster']) => void;
-}) {
-  const results = (
-    <VacanciesResults
-      {...input}
-      campaign={activeCampaign}
-      now={now}
-      board={board}
-      actions={actions}
-      onOpenNetworking={onOpenNetworking}
-    />
-  );
-  const {
-    loading = false,
-    failed = false,
-    failureSourceLabel,
-    onRetry,
-    pathIndicator,
-  } = input;
-  return (
-    <div className="vacancies-screen">
-      <VacanciesScreenHeader primaryRole={board.primaryRole} pathIndicator={pathIndicator} />
-      <VacanciesScreenBody
-        loading={loading}
-        failed={failed}
-        failureSourceLabel={failureSourceLabel}
-        onRetry={onRetry}
-      >
-        {results}
-      </VacanciesScreenBody>
     </div>
   );
 }
@@ -220,23 +598,6 @@ function campaignUpdateHandler(
 ) {
   return (updated: CampaignMetaView, addedRole: string | undefined) =>
     applyCampaignUpdate(updated, addedRole, setCampaign, setScreenState);
-}
-
-function VacanciesScreenHeader({
-  primaryRole,
-  pathIndicator,
-}: {
-  readonly primaryRole?: string;
-  readonly pathIndicator?: VacanciesPathIndicator;
-}) {
-  return (
-    <>
-      <VacanciesHeader primaryRole={primaryRole} />
-      {pathIndicator ? (
-        <CareerPathIndicator steps={pathIndicator.steps} onNavigate={pathIndicator.onNavigate} />
-      ) : null}
-    </>
-  );
 }
 
 function useActiveCampaign(campaign?: CampaignMetaView) {
@@ -254,112 +615,12 @@ function applyCampaignUpdate(
   setScreenState: ReturnType<typeof useVacanciesScreenBoard>['setState'],
 ) {
   setCampaign(campaign);
-  setScreenState((current) => ({
+  setScreenState((current: VacanciesScreenState) => ({
     ...current,
     roles: addedRole ? [...current.roles, addedRole] : current.roles,
     regions: campaign.regions.value,
     remoteOnly: campaign.remoteOnly ?? false,
   }));
-}
-
-function VacanciesScreenBody({
-  loading,
-  failed,
-  failureSourceLabel,
-  onRetry,
-  children,
-}: {
-  readonly loading: boolean;
-  readonly failed: boolean;
-  readonly failureSourceLabel?: string;
-  readonly onRetry?: () => void;
-  readonly children: ReactNode;
-}) {
-  if (loading) {
-    return (
-      <div className="vacancies-content">
-        <VacanciesLoadingState />
-      </div>
-    );
-  }
-  if (failed) {
-    return (
-      <div className="vacancies-content">
-        <VacanciesErrorState sourceLabel={failureSourceLabel} onRetry={onRetry} />
-      </div>
-    );
-  }
-  return children;
-}
-
-interface VacanciesResultsProps {
-  readonly matched: readonly MatchedVacancyItem[];
-  readonly total: number;
-  readonly campaign?: CampaignMetaView;
-  readonly candidateLevel?: string | null;
-  readonly now: string;
-  readonly applications?: VacancyApplications;
-  readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
-  readonly onMarkAlreadyApplied?: (
-    clusterId: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<void>;
-  readonly onScheduleInterview?: (
-    clusterId: string,
-    scheduledAt: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<ApplicationView>;
-  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
-  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
-  readonly onRetry?: () => void;
-  readonly onOpenResponses?: () => void;
-  readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
-}
-
-function VacanciesResults(props: VacanciesResultsProps) {
-  return (
-    <div className="vacancies-content">
-      <VacancyHypothesisSection
-        campaign={props.campaign}
-        board={props.board}
-        actions={props.actions}
-      />
-      {props.matched.length === 0 ? (
-        <VacanciesEmptyState role={props.board.primaryRole} onRetry={props.onRetry} />
-      ) : (
-        <VacanciesLayout
-          roleHypotheses={props.board.roleHypotheses}
-          regions={props.board.regions}
-          suggestedRegions={props.board.suggestedRegions}
-          remoteOnly={props.campaign?.remoteOnly ?? false}
-          candidateLevel={props.candidateLevel}
-          state={props.board.state}
-          onChange={props.board.setState}
-          onReset={() =>
-            props.board.setState({
-              ...EMPTY_STATE,
-              regions: props.board.regions,
-              remoteOnly: props.campaign?.remoteOnly ?? false,
-            })
-          }
-          total={props.total}
-          filtered={props.board.filtered}
-          now={props.now}
-          effectiveId={props.board.effectiveId}
-          selectedItem={props.board.selectedItem}
-          applications={props.applications}
-          onMarkAlreadyApplied={props.onMarkAlreadyApplied}
-          onScheduleInterview={props.onScheduleInterview}
-          mobileDetailOpen={props.board.mobileDetailOpen}
-          onSelect={props.board.onSelect}
-          onBack={props.board.onBack}
-          onOpenResponses={props.onOpenResponses}
-          onOpenProfile={props.onOpenProfile}
-          onOpenNetworking={props.onOpenNetworking}
-        />
-      )}
-    </div>
-  );
 }
 
 function VacancyHypothesisSection({
@@ -409,169 +670,38 @@ function VacancyHypothesisSection({
   );
 }
 
-function VacanciesLoadingState() {
-  return (
-    <p className="vacancies-state" aria-busy="true">
-      Загружаем подборку по кампании…
-    </p>
-  );
-}
-
-function VacanciesErrorState({
-  sourceLabel,
-  onRetry,
-}: {
-  readonly sourceLabel?: string;
-  readonly onRetry?: () => void;
-}) {
-  return (
-    <section className="vacancies-state is-error" role="alert">
-      <h2>Не удалось загрузить подборку</h2>
-      <p>
-        Не удалось загрузить общий пул вакансий. {sourceLabel ?? 'Причина сбоя не определена.'} Роль
-        и география сохранены.
-      </p>
-      {onRetry ? (
-        <button type="button" className="vacancies-btn vacancies-btn-primary" onClick={onRetry}>
-          Повторить
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-function VacanciesEmptyState({
-  role,
-  onRetry,
-}: {
-  readonly role?: string;
-  readonly onRetry?: () => void;
-}) {
-  return (
-    <section className="vacancies-state">
-      <h2>{role ? `По роли ${role} пока нет вакансий` : 'Для подбора не выбрана роль'}</h2>
-      <p>
-        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить
-        регионы или включить удалённый поиск.
-      </p>
-      {onRetry ? (
-        <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onRetry}>
-          Обновить подбор
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-interface VacanciesLayoutProps {
-  readonly roleHypotheses: NonNullable<CampaignMetaView['roleHypotheses']>;
-  readonly regions: readonly string[];
-  readonly suggestedRegions?: readonly string[];
-  readonly remoteOnly: boolean;
-  readonly candidateLevel?: string | null;
-  readonly state: VacanciesScreenState;
-  readonly onChange: (updater: (prev: VacanciesScreenState) => VacanciesScreenState) => void;
-  readonly onReset: () => void;
-  readonly total: number;
-  readonly filtered: readonly MatchedVacancyItem[];
-  readonly now: string;
-  readonly effectiveId?: string;
-  readonly selectedItem?: MatchedVacancyItem;
-  readonly applications?: VacancyApplications;
-  readonly onMarkAlreadyApplied?: (
-    clusterId: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<void>;
-  readonly onScheduleInterview?: (
-    clusterId: string,
-    scheduledAt: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<ApplicationView>;
-  readonly mobileDetailOpen: boolean;
-  readonly onSelect: (id: string) => void;
-  readonly onBack: () => void;
-  readonly onOpenResponses?: () => void;
-  readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
-  readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
-}
-
-function VacanciesLayout(props: VacanciesLayoutProps) {
-  return (
-    <div className="vacancies-layout">
-      <VacanciesFilters {...props} />
-      <VacanciesList
-        total={props.total}
-        items={props.filtered}
-        now={props.now}
-        selectedId={props.effectiveId}
-        onSelect={props.onSelect}
-        onReset={props.onReset}
-      />
-      <aside
-        className={`vacancies-detail-col${props.mobileDetailOpen ? ' is-open' : ''}`}
-        aria-label="Карточка вакансии"
-      >
-        {props.selectedItem ? (
-          <VacancyDetailPanel
-            item={props.selectedItem}
-            now={props.now}
-            applications={props.applications}
-            onMarkAlreadyApplied={props.onMarkAlreadyApplied}
-            onScheduleInterview={props.onScheduleInterview}
-            onBack={props.onBack}
-            onOpenResponses={props.onOpenResponses}
-            onAddToProfile={props.onOpenProfile}
-            onOpenNetworking={
-              props.onOpenNetworking
-                ? () => props.onOpenNetworking?.(props.selectedItem!.cluster)
-                : undefined
-            }
-          />
-        ) : null}
-      </aside>
-    </div>
-  );
-}
-
-function VacanciesHeader({ primaryRole }: { readonly primaryRole?: string }) {
-  return (
-    <PageHeader
-      kicker={primaryRole ? `Кампания · ${primaryRole}` : 'Кампания'}
-      title="Вакансии"
-      description="Отклик оформляется здесь, без перехода на площадку."
-    />
-  );
-}
-
 function filterByScreenState(
   items: readonly MatchedVacancyItem[],
   state: VacanciesScreenState,
   now: string,
 ): MatchedVacancyItem[] {
+  void now;
   return items.filter(({ cluster }) => {
     if (
       state.roles.length > 0 &&
-      !state.roles.some((role) => titleMatchesRole(cluster.canonicalTitle, role))
+      !state.roles.some((role: string) => titleMatchesRole(cluster.canonicalTitle, role))
     ) {
       return false;
     }
     if (state.remoteOnly && !cluster.isRemote) return false;
     if (state.regions.length > 0 && !state.remoteOnly) {
       const location = cluster.canonicalLocation?.toLocaleLowerCase('ru-RU') ?? '';
-      const inRegion = state.regions.some((region) =>
+      const inRegion = state.regions.some((region: string) =>
         location.includes(region.toLocaleLowerCase('ru-RU')),
       );
       if (!inRegion && !cluster.isRemote) return false;
     }
-    if (state.freshnessDays !== undefined) {
-      const { days } = vacancyAge(cluster, now);
-      if (days === null || days > state.freshnessDays) return false;
+    if (state.selectedCity) {
+      const location = cluster.canonicalLocation?.toLocaleLowerCase('ru-RU') ?? '';
+      const city = cluster.companyFeatures?.city?.toLocaleLowerCase('ru-RU') ?? '';
+      const target = state.selectedCity.toLocaleLowerCase('ru-RU');
+      if (!location.includes(target) && !city.includes(target)) return false;
     }
     return true;
   });
 }
 
-/** Единственная точка «есть совпадение» на всех трёх fit-dots (B248). */
+/** Единственная точка «есть совпадение» на всех трёх fit-dots (B248/B324). */
 export function FitDot({
   isYes,
   title,
@@ -588,6 +718,7 @@ export function FitDot({
       className={`fit-dot${isUnknown ? ' is-unknown' : isYes ? ' is-yes' : ' is-no'}`}
       title={title}
       aria-label={ariaLabel ?? `${title}: ${isYes ? 'совпадает' : 'не совпадает'}`}
+      role="img"
     >
       {isUnknown ? '?' : isYes ? <Check weight="bold" size={11} /> : '—'}
     </span>

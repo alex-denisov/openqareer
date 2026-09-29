@@ -27,8 +27,8 @@ function item(overrides: Partial<MatchedVacancyItem['cluster']> = {}): MatchedVa
       roleMatch: 'target',
       levelMatch: 'match',
       outsideGeography: false,
-      matchingPoints: [],
-      missingPoints: [],
+      matchingPoints: ['System Architecture'],
+      missingPoints: ['10 years team lead'],
       summary: '',
       calculatedAt: '2026-09-24T08:00:00.000Z',
     },
@@ -42,25 +42,28 @@ function render(overrides: Partial<Parameters<typeof VacancyRow>[0]> = {}) {
       now="2026-09-24T09:00:00.000Z"
       isSelected={false}
       onSelect={vi.fn()}
+      onOpenNetworking={vi.fn()}
+      onMarkAlreadyApplied={vi.fn()}
       {...overrides}
     />,
   );
 }
 
-describe('VacancyRow (B250)', () => {
+describe('VacancyRow (B266/B324)', () => {
   it('shows title, company/location/remote subtitle, compensation and age', () => {
     const html = render();
     expect(html).toContain('Business Information Architect');
     expect(html).toContain('Genetec · Canada · удалённо');
     expect(html).toContain('$');
     expect(html).toContain('190');
+    expect(html).toContain('в базе');
   });
 
-  it('renders one fit-dot per role/level/geography and marks misses as no', () => {
+  it('renders one fit-dot per role/level/geography and marks matches as is-yes', () => {
     const html = render({
       item: item(),
     });
-    // роль и уровень совпадают (target), гео совпадает (outsideGeography=false)
+    // роль и уровень совпадают (target/match), гео совпадает (outsideGeography=false)
     const yes = html.match(/fit-dot is-yes/g) ?? [];
     expect(yes.length).toBe(3);
   });
@@ -72,6 +75,7 @@ describe('VacancyRow (B250)', () => {
     };
     const html = render({ item: missGeo });
     expect(html).toContain('fit-dot is-no');
+    expect(html).toContain('title="География: не совпадает"');
   });
 
   it('keeps an unknown level neutral and names the missing signal', () => {
@@ -86,52 +90,69 @@ describe('VacancyRow (B250)', () => {
     expect(html).toContain('aria-label="Уровень не распознан"');
   });
 
+  it('renders status nearby (is-nearby) when level is partially matching', () => {
+    const nearby: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, levelMatch: 'below' },
+    };
+    const html = render({ item: nearby });
+    expect(html).toContain('fit-dot is-nearby');
+    expect(html).toContain('title="Уровень: рядом"');
+  });
+
+  it('labels adjacent roles separately from target-function matches', () => {
+    const adjacent: MatchedVacancyItem = {
+      ...item(),
+      explanation: { ...item().explanation, roleMatch: 'partial', adjacentRole: true },
+    };
+    const html = render({ item: adjacent });
+    expect(html).toContain('fit-dot is-nearby');
+    expect(html).toContain('title="Роль: смежная (рядом)"');
+  });
+
   it('is a real button, not a non-interactive element carrying a role', () => {
     const html = render();
     expect(html).toContain('<button');
     expect(html).not.toContain('role="button"');
   });
 
-  it('marks the selected row so the shell can highlight it', () => {
+  it('marks the selected row with is-selected, aria-expanded and renders vac-detail with 5 action buttons', () => {
     const html = render({ isSelected: true });
     expect(html).toContain('is-selected');
     expect(html).toContain('aria-pressed="true"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('vac-detail');
+    expect(html).toContain('Откликнуться');
+    expect(html).toContain('Я уже откликнулся');
+    expect(html).toContain('Нетворкинг');
+    expect(html).toContain('Подробнее');
+    expect(html).toContain('Сопроводительное письмо');
+    expect(html).toContain('Кто нанимает');
   });
 
-  it('renders three chips «Роль», «Уровень», «Гео» with text status (совпадает/рядом/нет)', () => {
-    const html = render();
-    expect(html).toContain('Роль');
-    expect(html).toContain('Уровень');
-    expect(html).toContain('Гео');
-    expect(html).toContain('совпадает');
-  });
+  describe('requirements summary in vacancy row', () => {
+    it('shows requirements count when requirements exist', () => {
+      const html = render();
+      expect(html).toContain('Требования: <span class="num">1 из 2</span>');
+    });
 
-  it('renders status «рядом» when role or level is partially matching', () => {
-    const nearby: MatchedVacancyItem = {
-      ...item(),
-      explanation: { ...item().explanation, roleMatch: 'partial', levelMatch: 'below' },
-    };
-    const html = render({ item: nearby });
-    expect(html).toContain('рядом');
-  });
+    it('shows warning when requirements do not match (0 of M)', () => {
+      const zeroMatched: MatchedVacancyItem = {
+        ...item(),
+        explanation: { ...item().explanation, matchingPoints: [], missingPoints: ['Req 1', 'Req 2'] },
+      };
+      const html = render({ item: zeroMatched });
+      expect(html).toContain('Требования: не совпали (<span class="num">0 из 2</span>)');
+    });
 
-  it('labels adjacent roles separately from partial target-function matches', () => {
-    const adjacent: MatchedVacancyItem = {
-      ...item(),
-      explanation: { ...item().explanation, roleMatch: 'partial', adjacentRole: true },
-    };
-    const html = render({ item: adjacent });
-    expect(html).toContain('смежная');
-    expect(html).toContain('Смежная роль вне семейств кампании');
-  });
-
-  it('renders status «нет» when role or geo does not match', () => {
-    const noMatch: MatchedVacancyItem = {
-      ...item(),
-      explanation: { ...item().explanation, roleMatch: 'none', outsideGeography: true },
-    };
-    const html = render({ item: noMatch });
-    expect(html).toContain('нет');
+    it('does not show requirements line when there are no requirements in description', () => {
+      const noReqs: MatchedVacancyItem = {
+        ...item(),
+        explanation: { ...item().explanation, matchingPoints: [], missingPoints: [] },
+      };
+      const html = render({ item: noReqs });
+      expect(html).not.toContain('vac-req');
+    });
   });
 
   describe('B262 · trust signals in vacancy row', () => {
@@ -145,7 +166,8 @@ describe('VacancyRow (B250)', () => {
         firstObservedAt: '2026-07-01T08:00:00.000Z', // > 60 days before 2026-09-24
       });
       const html = render({ item: staleItem });
-      expect(html).toContain('vac-trust-line is-stale');
+      expect(html).toContain('vac-trust-line');
+      expect(html).toContain('is-stale');
       expect(html).toContain('Вакансия открыта более 60 дней');
     });
 
@@ -154,7 +176,8 @@ describe('VacancyRow (B250)', () => {
         deadLink: true,
       });
       const html = render({ item: deadItem });
-      expect(html).toContain('vac-trust-line is-suspicious');
+      expect(html).toContain('vac-trust-line');
+      expect(html).toContain('is-suspicious');
       expect(html).toContain('Ссылка на вакансию недоступна');
     });
   });

@@ -18,21 +18,22 @@ describe('countActiveFilters', () => {
     expect(countActiveFilters(state)).toBe(0);
   });
 
-  it('counts selected roles, regions, remoteOnly flag and freshnessDays', () => {
+  it('counts selected roles, regions, remoteOnly flag and selectedCity', () => {
     const state: VacanciesScreenState = {
       roles: ['Backend Engineer', 'DevOps'],
       regions: ['Германия'],
       remoteOnly: true,
-      freshnessDays: 7,
+      selectedCity: 'Берлин',
     };
-    // 2 roles + 1 region + 1 remoteOnly + 1 freshnessDays = 5
+    // 2 roles + 1 region + 1 remoteOnly + 1 selectedCity = 5
     expect(countActiveFilters(state)).toBe(5);
   });
 });
 
-describe('VacanciesFilters mobile toggle (C74)', () => {
+describe('VacanciesFilters toggle and role limit', () => {
   const defaultProps = {
     roleHypotheses: [{ role: 'Backend Engineer', vacancyCount: 10, isHypothesis: false }],
+    campaignRoles: ['Backend Engineer'],
     regions: ['Германия'],
     state: {
       roles: [],
@@ -41,6 +42,7 @@ describe('VacanciesFilters mobile toggle (C74)', () => {
     },
     onChange: vi.fn(),
     onReset: vi.fn(),
+    onAddCustomRole: vi.fn().mockResolvedValue(true),
   };
 
   it('renders collapsed by default with «Фильтры · 0 активных»', () => {
@@ -97,6 +99,41 @@ describe('VacanciesFilters mobile toggle (C74)', () => {
     });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(aside.classList.contains('is-mobile-open')).toBe(false);
+
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  it('disables role input and shows warning when 10/10 roles limit is reached', () => {
+    const tenRoles = Array.from({ length: 10 }, (_, i) => `Role ${i + 1}`);
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <VacanciesFilters
+          {...defaultProps}
+          campaignRoles={tenRoles}
+          roleHypotheses={tenRoles.map((role) => ({ role, vacancyCount: 5, isHypothesis: false }))}
+        />,
+      );
+    });
+
+    // Expand filters
+    const toggle = container.querySelector('.vacancies-mobile-filter-toggle') as HTMLButtonElement;
+    act(() => {
+      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    const input = container.querySelector('.add-role-input') as HTMLInputElement;
+    expect(input.disabled).toBe(true);
+
+    const button = container.querySelector('.add-role-row button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+
+    const note = container.querySelector('.role-limit-note') as HTMLParagraphElement;
+    expect(note.classList.contains('is-warning')).toBe(true);
+    expect(note.textContent).toContain('Достигнут предел — 10 из 10 ролей. Уберите одну, чтобы добавить другую.');
 
     act(() => root.unmount());
     container.remove();
