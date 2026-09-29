@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { retentionCutoffFor } from '../domain/dataRetention';
+import { purgeExpiredCapabilityConsents } from './capabilityConsentStore';
+
+
 
 /**
  * B173 хранит доказательство акцепта, B195 / PRB-014 — следит, чтобы оно не
@@ -110,10 +113,7 @@ export function purgeExpiredRetention(
   const consentCutoff = retentionCutoffFor('записи об акцепте юридических документов', now);
   const auditCutoff = retentionCutoffFor('журналы безопасности', now);
 
-  // Аккаунты, удалённые до B195, оставили согласия без даты прекращения —
-  // считать три года было бы не от чего. Договор с исчезнувшим пользователем
-  // прекращён; отметка ставится в момент первой уборки, потому что настоящей
-  // даты удаления в данных не осталось.
+  // Аккаунты, удалённые до B195: отметка ставится в момент первой уборки.
   database
     .prepare(
       `UPDATE legal_consents SET contract_ended_at = ?
@@ -135,7 +135,9 @@ export function purgeExpiredRetention(
           )`,
       )
       .run(consentCutoff, limit).changes as number;
+    purgeExpiredCapabilityConsents(database, consentCutoff, limit);
   }
+
 
   let securityLog = 0;
   if (auditCutoff) {
