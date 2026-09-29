@@ -1180,16 +1180,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   } else {
     await vacAge.waitFor({ state: 'attached' });
   }
-  if (viewport.width <= 1023) {
-    await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
-  }
-  // Фильтр свежести обязан отсечь запись девятнадцатидневной давности.
-  await page.getByRole('button', { name: '7 дней', exact: true }).click();
-  assert(
-    (await vacancyRows.count()) === 1,
-    `${viewport.name}: фильтр свежести не отсёк старую запись`,
-  );
-  await page.getByRole('button', { name: '7 дней', exact: true }).click();
+  // Фильтр «Свежесть» убран решением владельца (B250, п.4): в базе остаётся
+  // только подпись «в базе N дн.» в строке; проверять нечего.
   await page.screenshot({
     path: `output/playwright/b178-vacancies-${viewport.name}.png`,
     fullPage: true,
@@ -1197,7 +1189,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   // Отклик из карточки (B251 F5, C47): «Откликнуться» ведёт на площадку и
   // одним кликом ставит запись «applied» — только она попадает в «Отклики».
-  await vacancyRows.first().locator('button').click();
+  // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
+  const firstRowToggle = vacancyRows.first().locator('button[aria-expanded]').first();
+  if ((await firstRowToggle.getAttribute('aria-expanded')) !== 'true') {
+    await firstRowToggle.click();
+  }
   await page.locator('.vacancies-detail-panel').waitFor();
   await page.getByRole('button', { name: 'Откликнуться' }).click();
   const recorded = page.__recordedApplications;
