@@ -111,7 +111,7 @@ export const CATALOG_STEP_CHUNK = 500;
 export const CLUSTER_KEYS_STEP_CHUNK = 500;
 
 /** Строк описаний за один шаг извлечения навыков: короткая транзакция (B307). */
-export const DESCRIPTION_SKILLS_STEP_CHUNK = 100;
+export const DESCRIPTION_SKILLS_STEP_CHUNK = 500;
 
 /**
  * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с

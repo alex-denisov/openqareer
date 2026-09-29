@@ -9,7 +9,11 @@ import { composeVacancyEngine } from '../vacancies/composeVacancyEngine';
 import { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import { SqliteVacancyPoolStore } from '../vacancies/sqliteVacancyPoolStore';
 import { clusterVacancies } from '../vacancies/vacancyDeduplicator';
-import { MaintenanceWorker, type MaintenanceLog } from './maintenanceWorker';
+import {
+  DESCRIPTION_SKILLS_STEP_CHUNK,
+  MaintenanceWorker,
+  type MaintenanceLog,
+} from './maintenanceWorker';
 
 /**
  * B230, срез 1: одна волна обслуживателя пишет срез площадки в файловую базу,
@@ -608,7 +612,7 @@ describe('MaintenanceWorker description skills step (B307)', () => {
     const worker = new MaintenanceWorker({ engine, log });
     const result = worker.runDescriptionSkillsStep();
 
-    expect(mockStep).toHaveBeenCalledWith(100);
+    expect(mockStep).toHaveBeenCalledWith(DESCRIPTION_SKILLS_STEP_CHUNK);
     expect(result).toEqual({ inspected: 5, updated: 2, passFinished: false });
     expect(log.entries).toEqual([
       { level: 'info', msg: 'vacancy-description-skills-tick' },
@@ -625,7 +629,7 @@ describe('MaintenanceWorker description skills step (B307)', () => {
     const worker = new MaintenanceWorker({ engine, log });
     const result = worker.runDescriptionSkillsStep();
 
-    expect(mockStep).toHaveBeenCalledWith(100);
+    expect(mockStep).toHaveBeenCalledWith(DESCRIPTION_SKILLS_STEP_CHUNK);
     expect(result).toEqual({ inspected: 5, updated: 0, passFinished: false });
     expect(log.entries).toEqual([]);
   });
