@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Идемпотентная установка Chromium для воркера обслуживания (B313).
+#
+# Ставит playwright-core закреплённой версии и Chromium в /opt/openqareer/browser
+# (владелец root, воркеру — только чтение), системные библиотеки браузера через
+# apt и профиль AppArmor, который разрешает песочнице Chromium пользовательские
+# пространства имён (Ubuntu 24.04 запрещает их непрофилированным бинарям).
+# Повторный запуск при той же версии ничего не меняет. Сервис не перезапускается.
+set -Eeuo pipefail
+
+readonly PLAYWRIGHT_VERSION="${OPENQAREER_PLAYWRIGHT_VERSION:-1.61.1}"
+readonly NODE_BIN_DIR="${OPENQAREER_NODE_BIN_DIR:-/opt/openqareer/node-v24.14.1-linux-x64/bin}"
+readonly BROWSER_ROOT=/opt/openqareer/browser
+readonly BROWSERS_PATH="$BROWSER_ROOT/ms-playwright"
+readonly MARKER="$BROWSER_ROOT/.installed-playwright-version"
+readonly APPARMOR_PROFILE=/etc/apparmor.d/openqareer-chromium
+
+fail() {
+  printf 'openqareer-browser-install: %s\n' "$1" >&2
+  exit 1
+}
+
+[[ "$(id -u)" == "0" ]] || fail "run with sudo/root"
+[[ "$PLAYWRIGHT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "unexpected playwright version"
+[[ -x "$NODE_BIN_DIR/node" && -x "$NODE_BIN_DIR/npm" ]] || fail "Node.js runtime is absent"
+export PATH="$NODE_BIN_DIR:$PATH"
+
+install -d -o root -g root -m 0755 "$BROWSER_ROOT"
+
+if [[ "$(cat "$MARKER" 2>/dev/null || true)" != "$PLAYWRIGHT_VERSION" ]] ||
+  [[ ! -d "$BROWSERS_PATH" ]]; then
+  (
+    cd "$BROWSER_ROOT"
+    npm install --no-save --no-audit --no-fund --ignore-scripts \
+      --prefix "$BROWSER_ROOT" "playwright-core@$PLAYWRIGHT_VERSION"
+    PLAYWRIGHT_BROWSERS_PATH="$BROWSERS_PATH" \
+      node "$BROWSER_ROOT/node_modules/playwright-core/cli.js" install --with-deps chromium
+  )
+  printf '%s\n' "$PLAYWRIGHT_VERSION" > "$MARKER"
+fi
+
+chown -R root:root "$BROWSER_ROOT"
+chmod -R go-w,a+rX "$BROWSER_ROOT"
+
+# Песочница Chromium: профиль только разрешает userns, остальное не ограничивает.
+apparmor_candidate="$(mktemp)"
+trap 'rm -f -- "$apparmor_candidate"' EXIT
+cat > "$apparmor_candidate" <<'PROFILE'
+abi <abi/4.0>,
+include <tunables/global>
+
+profile openqareer-chromium /opt/openqareer/browser/ms-playwright/**/chrome flags=(unconfined) {
+  userns,
+}
+PROFILE
+if ! cmp -s "$apparmor_candidate" "$APPARMOR_PROFILE" 2>/dev/null; then
+  install -o root -g root -m 0644 "$apparmor_candidate" "$APPARMOR_PROFILE"
+  if command -v apparmor_parser >/dev/null 2>&1; then
+    apparmor_parser -r "$APPARMOR_PROFILE"
+  fi
+fi
+
+[[ -f "$BROWSER_ROOT/node_modules/playwright-core/index.mjs" ]] ||
+  fail "playwright-core is not installed"
+printf 'openqareer-browser-install: playwright-core %s ready\n' "$PLAYWRIGHT_VERSION"

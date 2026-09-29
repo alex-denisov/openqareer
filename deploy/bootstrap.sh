@@ -217,6 +217,8 @@ install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-rollback" /usr/local/bin/openqareer-rollback
 install -o root -g root -m 0755 \
   "$SCRIPT_DIR/openqareer-env-set" /usr/local/bin/openqareer-env-set
+install -o root -g root -m 0755 \
+  "$SCRIPT_DIR/openqareer-browser-install" /usr/local/bin/openqareer-browser-install
 install -o root -g root -m 0644 \
   "$SCRIPT_DIR/openqareer-static.service" \
   /etc/systemd/system/openqareer-static.service
@@ -245,6 +247,8 @@ visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
   fail "current release does not contain server.mjs"
 [[ -f /etc/openqareer/openqareer.env ]] ||
   fail "/etc/openqareer/openqareer.env must be installed before migration"
+
+/usr/local/bin/openqareer-browser-install
 
 systemctl daemon-reload
 systemd-analyze verify /etc/systemd/system/openqareer-static.service

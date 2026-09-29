@@ -12,6 +12,9 @@ Environment=OPENQAREER_DATABASE_PATH=/var/lib/openqareer/openqareer.db
 # Куча вдвое-втрое меньше, чем у HTTP: волна опросов обязана жить в партиях,
 # а не в целом пуле. Превышение — это ошибка кода, и юнит её показывает.
 Environment=NODE_OPTIONS=--max-old-space-size=640
+# B313: Chromium для исполнителя пула LinkedIn ставится openqareer-browser-install.
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/openqareer/browser/ms-playwright
+Environment=OPENQAREER_PLAYWRIGHT_MODULE=/opt/openqareer/browser/node_modules/playwright-core/index.mjs
 EnvironmentFile=/etc/openqareer/openqareer.env
 ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/current/maintenance.mjs
 Restart=on-failure
@@ -22,7 +25,7 @@ TimeoutStopSec=300s
 KillMode=mixed
 UMask=0027
 
-MemoryMax=900M
+MemoryMax=2G
 MemorySwapMax=0
 Nice=10
 IOSchedulingClass=best-effort
@@ -43,7 +46,8 @@ ProtectSystem=strict
 ReadOnlyPaths=/srv/openqareer
 ReadWritePaths=/var/lib/openqareer
 RestrictAddressFamilies=AF_INET AF_INET6
-RestrictNamespaces=true
+# Песочнице Chromium нужны пользовательские, PID- и сетевые пространства имён.
+RestrictNamespaces=user pid net
 RestrictRealtime=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native

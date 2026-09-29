@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -65,9 +66,9 @@ const linkedinPoolExecutor =
         config: linkedinExecutorConfig,
         repository: linkedinPoolRepository,
         database: linkedinPoolRepository.getDatabase(),
-        // Только по требованию: на проде playwright ставится отдельно (B309).
+        // Только по требованию: на проде playwright ставится отдельно (B309, B313).
         browserFactory: async () => {
-          const { chromium } = await import('playwright');
+          const { chromium } = await import(playwrightModuleSpecifier());
           return chromium.launch({ headless: true });
         },
         notifyOwner: (message) => notifyOwner(config, message),
@@ -91,6 +92,12 @@ const worker = new MaintenanceWorker({
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
+
+/** На проде playwright-core лежит вне релиза (openqareer-browser-install): путь задаёт окружение. */
+function playwrightModuleSpecifier(): string {
+  const path = process.env.OPENQAREER_PLAYWRIGHT_MODULE?.trim();
+  return path ? pathToFileURL(path).href : 'playwright';
+}
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
