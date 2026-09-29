@@ -1,5 +1,4 @@
 import { DatabaseSync } from 'node:sqlite';
-import { chromium } from 'playwright';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
@@ -51,7 +50,11 @@ const linkedinPoolExecutor =
         config: linkedinExecutorConfig,
         repository: linkedinPoolRepository,
         database: linkedinPoolRepository.getDatabase(),
-        browserFactory: () => chromium.launch({ headless: true }),
+        // Только по требованию: на проде playwright ставится отдельно (B309).
+        browserFactory: async () => {
+          const { chromium } = await import('playwright');
+          return chromium.launch({ headless: true });
+        },
         notifyOwner: (message) => notifyOwner(config, message),
       })
     : undefined;
@@ -64,7 +67,9 @@ const worker = new MaintenanceWorker({
         titleModel: new TitleModelStep(
           semanticDatabase,
           new VertexModelTitleParser(config.vertex),
-          { dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000) },
+          {
+            dailyCalls: readPositiveInteger(process.env.OPENQAREER_TITLE_MODEL_DAILY_CALLS, 2_000),
+          },
         ),
       }
     : {}),
