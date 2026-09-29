@@ -4,6 +4,7 @@ import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
 import { MaintenanceWorker } from './maintenance/maintenanceWorker';
 import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
+import { purgeExpiredRecruiters } from './linkedinPool/companyRecruiterDiscovery';
 import {
   LinkedinPoolCompanyPageExecutor,
   readLinkedinPoolExecutorConfig,
@@ -88,6 +89,7 @@ const worker = new MaintenanceWorker({
       }
     : {}),
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
+  purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
