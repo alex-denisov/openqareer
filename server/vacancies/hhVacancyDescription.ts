@@ -14,7 +14,9 @@ export interface HhVacancyDetails {
   readonly archived?: boolean;
 }
 
-const ARCHIVED_MARKER = /Вакансия в архиве/u;
+// Статус самой вакансии в данных страницы. Текст «Вакансия в архиве» не годится:
+// он есть в словаре переводов каждой страницы hh и снимал живые вакансии (B312).
+const ARCHIVED_MARKER = /(?:&#34;|")status(?:&#34;|"):\{(?:&#34;|")archived(?:&#34;|"):true/u;
 
 export interface HhVacancyDescriptionLoaderOptions {
   readonly transport: HhSearchTransport;

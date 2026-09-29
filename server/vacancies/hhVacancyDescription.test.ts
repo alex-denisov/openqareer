@@ -143,11 +143,29 @@ describe('HhVacancyDescriptionLoader', () => {
     release({ status: 200, body: page });
     await first;
   });
-  it('распознаёт страницу вакансии в архиве', async () => {
+  // Словарь переводов со строкой «Вакансия в архиве» встроен в каждую страницу
+  // hh; признак архива — только статус самой вакансии в данных страницы (B312).
+  const TRANSLATIONS =
+    '&#34;vacancy.view.archived.title&#34;:&#34;Вакансия в архиве&#34;';
+  const archivedStatus = (value: boolean) =>
+    `&#34;status&#34;:{&#34;archived&#34;:${value},&#34;disabled&#34;:false}`;
+  const livePage = `<html>${TRANSLATIONS}${archivedStatus(false)}<div data-qa="vacancy-description"><p>Руководить командой</p></div></html>`;
+
+  it('распознаёт страницу вакансии в архиве по статусу вакансии', async () => {
     const loader = new HhVacancyDescriptionLoader({
-      transport: async () => ({ status: 200, body: '<html><div>Вакансия в архиве</div></html>' }),
+      transport: async () => ({ status: 200, body: `<html>${TRANSLATIONS}${archivedStatus(true)}</html>` }),
       sleep: async () => {},
     });
     await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toMatchObject({ archived: true });
+  });
+
+  it('живая вакансия со словарём переводов не считается архивной', async () => {
+    const loader = new HhVacancyDescriptionLoader({
+      transport: async () => ({ status: 200, body: livePage }),
+      sleep: async () => {},
+    });
+    const loaded = await loader.load('https://hh.ru/vacancy/2');
+    expect(loaded).not.toMatchObject({ archived: true });
+    expect(loaded).toMatchObject({ description: expect.stringContaining('Руководить командой') });
   });
 });
