@@ -4,6 +4,7 @@ import type { FunctionCode } from '../../shared/roleTaxonomy';
 import { normalizeTextForComparison } from './vacancyFingerprint';
 import { evaluateLevelMatch, LEVEL_RANK, type SeniorityLevel } from './levelMatcher';
 import { rulesParse } from './titleParse/rulesParse';
+import { canonicalizeSkill } from '../connectors/managementSkillsDictionary';
 
 /**
  * Объяснение соответствия состоит только из измеримого. Сводный балл убран
@@ -55,19 +56,29 @@ function evaluateSkills(
   const matchingPoints: string[] = [];
   const matchingFacts: MatchingFactPoint[] = [];
   const missingPoints: string[] = [];
-  const candidateSkillsNorm = new Set(candidateSkills.map(normalizeTextForComparison));
-  const factIdByLabel = new Map(
-    confirmedSkillFacts.map((fact) => [normalizeTextForComparison(fact.label), fact.id]),
-  );
+  const candidateSkillsNorm = new Set<string>();
+  for (const skill of candidateSkills) {
+    candidateSkillsNorm.add(normalizeTextForComparison(skill));
+    candidateSkillsNorm.add(normalizeTextForComparison(canonicalizeSkill(skill)));
+  }
+
+  const factIdByLabel = new Map<string, string>();
+  for (const fact of confirmedSkillFacts) {
+    const rawNorm = normalizeTextForComparison(fact.label);
+    const canonNorm = normalizeTextForComparison(canonicalizeSkill(fact.label));
+    factIdByLabel.set(rawNorm, fact.id);
+    factIdByLabel.set(canonNorm, fact.id);
+  }
 
   let matchedCount = 0;
   for (const skill of vacancySkills) {
     const skillNorm = normalizeTextForComparison(skill);
-    if (candidateSkillsNorm.has(skillNorm)) {
+    const canonNorm = normalizeTextForComparison(canonicalizeSkill(skill));
+    if (candidateSkillsNorm.has(skillNorm) || candidateSkillsNorm.has(canonNorm)) {
       matchedCount += 1;
       const text = `Подтверждённый навык: ${skill}`;
       matchingPoints.push(text);
-      const factId = factIdByLabel.get(skillNorm);
+      const factId = factIdByLabel.get(skillNorm) ?? factIdByLabel.get(canonNorm);
       matchingFacts.push(factId ? { text, factId } : { text });
     } else {
       missingPoints.push(skill);

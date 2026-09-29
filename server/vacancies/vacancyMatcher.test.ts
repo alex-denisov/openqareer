@@ -242,5 +242,47 @@ describe('Explainable Vacancy Matcher', () => {
       expect(roleExplanation.roleMatch).toBe('none');
       expect(titleExplanation.roleMatch).toBe('none');
     });
+
+    it('matches management skill synonyms to canonical requirements (B307)', () => {
+      const cooCandidate: CandidateMatchProfile = {
+        candidateId: 'cand-coo',
+        targetRoles: ['COO', 'Операционный директор'],
+        confirmedSkills: [
+          'Руководство командой',
+          'P&L Management',
+          'Business Strategy',
+        ],
+        confirmedFacts: [],
+        confirmedSkillFacts: [
+          { id: 'fact-team', label: 'Руководство командой' },
+          { id: 'fact-pnl', label: 'P&L Management' },
+        ],
+      };
+      const cooCluster: VacancyCluster = {
+        ...sampleCluster,
+        canonicalTitle: 'Операционный директор',
+        skills: [
+          'управление командой',
+          'управление P&L',
+          'Бюджетирование',
+        ],
+      };
+
+      const explanation = matchCandidateWithVacancy(cooCandidate, cooCluster);
+      expect(explanation.requirements).toEqual({ matched: 2, total: 3 });
+      expect(explanation.matchingPoints).toEqual(
+        expect.arrayContaining([
+          'Подтверждённый навык: управление командой',
+          'Подтверждённый навык: управление P&L',
+        ]),
+      );
+      expect(explanation.matchingFacts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ factId: 'fact-team' }),
+          expect.objectContaining({ factId: 'fact-pnl' }),
+        ]),
+      );
+      expect(explanation.missingPoints).toContain('Бюджетирование');
+    });
   });
 });

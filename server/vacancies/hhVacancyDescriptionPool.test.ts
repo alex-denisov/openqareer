@@ -125,6 +125,43 @@ describe('hh full-description on demand', () => {
     );
   });
 
+  it('если на карточке руководящей вакансии нет техтерминов — берёт требования из управленческого словаря (B307)', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const cooVacancy: UnifiedVacancy = {
+      ...vacancy,
+      id: 'src-hh-search:9005',
+      fingerprint: 'src-hh-search:9005',
+      title: 'Операционный директор (COO)',
+      description: '',
+      requiredSkills: [],
+    };
+    pool.mergeSourceSlice(source.id, [cooVacancy]);
+    const load = vi.fn().mockResolvedValue({
+      description: 'Ищем COO. Отвечать за P&L бизнеса, управление командой, бюджетирование, операционную эффективность, OKR и стратегическое планирование.',
+      skills: [],
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: { load },
+    });
+
+    await engine.loadVacancyDescription(cooVacancy.id);
+
+    const savedSkills = pool.getVacancy(cooVacancy.id)?.requiredSkills ?? [];
+    expect(savedSkills.length).toBeGreaterThanOrEqual(3);
+    expect(savedSkills).toEqual(
+      expect.arrayContaining([
+        'Управление P&L',
+        'Управление командой',
+        'Бюджетирование',
+        'Операционная эффективность',
+        'OKR / KPI',
+        'Стратегическое планирование',
+      ]),
+    );
+  });
+
   it('вакансию, которая на hh в архиве, снимает с пула и не останавливает пакет дочитывания', async () => {
     const pool = new MemoryVacancyPoolStore();
     const second = {

@@ -31,6 +31,7 @@ export interface MaintenanceEngine {
   probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
   runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
   runClusterKeysBackfillStep(chunk?: number): number;
+  runDescriptionSkillsStep?(chunk?: number): { inspected: number; updated: number; passFinished: boolean };
   readonly clusterKeysReady: boolean;
   readonly poolSize: number;
 }
@@ -50,6 +51,7 @@ export interface MaintenanceIntervals {
   readonly reportMs: number;
   readonly titleParseMs: number;
   readonly titleModelMs: number;
+  readonly descriptionSkillsMs?: number;
 }
 
 /** Шаг смыслового индекса (B267 S2): одна порция разметки пула правилами. */
@@ -93,6 +95,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   reportMs: 60 * 1_000,
   titleParseMs: 5 * 1_000,
   titleModelMs: 30 * 1_000,
+  descriptionSkillsMs: 10 * 1_000,
 };
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
@@ -106,6 +109,9 @@ export const CATALOG_STEP_CHUNK = 500;
 
 /** Кластеров за один шаг заполнения ключей: ~5 000 строк ключей в транзакции. */
 export const CLUSTER_KEYS_STEP_CHUNK = 500;
+
+/** Строк описаний за один шаг извлечения навыков: короткая транзакция (B307). */
+export const DESCRIPTION_SKILLS_STEP_CHUNK = 100;
 
 /**
  * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с
@@ -264,6 +270,23 @@ export class MaintenanceWorker {
     }
   }
 
+  /** Один такт обогащения описаний навыками: короткая транзакция, потом уступить (B307). */
+  runDescriptionSkillsStep():
+    | { inspected: number; updated: number; passFinished: boolean }
+    | undefined {
+    if (this.stopped) return undefined;
+    try {
+      const result = this.engine.runDescriptionSkillsStep?.(DESCRIPTION_SKILLS_STEP_CHUNK);
+      if (result && result.updated > 0) {
+        this.log.info({ ...result }, 'vacancy-description-skills-tick');
+      }
+      return result;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'vacancy-description-skills-failed');
+      return undefined;
+    }
+  }
+
   /**
    * Один шаг разметки пула правилами (B267 S2). Отдельный heartbeat раз в
    * пять минут показывает объём просмотренных индексных строк, включая уже
@@ -400,6 +423,9 @@ export class MaintenanceWorker {
     every(this.intervals.syncMs, () => this.runSyncWave());
     every(this.intervals.livenessMs, () => this.runLivenessProbe());
     every(this.intervals.catalogMs, () => this.runCatalogStep());
+    if (this.intervals.descriptionSkillsMs) {
+      every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
+    }
     every(this.intervals.reportMs, () => this.reportMemory());
     every(this.intervals.titleParseMs, () => this.runTitleParseStep());
     every(TITLE_PARSE_PROGRESS_INTERVAL_MS, () => this.reportTitleParseProgress());

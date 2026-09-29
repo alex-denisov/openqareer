@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { parseTelegramJobPost, parseTelegramChannelHtml } from './telegramChannelParser';
+import {
+  parseTelegramJobPost,
+  parseTelegramChannelHtml,
+  extractSkillsFromText,
+} from './telegramChannelParser';
 
 describe('Telegram Channel Job Parser', () => {
   const sampleTelegramHtml = `
@@ -199,5 +203,37 @@ describe('Telegram posts name the real title and never invent an employer (B164)
     });
 
     expect(parsed).toBeNull();
+  });
+
+  describe('extractSkillsFromText (B304 regression & B307 management skills)', () => {
+    it('preserves technical skills when tech keywords are present (no management skills added - B304 regression)', () => {
+      const techText = `
+        Ищем Senior Go Developer в финтех. Стек: Go, PostgreSQL, Docker, Kubernetes.
+        Вам предстоит управление командой разработки и ответственность за стратегию сервиса.
+      `;
+      const skills = extractSkillsFromText(techText);
+      expect(skills).toEqual(expect.arrayContaining(['Go', 'PostgreSQL', 'Docker', 'Kubernetes']));
+      expect(skills).not.toContain('Управление командой');
+      expect(skills).not.toContain('Стратегическое планирование');
+    });
+
+    it('extracts canonical management skills when tech keywords are empty (B307)', () => {
+      const cooText = `
+        Ищем Chief Operating Officer.
+        Зоны ответственности:
+        - Управление P&L и финансовый результат
+        - Руководство командой и найм ключевых сотрудников
+        - Бюджетирование и оптимизация бизнес-процессов
+        - Стратегическое планирование и внедрение OKR
+      `;
+      const skills = extractSkillsFromText(cooText);
+      expect(skills.length).toBeGreaterThanOrEqual(3);
+      expect(skills).toContain('Управление P&L');
+      expect(skills).toContain('Управление командой');
+      expect(skills).toContain('Бюджетирование');
+      expect(skills).toContain('Операционная эффективность');
+      expect(skills).toContain('Стратегическое планирование');
+      expect(skills).toContain('OKR / KPI');
+    });
   });
 });

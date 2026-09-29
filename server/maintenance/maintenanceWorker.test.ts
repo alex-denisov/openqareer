@@ -596,3 +596,37 @@ describe('MaintenanceWorker title model step (B267 S4)', () => {
     expect(log.entries).toEqual([]);
   });
 });
+
+describe('MaintenanceWorker description skills step (B307)', () => {
+  it('вызывает runDescriptionSkillsStep и логирует результат при наличии обновлений', () => {
+    const log = silentLog();
+    const mockStep = vi.fn().mockReturnValue({ inspected: 5, updated: 2, passFinished: false });
+    const engine = {
+      runDescriptionSkillsStep: mockStep,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+
+    const worker = new MaintenanceWorker({ engine, log });
+    const result = worker.runDescriptionSkillsStep();
+
+    expect(mockStep).toHaveBeenCalledWith(100);
+    expect(result).toEqual({ inspected: 5, updated: 2, passFinished: false });
+    expect(log.entries).toEqual([
+      { level: 'info', msg: 'vacancy-description-skills-tick' },
+    ]);
+  });
+
+  it('не логирует пустой такт без обновлений', () => {
+    const log = silentLog();
+    const mockStep = vi.fn().mockReturnValue({ inspected: 5, updated: 0, passFinished: false });
+    const engine = {
+      runDescriptionSkillsStep: mockStep,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+
+    const worker = new MaintenanceWorker({ engine, log });
+    const result = worker.runDescriptionSkillsStep();
+
+    expect(mockStep).toHaveBeenCalledWith(100);
+    expect(result).toEqual({ inspected: 5, updated: 0, passFinished: false });
+    expect(log.entries).toEqual([]);
+  });
+});

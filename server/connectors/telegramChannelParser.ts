@@ -3,6 +3,7 @@ import type { UnifiedVacancy, VacancySalary } from '../domain/unifiedVacancy';
 import { calculateVacancyFingerprint } from '../vacancies/vacancyFingerprint';
 import { decodeFeedEntities } from './feedText';
 import { extractTelegramJobHeader } from './telegramJobHeader';
+import { extractManagementSkillsFromText } from './managementSkillsDictionary';
 
 const KNOWN_TECH_KEYWORDS = [
   'React',
@@ -99,7 +100,10 @@ export function extractSkillsFromText(text: string): string[] {
       found.add(keyword);
     }
   }
-  return Array.from(found);
+  if (found.size > 0) {
+    return Array.from(found);
+  }
+  return extractManagementSkillsFromText(text);
 }
 
 function escapeRegExp(string: string) {

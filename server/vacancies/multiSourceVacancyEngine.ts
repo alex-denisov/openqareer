@@ -854,6 +854,21 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
+   * Один шаг обогащения вакансий пула управленческими навыками (B307).
+   */
+  public runDescriptionSkillsStep(
+    chunk?: number,
+  ): { inspected: number; updated: number; passFinished: boolean } {
+    return (
+      this.pool.backfillDescriptionSkillsStep?.(chunk) ?? {
+        inspected: 0,
+        updated: 0,
+        passFinished: true,
+      }
+    );
+  }
+
+  /**
    * Собирает кластеры, если пул менялся с прошлой сборки — только в режиме
    * `sync`. В фоновом режиме чтение отдаёт то, что есть: одно «медленное
    * чтение» на проде — это минуты без ответа для всех (B221).

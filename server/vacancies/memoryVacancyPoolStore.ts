@@ -29,6 +29,7 @@ import {
 import { catalogListings } from './vacancyCatalogFacets';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
+import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface StoredRow {
   readonly vacancy: UnifiedVacancy;
@@ -424,5 +425,30 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
 
   pendingCatalogEntries(): number {
     return 0;
+  }
+
+  backfillDescriptionSkillsStep(chunk = 100): {
+    inspected: number;
+    updated: number;
+    passFinished: boolean;
+  } {
+    let inspected = 0;
+    let updated = 0;
+    const entries = Array.from(this.rows.entries());
+    for (const [id, row] of entries) {
+      if (row.expiredAt) continue;
+      const v = row.vacancy;
+      const desc = v.fullDescription ?? v.description;
+      if (desc && (v.requiredSkills?.length ?? 0) === 0) {
+        inspected += 1;
+        const newSkills = extractSkillsFromText(desc);
+        if (newSkills.length > 0) {
+          this.rows.set(id, { ...row, vacancy: { ...v, requiredSkills: newSkills } });
+          updated += 1;
+        }
+        if (inspected >= chunk) return { inspected, updated, passFinished: false };
+      }
+    }
+    return { inspected, updated, passFinished: true };
   }
 }

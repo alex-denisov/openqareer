@@ -182,4 +182,10 @@ export interface VacancyPoolStore {
   backfillCatalogEntriesStep?(chunk?: number): number;
   /** Number of cluster rows still absent from the projection marker. */
   pendingCatalogEntries?(): number;
+  /** Bounded maintenance tick: enriches stored vacancies that have descriptions with management skills (B307). */
+  backfillDescriptionSkillsStep?(chunk?: number): {
+    inspected: number;
+    updated: number;
+    passFinished: boolean;
+  };
 }

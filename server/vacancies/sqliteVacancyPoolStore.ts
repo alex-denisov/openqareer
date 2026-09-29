@@ -62,6 +62,7 @@ import {
   type VacancyClusterLookup,
 } from './vacancyDeduplicator';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface VacancyRow {
   payload: string;
@@ -235,6 +236,8 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   /** Раз увидели строку в `vacancy_semantic` — считаем таблицу наполненной насовсем:
    * обслуживатель её не опустошает, а лишний запрос на каждого кандидата не нужен. */
   private semanticTableSeenReady = false;
+  /** Докуда дошло обогащение управленческими навыками по описаниям (B307). */
+  private descriptionSkillsCursor = 0;
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
@@ -1535,6 +1538,89 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   catalogProjectionReady(): boolean {
     return this.catalogBackfillComplete || this.pendingCatalogEntries() === 0;
+  }
+
+  /**
+   * Один шаг обогащения вакансий с описанием, но без ключевых навыков (B307).
+   * Идёт пачками по `rowid`, не перегружая память и уступая цикл событий.
+   */
+  backfillDescriptionSkillsStep(chunk = 100): {
+    inspected: number;
+    updated: number;
+    passFinished: boolean;
+  } {
+    const boundedChunk = Math.max(1, Math.min(Math.trunc(chunk), 1_000));
+    const rows = this.database
+      .prepare(
+        `SELECT rowid, id, source_id, payload, expired_at
+           FROM vacancy_pool
+          WHERE rowid > ?
+          ORDER BY rowid ASC
+          LIMIT ?`,
+      )
+      .all(this.descriptionSkillsCursor, boundedChunk) as unknown as Array<{
+      rowid: number;
+      id: string;
+      source_id: string;
+      payload: string;
+      expired_at: string | null;
+    }>;
+
+    if (rows.length === 0) {
+      this.descriptionSkillsCursor = 0;
+      return { inspected: 0, updated: 0, passFinished: true };
+    }
+
+    this.descriptionSkillsCursor = rows[rows.length - 1]!.rowid;
+    const toUpdate = this.collectDescriptionSkillsUpdates(rows);
+    this.applyDescriptionSkillsUpdates(toUpdate);
+
+    return {
+      inspected: rows.length,
+      updated: toUpdate.length,
+      passFinished: false,
+    };
+  }
+
+  private collectDescriptionSkillsUpdates(
+    rows: ReadonlyArray<{ id: string; source_id: string; payload: string; expired_at: string | null }>,
+  ): Array<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }> {
+    const toUpdate: Array<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }> = [];
+    for (const row of rows) {
+      const vacancy = parseVacancy(row.payload);
+      if (!vacancy) continue;
+      const desc = vacancy.fullDescription ?? vacancy.description;
+      if (desc && (vacancy.requiredSkills?.length ?? 0) === 0) {
+        const newSkills = extractSkillsFromText(desc);
+        if (newSkills.length > 0) {
+          toUpdate.push({
+            vacancy: { ...vacancy, requiredSkills: newSkills },
+            sourceId: row.source_id,
+            isExpired: row.expired_at !== null,
+          });
+        }
+      }
+    }
+    return toUpdate;
+  }
+
+  private applyDescriptionSkillsUpdates(
+    toUpdate: ReadonlyArray<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }>,
+  ): void {
+    if (toUpdate.length === 0) return;
+    const updatePool = this.database.prepare(
+      'UPDATE vacancy_pool SET payload = ? WHERE id = ?',
+    );
+    const index = this.prepareIndexUpsert();
+    const projection = this.prepareProjectionUpsert();
+
+    this.inTransaction(() => {
+      for (const item of toUpdate) {
+        updatePool.run(JSON.stringify(item.vacancy), item.vacancy.id);
+        index.run(...indexColumns(item.vacancy, item.sourceId), item.isExpired ? 1 : 0);
+        projection.run(item.vacancy.id, JSON.stringify(clusterProjectionOf(item.vacancy)));
+      }
+    });
   }
 
   saveClusters(clusters: VacancyCluster[]): void {
