@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateStrictTop20 } from './measure-strict-top20.mjs';
+import { collectMatchedPages, evaluateStrictTop20 } from './measure-strict-top20.mjs';
 
 describe('measure-strict-top20 (B323)', () => {
   it('разбор и подсчет строгого топ-20 на сохраненном ответе без сети', () => {
@@ -146,5 +146,38 @@ describe('measure-strict-top20 (B323)', () => {
     expect(result.roleCounts.adjacent).toBe(1);
     expect(result.levelMatchCount).toBe(19);
     expect(result.withRequirementMatchCount).toBe(18);
+  });
+
+  it('собирает топ-20 из нескольких страниц по nextOffset и не идёт дальше нужного', async () => {
+    const calls = [];
+    const pages = [
+      { data: [1, 2, 3, 4, 5, 6, 7], meta: { nextOffset: 7 } },
+      { data: [8, 9, 10, 11, 12, 13, 14], meta: { nextOffset: 14 } },
+      { data: [15, 16, 17, 18, 19, 20, 21], meta: { nextOffset: 21 } },
+      { data: [22], meta: { nextOffset: null } },
+    ];
+    const fetchPage = async (offset) => {
+      calls.push(offset);
+      const page = pages[calls.length - 1];
+      return { ok: true, status: 200, json: async () => page };
+    };
+    const items = await collectMatchedPages(fetchPage, 20);
+    expect(items).toHaveLength(20);
+    expect(items[19]).toBe(20);
+    expect(calls).toEqual([0, 7, 14]);
+  });
+
+  it('останавливается, когда пул кончился раньше лимита, и не зацикливается', async () => {
+    const fetchPage = async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: [1, 2], meta: { nextOffset: 0 } }),
+    });
+    expect(await collectMatchedPages(fetchPage, 20)).toEqual([1, 2]);
+  });
+
+  it('ошибка страницы — исключение с кодом ответа', async () => {
+    const fetchPage = async () => ({ ok: false, status: 502, json: async () => ({}) });
+    await expect(collectMatchedPages(fetchPage, 20)).rejects.toThrow('502');
   });
 });

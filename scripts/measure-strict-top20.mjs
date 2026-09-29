@@ -105,6 +105,30 @@ function parseCliArgument(name, fallback) {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
+const TOP_SIZE = 20;
+
+/**
+ * Подбор отдаётся страницами по ~12 КБ (около 6 записей): первая страница —
+ * не топ-20. Идём по `meta.nextOffset`, пока не наберём `limit` записей или
+ * пул не кончится. `fetchPage(offset)` возвращает Response.
+ */
+export async function collectMatchedPages(fetchPage, limit) {
+  const items = [];
+  let offset = 0;
+  for (let guard = 0; guard < 50 && items.length < limit; guard += 1) {
+    const response = await fetchPage(offset);
+    if (!response.ok) {
+      throw new Error(`Ошибка запроса подборки: ${response.status}`);
+    }
+    const envelope = await response.json();
+    if (Array.isArray(envelope.data)) items.push(...envelope.data);
+    const next = envelope.meta?.nextOffset;
+    if (typeof next !== 'number' || next <= offset) break;
+    offset = next;
+  }
+  return items.slice(0, limit);
+}
+
 export async function fetchStrictTop20(baseUrl, username, password) {
   const base = baseUrl.replace(/\/$/u, '');
 
@@ -133,20 +157,20 @@ export async function fetchStrictTop20(baseUrl, username, password) {
 
   const headers = { cookie, accept: 'application/json' };
 
-  const [campaignRes, vacanciesRes] = await Promise.all([
-    fetch(`${base}/api/v1/candidate/campaign`, { headers, signal: AbortSignal.timeout(30_000) }),
-    fetch(`${base}/api/v1/candidate/matched-vacancies`, { headers, signal: AbortSignal.timeout(60_000) }),
-  ]);
-
-  if (!vacanciesRes.ok) {
-    throw new Error(`Ошибка запроса подборки: ${vacanciesRes.status}`);
-  }
-
+  const campaignRes = await fetch(`${base}/api/v1/candidate/campaign`, {
+    headers,
+    signal: AbortSignal.timeout(30_000),
+  });
   const campaignJson = campaignRes.ok ? await campaignRes.json() : {};
-  const vacanciesJson = await vacanciesRes.json();
-
-  const vacancies = Array.isArray(vacanciesJson.data) ? vacanciesJson.data : [];
   const campaign = campaignJson.data ?? {};
+  const vacancies = await collectMatchedPages(
+    (offset) =>
+      fetch(`${base}/api/v1/candidate/matched-vacancies?offset=${offset}`, {
+        headers,
+        signal: AbortSignal.timeout(60_000),
+      }),
+    TOP_SIZE,
+  );
 
   const evaluated = evaluateStrictTop20(vacancies, campaign);
   evaluated.healthSha = healthSha;
