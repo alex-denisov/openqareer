@@ -477,7 +477,7 @@ test.describe('B089 administrator console', () => {
     await page.getByRole('button', { name: /pool-admin@example.test/ }).click();
     await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
 
-    const saveButton = page.getByRole('button', { name: 'Подтвердить профиль и перенос…' });
+    const saveButton = page.getByRole('button', { name: 'Перенести сессию на сервер' });
     await expect(saveButton).toBeVisible();
     const readBridgeState = () =>
       page.evaluate(
