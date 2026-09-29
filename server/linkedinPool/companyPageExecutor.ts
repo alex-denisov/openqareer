@@ -1,10 +1,10 @@
+import { readLinkedinPage } from './linkedinPageReader';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Browser, BrowserContext, Page } from 'playwright';
 import {
   parseLinkedinCompanyPeoplePageHtml,
   parseLinkedinCompanySearchPageHtml,
-  linkedinPageNeedsReauth,
 } from './companyPageParser';
 import {
   ensureCompanyRecruitersSchema,
@@ -309,18 +309,18 @@ export class LinkedinPoolCompanyPageExecutor {
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25_000 });
       if (this.stopped) return { status: 'stopped' };
-      const html = await page.content();
-      const statusCode = response?.status();
-      const finalUrl = page.url();
-      if (linkedinPageNeedsReauth({ statusCode, url: finalUrl, html })) {
-        const reason = /\/(?:login|uas\/login)(?:\/|\?|$)/iu.test(finalUrl)
-          ? 'login_required'
-          : statusCode === 401
-            ? 'expired'
-            : 'challenge_required';
-        return { status: 'needs_reauth', reason };
+      this.pauseController = new AbortController();
+      try {
+        return await readLinkedinPage(page, {
+          statusCode: response?.status(),
+          kind: detectCadencePageKind(url),
+          signal: this.pauseController.signal,
+          random: this.random,
+          wait: this.wait,
+        });
+      } finally {
+        this.pauseController = undefined;
       }
-      return { status: 'ready', html };
     } catch {
       return { status: this.stopped ? 'stopped' : 'transient_failure' };
     }

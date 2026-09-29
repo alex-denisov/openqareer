@@ -108,6 +108,9 @@ function fakeBrowser(options?: { challenge?: boolean }) {
     }),
     url: () => currentUrl,
     content: async () => html,
+    evaluate: async () => ({ height: 3000, viewport: 800 }),
+    mouse: { wheel: vi.fn(async () => undefined) },
+    close: vi.fn(async () => undefined),
   };
   const context = {
     addCookies: vi.fn(async () => undefined),
@@ -337,6 +340,8 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
       notification: 'sent',
     });
     expect(fake.navigated).toHaveLength(1);
+    expect(fake.page.mouse.wheel).not.toHaveBeenCalled();
+    expect(fake.page.close).toHaveBeenCalledOnce();
     expect(notifyOwner).toHaveBeenCalledTimes(1);
     expect(repository.list({ limit: 25, offset: 0 }).accounts.find(({ id }) => id === account.id)).toMatchObject({
       state: 'user_action_required',
