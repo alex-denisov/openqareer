@@ -212,6 +212,8 @@ let recruiterIntelligenceTimer: NodeJS.Timeout | undefined;
 let documentRetentionTimer: NodeJS.Timeout | undefined;
 let retentionSweepTimer: NodeJS.Timeout | undefined;
 let matchedPoolPrecomputeTimer: NodeJS.Timeout | undefined;
+let linkedinPoolSessionExpiryTimer: NodeJS.Timeout | undefined;
+let linkedinPoolSessionExpiryRetryTimer: NodeJS.Timeout | undefined;
 
 function runVacancyRefresh(): void {
   void vacancyIntelligenceService
@@ -290,6 +292,29 @@ function runRetentionSweep(): void {
   }
 }
 
+function runLinkedinPoolSessionExpiryPurge(): void {
+  try {
+    const purged = linkedinPool.purgeExpiredSessionCookies();
+    if (purged > 0) app.log.info({ purged }, 'linkedin-pool-session-expiry-purge-completed');
+    if (linkedinPoolSessionExpiryRetryTimer) {
+      clearTimeout(linkedinPoolSessionExpiryRetryTimer);
+      linkedinPoolSessionExpiryRetryTimer = undefined;
+    }
+  } catch (error) {
+    app.log.error(
+      { errorName: error instanceof Error ? error.name : 'UnknownError' },
+      'linkedin-pool-session-expiry-purge-failed',
+    );
+    if (!linkedinPoolSessionExpiryRetryTimer) {
+      linkedinPoolSessionExpiryRetryTimer = setTimeout(() => {
+        linkedinPoolSessionExpiryRetryTimer = undefined;
+        runLinkedinPoolSessionExpiryPurge();
+      }, 60_000);
+      linkedinPoolSessionExpiryRetryTimer.unref();
+    }
+  }
+}
+
 async function shutdown(signal: string): Promise<void> {
   app.log.info({ signal }, 'shutdown-started');
   if (vacancyRefreshTimer) clearInterval(vacancyRefreshTimer);
@@ -297,6 +322,8 @@ async function shutdown(signal: string): Promise<void> {
   if (documentRetentionTimer) clearInterval(documentRetentionTimer);
   if (retentionSweepTimer) clearInterval(retentionSweepTimer);
   if (matchedPoolPrecomputeTimer) clearInterval(matchedPoolPrecomputeTimer);
+  if (linkedinPoolSessionExpiryTimer) clearInterval(linkedinPoolSessionExpiryTimer);
+  if (linkedinPoolSessionExpiryRetryTimer) clearTimeout(linkedinPoolSessionExpiryRetryTimer);
   await app.close();
   candidateStore.close();
   authService.close();
@@ -349,6 +376,9 @@ try {
   // Сроки измеряются годами и месяцами, поэтому час — достаточная частота.
   retentionSweepTimer = setInterval(runRetentionSweep, 60 * 60 * 1_000);
   retentionSweepTimer.unref();
+  // Expired LinkedIn bearer cookies are removed at most fifteen minutes after li_at expiry.
+  linkedinPoolSessionExpiryTimer = setInterval(runLinkedinPoolSessionExpiryPurge, 15 * 60 * 1_000);
+  linkedinPoolSessionExpiryTimer.unref();
 } catch (error) {
   app.log.fatal(
     { errorName: error instanceof Error ? error.name : 'UnknownError' },

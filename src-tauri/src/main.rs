@@ -10,12 +10,14 @@ mod tunnel_manager;
 
 use automation_worker::{execute_candidate_action_safely, LocalActionRequest, LocalActionResult};
 use connector_session::{
-    bind_candidate_account, close_managed_session_window, close_orphaned_session_windows,
-    close_session_window, inspect_session_page, inspect_session_page_for,
-    is_managed_session_window_open, is_session_window_open, open_session_window, read_session_page,
+    bind_candidate_account, clear_linkedin_pool_profile, close_managed_session_window,
+    close_orphaned_session_windows, close_session_window, inspect_session_page,
+    inspect_session_page_for, is_managed_session_window_open, is_session_window_open,
+    open_session_window, read_linkedin_pool_session_cookies, read_session_page,
     reset_session_window, resize_session_window, resize_session_window_for,
-    should_route_through_tunnel, CandidateSessionAccount, SessionInspectionReport, SessionLayout,
-    SessionPageReport, SessionWindowReport, SessionWindowRequest,
+    should_route_through_tunnel, CandidateSessionAccount, PoolSessionCookie,
+    SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
+    SessionWindowRequest,
 };
 use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
@@ -204,6 +206,22 @@ async fn open_connector_session(
     Ok(open_session_window(&app, &request, proxy).await)
 }
 
+/// Exports LinkedIn cookies only from the explicitly named managed pool profile.
+#[tauri::command]
+fn export_pool_session(
+    session_key: String,
+    app: AppHandle,
+) -> Result<Vec<PoolSessionCookie>, String> {
+    read_linkedin_pool_session_cookies(&app, &session_key)
+}
+
+/// Removes the selected managed LinkedIn profile from this device after the
+/// server has accepted its encrypted copy or the admin revoked the session.
+#[tauri::command]
+async fn clear_pool_session_profile(session_key: String, app: AppHandle) -> Result<(), String> {
+    clear_linkedin_pool_profile(&app, &session_key).await
+}
+
 /// Whether the platform's window is still on screen.
 #[tauri::command]
 fn is_connector_session_open(
@@ -355,6 +373,8 @@ fn main() {
             desktop_native_fetch,
             bind_connector_account,
             open_connector_session,
+            export_pool_session,
+            clear_pool_session_profile,
             is_connector_session_open,
             close_connector_session,
             reset_connector_session,

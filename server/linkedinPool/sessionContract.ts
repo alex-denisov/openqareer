@@ -39,6 +39,39 @@ export const LINKEDIN_FAILURE_CODES = [
 
 export type LinkedinFailureCode = (typeof LINKEDIN_FAILURE_CODES)[number];
 
+export type LinkedinSessionCookieSameSite = 'Strict' | 'Lax' | 'None';
+
+/** Cookie values are process-only data and must never enter the account DTO. */
+export interface LinkedinSessionCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly domain: string;
+  readonly path: string;
+  /** Unix seconds; null means a browser session cookie without an expiry. */
+  readonly expiresAt: number | null;
+  readonly httpOnly: boolean;
+  readonly secure: boolean;
+  readonly sameSite: LinkedinSessionCookieSameSite | null;
+}
+
+export interface LinkedinPoolServerSessionSummary {
+  readonly capturedAt: string;
+  readonly expiresAt: string;
+  readonly cookieCount: number;
+  readonly revision: number;
+}
+
+export function isLinkedinSessionCookieDomain(value: string): boolean {
+  const rawDomain = value.trim().toLowerCase();
+  const domain = rawDomain.startsWith('.') ? rawDomain.slice(1) : rawDomain;
+  return (
+    domain === 'linkedin.com' ||
+    domain.endsWith('.linkedin.com') ||
+    domain === 'linkedin.cn' ||
+    domain.endsWith('.linkedin.cn')
+  );
+}
+
 export interface LinkedinPoolAccount {
   readonly id: string;
   readonly adminLabel: string;
@@ -54,6 +87,7 @@ export interface LinkedinPoolAccount {
   readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+  readonly serverSession: LinkedinPoolServerSessionSummary | null;
 }
 
 export interface LinkedinPoolPage {
@@ -95,7 +129,15 @@ const ALLOWED_TRANSITIONS: Record<LinkedinSessionState, readonly LinkedinSession
     'revoked',
     'disabled',
   ],
-  ready: ['checking', 'user_action_required', 'expired', 'challenge_required', 'cooling_down', 'revoked', 'disabled'],
+  ready: [
+    'checking',
+    'user_action_required',
+    'expired',
+    'challenge_required',
+    'cooling_down',
+    'revoked',
+    'disabled',
+  ],
   expired: ['user_action_required', 'login_required', 'revoked', 'disabled'],
   challenge_required: ['user_action_required', 'login_required', 'revoked', 'disabled'],
   cooling_down: ['checking', 'ready', 'login_required', 'revoked', 'disabled'],
@@ -104,17 +146,11 @@ const ALLOWED_TRANSITIONS: Record<LinkedinSessionState, readonly LinkedinSession
   disabled: [],
 };
 
-export function canTransition(
-  from: LinkedinSessionState,
-  to: LinkedinSessionState,
-): boolean {
+export function canTransition(from: LinkedinSessionState, to: LinkedinSessionState): boolean {
   return from === to || ALLOWED_TRANSITIONS[from].includes(to);
 }
 
-export function assertTransition(
-  from: LinkedinSessionState,
-  to: LinkedinSessionState,
-): void {
+export function assertTransition(from: LinkedinSessionState, to: LinkedinSessionState): void {
   if (!canTransition(from, to)) {
     throw new Error(`linkedin_session_transition_not_allowed:${from}->${to}`);
   }

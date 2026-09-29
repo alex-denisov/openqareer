@@ -78,6 +78,17 @@ interface DesktopSessionInspectionReport {
 /** Stable profile key for an admin-managed provider session. */
 export type ManagedSessionKey = string;
 
+export interface ManagedPoolSessionCookie {
+  readonly name: string;
+  readonly value: string;
+  readonly domain: string;
+  readonly path: string;
+  readonly expiresAt: number | null;
+  readonly httpOnly: boolean;
+  readonly secure: boolean;
+  readonly sameSite: 'Strict' | 'Lax' | 'None' | null;
+}
+
 /**
  * Opens the platform's own sign-in window. The candidate authenticates on the
  * platform, in their own session — credentials never pass through OpenQareer,
@@ -145,6 +156,24 @@ export async function openManagedLinkedinSession(
     layout,
     sessionKey,
   );
+}
+
+/** Reads cookies only from the selected desktop pool profile for explicit upload. */
+export async function exportPoolSessionCookies(
+  sessionKey: ManagedSessionKey,
+): Promise<ManagedPoolSessionCookie[]> {
+  if (!isTauriEnvironment()) throw new Error('desktop_runtime_required');
+  const cookies = await invokeDesktopCommand<ManagedPoolSessionCookie[]>('export_pool_session', {
+    sessionKey,
+  });
+  if (!cookies) throw new Error('desktop_bridge_unavailable');
+  return cookies;
+}
+
+/** Clears the persistent local copy after transfer or session revocation. */
+export async function clearPoolSessionProfile(sessionKey: ManagedSessionKey): Promise<void> {
+  if (!isTauriEnvironment()) throw new Error('desktop_runtime_required');
+  await invokeDesktopCommand<void>('clear_pool_session_profile', { sessionKey });
 }
 
 export async function closeConnectorSession(

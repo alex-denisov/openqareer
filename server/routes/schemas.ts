@@ -248,6 +248,29 @@ export const adminLinkedinPoolCompleteSchema = z.object({
   handle: z.string().regex(/^lhs_[A-Za-z0-9_-]{40,}$/),
   state: z.enum(['ready', 'login_required', 'challenge_required', 'expired', 'banned']),
   accountMarker: z.string().trim().max(240).optional(),
+}).refine((value) => value.state !== 'ready' || Boolean(value.accountMarker), {
+  path: ['accountMarker'],
+  message: 'profile marker is required to confirm a LinkedIn account',
+});
+
+export const adminLinkedinPoolSessionSchema = z.object({
+  cookies: z
+    .array(
+      z
+        .object({
+          name: z.string().min(1).max(256),
+          value: z.string().min(1).max(8_192),
+          domain: z.string().min(1).max(255),
+          path: z.string().min(1).max(1_024),
+          expiresAt: z.number().int().nullable(),
+          httpOnly: z.boolean(),
+          secure: z.boolean(),
+          sameSite: z.enum(['Strict', 'Lax', 'None']).nullable(),
+        })
+        .strict(),
+    )
+    .min(1)
+    .max(100),
 });
 
 export const adminVacancyQuerySchema = z.object({

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * B089 — the administrator surface. The owner asked for an admin account for
@@ -254,6 +255,7 @@ test.describe('B089 administrator console', () => {
                 revision: 0,
                 createdAt: '2026-09-22T00:00:00.000Z',
                 updatedAt: '2026-09-22T00:00:00.000Z',
+                serverSession: null,
               },
             ],
           },
@@ -286,6 +288,265 @@ test.describe('B089 administrator console', () => {
     await page.getByRole('button', { name: /pool-admin@example.test/ }).click();
     await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
     await expect(page.getByRole('alert')).toContainText('приложении OpenQareer Desktop');
+  });
+
+  test('requires transfer confirmation, clears the local profile, and offers retry when save fails', async ({
+    page,
+  }, testInfo) => {
+    let authRequests = 0;
+    await page.route('**/api/v1/auth/me', async (route) => {
+      authRequests += 1;
+      await route.fulfill({ json: { data: ADMINISTRATOR } });
+    });
+    await page.route('**/api/v1/admin/users*', (route) =>
+      route.fulfill({ json: { data: DIRECTORY } }),
+    );
+
+    const accountId = '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1';
+    const expiresAt = Math.floor((Date.now() + 60 * 60_000) / 1_000);
+    const syntheticCookies = [
+      {
+        name: 'li_at',
+        value: 'synthetic-session-secret-e2e',
+        domain: 'linkedin.com',
+        path: '/',
+        expiresAt,
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+      },
+    ];
+    await page.addInitScript((cookies) => {
+      try {
+        localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
+      } catch {
+        // The test page uses an HTTP origin, but keep the bridge deterministic if that changes.
+      }
+      const sessionBridgeState = { exports: 0, localProfileClears: 0 };
+      (
+        window as unknown as { __linkedinSessionBridgeState: typeof sessionBridgeState }
+      ).__linkedinSessionBridgeState = sessionBridgeState;
+      (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
+        {
+          invoke: async (command: string, args: Record<string, unknown>) => {
+            if (command === 'desktop_native_fetch') {
+              const request = args.request as {
+                url: string;
+                method: string;
+                headers?: Record<string, string>;
+                body?: string;
+              };
+              const response = await fetch(request.url, {
+                method: request.method,
+                headers: request.headers,
+                ...(request.body ? { body: request.body } : {}),
+              });
+              return {
+                status: response.status,
+                ok: response.ok,
+                headers: Object.fromEntries(response.headers.entries()),
+                body: await response.text(),
+              };
+            }
+            if (command === 'open_connector_session') {
+              return { opened: true, label: 'connector-linkedin-pool-test', reason: null };
+            }
+            if (command === 'inspect_connector_session_page') {
+              return {
+                ready: true,
+                url: 'https://www.linkedin.com/feed/',
+                signedInApplicant: true,
+                login: false,
+                otp: false,
+                captcha: false,
+                accountMarker: 'synthetic-profile-marker',
+              };
+            }
+            if (command === 'export_pool_session') {
+              const state = (
+                window as unknown as {
+                  __linkedinSessionBridgeState: typeof sessionBridgeState;
+                }
+              ).__linkedinSessionBridgeState;
+              state.exports += 1;
+              return cookies;
+            }
+            if (command === 'clear_pool_session_profile') {
+              const state = (
+                window as unknown as {
+                  __linkedinSessionBridgeState: typeof sessionBridgeState;
+                }
+              ).__linkedinSessionBridgeState;
+              state.localProfileClears += 1;
+              if (state.localProfileClears === 1) throw new Error('synthetic profile store busy');
+              return undefined;
+            }
+            if (command === 'resize_connector_session' || command === 'close_connector_session') {
+              return true;
+            }
+            return null;
+          },
+        };
+    }, syntheticCookies);
+
+    let loginVerified = false;
+    let serverSession: Record<string, unknown> | null = null;
+    let uploadAttempts = 0;
+    let uploadedCookies: unknown;
+    await page.route('**/api/v1/admin/linkedin/accounts?*', async (route) => {
+      await route.fulfill({
+        json: {
+          data: {
+            total: 1,
+            offset: 0,
+            nextOffset: null,
+            accounts: [
+              {
+                id: accountId,
+                adminLabel: 'Основной пул',
+                emailLogin: 'pool-admin@example.test',
+                providerAccountMarker: null,
+                profileIsolationId: 'profile_123e4567-e89b-12d3-a456-426614174000',
+                state: loginVerified ? 'ready' : 'login_required',
+                lastVerifiedAt: loginVerified ? new Date().toISOString() : null,
+                lastHeartbeatAt: null,
+                lastFailureCode: null,
+                leaseUntil: null,
+                capabilityVerdict: 'not_configured',
+                revision: 1,
+                createdAt: '2026-09-22T00:00:00.000Z',
+                updatedAt: new Date().toISOString(),
+                serverSession,
+              },
+            ],
+          },
+        },
+      });
+    });
+    await page.route(`**/api/v1/admin/linkedin/accounts/${accountId}/session`, async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 202,
+          json: {
+            data: {
+              account: { state: 'user_action_required' },
+              lease: {
+                accountId,
+                handle: 'lhs_synthetic_handle_for_e2e_123456789012345678901234567890',
+                expiresAt: new Date(Date.now() + 60_000).toISOString(),
+                transport: 'desktop',
+                webRemote: false,
+              },
+            },
+          },
+        });
+        return;
+      }
+      if (route.request().method() === 'PUT') {
+        uploadAttempts += 1;
+        uploadedCookies = route.request().postDataJSON().cookies;
+        if (uploadAttempts === 1) {
+          await route.fulfill({
+            status: 503,
+            json: { error: { code: 'storage_busy', message: 'Сервис временно недоступен.' } },
+          });
+          return;
+        }
+        serverSession = {
+          capturedAt: new Date().toISOString(),
+          expiresAt: new Date(expiresAt * 1_000).toISOString(),
+          cookieCount: 1,
+          revision: 1,
+        };
+        await route.fulfill({ json: { data: serverSession } });
+        return;
+      }
+      await route.fulfill({ status: 204, body: '' });
+    });
+    await page.route(`**/api/v1/admin/linkedin/accounts/${accountId}/session/complete`, (route) => {
+      loginVerified = true;
+      return route.fulfill({
+        json: { data: { state: 'ready', emailLogin: 'pool-admin@example.test' } },
+      });
+    });
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    expect(authRequests).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Аккаунты LinkedIn' }).click();
+    await page.getByRole('button', { name: /pool-admin@example.test/ }).click();
+    await page.getByRole('button', { name: 'Войти в LinkedIn' }).click();
+
+    const saveButton = page.getByRole('button', { name: 'Подтвердить профиль и перенос…' });
+    await expect(saveButton).toBeVisible();
+    const readBridgeState = () =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __linkedinSessionBridgeState: { exports: number; localProfileClears: number };
+            }
+          ).__linkedinSessionBridgeState,
+      );
+    expect((await readBridgeState()).exports).toBe(0);
+    expect(uploadAttempts).toBe(0);
+    await saveButton.click();
+    const transferDialog = page.getByRole('alertdialog', { name: 'Перенести сессию на сервер?' });
+    await expect(transferDialog).toContainText('pool-admin@example.test');
+    await expect(transferDialog).toContainText('/in/synthetic-profile-marker');
+    await expect(transferDialog).toContainText('После успешной передачи локальный профиль');
+    expect((await readBridgeState()).exports).toBe(0);
+    const evidenceDirectory = 'output/playwright/B306';
+    mkdirSync(evidenceDirectory, { recursive: true });
+    const evidenceName = `linkedin-session-${testInfo.project.name}`;
+    await page.screenshot({
+      path: join(evidenceDirectory, `${evidenceName}-retry.png`),
+      fullPage: true,
+    });
+    const retryMarkup = (await page.content())
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '')
+      .replace(/<link\b[^>]*rel="modulepreload"[^>]*>/giu, '')
+      .replace(/\s+crossorigin=""/giu, '')
+      .replace(/(["'])\/assets\//gu, '$1../../../dist/assets/');
+    writeFileSync(join(evidenceDirectory, `${evidenceName}-retry.html`), retryMarkup);
+    await transferDialog.getByRole('button', { name: 'Подтвердить перенос' }).click();
+    await expect(
+      page.getByText('Окно LinkedIn осталось открытым. Проверьте вход и повторите перенос.'),
+    ).toBeVisible();
+    await expect(saveButton).toBeVisible();
+    expect((await readBridgeState()).exports).toBe(1);
+    expect(uploadAttempts).toBe(1);
+    await saveButton.click();
+    await page
+      .getByRole('alertdialog', { name: 'Перенести сессию на сервер?' })
+      .getByRole('button', { name: 'Подтвердить перенос' })
+      .click();
+    await expect(
+      page.getByText(
+        'Сессия сохранена на сервере, но локальный профиль не очищен. Повторите очистку из приложения.',
+      ),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Повторить очистку профиля на устройстве' }).click();
+    await expect(
+      page.getByText('Локальный профиль LinkedIn очищен на этом устройстве.'),
+    ).toBeVisible();
+    await expect(page.getByText(/Сессия на сервере/)).toBeVisible();
+    await expect(page.locator('.admin-linkedin-card__meta')).toContainText('До ');
+    await page.screenshot({
+      path: join(evidenceDirectory, `${evidenceName}-saved.png`),
+      fullPage: true,
+    });
+    const savedMarkup = (await page.content())
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, '')
+      .replace(/<link\b[^>]*rel="modulepreload"[^>]*>/giu, '')
+      .replace(/\s+crossorigin=""/giu, '')
+      .replace(/(["'])\/assets\//gu, '$1../../../dist/assets/');
+    writeFileSync(join(evidenceDirectory, `${evidenceName}-saved.html`), savedMarkup);
+    expect(uploadAttempts).toBe(2);
+    expect((await readBridgeState()).exports).toBe(2);
+    expect((await readBridgeState()).localProfileClears).toBe(2);
+    expect(uploadedCookies).toEqual(syntheticCookies);
+    expect(JSON.stringify(serverSession)).not.toContain('synthetic-session-secret-e2e');
   });
 
   test('a new LinkedIn account appears in the list even when an old filter was active', async ({

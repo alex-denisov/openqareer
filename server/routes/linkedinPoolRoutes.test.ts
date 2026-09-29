@@ -92,6 +92,55 @@ async function signIn(
   return String(response.headers['set-cookie']).split(';')[0];
 }
 
+function validSessionCookies() {
+  return [
+    {
+      name: 'li_at',
+      value: 'route-test-session-secret',
+      domain: 'linkedin.com',
+      path: '/',
+      expiresAt: Math.floor((Date.now() + 60 * 60_000) / 1_000),
+      httpOnly: true,
+      secure: true,
+      sameSite: 'Lax',
+    },
+  ];
+}
+
+async function createReadyAccount(
+  app: Awaited<ReturnType<typeof buildApp>>,
+  adminCookie: string,
+): Promise<string> {
+  const created = await app.inject({
+    method: 'POST',
+    url: '/api/v1/admin/linkedin/accounts',
+    headers: {
+      cookie: adminCookie,
+      origin: 'http://localhost:3000',
+      'idempotency-key': '77777777-7777-4777-8777-777777777777',
+    },
+    payload: { adminLabel: 'Пул', emailLogin: 'pool-route@example.test' },
+  });
+  const accountId = created.json().data.id as string;
+  const login = await app.inject({
+    method: 'POST',
+    url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+    headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+  });
+  const complete = await app.inject({
+    method: 'POST',
+    url: `/api/v1/admin/linkedin/accounts/${accountId}/session/complete`,
+    headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+    payload: {
+      handle: login.json().data.lease.handle,
+      state: 'ready',
+      accountMarker: 'route-profile-marker',
+    },
+  });
+  expect(complete.statusCode).toBe(200);
+  return accountId;
+}
+
 describe('admin LinkedIn pool boundary', () => {
   it('does not disclose the pool route or identifier to a candidate', async () => {
     const app = await createApp();
@@ -144,6 +193,14 @@ describe('admin LinkedIn pool boundary', () => {
     expect(login.statusCode).toBe(202);
     expect(login.json().data.account.state).toBe('user_action_required');
     expect(login.json().data.lease.webRemote).toBe(false);
+
+    const unmarkedComplete = await app.inject({
+      method: 'POST',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session/complete`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+      payload: { handle: login.json().data.lease.handle, state: 'ready' },
+    });
+    expect(unmarkedComplete.statusCode).toBe(422);
 
     const complete = await app.inject({
       method: 'POST',
@@ -201,5 +258,93 @@ describe('admin LinkedIn pool boundary', () => {
 
     expect(response.statusCode).toBe(403);
     expect(response.json().error.code).toBe('origin_not_allowed');
+  });
+
+  it('stores only an encrypted session summary behind admin auth and CSRF, then deletes it', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const candidateCookie = await signIn(app, CANDIDATE);
+    const accountId = await createReadyAccount(app, adminCookie);
+    const cookies = validSessionCookies();
+
+    const forbidden = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: candidateCookie, origin: 'http://localhost:3000' },
+      payload: { cookies },
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const csrf = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: adminCookie },
+      payload: { cookies },
+    });
+    expect(csrf.statusCode).toBe(403);
+
+    const missingLiAt = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+      payload: {
+        cookies: [{ ...cookies[0]!, name: 'liap' }],
+      },
+    });
+    expect(missingLiAt.statusCode).toBe(422);
+    expect(missingLiAt.json().error.code).toBe('linkedin_session_cookie_required');
+
+    const saved = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+      payload: { cookies },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.body).not.toContain('route-test-session-secret');
+    expect(saved.json().data).toMatchObject({ cookieCount: 1, revision: 1 });
+
+    const list = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/accounts',
+      headers: { cookie: adminCookie },
+    });
+    expect(list.json().data.accounts[0].serverSession).toMatchObject({ cookieCount: 1 });
+    expect(JSON.stringify(list.json().data.accounts[0].serverSession)).not.toContain(
+      'route-test-session-secret',
+    );
+
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+    });
+    expect(deleted.statusCode).toBe(204);
+    const afterDelete = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/accounts',
+      headers: { cookie: adminCookie },
+    });
+    expect(afterDelete.json().data.accounts[0].serverSession).toBeNull();
+  });
+
+  it('returns 413 before parsing an oversized server-session upload', async () => {
+    const app = await createApp();
+    const adminCookie = await signIn(app, ADMIN);
+    const accountId = await createReadyAccount(app, adminCookie);
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/admin/linkedin/accounts/${accountId}/session`,
+      headers: { cookie: adminCookie, origin: 'http://localhost:3000' },
+      payload: {
+        cookies: [
+          {
+            ...validSessionCookies()[0],
+            value: 'x'.repeat(70_000),
+          },
+        ],
+      },
+    });
+    expect(response.statusCode).toBe(413);
   });
 });

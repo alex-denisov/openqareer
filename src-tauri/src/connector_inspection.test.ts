@@ -13,14 +13,20 @@ function inspect(input: {
   navigationProfile?: boolean;
 }) {
   const profile = input.profileLink ? { href: input.profileLink } : null;
+  const profileContainer = input.navigationProfile
+    ? {
+        querySelector(selector: string) {
+          return selector === 'a[href*="/in/"]' ? profile : null;
+        },
+      }
+    : null;
   const document = {
     readyState: 'complete',
     title: 'LinkedIn',
     body: { innerText: input.body ?? '' },
     querySelector(selector: string) {
-      if (selector === 'a[href*="/in/"]') return profile;
       if (input.navigationProfile && selector.includes('data-view-name="navigation-profile"')) {
-        return {};
+        return profileContainer ?? {};
       }
       return null;
     },
@@ -44,7 +50,7 @@ describe('connector inspection script', () => {
     });
   });
 
-  it('keeps the profile slug as an optional provider marker', () => {
+  it('gets the profile marker from the authenticated navigation profile link', () => {
     expect(
       inspect({
         pathname: '/in/alexey-denisov/',
@@ -52,5 +58,14 @@ describe('connector inspection script', () => {
         navigationProfile: true,
       }),
     ).toMatchObject({ signedInApplicant: true, accountMarker: 'alexey-denisov' });
+  });
+
+  it('does not mistake a profile link in page content for the signed-in account', () => {
+    expect(
+      inspect({
+        pathname: '/feed/',
+        profileLink: 'https://www.linkedin.com/in/someone-in-a-post/',
+      }),
+    ).toMatchObject({ signedInApplicant: true, accountMarker: null });
   });
 });

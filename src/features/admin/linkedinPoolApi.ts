@@ -1,4 +1,5 @@
 import { apiFetch, readData, throwApiError } from '../coach/apiClient';
+import type { ManagedPoolSessionCookie } from '../connections/connectorSession';
 
 export type LinkedinSessionState =
   | 'unconfigured'
@@ -42,6 +43,14 @@ export interface LinkedinPoolAccount {
   revision: number;
   createdAt: string;
   updatedAt: string;
+  serverSession: LinkedinPoolServerSessionSummary | null;
+}
+
+export interface LinkedinPoolServerSessionSummary {
+  capturedAt: string;
+  expiresAt: string;
+  cookieCount: number;
+  revision: number;
 }
 export interface LinkedinPoolPage {
   total: number;
@@ -148,6 +157,29 @@ export async function completeAdminLinkedinLogin(
     },
   );
   return readData<LinkedinPoolAccount>(response);
+}
+
+export async function storeAdminLinkedinSession(
+  accountId: string,
+  cookies: readonly ManagedPoolSessionCookie[],
+): Promise<LinkedinPoolServerSessionSummary> {
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cookies }),
+    },
+  );
+  return readData<LinkedinPoolServerSessionSummary>(response);
+}
+
+export async function deleteAdminLinkedinSession(accountId: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/admin/linkedin/accounts/${encodeURIComponent(accountId)}/session`,
+    { method: 'DELETE' },
+  );
+  if (!response.ok) await throwApiError(response);
 }
 
 export async function probeAdminLinkedinAccount(accountId: string): Promise<LinkedinPoolAccount> {
