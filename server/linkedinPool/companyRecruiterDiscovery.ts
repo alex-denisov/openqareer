@@ -24,6 +24,8 @@ export interface StoredCompanyRecruiter {
   readonly observedAt: string;
 }
 
+export const LINKEDIN_RECRUITER_RETENTION_MONTHS = 6;
+
 export const LINKEDIN_COMPANY_RECRUITERS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS linkedin_pool_company_recruiters (
   id TEXT PRIMARY KEY,
@@ -35,6 +37,8 @@ CREATE TABLE IF NOT EXISTS linkedin_pool_company_recruiters (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_linkedin_pool_company_recruiters_company
   ON linkedin_pool_company_recruiters(company_name);
+CREATE INDEX IF NOT EXISTS idx_linkedin_pool_company_recruiters_observed
+  ON linkedin_pool_company_recruiters(observed_at);
 `;
 
 export function ensureCompanyRecruitersSchema(database: DatabaseSync): void {
@@ -53,21 +57,56 @@ export function savePoolCompanyRecruiter(
 ): StoredCompanyRecruiter {
   const db = pool.getDatabase();
   ensureCompanyRecruitersSchema(db);
-  const id = randomUUID();
-  const observedAt = recruiter.observedAt ?? new Date().toISOString();
-  db.prepare(`
-    INSERT INTO linkedin_pool_company_recruiters
+  const currentTime = new Date().toISOString();
+  const observedAt = recruiter.observedAt && !Number.isNaN(Date.parse(recruiter.observedAt))
+    ? recruiter.observedAt > currentTime ? currentTime : recruiter.observedAt
+    : currentTime;
+  const existing = db.prepare(`
+    SELECT id, observed_at FROM linkedin_pool_company_recruiters
+    WHERE company_name = ? COLLATE NOCASE AND linkedin_url = ?
+    ORDER BY observed_at DESC LIMIT 1
+  `).get(recruiter.companyName, recruiter.linkedinUrl) as { id: string; observed_at: string } | undefined;
+  const id = existing?.id ?? randomUUID();
+  const effectiveObservedAt = existing && existing.observed_at > observedAt ? existing.observed_at : observedAt;
+  if (existing) {
+    db.prepare(`UPDATE linkedin_pool_company_recruiters
+      SET full_name = ?, role_title = ?, observed_at = ? WHERE id = ?`)
+      .run(recruiter.fullName, recruiter.roleTitle, effectiveObservedAt, id);
+  } else {
+    db.prepare(`INSERT INTO linkedin_pool_company_recruiters
       (id, company_name, full_name, role_title, linkedin_url, observed_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, recruiter.companyName, recruiter.fullName, recruiter.roleTitle, recruiter.linkedinUrl, observedAt);
+      VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(id, recruiter.companyName, recruiter.fullName, recruiter.roleTitle, recruiter.linkedinUrl, effectiveObservedAt);
+  }
   return {
     id,
     companyName: recruiter.companyName,
     fullName: recruiter.fullName,
     roleTitle: recruiter.roleTitle,
     linkedinUrl: recruiter.linkedinUrl,
-    observedAt,
+    observedAt: effectiveObservedAt,
   };
+}
+
+export function purgeExpiredRecruiters(database: DatabaseSync, now: Date, limit = 500): number {
+  if (!Number.isInteger(limit) || limit < 1) throw new RangeError('limit must be positive');
+  if (Number.isNaN(now.getTime())) throw new RangeError('now must be valid');
+  ensureCompanyRecruitersSchema(database);
+  const cutoff = recruiterRetentionCutoff(now);
+  const result = database.prepare(`DELETE FROM linkedin_pool_company_recruiters
+    WHERE id IN (SELECT id FROM linkedin_pool_company_recruiters
+      WHERE observed_at < ? ORDER BY observed_at LIMIT ?)`)
+    .run(cutoff.toISOString(), limit);
+  return Number(result.changes);
+}
+
+function recruiterRetentionCutoff(now: Date): Date {
+  const cutoff = new Date(now);
+  cutoff.setUTCDate(1);
+  cutoff.setUTCMonth(cutoff.getUTCMonth() - LINKEDIN_RECRUITER_RETENTION_MONTHS);
+  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoff.setUTCDate(Math.min(now.getUTCDate(), lastDay));
+  return cutoff;
 }
 
 export async function findCompanyRecruitersFromPool(
@@ -89,10 +128,10 @@ export async function findCompanyRecruitersFromPool(
   const row = db.prepare(`
     SELECT id, company_name, full_name, role_title, linkedin_url, observed_at
     FROM linkedin_pool_company_recruiters
-    WHERE company_name = ? COLLATE NOCASE
+    WHERE company_name = ? COLLATE NOCASE AND observed_at >= ?
     ORDER BY observed_at DESC
     LIMIT 1
-  `).get(cleanCompany) as {
+  `).get(cleanCompany, recruiterRetentionCutoff(new Date()).toISOString()) as {
     id: string;
     company_name: string;
     full_name: string;

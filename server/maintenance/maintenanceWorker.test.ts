@@ -104,6 +104,26 @@ function startConcurrentWriter(databasePath: string): {
 const offline = async () => ({ status: 0, body: null });
 
 describe('MaintenanceWorker (B230)', () => {
+  it('isolates recruiter purge failure and logs no PII', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const worker = new MaintenanceWorker({ engine: {} as never, log, purgeRecruiters: () => { throw new Error('Private Name https://linkedin.com/in/private'); } });
+    expect(await worker.runRecruiterPurgeStep()).toBe(0);
+    expect(log.error).toHaveBeenCalledWith({ errorName: 'Error' }, 'linkedin-recruiter-retention-failed');
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain('Private Name');
+  });
+  it('reports only the number of purged recruiter rows', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const worker = new MaintenanceWorker({ engine: {} as never, log, purgeRecruiters: () => 7 });
+    expect(await worker.runRecruiterPurgeStep()).toBe(7);
+    expect(log.info).toHaveBeenCalledWith({ deleted: 7 }, 'linkedin-recruiter-retention-purged');
+  });
+  it('drains expired recruiter rows in bounded batches', async () => {
+    const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const purgeRecruiters = vi.fn().mockReturnValueOnce(500).mockReturnValueOnce(3);
+    const worker = new MaintenanceWorker({ engine: {} as never, log, purgeRecruiters });
+    expect(await worker.runRecruiterPurgeStep()).toBe(503);
+    expect(purgeRecruiters).toHaveBeenCalledTimes(2);
+  });
   const directories: string[] = [];
   afterEach(() => {
     for (const directory of directories.splice(0))

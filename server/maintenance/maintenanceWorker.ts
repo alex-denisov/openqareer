@@ -54,6 +54,7 @@ export interface MaintenanceIntervals {
   readonly titleModelMs: number;
   readonly descriptionSkillsMs?: number;
   readonly linkedinPoolExecutorMs: number;
+  readonly recruiterPurgeMs: number;
 }
 
 export interface MaintenanceLinkedinPoolExecutor {
@@ -104,6 +105,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   titleModelMs: 30 * 1_000,
   descriptionSkillsMs: 10 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
+  recruiterPurgeMs: 24 * 60 * 60 * 1_000,
 };
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
@@ -144,6 +146,7 @@ export class MaintenanceWorker {
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
+  private readonly purgeRecruiters?: () => number;
   private titleModelRunning = false;
   private lastTitleModelLogAt = 0;
   private lastTitleParseProgressAt = Date.now();
@@ -166,11 +169,13 @@ export class MaintenanceWorker {
     titleParse?: TitleParseStep;
     titleModel?: TitleModelStep;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
+    purgeRecruiters?: () => number;
   }) {
     this.engine = options.engine;
     this.titleParse = options.titleParse;
     this.titleModel = options.titleModel;
     this.linkedinPoolExecutor = options.linkedinPoolExecutor;
+    this.purgeRecruiters = options.purgeRecruiters;
     this.log = options.log;
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
@@ -450,6 +455,24 @@ export class MaintenanceWorker {
     );
   }
 
+  async runRecruiterPurgeStep(): Promise<number> {
+    if (this.stopped || !this.purgeRecruiters) return 0;
+    try {
+      let total = 0;
+      while (!this.stopped) {
+        const deleted = this.purgeRecruiters();
+        total += deleted;
+        if (deleted < 500) break;
+        await new Promise((resolve) => setImmediate(resolve));
+      }
+      this.log.info({ deleted: total }, 'linkedin-recruiter-retention-purged');
+      return total;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'linkedin-recruiter-retention-failed');
+      return 0;
+    }
+  }
+
   /** Заводит таймеры; первая волна — сразу, остальное по расписанию. */
   start(): void {
     const every = (ms: number, tick: () => unknown) => {
@@ -464,6 +487,12 @@ export class MaintenanceWorker {
       every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
     }
     every(this.intervals.reportMs, () => this.reportMemory());
+    if (this.purgeRecruiters) {
+      every(this.intervals.recruiterPurgeMs, () =>
+        this.track(this.runRecruiterPurgeStep(), 'linkedin-recruiter-retention-failed', 0),
+      );
+      void this.track(this.runRecruiterPurgeStep(), 'linkedin-recruiter-retention-failed', 0);
+    }
     every(this.intervals.titleParseMs, () => this.runTitleParseStep());
     every(TITLE_PARSE_PROGRESS_INTERVAL_MS, () => this.reportTitleParseProgress());
     every(this.intervals.titleModelMs, () =>
