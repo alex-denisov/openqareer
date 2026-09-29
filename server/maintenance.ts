@@ -8,6 +8,7 @@ import {
   LinkedinPoolCompanyPageExecutor,
   readLinkedinPoolExecutorConfig,
 } from './linkedinPool/companyPageExecutor';
+import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/modelTitleParser';
@@ -22,8 +23,8 @@ import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
  * (`recluster: keyed`); полная пересборка на проде не помещается в память.
  */
 const config = readServerConfig(process.env);
-const linkedinExecutorConfig = readLinkedinPoolExecutorConfig(process.env);
 const log = createJsonLineLog();
+const linkedinExecutorConfig = readExecutorConfigOrDisable();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
   // Сведение по ключам: партия × соседи в куче, полная пересборка запрещена.
@@ -37,6 +38,19 @@ const composed = composeVacancyEngine({
 const semanticDatabase = new DatabaseSync(config.databasePath);
 semanticDatabase.exec('PRAGMA journal_mode = WAL;');
 applySqliteBusyTimeout(semanticDatabase);
+// Ошибка настройки исполнителя LinkedIn не должна останавливать обслуживание
+// пула вакансий: исполнитель остаётся выключенным, код ошибки — в журнал.
+function readExecutorConfigOrDisable(): LinkedinPoolExecutorConfig {
+  try {
+    return readLinkedinPoolExecutorConfig(process.env);
+  } catch (error: unknown) {
+    log.error(
+      { reason: error instanceof Error ? error.message : 'unknown' },
+      'linkedin-pool-executor-config-invalid',
+    );
+    return { enabled: false };
+  }
+}
 const linkedinPoolRepository = linkedinExecutorConfig.enabled
   ? new SqliteLinkedinPoolRepository({
       databasePath: config.databasePath,
