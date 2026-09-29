@@ -8,7 +8,7 @@
 
 use crate::linkedin_read_guard::{is_detail_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
-use std::fs::create_dir_all;
+use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -88,6 +88,20 @@ pub struct SessionInspectionReport {
     pub captcha: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PoolSessionCookie {
+    pub name: String,
+    pub value: String,
+    pub domain: String,
+    pub path: String,
+    /// Unix seconds, matching the browser cookie's absolute expiry.
+    pub expires_at: Option<i64>,
+    pub http_only: bool,
+    pub secure: bool,
+    pub same_site: Option<String>,
+}
+
 /// One long-lived window per platform, so a second click focuses the window the
 /// candidate already signed in to instead of starting a fresh session.
 pub fn session_window_label(platform: &str) -> Option<&'static str> {
@@ -146,6 +160,80 @@ fn session_window_label_for(
 
 fn host_belongs_to(host: &str, domain: &str) -> bool {
     host == domain || host.ends_with(&format!(".{domain}"))
+}
+
+fn is_linkedin_cookie_domain(domain: &str) -> bool {
+    let raw = domain.trim().to_ascii_lowercase();
+    if raw.starts_with("..") {
+        return false;
+    }
+    let normalized = raw.strip_prefix('.').unwrap_or(&raw);
+    normalized == "linkedin.com"
+        || normalized.ends_with(".linkedin.com")
+        || normalized == "linkedin.cn"
+        || normalized.ends_with(".linkedin.cn")
+}
+
+/// Returns only the LinkedIn cookies from the isolated managed pool profile.
+/// The value crosses Tauri IPC only for the explicit server-save action.
+pub fn read_linkedin_pool_session_cookies(
+    app: &AppHandle,
+    session_key: &str,
+) -> Result<Vec<PoolSessionCookie>, String> {
+    let (label, _) = session_window_label_for("linkedin", Some(session_key))?;
+    let webview = app
+        .get_webview(&label)
+        .ok_or_else(|| "managed_session_window_missing".to_string())?;
+    let linkedin_url = Url::parse("https://www.linkedin.com/")
+        .map_err(|_| "linkedin_cookie_origin_invalid".to_string())?;
+    let cookies = webview
+        .cookies_for_url(linkedin_url)
+        .map_err(|_| "linkedin_session_cookie_read_failed".to_string())?;
+    let mut exported = Vec::new();
+    for cookie in cookies {
+        // `cookies_for_url` limits host-only cookies to this LinkedIn origin;
+        // preserve that scope in the wire contract as `www.linkedin.com`.
+        let domain = cookie.domain().unwrap_or("www.linkedin.com");
+        if !is_linkedin_cookie_domain(domain) {
+            continue;
+        }
+        let name = cookie.name();
+        let value = cookie.value();
+        let path = cookie.path().unwrap_or("/");
+        if name.is_empty()
+            || name.len() > 256
+            || value.is_empty()
+            || value.len() > 8_192
+            || value
+                .chars()
+                .any(|character| character.is_control() || character == ';')
+            || path.len() > 1_024
+        {
+            return Err("linkedin_session_cookie_invalid".to_string());
+        }
+        exported.push(PoolSessionCookie {
+            name: name.to_string(),
+            value: value.to_string(),
+            domain: domain.to_string(),
+            path: path.to_string(),
+            expires_at: cookie
+                .expires_datetime()
+                .map(|expires| expires.unix_timestamp()),
+            http_only: cookie.http_only().unwrap_or(false),
+            secure: cookie.secure().unwrap_or(false),
+            same_site: cookie.same_site().map(|same_site| same_site.to_string()),
+        });
+    }
+    if exported.len() > 100 {
+        return Err("linkedin_session_cookie_count_invalid".to_string());
+    }
+    if !exported
+        .iter()
+        .any(|cookie| cookie.name == "li_at" && !cookie.value.is_empty())
+    {
+        return Err("linkedin_session_cookie_required".to_string());
+    }
+    Ok(exported)
 }
 
 /// The session window is ours: it may only ever hold the platform the candidate
@@ -264,6 +352,9 @@ fn validate(request: &SessionWindowRequest) -> Result<(String, Url, Option<[u8; 
 }
 
 fn managed_data_directory(app: &AppHandle, session_key: &str) -> Result<PathBuf, String> {
+    if !managed_linkedin_store_available() {
+        return Err("managed_session_store_requires_macos_14".to_string());
+    }
     let uuid = managed_session_uuid(session_key)?;
     let root = app
         .path()
@@ -271,9 +362,135 @@ fn managed_data_directory(app: &AppHandle, session_key: &str) -> Result<PathBuf,
         .map_err(|error| format!("managed_session_data_dir_unavailable: {error}"))?
         .join("linkedin-pool");
     let directory = root.join(format!("profile_{}", uuid.simple()));
-    create_dir_all(&directory)
-        .map_err(|error| format!("managed_session_data_dir_create_failed: {error}"))?;
+    create_private_directory(&root)?;
+    create_private_directory(&directory)?;
     Ok(directory)
+}
+
+fn managed_data_directory_path(app: &AppHandle, session_key: &str) -> Result<PathBuf, String> {
+    let uuid = managed_session_uuid(session_key)?;
+    Ok(app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("managed_session_data_dir_unavailable: {error}"))?
+        .join("linkedin-pool")
+        .join(format!("profile_{}", uuid.simple())))
+}
+
+fn managed_linkedin_store_available() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let version = objc2_foundation::NSProcessInfo::processInfo().operatingSystemVersion();
+        supports_custom_store_on_macos(version.majorVersion)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
+fn supports_custom_store_on_macos(major_version: isize) -> bool {
+    major_version >= 14
+}
+
+fn can_clear_managed_profile(
+    store_isolation_available: bool,
+    profile_exists: bool,
+    window_open: bool,
+) -> bool {
+    store_isolation_available || (!profile_exists && !window_open)
+}
+
+fn create_private_directory(path: &std::path::Path) -> Result<(), String> {
+    create_dir_all(path)
+        .map_err(|error| format!("managed_session_data_dir_create_failed: {error}"))?;
+    let metadata = symlink_metadata(path)
+        .map_err(|error| format!("managed_session_data_dir_unavailable: {error}"))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err("managed_session_data_dir_invalid".to_string());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
+            .map_err(|error| format!("managed_session_data_dir_permissions_failed: {error}"))?;
+    }
+    Ok(())
+}
+
+/// Closes the account's WebView, removes its WebKit data store and its local
+/// profile after transfer or revocation. Any failure is returned to the admin
+/// UI so it cannot report that the device copy was erased.
+pub async fn clear_linkedin_pool_profile(app: &AppHandle, session_key: &str) -> Result<(), String> {
+    let (label, data_store_identifier) = session_window_label_for("linkedin", Some(session_key))?;
+    let directory = managed_data_directory_path(app, session_key)?;
+    let parent = directory
+        .parent()
+        .ok_or_else(|| "managed_session_profile_path_invalid".to_string())?;
+    match symlink_metadata(parent) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("managed_session_profile_path_invalid".to_string());
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(format!("managed_session_profile_clear_failed: {error}")),
+    }
+    let profile_exists = match symlink_metadata(&directory) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
+            return Err("managed_session_profile_path_invalid".to_string());
+        }
+        Ok(_) => true,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+        Err(error) => return Err(format!("managed_session_profile_clear_failed: {error}")),
+    };
+    let store_isolation_available = managed_linkedin_store_available();
+    let window_open = app.get_webview(&label).is_some();
+    if !can_clear_managed_profile(store_isolation_available, profile_exists, window_open) {
+        return Err("managed_session_store_requires_macos_14".to_string());
+    }
+    if !store_isolation_available {
+        return Ok(());
+    }
+    if window_open && !close_session_window_by_label(app, &label) {
+        return Err("managed_session_window_close_failed".to_string());
+    }
+    if !await_managed_window_closed(app, &label).await {
+        return Err("managed_session_window_close_failed".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let identifier = data_store_identifier
+            .ok_or_else(|| "managed_session_store_identifier_missing".to_string())?;
+        let data_stores = app
+            .fetch_data_store_identifiers()
+            .await
+            .map_err(|_| "managed_session_data_store_read_failed".to_string())?;
+        if data_stores.contains(&identifier) {
+            app.remove_data_store(identifier)
+                .await
+                .map_err(|_| "managed_session_data_store_remove_failed".to_string())?;
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = data_store_identifier;
+    if directory.exists() {
+        remove_dir_all(&directory)
+            .map_err(|error| format!("managed_session_profile_clear_failed: {error}"))?;
+    }
+    if directory.exists() {
+        return Err("managed_session_profile_clear_failed".to_string());
+    }
+    Ok(())
+}
+
+async fn await_managed_window_closed(app: &AppHandle, label: &str) -> bool {
+    for _ in 0..20 {
+        if app.get_webview(label).is_none() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    app.get_webview(label).is_none()
 }
 
 /// The OpenQareer account the candidate sign-in windows belong to. Every
@@ -1175,6 +1392,37 @@ mod tests {
         LazyScrollState { height, at_end }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn managed_profile_directories_are_private_to_the_owner() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let path = std::env::temp_dir().join(format!("openqareer-profile-{}", Uuid::new_v4()));
+        create_private_directory(&path).expect("create private managed profile");
+        let mode = std::fs::metadata(&path)
+            .expect("read managed profile permissions")
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o700);
+        std::fs::remove_dir_all(path).expect("remove temporary managed profile");
+    }
+
+    #[test]
+    fn custom_linkedin_data_store_requires_macos_14() {
+        assert!(!supports_custom_store_on_macos(13));
+        assert!(supports_custom_store_on_macos(14));
+        assert!(supports_custom_store_on_macos(15));
+    }
+
+    #[test]
+    fn older_macos_can_delete_server_state_when_no_local_profile_exists() {
+        assert!(can_clear_managed_profile(false, false, false));
+        assert!(!can_clear_managed_profile(false, true, false));
+        assert!(!can_clear_managed_profile(false, false, true));
+        assert!(can_clear_managed_profile(true, true, true));
+    }
+
     #[test]
     fn lazy_scroll_waits_for_several_quiet_readings_before_stopping() {
         let mut quiet = 0;
@@ -1198,8 +1446,14 @@ mod tests {
 
     #[test]
     fn lazy_scroll_restarts_the_count_when_linkedin_appends_a_chunk() {
-        assert_eq!(next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0), 0);
-        assert_eq!(next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0), 0);
+        assert_eq!(
+            next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0),
+            0
+        );
+        assert_eq!(
+            next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0),
+            0
+        );
     }
 
     #[test]
@@ -1359,6 +1613,27 @@ https://media.licdn.com/dms/image/c 800w";
             session_window_label_for("linkedin", Some("profile-not-a-uuid")),
             Err("managed_session_key_invalid".to_string())
         );
+    }
+
+    #[test]
+    fn managed_cookie_export_allows_only_linkedin_domains() {
+        for domain in [
+            "linkedin.com",
+            ".linkedin.com",
+            "www.linkedin.com",
+            "linkedin.cn",
+            "login.linkedin.cn",
+        ] {
+            assert!(is_linkedin_cookie_domain(domain), "{domain}");
+        }
+        for domain in [
+            "notlinkedin.com",
+            "linkedin.com.example.test",
+            "google.com",
+            "..linkedin.com",
+        ] {
+            assert!(!is_linkedin_cookie_domain(domain), "{domain}");
+        }
     }
 
     #[test]

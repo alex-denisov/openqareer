@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   bindConnectorAccount,
+  clearPoolSessionProfile,
   closeConnectorSession,
   connectorAccountKey,
+  exportPoolSessionCookies,
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
@@ -208,6 +210,34 @@ describe('session window commands in the desktop shell', () => {
         },
       },
     ]);
+  });
+
+  it('exports cookies only through the named managed pool profile', async () => {
+    const cookies = [
+      {
+        name: 'li_at',
+        value: 'synthetic-session-secret',
+        domain: 'linkedin.com',
+        path: '/',
+        expiresAt: 1_900_000_000,
+        httpOnly: true,
+        secure: true,
+        sameSite: 'Lax',
+      },
+    ];
+    const calls = useDesktop(() => cookies);
+    const sessionKey = 'profile_123e4567-e89b-12d3-a456-426614174000';
+
+    await expect(exportPoolSessionCookies(sessionKey)).resolves.toEqual(cookies);
+    expect(calls).toEqual([{ cmd: 'export_pool_session', args: { sessionKey } }]);
+  });
+
+  it('clears only the explicitly named managed pool profile', async () => {
+    const calls = useDesktop(() => undefined);
+    const sessionKey = 'profile_123e4567-e89b-12d3-a456-426614174000';
+
+    await expect(clearPoolSessionProfile(sessionKey)).resolves.toBeUndefined();
+    expect(calls).toEqual([{ cmd: 'clear_pool_session_profile', args: { sessionKey } }]);
   });
 
   it('uses the wizard-sized managed layout and keeps it inside the app viewport', () => {

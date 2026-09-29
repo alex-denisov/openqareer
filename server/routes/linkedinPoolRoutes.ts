@@ -9,6 +9,7 @@ import {
   adminLinkedinPoolParamsSchema,
   adminLinkedinPoolPatchSchema,
   adminLinkedinPoolQuerySchema,
+  adminLinkedinPoolSessionSchema,
 } from './schemas';
 import {
   LinkedinPoolConflictError,
@@ -200,6 +201,51 @@ async function handleProbe(deps: LinkedinPoolDeps, request: FastifyRequest, repl
   }
 }
 
+async function handleStoreSession(
+  deps: LinkedinPoolDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireAdminMutation(deps, request, reply);
+  if (!principal) return;
+  const repository = repositoryOrError(deps, request, reply);
+  if (!repository) return;
+  const { accountId } = adminLinkedinPoolParamsSchema.parse(request.params);
+  const body = adminLinkedinPoolSessionSchema.parse(request.body ?? {});
+  try {
+    return {
+      data: repository.storeSessionCookies(accountId, body.cookies, {
+        actorUserId: principal.userId,
+        actorUsername: principal.username,
+      }),
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    return sendRepositoryError(error, request, reply);
+  }
+}
+
+async function handleDeleteSession(
+  deps: LinkedinPoolDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireAdminMutation(deps, request, reply);
+  if (!principal) return;
+  const repository = repositoryOrError(deps, request, reply);
+  if (!repository) return;
+  const { accountId } = adminLinkedinPoolParamsSchema.parse(request.params);
+  try {
+    repository.deleteSessionCookies(accountId, {
+      actorUserId: principal.userId,
+      actorUsername: principal.username,
+    });
+    return reply.code(204).send();
+  } catch (error) {
+    return sendRepositoryError(error, request, reply);
+  }
+}
+
 async function handleRevoke(deps: LinkedinPoolDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = requireAdminMutation(deps, request, reply);
   if (!principal) return;
@@ -242,6 +288,15 @@ export function registerLinkedinPoolRoutes(app: FastifyInstance, deps: LinkedinP
   app.post('/api/v1/admin/linkedin/accounts', withDeps(deps, handleCreate));
   app.patch('/api/v1/admin/linkedin/accounts/:accountId', withDeps(deps, handlePatch));
   app.post('/api/v1/admin/linkedin/accounts/:accountId/session', withDeps(deps, handleLogin));
+  app.put(
+    '/api/v1/admin/linkedin/accounts/:accountId/session',
+    { bodyLimit: 64 * 1_024 },
+    withDeps(deps, handleStoreSession),
+  );
+  app.delete(
+    '/api/v1/admin/linkedin/accounts/:accountId/session',
+    withDeps(deps, handleDeleteSession),
+  );
   app.post(
     '/api/v1/admin/linkedin/accounts/:accountId/session/complete',
     withDeps(deps, handleComplete),

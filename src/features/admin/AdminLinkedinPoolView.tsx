@@ -13,65 +13,40 @@ import {
 import { apiErrorMessage } from '../coach/apiClient';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import {
+  clearPoolSessionProfile,
   closeConnectorSession,
-  inspectSessionPage,
+  exportPoolSessionCookies,
   managedLinkedinSessionLayout,
   openManagedLinkedinSession,
   resizeConnectorSession,
-  type SessionInspectionResult,
-  type ManagedSessionKey,
 } from '../connections/connectorSession';
-import { sessionWaitingStage, type SessionWaitingStage } from '../connections/sessionWaitingStage';
+import {
+  useAdminLinkedinLoginPolling,
+  type ActiveLinkedinLogin,
+} from './adminLinkedinSessionFlow';
+import {
+  AdminLinkedinServerSessionActions,
+  AdminLinkedinServerSessionMeta,
+} from './AdminLinkedinServerSessionControls';
 import {
   completeAdminLinkedinLogin,
   createAdminLinkedinAccount,
+  deleteAdminLinkedinSession,
   deleteAdminLinkedinAccount,
   listAdminLinkedinAccounts,
   requestAdminLinkedinLogin,
   revokeAdminLinkedinAccount,
+  storeAdminLinkedinSession,
   type LinkedinPoolAccount,
   type LinkedinSessionState,
 } from './linkedinPoolApi';
+
+export { isSafeAdminLinkedinSessionPage } from './adminLinkedinSessionFlow';
 
 type PoolViewState =
   | { status: 'loading' }
   | { status: 'ready'; accounts: LinkedinPoolAccount[]; total: number }
   | { status: 'failed'; message: string };
-
-type ActiveLinkedinLogin = {
-  accountId: string;
-  sessionKey: ManagedSessionKey;
-  handle: string;
-};
-
-const ADMIN_WAITING_COPY: Record<SessionWaitingStage, string> = {
-  loading: 'Загружаем страницу LinkedIn…',
-  login: 'Введите логин и пароль в открытом окне LinkedIn.',
-  otp: 'Введите код 2FA в открытом окне LinkedIn.',
-  captcha: 'Пройдите CAPTCHA в открытом окне LinkedIn.',
-  unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
-};
-
-export function isSafeAdminLinkedinSessionPage(page: SessionInspectionResult): boolean {
-  try {
-    const url = new URL(page.url);
-    const host = url.hostname.toLowerCase();
-    return (
-      page.ready &&
-      page.signedInApplicant &&
-      url.protocol === 'https:' &&
-      (host === 'linkedin.com' ||
-        host.endsWith('.linkedin.com') ||
-        host === 'linkedin.cn' ||
-        host.endsWith('.linkedin.cn')) &&
-      !page.login &&
-      !page.otp &&
-      !page.captcha
-    );
-  } catch {
-    return false;
-  }
-}
 
 const STATE_COPY: Record<LinkedinSessionState, { label: string; detail: string }> = {
   unconfigured: {
@@ -155,9 +130,19 @@ function managedOpenFailureCopy(reason?: string): string {
     case 'managed_session_data_dir_unavailable':
     case 'managed_session_data_dir_create_failed':
       return 'Не удалось создать изолированный профиль LinkedIn на этом устройстве.';
+    case 'managed_session_store_requires_macos_14':
+      return 'Для изолированной сессии пула требуется macOS 14 или новее.';
     default:
       return 'Не удалось открыть отдельное окно LinkedIn. Перезапустите OpenQareer Desktop и повторите вход.';
   }
+}
+
+function localProfileFailureCopy(reason: unknown, fallback: string): string {
+  const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : '';
+  if (message.includes('managed_session_store_requires_macos_14')) {
+    return 'Локальный профиль можно очистить только на macOS 14 или новее. Серверная операция не выполнена.';
+  }
+  return apiErrorMessage(reason, fallback);
 }
 
 function useLinkedinPool() {
@@ -197,85 +182,6 @@ function useLinkedinPool() {
   return { state, refresh };
 }
 
-// eslint-disable-next-line max-lines-per-function -- this hook owns one candidate-equivalent auth lifecycle
-function useAdminLinkedinLoginPolling(
-  activeLogin: ActiveLinkedinLogin | undefined,
-  refresh: () => void,
-  setActiveLogin: (value: ActiveLinkedinLogin | undefined) => void,
-  setNotice: (value: string | undefined) => void,
-  setError: (value: string | undefined) => void,
-): void {
-  // eslint-disable-next-line max-lines-per-function -- this effect owns one candidate-equivalent auth lifecycle
-  useEffect(() => {
-    if (!activeLogin) return;
-    let cancelled = false;
-    let finished = false;
-    let inspectionFailures = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-
-    const finish = async (accountMarker?: string | null) => {
-      const account = await completeAdminLinkedinLogin(activeLogin.accountId, activeLogin.handle, {
-        state: 'ready',
-        ...(accountMarker ? { accountMarker } : {}),
-      });
-      await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
-      if (cancelled) return;
-      finished = true;
-      setActiveLogin(undefined);
-      setError(undefined);
-      setNotice(`Сессия ${account.emailLogin} подтверждена в отдельном профиле приложения.`);
-      refresh();
-    };
-
-    const poll = async () => {
-      if (cancelled || finished) return;
-      let page: SessionInspectionResult;
-      try {
-        page = await inspectSessionPage('linkedin', activeLogin.sessionKey);
-      } catch (reason: unknown) {
-        if (cancelled) return;
-        inspectionFailures += 1;
-        if (inspectionFailures < 12) {
-          setNotice('Окно LinkedIn загружается. Повторяем проверку сессии…');
-          timer = setTimeout(() => void poll(), 1_000);
-          return;
-        }
-        finished = true;
-        setActiveLogin(undefined);
-        setError(
-          apiErrorMessage(
-            reason,
-            'Не удалось проверить окно LinkedIn. Оно осталось открытым; повторите проверку в админке.',
-          ),
-        );
-        refresh();
-        return;
-      }
-      if (cancelled || finished) return;
-      inspectionFailures = 0;
-      if (isSafeAdminLinkedinSessionPage(page)) {
-        try {
-          await finish(page.accountMarker);
-        } catch (reason: unknown) {
-          finished = true;
-          setActiveLogin(undefined);
-          setError(apiErrorMessage(reason, 'Сервер не подтвердил сессию. Повторите проверку.'));
-          refresh();
-        }
-        return;
-      }
-      setNotice(ADMIN_WAITING_COPY[sessionWaitingStage(page)]);
-      timer = setTimeout(() => void poll(), 1_000);
-    };
-
-    void poll();
-    return () => {
-      cancelled = true;
-      if (timer) clearTimeout(timer);
-    };
-  }, [activeLogin, refresh, setActiveLogin, setError, setNotice]);
-}
-
 // eslint-disable-next-line max-lines-per-function
 export function AdminLinkedinPoolView() {
   const { state, refresh } = useLinkedinPool();
@@ -285,7 +191,11 @@ export function AdminLinkedinPoolView() {
   const [notice, setNotice] = useState<string>();
   const [error, setError] = useState<string>();
   const [confirmDelete, setConfirmDelete] = useState<LinkedinPoolAccount>();
+  const [confirmTransferAccountId, setConfirmTransferAccountId] = useState<string>();
   const [activeLogin, setActiveLogin] = useState<ActiveLinkedinLogin>();
+  const [verifiedSessionAccountId, setVerifiedSessionAccountId] = useState<string>();
+  const [verifiedSessionMarker, setVerifiedSessionMarker] = useState<string>();
+  const [localCleanupPendingAccountId, setLocalCleanupPendingAccountId] = useState<string>();
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'action' | 'stopped'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'state' | 'verified'>('name');
@@ -303,6 +213,15 @@ export function AdminLinkedinPoolView() {
   }, [confirmDelete]);
 
   useEffect(() => {
+    if (!confirmTransferAccountId) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setConfirmTransferAccountId(undefined);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [confirmTransferAccountId]);
+
+  useEffect(() => {
     if (!activeLogin) return;
     const resize = () => {
       void resizeConnectorSession(
@@ -316,7 +235,20 @@ export function AdminLinkedinPoolView() {
     return () => window.removeEventListener('resize', resize);
   }, [activeLogin]);
 
-  useAdminLinkedinLoginPolling(activeLogin, refresh, setActiveLogin, setNotice, setError);
+  const persistSession = useCallback(async (login: ActiveLinkedinLogin) => {
+    const cookies = await exportPoolSessionCookies(login.sessionKey);
+    return storeAdminLinkedinSession(login.accountId, cookies);
+  }, []);
+
+  useAdminLinkedinLoginPolling(
+    activeLogin,
+    refresh,
+    setActiveLogin,
+    setNotice,
+    setError,
+    setVerifiedSessionAccountId,
+    setVerifiedSessionMarker,
+  );
 
   async function addAccount(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -348,6 +280,9 @@ export function AdminLinkedinPoolView() {
 
   async function openLogin(account: LinkedinPoolAccount) {
     if (activeLogin) return;
+    setVerifiedSessionAccountId(undefined);
+    setVerifiedSessionMarker(undefined);
+    setConfirmTransferAccountId(undefined);
     if (!isTauriEnvironment()) {
       setError(managedOpenFailureCopy('desktop_runtime_required'));
       return;
@@ -381,6 +316,87 @@ export function AdminLinkedinPoolView() {
     }
   }
 
+  async function saveServerSession(account: LinkedinPoolAccount) {
+    const login = activeLogin;
+    if (
+      !login ||
+      login.accountId !== account.id ||
+      verifiedSessionAccountId !== account.id ||
+      !verifiedSessionMarker
+    ) {
+      return;
+    }
+    setConfirmTransferAccountId(account.id);
+  }
+
+  async function confirmServerSessionTransfer(account: LinkedinPoolAccount) {
+    const login = activeLogin;
+    if (
+      !login ||
+      login.accountId !== account.id ||
+      verifiedSessionAccountId !== account.id ||
+      !verifiedSessionMarker ||
+      confirmTransferAccountId !== account.id
+    ) {
+      return;
+    }
+    setBusyAccountId(account.id);
+    setError(undefined);
+    let storedOnServer = false;
+    try {
+      const session = await persistSession(login);
+      storedOnServer = true;
+      await clearPoolSessionProfile(login.sessionKey);
+      setActiveLogin(undefined);
+      setVerifiedSessionAccountId(undefined);
+      setVerifiedSessionMarker(undefined);
+      setConfirmTransferAccountId(undefined);
+      setLocalCleanupPendingAccountId(undefined);
+      setNotice(`Сессия сохранена на сервере до ${formatMoment(session.expiresAt)}.`);
+      refresh();
+    } catch (reason: unknown) {
+      setConfirmTransferAccountId(undefined);
+      if (storedOnServer) {
+        setActiveLogin(undefined);
+        setVerifiedSessionAccountId(undefined);
+        setVerifiedSessionMarker(undefined);
+        setLocalCleanupPendingAccountId(account.id);
+        setError(
+          `Сессия сохранена на сервере, но ${localProfileFailureCopy(
+            reason,
+            'локальный профиль не очищен. Повторите очистку из приложения.',
+          )}`,
+        );
+        setNotice('Cookies уже зашифрованы на сервере. Локальная копия останется до успешной очистки профиля.');
+      } else {
+        setError(apiErrorMessage(reason, 'Не удалось сохранить сессию на сервере.'));
+        setNotice('Окно LinkedIn осталось открытым. Проверьте вход и повторите перенос.');
+      }
+      refresh();
+    } finally {
+      setBusyAccountId(undefined);
+    }
+  }
+
+  async function clearLocalProfile(account: LinkedinPoolAccount) {
+    setBusyAccountId(account.id);
+    setError(undefined);
+    try {
+      await clearPoolSessionProfile(account.profileIsolationId);
+      if (activeLogin?.accountId === account.id) setActiveLogin(undefined);
+      if (verifiedSessionAccountId === account.id) setVerifiedSessionAccountId(undefined);
+      if (verifiedSessionAccountId === account.id) setVerifiedSessionMarker(undefined);
+      setLocalCleanupPendingAccountId(undefined);
+      setNotice('Локальный профиль LinkedIn очищен на этом устройстве.');
+      refresh();
+    } catch (reason: unknown) {
+      setLocalCleanupPendingAccountId(account.id);
+      setError(localProfileFailureCopy(reason, 'Не удалось очистить локальный профиль LinkedIn.'));
+    } finally {
+      setBusyAccountId(undefined);
+    }
+  }
+
   async function runAccountAction(
     account: LinkedinPoolAccount,
     action: () => Promise<unknown>,
@@ -400,15 +416,27 @@ export function AdminLinkedinPoolView() {
     }
   }
 
+  async function clearAccountLocalProfile(account: LinkedinPoolAccount) {
+    try {
+      await clearPoolSessionProfile(account.profileIsolationId);
+    } catch (reason: unknown) {
+      throw new Error(localProfileFailureCopy(reason, 'Не удалось очистить локальный профиль LinkedIn.'));
+    }
+    if (activeLogin?.accountId === account.id) setActiveLogin(undefined);
+    if (verifiedSessionAccountId === account.id) {
+      setVerifiedSessionAccountId(undefined);
+      setVerifiedSessionMarker(undefined);
+    }
+    if (confirmTransferAccountId === account.id) setConfirmTransferAccountId(undefined);
+    setLocalCleanupPendingAccountId(undefined);
+  }
+
   async function deleteAccount() {
     if (!confirmDelete) return;
     await runAccountAction(
       confirmDelete,
       async () => {
-        if (activeLogin?.accountId === confirmDelete.id) {
-          await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
-          setActiveLogin(undefined);
-        }
+        await clearAccountLocalProfile(confirmDelete);
         await deleteAdminLinkedinAccount(confirmDelete.id, confirmDelete.revision);
         setConfirmDelete(undefined);
       },
@@ -420,13 +448,10 @@ export function AdminLinkedinPoolView() {
     await runAccountAction(
       account,
       async () => {
-        if (activeLogin?.accountId === account.id) {
-          await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
-          setActiveLogin(undefined);
-        }
+        await clearAccountLocalProfile(account);
         await revokeAdminLinkedinAccount(account.id);
       },
-      'Сессия отозвана.',
+      'Сессия отозвана, локальный профиль очищен.',
     );
   }
 
@@ -436,10 +461,24 @@ export function AdminLinkedinPoolView() {
     await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
     await completeAdminLinkedinLogin(account.id, activeLogin.handle, { state: 'login_required' }).catch(() => undefined);
     setActiveLogin(undefined);
+    setVerifiedSessionAccountId(undefined);
+    setVerifiedSessionMarker(undefined);
+    setConfirmTransferAccountId(undefined);
     setBusyAccountId(undefined);
     setError(undefined);
     setNotice('Окно LinkedIn закрыто. Нажмите «Войти в LinkedIn», чтобы продолжить.');
     refresh();
+  }
+
+  async function removeServerSession(account: LinkedinPoolAccount) {
+    await runAccountAction(
+      account,
+      async () => {
+        await clearAccountLocalProfile(account);
+        await deleteAdminLinkedinSession(account.id);
+      },
+      'Сессия удалена с сервера и локальный профиль очищен.',
+    );
   }
 
   const visibleAccounts = state.status === 'ready'
@@ -584,7 +623,9 @@ export function AdminLinkedinPoolView() {
                 <p className="admin-linkedin-card__detail">{copy.detail}</p>
                 {activeLogin?.accountId === account.id ? (
                   <p className="admin-linkedin-card__active" role="status">
-                    Окно LinkedIn открыто. Ожидаем подтверждение входа…
+                    {verifiedSessionAccountId === account.id && verifiedSessionMarker
+                      ? `Профиль /in/${verifiedSessionMarker} подтверждён. Проверьте, что это ${account.emailLogin}.`
+                      : 'Окно LinkedIn открыто. Ожидаем подтверждение входа…'}
                   </p>
                 ) : null}
                 {failureCopy(account.lastFailureCode) ? (
@@ -606,6 +647,7 @@ export function AdminLinkedinPoolView() {
                     <dt>Доступ источника</dt>
                     <dd>{capabilityCopy(account.capabilityVerdict)}</dd>
                   </div>
+                  <AdminLinkedinServerSessionMeta account={account} />
                 </dl>
                 <div className="admin-linkedin-card__actions">
                   {activeLogin?.accountId === account.id ? (
@@ -631,6 +673,20 @@ export function AdminLinkedinPoolView() {
                         : 'Войти в LinkedIn'}
                     </button>
                   ) : null}
+                  <AdminLinkedinServerSessionActions
+                    account={account}
+                    canSave={
+                      activeLogin?.accountId === account.id &&
+                      verifiedSessionAccountId === account.id &&
+                      Boolean(verifiedSessionMarker)
+                    }
+                    canClearLocal={Boolean(account.serverSession) || localCleanupPendingAccountId === account.id}
+                    cleanupPending={localCleanupPendingAccountId === account.id}
+                    busy={busy}
+                    onSave={() => void saveServerSession(account)}
+                    onClearLocal={() => void clearLocalProfile(account)}
+                    onDelete={() => void removeServerSession(account)}
+                  />
                   {account.state !== 'revoked' && account.state !== 'disabled' ? (
                     <button
                       className="admin-btn is-secondary"
@@ -676,6 +732,45 @@ export function AdminLinkedinPoolView() {
                         onClick={() => void deleteAccount()}
                       >
                         Удалить аккаунт
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+                {confirmTransferAccountId === account.id &&
+                verifiedSessionAccountId === account.id &&
+                verifiedSessionMarker ? (
+                  <div
+                    className="admin-linkedin-confirm"
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby={`transfer-title-${account.id}`}
+                  >
+                    <h3 id={`transfer-title-${account.id}`}>Перенести сессию на сервер?</h3>
+                    <p>
+                      Cookies профиля /in/{verifiedSessionMarker} будут отправлены по защищённому
+                      соединению и зашифрованы в хранилище аккаунта {account.emailLogin}.
+                    </p>
+                    <p>
+                      Сервер хранит их до срока cookie li_at. Плановая очистка проходит при запуске
+                      и каждые 15 минут; при ошибке сервис повторит её через минуту. После успешной
+                      передачи локальный профиль LinkedIn на этом устройстве будет удалён.
+                    </p>
+                    <p>Продолжайте только если профиль LinkedIn принадлежит этому аккаунту пула.</p>
+                    <div>
+                      <button
+                        className="admin-btn is-secondary"
+                        type="button"
+                        onClick={() => setConfirmTransferAccountId(undefined)}
+                      >
+                        Отмена
+                      </button>
+                      <button
+                        className="admin-btn admin-btn--primary"
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void confirmServerSessionTransfer(account)}
+                      >
+                        {busy ? 'Переносим сессию…' : 'Подтвердить перенос'}
                       </button>
                     </div>
                   </div>

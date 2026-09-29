@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { SealedText } from '../data/sealedText';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
+import { prepareLinkedinSessionCookies } from './serverSessionCookies';
 import {
   assertTransition,
   type LinkedinFailureCode,
@@ -13,6 +14,8 @@ import {
   type LinkedinPoolPage,
   type LinkedinProviderCapability,
   type LinkedinProviderProbe,
+  type LinkedinPoolServerSessionSummary,
+  type LinkedinSessionCookie,
   type LinkedinSessionState,
 } from './sessionContract';
 
@@ -93,6 +96,10 @@ interface AccountRow {
   revision: number;
   created_at: string;
   updated_at: string;
+  session_captured_at?: string | null;
+  session_expires_at?: string | null;
+  session_cookie_count?: number | null;
+  session_revision?: number | null;
 }
 
 interface LeaseRow {
@@ -127,6 +134,14 @@ CREATE TABLE IF NOT EXISTS linkedin_pool_accounts (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS linkedin_pool_accounts_state
   ON linkedin_pool_accounts(state, created_at DESC, id ASC);
+CREATE TABLE IF NOT EXISTS linkedin_pool_sessions (
+  account_id TEXT PRIMARY KEY REFERENCES linkedin_pool_accounts(id) ON DELETE CASCADE,
+  cookies_cipher TEXT NOT NULL,
+  captured_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  cookie_count INTEGER NOT NULL CHECK (cookie_count BETWEEN 1 AND 100),
+  revision INTEGER NOT NULL DEFAULT 1
+) STRICT;
 CREATE TABLE IF NOT EXISTS linkedin_pool_leases (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL REFERENCES linkedin_pool_accounts(id) ON DELETE CASCADE,
@@ -169,6 +184,12 @@ function digest(value: string): string {
 
 function accountAssociatedData(accountId: string, field: string): string {
   return `linkedin-pool:${accountId}:${field}`;
+}
+
+function requireProviderMarkerForReady(probe: LinkedinProviderProbe | undefined): void {
+  if (probe?.state === 'ready' && !probe.accountMarker?.trim()) {
+    throw new LinkedinPoolConflictError('linkedin_provider_marker_required');
+  }
 }
 
 function failureCodeForState(state: LinkedinSessionState): LinkedinFailureCode | null {
@@ -214,6 +235,7 @@ export class SqliteLinkedinPoolRepository {
     }
     this.probe = options.probe;
     this.now = options.now ?? (() => new Date());
+    this.purgeExpiredSessionCookies();
   }
 
   close(): void {
@@ -225,17 +247,23 @@ export class SqliteLinkedinPoolRepository {
   }
 
   list(input: LinkedinPoolListInput): LinkedinPoolPage {
-    const where = input.state ? 'WHERE state = ?' : '';
+    this.purgeExpiredSessionCookies();
+    const where = input.state ? 'WHERE a.state = ?' : '';
     const params = input.state
       ? [input.state, input.limit, input.offset]
       : [input.limit, input.offset];
     const totalRow = this.database
-      .prepare(`SELECT COUNT(*) AS total FROM linkedin_pool_accounts ${where}`)
+      .prepare(`SELECT COUNT(*) AS total FROM linkedin_pool_accounts a ${where}`)
       .get(...(input.state ? [input.state] : [])) as { total: number };
     const rows = this.database
       .prepare(
-        `SELECT * FROM linkedin_pool_accounts ${where}
-         ORDER BY created_at DESC, id ASC LIMIT ? OFFSET ?`,
+        `SELECT a.*, s.captured_at AS session_captured_at,
+            s.expires_at AS session_expires_at, s.cookie_count AS session_cookie_count,
+            s.revision AS session_revision
+         FROM linkedin_pool_accounts a
+         LEFT JOIN linkedin_pool_sessions s ON s.account_id = a.id
+         ${where}
+         ORDER BY a.created_at DESC, a.id ASC LIMIT ? OFFSET ?`,
       )
       .all(...params) as unknown as AccountRow[];
     const accounts = rows.map((row) => this.toAccount(row));
@@ -249,6 +277,116 @@ export class SqliteLinkedinPoolRepository {
       offset: input.offset,
       nextOffset,
     };
+  }
+
+  storeSessionCookies(
+    accountId: string,
+    cookies: readonly LinkedinSessionCookie[],
+    actor: LinkedinPoolActor,
+  ): LinkedinPoolServerSessionSummary {
+    const account = this.requireAccountRow(accountId);
+    if (account.state !== 'ready') {
+      throw new LinkedinPoolConflictError('linkedin_session_account_not_ready');
+    }
+    const prepared = this.prepareSessionCookies(cookies);
+    const capturedAt = this.now().toISOString();
+    const existing = this.database
+      .prepare('SELECT revision FROM linkedin_pool_sessions WHERE account_id = ?')
+      .get(accountId) as { revision: number } | undefined;
+    const revision = (existing?.revision ?? 0) + 1;
+    const cookiesCipher = this.sealedText.seal(
+      JSON.stringify(prepared.cookies),
+      accountAssociatedData(accountId, 'session-cookies'),
+    );
+
+    this.transaction(() => {
+      this.database
+        .prepare(
+          `INSERT INTO linkedin_pool_sessions
+            (account_id, cookies_cipher, captured_at, expires_at, cookie_count, revision)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(account_id) DO UPDATE SET
+            cookies_cipher = excluded.cookies_cipher,
+            captured_at = excluded.captured_at,
+            expires_at = excluded.expires_at,
+            cookie_count = excluded.cookie_count,
+            revision = excluded.revision`,
+        )
+        .run(accountId, cookiesCipher, capturedAt, prepared.expiresAt, cookies.length, revision);
+      this.recordAudit(
+        actor,
+        'server_session_stored',
+        accountId,
+        `Stored ${cookies.length} LinkedIn cookies; expires ${prepared.expiresAt}`,
+      );
+    });
+
+    return {
+      capturedAt,
+      expiresAt: prepared.expiresAt,
+      cookieCount: cookies.length,
+      revision,
+    };
+  }
+
+  /** Decrypted session material is available only to trusted server code. */
+  readSessionCookies(accountId: string): readonly LinkedinSessionCookie[] | null {
+    const account = this.requireAccountRow(accountId);
+    if (account.state !== 'ready') return null;
+    const row = this.database
+      .prepare('SELECT cookies_cipher, expires_at FROM linkedin_pool_sessions WHERE account_id = ?')
+      .get(accountId) as { cookies_cipher: string; expires_at: string } | undefined;
+    if (!row) return null;
+    if (Date.parse(row.expires_at) <= this.now().getTime()) {
+      this.database
+        .prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ? AND expires_at <= ?')
+        .run(accountId, this.now().toISOString());
+      return null;
+    }
+    const opened = this.sealedText.open(
+      row.cookies_cipher,
+      accountAssociatedData(accountId, 'session-cookies'),
+    );
+    const cookies: unknown = JSON.parse(opened);
+    if (!Array.isArray(cookies)) throw new Error('linkedin_session_envelope_invalid');
+    return cookies as LinkedinSessionCookie[];
+  }
+
+  deleteSessionCookies(accountId: string, actor: LinkedinPoolActor): boolean {
+    this.requireAccountRow(accountId);
+    let deleted = false;
+    this.transaction(() => {
+      deleted =
+        Number(
+          this.database
+            .prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ?')
+            .run(accountId).changes,
+        ) > 0;
+      this.recordAudit(
+        actor,
+        'server_session_deleted',
+        accountId,
+        deleted ? 'Stored LinkedIn session removed' : 'No stored LinkedIn session existed',
+      );
+    });
+    return deleted;
+  }
+
+  private prepareSessionCookies(cookies: readonly LinkedinSessionCookie[]): {
+    readonly cookies: readonly LinkedinSessionCookie[];
+    readonly expiresAt: string;
+  } {
+    const prepared = prepareLinkedinSessionCookies(cookies, this.now());
+    if (!prepared.ok) throw new LinkedinPoolConflictError(prepared.code);
+    return { cookies: prepared.cookies, expiresAt: prepared.expiresAt };
+  }
+
+  purgeExpiredSessionCookies(): number {
+    return Number(
+      this.database
+      .prepare('DELETE FROM linkedin_pool_sessions WHERE expires_at <= ?')
+        .run(this.now().toISOString()).changes,
+    );
   }
 
   // This method intentionally keeps idempotency, encrypted row construction
@@ -441,12 +579,8 @@ export class SqliteLinkedinPoolRepository {
     handle: string,
     providerProbe?: LinkedinProviderProbe,
   ): Promise<LinkedinPoolAccount> {
-    const lease = this.database
-      .prepare(
-        `SELECT account_id, token_hash, expires_at FROM linkedin_pool_leases
-         WHERE account_id = ? AND token_hash = ? AND consumed_at IS NULL`,
-      )
-      .get(accountId, digest(handle)) as LeaseRow | undefined;
+    requireProviderMarkerForReady(providerProbe);
+    const lease = this.findLoginLease(accountId, handle);
     if (!lease || Date.parse(lease.expires_at) <= this.now().getTime()) {
       throw new LinkedinPoolConflictError('linkedin_login_lease_expired');
     }
@@ -515,6 +649,9 @@ export class SqliteLinkedinPoolRepository {
     this.transaction(() => {
       this.database.prepare('DELETE FROM linkedin_pool_leases WHERE account_id = ?').run(accountId);
       this.database
+        .prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ?')
+        .run(accountId);
+      this.database
         .prepare(
           `UPDATE linkedin_pool_accounts SET state = 'revoked', last_failure_code = 'revoked',
             lease_until = NULL, revision = revision + 1, updated_at = ? WHERE id = ?`,
@@ -539,7 +676,10 @@ export class SqliteLinkedinPoolRepository {
     const current = this.requireAccountRow(accountId);
     if (probe.state === 'ready') {
       const expectedMarker = this.openMarker(current);
-      if (expectedMarker && probe.accountMarker && expectedMarker !== probe.accountMarker) {
+      if (
+        !probe.accountMarker?.trim() ||
+        (expectedMarker && expectedMarker !== probe.accountMarker)
+      ) {
         return this.finishWithoutRuntime(accountId, 'provider_probe_failed');
       }
     }
@@ -554,13 +694,20 @@ export class SqliteLinkedinPoolRepository {
           accountAssociatedData(accountId, 'provider-marker'),
         )
       : current.provider_marker_cipher;
-    this.database
-      .prepare(
-        `UPDATE linkedin_pool_accounts SET state = ?, provider_marker_cipher = ?,
-          last_verified_at = ?, last_heartbeat_at = ?, last_failure_code = ?,
-          lease_until = NULL, revision = revision + 1, updated_at = ? WHERE id = ?`,
-      )
-      .run(probe.state, markerCipher, lastVerifiedAt, now, failureCode, now, accountId);
+    this.transaction(() => {
+      this.database
+        .prepare(
+          `UPDATE linkedin_pool_accounts SET state = ?, provider_marker_cipher = ?,
+            last_verified_at = ?, last_heartbeat_at = ?, last_failure_code = ?,
+            lease_until = NULL, revision = revision + 1, updated_at = ? WHERE id = ?`,
+        )
+        .run(probe.state, markerCipher, lastVerifiedAt, now, failureCode, now, accountId);
+      if (probe.state !== 'ready') {
+        this.database
+          .prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ?')
+          .run(accountId);
+      }
+    });
     return this.requireAccount(accountId);
   }
 
@@ -606,6 +753,15 @@ export class SqliteLinkedinPoolRepository {
     return row;
   }
 
+  private findLoginLease(accountId: string, handle: string): LeaseRow | undefined {
+    return this.database
+      .prepare(
+        `SELECT account_id, token_hash, expires_at FROM linkedin_pool_leases
+         WHERE account_id = ? AND token_hash = ? AND consumed_at IS NULL`,
+      )
+      .get(accountId, digest(handle)) as LeaseRow | undefined;
+  }
+
   private assertRevision(row: AccountRow, revision: number): void {
     if (row.revision !== revision) throw new LinkedinPoolConflictError('stale_revision');
   }
@@ -638,6 +794,18 @@ export class SqliteLinkedinPoolRepository {
       revision: row.revision,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      serverSession:
+        row.session_captured_at &&
+        row.session_expires_at &&
+        typeof row.session_cookie_count === 'number' &&
+        typeof row.session_revision === 'number'
+          ? {
+              capturedAt: row.session_captured_at,
+              expiresAt: row.session_expires_at,
+              cookieCount: row.session_cookie_count,
+              revision: row.session_revision,
+            }
+          : null,
     };
   }
 

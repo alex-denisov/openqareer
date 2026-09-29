@@ -261,6 +261,10 @@ function handleRouteError(
     );
   }
 
+  if (getErrorStatusCode(error) === 413) {
+    return sendPayloadTooLarge(request, reply);
+  }
+
   if (isSqliteBusy(error)) {
     // База занята обслуживателем дольше busy_timeout (PRB-043): это не поломка,
     // а очередь на запись — кандидату честно называем причину и просим
@@ -289,6 +293,17 @@ function handleRouteError(
     'internal_error',
     'Сервис не завершил запрос. Повторите попытку позже.',
     true,
+  );
+}
+
+function sendPayloadTooLarge(request: FastifyRequest, reply: FastifyReply): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    413,
+    'payload_too_large',
+    'Размер запроса превышает допустимый предел.',
+    false,
   );
 }
 

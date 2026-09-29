@@ -44,7 +44,17 @@
     );
     var linkedinAccountMarker = null;
     if (platform === 'linkedin') {
-      var profileLink = document.querySelector('a[href*="/in/"]');
+      var profileContainer = document.querySelector(
+        '[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],.global-nav__me-photo',
+      );
+      var profileLink = null;
+      if (profileContainer) {
+        if (profileContainer.href) {
+          profileLink = profileContainer;
+        } else if (typeof profileContainer.querySelector === 'function') {
+          profileLink = profileContainer.querySelector('a[href*="/in/"]');
+        }
+      }
       if (profileLink) {
         try {
           var profileUrl = new URL(profileLink.href, location.origin);
