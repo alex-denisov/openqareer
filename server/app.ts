@@ -38,9 +38,12 @@ import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
+import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
+import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
+
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -67,7 +70,9 @@ interface BuildAppOptions {
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
+  capabilityConsentStore?: SqliteCapabilityConsentStore;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
+
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
   /**
@@ -217,6 +222,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   registerVacancyCatalogRoutes(app, deps);
   registerReputationAuditRoutes(app, deps);
   registerSearchConsentRoutes(app, deps);
+  registerCapabilityConsentRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
@@ -240,52 +246,35 @@ function createUploadStaging(): UploadStaging {
 }
 
 function assembleRouteDeps(options: BuildAppOptions, services: AppServices): RouteDeps {
-  const {
-    config,
-    authService,
-    candidateStore,
-    coachProvider,
-    importProfile = importPublicProfileUrl,
-    resumeStructurer,
-    roleNamer,
-    campaignRoleModel,
-    coverLetterWriter,
-    recruiterContactsRepo,
-    candidateReputationRepo,
-    searchConsentRepo,
-    linkedinPool,
-    searchVacancies = searchHhVacancies,
-    hhCrawlSettings,
-    runtimeMemory,
-    matchedPoolPrecompute,
-  } = options;
-
+  const { config } = options;
   return {
     config,
-    authService,
-    candidateStore,
+    authService: options.authService,
+    candidateStore: options.candidateStore,
     uploadStaging: createUploadStaging(),
-    coachProvider,
-    importProfile,
-    resumeStructurer,
-    roleNamer,
-    campaignRoleModel,
-    coverLetterWriter,
+    coachProvider: options.coachProvider,
+    importProfile: options.importProfile ?? importPublicProfileUrl,
+    resumeStructurer: options.resumeStructurer,
+    roleNamer: options.roleNamer,
+    campaignRoleModel: options.campaignRoleModel,
+    coverLetterWriter: options.coverLetterWriter,
     recruiterContactsRepo:
-      recruiterContactsRepo ??
+      options.recruiterContactsRepo ??
       new SqliteRecruiterContactsRepository({ databasePath: config.databasePath }),
     candidateReputationRepo:
-      candidateReputationRepo ??
+      options.candidateReputationRepo ??
       new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
     searchConsentRepo:
-      searchConsentRepo ?? new SqliteSearchConsentRepository({ databasePath: config.databasePath }),
-    ...(linkedinPool ? { linkedinPool } : {}),
+      options.searchConsentRepo ?? new SqliteSearchConsentRepository({ databasePath: config.databasePath }),
+    capabilityConsentStore:
+      options.capabilityConsentStore ??
+      new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    ...(options.linkedinPool ? { linkedinPool: options.linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
-
-    searchVacancies,
-    ...(hhCrawlSettings ? { hhCrawlSettings } : {}),
-    ...(runtimeMemory ? { runtimeMemory } : {}),
-    ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
+    searchVacancies: options.searchVacancies ?? searchHhVacancies,
+    ...(options.hhCrawlSettings ? { hhCrawlSettings: options.hhCrawlSettings } : {}),
+    ...(options.runtimeMemory ? { runtimeMemory: options.runtimeMemory } : {}),
+    ...(options.matchedPoolPrecompute ? { matchedPoolPrecompute: options.matchedPoolPrecompute } : {}),
     ...services,
   };
 }
@@ -318,6 +307,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   const app = await createFastifyBase(config, logDestination);
   app.addHook('onClose', () => {
     services.titleParseStore.close();
+    deps.capabilityConsentStore?.close();
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);

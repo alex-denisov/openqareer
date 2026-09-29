@@ -2,6 +2,8 @@ import { randomBytes, randomUUID, scrypt as scryptCallback } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { DatabaseSync } from 'node:sqlite';
 import type { CandidateStore } from '../data/candidateStore';
+import { deleteCapabilityConsentsForUser } from './capabilityConsentStore';
+
 import type {
   AdminAuditPage,
   AdminUserPage,
@@ -386,7 +388,10 @@ export function deleteUserByAdmin(
     candidateStore.deleteCandidate(user.candidateId);
   }
 
+  deleteCapabilityConsentsForUser(database, targetUserId);
+
   database.prepare(`DELETE FROM users WHERE id = ?`).run(targetUserId);
+
 
   if (actorPrincipal) {
     recordAdminAudit(database, {

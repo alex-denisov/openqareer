@@ -77,4 +77,6 @@ export interface RouteDeps {
   linkedinPool?: import('../linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
   /** Согласие «Вы в поиске» — единственное видимое кандидату согласие механики B (B263). */
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
+  /** Журнал согласий кандидата на возможности профиля (B263). */
+  capabilityConsentStore?: import('../auth/capabilityConsentStore').SqliteCapabilityConsentStore;
 }
