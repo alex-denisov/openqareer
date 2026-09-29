@@ -60,6 +60,9 @@ function evaluateSkills(
   for (const skill of candidateSkills) {
     candidateSkillsNorm.add(normalizeTextForComparison(skill));
     candidateSkillsNorm.add(normalizeTextForComparison(canonicalizeSkill(skill)));
+    // «Artificial Intelligence (AI)» из LinkedIn совпадает с «AI» вакансии.
+    const abbreviation = /\(([^()]+)\)\s*$/u.exec(skill)?.[1];
+    if (abbreviation) candidateSkillsNorm.add(normalizeTextForComparison(abbreviation));
   }
 
   const factIdByLabel = new Map<string, string>();

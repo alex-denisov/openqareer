@@ -217,6 +217,18 @@ describe('Telegram posts name the real title and never invent an employer (B164)
       expect(skills).not.toContain('Стратегическое планирование');
     });
 
+    it('adds management skills when the text names fewer than three tech terms (B307)', () => {
+      const leadText = `
+        Director of Engineering, AI Functions. You will lead a team of managers,
+        own the roadmap and manage risk across the AI platform.
+        Руководство командой и управление рисками.
+      `;
+      const skills = extractSkillsFromText(leadText);
+      expect(skills).toContain('AI');
+      expect(skills).toContain('Управление командой');
+      expect(skills).toContain('Управление рисками');
+    });
+
     it('extracts canonical management skills when tech keywords are empty (B307)', () => {
       const cooText = `
         Ищем Chief Operating Officer.

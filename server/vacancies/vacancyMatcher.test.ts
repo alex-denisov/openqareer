@@ -243,6 +243,17 @@ describe('Explainable Vacancy Matcher', () => {
       expect(titleExplanation.roleMatch).toBe('none');
     });
 
+    it('matches an abbreviation in brackets of a candidate skill (B307)', () => {
+      const candidate: CandidateMatchProfile = {
+        candidateId: 'cand-ai',
+        targetRoles: ['Head of AI'],
+        confirmedSkills: ['Artificial Intelligence (AI)'],
+        confirmedFacts: [],
+      };
+      const cluster: VacancyCluster = { ...sampleCluster, canonicalTitle: 'Head of AI', skills: ['AI'] };
+      expect(matchCandidateWithVacancy(candidate, cluster).requirements).toEqual({ matched: 1, total: 1 });
+    });
+
     it('matches management skill synonyms to canonical requirements (B307)', () => {
       const cooCandidate: CandidateMatchProfile = {
         candidateId: 'cand-coo',

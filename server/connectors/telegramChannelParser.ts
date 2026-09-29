@@ -92,6 +92,8 @@ function parseNumberWithK(raw: string): number | undefined {
   return isK && num < 1000 ? num * 1000 : num;
 }
 
+const MIN_TECH_TERMS_FOR_TECH_ONLY = 3;
+
 export function extractSkillsFromText(text: string): string[] {
   const found = new Set<string>();
   for (const keyword of KNOWN_TECH_KEYWORDS) {
@@ -100,10 +102,13 @@ export function extractSkillsFromText(text: string): string[] {
       found.add(keyword);
     }
   }
-  if (found.size > 0) {
+  // Стек из трёх и больше терминов — техническая вакансия, её набор не трогаем.
+  // У руководящей вакансии техтермин бывает один («AI»), и тогда без
+  // управленческого словаря требования почти пустые (B307).
+  if (found.size >= MIN_TECH_TERMS_FOR_TECH_ONLY) {
     return Array.from(found);
   }
-  return extractManagementSkillsFromText(text);
+  return Array.from(new Set([...found, ...extractManagementSkillsFromText(text)]));
 }
 
 function escapeRegExp(string: string) {
