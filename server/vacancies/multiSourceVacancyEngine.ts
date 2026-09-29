@@ -82,6 +82,7 @@ export type SourceFetcher = (
 export interface VacancyDescriptionLoaded {
   readonly description?: string;
   readonly skills?: readonly string[];
+  readonly archived?: boolean;
 }
 
 /** Читает полный текст только когда кандидат дошёл до конкретной вакансии. */
@@ -939,6 +940,17 @@ export class MultiSourceVacancyEngine {
     return { requested: selected.length, ...counts };
   }
 
+  /**
+   * Работодатель снял вакансию на площадке: запись уходит из выдачи так же, как
+   * после проверки живости ссылки (B200). Это не отказ площадки — пакет
+   * дочитывания идёт дальше (B304).
+   */
+  private retireArchivedVacancy(vacancy: UnifiedVacancy): VacancyDescriptionLoadResult {
+    this.pool.markExpired([vacancy.id], new Date().toISOString());
+    this.handleExpiredVacancies([vacancy.id]);
+    return { vacancy, unavailable: true, status: 'skipped' };
+  }
+
   private async loadAndStoreVacancyDescription(
     vacancy: UnifiedVacancy,
   ): Promise<VacancyDescriptionLoadResult> {
@@ -949,6 +961,7 @@ export class MultiSourceVacancyEngine {
       return { vacancy, unavailable: true, status: 'failed' };
     }
     if (!loaded) return { vacancy, unavailable: true, status: 'failed' };
+    if (typeof loaded === 'object' && loaded.archived) return this.retireArchivedVacancy(vacancy);
 
     const fullDescription = typeof loaded === 'string' ? loaded : loaded.description;
     const loadedSkills =

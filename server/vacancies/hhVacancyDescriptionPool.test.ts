@@ -125,6 +125,31 @@ describe('hh full-description on demand', () => {
     );
   });
 
+  it('вакансию, которая на hh в архиве, снимает с пула и не останавливает пакет дочитывания', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    const second = {
+      ...vacancy,
+      id: 'src-hh-search:9002',
+      fingerprint: 'src-hh-search:9002',
+      url: 'https://hh.ru/vacancy/9002',
+    };
+    pool.mergeSourceSlice(source.id, [vacancy, second]);
+    const load = vi
+      .fn()
+      .mockResolvedValueOnce({ archived: true, skills: [] })
+      .mockResolvedValueOnce({ description: 'Полный текст', skills: ['Python'] });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: { load },
+    });
+
+    await engine.preloadVacancyDescriptions([vacancy.id, second.id]);
+
+    expect(pool.getVacancy(vacancy.id)).toBeUndefined();
+    expect(pool.getVacancy(second.id)?.requiredSkills).toEqual(['Python']);
+  });
+
   it('повторяет запись закешированной страницы после временной ошибки пула', async () => {
     const pool = new MemoryVacancyPoolStore();
     const existing = { ...vacancy, fullDescription: 'Описание из поиска' };

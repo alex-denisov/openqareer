@@ -10,7 +10,11 @@ const DESCRIPTION_PATTERN =
 export interface HhVacancyDetails {
   readonly description?: string;
   readonly skills: readonly string[];
+  /** Работодатель снял вакансию: страница отвечает 200, но показывает «Вакансия в архиве». */
+  readonly archived?: boolean;
 }
+
+const ARCHIVED_MARKER = /Вакансия в архиве/u;
 
 export interface HhVacancyDescriptionLoaderOptions {
   readonly transport: HhSearchTransport;
@@ -137,7 +141,8 @@ export class HhVacancyDescriptionLoader {
       if (response.status === 200) {
         const description = descriptionFromPage(response.body);
         const skills = skillsFromPage(response.body);
-        details = description || skills.length > 0 ? { description, skills } : undefined;
+        if (ARCHIVED_MARKER.test(response.body)) details = { archived: true, skills: [] };
+        else details = description || skills.length > 0 ? { description, skills } : undefined;
       } else {
         details = undefined;
       }

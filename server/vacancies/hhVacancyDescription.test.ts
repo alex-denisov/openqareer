@@ -143,4 +143,11 @@ describe('HhVacancyDescriptionLoader', () => {
     release({ status: 200, body: page });
     await first;
   });
+  it('распознаёт страницу вакансии в архиве', async () => {
+    const loader = new HhVacancyDescriptionLoader({
+      transport: async () => ({ status: 200, body: '<html><div>Вакансия в архиве</div></html>' }),
+      sleep: async () => {},
+    });
+    await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toMatchObject({ archived: true });
+  });
 });
