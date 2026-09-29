@@ -2,6 +2,7 @@
    are intentionally kept together so replacement, expiry and reclustering share
    one transaction boundary. */
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
+import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 import type {
   UnifiedVacancy,
   VacancyCluster,
@@ -957,7 +958,11 @@ export class MultiSourceVacancyEngine {
     }
 
     const existingSkills = vacancy.requiredSkills ?? [];
-    const skillsToSave = existingSkills.length > 0 ? existingSkills : [...loadedSkills];
+    // Работодатели на hh часто не заполняют «Ключевые навыки»: тогда требования
+    // берутся из текста описания тем же словарём, что у ленты Telegram (B304).
+    const pageSkills =
+      loadedSkills.length > 0 ? [...loadedSkills] : extractSkillsFromText(fullDescription ?? '');
+    const skillsToSave = existingSkills.length > 0 ? existingSkills : pageSkills;
 
     const updated: UnifiedVacancy = {
       ...vacancy,

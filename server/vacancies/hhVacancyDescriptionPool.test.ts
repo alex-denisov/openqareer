@@ -105,6 +105,26 @@ describe('hh full-description on demand', () => {
     expect(explanation.requirements?.matched).toBe(1);
   });
 
+  it('если на карточке нет блока ключевых навыков — берёт их из текста описания (B304)', async () => {
+    const pool = new MemoryVacancyPoolStore();
+    pool.mergeSourceSlice(source.id, [vacancy]);
+    const load = vi.fn().mockResolvedValue({
+      description: 'Строим платформу на Kubernetes и AWS, бэкенд на Python.',
+      skills: [],
+    });
+    const engine = new MultiSourceVacancyEngine({
+      sources: [source],
+      pool,
+      descriptionLoader: { load },
+    });
+
+    await engine.loadVacancyDescription(vacancy.id);
+
+    expect(pool.getVacancy(vacancy.id)?.requiredSkills).toEqual(
+      expect.arrayContaining(['Kubernetes', 'AWS', 'Python']),
+    );
+  });
+
   it('повторяет запись закешированной страницы после временной ошибки пула', async () => {
     const pool = new MemoryVacancyPoolStore();
     const existing = { ...vacancy, fullDescription: 'Описание из поиска' };
