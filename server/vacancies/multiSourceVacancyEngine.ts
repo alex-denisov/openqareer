@@ -946,8 +946,9 @@ export class MultiSourceVacancyEngine {
    * дочитывания идёт дальше (B304).
    */
   private retireArchivedVacancy(vacancy: UnifiedVacancy): VacancyDescriptionLoadResult {
+    // Только индекс: handleExpiredVacancies грузит все кластеры и в HTTP-процессе
+    // выбивал память (heap OOM на проде 29.09). Кластер сведёт воркер обслуживания.
     this.pool.markExpired([vacancy.id], new Date().toISOString());
-    this.handleExpiredVacancies([vacancy.id]);
     return { vacancy, unavailable: true, status: 'skipped' };
   }
 
