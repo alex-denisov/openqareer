@@ -49,7 +49,7 @@ export function VacancyMapView({
     : mappedItems;
 
   return (
-    <div className="career-vacancy-map-view">
+    <div className="career-vacancy-map-view vacancy-map-view">
       <MapHeader
         onMapCount={facets.onMap.count}
         unmappedCount={facets.onMap.unmappedCount}
@@ -243,7 +243,7 @@ function CityChips({
 }) {
   if (cities.length === 0) return null;
   return (
-    <div className="career-map-city-chips" aria-label="Города на карте">
+    <div className="career-map-city-chips vacancy-map-cities" aria-label="Города на карте">
       {cities.map((c) => {
         const isSelected = selectedCity === c.city;
         return (

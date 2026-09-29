@@ -245,10 +245,12 @@ async function openInfoModal(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
-  if (page.viewportSize()?.width === 390) {
-    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  const firstItem = page.locator('.vac-list-item').first();
+  if ((await firstItem.locator('.vac-row').getAttribute('aria-expanded')) !== 'true') {
+    await firstItem.locator('.vac-row').click();
   }
-  await page.locator('.vacancies-detail-col').getByRole('button', { name: 'Подробнее' }).click();
+  await expect(firstItem.locator('.vac-detail')).toBeVisible();
+  await firstItem.locator('.vac-detail').getByRole('button', { name: 'Подробнее' }).click();
   await expect(page.locator('.career-modal-card.is-detail')).toBeVisible();
 }
 
@@ -286,7 +288,7 @@ test.describe('B250 vacancy detail modal', () => {
     await page.keyboard.press('Escape');
     await expect(card).toHaveCount(0);
     await expect(
-      page.locator('.vacancies-detail-col').getByRole('button', { name: 'Подробнее' }),
+      page.locator('.vac-detail').getByRole('button', { name: 'Подробнее' }),
     ).toBeFocused();
   });
 

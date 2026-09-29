@@ -21,11 +21,14 @@ describe('useVacancyCampaignActions', () => {
     };
     const spy = vi
       .spyOn(matchedVacancyApi, 'saveCandidateCampaign')
-      .mockResolvedValue(updatedCampaign as any);
+      .mockResolvedValue(updatedCampaign as unknown as matchedVacancyApi.CampaignMetaView);
 
     let actionsRef: ReturnType<typeof useVacancyCampaignActions> | null = null;
     function TestComponent() {
-      actionsRef = useVacancyCampaignActions(sampleCampaign as any, { onCampaignUpdated });
+      actionsRef = useVacancyCampaignActions(
+        sampleCampaign as unknown as matchedVacancyApi.CampaignMetaView,
+        { onCampaignUpdated },
+      );
       return null;
     }
 
@@ -47,7 +50,10 @@ describe('useVacancyCampaignActions', () => {
       regions: ['Москва'],
       remoteOnly: false,
     });
-    expect(onCampaignUpdated).toHaveBeenCalledWith(updatedCampaign, 'Head of Product');
+    expect(onCampaignUpdated).toHaveBeenCalledWith(
+      updatedCampaign as unknown as matchedVacancyApi.CampaignMetaView,
+      'Head of Product',
+    );
 
     await act(async () => {
       root.unmount();
@@ -65,7 +71,10 @@ describe('useVacancyCampaignActions', () => {
     };
     let actionsRef: ReturnType<typeof useVacancyCampaignActions> | null = null;
     function TestComponent() {
-      actionsRef = useVacancyCampaignActions(fullCampaign as any, { onCampaignUpdated: vi.fn() });
+      actionsRef = useVacancyCampaignActions(
+        fullCampaign as unknown as matchedVacancyApi.CampaignMetaView,
+        { onCampaignUpdated: vi.fn() },
+      );
       return null;
     }
 
@@ -96,11 +105,14 @@ describe('useVacancyCampaignActions', () => {
     };
     const spy = vi
       .spyOn(matchedVacancyApi, 'saveCandidateCampaign')
-      .mockResolvedValue(updatedCampaign as any);
+      .mockResolvedValue(updatedCampaign as unknown as matchedVacancyApi.CampaignMetaView);
 
     let actionsRef: ReturnType<typeof useVacancyCampaignActions> | null = null;
     function TestComponent() {
-      actionsRef = useVacancyCampaignActions(sampleCampaign as any, { onCampaignUpdated });
+      actionsRef = useVacancyCampaignActions(
+        sampleCampaign as unknown as matchedVacancyApi.CampaignMetaView,
+        { onCampaignUpdated },
+      );
       return null;
     }
 
