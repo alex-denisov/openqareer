@@ -2,6 +2,7 @@ import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
+import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
 import {
   SYNC_BATCH_LIMIT,
   type RequestedSourceSync,
@@ -52,6 +53,12 @@ export interface MaintenanceIntervals {
   readonly titleParseMs: number;
   readonly titleModelMs: number;
   readonly descriptionSkillsMs?: number;
+  readonly linkedinPoolExecutorMs: number;
+}
+
+export interface MaintenanceLinkedinPoolExecutor {
+  runStep(): Promise<LinkedinPoolExecutorReport>;
+  stop(): Promise<void> | void;
 }
 
 /** Шаг смыслового индекса (B267 S2): одна порция разметки пула правилами. */
@@ -96,6 +103,7 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   titleParseMs: 5 * 1_000,
   titleModelMs: 30 * 1_000,
   descriptionSkillsMs: 10 * 1_000,
+  linkedinPoolExecutorMs: 30 * 1_000,
 };
 
 /** Ключей индекса за шаг разметки: окно O(chunk), одна короткая транзакция. */
@@ -135,6 +143,7 @@ export class MaintenanceWorker {
   private readonly manualInFlight = new Set<string>();
   private readonly titleParse?: TitleParseStep;
   private readonly titleModel?: TitleModelStep;
+  private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   private titleModelRunning = false;
   private lastTitleModelLogAt = 0;
   private lastTitleParseProgressAt = Date.now();
@@ -156,10 +165,12 @@ export class MaintenanceWorker {
     readHeap?: () => HeapReading;
     titleParse?: TitleParseStep;
     titleModel?: TitleModelStep;
+    linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   }) {
     this.engine = options.engine;
     this.titleParse = options.titleParse;
     this.titleModel = options.titleModel;
+    this.linkedinPoolExecutor = options.linkedinPoolExecutor;
     this.log = options.log;
     this.intervals = { ...DEFAULT_MAINTENANCE_INTERVALS, ...options.intervals };
     this.readHeap = options.readHeap ?? readProcessHeap;
@@ -338,6 +349,32 @@ export class MaintenanceWorker {
     }
   }
 
+  async runLinkedinPoolExecutorStep(): Promise<void> {
+    if (this.stopped || !this.linkedinPoolExecutor) return;
+    const work = this.linkedinPoolExecutor.runStep().then((result) => {
+      if (result.status === 'processed') {
+        this.log.info(
+          {
+            pages: result.pageCount,
+            recruiters: result.recruiterCount,
+            notification: result.notification,
+          },
+          'linkedin-pool-executor-step',
+        );
+      } else if (result.status === 'needs_reauth' || result.status === 'transient_failure') {
+        this.log.warn(
+          {
+            status: result.status,
+            pages: result.pageCount,
+            notification: result.notification,
+          },
+          'linkedin-pool-executor-stopped',
+        );
+      }
+    });
+    await this.track(work, 'linkedin-pool-executor-failed', undefined);
+  }
+
   /** Периодический снимок окон S2, даже если все строки в них уже размечены. */
   reportTitleParseProgress(): void {
     if (this.stopped || !this.titleParse) return;
@@ -432,6 +469,9 @@ export class MaintenanceWorker {
     every(this.intervals.titleModelMs, () =>
       this.track(this.runTitleModelStep(), 'title-model-step-failed', undefined),
     );
+    if (this.linkedinPoolExecutor) {
+      every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
+    }
     void this.runManualSyncWave();
     void this.runSyncWave();
   }
@@ -497,6 +537,11 @@ export class MaintenanceWorker {
   async stop(graceMs = DEFAULT_STOP_GRACE_MS): Promise<{ waveFinished: boolean }> {
     this.stopped = true;
     for (const timer of this.timers.splice(0)) clearInterval(timer);
+    try {
+      await this.linkedinPoolExecutor?.stop();
+    } catch (error: unknown) {
+      this.log.warn({ errorName: errorName(error) }, 'linkedin-pool-executor-stop-failed');
+    }
     if (this.inFlight.size === 0) return { waveFinished: true };
     let timer: NodeJS.Timeout | undefined;
     const deadline = new Promise<'timeout'>((resolve) => {

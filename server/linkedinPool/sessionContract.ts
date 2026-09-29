@@ -25,6 +25,7 @@ export type LinkedinProviderCapability = (typeof LINKEDIN_PROVIDER_CAPABILITIES)
 export const LINKEDIN_FAILURE_CODES = [
   'account_unconfigured',
   'login_required',
+  'needs_reauth',
   'session_runtime_unavailable',
   'provider_permission_required',
   'provider_probe_unavailable',

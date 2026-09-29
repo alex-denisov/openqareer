@@ -249,12 +249,11 @@ export class SqliteLinkedinPoolRepository {
   list(input: LinkedinPoolListInput): LinkedinPoolPage {
     this.purgeExpiredSessionCookies();
     const where = input.state ? 'WHERE a.state = ?' : '';
-    const params = input.state
-      ? [input.state, input.limit, input.offset]
-      : [input.limit, input.offset];
+    const stateParams = input.state ? [input.state] : [];
+    const params = [...stateParams, input.limit, input.offset];
     const totalRow = this.database
       .prepare(`SELECT COUNT(*) AS total FROM linkedin_pool_accounts a ${where}`)
-      .get(...(input.state ? [input.state] : [])) as { total: number };
+      .get(...stateParams) as { total: number };
     const rows = this.database
       .prepare(
         `SELECT a.*, s.captured_at AS session_captured_at,

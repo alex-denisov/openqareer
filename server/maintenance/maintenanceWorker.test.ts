@@ -257,6 +257,26 @@ describe('MaintenanceWorker (B230)', () => {
     composed.close();
   });
 
+  it('runs and stops the optional LinkedIn pool step through the maintenance boundary', async () => {
+    const log = silentLog();
+    const linkedinPoolExecutor = {
+      runStep: vi.fn(async () => ({ status: 'processed' as const, pageCount: 2, recruiterCount: 1 })),
+      stop: vi.fn(async () => undefined),
+    };
+    const worker = new MaintenanceWorker({
+      engine: {} as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'],
+      log,
+      linkedinPoolExecutor,
+    });
+
+    await worker.runLinkedinPoolExecutorStep();
+    await worker.stop();
+
+    expect(linkedinPoolExecutor.runStep).toHaveBeenCalledTimes(1);
+    expect(linkedinPoolExecutor.stop).toHaveBeenCalledTimes(1);
+    expect(log.entries.some((entry) => entry.msg === 'linkedin-pool-executor-step')).toBe(true);
+  });
+
   it('a stuck source does not block the next wave for the other sources', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'maintenance-worker-'));
     directories.push(directory);

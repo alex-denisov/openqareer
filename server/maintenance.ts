@@ -1,8 +1,15 @@
 import { DatabaseSync } from 'node:sqlite';
+import { chromium } from 'playwright';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
 import { createJsonLineLog } from './maintenance/jsonLineLog';
 import { MaintenanceWorker } from './maintenance/maintenanceWorker';
+import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
+import {
+  LinkedinPoolCompanyPageExecutor,
+  readLinkedinPoolExecutorConfig,
+} from './linkedinPool/companyPageExecutor';
+import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
 import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/modelTitleParser';
 import { logPoolWrites } from './maintenance/poolWriteLog';
@@ -16,6 +23,7 @@ import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
  * (`recluster: keyed`); полная пересборка на проде не помещается в память.
  */
 const config = readServerConfig(process.env);
+const linkedinExecutorConfig = readLinkedinPoolExecutorConfig(process.env);
 const log = createJsonLineLog();
 const composed = composeVacancyEngine({
   databasePath: config.databasePath,
@@ -30,6 +38,23 @@ const composed = composeVacancyEngine({
 const semanticDatabase = new DatabaseSync(config.databasePath);
 semanticDatabase.exec('PRAGMA journal_mode = WAL;');
 applySqliteBusyTimeout(semanticDatabase);
+const linkedinPoolRepository = linkedinExecutorConfig.enabled
+  ? new SqliteLinkedinPoolRepository({
+      databasePath: config.databasePath,
+      encryptionKey: config.dataEncryptionKey,
+      ...(config.linkedinRuntimeRoot ? { runtimeRoot: config.linkedinRuntimeRoot } : {}),
+    })
+  : undefined;
+const linkedinPoolExecutor =
+  linkedinExecutorConfig.enabled && linkedinPoolRepository
+    ? new LinkedinPoolCompanyPageExecutor({
+        config: linkedinExecutorConfig,
+        repository: linkedinPoolRepository,
+        database: linkedinPoolRepository.getDatabase(),
+        browserFactory: () => chromium.launch({ headless: true }),
+        notifyOwner: (message) => notifyOwner(config, message),
+      })
+    : undefined;
 const worker = new MaintenanceWorker({
   engine: composed.engine,
   log,
@@ -43,6 +68,7 @@ const worker = new MaintenanceWorker({
         ),
       }
     : {}),
+  ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
 });
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
@@ -73,6 +99,7 @@ async function shutdown(signal: string): Promise<void> {
     return;
   }
   semanticDatabase.close();
+  linkedinPoolRepository?.close();
   composed.close();
   log.info({ signal, waveFinished }, 'maintenance-shutdown-finished');
   process.exit(0);
@@ -93,5 +120,6 @@ try {
     'maintenance-start-failed',
   );
   composed.close();
+  linkedinPoolRepository?.close();
   process.exit(1);
 }

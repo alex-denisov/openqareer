@@ -17,6 +17,7 @@ export type LinkedinSessionState =
 export type LinkedinFailureCode =
   | 'account_unconfigured'
   | 'login_required'
+  | 'needs_reauth'
   | 'session_runtime_unavailable'
   | 'provider_permission_required'
   | 'provider_probe_unavailable'

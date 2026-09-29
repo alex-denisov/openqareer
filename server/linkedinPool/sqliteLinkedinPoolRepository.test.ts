@@ -8,6 +8,12 @@ import {
   type LinkedinSessionProbe,
 } from './sqliteLinkedinPoolRepository';
 import { isLinkedinSessionCookieDomain, type LinkedinSessionCookie } from './sessionContract';
+import {
+  getLinkedinExecutorDailyUsage,
+  markLinkedinPoolAccountNeedsReauth,
+  recordLinkedinExecutorCompanyAttempt,
+  recordLinkedinExecutorPageAttempt,
+} from './executorAuditRepository';
 
 const actor = { actorUserId: 'admin-user', actorUsername: 'admin.test' };
 const encryptionKey = Buffer.alloc(32, 19);
@@ -20,13 +26,14 @@ afterEach(() => {
   }
 });
 
-function createRepository(probe?: LinkedinSessionProbe) {
+function createRepository(probe?: LinkedinSessionProbe, now?: () => Date) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-linkedin-pool-'));
   const repository = new SqliteLinkedinPoolRepository({
     databasePath: join(directory, 'app.db'),
     encryptionKey,
     runtimeRoot: join(directory, 'runtime'),
     probe,
+    now,
   });
   resources.push({ repository, directory });
   return { repository, directory };
@@ -338,5 +345,77 @@ describe('SqliteLinkedinPoolRepository', () => {
         .prepare('SELECT COUNT(*) AS count FROM linkedin_pool_sessions')
         .get(),
     ).toMatchObject({ count: 0 });
+  });
+
+  it('marks an account needs_reauth without changing the existing SQLite state constraint', async () => {
+    const { repository } = createRepository();
+    const account = createAccount(repository);
+    await markAccountReady(repository, account.id);
+    repository.storeSessionCookies(account.id, sessionCookies(), actor);
+
+    expect(
+      markLinkedinPoolAccountNeedsReauth(
+        repository.getDatabase(),
+        account.id,
+        'challenge_required',
+        new Date(),
+      ),
+    ).toBe(true);
+    expect(
+      markLinkedinPoolAccountNeedsReauth(
+        repository.getDatabase(),
+        account.id,
+        'challenge_required',
+        new Date(),
+      ),
+    ).toBe(false);
+    expect(repository.list({ limit: 25, offset: 0 }).accounts[0]).toMatchObject({
+      state: 'user_action_required',
+      lastFailureCode: 'needs_reauth',
+      serverSession: null,
+    });
+    expect(repository.readSessionCookies(account.id)).toBeNull();
+    expect(
+      repository
+        .getDatabase()
+        .prepare('SELECT state, last_failure_code FROM linkedin_pool_accounts WHERE id = ?')
+        .get(account.id),
+    ).toEqual({ state: 'user_action_required', last_failure_code: 'needs_reauth' });
+  });
+
+  it('persists page budget and company hashes without audit payloads', () => {
+    const now = new Date('2026-09-29T10:00:00.000Z');
+    const { repository } = createRepository(undefined, () => now);
+    const account = createAccount(repository);
+    const companyHash = 'a'.repeat(64);
+
+    recordLinkedinExecutorCompanyAttempt(repository.getDatabase(), account.id, companyHash, now);
+    recordLinkedinExecutorPageAttempt(
+      repository.getDatabase(),
+      account.id,
+      'company_search',
+      companyHash,
+      now,
+    );
+    recordLinkedinExecutorPageAttempt(
+      repository.getDatabase(),
+      account.id,
+      'company_people',
+      companyHash,
+      now,
+    );
+
+    expect(
+      getLinkedinExecutorDailyUsage(
+        repository.getDatabase(),
+        account.id,
+        '2026-09-29T00:00:00.000Z',
+      ),
+    ).toEqual({ pageCount: 2, attemptedCompanyHashes: [companyHash], lastPageAt: now.toISOString() });
+    const details = repository
+      .getDatabase()
+      .prepare('SELECT detail FROM linkedin_pool_audit WHERE account_id = ?')
+      .all(account.id) as Array<{ detail: string }>;
+    expect(details.map((entry) => entry.detail)).not.toContain('Northwind Group');
   });
 });
