@@ -269,7 +269,8 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await expect(page.getByRole('heading', { name: 'Вакансии', exact: true })).toBeVisible();
     const vacancy = page.locator('.vac-list-item').first();
     await expect(vacancy).toContainText('Senior Software Engineer');
-    await vacancy.locator('button').click();
+    const rowToggle = vacancy.locator('button[aria-expanded]').first();
+    if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') await rowToggle.click();
     const detail = page.locator('.vacancies-detail-panel');
     await expect(detail).toContainText('Опубликована на hh.ru');
 

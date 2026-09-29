@@ -1053,7 +1053,8 @@ test.describe('B265 Profile screen', () => {
     await page.locator('button[aria-label="Вакансии"]:visible').first().click();
     const vacancy = page.locator('.vac-list-item').first();
     await expect(vacancy).toContainText('Platform Engineer');
-    await vacancy.locator('button').click();
+    const rowToggle = vacancy.locator('button[aria-expanded]').first();
+    if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') await rowToggle.click();
     await page
       .locator('.vacancies-detail-panel')
       .getByRole('button', { name: 'Добавить в профиль' })
@@ -1083,12 +1084,19 @@ test.describe('B265 Profile screen', () => {
     await expect.poll(() => accepted).toBe(true);
     await expect.poll(() => matchedReadsAfterAccept).toBeGreaterThan(0);
     await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+    const reopenedToggle = page
+      .locator('.vac-list-item')
+      .first()
+      .locator('button[aria-expanded]')
+      .first();
+    if ((await reopenedToggle.getAttribute('aria-expanded')) !== 'true')
+      await reopenedToggle.click();
     await expect(
-      page.locator('.vacancies-req-block').filter({ hasText: 'Совпадает по фактам профиля' }),
+      page.locator('.req-block').filter({ hasText: 'Совпадает по фактам профиля' }),
     ).toContainText(requirement);
     await expect(
       page
-        .locator('.vacancies-req-block')
+        .locator('.req-block')
         .filter({ hasText: 'Требования вакансии, которых нет в вашем профиле' }),
     ).toHaveCount(0);
   });

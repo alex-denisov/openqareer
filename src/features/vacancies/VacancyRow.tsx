@@ -4,6 +4,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
+import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
@@ -606,10 +607,12 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   const missingPoints = explanation.missingPoints ?? [];
   const total = matchingPoints.length + missingPoints.length;
   const { interviewState, appliedState, trust } = rowState;
+  const source = vacancySourceLabels(cluster.sources)[0];
 
   return (
     <div className="vac-detail vacancies-detail-col vacancies-detail-panel">
       <DetailTrustAlert trust={trust} />
+      {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
       <p className="req-summary">
         {total > 0
           ? `Требования вакансии: ${matchingPoints.length} из ${total} подтверждены фактами профиля`
