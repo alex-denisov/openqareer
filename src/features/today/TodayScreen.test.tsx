@@ -240,6 +240,20 @@ describe('TodayScreen (B251 S5)', () => {
       approvalBoundary: 'Профиль меняется только после согласования.',
     };
 
+    it('оставляет единственную акцентную кнопку консультанта при наличии интервью', () => {
+      const html = renderTodayScreen({
+        consultantAction: { ...mockAction, label: 'Проверить факты' },
+        snapshot: { ...snapshot, queue: [...snapshot.queue, {
+          kind: 'interview', applicationId: 'interview-one', title: 'Product Lead',
+          company: 'Компания', eyebrow: 'Интервью', dueAt: null, fit: null,
+        }] },
+      });
+      const accentButtons = html.match(/<button[^>]*class="[^"]*career-btn-primary[^"]*"[^>]*>[\s\S]*?<\/button>/gu) ?? [];
+      expect(accentButtons).toHaveLength(1);
+      expect(accentButtons[0]).toContain('Проверить факты');
+      expect(html).toContain('Подготовиться');
+    });
+
     it('встраивает карточку консультанта в очередь дня с заголовком, обоснованием и кнопкой действия', () => {
       const html = renderTodayScreen({ consultantAction: mockAction });
 

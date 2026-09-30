@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LinkedinDraftCard } from './LinkedinDraftCard';
 import { ClockCountdown, DotsThreeVertical, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
@@ -41,6 +42,7 @@ export interface TodayScreenProps {
   readonly markingFollowUpIds?: ReadonlySet<string>;
   readonly candidateId?: string;
   readonly consultantAction?: ReasonedCareerAction;
+  readonly onOpenTariffs?: () => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }
 
@@ -87,6 +89,7 @@ export function TodayScreen({
   candidateId,
   consultantAction,
   onNavigate,
+  onOpenTariffs,
 }: TodayScreenProps) {
   const { activeAction, onAccept, onDismiss } = useTodayConsultantAction({
     candidateId,
@@ -101,6 +104,7 @@ export function TodayScreen({
   return (
     <TodayContent
       snapshot={snapshot}
+      onOpenTariffs={onOpenTariffs}
       activeAction={activeAction}
       onAccept={onAccept}
       onDismiss={onDismiss}
@@ -118,6 +122,7 @@ interface TodayContentProps {
   readonly onDismiss: () => void;
   readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   readonly markingFollowUpIds: ReadonlySet<string>;
+  readonly onOpenTariffs?: () => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }
 
@@ -129,6 +134,7 @@ function TodayContent({
   onMarkFollowUpSent,
   markingFollowUpIds,
   onNavigate,
+  onOpenTariffs,
 }: TodayContentProps) {
   const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
   return (
@@ -154,6 +160,7 @@ function TodayContent({
           onDismissConsultant={onDismiss}
         />
         <div className="career-today-side">
+          <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
           <TodayFollowUps
             followUps={followUps}
             onMarkFollowUpSent={onMarkFollowUpSent}
@@ -544,7 +551,7 @@ function PrepareInterviewButton({ item }: { item: TodayQueueItem }) {
     <>
       <button
         type="button"
-        className="career-btn career-btn-primary career-btn-sm"
+        className="career-btn career-btn-secondary career-btn-sm"
         onClick={() => setOpen(true)}
       >
         Подготовиться

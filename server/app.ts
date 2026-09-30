@@ -45,6 +45,9 @@ import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoute
 import { SqliteCandidateActionRepository } from './candidate/sqliteCandidateActionRepository';
 import { CandidateActionExecutor } from './candidate/candidateActionExecutor';
 import { registerCandidateActionRoutes } from './routes/candidateActionRoutes';
+import { registerCandidateDraftRoutes, type CandidateDraftRouteDeps } from './routes/candidateDraftRoutes';
+import { SqliteCandidateDraftRepository } from './candidate/sqliteCandidateDraftRepository';
+import { buildLinkedinDraftWriter, type LinkedinDraftWriter } from './providers/linkedinDraftWriter';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
 interface BuildAppOptions {
@@ -67,6 +70,8 @@ interface BuildAppOptions {
   roleNamer?: RoleNamer;
   campaignRoleModel?: RouteDeps['campaignRoleModel'];
   coverLetterWriter?: CoverLetterWriter;
+  linkedinDraftWriter?: LinkedinDraftWriter;
+  candidateDraftRepository?: SqliteCandidateDraftRepository;
   /** Инъекция нужна тестам; в runtime стор открывает общую базу пула. */
   titleParseStore?: SqliteTitleParseStore;
   recruiterContactsRepo?: SqliteRecruiterContactsRepository;
@@ -212,7 +217,7 @@ async function createFastifyBase(
   return app;
 }
 
-async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+async function registerApiRoutes(app: FastifyInstance, deps: CandidateDraftRouteDeps): Promise<void> {
   await registerAdminRoutes(app, deps);
   await registerAuthRoutes(app, deps);
   await registerConnectorRoutes(app, deps);
@@ -227,6 +232,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   registerSearchConsentRoutes(app, deps);
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
+  registerCandidateDraftRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
@@ -271,7 +277,7 @@ function createCandidateRepositories(options: BuildAppOptions) {
   };
 }
 
-function assembleRouteDeps(options: BuildAppOptions, services: AppServices): RouteDeps {
+function assembleRouteDeps(options: BuildAppOptions, services: AppServices): CandidateDraftRouteDeps {
   const {
     config,
     authService,
@@ -301,6 +307,15 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     campaignRoleModel,
     coverLetterWriter,
     ...createCandidateRepositories(options),
+    candidateDraftRepository: options.candidateDraftRepository ?? new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),
+    linkedinDraftWriter: options.linkedinDraftWriter ?? buildLinkedinDraftWriter({
+      personalProvider: config.personalProvider,
+      model: config.model,
+      fallbacks: config.personalFallbacks,
+      providerCredentials: config.providerCredentials,
+      cloudflareGateway: config.cloudflareGateway,
+      vertex: config.vertex,
+    }),
     ...(options.candidateActionExecutor ? { candidateActionExecutor: options.candidateActionExecutor } : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
@@ -342,6 +357,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook('onClose', () => {
     services.titleParseStore.close();
     deps.capabilityConsentStore?.close();
+    if (!options.candidateDraftRepository) deps.candidateDraftRepository.close();
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);

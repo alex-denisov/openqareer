@@ -1,0 +1,26 @@
+.career-drafts { min-width: 0; padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); overflow-wrap: anywhere; }
+.career-drafts h2 { margin: 0; font-size: var(--career-text-md); }
+.career-drafts p, .career-drafts label, .career-drafts-recent { font-size: var(--career-text-xs); line-height: 1.45; }
+.career-drafts > p { color: var(--career-text-soft); margin: var(--career-space-2) 0 var(--career-space-3); }
+.career-drafts form { display: grid; gap: var(--career-space-2); }
+.career-drafts input, .career-drafts textarea { width: 100%; min-width: 0; box-sizing: border-box; background: var(--career-bg); color: var(--career-text); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); padding: var(--career-space-2); font: inherit; font-size: var(--career-text-sm); min-height: calc(var(--career-space-5) + var(--career-space-6)); }
+.career-drafts-kinds { display: flex; flex-wrap: wrap; gap: var(--career-space-2); }
+.career-drafts .career-btn { min-height: calc(var(--career-space-5) + var(--career-space-6)); min-width: 0; white-space: normal; }
+.career-drafts [aria-pressed=true] { border-color: var(--career-accent); }
+.career-drafts-result { margin-top: var(--career-space-3); }
+.career-drafts-result p { white-space: pre-wrap; }
+.career-drafts-recent { margin: var(--career-space-3) 0 0; padding-inline-start: var(--career-space-4); color: var(--career-text-soft); }
+.career-drafts :focus-visible { outline: var(--career-border-width) solid var(--career-accent); outline-offset: var(--career-space-1); }
+.career-drafts :disabled { opacity: .5; cursor: wait; }
+
+/* На широком экране очередь задаёт высоту; черновики доступны во внутренней прокрутке. */
+@media (min-width: 1025px) {
+  .career-today-side {
+    contain: size;
+    align-self: stretch;
+    min-height: 0;
+    overflow-y: auto;
+    grid-auto-rows: max-content;
+    scrollbar-gutter: stable;
+  }
+}

@@ -303,6 +303,7 @@ export function CareerCabinet({
 /** «Сегодня» reads its own digest through `useToday` — the cabinet's
  * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
 function TodaySection({
+  onOpenTariffs,
   candidateId,
   consultantAction,
   onNavigate,
@@ -310,10 +311,12 @@ function TodaySection({
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
+  onOpenTariffs?: () => void;
 }) {
   const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
   return (
     <TodayScreen
+      onOpenTariffs={onOpenTariffs}
       snapshot={snapshot}
       loading={loading}
       failed={failed}
@@ -393,6 +396,7 @@ function CabinetSection({
   if (view === 'today') {
     return (
       <TodaySection
+        onOpenTariffs={onOpenTariffs}
         candidateId={session.candidateId}
         consultantAction={consultantAction}
         onNavigate={onNavigate}
