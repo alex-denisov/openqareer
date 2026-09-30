@@ -11683,7 +11683,7 @@
   left: 0;
   z-index: 6;
   min-width: 240px;
-  box-shadow: 0 12px 32px oklch(0% 0 0 / 0.4);
+  box-shadow: var(--career-shadow-tooltip);
   margin: 0;
   padding: var(--career-space-3);
   border: 1px solid var(--career-line);
@@ -14635,7 +14635,7 @@ button.chip {
   font-size: var(--career-text-xs);
   line-height: 1.45;
   pointer-events: none;
-  box-shadow: 0 12px 32px oklch(0% 0 0 / 0.4);
+  box-shadow: var(--career-shadow-tooltip);
 }
 
 .oq-title-tip[hidden] {

@@ -17,32 +17,11 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [companyHidden, setCompanyHidden] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string>();
-
-  const submit = async () => {
-    if (!title.trim()) {
-      setError('Укажите название роли.');
-      return;
-    }
-    setSubmitting(true);
-    setError(undefined);
-    try {
-      await onSubmit({
-        manualVacancy: {
-          title: title.trim(),
-          company: company.trim(),
-          companyHidden,
-          source: 'recruiter',
-        },
-        stage: 'saved',
-      });
-    } catch {
-      setError('Не удалось сохранить карточку. Повторите.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const { submitting, error, submit } = useManualCardSubmit(onSubmit, {
+    title,
+    company,
+    companyHidden,
+  });
 
   return (
     // A real dialog (B331): the bare div had no styles, no backdrop and no
@@ -69,21 +48,71 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
           </p>
         ) : null}
       </div>
-      <div className="career-modal-footer is-compact">
-        <button type="button" className="career-quiet-button" onClick={onCancel}>
-          Отмена
-        </button>
-        <button
-          type="button"
-          className="career-primary-button"
-          onClick={() => void submit()}
-          disabled={submitting}
-        >
-          {submitting ? 'Сохраняем…' : 'Добавить'}
-        </button>
-      </div>
+      <ManualCardFooter
+        submitting={submitting}
+        onCancel={onCancel}
+        onSubmit={() => void submit()}
+      />
     </ImportModalShell>
   );
+}
+
+function ManualCardFooter({
+  submitting,
+  onCancel,
+  onSubmit,
+}: {
+  readonly submitting: boolean;
+  readonly onCancel: () => void;
+  readonly onSubmit: () => void;
+}) {
+  return (
+    <div className="career-modal-footer is-compact">
+      <button type="button" className="career-quiet-button" onClick={onCancel}>
+        Отмена
+      </button>
+      <button
+        type="button"
+        className="career-primary-button"
+        onClick={onSubmit}
+        disabled={submitting}
+      >
+        {submitting ? 'Сохраняем…' : 'Добавить'}
+      </button>
+    </div>
+  );
+}
+
+function useManualCardSubmit(
+  onSubmit: ManualCardFormProps['onSubmit'],
+  fields: { readonly title: string; readonly company: string; readonly companyHidden: boolean },
+) {
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = async () => {
+    if (!fields.title.trim()) {
+      setError('Укажите название роли.');
+      return;
+    }
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      await onSubmit({
+        manualVacancy: {
+          title: fields.title.trim(),
+          company: fields.company.trim(),
+          companyHidden: fields.companyHidden,
+          source: 'recruiter',
+        },
+        stage: 'saved',
+      });
+    } catch {
+      setError('Не удалось сохранить карточку. Повторите.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  return { submitting, error, submit };
 }
 
 interface ManualCardFieldsProps {

@@ -48,21 +48,32 @@ export function installTitleTooltips(root: Document): () => void {
     hide();
   };
 
-  root.addEventListener('mouseover', show);
-  root.addEventListener('focusin', show);
-  root.addEventListener('click', show);
-  root.addEventListener('mouseout', leave);
-  root.addEventListener('focusout', leave);
-  root.addEventListener('scroll', hide, true);
+  const detach = listen(root, show, leave, hide);
   return () => {
     hide();
-    root.removeEventListener('mouseover', show);
-    root.removeEventListener('focusin', show);
-    root.removeEventListener('click', show);
-    root.removeEventListener('mouseout', leave);
-    root.removeEventListener('focusout', leave);
-    root.removeEventListener('scroll', hide, true);
+    detach();
     tip.remove();
+  };
+}
+
+function listen(
+  root: Document,
+  show: (event: Event) => void,
+  leave: (event: Event) => void,
+  hide: () => void,
+): () => void {
+  const pairs: ReadonlyArray<readonly [string, EventListener]> = [
+    ['mouseover', show],
+    ['focusin', show],
+    ['click', show],
+    ['mouseout', leave],
+    ['focusout', leave],
+  ];
+  for (const [type, handler] of pairs) root.addEventListener(type, handler);
+  root.addEventListener('scroll', hide, true);
+  return () => {
+    for (const [type, handler] of pairs) root.removeEventListener(type, handler);
+    root.removeEventListener('scroll', hide, true);
   };
 }
 
