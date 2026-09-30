@@ -368,6 +368,33 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     });
   });
 
+  it('reports why a page failed and marks the following backoff steps as backoff, not new failures', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    fake.page.goto.mockRejectedValueOnce(new Error('net::ERR_TUNNEL_CONNECTION_FAILED'));
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner: vi.fn(async () => ({ status: 'sent' as const, httpStatus: 200, messageId: 3 })),
+      now: () => now,
+      wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
+    });
+
+    await expect(executor.runStep()).resolves.toMatchObject({
+      status: 'transient_failure',
+      reason: 'Error: net::ERR_TUNNEL_CONNECTION_FAILED',
+    });
+    await expect(executor.runStep()).resolves.toMatchObject({
+      status: 'transient_failure',
+      reason: 'backoff',
+    });
+  });
+
   it('reserves two pages and does not read or switch accounts at the daily limit or outside the window', async () => {
     const repository = createRepository();
     const account = await createReadyAccount(repository, 'pool-one@example.test');

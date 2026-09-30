@@ -367,10 +367,13 @@ export class MaintenanceWorker {
           'linkedin-pool-executor-step',
         );
       } else if (result.status === 'needs_reauth' || result.status === 'transient_failure') {
+        // Шаг во время паузы после сбоя — не новый сбой; не засоряем журнал каждые 30 с.
+        if (result.reason === 'backoff') return;
         this.log.warn(
           {
             status: result.status,
             pages: result.pageCount,
+            reason: result.reason,
             notification: result.notification,
           },
           'linkedin-pool-executor-stopped',

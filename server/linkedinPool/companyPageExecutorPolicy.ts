@@ -36,6 +36,8 @@ export interface LinkedinPoolExecutorReport {
   readonly pageCount: number;
   readonly recruiterCount: number;
   readonly notification?: 'sent' | 'disabled' | 'failed';
+  /** Причина сбоя без данных сессии: «ИмяОшибки: сообщение» или `backoff`. */
+  readonly reason?: string;
 }
 
 export function readLinkedinPoolExecutorConfig(

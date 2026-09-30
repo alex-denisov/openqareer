@@ -73,6 +73,7 @@ interface PageRead {
   readonly status: 'ready' | 'needs_reauth' | 'transient_failure' | 'stopped';
   readonly html?: string;
   readonly reason?: 'challenge_required' | 'expired' | 'login_required';
+  readonly failure?: string;
 }
 
 export function detectCadencePageKind(url: string): CadencePageKind {
@@ -122,7 +123,7 @@ export class LinkedinPoolCompanyPageExecutor {
     if (this.stopped) return report('stopped');
     if (this.reauthRequired) return report('needs_reauth');
     if (this.running) return report('stopped');
-    if (this.isBackingOff()) return report('transient_failure');
+    if (this.isBackingOff()) return { ...report('transient_failure'), reason: 'backoff' };
     this.running = true;
     try {
       const outcome = await this.runEnabledStep();
@@ -132,10 +133,10 @@ export class LinkedinPoolCompanyPageExecutor {
         this.recordTransientFailure();
       }
       return outcome;
-    } catch {
+    } catch (error: unknown) {
       if (this.stopped) return report('stopped');
       this.recordTransientFailure();
-      return report('transient_failure');
+      return { ...report('transient_failure'), reason: describeFailure(error) };
     } finally {
       this.running = false;
       await this.closeBrowser();
@@ -321,8 +322,9 @@ export class LinkedinPoolCompanyPageExecutor {
       } finally {
         this.pauseController = undefined;
       }
-    } catch {
-      return { status: this.stopped ? 'stopped' : 'transient_failure' };
+    } catch (error: unknown) {
+      if (this.stopped) return { status: 'stopped' };
+      return { status: 'transient_failure', failure: describeFailure(error) };
     }
   }
 
@@ -331,7 +333,8 @@ export class LinkedinPoolCompanyPageExecutor {
       const notice = await this.blockForReauth(page.reason ?? 'challenge_required');
       return { ...notice, pageCount: pages };
     }
-    return report(page.status === 'stopped' ? 'stopped' : 'transient_failure', pages, 0);
+    if (page.status === 'stopped') return report('stopped', pages, 0);
+    return { ...report('transient_failure', pages, 0), reason: page.failure ?? 'page_not_ready' };
   }
 
   private async blockForReauth(
@@ -378,6 +381,12 @@ function report(
   recruiterCount = 0,
 ): LinkedinPoolExecutorReport {
   return { status, pageCount, recruiterCount };
+}
+
+/** Имя и сообщение ошибки, обрезанные; cookies и заголовки сюда не попадают. */
+function describeFailure(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`.slice(0, 300);
+  return 'unknown_error';
 }
 
 function companyHash(companyName: string): string {
