@@ -8,6 +8,45 @@
 export const DEFAULT_ACCOUNT_TIMEZONE = 'Europe/Moscow';
 
 /**
+ * Описание часового пояса для списка выбора.
+ */
+export interface TimezoneOption {
+  readonly city: string;
+  readonly timezone: string;
+}
+
+/**
+ * Постоянный упорядоченный список часовых поясов (B332).
+ */
+export const COMMON_TIMEZONES: readonly TimezoneOption[] = [
+  { city: 'Москва', timezone: 'Europe/Moscow' },
+  { city: 'Калининград', timezone: 'Europe/Kaliningrad' },
+  { city: 'Самара', timezone: 'Europe/Samara' },
+  { city: 'Екатеринбург', timezone: 'Asia/Yekaterinburg' },
+  { city: 'Новосибирск', timezone: 'Asia/Novosibirsk' },
+  { city: 'Красноярск', timezone: 'Asia/Krasnoyarsk' },
+  { city: 'Иркутск', timezone: 'Asia/Irkutsk' },
+  { city: 'Владивосток', timezone: 'Asia/Vladivostok' },
+  { city: 'Минск', timezone: 'Europe/Minsk' },
+  { city: 'Киев', timezone: 'Europe/Kyiv' },
+  { city: 'Тбилиси', timezone: 'Asia/Tbilisi' },
+  { city: 'Ереван', timezone: 'Asia/Yerevan' },
+  { city: 'Алматы', timezone: 'Asia/Almaty' },
+  { city: 'Ташкент', timezone: 'Asia/Tashkent' },
+  { city: 'Дубай', timezone: 'Asia/Dubai' },
+  { city: 'Стамбул', timezone: 'Europe/Istanbul' },
+  { city: 'Каир', timezone: 'Africa/Cairo' },
+  { city: 'Берлин', timezone: 'Europe/Berlin' },
+  { city: 'Амстердам', timezone: 'Europe/Amsterdam' },
+  { city: 'Лондон', timezone: 'Europe/London' },
+  { city: 'Лиссабон', timezone: 'Europe/Lisbon' },
+  { city: 'Нью-Йорк', timezone: 'America/New_York' },
+  { city: 'Лос-Анджелес', timezone: 'America/Los_Angeles' },
+  { city: 'Сингапур', timezone: 'Asia/Singapore' },
+  { city: 'Бангкок', timezone: 'Asia/Bangkok' },
+] as const;
+
+/**
  * Проверяет, является ли строка валидным идентификатором IANA time zone.
  */
 export function isValidTimezone(timezone: unknown): boolean {
@@ -20,6 +59,51 @@ export function isValidTimezone(timezone: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Вычисляет текущее смещение часового пояса через Intl.DateTimeFormat (вид «UTC+3», «UTC-5», «UTC»).
+ */
+export function formatTimezoneOffset(timezone: string, date: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'shortOffset',
+    }).formatToParts(date);
+    const tzPart = parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
+    const offset = tzPart.replace(/^GMT/, '');
+    if (!offset || offset === '+0' || offset === '-0' || offset === '+00:00' || offset === '-00:00') {
+      return 'UTC';
+    }
+    return `UTC${offset}`;
+  } catch {
+    return 'UTC';
+  }
+}
+
+/**
+ * Возвращает название города для часового пояса (из постоянного списка или из строки IANA).
+ */
+export function getTimezoneCity(timezone: string): string {
+  const found = COMMON_TIMEZONES.find((item) => item.timezone === timezone);
+  if (found) {
+    return found.city;
+  }
+  const parts = timezone.split('/');
+  return parts[parts.length - 1].replace(/_/g, ' ');
+}
+
+/**
+ * Форматирует часовой пояс для отображения: «Москва (UTC+3)» или «<значение> (UTC±N)».
+ */
+export function formatTimezoneDisplay(timezone?: string | null, date: Date = new Date()): string {
+  const tz = timezone?.trim() || DEFAULT_ACCOUNT_TIMEZONE;
+  const offset = formatTimezoneOffset(tz, date);
+  const found = COMMON_TIMEZONES.find((item) => item.timezone === tz);
+  if (found) {
+    return `${found.city} (${offset})`;
+  }
+  return `${tz} (${offset})`;
 }
 
 /**

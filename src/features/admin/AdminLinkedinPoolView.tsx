@@ -41,6 +41,11 @@ import {
   type LinkedinPoolAccount,
   type LinkedinSessionState,
 } from './linkedinPoolApi';
+import { TimezoneSelect } from '../shell/TimezoneSelect';
+import {
+  DEFAULT_ACCOUNT_TIMEZONE,
+  formatTimezoneDisplay,
+} from '../../../shared/timezoneUtils';
 
 export { isSafeAdminLinkedinSessionPage } from './adminLinkedinSessionFlow';
 
@@ -198,7 +203,7 @@ export function AdminLinkedinPoolView() {
   const [verifiedSessionMarker, setVerifiedSessionMarker] = useState<string>();
   const [localCleanupPendingAccountId, setLocalCleanupPendingAccountId] = useState<string>();
   const [query, setQuery] = useState('');
-  const [accountTimezone, setAccountTimezone] = useState('');
+  const [accountTimezone, setAccountTimezone] = useState(DEFAULT_ACCOUNT_TIMEZONE);
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'action' | 'stopped'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'state' | 'verified'>('name');
   const [descending, setDescending] = useState(false);
@@ -264,7 +269,7 @@ export function AdminLinkedinPoolView() {
         timezone: accountTimezone.trim() || undefined,
       });
       setIdentifier('');
-      setAccountTimezone('');
+      setAccountTimezone(DEFAULT_ACCOUNT_TIMEZONE);
       setQuery('');
       setStatusFilter('all');
       setSortBy('name');
@@ -536,16 +541,12 @@ export function AdminLinkedinPoolView() {
               autoComplete="off"
             />
           </label>
-          <label>
-            <span>Часовой пояс (IANA)</span>
-            <input
-              value={accountTimezone}
-              onChange={(event) => setAccountTimezone(event.target.value)}
-              placeholder="Europe/Moscow (или авто)"
-              maxLength={64}
-              autoComplete="off"
-            />
-          </label>
+          <TimezoneSelect
+            name="timezone"
+            value={accountTimezone}
+            onChange={(event) => setAccountTimezone(event.target.value)}
+            disabled={formBusy}
+          />
         </div>
         <button
           className="admin-btn admin-btn--primary"
@@ -663,7 +664,7 @@ export function AdminLinkedinPoolView() {
                   </div>
                   <div>
                     <dt>Часовой пояс</dt>
-                    <dd>{account.timezone ?? 'Europe/Moscow'}</dd>
+                    <dd>{formatTimezoneDisplay(account.timezone)}</dd>
                   </div>
                   <AdminLinkedinServerSessionMeta account={account} />
                 </dl>

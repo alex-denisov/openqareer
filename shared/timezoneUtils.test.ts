@@ -44,3 +44,42 @@ describe('timezoneUtils (B328)', () => {
     expect(inferTimezoneFromRegionOrLabel(null)).toBe(DEFAULT_ACCOUNT_TIMEZONE);
   });
 });
+
+describe('timezoneUtils (B332)', () => {
+  it('contains the immutable list of 25 common timezones in order', async () => {
+    const { COMMON_TIMEZONES } = await import('./timezoneUtils');
+    expect(COMMON_TIMEZONES).toHaveLength(25);
+    expect(COMMON_TIMEZONES[0]).toEqual({ city: 'Москва', timezone: 'Europe/Moscow' });
+    expect(COMMON_TIMEZONES[1]).toEqual({ city: 'Калининград', timezone: 'Europe/Kaliningrad' });
+    expect(COMMON_TIMEZONES[24]).toEqual({ city: 'Бангкок', timezone: 'Asia/Bangkok' });
+
+    for (const item of COMMON_TIMEZONES) {
+      expect(isValidTimezone(item.timezone), `${item.timezone} must be valid`).toBe(true);
+    }
+  });
+
+  it('calculates offsets dynamically including positive, negative, and zero (UTC)', async () => {
+    const { formatTimezoneOffset } = await import('./timezoneUtils');
+    expect(formatTimezoneOffset('Europe/Moscow')).toBe('UTC+3');
+    expect(formatTimezoneOffset('UTC')).toBe('UTC');
+    // Отрицательные смещения США
+    expect(formatTimezoneOffset('America/New_York')).toMatch(/^UTC[-−]\d+/);
+    expect(formatTimezoneOffset('America/Los_Angeles')).toMatch(/^UTC[-−]\d+/);
+  });
+
+  it('formats timezone display for admin cards and labels', async () => {
+    const { formatTimezoneDisplay } = await import('./timezoneUtils');
+    expect(formatTimezoneDisplay('Europe/Moscow')).toBe('Москва (UTC+3)');
+    expect(formatTimezoneDisplay(null)).toBe('Москва (UTC+3)');
+    expect(formatTimezoneDisplay(undefined)).toBe('Москва (UTC+3)');
+    expect(formatTimezoneDisplay('')).toBe('Москва (UTC+3)');
+    expect(formatTimezoneDisplay('Asia/Tokyo')).toMatch(/^Asia\/Tokyo \(UTC\+9\)$/);
+  });
+
+  it('extracts city name from known list or timezone string', async () => {
+    const { getTimezoneCity } = await import('./timezoneUtils');
+    expect(getTimezoneCity('Europe/Moscow')).toBe('Москва');
+    expect(getTimezoneCity('Europe/Kaliningrad')).toBe('Калининград');
+    expect(getTimezoneCity('Asia/Tokyo')).toBe('Tokyo');
+  });
+});

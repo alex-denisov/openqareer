@@ -20,6 +20,15 @@ describe('AdminLinkedinPoolView', () => {
     expect(html).not.toContain('mask');
   });
 
+  it('renders TimezoneSelect in add form without IANA label and default Moscow (B332)', () => {
+    const html = renderToStaticMarkup(<AdminLinkedinPoolView />);
+    expect(html).not.toContain('Часовой пояс (IANA)');
+    expect(html).toContain('Часовой пояс');
+    expect(html).toContain('name="timezone"');
+    expect(html).toContain('value="Europe/Moscow"');
+    expect(html).toContain('Москва (UTC+3)');
+  });
+
   it('requires a classified signed-in LinkedIn page before confirming a pool session', () => {
     expect(
       isSafeAdminLinkedinSessionPage({

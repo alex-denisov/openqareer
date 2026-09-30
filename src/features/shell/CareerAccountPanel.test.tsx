@@ -80,3 +80,30 @@ describe('CareerAccountPanel initial section (B266)', () => {
     expect(active).toBe('Подключения');
   });
 });
+
+describe('CareerAccountPanel timezone selection (B332)', () => {
+  const user = {
+    username: 'jordan',
+    email: 'jordan@example.com',
+    displayName: 'Jordan Rivers',
+    role: 'candidate',
+    isTest: true,
+    candidateId: 'c-1',
+  } as const;
+
+  it('renders TimezoneSelect in security section without (IANA) label', () => {
+    const html = renderToStaticMarkup(
+      <CareerAccountPanel
+        initialUser={user as never}
+        initialSection="security"
+        onClose={() => undefined}
+        onIdentityChange={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('(IANA)');
+    expect(html).toContain('Часовой пояс');
+    expect(html).toContain('name="timezone"');
+    expect(html).toContain('Сохранить часовой пояс');
+  });
+});
+

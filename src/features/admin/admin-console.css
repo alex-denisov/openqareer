@@ -427,7 +427,8 @@
   font-size: 0.82rem;
 }
 
-.admin-linkedin-add__fields input {
+.admin-linkedin-add__fields input,
+.admin-linkedin-add__fields select {
   min-block-size: 2.75rem;
   min-inline-size: 0;
   padding-inline: 0.75rem;
@@ -638,7 +639,8 @@
 }
 
 .admin-btn:focus-visible,
-.admin-linkedin-add input:focus-visible {
+.admin-linkedin-add input:focus-visible,
+.admin-linkedin-add select:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
