@@ -13797,6 +13797,11 @@ button.chip {
   gap: var(--career-space-4);
 }
 
+/* Flex `gap` sets the rhythm; default <p> margins doubled it (B324). */
+.vac-detail > p {
+  margin: 0;
+}
+
 .req-summary {
   display: block;
   font-size: var(--career-text-xs);
