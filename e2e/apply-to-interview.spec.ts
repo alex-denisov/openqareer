@@ -424,13 +424,22 @@ async function openVacancies(page: Page): Promise<void> {
   await expect(page.locator('.vacancies-screen')).toBeVisible();
 }
 
+/** На 1440 первая вакансия уже раскрыта; повторный клик по заголовку её свернёт (B324). */
+async function openFirstVacancy(page: Page): Promise<void> {
+  const firstItem = page.locator('.vac-list-item').first();
+  await expect(firstItem).toBeVisible();
+  if (await firstItem.locator('.vacancies-detail-col').isVisible()) return;
+  await firstItem.locator('.vac-row').click();
+  await expect(firstItem.locator('.vacancies-detail-col')).toBeVisible();
+}
+
 async function openResponses(page: Page): Promise<void> {
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
 }
 
 async function walkChain(page: Page): Promise<void> {
   await openVacancies(page);
-  await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  await openFirstVacancy(page);
 
   const applyButton = page
     .locator('.vacancies-detail-col')
@@ -469,7 +478,7 @@ async function walkChain(page: Page): Promise<void> {
 async function walkManualAppliedChain(page: Page): Promise<void> {
   const viewport = page.viewportSize()?.width ?? 0;
   await openVacancies(page);
-  await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  await openFirstVacancy(page);
   await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
   await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
 
@@ -485,7 +494,7 @@ async function walkManualAppliedChain(page: Page): Promise<void> {
 
 async function walkExistingAppliedVacancyToPrep(page: Page): Promise<void> {
   await openVacancies(page);
-  await page.locator('.vac-list-item').first().locator('.vac-row').click();
+  await openFirstVacancy(page);
   await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
   await page.getByRole('button', { name: 'Назначили интервью' }).click();
   await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
@@ -588,7 +597,7 @@ test.describe('C47 apply-to-interview chain', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
-    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    await openFirstVacancy(page);
 
     await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
 
@@ -617,7 +626,7 @@ test.describe('C47 apply-to-interview chain', () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
-    await page.locator('.vac-list-item').first().locator('.vac-row').click();
+    await openFirstVacancy(page);
     await page.getByRole('button', { name: 'Назначили интервью' }).click();
     await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
     await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
