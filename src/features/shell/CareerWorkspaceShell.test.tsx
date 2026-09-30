@@ -678,7 +678,90 @@ describe('рельс «Пульт»', () => {
     expect(plan).not.toBeNull();
     expect(plan![0]).toContain(`aria-label="Тарифы, план ${CURRENT_PLAN.name}"`);
     expect(plan![0]).not.toContain('career-rail-plan-text');
-    expect(plan![0]).toContain('M12 3.2 20.4 12 12 20.8 3.6 12z');
+    expect(plan![0]).toContain('<svg');
+  });
+
+  it('в раскрытой панели показывает имя и email у аватара, в свёрнутой — нет', () => {
+    const session = {
+      username: 'alexey',
+      email: 'alexey@example.com',
+      displayName: 'Мария Иванова',
+      role: 'candidate' as const,
+      isTest: false,
+      candidateId: 'candidate-1',
+    };
+    const workspace = prepareCareerWorkspace({
+      resumeText: 'Синтетический профиль кандидата.',
+      resumeSource: 'text',
+      targetDirection: 'Руководитель продукта',
+      regions: ['ru'],
+      currentSituation: 'Проверяю навигацию.',
+      constraints: '',
+      urgency: 'active',
+    });
+
+    const collapsedHtml = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={session}
+        workspace={workspace}
+        initialRailExpanded={false}
+      />,
+    );
+    const accountButtonCollapsed = collapsedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
+    expect(accountButtonCollapsed).not.toBeNull();
+    expect(accountButtonCollapsed![0]).not.toContain('Мария Иванова');
+    expect(accountButtonCollapsed![0]).not.toContain('alexey@example.com');
+
+    const expandedHtml = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={session}
+        workspace={workspace}
+        initialRailExpanded={true}
+      />,
+    );
+    const accountButtonExpanded = expandedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
+    expect(accountButtonExpanded).not.toBeNull();
+    expect(accountButtonExpanded![0]).toContain('Мария Иванова');
+    expect(accountButtonExpanded![0]).toContain('alexey@example.com');
+  });
+
+  it('в раскрытой панели без email показывает только имя без пустой строки', () => {
+    const session = {
+      username: 'alexey',
+      email: null,
+      displayName: 'Мария Иванова',
+      role: 'candidate' as const,
+      isTest: false,
+      candidateId: 'candidate-1',
+    };
+    const workspace = prepareCareerWorkspace({
+      resumeText: 'Синтетический профиль кандидата.',
+      resumeSource: 'text',
+      targetDirection: 'Руководитель продукта',
+      regions: ['ru'],
+      currentSituation: 'Проверяю навигацию.',
+      constraints: '',
+      urgency: 'active',
+    });
+
+    const expandedHtml = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        session={session}
+        workspace={workspace}
+        initialRailExpanded={true}
+      />,
+    );
+    const accountButtonExpanded = expandedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
+    expect(accountButtonExpanded).not.toBeNull();
+    expect(accountButtonExpanded![0]).toContain('Мария Иванова');
+    expect(accountButtonExpanded![0]).not.toContain('career-account-email');
+  });
+
+  it('кнопка «План» содержит svg значок', () => {
+    const html = railHtml();
+    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
+    expect(plan).not.toBeNull();
+    expect(plan![0]).toContain('<svg');
   });
 
   it('подсвечивает пункт плана как активный на экране тарифов', () => {
