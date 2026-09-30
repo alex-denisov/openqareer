@@ -1,0 +1,19 @@
+.career-paywall-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: var(--career-space-4); background: color-mix(in oklch, var(--career-bg) 85%, transparent); }
+.career-paywall-modal { background: var(--career-surface); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-lg); max-width: calc(var(--career-space-8) * 23); width: 100%; max-height: 90dvh; overflow-y: auto; box-sizing: border-box; padding: var(--career-space-5); color: var(--career-text); }
+.career-paywall-header { display: flex; align-items: flex-start; gap: var(--career-space-3); }
+.career-paywall-titles { min-width: 0; flex: 1; }
+.career-paywall-title { margin: 0; font-size: var(--career-text-lg); }
+.career-paywall-subtitle, .career-paywall-plan-desc, .career-paywall-footer { font-size: var(--career-text-sm); color: var(--career-text-soft); line-height: 1.45; }
+.career-paywall-close-btn, .career-paywall-cta-btn { border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); background: transparent; color: var(--career-text); cursor: pointer; min-height: calc(var(--career-space-5) + var(--career-space-6)); min-width: calc(var(--career-space-5) + var(--career-space-6)); }
+.career-paywall-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--career-space-8) * 8)), 1fr)); gap: var(--career-space-4); margin-top: var(--career-space-4); }
+.career-paywall-card { min-width: 0; padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); display: flex; flex-direction: column; gap: var(--career-space-3); }
+.career-paywall-plan-name { margin: 0; font-size: var(--career-text-md); }
+.career-paywall-price { margin: 0; font-size: var(--career-text-lg); }
+.career-paywall-period { font-size: var(--career-text-sm); }
+.career-paywall-plan-desc { margin: 0; }
+.career-paywall-features { list-style: none; margin: 0; padding: 0; font-size: var(--career-text-sm); }
+.career-paywall-feature-item { display: flex; align-items: flex-start; gap: var(--career-space-2); }
+.career-paywall-check-icon { flex-shrink: 0; color: var(--career-accent); }
+.career-paywall-cta-btn { padding: var(--career-space-2) var(--career-space-3); font: inherit; font-size: var(--career-text-sm); margin-top: auto; }
+.career-paywall-modal button:hover, .career-paywall-modal button:active { background: var(--career-surface-raised); }
+.career-paywall-modal button:focus-visible { outline: var(--career-border-width) solid var(--career-accent); outline-offset: var(--career-space-1); }
