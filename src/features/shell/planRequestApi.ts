@@ -26,12 +26,18 @@ export type PlanRequestState = 'idle' | 'sending' | 'sent' | 'failed';
 /** Requests already stored on the server, and the send action for one more. */
 export function usePlanRequests() {
   const [states, setStates] = useState<Readonly<Record<string, PlanRequestState>>>({});
+  const [dates, setDates] = useState<Readonly<Record<string, string>>>({});
   useEffect(() => {
     let alive = true;
     listPlanRequests()
       .then((stored) => {
         if (!alive) return;
         setStates(Object.fromEntries(stored.map((item) => [item.planId, 'sent' as const])));
+        setDates(
+          Object.fromEntries(
+            stored.filter((item) => Boolean(item.createdAt)).map((item) => [item.planId, item.createdAt]),
+          ),
+        );
       })
       .catch(() => undefined);
     return () => {
@@ -41,8 +47,13 @@ export function usePlanRequests() {
   const send = (planId: PlanRequestId) => {
     setStates((current) => ({ ...current, [planId]: 'sending' }));
     createPlanRequest(planId)
-      .then(() => setStates((current) => ({ ...current, [planId]: 'sent' })))
+      .then((res) => {
+        setStates((current) => ({ ...current, [planId]: 'sent' }));
+        if (res?.createdAt) {
+          setDates((current) => ({ ...current, [planId]: res.createdAt }));
+        }
+      })
       .catch(() => setStates((current) => ({ ...current, [planId]: 'failed' })));
   };
-  return { states, send };
+  return { states, dates, send };
 }

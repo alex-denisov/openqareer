@@ -254,7 +254,10 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
       {tab === 'documents' ? (
         <ProfileDocumentMenu draft={draft} memory={memory} />
       ) : tab === 'audit' ? (
-        <CandidateReputationAuditView candidateId={candidateId} />
+        <CandidateReputationAuditView
+          candidateId={candidateId}
+          linkedInConnected={connections?.some((c) => c.platform === 'linkedin' && c.status === 'connected')}
+        />
       ) : (
         <>
           <ProfileAnchorNav />

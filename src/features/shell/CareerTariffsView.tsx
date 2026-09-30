@@ -42,7 +42,7 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
               </span>
               <strong>{item.price}</strong>
               <small>
-                {item.status} · {item.time}
+                {item.time ? `${item.status} · ${item.time}` : item.status}
               </small>
             </button>
           ))}
@@ -50,7 +50,7 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
         <section className="career-plan-detail" aria-live="polite">
           <div>
             <p className="career-plan-time">
-              {plan.status} · {plan.time}
+              {plan.time ? `${plan.status} · ${plan.time}` : plan.status}
             </p>
             <h2>{plan.name}</h2>
             <strong className="career-plan-price">{plan.price}</strong>
@@ -58,7 +58,11 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
           <ul>
             {plan.points.map((point) => (
               <li key={point}>
-                <Check size={17} weight="bold" aria-hidden="true" />
+                {plan.id === 'auto' ? (
+                  <span className="career-plan-point-dot" aria-hidden="true" />
+                ) : (
+                  <Check size={17} weight="bold" aria-hidden="true" />
+                )}
                 {point}
               </li>
             ))}
@@ -71,6 +75,7 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
           ) : plan.id === 'setup' ? (
             <PlanRequestAction
               state={requests.states.consultant ?? 'idle'}
+              date={requests.dates.consultant}
               onSend={() => requests.send('consultant')}
             />
           ) : (
@@ -85,12 +90,29 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
   );
 }
 
+function formatDayMonth(iso: string): string | null {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(d);
+}
+
 /** The request is shown as sent only after the server stored it (B266). */
-function PlanRequestAction({ state, onSend }: { state: PlanRequestState; onSend: () => void }) {
+function PlanRequestAction({
+  state,
+  date,
+  onSend,
+}: {
+  state: PlanRequestState;
+  date?: string;
+  onSend: () => void;
+}) {
   if (state === 'sent') {
+    const formattedDate = date ? formatDayMonth(date) : null;
     return (
       <p className="career-plan-standing" role="status">
-        Заявка отправлена — свяжемся в течение рабочего дня
+        {formattedDate
+          ? `Заявка отправлена ${formattedDate} — свяжемся в течение рабочего дня`
+          : 'Заявка уже отправлена'}
       </p>
     );
   }

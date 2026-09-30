@@ -91,11 +91,13 @@ function LanguageRow({
         <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
       </div>
-      {entry.sourceLabel && entry.cefr ? (
-        <p className="career-profile-screen-lang-source">
-          LinkedIn: «{entry.sourceLabel}» → {entry.cefr}
-        </p>
-      ) : null}
+      <p className="career-profile-screen-lang-source">
+        {entry.sourceLabel?.trim()
+          ? (entry.sourceLabel.startsWith('Из LinkedIn:')
+              ? entry.sourceLabel
+              : `Из LinkedIn: ${entry.sourceLabel}`)
+          : 'Указано вами'}
+      </p>
     </div>
   );
 }

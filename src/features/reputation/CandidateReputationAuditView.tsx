@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowClockwise,
   CircleNotch,
+  MinusCircle,
   ShieldCheck,
   Warning,
   WarningOctagon,
@@ -25,6 +26,7 @@ export interface CandidateReputationAuditViewProps {
   readonly initialRunning?: boolean;
   readonly initialError?: string;
   readonly onAuditCompleted?: (audit: CandidateReputationAudit) => void;
+  readonly linkedInConnected?: boolean;
 }
 
 function categoryTitle(category: ReputationRiskItem['category']): string {
@@ -55,6 +57,14 @@ function statusBadgeProps(status: ReputationOverallStatus): {
     case 'critical_risk':
       return { label: 'Критический риск', className: 'is-critical', icon: WarningOctagon };
   }
+}
+
+function formatAuditDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  const dayMonth = new Intl.DateTimeFormat('ru-RU', { day: 'numeric', month: 'long' }).format(date);
+  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(date);
+  return `${dayMonth}, ${time}`;
 }
 
 function AuditScoreBanner({
@@ -88,7 +98,13 @@ function AuditScoreBanner({
         disabled={running}
       >
         <ArrowClockwise size={14} className={running ? 'spin' : ''} />
-        <span>{running ? 'Анализ...' : 'Запустить повторный анализ'}</span>
+        <span>
+          {running
+            ? 'Анализ...'
+            : audit.overallStatus === 'not_scanned'
+              ? 'Запустить проверку'
+              : 'Запустить повторный анализ'}
+        </span>
       </button>
     </div>
   );
@@ -121,14 +137,35 @@ function DiscrepancyCard({ item }: { item: ConsistencyDiscrepancy }) {
   );
 }
 
-function AuditDiscrepanciesBlock({ items, scanned }: { items: ConsistencyDiscrepancy[]; scanned: boolean }) {
+function AuditDiscrepanciesBlock({
+  items,
+  scanned,
+  linkedInConnected,
+}: {
+  items: ConsistencyDiscrepancy[];
+  scanned: boolean;
+  linkedInConnected?: boolean;
+}) {
+  const unscannedText = linkedInConnected
+    ? 'Не проверялось: проверка открытых источников ещё не запускалась.'
+    : 'Не проверялось: источники не подключены.';
+
   return (
     <section className="career-reputation-section" aria-labelledby="consistency-heading">
-      <h3 id="consistency-heading">Согласованность истории (Cross-Source)</h3>
+      <h3 id="consistency-heading">Согласованность истории между источниками</h3>
       {items.length === 0 ? (
-        <div className="career-reputation-empty-box">
-          <ShieldCheck size={18} />
-          <span>{scanned ? 'Расхождений в датах и должностях между внешними профилями не обнаружено.' : 'Источники профилей не подключены, поэтому согласованность не оценивалась.'}</span>
+        <div className={`career-reputation-empty-box ${scanned ? '' : 'is-unscanned'}`}>
+          {scanned ? (
+            <>
+              <ShieldCheck size={18} />
+              <span>Расхождений в датах и должностях между внешними профилями не обнаружено.</span>
+            </>
+          ) : (
+            <>
+              <MinusCircle size={18} />
+              <span>{unscannedText}</span>
+            </>
+          )}
         </div>
       ) : (
         <ul className="career-reputation-list">
@@ -172,9 +209,18 @@ function AuditRisksBlock({ items, scanned }: { items: ReputationRiskItem[]; scan
     <section className="career-reputation-section" aria-labelledby="risks-heading">
       <h3 id="risks-heading">Репутационные риски и публикации</h3>
       {items.length === 0 ? (
-        <div className="career-reputation-empty-box">
-          <ShieldCheck size={18} />
-          <span>{scanned ? 'Потенциально компрометирующих публикаций и токсичных высказываний не обнаружено.' : 'Публичные публикации не сканировались.'}</span>
+        <div className={`career-reputation-empty-box ${scanned ? '' : 'is-unscanned'}`}>
+          {scanned ? (
+            <>
+              <ShieldCheck size={18} />
+              <span>Потенциально компрометирующих публикаций и токсичных высказываний не обнаружено.</span>
+            </>
+          ) : (
+            <>
+              <MinusCircle size={18} />
+              <span>Не проверялось: публичные публикации не сканировались.</span>
+            </>
+          )}
         </div>
       ) : (
         <ul className="career-reputation-list">
@@ -238,12 +284,18 @@ function AuditUnstartedView({
 function AuditResultsView({
   audit,
   running,
+  linkedInConnected,
   onRecheck,
 }: {
   audit: CandidateReputationAudit;
   running: boolean;
+  linkedInConnected?: boolean;
   onRecheck: () => void;
 }) {
+  const cleanConsent = audit.consentAction.replace(/\.+$/u, '');
+  const started = formatAuditDate(audit.startedAt);
+  const completed = audit.completedAt ? formatAuditDate(audit.completedAt) : null;
+
   return (
     <div className="career-reputation-results">
       <AuditScoreBanner
@@ -251,12 +303,19 @@ function AuditResultsView({
         running={running}
         onRecheck={onRecheck}
       />
-      <AuditDiscrepanciesBlock items={audit.consistencyDiscrepancies} scanned={audit.overallStatus !== 'not_scanned'} />
-      <AuditRisksBlock items={audit.reputationRisks} scanned={audit.overallStatus !== 'not_scanned'} />
+      <AuditDiscrepanciesBlock
+        items={audit.consistencyDiscrepancies}
+        scanned={audit.overallStatus !== 'not_scanned'}
+        linkedInConnected={linkedInConnected}
+      />
+      <AuditRisksBlock
+        items={audit.reputationRisks}
+        scanned={audit.overallStatus !== 'not_scanned'}
+      />
       <footer className="career-reputation-footer">
         <small>
-          {audit.consentAction}. Аудит начат: {audit.startedAt}
-          {audit.completedAt ? `, завершён: ${audit.completedAt}` : ''}
+          {cleanConsent}. Аудит начат: {started}
+          {completed ? `, завершён: ${completed}` : ''}
         </small>
       </footer>
     </div>
@@ -324,12 +383,24 @@ function useCandidateReputationAudit(
   return { audit, running, loading, error, handleStartAudit };
 }
 
+function ReputationHeader() {
+  return (
+    <header className="career-reputation-header">
+      <h2>Что о вас находят открытые источники</h2>
+      <p className="career-reputation-intro">
+        Объективная оценка профиля глазами службы безопасности и нанимателя.
+      </p>
+    </header>
+  );
+}
+
 export function CandidateReputationAuditView({
   candidateId,
   initialAudit,
   initialRunning = false,
   initialError,
   onAuditCompleted,
+  linkedInConnected,
 }: CandidateReputationAuditViewProps) {
   const { audit, running, loading, error, handleStartAudit } = useCandidateReputationAudit(
     candidateId,
@@ -341,12 +412,7 @@ export function CandidateReputationAuditView({
 
   return (
     <div className="career-reputation-surface">
-      <header className="career-reputation-header">
-        <h2>Что о вас находят открытые источники</h2>
-        <p className="career-reputation-intro">
-          Объективная оценка профиля глазами службы безопасности и нанимателя.
-        </p>
-      </header>
+      <ReputationHeader />
 
       {error ? (
         <div className="career-reputation-error-alert" role="alert">
@@ -373,6 +439,7 @@ export function CandidateReputationAuditView({
         <AuditResultsView
           audit={audit}
           running={running}
+          linkedInConnected={linkedInConnected}
           onRecheck={() => void handleStartAudit()}
         />
       ) : null}
