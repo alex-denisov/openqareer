@@ -17,4 +17,7 @@ describe('formatTodaySalary (B251 S5)', () => {
   it('returns null when no salary data is present', () => {
     expect(formatTodaySalary(undefined)).toBeNull();
   });
+  it('shows hh.ru RUR as the rouble sign (B331)', () => {
+    expect(formatTodaySalary({ from: 80000, currency: 'RUR' })).toBe('от ₽80k');
+  });
 });

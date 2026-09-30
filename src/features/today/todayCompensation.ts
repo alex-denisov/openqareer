@@ -4,6 +4,7 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   usd: '$',
   eur: '€',
   rub: '₽',
+  rur: '₽', // hh.ru still reports roubles as RUR
   gbp: '£',
 };
 

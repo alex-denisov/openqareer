@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { LinkedinDraftCard } from './LinkedinDraftCard';
-import { ClockCountdown, DotsThreeVertical, Sparkle, X } from '@phosphor-icons/react';
+import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
@@ -473,14 +473,6 @@ function QueueRow({
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
         />
-        <button
-          type="button"
-          className="career-btn-icon"
-          aria-haspopup="menu"
-          aria-label="Ещё действия"
-        >
-          <DotsThreeVertical size={16} aria-hidden="true" />
-        </button>
       </div>
     </li>
   );

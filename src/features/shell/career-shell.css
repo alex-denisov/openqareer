@@ -11983,7 +11983,8 @@
   gap: var(--career-space-2);
   overflow-x: auto;
   padding: var(--career-space-2) 0;
-  background: color-mix(in oklch, var(--career-bg) 92%, transparent);
+  /* Opaque: at 92 % the scrolled body text read through the bar in the .app (B331). */
+  background: var(--career-bg);
   border-bottom: 1px solid var(--career-line);
 }
 
@@ -13753,6 +13754,15 @@ button.chip {
   font-size: var(--career-text-xs);
   border: 1px solid var(--career-line-strong);
   color: var(--career-text-dim);
+  flex: none;
+}
+
+/* The glyph is the non-colour signal (DESIGN: states are never colour-only).
+   An unsized SVG in a flex box collapses to zero in WebKit, so the .app
+   showed blank discs (B331). */
+.fit-dot .icon {
+  width: 12px;
+  height: 12px;
   flex: none;
 }
 
