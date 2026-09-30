@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../app';
 import { AuthService } from '../auth/authService';
@@ -184,6 +184,11 @@ describe('Candidate Action Routes (B261)', () => {
   });
 
   it('executes batch when confirmed and consent is present', async () => {
+    // The route reads the real clock; pin it to 15:00 Moscow so the run does
+    // not land in quiet hours when CI happens to run at night (B331).
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
+    onTestFinished(() => vi.useRealTimers());
     const { app, candidateToken, candidateId, capabilityConsentStore } = await createTestEnv();
 
     // Directly record consent for test
