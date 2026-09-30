@@ -16,7 +16,7 @@ function useLinkedinDraftCard() {
   const [paywall, setPaywall] = useState(false);
   useEffect(() => {
     let active = true;
-    void listDrafts().then(items => { if (active) setRecent(items); }, () => {
+    void listDrafts().then(items => { if (active) setRecent(Array.isArray(items) ? items : []); }, () => {
       if (active) setError('Не получилось загрузить последние черновики.');
     });
     return () => { active = false; };

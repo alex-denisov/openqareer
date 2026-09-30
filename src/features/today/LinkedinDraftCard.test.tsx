@@ -27,6 +27,12 @@ describe('LinkedinDraftCard', () => {
     await act(async () => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
   }
   const button = (text: string) => [...host.querySelectorAll('button')].find(b => b.textContent === text)!;
+  it('does not crash the cabinet when the drafts list comes back in an unexpected shape', async () => {
+    vi.mocked(api.listDrafts).mockResolvedValue(null as unknown as api.LinkedinDraft[]);
+    await render();
+    expect(host.querySelector('form')).not.toBeNull();
+    expect(host.querySelector('.career-drafts-recent')).toBeNull();
+  });
   it('shows empty form and outlined prepare action', async () => {
     await render(); expect(host.textContent).toContain('Готовим текст — публикуете вы сами');
     expect(button('Подготовить черновик').className).not.toContain('primary');
