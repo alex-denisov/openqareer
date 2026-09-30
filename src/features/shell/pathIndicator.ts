@@ -142,7 +142,7 @@ function shortlistStepOf(input: PathIndicatorInput): PathStep {
       state === 'done'
         ? 'Кампания вернула вакансии'
         : input.matchedPoolCount > 0
-          ? `${input.matchedPoolCount} в подборке — вы здесь`
+          ? `${input.matchedPoolCount} в подборке`
           : 'Кампания не запущена или пул по роли пуст',
     destination: 'opportunities',
   };
@@ -157,7 +157,7 @@ function responsesStepOf(input: PathIndicatorInput): PathStep {
     active > 0 ? 'in-progress' : input.confirmedApplications > 0 ? 'done' : 'not-started';
   const reason =
     state === 'in-progress'
-      ? `${active} в работе — вы здесь`
+      ? `${active} в работе`
       : state === 'done'
         ? 'Есть подтверждённый отклик'
         : 'Откликов нет — начните с очереди дня';

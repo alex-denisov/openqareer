@@ -41,7 +41,7 @@ describe('CareerPathIndicator', () => {
     expect(html).toContain('career-path-mobile-summary');
     expect(html).toContain('Шаг 3 из 5');
     expect(html).toContain('Подборка');
-    expect(html).toContain('2 в подборке — вы здесь');
+    expect(html).toContain('2 в подборке');
   });
 
   it('highlights the open section with data-state="active" on campaign screen', () => {

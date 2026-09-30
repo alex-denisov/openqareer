@@ -56,7 +56,7 @@ describe('buildPathIndicator', () => {
 
     expect(steps.find((step) => step.id === 'shortlist')).toMatchObject({
       state: 'in-progress',
-      reason: '3 в подборке — вы здесь',
+      reason: '3 в подборке',
     });
   });
 
@@ -127,7 +127,7 @@ describe('buildPathIndicator', () => {
 
     expect(steps.find((step) => step.id === 'responses')).toMatchObject({
       state: 'in-progress',
-      reason: '9 в работе — вы здесь',
+      reason: '9 в работе',
     });
   });
 
