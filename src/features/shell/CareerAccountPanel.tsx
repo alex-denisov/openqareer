@@ -42,6 +42,7 @@ import { appVersionLine } from './appVersion';
 import { buildFreshnessLine } from './buildFreshness';
 import { clearOutreachStore } from '../outreach/outreachTrackingStore';
 import { useBuildFreshness } from './useBuildFreshness';
+import { TimezoneSelect } from './TimezoneSelect';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -719,16 +720,12 @@ function AuthenticatedAccount({
         <div className="career-account-section-stack">
           <form className="career-account-form" onSubmit={onSaveTimezone}>
             <h2>Часовой пояс</h2>
-            <label>
-              <span>Часовой пояс (IANA)</span>
-              <input
-                name="timezone"
-                type="text"
-                defaultValue={account?.profile?.timezone ?? ''}
-                placeholder="Europe/Moscow"
-                maxLength={64}
-              />
-            </label>
+            <TimezoneSelect
+              key={account?.profile?.timezone ?? 'device'}
+              name="timezone"
+              defaultValue={account?.profile?.timezone || undefined}
+              disabled={busy}
+            />
             <button className="career-primary-button" disabled={busy}>
               Сохранить часовой пояс
             </button>
