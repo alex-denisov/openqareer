@@ -9,9 +9,14 @@ import {
 import {
   CoachApiError,
   getStoredSessionToken,
+  SESSION_TOKEN_STORAGE_KEY,
   SESSION_EXPIRED_EVENT,
   setStoredSessionToken,
 } from './features/coach/apiClient';
+import {
+  readSavedDesktopSessionToken,
+  restoreDesktopSessionToken,
+} from './services/desktop/desktopSessionToken';
 import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
 import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
 import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
@@ -81,6 +86,14 @@ export default function App() {
 
   const resolveSession = useCallback(async () => {
     const revision = ++sessionRevision.current;
+    if (isDesktop) {
+      await restoreDesktopSessionToken({
+        readSaved: readSavedDesktopSessionToken,
+        getLocal: getStoredSessionToken,
+        setLocal: (saved) => window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, saved),
+      });
+      if (revision !== sessionRevision.current) return;
+    }
     const token = getStoredSessionToken();
     const isCurrent = () =>
       revision === sessionRevision.current && token === getStoredSessionToken();

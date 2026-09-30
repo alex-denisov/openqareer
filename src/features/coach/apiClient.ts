@@ -2,6 +2,7 @@ import {
   desktopNativeFetch,
   isTauriEnvironment,
 } from '../../services/desktop/desktopBridge';
+import { mirrorDesktopSessionToken } from '../../services/desktop/desktopSessionToken';
 
 /**
  * The shared browser transport for the candidate API.
@@ -73,6 +74,7 @@ export function setStoredSessionToken(token: string | null): void {
   } catch {
     // Ignore localStorage access failures
   }
+  mirrorDesktopSessionToken(token);
 }
 
 export function getApiBaseUrl(): string {

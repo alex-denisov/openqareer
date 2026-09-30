@@ -5,6 +5,7 @@ mod automation_worker;
 mod connector_session;
 mod linkedin_read_guard;
 mod network_probe;
+mod session_token_store;
 mod sidecar_lifecycle;
 mod tunnel_manager;
 
@@ -206,6 +207,23 @@ async fn open_connector_session(
     Ok(open_session_window(&app, &request, proxy).await)
 }
 
+/// The session token as the app last saved it (B327): WebKit may lose its copy
+/// on quit, this one is written synchronously.
+#[tauri::command]
+fn read_session_token(app: AppHandle) -> Option<String> {
+    let dir = app.path().app_data_dir().ok()?;
+    session_token_store::read_token(&dir)
+}
+
+#[tauri::command]
+fn write_session_token(token: Option<String>, app: AppHandle) -> Result<(), String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|_| "session_token_dir_failed".to_string())?;
+    session_token_store::write_token(&dir, token.as_deref())
+}
+
 /// Exports LinkedIn cookies only from the explicitly named managed pool profile.
 #[tauri::command]
 fn export_pool_session(
@@ -382,6 +400,8 @@ fn main() {
             read_connector_session_page,
             inspect_connector_session_page,
             get_desktop_environment_info,
+            read_session_token,
+            write_session_token,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
