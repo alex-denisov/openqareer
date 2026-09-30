@@ -11,6 +11,7 @@ function inspect(input: {
   body?: string;
   profileLink?: string;
   navigationProfile?: boolean;
+  shareboxProfile?: string;
 }) {
   const profile = input.profileLink ? { href: input.profileLink } : null;
   const profileContainer = input.navigationProfile
@@ -25,6 +26,12 @@ function inspect(input: {
     title: 'LinkedIn',
     body: { innerText: input.body ?? '' },
     querySelector(selector: string) {
+      if (input.shareboxProfile && selector.includes('#shareboxProfilePictureComponentRef')) {
+        return {
+          querySelector: (inner: string) =>
+            inner === 'a[href*="/in/"]' ? { href: input.shareboxProfile } : null,
+        };
+      }
       if (input.navigationProfile && selector.includes('data-view-name="navigation-profile"')) {
         return profileContainer ?? {};
       }
@@ -79,5 +86,11 @@ describe('connector inspection script', () => {
     expect(
       inspect({ pathname: '/in/someone-else/', body: 'Someone Else\nConnect\nMessage' }),
     ).toMatchObject({ accountMarker: null });
+  });
+
+  it('takes the marker from the "Start a post" avatar on the feed right after sign-in (B325)', () => {
+    expect(
+      inspect({ pathname: '/feed/', shareboxProfile: 'https://www.linkedin.com/in/emmy-rupp-a24857422/' }),
+    ).toMatchObject({ signedInApplicant: true, accountMarker: 'emmy-rupp-a24857422' });
   });
 });

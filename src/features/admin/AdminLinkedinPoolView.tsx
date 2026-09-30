@@ -21,6 +21,7 @@ import {
   resizeConnectorSession,
 } from '../connections/connectorSession';
 import {
+  transferFailureCopy,
   useAdminLinkedinLoginPolling,
   type ActiveLinkedinLogin,
 } from './adminLinkedinSessionFlow';
@@ -369,7 +370,7 @@ export function AdminLinkedinPoolView() {
         );
         setNotice('Cookies уже зашифрованы на сервере. Локальная копия останется до успешной очистки профиля.');
       } else {
-        setError(apiErrorMessage(reason, 'Не удалось сохранить сессию на сервере.'));
+        setError(apiErrorMessage(reason, transferFailureCopy(reason)));
         setNotice('Окно LinkedIn осталось открытым. Проверьте вход и повторите перенос.');
       }
       refresh();

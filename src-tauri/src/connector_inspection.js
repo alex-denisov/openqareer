@@ -44,8 +44,10 @@
     );
     var linkedinAccountMarker = null;
     if (platform === 'linkedin') {
+      // The "Start a post" avatar on /feed/ always links to the signed-in
+      // account, and /feed/ is where every sign-in lands (B325).
       var profileContainer = document.querySelector(
-        '[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],.global-nav__me-photo',
+        '#shareboxProfilePictureComponentRef,[data-view-name="navigation-profile"],[data-test-id="nav-profile"],[data-test-global-nav-me],.global-nav__me-photo',
       );
       var profileLink = null;
       if (profileContainer) {
@@ -62,10 +64,8 @@
           linkedinAccountMarker = profileMatch ? profileMatch[1] : null;
         } catch (_profileError) {}
       }
-      // LinkedIn's current navigation no longer wraps the "Me" photo in a
-      // profile link, so the marker above stays empty on a signed-in feed
-      // (B325). The account's own profile page is unambiguous: only its owner
-      // sees the edit controls, so the slug comes from the address.
+      // On the account's own profile page only its owner sees the edit
+      // controls, so the slug may also come from the address.
       var ownProfilePath = /^\/in\/([^/?#]+)\/?$/u.exec(path);
       var ownProfileControls =
         q(

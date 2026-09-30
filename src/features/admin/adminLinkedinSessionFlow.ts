@@ -28,6 +28,19 @@ export function isClosedSessionWindow(reason: unknown): boolean {
   return message.includes('session_window_missing');
 }
 
+const TRANSFER_FAILURE_COPY: Record<string, string> = {
+  managed_session_window_missing: 'Окно LinkedIn закрыто — откройте его снова и повторите перенос.',
+  linkedin_session_cookie_required: 'В окне нет действующего входа LinkedIn (cookie li_at). Войдите заново и повторите.',
+  linkedin_session_cookie_read_failed: 'Приложение не смогло прочитать cookies окна LinkedIn. Повторите перенос.',
+  linkedin_session_cookie_count_invalid: 'В профиле LinkedIn слишком много cookies. Очистите локальный профиль и войдите заново.',
+};
+
+/** Names the real reason a transfer failed instead of a generic line (B325). */
+export function transferFailureCopy(reason: unknown): string {
+  const code = reason instanceof Error ? reason.message : String(reason);
+  return TRANSFER_FAILURE_COPY[code] ?? `Не удалось сохранить сессию на сервере (${code.slice(0, 80)}).`;
+}
+
 export function isSafeAdminLinkedinSessionPage(page: SessionInspectionResult): boolean {
   try {
     const url = new URL(page.url);

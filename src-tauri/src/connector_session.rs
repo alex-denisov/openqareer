@@ -174,6 +174,11 @@ fn is_linkedin_cookie_domain(domain: &str) -> bool {
         || normalized.ends_with(".linkedin.cn")
 }
 
+/// RFC 6265 token characters; the server accepts nothing else (serverSessionCookies.ts).
+fn is_cookie_name_character(character: char) -> bool {
+    character.is_ascii_alphanumeric() || "!#$%&'*+-.^_`|~".contains(character)
+}
+
 /// Returns only the LinkedIn cookies from the isolated managed pool profile.
 /// The value crosses Tauri IPC only for the explicit server-save action.
 pub fn read_linkedin_pool_session_cookies(
@@ -208,8 +213,15 @@ pub fn read_linkedin_pool_session_cookies(
                 .chars()
                 .any(|character| character.is_control() || character == ';')
             || path.len() > 1_024
+            || !path.starts_with('/')
+            || !name.chars().all(is_cookie_name_character)
+            || (cookie.same_site() == Some(tauri::webview::cookie::SameSite::None)
+                && !cookie.secure().unwrap_or(false))
         {
-            return Err("linkedin_session_cookie_invalid".to_string());
+            // LinkedIn keeps a few cleared (empty) or oddly shaped cookies in a
+            // live profile; one of them must not sink the whole transfer (B325).
+            // The session itself is `li_at`, checked below.
+            continue;
         }
         exported.push(PoolSessionCookie {
             name: name.to_string(),
