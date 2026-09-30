@@ -31,7 +31,7 @@ interface LandingPageProps {
  * уходят внутренние слова продукта («пул», «выборка», «диагностика») и узкие
  * фразы про одну площадку: площадок много, hh.ru и LinkedIn — только примеры.
  */
-export const LANDING_HERO_TITLE = 'Ваш поиск работы под контролем';
+export const LANDING_HERO_TITLE = 'Поиск работы с опорой на проверенные факты';
 
 const FAQ_ITEMS = [
   {
@@ -328,7 +328,7 @@ function HeroActionButtons({
   return (
     <>
       <SiteLink to="/signup" className="site-btn is-primary is-large" onNavigate={onNavigate}>
-        Собрать профиль из резюме <ArrowRight size={18} weight="bold" aria-hidden="true" />
+        Собрать профиль бесплатно <ArrowRight size={18} weight="bold" aria-hidden="true" />
       </SiteLink>
       <SiteLink to="/login" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
         <SignIn size={18} weight="bold" aria-hidden="true" /> Войти в кабинет
@@ -519,7 +519,7 @@ function FeaturedTariffCard({
 function LandingTariffs({ session, onNavigate }: LandingPageProps) {
   const targetPath = session ? '/app' : '/signup';
   const primaryButtonLabel = session ? 'Вернуться в кабинет' : 'Сначала собрать профиль бесплатно';
-  const freeButtonLabel = session ? 'Открыть кабинет' : 'Создать бесплатный аккаунт';
+  const freeButtonLabel = session ? 'Открыть кабинет' : 'Начать поиск бесплатно';
 
   return (
     <section id="tariffs" className="site-section" aria-labelledby="tariffs-heading">
@@ -569,7 +569,7 @@ function LandingCta({ session, onNavigate }: LandingPageProps) {
           className="site-btn is-primary is-large"
           onNavigate={onNavigate}
         >
-          {session ? 'Открыть кабинет' : 'Создать бесплатный аккаунт'}{' '}
+          {session ? 'Открыть кабинет' : 'Начать поиск бесплатно'}{' '}
           <ArrowRight size={18} weight="bold" aria-hidden="true" />
         </SiteLink>
       </div>

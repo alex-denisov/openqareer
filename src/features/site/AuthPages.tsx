@@ -477,7 +477,7 @@ export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: A
   return (
     <div className="auth-page-container">
       <div className="auth-card">
-        <AuthCardHeader title="Создать аккаунт" subtitle="Начните доказательную карьерную диагностику" onNavigate={onNavigate} />
+        <AuthCardHeader title="Создать аккаунт" subtitle="Соберите профиль и получите подходящие вакансии" onNavigate={onNavigate} />
         <SignupForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
           <span>Уже есть аккаунт? <button type="button" onClick={() => onNavigate('/login')}>Войти</button></span>

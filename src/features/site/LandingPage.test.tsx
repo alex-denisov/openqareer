@@ -8,7 +8,7 @@ describe('LandingPage', () => {
     const html = renderToStaticMarkup(<LandingPage onNavigate={handleNavigate} />);
 
     // Hero — вариант B отчёта маркетолога (B236, решение владельца 2026-09-21).
-    expect(html).toContain('Ваш поиск работы под контролем');
+    expect(html).toContain('Поиск работы с опорой на проверенные факты');
     expect(html).toContain('Основной путь бесплатен и без срока');
     expect(html).toContain('ничего не отправляет без вашего');
     expect(html).toContain('Один профиль по фактам');
@@ -16,7 +16,7 @@ describe('LandingPage', () => {
     expect(html).toContain('Вопросы перед регистрацией');
     expect(html).toContain('Войти');
     expect(html).toContain('Создать аккаунт');
-    expect(html).toContain('Собрать профиль из резюме');
+    expect(html).toContain('Собрать профиль бесплатно');
     expect(html).toContain('application/ld+json');
     // Площадок много: ни одна строка не подаёт hh.ru или LinkedIn как единственный путь.
     expect(html).not.toContain('десктопн');

@@ -66,7 +66,7 @@ const FORMAT_TABS: ReadonlyArray<{
 }> = [
   { id: 'email', label: 'Письмо', icon: Envelope },
   { id: 'linkedin', label: 'LinkedIn-заметка (300 знаков)', icon: LinkedinLogo },
-  { id: 'ats', label: 'Cover letter для ATS', icon: FileText },
+  { id: 'ats', label: 'Сопроводительное для ATS', icon: FileText },
 ];
 
 function pluralizeFacts(count: number): string {
@@ -592,7 +592,7 @@ function usePitchFetcher(
       .catch((err) => {
         if (isMounted) {
           setError(
-            err instanceof Error ? err.message : 'Не удалось сгенерировать. Попробуйте ещё раз.',
+            err instanceof Error ? err.message : 'Не удалось подготовить текст. Повторите.',
           );
           setLoading(false);
         }

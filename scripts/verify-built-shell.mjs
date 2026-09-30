@@ -1005,7 +1005,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     waitUntil: 'commit',
   });
   const landingHeading = page.getByRole('heading', {
-    name: 'Ваш поиск работы под контролем',
+    name: 'Поиск работы с опорой на проверенные факты',
   });
   await landingHeading.waitFor({ state: 'visible', timeout: 2_000 });
   const shellMs = Math.round(performance.now() - startedAt);
@@ -1020,7 +1020,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: landing links are inert before hydration`,
   );
   assert(
-    (await page.getByRole('heading', { name: 'Ваш поиск работы под контролем' }).count()) === 1,
+    (await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).count()) === 1,
     `${viewport.name}: landing page heading is absent from initial HTML`,
   );
 
@@ -1281,7 +1281,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const logoutResponse = page.waitForResponse((res) => res.url().includes('/api/v1/auth/logout'));
   await page.getByRole('button', { name: 'Выйти' }).click();
   await logoutResponse;
-  await page.getByRole('heading', { name: 'Ваш поиск работы под контролем' }).waitFor();
+  await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
   assert(
     (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
     `${viewport.name}: account panel remained open after logout`,

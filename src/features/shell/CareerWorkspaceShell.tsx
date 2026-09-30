@@ -607,7 +607,7 @@ export function CareerWorkspaceShell({
             <div className="career-responses-signin-hint">
               <h3>Отклики появятся после входа в аккаунт</h3>
               <p>
-                Пайплайн откликов хранится на сервере вместе с профилем. Войдите, чтобы открыть его.
+                Отклики хранятся на сервере вместе с профилем. Войдите, чтобы открыть их.
               </p>
               <button type="button" onClick={onOpenLogin}>
                 Войти

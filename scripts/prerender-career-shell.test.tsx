@@ -41,7 +41,7 @@ describe('production career shell prerender', () => {
     expect(html).toContain('class="career-bootstrap-shell" data-bootstrap-shell="true">');
     expect(html).not.toContain('data-bootstrap-shell="true" inert');
     expect(html).toContain('href="/login"');
-    expect(html).toContain('Ваш поиск работы под контролем');
+    expect(html).toContain('Поиск работы с опорой на проверенные факты');
     expect(html).toContain('Основной путь бесплатен и без срока');
     expect(html).toContain('Профиль по фактам');
     expect(html).toContain('Один следующий шаг');

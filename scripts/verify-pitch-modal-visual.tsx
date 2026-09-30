@@ -213,7 +213,7 @@ function createTestCases(appCss: string, shellCss: string): TestCase[] {
       name: 'desktop-1440-pitch-modal-ats',
       viewport: { width: 1440, height: 900 },
       html: buildHtml(board, appCss, shellCss, { showModal: true, modalHtml: ats }),
-      description: 'Десктоп (1440×900): вкладка Cover letter для ATS с кнопками копирования и скачивания',
+      description: 'Десктоп (1440×900): вкладка Сопроводительное для ATS с кнопками копирования и скачивания',
     },
     {
       name: 'mobile-390-pitch-modal-email',

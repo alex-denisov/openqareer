@@ -96,8 +96,8 @@ describe('ResponsesBoard columns', () => {
 
   it('renders the empty pipeline copy from the mockup', () => {
     const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />);
-    expect(html).toContain('Пайплайн пуст');
-    expect(html).toContain('Пайплайн наполняется из очереди дня');
+    expect(html).toContain('Откликов пока нет');
+    expect(html).toContain('Здесь появится карточка каждого отклика');
     expect(html).toContain('Перейти к вакансиям');
     expect(html).toContain('Добавить отклик вручную');
   });

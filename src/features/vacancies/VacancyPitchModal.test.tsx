@@ -58,7 +58,7 @@ describe('VacancyPitchModal', () => {
     // Format tabs
     expect(html).toContain('Письмо');
     expect(html).toContain('LinkedIn-заметка (300 знаков)');
-    expect(html).toContain('Cover letter для ATS');
+    expect(html).toContain('Сопроводительное для ATS');
 
     // Tone switchers
     expect(html).toContain('Executive');
