@@ -88,7 +88,10 @@ function useVacanciesScreenBoard(
     regions,
     remoteOnly: campaign?.remoteOnly ?? false,
   });
-  const [selectedId, setSelectedId] = useState<string | undefined>(() =>
+  // `undefined` — nothing chosen yet, so the default vacancy opens once the
+  // pool arrives; `null` — the candidate collapsed the row and wants none open
+  // (B324: collapsing used to reopen the default vacancy).
+  const [selectedId, setSelectedId] = useState<string | null | undefined>(() =>
     initialSelectedId(matched),
   );
 
@@ -121,7 +124,7 @@ function useVacanciesScreenBoard(
     selectedId,
     setSelectedId,
     toggleSelect: (id: string) => {
-      setSelectedId((prev) => (prev === id ? undefined : id));
+      setSelectedId((prev) => (prev === id ? null : id));
     },
     roleHypotheses: campaign?.roleHypotheses ?? [],
     primaryRole: state.roles[0] ?? roles[0],
@@ -257,7 +260,7 @@ interface ListContentProps {
   readonly items: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly now: string;
-  readonly selectedId?: string;
+  readonly selectedId?: string | null;
   readonly onToggleSelect: (id: string) => void;
   readonly applications?: VacanciesScreenProps['applications'];
   readonly onMarkAlreadyApplied?: VacanciesScreenProps['onMarkAlreadyApplied'];

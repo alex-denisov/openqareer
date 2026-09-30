@@ -565,6 +565,27 @@ test.describe('B250 vacancies screen', () => {
     await expect(actions.getByRole('button', { name: 'Сопроводительное письмо' })).toBeVisible();
   });
 
+  test('clicking the header of the expanded vacancy collapses it and opens no other one', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const expanded = page.locator('.vac-row[aria-expanded="true"]');
+    const second = page.locator('.vac-list-item').nth(1).locator('.vac-row');
+    await second.click();
+    await expect(second).toHaveAttribute('aria-expanded', 'true');
+    await expect(expanded).toHaveCount(1);
+
+    await second.click();
+    await expect(second).toHaveAttribute('aria-expanded', 'false');
+    // Collapsing must not hand the selection back to the default vacancy.
+    await expect(expanded).toHaveCount(0);
+  });
+
   test('on 390 selecting a row expands the accordion and clicking again collapses it', async ({
     page,
   }) => {
