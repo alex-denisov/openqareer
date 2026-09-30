@@ -368,6 +368,34 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     });
   });
 
+  it('treats a LinkedIn redirect loop as a rejected session: stops, marks needs_reauth and notifies', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    fake.page.goto.mockRejectedValueOnce(
+      new Error('page.goto: net::ERR_TOO_MANY_REDIRECTS at https://www.linkedin.com/search/results/companies/'),
+    );
+    const notifyOwner = vi.fn(async () => ({ status: 'sent' as const, httpStatus: 200, messageId: 4 }));
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner,
+      now: () => now,
+      wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
+    });
+
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'needs_reauth', notification: 'sent' });
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'needs_reauth' });
+    expect(fake.page.goto).toHaveBeenCalledTimes(1);
+    expect(repository.list({ limit: 25, offset: 0 }).accounts.find(({ id }) => id === account.id)).toMatchObject({
+      state: 'user_action_required',
+    });
+  });
+
   it('reports why a page failed and marks the following backoff steps as backoff, not new failures', async () => {
     const repository = createRepository();
     const account = await createReadyAccount(repository, 'pool-one@example.test');

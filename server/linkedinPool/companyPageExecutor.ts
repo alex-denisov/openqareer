@@ -324,6 +324,9 @@ export class LinkedinPoolCompanyPageExecutor {
       }
     } catch (error: unknown) {
       if (this.stopped) return { status: 'stopped' };
+      // LinkedIn гоняет по кругу переадресаций, когда не принимает cookies сессии
+      // (прод 30.09: каждый поиск). Повторять нельзя — это риск блокировки.
+      if (isRedirectLoop(error)) return { status: 'needs_reauth', reason: 'expired' };
       return { status: 'transient_failure', failure: describeFailure(error) };
     }
   }
@@ -381,6 +384,10 @@ function report(
   recruiterCount = 0,
 ): LinkedinPoolExecutorReport {
   return { status, pageCount, recruiterCount };
+}
+
+function isRedirectLoop(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('ERR_TOO_MANY_REDIRECTS');
 }
 
 /** Имя и сообщение ошибки, обрезанные; cookies и заголовки сюда не попадают. */
