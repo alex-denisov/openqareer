@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { consultantTargetView, TodayScreen } from './TodayScreen';
+import { consultantTargetView, queueItemTarget, TodayScreen } from './TodayScreen';
 import { clearConsultantActionResolution, resolveConsultantAction } from './consultantActionStorage';
 import type { TodaySnapshot } from './todayApi';
 
@@ -311,3 +311,12 @@ describe('TodayScreen (B251 S5)', () => {
   });
 });
 
+
+describe('queueItemTarget (B331: «Открыть» was a button without a handler)', () => {
+  it('opens vacancies for a vacancy card and responses for an application card', () => {
+    const [followUp, vacancy] = snapshot.queue;
+    expect(queueItemTarget(vacancy)).toBe('opportunities');
+    expect(queueItemTarget({ ...vacancy, kind: 'shortlist' })).toBe('opportunities');
+    expect(queueItemTarget({ ...followUp, kind: 'candidate_turn' })).toBe('responses');
+  });
+});

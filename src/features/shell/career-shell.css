@@ -10943,8 +10943,21 @@
 }
 
 .career-outreach-confirm-label input {
+  /* Modal field rules stretched the box to a 44 px square and squeezed the
+     label into a column spilling out of the dialog (B331 .app). */
+  flex: none;
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
   cursor: pointer;
   accent-color: var(--career-accent);
+}
+
+.career-outreach-confirm-label span {
+  flex: 1;
+  min-width: 0;
 }
 
 .career-outreach-history {
@@ -14606,4 +14619,67 @@ button.chip {
 
 .career-profile-screen-details-toggle[aria-expanded='true'] .career-profile-screen-details-caret {
   transform: rotate(180deg);
+}
+
+/* Desktop-only tip for `title` text, which WKWebView never shows (B331,
+   src/services/desktop/titleTooltips.ts). */
+.oq-title-tip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: 0 12px 32px oklch(0% 0 0 / 0.4);
+}
+
+.oq-title-tip[hidden] {
+  display: none;
+}
+
+/* «Добавить вручную» (B331): fields inside the shared dialog shell. */
+.career-responses-manual-form {
+  display: grid;
+  gap: var(--career-space-4);
+}
+
+.career-responses-manual-form > label:not(.career-responses-manual-check) {
+  display: grid;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-responses-manual-form > label > input:not([type='checkbox']) {
+  min-height: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-responses-manual-check {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-height: var(--career-target-min);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.career-responses-manual-check input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--career-accent);
 }

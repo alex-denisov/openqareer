@@ -158,6 +158,7 @@ function TodayContent({
           consultantAction={activeAction}
           onAcceptConsultant={onAccept}
           onDismissConsultant={onDismiss}
+          onNavigate={onNavigate}
         />
         <div className="career-today-side">
           <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
@@ -295,6 +296,7 @@ function TodayQueueList({
   onDismissConsultant,
   onMarkFollowUpSent,
   markingFollowUpIds,
+  onNavigate,
 }: {
   queue: readonly TodayQueueItem[];
   hasConsultantCard: boolean;
@@ -303,6 +305,7 @@ function TodayQueueList({
   onDismissConsultant?: () => void;
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   markingFollowUpIds: ReadonlySet<string>;
+  onNavigate?: (view: CareerCabinetView) => void;
 }) {
   return (
     <ul className="career-today-list">
@@ -321,6 +324,7 @@ function TodayQueueList({
           isFirst={!hasConsultantCard && index === 0}
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
+          onNavigate={onNavigate}
         />
       ))}
     </ul>
@@ -335,6 +339,7 @@ function TodayQueue({
   consultantAction,
   onAcceptConsultant,
   onDismissConsultant,
+  onNavigate,
 }: {
   queue: readonly TodayQueueItem[];
   sinceLastVisitItems: readonly string[];
@@ -343,6 +348,7 @@ function TodayQueue({
   consultantAction?: ReasonedCareerAction;
   onAcceptConsultant?: () => void;
   onDismissConsultant?: () => void;
+  onNavigate?: (view: CareerCabinetView) => void;
 }) {
   const hasConsultantCard = Boolean(consultantAction);
   const totalCount = queue.length + (hasConsultantCard ? 1 : 0);
@@ -369,6 +375,7 @@ function TodayQueue({
           onDismissConsultant={onDismissConsultant}
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
+          onNavigate={onNavigate}
         />
       )}
     </section>
@@ -440,11 +447,13 @@ function QueueRow({
   isFirst,
   onMarkFollowUpSent,
   markingFollowUpIds,
+  onNavigate,
 }: {
   item: TodayQueueItem;
   isFirst: boolean;
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   markingFollowUpIds: ReadonlySet<string>;
+  onNavigate?: (view: CareerCabinetView) => void;
 }) {
   const salary = formatTodaySalary(item.salary);
   const isVacancy = item.kind === 'new_vacancy' || item.kind === 'shortlist';
@@ -472,6 +481,7 @@ function QueueRow({
           item={item}
           onMarkFollowUpSent={onMarkFollowUpSent}
           markingFollowUpIds={markingFollowUpIds}
+          onNavigate={onNavigate}
         />
       </div>
     </li>
@@ -507,14 +517,21 @@ function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title
   );
 }
 
+/** Where «Открыть» on a queue card leads (B331: the button had no handler). */
+export function queueItemTarget(item: TodayQueueItem): CareerCabinetView {
+  return item.kind === 'new_vacancy' || item.kind === 'shortlist' ? 'opportunities' : 'responses';
+}
+
 function QueueAction({
   item,
   onMarkFollowUpSent,
   markingFollowUpIds,
+  onNavigate,
 }: {
   item: TodayQueueItem;
   onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   markingFollowUpIds: ReadonlySet<string>;
+  onNavigate?: (view: CareerCabinetView) => void;
 }) {
   if (item.kind === 'follow_up') {
     return item.applicationId ? (
@@ -529,7 +546,11 @@ function QueueAction({
     return <PrepareInterviewButton item={item} />;
   }
   return (
-    <button type="button" className="career-btn career-btn-secondary career-btn-sm">
+    <button
+      type="button"
+      className="career-btn career-btn-secondary career-btn-sm"
+      onClick={() => onNavigate?.(queueItemTarget(item))}
+    >
       Открыть
     </button>
   );

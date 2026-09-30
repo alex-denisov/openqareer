@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { NotePencil } from '@phosphor-icons/react';
+import { ImportModalShell } from '../connections/ImportModalShell';
 import type { CreateApplicationInput } from './applicationsApi';
 
 interface ManualCardFormProps {
@@ -27,7 +29,12 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
     setError(undefined);
     try {
       await onSubmit({
-        manualVacancy: { title: title.trim(), company: company.trim(), companyHidden, source: 'recruiter' },
+        manualVacancy: {
+          title: title.trim(),
+          company: company.trim(),
+          companyHidden,
+          source: 'recruiter',
+        },
         stage: 'saved',
       });
     } catch {
@@ -38,29 +45,44 @@ export function ManualCardForm({ onCancel, onSubmit }: ManualCardFormProps) {
   };
 
   return (
-    <div className="career-responses-manual-form" role="dialog" aria-label="Добавить карточку вручную">
-      <ManualCardFields
-        title={title}
-        onTitleChange={setTitle}
-        company={company}
-        onCompanyChange={setCompany}
-        companyHidden={companyHidden}
-        onCompanyHiddenChange={setCompanyHidden}
-      />
-      {error ? (
-        <p className="career-responses-card-failed" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="career-responses-manual-form-actions">
-        <button type="button" onClick={onCancel}>
+    // A real dialog (B331): the bare div had no styles, no backdrop and no
+    // Escape, and opened below the fold of the board in the .app.
+    <ImportModalShell
+      isOpen
+      onClose={onCancel}
+      titleId="manual-card-title"
+      title="Добавить карточку вручную"
+      icon={<NotePencil size={18} aria-hidden="true" />}
+    >
+      <div className="career-modal-body career-responses-manual-form">
+        <ManualCardFields
+          title={title}
+          onTitleChange={setTitle}
+          company={company}
+          onCompanyChange={setCompany}
+          companyHidden={companyHidden}
+          onCompanyHiddenChange={setCompanyHidden}
+        />
+        {error ? (
+          <p className="career-modal-error" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <div className="career-modal-footer is-compact">
+        <button type="button" className="career-quiet-button" onClick={onCancel}>
           Отмена
         </button>
-        <button type="button" onClick={() => void submit()} disabled={submitting}>
-          Добавить
+        <button
+          type="button"
+          className="career-primary-button"
+          onClick={() => void submit()}
+          disabled={submitting}
+        >
+          {submitting ? 'Сохраняем…' : 'Добавить'}
         </button>
       </div>
-    </div>
+    </ImportModalShell>
   );
 }
 
@@ -95,7 +117,7 @@ function ManualCardFields({
           disabled={companyHidden}
         />
       </label>
-      <label>
+      <label className="career-responses-manual-check">
         <input
           type="checkbox"
           checked={companyHidden}
