@@ -14,6 +14,7 @@ import {
   setStoredSessionToken,
 } from './features/coach/apiClient';
 import {
+  mirrorDesktopSessionToken,
   readSavedDesktopSessionToken,
   restoreDesktopSessionToken,
 } from './services/desktop/desktopSessionToken';
@@ -95,6 +96,9 @@ export default function App() {
       if (revision !== sessionRevision.current) return;
     }
     const token = getStoredSessionToken();
+    // A token signed in before B327 lives only in WebKit: save it now so the
+    // next quit cannot lose it.
+    if (isDesktop && token) mirrorDesktopSessionToken(token);
     const isCurrent = () =>
       revision === sessionRevision.current && token === getStoredSessionToken();
     setSessionError(undefined);
