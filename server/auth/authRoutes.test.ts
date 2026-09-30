@@ -215,6 +215,51 @@ describe('cookie auth routes', () => {
     });
   });
 
+  it('updates candidate timezone and validates IANA format', async () => {
+    const app = await createApp();
+    const candidate = await login(app, 'candidate.test', 'candidate-password-for-tests');
+
+    const invalid = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/account/profile',
+      headers: {
+        cookie: candidate.cookie,
+        origin: 'http://localhost:3000',
+      },
+      payload: {
+        timezone: 'Mars/Phobos',
+      },
+    });
+    expect(invalid.statusCode).toBe(422);
+
+    const valid = await app.inject({
+      method: 'PATCH',
+      url: '/api/v1/account/profile',
+      headers: {
+        cookie: candidate.cookie,
+        origin: 'http://localhost:3000',
+      },
+      payload: {
+        timezone: 'Europe/Belgrade',
+      },
+    });
+    expect(valid.statusCode).toBe(200);
+    expect(valid.json().data.profile).toMatchObject({
+      timezone: 'Europe/Belgrade',
+    });
+
+    const account = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account',
+      headers: {
+        cookie: candidate.cookie,
+        origin: 'http://localhost:3000',
+      },
+    });
+    expect(account.statusCode).toBe(200);
+    expect(account.json().data.profile.timezone).toBe('Europe/Belgrade');
+  });
+
   it('changes the password and rotates every existing session', async () => {
     const app = await createApp();
     const first = await login(app, 'candidate.test', 'candidate-password-for-tests');

@@ -502,6 +502,7 @@ export async function getAccount(): Promise<AccountSnapshot> {
 export async function updateAccountProfile(input: {
   headline?: string;
   workMode?: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+  timezone?: string | null;
 }): Promise<AccountSnapshot> {
   const response = await apiFetch('/api/v1/account/profile', {
     method: 'PATCH',

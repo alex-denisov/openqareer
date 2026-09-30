@@ -79,4 +79,8 @@ export interface RouteDeps {
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
   /** Журнал согласий кандидата на возможности профиля (B263). */
   capabilityConsentStore?: import('../auth/capabilityConsentStore').SqliteCapabilityConsentStore;
+  /** Репозиторий квитанций, лимитов и kill-switch действий кандидата (B261). */
+  candidateActionRepository?: import('../candidate/sqliteCandidateActionRepository').SqliteCandidateActionRepository;
+  /** Исполнитель подтверждённых пакетов действий кандидата (B261). */
+  candidateActionExecutor?: import('../candidate/candidateActionExecutor').CandidateActionExecutor;
 }

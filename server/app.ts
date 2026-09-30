@@ -42,6 +42,9 @@ import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
 import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoutes';
+import { SqliteCandidateActionRepository } from './candidate/sqliteCandidateActionRepository';
+import { CandidateActionExecutor } from './candidate/candidateActionExecutor';
+import { registerCandidateActionRoutes } from './routes/candidateActionRoutes';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 
 interface BuildAppOptions {
@@ -70,6 +73,8 @@ interface BuildAppOptions {
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
+  candidateActionRepository?: SqliteCandidateActionRepository;
+  candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
@@ -221,6 +226,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: RouteDeps): Promise
   registerReputationAuditRoutes(app, deps);
   registerSearchConsentRoutes(app, deps);
   registerCapabilityConsentRoutes(app, deps);
+  registerCandidateActionRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
@@ -259,6 +265,9 @@ function createCandidateRepositories(options: BuildAppOptions) {
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    candidateActionRepository:
+      options.candidateActionRepository ??
+      new SqliteCandidateActionRepository({ databasePath: config.databasePath }),
   };
 }
 
@@ -292,6 +301,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Rou
     campaignRoleModel,
     coverLetterWriter,
     ...createCandidateRepositories(options),
+    ...(options.candidateActionExecutor ? { candidateActionExecutor: options.candidateActionExecutor } : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
 

@@ -15,6 +15,7 @@ export interface AuthPrincipal {
 export interface RegistrationProfile {
   email?: string;
   displayName?: string;
+  timezone?: string;
 }
 
 export interface AccountSnapshot {
@@ -25,6 +26,7 @@ export interface AccountSnapshot {
     headline: string | null;
     location: string | null;
     workMode: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+    timezone?: string | null;
     updatedAt: string | null;
   };
   sessions: Array<{
@@ -42,6 +44,7 @@ export interface AccountProfileUpdate {
   headline?: string | null;
   location?: string | null;
   workMode?: AccountSnapshot['profile']['workMode'];
+  timezone?: string | null;
 }
 
 export interface PasswordResetDelivery {
@@ -75,6 +78,7 @@ export interface AdminUserRecord {
   subscriptionStatus: SubscriptionStatus;
   subscriptionExpiresAt: string | null;
   subscriptionNotes: string | null;
+  timezone?: string | null;
   createdAt: string;
   activeSessions: number;
   lastSeenAt: string | null;
@@ -127,6 +131,7 @@ export interface AdminUserUpdateInput {
   headline?: string | null;
   location?: string | null;
   workMode?: string | null;
+  timezone?: string | null;
   role?: UserRole;
   subscriptionTier?: SubscriptionTier;
   subscriptionStatus?: SubscriptionStatus;

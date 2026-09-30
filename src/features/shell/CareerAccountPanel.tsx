@@ -22,6 +22,7 @@ import {
   requestPasswordReset,
   resetPassword,
   revokeOtherSessions,
+  updateAccountProfile,
   type AccountSnapshot,
   type AuthUser,
 } from '../coach/coachApi';
@@ -285,6 +286,23 @@ export function CareerAccountPanel({
     }
   }
 
+  async function saveTimezone(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const tzValue = stringValue(form, 'timezone').trim();
+    setBusy(true);
+    setError(undefined);
+    try {
+      const updated = await updateAccountProfile({ timezone: tzValue || null });
+      setAccount(updated);
+      setNotice('Часовой пояс сохранён.');
+    } catch (reason) {
+      setError(accountError(reason));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function closeOtherSessions() {
     setBusy(true);
     setError(undefined);
@@ -420,6 +438,7 @@ export function CareerAccountPanel({
             busy={busy}
             onSectionChange={setSection}
             onSavePassword={savePassword}
+            onSaveTimezone={saveTimezone}
             onCloseOtherSessions={closeOtherSessions}
             onDownloadExport={downloadExport}
             onDeleteAccount={deleteAccount}
@@ -643,6 +662,7 @@ function AuthenticatedAccount({
   busy,
   onSectionChange,
   onSavePassword,
+  onSaveTimezone,
   onCloseOtherSessions,
   onDownloadExport,
   onDeleteAccount,
@@ -655,6 +675,7 @@ function AuthenticatedAccount({
   busy: boolean;
   onSectionChange: (section: AccountSection) => void;
   onSavePassword: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  onSaveTimezone: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onCloseOtherSessions: () => Promise<void>;
   onDownloadExport: () => Promise<void>;
   onDeleteAccount: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
@@ -696,6 +717,22 @@ function AuthenticatedAccount({
 
       {section === 'security' ? (
         <div className="career-account-section-stack">
+          <form className="career-account-form" onSubmit={onSaveTimezone}>
+            <h2>Часовой пояс</h2>
+            <label>
+              <span>Часовой пояс (IANA)</span>
+              <input
+                name="timezone"
+                type="text"
+                defaultValue={account?.profile?.timezone ?? ''}
+                placeholder="Europe/Moscow"
+                maxLength={64}
+              />
+            </label>
+            <button className="career-primary-button" disabled={busy}>
+              Сохранить часовой пояс
+            </button>
+          </form>
           <form className="career-account-form" onSubmit={onSavePassword}>
             <h2>Сменить пароль</h2>
             <label>

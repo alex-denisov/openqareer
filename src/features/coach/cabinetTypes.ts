@@ -11,6 +11,7 @@ export interface AccountSnapshot {
     headline: string | null;
     location: string | null;
     workMode: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
+    timezone?: string | null;
     updatedAt: string | null;
   };
   sessions: Array<{

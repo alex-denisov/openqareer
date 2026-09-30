@@ -241,6 +241,21 @@ describe('LinkedIn pool executor controls', () => {
     expect(linkedinLocalDayStart(new Date('2026-09-29T10:00:00.000Z'), 'Europe/Moscow').toISOString()).toBe(
       '2026-09-28T21:00:00.000Z',
     );
+
+    // B328: midnight boundary traversal and working hours in America/New_York (EDT, UTC-4)
+    expect(isLinkedinExecutorWithinHours(new Date('2026-09-29T12:59:00.000Z'), 'America/New_York')).toBe(
+      false,
+    );
+    expect(isLinkedinExecutorWithinHours(new Date('2026-09-29T13:00:00.000Z'), 'America/New_York')).toBe(
+      true,
+    );
+    // Midnight boundary: 23:59 on Sep 28 vs 00:01 on Sep 29
+    expect(
+      linkedinLocalDayStart(new Date('2026-09-29T03:59:00.000Z'), 'America/New_York').toISOString(),
+    ).toBe('2026-09-28T04:00:00.000Z');
+    expect(
+      linkedinLocalDayStart(new Date('2026-09-29T04:01:00.000Z'), 'America/New_York').toISOString(),
+    ).toBe('2026-09-29T04:00:00.000Z');
   });
 
   it('keeps every page gap and daily page budget within the B309 limits', () => {

@@ -42,6 +42,7 @@ export interface LinkedinPoolAccount {
   leaseUntil: string | null;
   capabilityVerdict: 'not_configured' | 'official_api' | 'provider_permitted';
   revision: number;
+  timezone?: string;
   createdAt: string;
   updatedAt: string;
   serverSession: LinkedinPoolServerSessionSummary | null;
@@ -96,6 +97,7 @@ export async function createAdminLinkedinAccount(input: {
   adminLabel: string;
   emailLogin: string;
   providerAccountMarker?: string;
+  timezone?: string;
 }): Promise<LinkedinPoolAccount> {
   const response = await apiFetch('/api/v1/admin/linkedin/accounts', {
     method: 'POST',
@@ -115,6 +117,7 @@ export async function updateAdminLinkedinAccount(
     adminLabel?: string;
     emailLogin?: string;
     providerAccountMarker?: string | null;
+    timezone?: string;
   },
 ): Promise<LinkedinPoolAccount> {
   const response = await apiFetch(

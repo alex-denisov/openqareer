@@ -7,169 +7,46 @@ import { SealedText } from '../data/sealedText';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { prepareLinkedinSessionCookies } from './serverSessionCookies';
 import {
+  DEFAULT_ACCOUNT_TIMEZONE,
+  inferTimezoneFromRegionOrLabel,
+  isValidTimezone,
+} from '../../shared/timezoneUtils';
+import {
   assertTransition,
   type LinkedinFailureCode,
   type LinkedinLease,
   type LinkedinPoolAccount,
   type LinkedinPoolPage,
-  type LinkedinProviderCapability,
   type LinkedinProviderProbe,
   type LinkedinPoolServerSessionSummary,
   type LinkedinSessionCookie,
   type LinkedinSessionState,
 } from './sessionContract';
 
-export interface LinkedinPoolListInput {
-  readonly state?: LinkedinSessionState;
-  readonly limit: number;
-  readonly offset: number;
-}
-
-export interface LinkedinPoolCreateInput {
-  readonly adminLabel: string;
-  readonly emailLogin: string;
-  readonly providerAccountMarker?: string;
-  readonly idempotencyKey: string;
-  readonly actorUserId: string;
-  readonly actorUsername: string;
-}
-
-export interface LinkedinPoolUpdateInput {
-  readonly accountId: string;
-  readonly revision: number;
-  readonly adminLabel?: string;
-  readonly emailLogin?: string;
-  readonly providerAccountMarker?: string | null;
-  readonly actorUserId: string;
-  readonly actorUsername: string;
-}
-
-export interface LinkedinPoolActor {
-  readonly actorUserId: string;
-  readonly actorUsername: string;
-}
-
-export interface LinkedinSessionProbeInput {
-  readonly account: LinkedinPoolAccount;
-  readonly lease?: LinkedinLease;
-}
-
-export type LinkedinSessionProbe = (
-  input: LinkedinSessionProbeInput,
-) => Promise<LinkedinProviderProbe>;
-
-export interface LinkedinPoolRepositoryOptions {
-  readonly databasePath: string;
-  readonly encryptionKey: Buffer;
-  readonly runtimeRoot?: string;
-  readonly probe?: LinkedinSessionProbe;
-  readonly now?: () => Date;
-}
-
-export class LinkedinPoolNotFoundError extends Error {
-  constructor() {
-    super('linkedin_pool_account_not_found');
-    this.name = 'LinkedinPoolNotFoundError';
-  }
-}
-
-export class LinkedinPoolConflictError extends Error {
-  constructor(code: string) {
-    super(code);
-    this.name = 'LinkedinPoolConflictError';
-  }
-}
-
-interface AccountRow {
-  id: string;
-  admin_label: string;
-  email_login_cipher: string;
-  email_login_digest: string;
-  provider_marker_cipher: string | null;
-  profile_isolation_id: string;
-  state: LinkedinSessionState;
-  last_verified_at: string | null;
-  last_heartbeat_at: string | null;
-  last_failure_code: LinkedinFailureCode | null;
-  lease_until: string | null;
-  capability_verdict: LinkedinProviderCapability;
-  revision: number;
-  created_at: string;
-  updated_at: string;
-  session_captured_at?: string | null;
-  session_expires_at?: string | null;
-  session_cookie_count?: number | null;
-  session_revision?: number | null;
-}
-
-interface LeaseRow {
-  account_id: string;
-  token_hash: string;
-  expires_at: string;
-}
-
-const LINKEDIN_POOL_SCHEMA = `
-CREATE TABLE IF NOT EXISTS linkedin_pool_accounts (
-  id TEXT PRIMARY KEY,
-  admin_label TEXT NOT NULL,
-  email_login_cipher TEXT NOT NULL,
-  email_login_digest TEXT NOT NULL UNIQUE,
-  provider_marker_cipher TEXT,
-  profile_isolation_id TEXT NOT NULL UNIQUE,
-  state TEXT NOT NULL CHECK (state IN (
-    'unconfigured', 'login_required', 'user_action_required', 'checking',
-    'ready', 'expired', 'challenge_required', 'cooling_down', 'revoked',
-    'banned', 'disabled'
-  )),
-  last_verified_at TEXT,
-  last_heartbeat_at TEXT,
-  last_failure_code TEXT,
-  lease_until TEXT,
-  capability_verdict TEXT NOT NULL CHECK (
-    capability_verdict IN ('not_configured', 'official_api', 'provider_permitted')
-  ),
-  revision INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS linkedin_pool_accounts_state
-  ON linkedin_pool_accounts(state, created_at DESC, id ASC);
-CREATE TABLE IF NOT EXISTS linkedin_pool_sessions (
-  account_id TEXT PRIMARY KEY REFERENCES linkedin_pool_accounts(id) ON DELETE CASCADE,
-  cookies_cipher TEXT NOT NULL,
-  captured_at TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  cookie_count INTEGER NOT NULL CHECK (cookie_count BETWEEN 1 AND 100),
-  revision INTEGER NOT NULL DEFAULT 1
-) STRICT;
-CREATE TABLE IF NOT EXISTS linkedin_pool_leases (
-  id TEXT PRIMARY KEY,
-  account_id TEXT NOT NULL REFERENCES linkedin_pool_accounts(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL UNIQUE,
-  expires_at TEXT NOT NULL,
-  consumed_at TEXT,
-  created_at TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS linkedin_pool_leases_account
-  ON linkedin_pool_leases(account_id, expires_at);
-CREATE TABLE IF NOT EXISTS linkedin_pool_idempotency (
-  idempotency_key TEXT PRIMARY KEY,
-  request_digest TEXT NOT NULL,
-  account_id TEXT NOT NULL,
-  created_at TEXT NOT NULL
-) STRICT;
-CREATE TABLE IF NOT EXISTS linkedin_pool_audit (
-  id TEXT PRIMARY KEY,
-  actor_user_id TEXT NOT NULL,
-  actor_username TEXT NOT NULL,
-  action TEXT NOT NULL,
-  account_id TEXT,
-  detail TEXT,
-  created_at TEXT NOT NULL
-) STRICT;
-CREATE INDEX IF NOT EXISTS linkedin_pool_audit_created
-  ON linkedin_pool_audit(created_at DESC, id DESC);
-`;
+export {
+  LinkedinPoolConflictError,
+  type LinkedinPoolCreateInput,
+  type LinkedinPoolListInput,
+  LinkedinPoolNotFoundError,
+  type LinkedinPoolRepositoryOptions,
+  type LinkedinPoolUpdateInput,
+  type LinkedinPoolActor,
+  type LinkedinSessionProbe,
+  type LinkedinSessionProbeInput,
+} from './linkedinPoolTypes';
+import {
+  type AccountRow,
+  type LeaseRow,
+  type LinkedinPoolCreateInput,
+  type LinkedinPoolListInput,
+  type LinkedinPoolRepositoryOptions,
+  type LinkedinPoolUpdateInput,
+  type LinkedinPoolActor,
+  type LinkedinSessionProbe,
+  LINKEDIN_POOL_SCHEMA,
+  LinkedinPoolConflictError,
+  LinkedinPoolNotFoundError,
+} from './linkedinPoolTypes';
 
 function normalizeLoginIdentifier(value: string): string {
   const trimmed = value.trim();
@@ -228,6 +105,13 @@ export class SqliteLinkedinPoolRepository {
     this.database.exec('PRAGMA journal_mode = WAL; PRAGMA secure_delete = ON;');
     applySqliteBusyTimeout(this.database);
     this.database.exec(LINKEDIN_POOL_SCHEMA);
+    try {
+      this.database.exec(
+        "ALTER TABLE linkedin_pool_accounts ADD COLUMN timezone TEXT NOT NULL DEFAULT 'Europe/Moscow';",
+      );
+    } catch {
+      // Column already exists or schema already applied
+    }
     this.sealedText = new SealedText(options.encryptionKey);
     this.runtimeRoot = options.runtimeRoot ?? join(tmpdir(), 'openqareer-linkedin-runtime');
     if (!isAbsolute(this.runtimeRoot)) {
@@ -422,6 +306,10 @@ export class SqliteLinkedinPoolRepository {
     const id = randomUUID();
     const profileIsolationId = `profile_${randomUUID()}`;
     const now = this.now().toISOString();
+    const effectiveTimezone =
+      input.timezone && isValidTimezone(input.timezone)
+        ? input.timezone
+        : inferTimezoneFromRegionOrLabel(`${input.adminLabel} ${input.providerAccountMarker ?? ''}`);
     const account: AccountRow = {
       id,
       admin_label: input.adminLabel.trim(),
@@ -435,6 +323,7 @@ export class SqliteLinkedinPoolRepository {
         : null,
       profile_isolation_id: profileIsolationId,
       state: 'unconfigured',
+      timezone: effectiveTimezone,
       last_verified_at: null,
       last_heartbeat_at: null,
       last_failure_code: 'account_unconfigured',
@@ -451,8 +340,8 @@ export class SqliteLinkedinPoolRepository {
           `INSERT INTO linkedin_pool_accounts (
             id, admin_label, email_login_cipher, email_login_digest,
             provider_marker_cipher, profile_isolation_id, state,
-            last_failure_code, capability_verdict, revision, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            timezone, last_failure_code, capability_verdict, revision, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           account.id,
@@ -462,6 +351,7 @@ export class SqliteLinkedinPoolRepository {
           account.provider_marker_cipher,
           account.profile_isolation_id,
           account.state,
+          account.timezone,
           account.last_failure_code,
           account.capability_verdict,
           account.revision,
@@ -497,12 +387,18 @@ export class SqliteLinkedinPoolRepository {
         .get(digest(nextEmail), input.accountId);
       if (duplicate) throw new LinkedinPoolConflictError('linkedin_email_login_exists');
     }
+    const nextTimezone =
+      input.timezone !== undefined && input.timezone !== null
+        ? isValidTimezone(input.timezone)
+          ? input.timezone
+          : current.timezone ?? DEFAULT_ACCOUNT_TIMEZONE
+        : current.timezone ?? DEFAULT_ACCOUNT_TIMEZONE;
     const now = this.now().toISOString();
     this.database
       .prepare(
         `UPDATE linkedin_pool_accounts SET
           admin_label = ?, email_login_cipher = ?, email_login_digest = ?,
-          provider_marker_cipher = ?, revision = revision + 1, updated_at = ?
+          provider_marker_cipher = ?, timezone = ?, revision = revision + 1, updated_at = ?
          WHERE id = ? AND revision = ?`,
       )
       .run(
@@ -515,6 +411,7 @@ export class SqliteLinkedinPoolRepository {
               accountAssociatedData(input.accountId, 'provider-marker'),
             )
           : null,
+        nextTimezone,
         now,
         input.accountId,
         input.revision,
@@ -731,9 +628,16 @@ export class SqliteLinkedinPoolRepository {
     return this.requireAccount(accountId);
   }
 
-  private findAccount(accountId: string): LinkedinPoolAccount | null {
+  findAccount(accountId: string): LinkedinPoolAccount | null {
     const row = this.database
-      .prepare('SELECT * FROM linkedin_pool_accounts WHERE id = ?')
+      .prepare(
+        `SELECT a.*, s.captured_at AS session_captured_at,
+            s.expires_at AS session_expires_at, s.cookie_count AS session_cookie_count,
+            s.revision AS session_revision
+         FROM linkedin_pool_accounts a
+         LEFT JOIN linkedin_pool_sessions s ON s.account_id = a.id
+         WHERE a.id = ?`,
+      )
       .get(accountId) as AccountRow | undefined;
     return row ? this.toAccount(row) : null;
   }
@@ -785,6 +689,7 @@ export class SqliteLinkedinPoolRepository {
       providerAccountMarker: this.openMarker(row),
       profileIsolationId: row.profile_isolation_id,
       state: row.state,
+      timezone: row.timezone ?? DEFAULT_ACCOUNT_TIMEZONE,
       lastVerifiedAt: row.last_verified_at,
       lastHeartbeatAt: row.last_heartbeat_at,
       lastFailureCode: row.last_failure_code,

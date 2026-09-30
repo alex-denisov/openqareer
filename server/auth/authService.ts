@@ -57,6 +57,7 @@ import {
   listAudit as adminListAudit,
   recordAdminAudit,
 } from './adminUserManager';
+import { isValidTimezone } from '../../shared/timezoneUtils';
 
 const scrypt = promisify(scryptCallback);
 /**
@@ -117,6 +118,7 @@ interface UserRow {
   headline: string | null;
   location: string | null;
   work_mode: AccountSnapshot['profile']['workMode'];
+  timezone: string | null;
   blocked_at: string | null;
   profile_updated_at: string | null;
 }
@@ -182,6 +184,7 @@ export class AuthService implements SessionAuth {
         passwordHash,
         candidate.id,
         now,
+        profile.timezone,
       );
     } catch (error) {
       candidateStore.deleteCandidate(candidate.id);
@@ -204,14 +207,17 @@ export class AuthService implements SessionAuth {
     passwordHash: Buffer,
     candidateId: string,
     now: string,
+    timezone?: string | null,
   ): void {
+    const validTimezone =
+      timezone?.trim() && isValidTimezone(timezone.trim()) ? timezone.trim() : null;
     this.database
       .prepare(
         `INSERT INTO users
           (id, username, email, display_name, role, password_salt,
            password_hash, candidate_id, is_test, created_at, updated_at,
-           profile_updated_at)
-         VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, 0, ?, ?, ?)`,
+           profile_updated_at, timezone)
+         VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, 0, ?, ?, ?, ?)`,
       )
       .run(
         randomUUID(),
@@ -224,6 +230,7 @@ export class AuthService implements SessionAuth {
         now,
         now,
         now,
+        validTimezone,
       );
   }
 
@@ -469,6 +476,7 @@ export class AuthService implements SessionAuth {
         headline: user.headline,
         location: user.location,
         workMode: user.work_mode,
+        timezone: user.timezone,
         updatedAt: user.profile_updated_at,
       },
       sessions: sessions.map((session) => ({
@@ -492,12 +500,18 @@ export class AuthService implements SessionAuth {
     if (owner && owner.id !== user.id) throw new AuthEmailTakenError();
     const normalizeNullable = (value: string | null | undefined, fallback: string | null) =>
       value === undefined ? fallback : value?.trim() || null;
+    const nextTimezone =
+      input.timezone === undefined
+        ? user.timezone
+        : input.timezone && isValidTimezone(input.timezone)
+          ? input.timezone.trim()
+          : null;
     const now = new Date().toISOString();
     this.database
       .prepare(
         `UPDATE users
          SET email = ?, display_name = ?, headline = ?, location = ?,
-             work_mode = ?, profile_updated_at = ?, updated_at = ?
+             work_mode = ?, timezone = ?, profile_updated_at = ?, updated_at = ?
          WHERE id = ?`,
       )
       .run(
@@ -506,6 +520,7 @@ export class AuthService implements SessionAuth {
         normalizeNullable(input.headline, user.headline),
         normalizeNullable(input.location, user.location),
         input.workMode === undefined ? user.work_mode : input.workMode,
+        nextTimezone,
         now,
         now,
         user.id,
@@ -731,6 +746,11 @@ export class AuthService implements SessionAuth {
     } catch {
       // contract-end column already present
     }
+    try {
+      this.database.exec('ALTER TABLE users ADD COLUMN timezone TEXT;');
+    } catch {
+      // timezone column already exists
+    }
     // Administrators are provisioned only from configured seed accounts
     // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to
     // change an existing user's role. A previous hardcoded handle list granted
@@ -765,7 +785,7 @@ const USER_SELECT = `
   SELECT users.id, users.username, users.role, users.password_salt,
          users.password_hash, users.is_test, users.candidate_id,
          users.email, users.display_name, users.headline, users.location,
-         users.work_mode, users.blocked_at, users.profile_updated_at,
+         users.work_mode, users.timezone, users.blocked_at, users.profile_updated_at,
          users.created_at AS user_created_at,
          candidates.data_class, candidates.locale,
          candidates.created_at AS candidate_created_at

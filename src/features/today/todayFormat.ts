@@ -10,22 +10,27 @@ import { pluralRu } from '../../../shared/pluralRu';
  * проверить отдельно от вёрстки.
  */
 
-function formatHm(iso: string): string {
-  return new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(
-    new Date(iso),
-  );
+function formatHm(iso: string, timezone?: string): string {
+  return new Intl.DateTimeFormat('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+    ...(timezone ? { timeZone: timezone } : {}),
+  }).format(new Date(iso));
 }
 
-function formatWeekdayTime(iso: string): string {
+function formatWeekdayTime(iso: string, timezone?: string): string {
   const date = new Date(iso);
-  const weekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(date);
-  return `${weekday}, ${formatHm(iso)}`;
+  const weekday = new Intl.DateTimeFormat('ru-RU', {
+    weekday: 'long',
+    ...(timezone ? { timeZone: timezone } : {}),
+  }).format(date);
+  return `${weekday}, ${formatHm(iso, timezone)}`;
 }
 
-export function newVacanciesBasis(caption: TodayNewVacanciesCaption | null): string | null {
+export function newVacanciesBasis(caption: TodayNewVacanciesCaption | null, timezone?: string): string | null {
   if (!caption) return null;
   const campaign = caption.campaignRole ? `кампания ${caption.campaignRole}` : null;
-  const updated = caption.updatedAt ? `обновлено в ${formatHm(caption.updatedAt)}` : null;
+  const updated = caption.updatedAt ? `обновлено в ${formatHm(caption.updatedAt, timezone)}` : null;
   return [campaign, updated].filter(Boolean).join(' · ') || null;
 }
 
@@ -33,16 +38,16 @@ export function followUpBasis(captions: readonly string[]): string | null {
   return captions.length > 0 ? captions.join(' · ') : null;
 }
 
-export function nextInterviewBasis(interview: TodayNextInterview | null): string | null {
+export function nextInterviewBasis(interview: TodayNextInterview | null, timezone?: string): string | null {
   if (!interview) return null;
   const who = interview.company ?? interview.title;
-  return `${who} · раунд ${interview.round} · ${formatWeekdayTime(interview.at)}`;
+  return `${who} · раунд ${interview.round} · ${formatWeekdayTime(interview.at, timezone)}`;
 }
 
-export function digestBasis(kind: 'new' | 'followUp' | 'interview', digest: TodayDigest): string | null {
-  if (kind === 'new') return newVacanciesBasis(digest.newVacanciesCaption);
+export function digestBasis(kind: 'new' | 'followUp' | 'interview', digest: TodayDigest, timezone?: string): string | null {
+  if (kind === 'new') return newVacanciesBasis(digest.newVacanciesCaption, timezone);
   if (kind === 'followUp') return followUpBasis(digest.followUpCaptions);
-  return nextInterviewBasis(digest.nextInterview);
+  return nextInterviewBasis(digest.nextInterview, timezone);
 }
 
 const FOLLOW_UP_STATUS_LABEL: Record<TodayFollowUp['status'], string> = {

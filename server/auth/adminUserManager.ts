@@ -35,6 +35,7 @@ interface AdminUserRow {
   subscription_status: SubscriptionStatus | null;
   subscription_expires_at: string | null;
   subscription_notes: string | null;
+  timezone: string | null;
   created_at: string;
   active_sessions: number;
   last_seen_at: string | null;
@@ -72,6 +73,7 @@ function toAdminUserRecord(row: AdminUserRow): AdminUserRecord {
     subscriptionStatus: row.subscription_status ?? 'active',
     subscriptionExpiresAt: row.subscription_expires_at,
     subscriptionNotes: row.subscription_notes,
+    timezone: row.timezone ?? null,
     createdAt: row.created_at,
     activeSessions: row.active_sessions,
     lastSeenAt: row.last_seen_at,
@@ -156,6 +158,7 @@ export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminU
       users.subscription_status,
       users.subscription_expires_at,
       users.subscription_notes,
+      users.timezone,
       users.created_at,
       COUNT(sessions.token_hash) AS active_sessions,
       MAX(sessions.last_seen_at) AS last_seen_at
@@ -197,6 +200,7 @@ export function getUser(database: DatabaseSync, userId: string): AdminUserRecord
         users.subscription_status,
         users.subscription_expires_at,
         users.subscription_notes,
+        users.timezone,
         users.created_at,
         COUNT(sessions.token_hash) AS active_sessions,
         MAX(sessions.last_seen_at) AS last_seen_at
@@ -286,6 +290,21 @@ export function setUserBlocked(
   return getUser(database, targetUserId)!;
 }
 
+function updateUserValues(input: AdminUserUpdateInput, fallbackExpiresAt: string | null) {
+  return [
+    input.email ?? null,
+    input.displayName ?? null,
+    input.headline ?? null,
+    input.location ?? null,
+    input.workMode ?? null,
+    input.subscriptionTier ?? null,
+    input.subscriptionStatus ?? null,
+    input.subscriptionExpiresAt !== undefined ? input.subscriptionExpiresAt : fallbackExpiresAt,
+    input.subscriptionNotes ?? null,
+    input.timezone ?? null,
+  ];
+}
+
 export function updateUserByAdmin(
   database: DatabaseSync,
   targetUserId: string,
@@ -308,22 +327,11 @@ export function updateUserByAdmin(
            subscription_status = COALESCE(?, subscription_status),
            subscription_expires_at = ?,
            subscription_notes = COALESCE(?, subscription_notes),
+           timezone = COALESCE(?, timezone),
            updated_at = ?
        WHERE id = ?`,
     )
-    .run(
-      input.email !== undefined ? input.email : null,
-      input.displayName !== undefined ? input.displayName : null,
-      input.headline !== undefined ? input.headline : null,
-      input.location !== undefined ? input.location : null,
-      input.workMode !== undefined ? input.workMode : null,
-      input.subscriptionTier !== undefined ? input.subscriptionTier : null,
-      input.subscriptionStatus !== undefined ? input.subscriptionStatus : null,
-      input.subscriptionExpiresAt !== undefined ? input.subscriptionExpiresAt : user.subscriptionExpiresAt,
-      input.subscriptionNotes !== undefined ? input.subscriptionNotes : null,
-      now,
-      targetUserId,
-    );
+    .run(...updateUserValues(input, user.subscriptionExpiresAt), now, targetUserId);
 
   if (actorPrincipal) {
     recordAdminAudit(database, {

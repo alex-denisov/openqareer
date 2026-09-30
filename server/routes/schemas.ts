@@ -4,6 +4,7 @@ import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { linkedinProfileV2Schema } from '../../shared/linkedinProfileV2';
 import { parseProfileUrl } from '../connectors/profileUrlImport';
 import { careerCommandExecutionTargetSchema } from '../orchestration/careerCommandPlanner';
+import { isValidTimezone } from '../../shared/timezoneUtils';
 
 function fieldGovernedBy(check: (value: string) => string | null, trim: boolean) {
   const base = trim ? z.string().trim() : z.string();
@@ -60,6 +61,7 @@ export const accountProfileSchema = z
     headline: z.string().trim().min(2).max(220).nullable().optional(),
     location: z.string().trim().min(2).max(160).nullable().optional(),
     workMode: z.enum(['office', 'hybrid', 'remote', 'flexible']).nullable().optional(),
+    timezone: z.string().trim().refine(isValidTimezone, 'Неверный часовой пояс IANA').nullable().optional(),
   })
   .refine((value) => Object.values(value).some((item) => item !== undefined), {
     message: 'at least one profile field is required',
@@ -227,6 +229,7 @@ export const adminLinkedinPoolCreateSchema = z.object({
   adminLabel: linkedinAdminLabelSchema,
   emailLogin: linkedinEmailLoginSchema,
   providerAccountMarker: z.string().trim().min(1).max(240).optional(),
+  timezone: z.string().trim().refine(isValidTimezone, 'Неверный часовой пояс IANA').optional(),
 });
 
 export const adminLinkedinPoolPatchSchema = z.object({
@@ -234,6 +237,7 @@ export const adminLinkedinPoolPatchSchema = z.object({
   adminLabel: linkedinAdminLabelSchema.optional(),
   emailLogin: linkedinEmailLoginSchema.optional(),
   providerAccountMarker: z.string().trim().max(240).nullable().optional(),
+  timezone: z.string().trim().refine(isValidTimezone, 'Неверный часовой пояс IANA').nullable().optional(),
 });
 
 export const adminLinkedinPoolParamsSchema = z.object({

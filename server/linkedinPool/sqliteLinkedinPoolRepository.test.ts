@@ -418,4 +418,46 @@ describe('SqliteLinkedinPoolRepository', () => {
       .all(account.id) as Array<{ detail: string }>;
     expect(details.map((entry) => entry.detail)).not.toContain('Northwind Group');
   });
+
+  it('assigns, infers and updates pool account timezone', () => {
+    const { repository } = createRepository();
+
+    // 1. Fallback default
+    const defaultAcc = repository.create({
+      adminLabel: 'Пул без региона',
+      emailLogin: 'default@example.test',
+      idempotencyKey: '33333333-3333-4333-8333-333333333333',
+      ...actor,
+    }).account;
+    expect(defaultAcc.timezone).toBe('Europe/Moscow');
+
+    // 2. Inferred from label/marker
+    const inferredAcc = repository.create({
+      adminLabel: 'Пул California West Coast',
+      emailLogin: 'us-west@example.test',
+      idempotencyKey: '44444444-4444-4444-8444-444444444444',
+      ...actor,
+    }).account;
+    expect(inferredAcc.timezone).toBe('America/Los_Angeles');
+
+    // 3. Explicit timezone
+    const explicitAcc = repository.create({
+      adminLabel: 'Пул Токио',
+      emailLogin: 'tokyo@example.test',
+      timezone: 'Asia/Tokyo',
+      idempotencyKey: '55555555-5555-4555-8555-555555555555',
+      ...actor,
+    }).account;
+    expect(explicitAcc.timezone).toBe('Asia/Tokyo');
+
+    // 4. Update timezone
+    const updated = repository.update({
+      accountId: explicitAcc.id,
+      revision: explicitAcc.revision,
+      timezone: 'Europe/London',
+      ...actor,
+    });
+    expect(updated.timezone).toBe('Europe/London');
+    expect(repository.findAccount(explicitAcc.id)?.timezone).toBe('Europe/London');
+  });
 });

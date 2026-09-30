@@ -198,6 +198,7 @@ export function AdminLinkedinPoolView() {
   const [verifiedSessionMarker, setVerifiedSessionMarker] = useState<string>();
   const [localCleanupPendingAccountId, setLocalCleanupPendingAccountId] = useState<string>();
   const [query, setQuery] = useState('');
+  const [accountTimezone, setAccountTimezone] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'ready' | 'action' | 'stopped'>('all');
   const [sortBy, setSortBy] = useState<'name' | 'state' | 'verified'>('name');
   const [descending, setDescending] = useState(false);
@@ -260,8 +261,10 @@ export function AdminLinkedinPoolView() {
       const created = await createAdminLinkedinAccount({
         adminLabel: identifier.trim(),
         emailLogin: identifier.trim(),
+        timezone: accountTimezone.trim() || undefined,
       });
       setIdentifier('');
+      setAccountTimezone('');
       setQuery('');
       setStatusFilter('all');
       setSortBy('name');
@@ -533,6 +536,16 @@ export function AdminLinkedinPoolView() {
               autoComplete="off"
             />
           </label>
+          <label>
+            <span>Часовой пояс (IANA)</span>
+            <input
+              value={accountTimezone}
+              onChange={(event) => setAccountTimezone(event.target.value)}
+              placeholder="Europe/Moscow (или авто)"
+              maxLength={64}
+              autoComplete="off"
+            />
+          </label>
         </div>
         <button
           className="admin-btn admin-btn--primary"
@@ -647,6 +660,10 @@ export function AdminLinkedinPoolView() {
                   <div>
                     <dt>Доступ источника</dt>
                     <dd>{capabilityCopy(account.capabilityVerdict)}</dd>
+                  </div>
+                  <div>
+                    <dt>Часовой пояс</dt>
+                    <dd>{account.timezone ?? 'Europe/Moscow'}</dd>
                   </div>
                   <AdminLinkedinServerSessionMeta account={account} />
                 </dl>

@@ -85,6 +85,7 @@ export interface LinkedinPoolAccount {
   readonly lastFailureCode: LinkedinFailureCode | null;
   readonly leaseUntil: string | null;
   readonly capabilityVerdict: LinkedinProviderCapability;
+  readonly timezone: string;
   readonly revision: number;
   readonly createdAt: string;
   readonly updatedAt: string;

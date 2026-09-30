@@ -113,5 +113,28 @@ describe('todayFormat (B255 returning user digest)', () => {
         at: '2026-10-02T14:00:00.000Z',
       }),
     ).toContain('Acme · раунд 1');
+
+    // B328: format with candidate's timezone
+    const moscowTime = nextInterviewBasis(
+      {
+        company: 'Acme',
+        title: 'DevOps',
+        round: 1,
+        at: '2026-10-02T14:00:00.000Z',
+      },
+      'Europe/Moscow',
+    );
+    expect(moscowTime).toContain('17:00');
+
+    const newYorkTime = nextInterviewBasis(
+      {
+        company: 'Acme',
+        title: 'DevOps',
+        round: 1,
+        at: '2026-10-02T14:00:00.000Z',
+      },
+      'America/New_York',
+    );
+    expect(newYorkTime).toContain('10:00');
   });
 });

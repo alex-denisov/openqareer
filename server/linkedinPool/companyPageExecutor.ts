@@ -183,18 +183,17 @@ export class LinkedinPoolCompanyPageExecutor {
     const config = this.config;
     if (!config.enabled) return report('disabled');
     const now = this.now();
-    const plan = this.getOrComputePlan(config.accountId, now, config.timezone, config.mode);
+    const account = this.repository.findAccount(config.accountId);
+    const effectiveTimezone = account?.timezone || config.timezone;
+    const plan = this.getOrComputePlan(config.accountId, now, effectiveTimezone, config.mode);
     const dailyUsage = getLinkedinExecutorDailyUsage(
       this.database,
       config.accountId,
-      linkedinLocalDayStart(now, config.timezone).toISOString(),
+      linkedinLocalDayStart(now, effectiveTimezone).toISOString(),
     );
-    const decision = (this.decideFn ?? decide)(plan, now, dailyUsage.pageCount, config.timezone);
+    const decision = (this.decideFn ?? decide)(plan, now, dailyUsage.pageCount, effectiveTimezone);
     if (decision.status !== 'run') return report(decision.status);
 
-    const account = this.repository
-      .list({ limit: 200, offset: 0 })
-      .accounts.find((entry) => entry.id === config.accountId);
     if (!account) return report('account_not_ready');
     if (account.state === 'user_action_required' && account.lastFailureCode === 'needs_reauth') {
       return this.blockForReauth('login_required');
@@ -210,10 +209,10 @@ export class LinkedinPoolCompanyPageExecutor {
     if (dailyUsage.pageCount > 0) {
       await this.waitBetweenPages(detectCadencePageKind(linkedinCompanySearchUrl(companyName)));
       if (this.stopped) return report('stopped');
-      const midDecision = (this.decideFn ?? decide)(plan, this.now(), dailyUsage.pageCount, config.timezone);
+      const midDecision = (this.decideFn ?? decide)(plan, this.now(), dailyUsage.pageCount, effectiveTimezone);
       if (midDecision.status !== 'run') return report(midDecision.status);
     }
-    return this.collectCompany(account.id, companyName, session.cookies, plan, dailyUsage.pageCount);
+    return this.collectCompany(account.id, companyName, session.cookies, plan, dailyUsage.pageCount, effectiveTimezone);
   }
 
   private async readReadySession(
@@ -258,6 +257,7 @@ export class LinkedinPoolCompanyPageExecutor {
     cookies: readonly LinkedinSessionCookie[],
     plan: DayPlan,
     pagesBefore: number,
+    timezone: string,
   ): Promise<LinkedinPoolExecutorReport> {
     const hash = companyHash(companyName);
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
@@ -275,7 +275,7 @@ export class LinkedinPoolCompanyPageExecutor {
     await this.waitBetweenPages(detectCadencePageKind(peopleUrl));
     if (this.stopped) return report('stopped', 1, 0);
     if (!this.config.enabled) return report('disabled', 1, 0);
-    const midDecision = (this.decideFn ?? decide)(plan, this.now(), pagesBefore + 1, this.config.timezone);
+    const midDecision = (this.decideFn ?? decide)(plan, this.now(), pagesBefore + 1, timezone);
     if (midDecision.status !== 'run') return report(midDecision.status, 1, 0);
 
     const people = await this.readPage(page, peopleUrl, 'company_people', hash);
