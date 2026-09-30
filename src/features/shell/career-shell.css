@@ -11636,8 +11636,13 @@
   font-size: var(--career-text-xs);
 }
 
+/* The coverage list floats under the chip. As an in-flow flex sibling it
+   stretched the pill summary into a tall oval and pushed the hh.ru chip to
+   the next line in the .app (B331). */
 .career-profile-screen-source-chip {
+  position: relative;
   display: inline-flex;
+  align-items: flex-start;
 }
 
 .career-profile-screen-source-chip summary {
@@ -11660,7 +11665,13 @@
 }
 
 .career-profile-screen-source-chip .career-profile-screen-coverage {
-  margin: var(--career-space-2) 0 0;
+  position: absolute;
+  top: calc(100% + var(--career-space-2));
+  left: 0;
+  z-index: 6;
+  min-width: 240px;
+  box-shadow: 0 12px 32px oklch(0% 0 0 / 0.4);
+  margin: 0;
   padding: var(--career-space-3);
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-sm);

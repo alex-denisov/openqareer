@@ -42,7 +42,9 @@ export function compareBuildToRelease(buildSha: string, releaseSha: string | nul
 export function buildFreshnessLine(state: BuildFreshness): string {
   if (state.kind === 'current') return 'Сборка совпадает с продакшеном.';
   if (state.kind === 'outdated') {
-    return `Эта сборка отстала от продакшена — там уже ${state.releaseSha}. Установите свежую.`;
+    // A SHA alone cannot say which side is newer: a local build ahead of an
+    // undeployed main read as «отстала» (B331). Say what is known.
+    return `Сборка отличается от продакшена (там ${state.releaseSha}). Если она старше — установите свежую.`;
   }
   return state.reason === 'build-unmarked'
     ? 'Сборка не помечена, поэтому сравнить её с продакшеном нельзя.'

@@ -188,7 +188,9 @@ describe('Candidate Action Routes (B261)', () => {
     // not land in quiet hours when CI happens to run at night (B331).
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const { app, candidateToken, candidateId, capabilityConsentStore } = await createTestEnv();
 
     // Directly record consent for test
