@@ -62,6 +62,22 @@
           linkedinAccountMarker = profileMatch ? profileMatch[1] : null;
         } catch (_profileError) {}
       }
+      // LinkedIn's current navigation no longer wraps the "Me" photo in a
+      // profile link, so the marker above stays empty on a signed-in feed
+      // (B325). The account's own profile page is unambiguous: only its owner
+      // sees the edit controls, so the slug comes from the address.
+      var ownProfilePath = /^\/in\/([^/?#]+)\/?$/u.exec(path);
+      var ownProfileControls =
+        q(
+          '[data-view-name="profile-edit-button"],button[aria-label*="Edit profile" i],button[aria-label*="Редактировать профиль" i]',
+        ) || /(edit profile|редактировать профиль|private to you|видно только вам)/i.test(text);
+      if (!linkedinAccountMarker && ownProfilePath && ownProfileControls) {
+        try {
+          linkedinAccountMarker = decodeURIComponent(ownProfilePath[1]);
+        } catch (_decodeError) {
+          linkedinAccountMarker = ownProfilePath[1];
+        }
+      }
     }
     var linkedinAuthenticatedRoute =
       /^\/(?:feed|mynetwork|jobs|messaging|notifications|search)(?:\/|$)/i.test(path) ||

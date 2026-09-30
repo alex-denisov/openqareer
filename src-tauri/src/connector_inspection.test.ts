@@ -68,4 +68,16 @@ describe('connector inspection script', () => {
       }),
     ).toMatchObject({ signedInApplicant: true, accountMarker: null });
   });
+
+  it('takes the marker from the address on the account own profile page (B325)', () => {
+    expect(
+      inspect({ pathname: '/in/emmy-rupp-123/', body: 'Emmy Rupp\nEdit profile\nPrivate to you' }),
+    ).toMatchObject({ signedInApplicant: true, accountMarker: 'emmy-rupp-123' });
+  });
+
+  it('does not take the marker from someone else\'s profile page', () => {
+    expect(
+      inspect({ pathname: '/in/someone-else/', body: 'Someone Else\nConnect\nMessage' }),
+    ).toMatchObject({ accountMarker: null });
+  });
 });

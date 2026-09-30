@@ -22,6 +22,12 @@ const ADMIN_WAITING_COPY: Record<SessionWaitingStage, string> = {
   unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
 };
 
+/** The admin closed the LinkedIn window: not a failure, just the end of this check (B325). */
+export function isClosedSessionWindow(reason: unknown): boolean {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  return message.includes('session_window_missing');
+}
+
 export function isSafeAdminLinkedinSessionPage(page: SessionInspectionResult): boolean {
   try {
     const url = new URL(page.url);
@@ -83,6 +89,14 @@ export function useAdminLinkedinLoginPolling(
         page = await inspectSessionPage('linkedin', activeLogin.sessionKey);
       } catch (reason: unknown) {
         if (cancelled) return;
+        if (isClosedSessionWindow(reason)) {
+          finished = true;
+          setActiveLogin(undefined);
+          setError(undefined);
+          setNotice('Окно LinkedIn закрыто до подтверждения входа. Нажмите «Проверить в приложении» ещё раз.');
+          refresh();
+          return;
+        }
         inspectionFailures += 1;
         if (inspectionFailures < 12) {
           setNotice('Окно LinkedIn загружается. Повторяем проверку сессии…');
