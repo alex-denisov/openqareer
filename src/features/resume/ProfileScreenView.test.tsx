@@ -223,6 +223,18 @@ describe('ProfileScreenSurface — states', () => {
     expect(documentsHtml).not.toContain('sec-experience');
   });
 
+  it('D24: после выбора вкладки "documents" содержимое документа раскрыто сразу без дублирующей кнопки', () => {
+    const documentsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="documents" />,
+    );
+    // Содержимое документа видно сразу
+    expect(documentsHtml).toContain('career-profile-screen-document-menu');
+    expect(documentsHtml).toContain('Формат позиционирования');
+    expect(documentsHtml).toContain('Экспорт резюме');
+    // Нет дублирующей кнопки со свертыванием
+    expect(documentsHtml).not.toContain('>Документ и форматы</button>');
+  });
+
   // Owner acceptance 2026-09-25: the self-audit view was orphaned behind a
   // dead host after B248 — it must reach the candidate through the profile
   // screen's own tab row, not a screen nobody renders.
