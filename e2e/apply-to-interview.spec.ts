@@ -445,6 +445,12 @@ async function walkChain(page: Page): Promise<void> {
     .locator('.vacancies-detail-col')
     .getByRole('button', { name: 'Откликнуться' });
   await applyButton.click();
+  // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
+  await expect(page.locator('.vacancies-detail-col')).not.toContainText('Отклик отмечен');
+  await page
+    .locator('.vacancies-detail-col')
+    .getByRole('button', { name: 'Да, отклик отправлен' })
+    .click();
   await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });
   await expect(goToResponses).toBeVisible();

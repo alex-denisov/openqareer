@@ -436,6 +436,8 @@ function ExternalApplyButton({
   readonly showUnsavedError: boolean;
   readonly onApply: () => void;
 }) {
+  // B341: открытие сайта ещё не отклик — отмечаем только по подтверждению.
+  const [opened, setOpened] = useState(false);
   return (
     <>
       <button
@@ -444,11 +446,20 @@ function ExternalApplyButton({
         onClick={() => {
           onApply();
           void openExternalLink(cluster.primaryUrl);
-          applications?.record(cluster.id, 'applied', vacancySnapshot(cluster));
+          setOpened(true);
         }}
       >
         Откликнуться
       </button>
+      {opened ? (
+        <button
+          type="button"
+          className="vacancies-btn"
+          onClick={() => applications?.record(cluster.id, 'applied', vacancySnapshot(cluster))}
+        >
+          Да, отклик отправлен
+        </button>
+      ) : null}
       {showUnsavedError && applications?.unsaved.has(cluster.id) ? (
         <p className="vacancies-interview-error" role="alert">
           Не удалось сохранить отклик. Состояние не изменено.

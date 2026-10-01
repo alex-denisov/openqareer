@@ -303,13 +303,24 @@ function AppliedActions({
 
 function NotAppliedActions({
   savingApplied,
+  externalOpened,
   onApplyExternal,
+  onConfirmSent,
   onConfirmAlreadyApplied,
 }: {
   readonly savingApplied: boolean;
+  readonly externalOpened: boolean;
   readonly onApplyExternal: () => void;
+  readonly onConfirmSent: () => void;
   readonly onConfirmAlreadyApplied?: () => void;
 }) {
+  if (externalOpened) {
+    return (
+      <button type="button" className="btn btn-primary action-btn" onClick={onConfirmSent}>
+        Да, отклик отправлен
+      </button>
+    );
+  }
   return (
     <>
       <button type="button" className="btn btn-primary action-btn" onClick={onApplyExternal}>
@@ -334,7 +345,9 @@ interface ActionButtonsProps {
   readonly savingApplied: boolean;
   readonly onOpenResponses?: () => void;
   readonly onToggleSchedule?: () => void;
+  readonly externalOpened: boolean;
   readonly onApplyExternal: () => void;
+  readonly onConfirmSent: () => void;
   readonly onConfirmAlreadyApplied?: () => void;
   readonly onOpenNetworking?: () => void;
   readonly onOpenInfo: () => void;
@@ -346,7 +359,9 @@ function VacancyActionButtons({
   savingApplied,
   onOpenResponses,
   onToggleSchedule,
+  externalOpened,
   onApplyExternal,
+  onConfirmSent,
   onConfirmAlreadyApplied,
   onOpenNetworking,
   onOpenInfo,
@@ -359,7 +374,9 @@ function VacancyActionButtons({
       ) : (
         <NotAppliedActions
           savingApplied={savingApplied}
+          externalOpened={externalOpened}
           onApplyExternal={onApplyExternal}
+          onConfirmSent={onConfirmSent}
           onConfirmAlreadyApplied={onConfirmAlreadyApplied}
         />
       )}
@@ -517,8 +534,13 @@ function useVacancyRowState({
   const appliedState = useVacancyRowApplied(cluster, onMarkAlreadyApplied);
   const application = applications?.byCluster.get(cluster.id);
 
+  // B341: открытие сайта ещё не отклик — отмечаем только по подтверждению.
+  const [externalOpened, setExternalOpened] = useState(false);
   const handleApplyExternal = () => {
     void openExternalLink(cluster.primaryUrl);
+    setExternalOpened(true);
+  };
+  const handleConfirmSent = () => {
     applications?.record(cluster.id, 'applied', vacancySnapshot(cluster));
   };
 
@@ -533,6 +555,8 @@ function useVacancyRowState({
     interviewState,
     appliedState,
     handleApplyExternal,
+    externalOpened,
+    handleConfirmSent,
   };
 }
 
@@ -602,6 +626,18 @@ function DetailInterviewSection({
   );
 }
 
+function externalApplyProps(rowState: {
+  readonly externalOpened: boolean;
+  readonly handleApplyExternal: () => void;
+  readonly handleConfirmSent: () => void;
+}) {
+  return {
+    externalOpened: rowState.externalOpened,
+    onApplyExternal: rowState.handleApplyExternal,
+    onConfirmSent: rowState.handleConfirmSent,
+  };
+}
+
 function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const matchingPoints = explanation.matchingPoints ?? [];
   const missingPoints = explanation.missingPoints ?? [];
@@ -637,7 +673,7 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
             ? () => interviewState.setScheduleOpen((prev) => !prev)
             : undefined
         }
-        onApplyExternal={rowState.handleApplyExternal}
+        {...externalApplyProps(rowState)}
         onConfirmAlreadyApplied={
           rowProps.onMarkAlreadyApplied
             ? () => void appliedState.handleConfirmAlreadyApplied()

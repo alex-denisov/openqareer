@@ -10,6 +10,7 @@ import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/appli
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { ApplicationView } from './applicationsApi';
+import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
@@ -21,10 +22,6 @@ const STAGE_LABEL: Record<ApplicationStage, string> = {
   rejected: 'Отказ',
   archived: 'Архив',
 };
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface ResponsesCardProps {
   readonly application: ApplicationView;
@@ -412,7 +409,7 @@ function StageChangeControl({
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
 }) {
   const [nextStage, setNextStage] = useState<ApplicationStage>(stage);
-  const [occurredAt, setOccurredAt] = useState(todayIsoDate());
+  const [occurredAt, setOccurredAt] = useState(() => localIsoDate());
   const dirty = nextStage !== stage;
   const movingToInterview = nextStage === 'interview';
   return (

@@ -172,6 +172,15 @@ describe('VacancyDetailPanel (B250)', () => {
       button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(openSpy).toHaveBeenCalledWith('https://example.com/vacancy');
+    // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
+    expect(record).not.toHaveBeenCalled();
+    const confirm = Array.from(container.querySelectorAll('button')).find(
+      (el) => el.textContent === 'Да, отклик отправлен',
+    );
+    expect(confirm).toBeDefined();
+    act(() => {
+      confirm?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     expect(record).toHaveBeenCalledWith(
       'c-1',
       'applied',
