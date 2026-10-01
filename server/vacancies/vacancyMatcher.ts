@@ -117,7 +117,65 @@ function evaluateRole(targetRoles: string[], vacancyTitle: string) {
  * правилами, а не из подстроки. Единственное смежное исключение — продуктовые
  * роли для Eng/Ops кампаний; остальные несовпадения остаются `none`.
  */
-function evaluateSemanticRole(
+const NON_TECH_SECTOR_FUNCTIONS: ReadonlySet<FunctionCode> = new Set([
+  'healthcare',
+  'retail',
+  'hospitality',
+  'education',
+  'logistics',
+  'real-estate',
+  'construction',
+  'agriculture',
+  'manufacturing',
+]);
+
+const TECH_FUNCTIONS: ReadonlySet<FunctionCode> = new Set([
+  'eng',
+  'eng-mgmt',
+  'it-ops',
+  'data',
+  'ai-ml',
+  'security',
+  'qa',
+  'product',
+]);
+
+function isNonTechNoise(functions: readonly FunctionCode[]): boolean {
+  const hasNonTechSector = functions.some((code) => NON_TECH_SECTOR_FUNCTIONS.has(code));
+  const hasTechFunction = functions.some((code) => TECH_FUNCTIONS.has(code));
+  return hasNonTechSector && !hasTechFunction;
+}
+
+function determineRoleMatchPoints(
+  parsedLevelRank: number | null,
+  targetRank: number | undefined,
+  adjacentProductRole: boolean,
+): { roleMatch: VacancyRoleMatch; matchingPoints: string[] } {
+  const distance =
+    targetRank !== undefined && parsedLevelRank !== null
+      ? Math.abs(parsedLevelRank - targetRank)
+      : undefined;
+  const roleMatch: VacancyRoleMatch = adjacentProductRole
+    ? 'partial'
+    : distance === 0
+      ? 'target'
+      : 'partial';
+  if (adjacentProductRole) {
+    return { roleMatch, matchingPoints: ['Смежная продуктовая роль вне семейств кампании.'] };
+  }
+  return {
+    roleMatch,
+    matchingPoints: [
+      roleMatch === 'target'
+        ? 'Функция роли и уровень совпадают по разбору названия.'
+        : targetRank === undefined
+          ? 'Функция роли совпадает; уровень кандидата неизвестен.'
+          : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
+    ],
+  };
+}
+
+export function evaluateSemanticRole(
   roleFunctions: readonly FunctionCode[],
   targetLevel: SeniorityLevel | undefined,
   vacancyTitle: string,
@@ -128,45 +186,30 @@ function evaluateSemanticRole(
   const containsOtherCommercialFunction = (['sales', 'marketing'] as const).some((code) =>
     !roleFunctions.includes(code) && (parsed.functions.includes(code) || titleWords.has(code)),
   );
+
+  if (containsOtherCommercialFunction || isNonTechNoise(parsed.functions)) {
+    return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
+  }
+
+  // §3.4: Доверие к SQL. Если правила не нашли функций вовсе, вакансия не отбрасывается.
+  if (parsed.functions.length === 0) {
+    matchingPoints.push('Функция определена разбором названия при сборе.');
+    return { roleMatch: 'partial' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
+  }
+
   const primaryFunction = parsed.functions[0];
   const hasTargetFunction = parsed.functions.some((code) => roleFunctions.includes(code));
   const adjacentProductRole =
     PRODUCT_ADJACENT_CAMPAIGN_FUNCTIONS.some((code) => roleFunctions.includes(code)) &&
     parsed.functions.includes('product') &&
     (!primaryFunction || !roleFunctions.includes(primaryFunction));
-  if (
-    containsOtherCommercialFunction ||
-    (!hasTargetFunction && !adjacentProductRole)
-  ) {
+  if (!hasTargetFunction && !adjacentProductRole) {
     return { roleMatch: 'none' as VacancyRoleMatch, matchingPoints, adjacentRole: false };
   }
 
   const targetRank = targetLevel ? LEVEL_RANK[targetLevel] : undefined;
-  // Semantic SQL already limits persisted title_parse.level_rank to the
-  // candidate's level and its adjacent step. The rules parser can disagree
-  // with a persisted/model parse, so it must not reject an SQL-selected item.
-  const distance =
-    targetRank !== undefined && parsed.levelRank !== null
-      ? Math.abs(parsed.levelRank - targetRank)
-      : undefined;
-  const roleMatch: VacancyRoleMatch = adjacentProductRole
-    ? 'partial'
-    : distance === 0
-      ? 'target'
-      : 'partial';
-  if (adjacentProductRole) {
-    matchingPoints.push('Смежная продуктовая роль вне семейств кампании.');
-  }
-  if (!adjacentProductRole) {
-    matchingPoints.push(
-      roleMatch === 'target'
-        ? 'Функция роли и уровень совпадают по разбору названия.'
-        : targetRank === undefined
-          ? 'Функция роли совпадает; уровень кандидата неизвестен.'
-          : 'Функция роли совпадает; уровень отобран семантическим фильтром.',
-    );
-  }
-  return { roleMatch, matchingPoints, adjacentRole: adjacentProductRole };
+  const points = determineRoleMatchPoints(parsed.levelRank, targetRank, adjacentProductRole);
+  return { roleMatch: points.roleMatch, matchingPoints: points.matchingPoints, adjacentRole: adjacentProductRole };
 }
 
 const ROLE_SENTENCE: Record<VacancyRoleMatch, string> = {

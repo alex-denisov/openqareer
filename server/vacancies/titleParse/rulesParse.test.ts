@@ -293,4 +293,37 @@ describe('rulesParse (B267 S1)', () => {
     const accuracy = (GOLDEN_SET.length - misses.length) / GOLDEN_SET.length;
     expect(accuracy, `misses:\n${misses.join('\n')}`).toBeGreaterThanOrEqual(0.85);
   });
+
+  it('распознаёт IT-руководящие названия из набора B338-3', () => {
+    const requiredTitles: readonly [string, string][] = [
+      ['it manager', 'it-ops'],
+      ['it director', 'it-ops'],
+      ['sr. director, it portfolio leader', 'it-ops'],
+      ['it portfolio', 'it-ops'],
+      ['infrastructure engineer', 'it-ops'],
+      ['cloud engineering manager', 'eng-mgmt'],
+      ['solution architects', 'eng-mgmt'],
+      ['data centers director', 'it-ops'],
+      ['head of digital transformation', 'eng-mgmt'],
+      ['директор по информационным технологиям', 'it-ops'],
+      ['ИТ-директор', 'it-ops'],
+      ['руководитель отдела ИТ', 'it-ops'],
+      ['руководитель отдела разработки', 'eng-mgmt'],
+      ['руководитель отдела эксплуатации', 'it-ops'],
+      ['руководитель сетевого отдела', 'it-ops'],
+      ['технический директор', 'eng-mgmt'],
+      ['CTO', 'eng-mgmt'],
+      ['CIO', 'it-ops'],
+      ['CDO', 'eng-mgmt'],
+    ];
+
+    for (const [title, expectedFunc] of requiredTitles) {
+      const { functions } = rulesParse(title);
+      expect(
+        functions,
+        `title "${title}" should include function "${expectedFunc}", got: [${functions.join(', ')}]`,
+      ).toContain(expectedFunc);
+    }
+  });
 });
+

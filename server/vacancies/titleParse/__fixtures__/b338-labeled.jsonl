@@ -1,0 +1,340 @@
+{"f":"exec-general","t":"заведующая/заведующий детским образовательным учреждением","expected":"irrelevant"}
+{"f":"exec-general","t":"директор","expected":"unclear"}
+{"f":"exec-general","t":"руководитель филиала","expected":"unclear"}
+{"f":"eng-mgmt","t":"директор по техническому развитию","expected":"relevant"}
+{"f":"eng-mgmt","t":"технический директор","expected":"relevant"}
+{"f":"eng-mgmt","t":"руководитель конструкторского бюро","expected":"irrelevant"}
+{"f":"exec-general","t":"руководитель в типографию","expected":"irrelevant"}
+{"f":"it-ops","t":"начальник отделения филиала","expected":"irrelevant"}
+{"f":"exec-general","t":"генеральный директор автосервиса","expected":"irrelevant"}
+{"f":"exec-general","t":"генеральный директор скорой медицинской помощи","expected":"unclear"}
+{"f":"it-ops","t":"ит-менеджер","expected":"unclear"}
+{"f":"exec-general","t":"директор филиала","expected":"unclear"}
+{"f":"it-ops","t":"руководитель отдела информационных технологий","expected":"unclear"}
+{"f":"it-ops","t":"руководитель отдела инфраструктуры / lead devops / head of infrastructure","expected":"relevant"}
+{"f":"exec-general","t":"менеджер филиала","expected":"unclear"}
+{"f":"eng-mgmt","t":"технический руководитель","expected":"unclear"}
+{"f":"exec-general","t":"исполнительный директор","expected":"unclear"}
+{"f":"exec-general","t":"директор агентства","expected":"irrelevant"}
+{"f":"it-ops","t":"начальник отдела эксплуатации","expected":"unclear"}
+{"f":"it-ops","t":"руководитель направления систем связи и телефонии","expected":"unclear"}
+{"f":"it-ops","t":"начальник отдела эксплуатации приборов учёта службы реализации услуг нергии комсомол","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"руководитель по развитию информационных технологий","expected":"unclear"}
+{"f":"eng-mgmt","t":"начальник энергоучастка","expected":"irrelevant"}
+{"f":"exec-general","t":"начальник центра","expected":"unclear"}
+{"f":"exec-general","t":"генеральный директор/исполнительный директор","expected":"relevant"}
+{"f":"exec-general","t":"первый заместитель директора гку яо \"центр организации дорожного движения\"","expected":"unclear"}
+{"f":"it-ops","t":"начальник отдела эксплуатации информационных систем","expected":"unclear"}
+{"f":"exec-general","t":"руководитель направления","expected":"unclear"}
+{"f":"exec-general","t":"генеральный директор","expected":"unclear"}
+{"f":"eng-mgmt","t":"начальник электротехнической лаборатории","expected":"irrelevant"}
+{"f":"exec-general","t":"генеральный директор тревел-дивизиона","expected":"irrelevant"}
+{"f":"exec-general","t":"исполнительный директор агентства недвижимости","expected":"irrelevant"}
+{"f":"exec-general","t":"директор фитнес-клуба","expected":"unclear"}
+{"f":"exec-general","t":"управляющий сельскохозяйственным предприятием","expected":"unclear"}
+{"f":"eng-mgmt","t":"главный инженер на производство","expected":"irrelevant"}
+{"f":"exec-general","t":"заместитель операционного директора","expected":"unclear"}
+{"f":"it-ops","t":"начальник компьютерного обеспечения","expected":"relevant"}
+{"f":"exec-general","t":"директор охранного предприятия","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель it отдела","expected":"relevant"}
+{"f":"eng-mgmt","t":"начальник проектно-конструкторской лаборатории проектирования электромонтажа","expected":"irrelevant"}
+{"f":"exec-general","t":"заместитель министра","expected":"unclear"}
+{"f":"eng-mgmt","t":"руководитель проектного отдела","expected":"unclear"}
+{"f":"it-ops","t":"руководитель отдела управления ит-сервисами","expected":"unclear"}
+{"f":"exec-general","t":"директор пневматического тира","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"руководитель конструкторского отдела","expected":"unclear"}
+{"f":"exec-general","t":"управляющий филиала","expected":"unclear"}
+{"f":"it-ops","t":"руководитель отдела внедрения","expected":"relevant"}
+{"f":"exec-general","t":"управляющая/управляющий филиалами","expected":"unclear"}
+{"f":"exec-general","t":"генеральный директор чоо","expected":"irrelevant"}
+{"f":"exec-general","t":"руководитель филиала производства","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"техлид ai-направления","expected":"relevant"}
+{"f":"exec-general","t":"управляющий директор","expected":"unclear"}
+{"f":"eng-mgmt","t":"руководитель группы разработки","expected":"relevant"}
+{"f":"it-ops","t":"руководитель it-отдела","expected":"relevant"}
+{"f":"exec-general","t":"национальный директор","expected":"unclear"}
+{"f":"exec-general","t":"директор филиала вип центр","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"руководитель ит отдела","expected":"relevant"}
+{"f":"eng-mgmt","t":"начальник электроцеха","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"начальник энергоцентра","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель центра цифрового образования","expected":"relevant"}
+{"f":"exec-general","t":"управляющая/управляющий/директор","expected":"unclear"}
+{"f":"exec-general","t":"руководитель атомного направления","expected":"irrelevant"}
+{"f":"exec-general","t":"директор бизнес-региона","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"руководитель отдела it","expected":"relevant"}
+{"f":"exec-general","t":"управляющий филиалом","expected":"unclear"}
+{"f":"eng-mgmt","t":"руководитель департамента инжиниринга / технический директор","expected":"relevant"}
+{"f":"exec-general","t":"заместитель руководителя","expected":"unclear"}
+{"f":"it-ops","t":"руководитель ит отдела в отель","expected":"relevant"}
+{"f":"exec-general","t":"директор региона","expected":"unclear"}
+{"f":"exec-general","t":"исполнительный директор iq club","expected":"unclear"}
+{"f":"eng-mgmt","t":"заместитель технического директора","expected":"relevant"}
+{"f":"exec-general","t":"ceo / исполнительный директор","expected":"unclear"}
+{"f":"eng-mgmt","t":"начальник управления эксплуатации трубопроводов","expected":"irrelevant"}
+{"f":"exec-general","t":"директор digital-рекламного агентства ns premium","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"инженер-схемотехник/ главный конструктор","expected":"unclear"}
+{"f":"exec-general","t":"генеральный директор центра отдыха \"притомье\"","expected":"relevant"}
+{"f":"exec-general","t":"первый заместитель директора","expected":"unclear"}
+{"f":"eng-mgmt","t":"руководитель технической функции","expected":"relevant"}
+{"f":"it-ops","t":"руководитель инфраструктурных проектов / координатор эксплуатации ис","expected":"relevant"}
+{"f":"exec-general","t":"руководитель обособленного подразделения","expected":"unclear"}
+{"f":"it-ops","t":"руководитель отдела it-инфраструктуры и техподдержки","expected":"relevant"}
+{"f":"exec-general","t":"директор представительства","expected":"unclear"}
+{"f":"exec-general","t":"ceo / управляющий директор онлайн-школы","expected":"unclear"}
+{"f":"exec-general","t":"руководитель детского развивающего центра","expected":"irrelevant"}
+{"f":"exec-general","t":"заместитель генерального директора по организационным вопросам","expected":"unclear"}
+{"f":"eng-mgmt","t":"руководитель отдела разработки электроники","expected":"relevant"}
+{"f":"it-ops","t":"руководитель проекта по эксплуатации информационных систем","expected":"relevant"}
+{"f":"exec-general","t":"деректор управляющей компании","expected":"unclear"}
+{"f":"exec-general","t":"руководитель сельхозпредприятия","expected":"irrelevant"}
+{"f":"exec-general","t":"управляющий автопредприятия","expected":"irrelevant"}
+{"f":"eng-mgmt,it-ops","t":"ит-директор / руководитель ит и автоматизации","expected":"relevant"}
+{"f":"eng-mgmt","t":"зам.генерального директора/технический директор","expected":"relevant"}
+{"f":"eng-mgmt","t":"производственный директор / технический директор","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"руководитель технического отдела","expected":"relevant"}
+{"f":"it-ops","t":"начальник отдела строительства, эксплуатации и материально-технического обеспечения управления","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"начальник электроучастка","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"e-commerce tech lead / технический директор cto","expected":"relevant"}
+{"f":"it-ops","t":"руководитель по эксплуатации и ремонту","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"руководитель отдела разработки 1с","expected":"relevant"}
+{"f":"eng-mgmt","t":"руководитель в области информационной безопасности департамента цифровой трансформации","expected":"relevant"}
+{"f":"it-ops","t":"ит-директор","expected":"relevant"}
+{"f":"it-ops","t":"руководитель по автоматизации складских процессов","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель эксплуатации магазинов","expected":"irrelevant"}
+{"f":"eng-mgmt,it-ops","t":"начальник it отдела","expected":"relevant"}
+{"f":"exec-general","t":"директор филиала магазинов \"магнит у дома\" в г. уфа","expected":"irrelevant"}
+{"f":"exec-general","t":"директор филиала магазинов \"магнит у дома\"","expected":"irrelevant"}
+{"f":"exec-general","t":"генеральный директор аутсорсинговой компании","expected":"unclear"}
+{"f":"exec-general","t":"ceo saas apps / руководитель направления подписочных приложений","expected":"relevant"}
+{"f":"eng-mgmt","t":"начальник электрического цеха тэц","expected":"irrelevant"}
+{"f":"exec-general","t":"директор спортивного направления","expected":"irrelevant"}
+{"f":"it-ops","t":"директор по информационным технологиям / cdto","expected":"relevant"}
+{"f":"it-ops","t":"руководитель отдела сопровождения","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"руководитель отдела автоматизации","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"ит лидер кластера","expected":"relevant"}
+{"f":"exec-general","t":"начальник культурно-досугового центра","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель направления сопровождения карточного процессинга","expected":"relevant"}
+{"f":"exec-general","t":"руководитель филиала транспортной компании","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель технической службы","expected":"relevant"}
+{"f":"it-ops","t":"руководитель центра автоматизации и аналитики персонала","expected":"relevant"}
+{"f":"it-ops","t":"директор по информационным технологиям","expected":"relevant"}
+{"f":"exec-general","t":"директор по стратегии","expected":"unclear"}
+{"f":"eng-mgmt","t":"начальник электролаборатории, луганск","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"руководитель монтажного отдела","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"head of engineering / руководитель разработки","expected":"relevant"}
+{"f":"exec-general","t":"управляющий обособленным подразделением","expected":"unclear"}
+{"f":"exec-general","t":"руководитель студии комплексного развития \"я расту\"","expected":"irrelevant"}
+{"f":"exec-general","t":"руководитель регионального офиса","expected":"unclear"}
+{"f":"eng-mgmt","t":"директор по разработке","expected":"relevant"}
+{"f":"exec-general","t":"руководитель территориального подразделения","expected":"unclear"}
+{"f":"exec-general","t":"руководитель учреждения","expected":"unclear"}
+{"f":"eng-mgmt","t":"технический директор группы управляющих компаний","expected":"relevant"}
+{"f":"exec-general","t":"руководитель/управляющий","expected":"unclear"}
+{"f":"exec-general","t":"руководитель сферы образования региона","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"технический директор асутп энергетика","expected":"relevant"}
+{"f":"it-ops","t":"руководитель отдела управления сервисом и аутсорсингом","expected":"unclear"}
+{"f":"it-ops","t":"начальник отдела эксплуатации комплексов связи","expected":"relevant"}
+{"f":"eng-mgmt","t":"технический директор-начальник котельной","expected":"irrelevant"}
+{"f":"it-ops","t":"руководитель корпоративных проектов 1с","expected":"relevant"}
+{"f":"eng-mgmt","t":"начальник энергомеханического отдела","expected":"irrelevant"}
+{"f":"exec-general","t":"директор филиала таксопарка","expected":"irrelevant"}
+{"f":"eng-mgmt,it-ops","t":"начальник службы асу","expected":"relevant"}
+{"f":"eng-mgmt","t":"начальник бюро промышленной электроники","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"начальник солнечной электростанции","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"руководитель инжинирингового центра","expected":"relevant"}
+{"f":"exec-general","t":"руководитель филиала по натяжным потолкам","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"заместитель начальника инженерно-технического отдела","expected":"relevant"}
+{"f":"it-ops","t":"руководитель отдела системного администрирования","expected":"relevant"}
+{"f":"exec-general","t":"начальник аппарата","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"ит директор","expected":"relevant"}
+{"f":"exec-general","t":"заместитель генерального директора / coo / коммерческий директор","expected":"unclear"}
+{"f":"exec-general","t":"заместитель директора дивизиона по техническим вопросам","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"тимлид отдела интеграции платежных решений","expected":"relevant"}
+{"f":"exec-general","t":"директор филиала / региональный менеджер сзфо","expected":"unclear"}
+{"f":"exec-general","t":"руководитель представительства","expected":"unclear"}
+{"f":"exec-general","t":"заместитель заведующего фармацевтической компанией","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"технический директор департамента 1с","expected":"relevant"}
+{"f":"exec-general","t":"руководитель направления в кыргызстане","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"начальник бюро внедрения и сопровождения","expected":"relevant"}
+{"f":"eng-mgmt","t":"гип/ведущий конструктор/технический директор","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"начальник отдела телекоммуникаций и эксплуатации сети","expected":"relevant"}
+{"f":"exec-general","t":"директор медицинского центра","expected":"irrelevant"}
+{"f":"exec-general","t":"операционный директор на производство безалкогольных напитков","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"заместитель руководителя технического департамента","expected":"relevant"}
+{"f":"exec-general","t":"начальник филиала","expected":"unclear"}
+{"f":"exec-general","t":"директор центра дополнительного образования","expected":"irrelevant"}
+{"f":"exec-general","t":"руководитель типографии","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"руководитель направление добавки в бетон/руководитель технической службы","expected":"irrelevant"}
+{"f":"exec-general","t":"директор ооо \"лдс-плюс\"","expected":"unclear"}
+{"f":"exec-general,it-ops","t":"руководитель филиала ит-компании","expected":"relevant"}
+{"f":"exec-general","t":"генеральный директор / ceo","expected":"unclear"}
+{"f":"it-ops","t":"it manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"r&d engineering, director","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff / strategic projects manager","expected":"unclear"}
+{"f":"it-ops","t":"sr. director, it portfolio leader","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior manager, software engineering","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"head of it department","expected":"relevant"}
+{"f":"it-ops","t":"data center","expected":"relevant"}
+{"f":"it-ops","t":"director, commercial platforms & customer capabilities","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff","expected":"unclear"}
+{"f":"exec-general","t":"regional manager","expected":"unclear"}
+{"f":"exec-general","t":"fòs feminista board of directors and standing committee members","expected":"relevant"}
+{"f":"exec-general,it-ops","t":"digital officer","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"/ executive director of technology","expected":"relevant"}
+{"f":"exec-general","t":"digitstat direktor o'rinbosari","expected":"unclear"}
+{"f":"eng-mgmt","t":"senior engineering & maintenance manager- projects","expected":"relevant"}
+{"f":"it-ops","t":"information systems manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"defense enterprise chief technology officer","expected":"relevant"}
+{"f":"exec-general","t":"regional leader","expected":"unclear"}
+{"f":"exec-general","t":"co-founder","expected":"unclear"}
+{"f":"eng-mgmt","t":"senior director, ad tech engineering, capital one shopping tech (","expected":"relevant"}
+{"f":"it-ops","t":"head data center","expected":"relevant"}
+{"f":"eng-mgmt","t":"vp of engineering","expected":"relevant"}
+{"f":"exec-general","t":"regional director","expected":"relevant"}
+{"f":"exec-general","t":"business head","expected":"unclear"}
+{"f":"it-ops","t":"senior director, infrastructure & capital projects","expected":"relevant"}
+{"f":"exec-general","t":"ai research lab chief of staff","expected":"relevant"}
+{"f":"eng-mgmt,exec-general","t":"int-7f85660","expected":"irrelevant"}
+{"f":"it-ops","t":"associate director of it operations","expected":"relevant"}
+{"f":"exec-general","t":"executive pastor or chief of staff and ministries","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"knowledge engineer / semantic expert for ai associate director","expected":"relevant"}
+{"f":"exec-general","t":"board chair","expected":"irrelevant"}
+{"f":"it-ops","t":"agm-ip operations","expected":"unclear"}
+{"f":"it-ops","t":"vice president of technology operations","expected":"relevant"}
+{"f":"eng-mgmt","t":"head of bess r&d and engineering","expected":"relevant"}
+{"f":"it-ops","t":"it solution delivery executive","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff, engineering","expected":"relevant"}
+{"f":"it-ops","t":"director of software applications and support","expected":"relevant"}
+{"f":"exec-general","t":"board of directors","expected":"relevant"}
+{"f":"exec-general","t":"regional vice president","expected":"unclear"}
+{"f":"exec-general","t":"area chief of staff","expected":"unclear"}
+{"f":"exec-general","t":"directeur de région","expected":"unclear"}
+{"f":"eng-mgmt","t":"leitung technische produktentwicklung","expected":"relevant"}
+{"f":"it-ops","t":"chief information officer","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"director, site reliability engineering","expected":"relevant"}
+{"f":"exec-general","t":"president","expected":"unclear"}
+{"f":"eng-mgmt","t":"director, software development","expected":"relevant"}
+{"f":"eng-mgmt","t":"engineering director","expected":"relevant"}
+{"f":"exec-general","t":"bord002: executive member of the board of directors","expected":"relevant"}
+{"f":"eng-mgmt","t":"director of engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"head of development","expected":"relevant"}
+{"f":"eng-mgmt,exec-general","t":"founding cto, ai legal tech","expected":"relevant"}
+{"f":"eng-mgmt","t":"director, software engineering","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"responsable senior innovation et gestion technologique","expected":"relevant"}
+{"f":"eng-mgmt","t":"dir security operations & engineering","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff to the ceo","expected":"unclear"}
+{"f":"it-ops","t":"director, technical success management","expected":"relevant"}
+{"f":"it-ops","t":"cio","expected":"relevant"}
+{"f":"eng-mgmt","t":"head of technical operations and np camo","expected":"irrelevant"}
+{"f":"it-ops","t":"director, global it","expected":"relevant"}
+{"f":"exec-general","t":"aotearoa board chair","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"cto / chief architect","expected":"relevant"}
+{"f":"exec-general","t":"regional managing director nordics","expected":"relevant"}
+{"f":"eng-mgmt","t":"director – analytics platform","expected":"relevant"}
+{"f":"it-ops","t":"senior director – it m&a integration & digital transformation","expected":"relevant"}
+{"f":"eng-mgmt","t":"cpto @breega","expected":"relevant"}
+{"f":"it-ops","t":"service manager","expected":"unclear"}
+{"f":"exec-general","t":"sr. director","expected":"relevant"}
+{"f":"exec-general","t":"senior director","expected":"relevant"}
+{"f":"eng-mgmt","t":"identity access management operations and engineering manager","expected":"relevant"}
+{"f":"it-ops","t":"senior manager, hardware deployment","expected":"relevant"}
+{"f":"it-ops","t":"senior manager, technical consulting","expected":"relevant"}
+{"f":"it-ops","t":"head of global technology services","expected":"relevant"}
+{"f":"eng-mgmt","t":"vp, cl, backend eng, wrb tech","expected":"relevant"}
+{"f":"exec-general","t":"ceo office","expected":"unclear"}
+{"f":"eng-mgmt","t":"sr. manager, ai engineer","expected":"relevant"}
+{"f":"eng-mgmt","t":"responsable technique – ingénierie électromécanique & production","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"head of engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"director, shopify engineering","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"engineering manager, site reliability engineering","expected":"relevant"}
+{"f":"exec-general","t":"gm data strategy, management and governance","expected":"relevant"}
+{"f":"exec-general","t":"mobility chief of staff","expected":"unclear"}
+{"f":"eng-mgmt","t":"sr. manager, machine learning engineering, ads measurement products","expected":"relevant"}
+{"f":"exec-general","t":"director, chief of staff","expected":"relevant"}
+{"f":"exec-general","t":"senior nursing executive","expected":"irrelevant"}
+{"f":"exec-general","t":"sr. director/general manager americas instrument services","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"site reliability engineering manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"director, ai engineer","expected":"relevant"}
+{"f":"it-ops","t":"directeur , opérations produit & technology","expected":"relevant"}
+{"f":"it-ops","t":"it operations manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"software engineering senior manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"hardware manager, switch design","expected":"relevant"}
+{"f":"eng-mgmt","t":"electrical and mechanical director","expected":"relevant"}
+{"f":"exec-general","t":"manta technologies: manager, strategy and corporate development","expected":"unclear"}
+{"f":"eng-mgmt,it-ops","t":"head of corporate applications","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior manager, process design engineering","expected":"relevant"}
+{"f":"exec-general","t":"assisterende direktør beskyttelse","expected":"irrelevant"}
+{"f":"it-ops","t":"head of infrastructure development and climate resiliency department","expected":"relevant"}
+{"f":"eng-mgmt","t":"technical director","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"director of devops / sre","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"director of technology","expected":"relevant"}
+{"f":"it-ops","t":"head of employee tech & experience","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"sr. manager, capacity engineering","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff and external relations","expected":"unclear"}
+{"f":"eng-mgmt","t":"head of digital transformation — insurance & investments","expected":"relevant"}
+{"f":"exec-general","t":"regional business director","expected":"relevant"}
+{"f":"exec-general","t":"fractional coo","expected":"irrelevant"}
+{"f":"it-ops","t":"senior manager, trading operations & it support – apac","expected":"relevant"}
+{"f":"it-ops","t":"cymer","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"director of digital transformation — insurance & investments","expected":"relevant"}
+{"f":"exec-general","t":"sr. director, cdo strategic growth","expected":"relevant"}
+{"f":"it-ops","t":"psoc manager","expected":"relevant"}
+{"f":"it-ops","t":"head of devops","expected":"relevant"}
+{"f":"eng-mgmt","t":"chief technology officer","expected":"relevant"}
+{"f":"exec-general","t":"special projects manager","expected":"unclear"}
+{"f":"eng-mgmt","t":"senior manager, system co-design manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior director of software engineering","expected":"relevant"}
+{"f":"exec-general","t":"chief sustainability officer","expected":"irrelevant"}
+{"f":"exec-general","t":"manager business unit","expected":"unclear"}
+{"f":"eng-mgmt","t":"avp, engineering & qa","expected":"relevant"}
+{"f":"eng-mgmt","t":"technical director civil & structures","expected":"relevant"}
+{"f":"eng-mgmt","t":"head of techncial excellence","expected":"relevant"}
+{"f":"eng-mgmt","t":"gd9","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"applied ai head of data engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"director of electrical engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior manager, mobile engineering","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"senior technology leadership professional","expected":"relevant"}
+{"f":"it-ops","t":"head of oracle service delivery management","expected":"relevant"}
+{"f":"it-ops","t":"senior manager, solution operations","expected":"relevant"}
+{"f":"it-ops","t":"director, health navigation solutions technology","expected":"relevant"}
+{"f":"it-ops","t":"hr technology director","expected":"relevant"}
+{"f":"eng-mgmt","t":"director, process engineer – dry etch","expected":"relevant"}
+{"f":"eng-mgmt","t":"suunnittelupäällikkö laitos- ja prosessisuunnitteluun","expected":"irrelevant"}
+{"f":"it-ops","t":"track manager","expected":"unclear"}
+{"f":"exec-general","t":"chief executive officer","expected":"unclear"}
+{"f":"exec-general","t":"executive director, chief operations officer","expected":"relevant"}
+{"f":"eng-mgmt","t":"sr manager, machine learning engineering","expected":"relevant"}
+{"f":"exec-general","t":"chief of staff, it business systems & digital employee experience","expected":"relevant"}
+{"f":"eng-mgmt","t":"product engineering manager, compute and storage","expected":"relevant"}
+{"f":"eng-mgmt","t":"manager of software development","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior director, ai engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"director engineering","expected":"relevant"}
+{"f":"exec-general","t":"sr. director, chief of staff","expected":"relevant"}
+{"f":"it-ops","t":"director, technology services","expected":"relevant"}
+{"f":"exec-general","t":"unit head","expected":"unclear"}
+{"f":"eng-mgmt","t":"mobile solution director","expected":"relevant"}
+{"f":"exec-general","t":"business unit manager","expected":"relevant"}
+{"f":"eng-mgmt","t":"director of engineering, platform","expected":"relevant"}
+{"f":"eng-mgmt","t":"r&d director of engineering","expected":"relevant"}
+{"f":"exec-general","t":"business head — new markets","expected":"unclear"}
+{"f":"it-ops","t":"group it manager","expected":"relevant"}
+{"f":"it-ops","t":"email deliverability","expected":"irrelevant"}
+{"f":"eng-mgmt","t":"asic / digital design director of engineering","expected":"relevant"}
+{"f":"exec-general","t":"operations manager / general manager","expected":"unclear"}
+{"f":"exec-general","t":"executive director, sustainability planning & strategy, asia pacific division","expected":"relevant"}
+{"f":"exec-general","t":"local leader","expected":"unclear"}
+{"f":"exec-general,it-ops","t":"senior vice president, data centers","expected":"relevant"}
+{"f":"eng-mgmt,it-ops","t":"head of business technology engineering","expected":"relevant"}
+{"f":"exec-general","t":"president and chief executive officer","expected":"unclear"}
+{"f":"exec-general","t":"senior regional manager","expected":"unclear"}
+{"f":"eng-mgmt","t":"director, electrical engineering","expected":"relevant"}
+{"f":"eng-mgmt","t":"software development manager, amazon leo","expected":"relevant"}
+{"f":"eng-mgmt","t":"mea head of applications engineering","expected":"relevant"}
+{"f":"exec-general","t":"ciso候補/upwardのit/ai戦略を牽引/データドリブンな経営基盤構築/itコンサルタント/東京都/正社員","expected":"unclear"}
+{"f":"it-ops","t":"responsable de operaciones it","expected":"relevant"}
+{"f":"exec-general","t":"area vice-president anz","expected":"unclear"}
+{"f":"exec-general","t":"ceo/commercial growth partner","expected":"unclear"}
+{"f":"exec-general","t":"entrepreneur in residence","expected":"unclear"}
+{"f":"it-ops","t":"senior manager, technical operations","expected":"relevant"}
+{"f":"it-ops","t":"data centre operations manager, data center operations","expected":"relevant"}
+{"f":"eng-mgmt","t":"senior manager of software engineering","expected":"relevant"}
