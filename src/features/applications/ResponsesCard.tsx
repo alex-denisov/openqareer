@@ -8,6 +8,7 @@ import {
 } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
+import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { ApplicationView } from './applicationsApi';
 import { localIsoDate } from './localIsoDate';
@@ -23,6 +24,12 @@ const STAGE_LABEL: Record<ApplicationStage, string> = {
   archived: 'Архив',
 };
 
+function buildSubjectTitle(vacancy?: ApplicationView['vacancy']): string {
+  const title = vacancy?.title ?? 'Без названия';
+  const company = vacancy?.companyHidden ? '' : (vacancy?.company ?? '');
+  return `О вакансии: ${title}${company ? ` — ${company}` : ''}`;
+}
+
 interface ResponsesCardProps {
   readonly application: ApplicationView;
   readonly failed: boolean;
@@ -30,6 +37,11 @@ interface ResponsesCardProps {
   readonly isMenuOpen?: boolean;
   readonly onToggleMenu?: () => void;
   readonly onCloseMenu?: () => void;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
   readonly onRetry: () => void;
@@ -176,7 +188,7 @@ export function ResponsesCard(props: ResponsesCardProps) {
       />
       <CardAlerts failed={failed} conflicted={conflicted} onRetry={props.onRetry} onRefresh={props.onRefresh} />
       {application.stage === 'interview' ? (
-        <PrepareInterviewControl application={application} />
+        <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
       ) : null}
       <CardFooter
         application={application}
@@ -185,6 +197,7 @@ export function ResponsesCard(props: ResponsesCardProps) {
         menuOpen={menuOpen}
         onToggleMenu={toggleMenu}
         onCloseMenu={closeMenu}
+        onOpenExpert={props.onOpenExpert}
         onChangeStage={props.onChangeStage}
         onScheduleInterview={props.onScheduleInterview}
         onSaveNote={props.onSaveNote}
@@ -198,8 +211,28 @@ export function ResponsesCard(props: ResponsesCardProps) {
 /** «Подготовиться» from a card already in the interview stage (B251 F5) opens
  * the same prep material «Сегодня» offers — no separate prep screen exists
  * yet (`docs/v1-release/tasks/codex/C47-b251-interview-path-from-card.md`). */
-function PrepareInterviewControl({ application }: { application: ApplicationView }) {
+function PrepareInterviewControl({
+  application,
+  onOpenExpert,
+}: {
+  application: ApplicationView;
+  onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const handleAskConsultant = onOpenExpert
+    ? () => {
+        onOpenExpert(
+          'interviews',
+          { kind: 'application', id: application.id },
+          buildSubjectTitle(application.vacancy),
+        );
+      }
+    : undefined;
+
   return (
     <div className="career-responses-prep-action">
       <button
@@ -219,6 +252,7 @@ function PrepareInterviewControl({ application }: { application: ApplicationView
             ? undefined
             : (application.vacancy?.company ?? undefined),
         }}
+        onAskConsultant={handleAskConsultant}
       />
     </div>
   );
@@ -270,6 +304,7 @@ interface CardFooterProps {
   menuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
@@ -281,6 +316,7 @@ interface CardMenuWrapProps {
   menuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
@@ -304,6 +340,18 @@ function CardMenuWrap(props: CardMenuWrapProps) {
       {menuOpen ? (
         <CardMenu
           application={application}
+          onDiscussWithConsultant={
+            props.onOpenExpert
+              ? () => {
+                  props.onOpenExpert?.(
+                    'responses',
+                    { kind: 'application', id: application.id },
+                    buildSubjectTitle(application.vacancy),
+                  );
+                  onCloseMenu();
+                }
+              : undefined
+          }
           onChangeStage={(stage, occurredAt) => {
             props.onChangeStage(stage, occurredAt);
             onCloseMenu();
@@ -333,6 +381,7 @@ function CardFooter({
   menuOpen,
   onToggleMenu,
   onCloseMenu,
+  onOpenExpert,
   onChangeStage,
   onScheduleInterview,
   onSaveNote,
@@ -348,6 +397,7 @@ function CardFooter({
         menuOpen={menuOpen}
         onToggleMenu={onToggleMenu}
         onCloseMenu={onCloseMenu}
+        onOpenExpert={onOpenExpert}
         onChangeStage={onChangeStage}
         onScheduleInterview={onScheduleInterview}
         onSaveNote={onSaveNote}
@@ -491,12 +541,14 @@ function saveStageChange({
 
 function CardMenu({
   application,
+  onDiscussWithConsultant,
   onChangeStage,
   onScheduleInterview,
   onSaveNote,
   onSkip,
 }: {
   application: ApplicationView;
+  onDiscussWithConsultant?: () => void;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
@@ -512,6 +564,11 @@ function CardMenu({
         onChangeStage={onChangeStage}
         onScheduleInterview={onScheduleInterview}
       />
+      {onDiscussWithConsultant ? (
+        <button type="button" onClick={onDiscussWithConsultant}>
+          Обсудить с консультантом
+        </button>
+      ) : null}
       {application.vacancy?.url ? (
         <a href={application.vacancy.url} target="_blank" rel="noreferrer">
           Открыть карточку вакансии

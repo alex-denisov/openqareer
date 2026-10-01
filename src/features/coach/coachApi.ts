@@ -1,4 +1,6 @@
 import { receiveCoachResult } from './coachResultDelivery';
+import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
+export type { CoachTurnStage, CoachTurnSubject };
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerStrategy } from '../../../shared/careerStrategy';
@@ -693,6 +695,9 @@ export async function sendCoachTurn(input: {
   marketQuery?: string;
   idempotencyKey?: string;
   messageId?: string;
+  stage?: CoachTurnStage;
+  subject?: CoachTurnSubject;
+  isService?: boolean;
 }): Promise<CoachResult> {
   const key = input.idempotencyKey ?? crypto.randomUUID();
   try {
@@ -704,6 +709,9 @@ export async function sendCoachTurn(input: {
         messageId: input.messageId ?? crypto.randomUUID(),
         content: input.content,
         marketQuery: input.marketQuery,
+        stage: input.stage,
+        subject: input.subject,
+        isService: input.isService,
       }),
     });
     const data = await readDataObject<CoachResult & { status?: string }>(response);
@@ -725,6 +733,19 @@ export async function sendCoachTurn(input: {
     // The POST may have succeeded: read the saved operation, never generate again.
   }
   return receiveCoachResult<CoachResult>(key);
+}
+
+export async function rejectCoachProposal(input: {
+  proposalKey: string;
+  reason?: string;
+}): Promise<{ ok: boolean; proposalKey: string }> {
+  const response = await apiFetch('/api/v1/coach/proposals/reject', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) await throwApiError(response);
+  return readDataObject<{ ok: boolean; proposalKey: string }>(response);
 }
 
 export async function changeMemory(

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import type { MarketObservation } from '../domain/coach';
+import { STAGE_TO_PHASE, type MarketObservation } from '../domain/coach';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
 import type { CandidateStore } from '../data/candidateStore';
@@ -14,7 +14,8 @@ import {
   withDeps,
 } from './helpers';
 import { registerCoachResultRoute } from './coachResultRoute';
-import { coachTurnRequestSchema } from './schemas';
+import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
+import { buildCoachSubjectContext } from './coachSubjectContext';
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
@@ -161,13 +162,43 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   }
   const key = parsedKey.data;
   const body = coachTurnRequestSchema.parse(request.body);
-  const phase = nextCoachPhase(candidateStore.getSnapshot(candidate.id), body.content);
-  const started = candidateStore.startTurn(candidate.id, key, { ...body, phase });
+  const phase = body.stage
+    ? STAGE_TO_PHASE[body.stage]
+    : nextCoachPhase(candidateStore.getSnapshot(candidate.id), body.content);
+
+  let stageContext: string | undefined;
+  if (body.subject) {
+    const context = await buildCoachSubjectContext(deps, candidate.id, body.subject);
+    if (context === null) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'subject_not_found',
+        'Объект не найден.',
+        false,
+      );
+    }
+    stageContext = context;
+  }
+
+  const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
   if (started.state === 'completed') {
     return providerResponse(request, started.output);
   }
 
   return deliverTurn(deps, request, reply, candidate.id, key, started.input, body.marketQuery);
+};
+
+const handleRejectProposal: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+
+  const body = coachProposalRejectRequestSchema.parse(request.body);
+  candidateStore.rejectConsultantProposal(candidate.id, body.proposalKey, body.reason);
+  return reply.code(200).send({ data: { ok: true, proposalKey: body.proposalKey } });
 };
 
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
@@ -179,5 +210,12 @@ export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps)
       config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
     },
     withDeps(deps, handleCoachTurn),
+  );
+  app.post(
+    '/api/v1/coach/proposals/reject',
+    {
+      config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    },
+    withDeps(deps, handleRejectProposal),
   );
 }

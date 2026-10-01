@@ -34,10 +34,19 @@ export interface InterviewPrepModalProps {
   readonly facts?: readonly CandidateMemory[];
   readonly candidateName?: string;
   readonly initialTab?: InterviewPrepTab;
+  readonly onAskConsultant?: () => void;
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
-  const { isOpen, onClose, vacancy, facts = [], candidateName, initialTab = 'overview' } = props;
+  const {
+    isOpen,
+    onClose,
+    vacancy,
+    facts = [],
+    candidateName,
+    initialTab = 'overview',
+    onAskConsultant,
+  } = props;
   const [tab, setTab] = useState<InterviewPrepTab>(initialTab);
   const cardRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +74,12 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
         tabIndex={-1}
         ref={cardRef}
       >
-        <InterviewHeader title={vacancy.title} company={vacancy.company} onClose={onClose} />
+        <InterviewHeader
+          title={vacancy.title}
+          company={vacancy.company}
+          onClose={onClose}
+          onAskConsultant={onAskConsultant}
+        />
         <InterviewTabNav tab={tab} onTabChange={setTab} />
         <main className="career-interview-body">
           <InterviewTabContent tab={tab} brief={brief} />
@@ -103,17 +117,31 @@ function InterviewHeader({
   title,
   company,
   onClose,
+  onAskConsultant,
 }: {
   readonly title: string;
   readonly company?: string;
   readonly onClose: () => void;
+  readonly onAskConsultant?: () => void;
 }) {
   return (
     <header className="career-interview-header">
       <div className="career-interview-title-block">
-        <h2 id="career-interview-title" className="career-interview-title">
-          Интервью: «{title}»{company ? `, ${company}` : ''}
-        </h2>
+        <div className="career-interview-title-row">
+          <h2 id="career-interview-title" className="career-interview-title">
+            Интервью: «{title}»{company ? `, ${company}` : ''}
+          </h2>
+          {onAskConsultant ? (
+            <button
+              type="button"
+              className="career-btn career-btn-secondary career-ask-consultant-btn"
+              onClick={onAskConsultant}
+            >
+              <ChatCircleDots size={16} aria-hidden="true" />
+              <span>Спросить консультанта</span>
+            </button>
+          ) : null}
+        </div>
         <p className="career-interview-subtitle">
           Справка — из текста вакансии; ответы — из фактов профиля. Это заготовки, не скрипт.
         </p>

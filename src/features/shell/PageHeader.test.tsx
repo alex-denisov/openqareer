@@ -30,4 +30,18 @@ describe('PageHeader', () => {
 
     expect(html).not.toContain('career-page-header-right');
   });
+
+  it('renders outline consultant button next to title when onAskConsultant is provided', () => {
+    const html = renderToStaticMarkup(
+      <PageHeader
+        kicker="Личный кабинет"
+        title="Профиль"
+        description="Факты профиля."
+        onAskConsultant={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('career-ask-consultant-btn');
+    expect(html).toContain('Спросить консультанта');
+  });
 });

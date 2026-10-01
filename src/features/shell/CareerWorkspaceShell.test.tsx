@@ -219,7 +219,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль');
     expect(html).toContain('Вакансии');
     expect(html).toContain('Отклики');
-    expect(html).toContain('Консультант');
+    expect(html).not.toContain('Консультант');
     expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
@@ -651,11 +651,10 @@ describe('рельс «Пульт»', () => {
       (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
     );
 
-    // Пять разделов макета «Сегодня · Профиль · Вакансии · Отклики ·
-    // Консультант» (B248), каждый нарисован дважды: рельс и нижняя панель на
-    // узком экране. Важно, что рисунков ровно пять разных (B179, B248).
-    expect(paths.length).toBe(10);
-    expect(new Set(paths).size).toBe(5);
+    // Четыре раздела макета «Сегодня · Профиль · Вакансии · Отклики» (B340),
+    // каждый нарисован дважды: рельс и нижняя панель на узком экране.
+    expect(paths.length).toBe(8);
+    expect(new Set(paths).size).toBe(4);
   });
 
   it('называет план, который действительно работает, а не выдуманный', () => {

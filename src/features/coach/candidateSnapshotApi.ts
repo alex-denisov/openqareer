@@ -1,4 +1,4 @@
-import type { CandidateSnapshot } from './coachApi';
+import type { CandidateSnapshot, CoachTurnStage } from './coachApi';
 import { CoachApiError as CoachApiErrorClass, apiFetch, throwApiError } from './apiClient';
 
 /**
@@ -105,8 +105,8 @@ export async function getCandidate(): Promise<CandidateSnapshot> {
 }
 
 /** Снимок вместе с диалогом — его просит только панель эксперта. */
-export async function getCandidateWithMessages(): Promise<CandidateSnapshot> {
-  const [snapshot, messages] = await Promise.all([getCandidate(), getCandidateMessages()]);
+export async function getCandidateWithMessages(stage?: CoachTurnStage): Promise<CandidateSnapshot> {
+  const [snapshot, messages] = await Promise.all([getCandidate(), getCandidateMessages(stage)]);
   return { ...snapshot, messages };
 }
 
@@ -115,9 +115,13 @@ export interface CandidateMessagePage {
   readonly nextOffset: number | null;
 }
 
-export async function getCandidateMessagePage(offset = 0): Promise<CandidateMessagePage> {
+export async function getCandidateMessagePage(
+  offset = 0,
+  stage?: CoachTurnStage,
+): Promise<CandidateMessagePage> {
+  const stageQuery = stage ? `&stage=${encodeURIComponent(stage)}` : '';
   const response = await apiFetch(
-    `/api/v1/candidate/me/messages?offset=${encodeURIComponent(String(offset))}`,
+    `/api/v1/candidate/me/messages?offset=${encodeURIComponent(String(offset))}${stageQuery}`,
   );
   if (!response.ok) {
     await throwApiError(response);
@@ -137,12 +141,14 @@ export async function getCandidateMessagePage(offset = 0): Promise<CandidateMess
 }
 
 /** Весь диалог кандидата — страницами, как и всё, что не влезает в ответ. */
-export async function getCandidateMessages(): Promise<CandidateSnapshot['messages']> {
+export async function getCandidateMessages(
+  stage?: CoachTurnStage,
+): Promise<CandidateSnapshot['messages']> {
   const items: CandidateSnapshot['messages'] = [];
   let offset: number | null = 0;
   let pages = 0;
   while (offset !== null && pages < 60) {
-    const page: CandidateMessagePage = await getCandidateMessagePage(offset);
+    const page: CandidateMessagePage = await getCandidateMessagePage(offset, stage);
     if (page.items.length === 0) break;
     items.push(...page.items);
     offset = page.nextOffset;

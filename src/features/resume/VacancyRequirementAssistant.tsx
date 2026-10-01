@@ -53,6 +53,9 @@ async function prepareRequirementSuggestion(
     content: requirementPrompt(request),
     idempotencyKey: request.requestId,
     messageId: request.requestId,
+    stage: 'vacancies',
+    subject: { kind: 'vacancy', id: request.vacancyId },
+    isService: true,
   });
   const proposalIndex = groundedExperienceProposalIndex(result, draft, memory);
   if (proposalIndex === undefined) return undefined;

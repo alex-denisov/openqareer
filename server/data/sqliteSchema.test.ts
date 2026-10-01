@@ -10,6 +10,7 @@ import {
   MIGRATION_32,
   MIGRATION_33,
   MIGRATION_35,
+  MIGRATION_36,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
@@ -488,3 +489,31 @@ describe('title parse and semantic index schema (B267 slice 1)', () => {
     database.close();
   });
 });
+
+describe('stage coach schema (B340 slice 1)', () => {
+  it('creates all tables and indices cleanly on fresh database', () => {
+    const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
+    expect(() => {
+      database.exec(MIGRATION_36);
+      database.exec(MIGRATION_36);
+    }).not.toThrow();
+
+    for (const table of ['message_stages', 'turn_stages', 'consultant_rejections']) {
+      expect(
+        database
+          .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+          .get(table),
+      ).toEqual({ name: table });
+    }
+    database.close();
+  });
+
+  it('is only CREATE TABLE/INDEX IF NOT EXISTS and never touches existing tables', () => {
+    expect(MIGRATION_36).not.toMatch(/ALTER TABLE/iu);
+    const statements = MIGRATION_36.split(';').map((s) => s.trim()).filter(Boolean);
+    for (const statement of statements) {
+      expect(statement).toMatch(/^CREATE (TABLE|(UNIQUE )?INDEX) IF NOT EXISTS/iu);
+    }
+  });
+});
+

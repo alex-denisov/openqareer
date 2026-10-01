@@ -9,6 +9,7 @@ import {
 } from '../data/candidateSnapshotPage';
 import { handleGetWorkspace, handlePutWorkspace } from './workspaceHandlers';
 import { evaluateProductCase, productCaseSubmissionSchema } from '../domain/assessment';
+import { coachTurnStageSchema } from '../domain/coach';
 import { evaluateGermanyMarket, germanyMarketSubmissionSchema } from '../domain/germanyMarket';
 import {
   buildResumeStudioProjection,
@@ -151,10 +152,12 @@ const handleCreateCandidate: Handler = async (deps, request, reply) => {
 
 const snapshotQuerySchema = z.object({
   memoryOffset: z.coerce.number().int().min(0).default(0),
+  stage: coachTurnStageSchema.optional(),
 });
 
 const messagesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
+  stage: coachTurnStageSchema.optional(),
 });
 
 const handleGetSnapshot: Handler = async (
@@ -164,10 +167,10 @@ const handleGetSnapshot: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { memoryOffset } = snapshotQuerySchema.parse(request.query);
+  const { memoryOffset, stage } = snapshotQuerySchema.parse(request.query);
   // Целиком снимок до браузера не доезжает — маршрут рвёт ответ примерно на
   // 20 460 байт (INC-030). Экран получает голову снимка и дочитывает память.
-  const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id), memoryOffset);
+  const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id, stage), memoryOffset);
   return { data, meta: { requestId: request.id, ...meta } };
 };
 
@@ -183,12 +186,7 @@ const handleGetMemory: Handler = async (
   const page = buildMemoryPage(candidateStore.getSnapshot(candidate.id).memory, offset);
   return {
     data: page.items,
-    meta: {
-      requestId: request.id,
-      total: page.total,
-      offset: page.offset,
-      nextOffset: page.nextOffset,
-    },
+    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
   };
 };
 
@@ -200,12 +198,7 @@ const handleGetTurns: Handler = async ({ authService, candidateStore, config }, 
   const page = buildTurnPage(candidateStore.getSnapshot(candidate.id).turns, offset);
   return {
     data: page.items,
-    meta: {
-      requestId: request.id,
-      total: page.total,
-      offset: page.offset,
-      nextOffset: page.nextOffset,
-    },
+    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
   };
 };
 
@@ -217,16 +210,12 @@ const handleGetMessages: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { offset } = messagesQuerySchema.parse(request.query);
-  const page = buildMessagePage(candidateStore.getSnapshot(candidate.id).messages, offset);
+  const { offset, stage } = messagesQuerySchema.parse(request.query);
+  const messages = candidateStore.getMessages(candidate.id, stage);
+  const page = buildMessagePage(messages, offset);
   return {
     data: page.items,
-    meta: {
-      requestId: request.id,
-      total: page.total,
-      offset: page.offset,
-      nextOffset: page.nextOffset,
-    },
+    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
   };
 };
 

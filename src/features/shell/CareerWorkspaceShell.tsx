@@ -6,10 +6,9 @@ import {
   ProfileIcon,
   TodayIcon,
   ResponsesIcon,
-  ConsultantIcon,
   type SectionIconProps,
 } from './sectionIcons';
-import type { AuthUser } from '../coach/coachApi';
+import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
 import { OnboardingWizard } from '../journey/OnboardingWizard';
@@ -119,7 +118,6 @@ const primaryNavigation: readonly RailNavItem[] = [
     target: 'responses',
     tracksActive: true,
   },
-  { key: 'consultant', label: 'Консультант', icon: ConsultantIcon, kind: 'expert' },
 ];
 
 /**
@@ -178,7 +176,15 @@ export function CareerWorkspaceShell({
   initialRailExpanded,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>(initialView);
-  const [expertOpen, setExpertOpen] = useState(false);
+  const [expertConfig, setExpertConfig] = useState<{
+    open: boolean;
+    stage: CoachTurnStage;
+    subject?: CoachTurnSubject;
+    subjectTitle?: string;
+  }>({
+    open: false,
+    stage: 'today',
+  });
   const [cabinetRevision, setCabinetRevision] = useState(0);
   const [accountOpen, setAccountOpen] = useState(
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
@@ -296,7 +302,7 @@ export function CareerWorkspaceShell({
   function navigate(view: ShellView) {
     if (!isNavigable(view)) return;
     setActiveView(view);
-    setExpertOpen(false);
+    setExpertConfig((prev) => ({ ...prev, open: false }));
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
       document.getElementById('career-main')?.scrollTo({
@@ -306,13 +312,21 @@ export function CareerWorkspaceShell({
     });
   }
 
-  function openExpert() {
-    setExpertOpen(true);
-  }
+  const openExpert = useCallback(
+    (stage?: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => {
+      setExpertConfig({
+        open: true,
+        stage: stage ?? 'today',
+        subject,
+        subjectTitle,
+      });
+    },
+    [],
+  );
 
-  function closeExpert() {
-    setExpertOpen(false);
-  }
+  const closeExpert = useCallback(() => {
+    setExpertConfig((prev) => ({ ...prev, open: false }));
+  }, []);
 
   const closeAccount = useCallback(() => {
     setAccountOpen(false);
@@ -362,7 +376,7 @@ export function CareerWorkspaceShell({
 
   return (
     <div
-      className={`career-shell ${expertOpen ? 'expert-is-open' : ''} ${
+      className={`career-shell ${expertConfig.open ? 'expert-is-open' : ''} ${
         onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''
       }`}
       data-rail={railExpanded ? 'expanded' : 'collapsed'}
@@ -376,7 +390,7 @@ export function CareerWorkspaceShell({
         id="career-rail"
         className="career-rail"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
+        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         <button
           className="career-brand-mark"
@@ -472,7 +486,7 @@ export function CareerWorkspaceShell({
           door was chrome that did nothing (B169 §6, §8). */}
       <header
         className="career-topbar"
-        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
+        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         <button
           className="career-wordmark"
@@ -514,7 +528,7 @@ export function CareerWorkspaceShell({
       <main
         id="career-main"
         className="career-main"
-        aria-hidden={expertOpen || accountOpen ? true : undefined}
+        aria-hidden={expertConfig.open || accountOpen ? true : undefined}
       >
         <AppErrorBoundary>
           {sessionPending ? (
@@ -562,6 +576,7 @@ export function CareerWorkspaceShell({
               onNavigate={navigate}
               onOpenTariffs={() => navigate('tariffs')}
               onOpenConnections={openConnections}
+              onOpenExpert={openExpert}
               onUpdateWorkspace={onUpdateWorkspace}
             />
           ) : null}
@@ -636,14 +651,14 @@ export function CareerWorkspaceShell({
       <nav
         className="career-mobile-nav"
         aria-label="Основная навигация"
-        aria-hidden={expertOpen || accountOpen || onboardingIsFullscreen ? true : undefined}
+        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
       >
         {primaryNavigation.map((item) => (
           <NavigationButton key={item.key} {...railButtonProps(item)} />
         ))}
       </nav>
 
-      {expertOpen ? (
+      {expertConfig.open ? (
         <>
           <button
             className="career-expert-scrim"
@@ -656,6 +671,9 @@ export function CareerWorkspaceShell({
           <CareerExpertPanel
             journey={journey}
             marketQuery={visibleWorkspace?.targetDirection}
+            stage={expertConfig.stage}
+            subject={expertConfig.subject}
+            subjectTitle={expertConfig.subjectTitle}
             initialUser={session ?? null}
             onIdentityChange={resetForAccount}
             onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}

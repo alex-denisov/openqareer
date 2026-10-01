@@ -1966,11 +1966,23 @@
   min-width: 0;
 }
 
+.career-page-header-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  flex-wrap: wrap;
+}
+
+.career-page-header-title-row h1,
 .career-page-header h1 {
   margin: var(--career-space-1) 0 var(--career-space-1);
   font-size: var(--career-text-xl);
   line-height: 1.08;
   letter-spacing: -0.035em;
+}
+
+.career-ask-consultant-btn {
+  margin: var(--career-space-1) 0;
 }
 
 .career-page-header p {
@@ -11175,6 +11187,13 @@
 .career-interview-title-block {
   min-width: 0;
   flex: 1;
+}
+
+.career-interview-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  flex-wrap: wrap;
 }
 
 .career-interview-title {

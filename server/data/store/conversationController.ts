@@ -4,18 +4,21 @@ import {
   type CoachMessage,
   type CoachTurnInput,
   type CoachTurnResult,
+  type CoachTurnStage,
 } from '../../domain/coach';
 import { buildExperienceDossier } from '../../domain/dossier';
 import {
   isImportedMemoryId,
   isResumeImportAnnouncement,
 } from '../../domain/resumeImport';
-
-/** Imported profiles run to ~50 facts; 40 keeps the block under ~1.5K tokens. */
-const KNOWN_FACTS_LIMIT = 40;
+import { memoryStatusAfter, memoryStatementAfter, memorySourceRefsAfter } from './memoryRowHelpers';
+import { StageMessageStore, type StoredTurnStage } from './stageMessageStore';
+import { ConsultantRejectionStore } from './consultantRejectionStore';
+import { buildKnowledgeContext } from './knowledgeContextHelper';
 import type { CoachProviderResult } from '../../providers/coachProvider';
 import type {
   CandidateIdentity,
+  ConsultantRejection,
   ImportedResumeEvidence,
   MemoryChange,
   ResumeEvidenceImport,
@@ -54,19 +57,22 @@ export class ConversationController {
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly documentRepository: SqliteDocumentRepository;
+  private readonly stageMessages: StageMessageStore;
+  private readonly consultantRejections: ConsultantRejectionStore;
 
   constructor(deps: ConversationDeps) {
     this.database = deps.database;
     this.sealedText = deps.sealedText;
     this.documentRepository = deps.documentRepository;
+    this.stageMessages = new StageMessageStore(deps.database);
+    this.consultantRejections = new ConsultantRejectionStore(deps.database);
   }
 
-  startTurn(
-    candidate: CandidateIdentity,
+  private verifyOrResumeTurn(
     candidateId: string,
     idempotencyKey: string,
     request: TurnRequest,
-  ): StartedTurn {
+  ): StartedTurn | null {
     const existing = this.getTurn(candidateId, idempotencyKey);
     if (existing) {
       const storedMessage = this.getMessage(candidateId, existing.user_message_id);
@@ -93,12 +99,25 @@ export class ConversationController {
            WHERE candidate_id = ? AND idempotency_key = ?`,
         )
         .run(new Date().toISOString(), candidateId, idempotencyKey);
-    } else {
-      if (this.getMessage(candidateId, request.messageId)) {
-        throw new CandidateStoreConflictError();
-      }
-      this.insertPendingTurn(candidateId, idempotencyKey, request);
+      return null;
     }
+    if (!request.isService && this.getMessage(candidateId, request.messageId)) {
+      throw new CandidateStoreConflictError();
+    }
+    this.insertPendingTurn(candidateId, idempotencyKey, request);
+    return null;
+  }
+
+  startTurn(
+    candidate: CandidateIdentity,
+    candidateId: string,
+    idempotencyKey: string,
+    request: TurnRequest,
+  ): StartedTurn {
+    const resumed = this.verifyOrResumeTurn(candidateId, idempotencyKey, request);
+    if (resumed) return resumed;
+
+    const rejectedStrings = this.consultantRejections.formatForModelInput(candidateId);
 
     return {
       state: 'ready',
@@ -107,10 +126,33 @@ export class ConversationController {
         dataClass: candidate.dataClass,
         locale: candidate.locale,
         phase: request.phase,
-        messages: this.modelTurns(candidateId),
+        messages: this.modelTurns(candidateId, request.stage),
         knowledgeContext: this.knowledgeContext(candidateId),
+        ...(request.stageContext ? { stageContext: request.stageContext } : {}),
+        ...(rejectedStrings.length > 0 ? { rejectedProposals: rejectedStrings } : {}),
       },
     };
+  }
+
+  private recordAssistantMessage(
+    candidateId: string,
+    conversationId: string,
+    assistantMessageId: string,
+    message: string,
+    turnStage: StoredTurnStage | null,
+    now: string,
+  ): void {
+    if (turnStage?.is_service) return;
+    this.insertMessage(candidateId, conversationId, assistantMessageId, 'assistant', message, now);
+    if (turnStage?.stage) {
+      this.stageMessages.insertMessageStage(
+        assistantMessageId,
+        candidateId,
+        turnStage.stage,
+        turnStage.subject_kind,
+        turnStage.subject_id,
+      );
+    }
   }
 
   completeTurn(
@@ -122,16 +164,23 @@ export class ConversationController {
     if (!turn || turn.status !== 'pending') {
       throw new CandidateStoreConflictError();
     }
+    const turnStage = this.stageMessages.getTurnStage(candidateId, idempotencyKey);
     const conversationId = this.conversationId(candidateId);
     const assistantMessageId = randomUUID();
     const now = new Date().toISOString();
+
+    output.result.actionProposals = this.consultantRejections.filterProposals(
+      candidateId,
+      output.result.actionProposals,
+    );
+
     this.inTransaction(() => {
-      this.insertMessage(
+      this.recordAssistantMessage(
         candidateId,
         conversationId,
         assistantMessageId,
-        'assistant',
         output.result.message,
+        turnStage,
         now,
       );
       this.insertMemoryCandidates(
@@ -431,7 +480,7 @@ export class ConversationController {
     });
   }
 
-  snapshotParts(candidateId: string): {
+  snapshotParts(candidateId: string, stage?: CoachTurnStage): {
     messages: CoachMessage[];
     memory: StoredMemory[];
     turns: StoredTurn[];
@@ -439,7 +488,7 @@ export class ConversationController {
   } {
     const memory = this.memory(candidateId);
     return {
-      messages: this.messages(candidateId),
+      messages: this.messages(candidateId, stage),
       memory,
       turns: this.turns(candidateId),
       dossier: buildExperienceDossier(memory),
@@ -484,6 +533,32 @@ export class ConversationController {
     };
   }
 
+  private recordUserMessage(
+    candidateId: string,
+    conversationId: string,
+    request: TurnRequest,
+    now: string,
+  ): void {
+    if (request.isService) return;
+    this.insertMessage(
+      candidateId,
+      conversationId,
+      request.messageId,
+      'user',
+      request.content,
+      now,
+    );
+    if (request.stage) {
+      this.stageMessages.insertMessageStage(
+        request.messageId,
+        candidateId,
+        request.stage,
+        request.subject?.kind,
+        request.subject?.id,
+      );
+    }
+  }
+
   private insertPendingTurn(
     candidateId: string,
     idempotencyKey: string,
@@ -492,14 +567,7 @@ export class ConversationController {
     const conversationId = this.conversationId(candidateId);
     const now = new Date().toISOString();
     this.inTransaction(() => {
-      this.insertMessage(
-        candidateId,
-        conversationId,
-        request.messageId,
-        'user',
-        request.content,
-        now,
-      );
+      this.recordUserMessage(candidateId, conversationId, request, now);
       this.database
         .prepare(
           `INSERT INTO turns
@@ -517,6 +585,15 @@ export class ConversationController {
           now,
           now,
         );
+      if (request.stage) {
+        this.stageMessages.recordTurnStage(
+          candidateId,
+          idempotencyKey,
+          request.stage,
+          request.subject,
+          Boolean(request.isService),
+        );
+      }
       this.touchConversation(conversationId, now);
     });
   }
@@ -553,14 +630,8 @@ export class ConversationController {
       );
   }
 
-  private messages(candidateId: string): CoachMessage[] {
-    const rows = this.database
-      .prepare(
-        `SELECT id, role, body_cipher, created_at
-         FROM messages WHERE candidate_id = ?
-         ORDER BY created_at, id`,
-      )
-      .all(candidateId) as unknown as MessageRow[];
+  private messages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
+    const rows = this.stageMessages.queryMessages(candidateId, stage);
     return rows.map((row) => ({
       id: row.id,
       role: row.role,
@@ -569,6 +640,22 @@ export class ConversationController {
         messageAssociatedData(candidateId, row.id),
       ),
     }));
+  }
+
+  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
+    return this.messages(candidateId, stage);
+  }
+
+  rejectConsultantProposal(
+    candidateId: string,
+    proposalKey: string,
+    reason?: string,
+  ): void {
+    this.consultantRejections.reject(candidateId, proposalKey, reason);
+  }
+
+  getConsultantRejections(candidateId: string): ConsultantRejection[] {
+    return this.consultantRejections.list(candidateId);
   }
 
   private getMessage(
@@ -598,8 +685,8 @@ export class ConversationController {
    * Import announcements are `role: 'user'` rows for schema reasons only
    * (B266) — the model must never read them as candidate turns.
    */
-  private modelTurns(candidateId: string) {
-    return this.messages(candidateId)
+  private modelTurns(candidateId: string, stage?: CoachTurnStage) {
+    return this.messages(candidateId, stage)
       .filter((message) => !isResumeImportAnnouncement(message))
       .slice(-30);
   }
@@ -607,74 +694,11 @@ export class ConversationController {
   private knowledgeContext(
     candidateId: string,
   ): NonNullable<CoachTurnInput['knowledgeContext']> {
-    const memory = this.memory(candidateId);
-    // The candidate's own imported profile counts as known context (B266):
-    // otherwise the consultant asks for experience it already holds. Confirmed
-    // facts go first; imported ones are flagged so the model keeps them as
-    // unverified. Open questions are not facts.
-    const isConfirmed = (item: (typeof memory)[number]) =>
-      item.status === 'confirmed' || item.status === 'corrected';
-    const isImported = (item: (typeof memory)[number]) =>
-      item.status === 'proposed' &&
-      item.kind !== 'open-question' &&
-      isImportedMemoryId(item.id);
-    const known = [
-      ...memory.filter(isConfirmed).slice(-12),
-      ...memory.filter(isImported),
-    ].slice(0, KNOWN_FACTS_LIMIT);
-    const confirmedFacts = known.map((item) => ({
-      ref: `memory:${item.id}`,
-      kind: item.kind,
-      domain: item.domain,
-      statement: item.statement.slice(0, 1_000),
-      sourceRefs: item.sourceMessageIds.slice(0, 20),
-      sensitive: item.sensitive,
-      source: isConfirmed(item) ? ('confirmed' as const) : ('imported' as const),
-    }));
-    const openQuestions = memory
-      .filter(
-        (item) => item.kind === 'open-question' && item.status === 'proposed',
-      )
-      .slice(-12)
-      .map((item) => ({
-        ref: `memory:${item.id}`,
-        statement: item.statement,
-        sourceRefs: item.sourceMessageIds,
-      }));
-    return {
-      confirmedFacts,
-      openQuestions,
-      documents: this.documentKnowledgeContext(candidateId),
-    };
-  }
-
-  private documentKnowledgeContext(
-    candidateId: string,
-  ): NonNullable<CoachTurnInput['knowledgeContext']>['documents'] {
-    return this.documentRepository
-      .list(candidateId)
-      .filter(
-        (document) =>
-          document.parseStatus === 'ready' &&
-          (document.kind === 'resume' || document.kind === 'profile_export'),
-      )
-      .flatMap((document) => {
-        const stored = this.documentRepository.get(candidateId, document.id);
-        const excerpt = stored?.extractedText?.trim();
-        return excerpt
-          ? [
-              {
-                ref: `document:${document.id}`,
-                kind: document.kind,
-                fileName: document.fileName,
-                version: document.version,
-                sha256: document.sha256,
-                excerpt: excerpt.slice(0, 6_000),
-              },
-            ]
-          : [];
-      })
-      .slice(0, 2);
+    return buildKnowledgeContext(
+      this.memory(candidateId),
+      candidateId,
+      this.documentRepository,
+    );
   }
 
   private memory(candidateId: string): StoredMemory[] {
@@ -848,24 +872,4 @@ export class ConversationController {
       throw error;
     }
   }
-}
-
-function memoryStatusAfter(change: MemoryChange): 'confirmed' | 'corrected' | 'deleted' {
-  if (change.action === 'confirm') return 'confirmed';
-  return change.action === 'correct' ? 'corrected' : 'deleted';
-}
-
-function memoryStatementAfter(change: MemoryChange, currentStatement: string): string {
-  if (change.action === 'correct') return change.statement!.trim();
-  return change.action === 'delete' ? '[deleted]' : currentStatement;
-}
-
-function memorySourceRefsAfter(change: MemoryChange, row: MemoryRow, now: string): string[] {
-  const currentSourceRefs = JSON.parse(row.source_message_ids) as string[];
-  const activeSourceRefs = currentSourceRefs.filter(
-    (ref) => !ref.startsWith('deleted-document:'),
-  );
-  return change.action !== 'delete' && activeSourceRefs.length === 0
-    ? [`candidate-review:${now}`]
-    : activeSourceRefs;
 }

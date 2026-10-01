@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesBoard } from './ResponsesBoard';
 import type { ApplicationView } from './applicationsApi';
 import type { UseApplications } from './useApplications';
@@ -273,4 +273,85 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(1);
     expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(1);
   });
+
+  it('вызывает onOpenExpert с этапом responses и subject отклика при клике «Обсудить с консультантом»', () => {
+    const onOpenExpert = vi.fn();
+    act(() => {
+      root.render(
+        <ResponsesBoard
+          state={readyState(applications)}
+          onOpenVacancies={() => {}}
+          onOpenExpert={onOpenExpert}
+        />,
+      );
+    });
+
+    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
+    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      roleTitle.click();
+    });
+
+    const discussBtn = Array.from(firstCard.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Обсудить с консультантом'),
+    );
+    expect(discussBtn).toBeDefined();
+
+    act(() => {
+      discussBtn?.click();
+    });
+
+    expect(onOpenExpert).toHaveBeenCalledWith(
+      'responses',
+      { kind: 'application', id: 'a1' },
+      'О вакансии: First Role — Acme',
+    );
+  });
+
+  it('в карточке с этапом interview кнопка Подготовиться открывает модалку с кнопкой Спросить консультанта', () => {
+    const onOpenExpert = vi.fn();
+    const interviewApps = [
+      application({
+        id: 'a-int',
+        stage: 'interview',
+        vacancy: { title: 'Tech Lead', company: 'Yandex', url: 'https://x', source: 'hh' },
+      }),
+    ];
+
+    act(() => {
+      root.render(
+        <ResponsesBoard
+          state={readyState(interviewApps)}
+          onOpenVacancies={() => {}}
+          onOpenExpert={onOpenExpert}
+        />,
+      );
+    });
+
+    const prepBtn = Array.from(container.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Подготовиться'),
+    );
+    expect(prepBtn).toBeDefined();
+
+    act(() => {
+      prepBtn?.click();
+    });
+
+    const askBtn = Array.from(document.querySelectorAll('button')).find(
+      (b) => b.textContent?.includes('Спросить консультанта'),
+    );
+    expect(askBtn).toBeDefined();
+
+    act(() => {
+      askBtn?.click();
+    });
+
+    expect(onOpenExpert).toHaveBeenCalledWith(
+      'interviews',
+      { kind: 'application', id: 'a-int' },
+      'О вакансии: Tech Lead — Yandex',
+    );
+  });
 });
+

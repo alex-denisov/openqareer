@@ -12,6 +12,7 @@ import {
   ResumeRevisionConflictError,
 } from '../orchestration/careerCommandDispatcher';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
+import { computeProposalKey, consultantProposalKey } from '../../shared/consultantProposalKey';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -31,10 +32,27 @@ const handleListCommands: Handler = async (
 ) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  const rawCommands =
+    careerCommandDispatcher?.list(candidate.id) ??
+    candidateStore.listCareerCommands(candidate.id);
+  const rejections = candidateStore.getConsultantRejections(candidate.id);
+  const rejectedKeys = new Set(rejections.map((r) => r.proposalKey));
+  const data = rawCommands.filter((cmd) => {
+    const target = cmd.executionTarget;
+    if (
+      target &&
+      'section' in target &&
+      'proposedText' in target &&
+      typeof target.section === 'string' &&
+      typeof target.proposedText === 'string'
+    ) {
+      const key = computeProposalKey(target.section, target.proposedText);
+      if (rejectedKeys.has(key)) return false;
+    }
+    return true;
+  });
   return {
-    data:
-      careerCommandDispatcher?.list(candidate.id) ??
-      candidateStore.listCareerCommands(candidate.id),
+    data,
     meta: { requestId: request.id },
   };
 };
@@ -133,6 +151,31 @@ function saveCommandForProposal(input: {
   );
 }
 
+function isProposalRejected(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  proposal: Parameters<typeof consultantProposalKey>[0],
+): boolean {
+  const rejections = candidateStore.getConsultantRejections(candidateId);
+  return rejections.some((r) => r.proposalKey === consultantProposalKey(proposal));
+}
+
+function validateProposal(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  snapshot: ReturnType<RouteDeps['candidateStore']['getSnapshot']>,
+  body: z.infer<typeof careerCommandRequestSchema>,
+) {
+  const { turn, proposal } = findCompletedProposal(snapshot, body);
+  if (!turn || !proposal) {
+    return { ok: false, err: 'Такого предложения нет в сохранённом карьерном ходе.' } as const;
+  }
+  if (isProposalRejected(candidateStore, candidateId, proposal)) {
+    return { ok: false, err: 'Предложение было отклонено.' } as const;
+  }
+  return { ok: true, turn, proposal } as const;
+}
+
 async function createCommand(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -150,17 +193,11 @@ async function createCommand(
   const idempotencyKey = z.string().uuid().parse(request.headers['idempotency-key']);
   const body = careerCommandRequestSchema.parse(request.body);
   const snapshot = deps.candidateStore.getSnapshot(candidate.id);
-  const { turn, proposal } = findCompletedProposal(snapshot, body);
-  if (!turn || !proposal) {
-    return sendError(
-      reply,
-      request,
-      404,
-      'career_proposal_not_found',
-      'Такого предложения нет в сохранённом карьерном ходе.',
-      false,
-    );
+  const found = validateProposal(deps.candidateStore, candidate.id, snapshot, body);
+  if (!found.ok) {
+    return sendError(reply, request, 404, 'career_proposal_not_found', found.err, false);
   }
+  const { turn, proposal } = found;
   const target = resolveExecutionTarget(snapshot, proposal, body.executionTarget ?? null);
   if (!target.ok) {
     return sendError(reply, request, target.status, target.code, target.message, false);

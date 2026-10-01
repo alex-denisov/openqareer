@@ -35,6 +35,7 @@ export interface VacancyRowProps {
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+  readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
 }
 
 function logoInitials(company: string): string {
@@ -350,6 +351,7 @@ interface ActionButtonsProps {
   readonly onConfirmSent: () => void;
   readonly onConfirmAlreadyApplied?: () => void;
   readonly onOpenNetworking?: () => void;
+  readonly onDiscussWithConsultant?: () => void;
   readonly onOpenInfo: () => void;
   readonly onOpenPitch: () => void;
 }
@@ -364,6 +366,7 @@ function VacancyActionButtons({
   onConfirmSent,
   onConfirmAlreadyApplied,
   onOpenNetworking,
+  onDiscussWithConsultant,
   onOpenInfo,
   onOpenPitch,
 }: ActionButtonsProps) {
@@ -380,6 +383,16 @@ function VacancyActionButtons({
           onConfirmAlreadyApplied={onConfirmAlreadyApplied}
         />
       )}
+
+      {onDiscussWithConsultant ? (
+        <button
+          type="button"
+          className="btn btn-secondary action-btn"
+          onClick={onDiscussWithConsultant}
+        >
+          Обсудить с консультантом
+        </button>
+      ) : null}
 
       {onOpenNetworking ? (
         <button type="button" className="btn btn-secondary action-btn" onClick={onOpenNetworking}>
@@ -638,6 +651,34 @@ function externalApplyProps(rowState: {
   };
 }
 
+function buildActionButtonsProps(
+  rowProps: DetailProps['rowProps'],
+  rowState: DetailProps['rowState'],
+  cluster: DetailProps['cluster'],
+) {
+  const { interviewState, appliedState } = rowState;
+  return {
+    alreadyApplied: rowState.alreadyApplied,
+    savingApplied: appliedState.savingApplied,
+    onOpenResponses: rowProps.onOpenResponses,
+    onToggleSchedule: rowProps.onScheduleInterview
+      ? () => interviewState.setScheduleOpen((prev) => !prev)
+      : undefined,
+    ...externalApplyProps(rowState),
+    onConfirmAlreadyApplied: rowProps.onMarkAlreadyApplied
+      ? () => void appliedState.handleConfirmAlreadyApplied()
+      : undefined,
+    onOpenNetworking: rowProps.onOpenNetworking
+      ? () => rowProps.onOpenNetworking!(cluster)
+      : undefined,
+    onDiscussWithConsultant: rowProps.onDiscussWithConsultant
+      ? () => rowProps.onDiscussWithConsultant!(cluster)
+      : undefined,
+    onOpenInfo: () => rowState.setInfoOpen(true),
+    onOpenPitch: () => rowState.setPitchOpen(true),
+  };
+}
+
 function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const matchingPoints = explanation.matchingPoints ?? [];
   const missingPoints = explanation.missingPoints ?? [];
@@ -664,27 +705,7 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 
       <RecruiterSection cluster={cluster} />
 
-      <VacancyActionButtons
-        alreadyApplied={rowState.alreadyApplied}
-        savingApplied={appliedState.savingApplied}
-        onOpenResponses={rowProps.onOpenResponses}
-        onToggleSchedule={
-          rowProps.onScheduleInterview
-            ? () => interviewState.setScheduleOpen((prev) => !prev)
-            : undefined
-        }
-        {...externalApplyProps(rowState)}
-        onConfirmAlreadyApplied={
-          rowProps.onMarkAlreadyApplied
-            ? () => void appliedState.handleConfirmAlreadyApplied()
-            : undefined
-        }
-        onOpenNetworking={
-          rowProps.onOpenNetworking ? () => rowProps.onOpenNetworking!(cluster) : undefined
-        }
-        onOpenInfo={() => rowState.setInfoOpen(true)}
-        onOpenPitch={() => rowState.setPitchOpen(true)}
-      />
+      <VacancyActionButtons {...buildActionButtonsProps(rowProps, rowState, cluster)} />
 
       <DetailInterviewSection
         appliedError={appliedState.appliedError}

@@ -17,6 +17,8 @@ import type {
 } from './sqliteApplicationInterviewRepository';
 import type { ApplicationOfferTerms, StoredApplicationOffer } from './sqliteApplicationOfferRepository';
 import type { StoredVacancySkip, VacancySkipOrigin } from './sqliteVacancySkipRepository';
+import type { DatabaseSync } from 'node:sqlite';
+import type { CandidateInterviewSubject } from './candidateStore';
 import type { RecordVisitResult } from './sqliteCandidateVisitRepository';
 
 /**
@@ -27,6 +29,10 @@ import type { RecordVisitResult } from './sqliteCandidateVisitRepository';
  * constructor, with the fields declared there for `implements CandidateStore`.
  */
 export interface ApplicationTrackerMethods {
+  getInterviewSubject(
+    candidateId: string,
+    interviewId: string,
+  ): CandidateInterviewSubject | null;
   listVacancyApplications(candidateId: string): VacancyApplication[];
   recordVacancyApplication(candidateId: string, input: VacancyApplicationInput): VacancyApplication;
   listApplications(candidateId: string, options?: ReadApplicationOptions): ApplicationView[];
@@ -130,17 +136,70 @@ function createCoreApplicationMethods(
   };
 }
 
+function parseInterviewSnapshot(raw: string | null) {
+  if (!raw) return {};
+  try {
+    const snap = JSON.parse(raw) as { title?: string; company?: string };
+    return { vacancyTitle: snap.title, vacancyCompany: snap.company };
+  } catch {
+    return {};
+  }
+}
+
+function queryInterviewSubject(
+  database: DatabaseSync,
+  candidateId: string,
+  interviewId: string,
+) {
+  const row = database
+    .prepare(
+      `SELECT i.id, i.application_id, i.round, i.scheduled_at,
+              a.stage, a.vacancy_snapshot, a.cluster_id
+       FROM application_interviews i
+       JOIN applications a ON a.id = i.application_id
+       WHERE i.id = ? AND a.candidate_id = ?`,
+    )
+    .get(interviewId, candidateId) as
+    | {
+        id: string;
+        application_id: string;
+        round: number;
+        scheduled_at: string | null;
+        stage: string;
+        vacancy_snapshot: string | null;
+        cluster_id: string | null;
+      }
+    | undefined;
+  if (!row) return null;
+  const { vacancyTitle, vacancyCompany } = parseInterviewSnapshot(row.vacancy_snapshot);
+  return {
+    id: row.id,
+    applicationId: row.application_id,
+    round: row.round,
+    scheduledAt: row.scheduled_at,
+    stage: row.stage,
+    vacancyTitle,
+    vacancyCompany,
+  };
+}
+
 function createInterviewApplicationMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
+  database: DatabaseSync,
 ): Pick<
   ApplicationTrackerMethods,
   | 'linkApplicationMaterial'
   | 'createApplicationInterview'
   | 'patchApplicationInterview'
   | 'putApplicationOffer'
+  | 'getInterviewSubject'
 > {
   return {
+    getInterviewSubject(candidateId, interviewId) {
+      requireCandidate(candidateId);
+      return queryInterviewSubject(database, candidateId, interviewId);
+    },
     linkApplicationMaterial(candidateId, applicationId, role, documentId) {
       requireCandidate(candidateId);
       return tracker.linkMaterial(candidateId, applicationId, role, documentId);
@@ -213,10 +272,11 @@ function createVacancyJourneyMethods(
 export function createApplicationTrackerMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
+  database: DatabaseSync,
 ): ApplicationTrackerMethods {
   return {
     ...createCoreApplicationMethods(tracker, requireCandidate),
-    ...createInterviewApplicationMethods(tracker, requireCandidate),
+    ...createInterviewApplicationMethods(tracker, requireCandidate, database),
     ...createVacancyJourneyMethods(tracker, requireCandidate),
   };
 }

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
-import { updateAccountProfile, type AuthUser } from '../coach/coachApi';
+import { updateAccountProfile, type AuthUser, type CoachTurnStage, type CoachTurnSubject } from '../coach/coachApi';
 import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
@@ -42,6 +42,23 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
 
+function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
+  switch (view) {
+    case 'profile':
+    case 'resume':
+      return 'profile';
+    case 'career':
+      return 'career';
+    case 'opportunities':
+      return 'vacancies';
+    case 'responses':
+      return 'responses';
+    case 'today':
+    default:
+      return 'today';
+  }
+}
+
 interface CareerCabinetProps {
   view: CareerCabinetView;
   session: AuthUser & { candidateId: string };
@@ -49,6 +66,7 @@ interface CareerCabinetProps {
   onNavigate: (view: CareerCabinetView) => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
 
@@ -67,6 +85,7 @@ export function CareerCabinet({
   onNavigate,
   onOpenTariffs,
   onOpenConnections,
+  onOpenExpert,
   onUpdateWorkspace,
 }: CareerCabinetProps) {
   const data = useCareerCabinetData(session.candidateId);
@@ -254,6 +273,9 @@ export function CareerCabinet({
             loading={data.loading && Boolean(data.snapshot)}
             error={data.error}
             onRetry={() => void data.refresh()}
+            onAskConsultant={
+              onOpenExpert ? () => onOpenExpert(stageForCabinetView(view)) : undefined
+            }
             tabs={
               view === 'profile' ? (
                 <ProfileTabs tab={profileTab} onTab={setProfileTab} />
@@ -292,6 +314,7 @@ export function CareerCabinet({
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
+            onOpenExpert={onOpenExpert}
             onUpdateWorkspace={onUpdateWorkspace}
           />
         )}
@@ -364,6 +387,7 @@ function CabinetSection({
   onSavePremises,
   onOpenTariffs,
   onOpenConnections,
+  onOpenExpert,
   onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
@@ -391,6 +415,7 @@ function CabinetSection({
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   if (view === 'today') {
@@ -466,6 +491,7 @@ function CabinetSection({
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
+        onOpenExpert={onOpenExpert}
       />
     );
   }
@@ -479,6 +505,7 @@ function CabinetSection({
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
       onOpenProfile={onOpenProfileRequirement}
+      onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
     />
   );
@@ -494,12 +521,14 @@ function CabinetHeader({
   loading,
   error,
   onRetry,
+  onAskConsultant,
   tabs,
 }: {
   view: CareerCabinetView;
   loading: boolean;
   error?: string;
   onRetry: () => void;
+  onAskConsultant?: () => void;
   /** «Профиль / Документ и форматы» — only the profile view sends one. */
   tabs?: ReactNode;
 }) {
@@ -508,6 +537,7 @@ function CabinetHeader({
       kicker={VIEW_KICKER[view]}
       title={VIEW_TITLE[view]}
       description={VIEW_DESCRIPTION[view]}
+      onAskConsultant={onAskConsultant}
       right={
         tabs || loading || error ? (
           <>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
+import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
@@ -30,9 +31,11 @@ const COLUMNS: readonly Column[] = [
 export function ResponsesBoard({
   state,
   onOpenVacancies,
+  onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   if (state.status === 'loading') return <LoadingState />;
   if (state.status === 'error') {
@@ -41,7 +44,7 @@ export function ResponsesBoard({
     );
   }
   if (state.applications.length === 0) return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
-  return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} />;
+  return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} onOpenExpert={onOpenExpert} />;
 }
 
 function LoadingState() {
@@ -125,9 +128,11 @@ function ErrorState({
 function ReadyBoard({
   state,
   onOpenVacancies,
+  onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [addingManual, setAddingManual] = useState(false);
   const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
@@ -154,6 +159,7 @@ function ReadyBoard({
             onCloseMenu={handleCloseMenu}
             onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
             onAddManual={column.key === 'saved' ? () => setAddingManual(true) : undefined}
+            onOpenExpert={onOpenExpert}
           />
         ))}
       </div>
@@ -188,6 +194,7 @@ interface BoardColumnProps {
   onCloseMenu: () => void;
   onOpenVacancies?: () => void;
   onAddManual?: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }
 
 function ColumnHeader({ label, count }: { label: string; count: number }) {
@@ -205,12 +212,14 @@ function ColumnCardItem({
   isMenuOpen,
   onToggleMenu,
   onCloseMenu,
+  onOpenExpert,
 }: {
   application: ApplicationView;
   state: UseApplications;
   isMenuOpen: boolean;
   onToggleMenu: (id: string) => void;
   onCloseMenu: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
     <ResponsesCard
@@ -220,6 +229,7 @@ function ColumnCardItem({
       isMenuOpen={isMenuOpen}
       onToggleMenu={() => onToggleMenu(application.id)}
       onCloseMenu={onCloseMenu}
+      onOpenExpert={onOpenExpert}
       onChangeStage={(stage, occurredAt) =>
         state.changeStage(application.id, stage, occurredAt)
       }
@@ -243,6 +253,7 @@ function BoardColumn({
   onCloseMenu,
   onOpenVacancies,
   onAddManual,
+  onOpenExpert,
 }: BoardColumnProps) {
   const cards = state.applications.filter((application) =>
     column.stages.includes(application.stage),
@@ -259,6 +270,7 @@ function BoardColumn({
             isMenuOpen={activeMenuCardId === application.id}
             onToggleMenu={onToggleMenu}
             onCloseMenu={onCloseMenu}
+            onOpenExpert={onOpenExpert}
           />
         ))}
         {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}
