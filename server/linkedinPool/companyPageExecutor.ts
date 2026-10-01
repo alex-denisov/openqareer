@@ -121,7 +121,7 @@ export class LinkedinPoolCompanyPageExecutor {
   async runStep(): Promise<LinkedinPoolExecutorReport> {
     if (!this.config.enabled) return report('disabled');
     if (this.stopped) return report('stopped');
-    if (this.reauthRequired) return report('needs_reauth');
+    if (this.reauthRequired && !this.accountReadyAgain()) return report('needs_reauth');
     if (this.running) return report('stopped');
     if (this.isBackingOff()) return { ...report('transient_failure'), reason: 'backoff' };
     this.running = true;
@@ -160,6 +160,15 @@ export class LinkedinPoolCompanyPageExecutor {
     const sample = Math.min(1, Math.max(0, this.random()));
     const jitter = 0.8 + 0.4 * sample;
     this.backoffUntilMs = this.now().getTime() + Math.round(baseMs * jitter);
+  }
+
+  /** The owner re-logged in and transferred a fresh session: resume without a process restart. */
+  private accountReadyAgain(): boolean {
+    if (!this.config.enabled) return false;
+    if (this.repository.findAccount(this.config.accountId)?.state !== 'ready') return false;
+    this.reauthRequired = false;
+    this.resetBackoff();
+    return true;
   }
 
   private resetBackoff(): void {
