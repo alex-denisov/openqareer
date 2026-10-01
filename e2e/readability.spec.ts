@@ -528,4 +528,28 @@ test.describe('B232 readability gate', () => {
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
   });
+
+  test('capture B335 screenshots: rail expanded, collapsed and mobile', async ({ page }) => {
+    await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    // Collapsed rail at 1176
+    await page.screenshot({ path: 'output/playwright/B335/rail-collapsed-1176.png' });
+
+    // Expanded rail at 1176
+    await page.locator('.career-rail-toggle').click();
+    await expect(page.locator('.career-shell')).toHaveAttribute('data-rail', 'expanded');
+    const railBox = await page.locator('.career-rail').boundingBox();
+    expect(railBox?.width).toBe(200);
+
+    await page.screenshot({ path: 'output/playwright/B335/rail-expanded-1176.png' });
+
+    // 390 mobile
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await page.screenshot({ path: 'output/playwright/B335/rail-390.png' });
+  });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { CaretLeft, CaretRight, ShieldCheck } from '@phosphor-icons/react';
+import { CaretLeft, CaretRight, ShieldCheck, Diamond } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import {
   VacanciesIcon,
@@ -7,7 +7,6 @@ import {
   TodayIcon,
   ResponsesIcon,
   ConsultantIcon,
-  TariffsIcon,
   type SectionIconProps,
 } from './sectionIcons';
 import type { AuthUser } from '../coach/coachApi';
@@ -51,6 +50,7 @@ interface CareerWorkspaceShellProps {
   onSessionChange?: (session: AuthUser | null) => void;
   /** Deep-links the shell straight to a section, e.g. a «Тарифы» link. */
   initialView?: ShellView;
+  initialRailExpanded?: boolean;
 }
 
 type SectionIcon = (props: SectionIconProps) => ReactElement;
@@ -175,6 +175,7 @@ export function CareerWorkspaceShell({
   onOpenLogin = () => undefined,
   onSessionChange = () => undefined,
   initialView = 'today',
+  initialRailExpanded,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>(initialView);
   const [expertOpen, setExpertOpen] = useState(false);
@@ -185,7 +186,7 @@ export function CareerWorkspaceShell({
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
   const [railExpanded, setRailExpanded] = useState(
-    () => typeof window !== 'undefined' && readRailPreference(),
+    () => initialRailExpanded ?? (typeof window !== 'undefined' && readRailPreference()),
   );
   // A diagnostic that is under way owns the «Сегодня» screen even after the
   // account its own source step demanded arrives (B141).
@@ -355,7 +356,9 @@ export function CareerWorkspaceShell({
   );
 
   const planName = CURRENT_PLAN.name;
-  const accountInitials = initialsFor(session?.displayName ?? session?.username ?? null);
+  const accountDisplayName = session?.displayName ?? session?.username ?? null;
+  const accountEmail = session?.email ?? null;
+  const accountInitials = initialsFor(accountDisplayName);
 
   return (
     <div
@@ -415,7 +418,11 @@ export function CareerWorkspaceShell({
             aria-label={`Тарифы, план ${planName}`}
             title={`Тарифы. План «${planName}»`}
           >
-            <TariffsIcon size={railExpanded ? 18 : 20} active={activeView === 'tariffs'} />
+            <Diamond
+              size={22}
+              weight={activeView === 'tariffs' ? 'fill' : 'regular'}
+              aria-hidden="true"
+            />
             {railExpanded ? (
               <span className="career-rail-plan-text">
                 <b>План · {planName}</b>
@@ -434,6 +441,14 @@ export function CareerWorkspaceShell({
             <span className="career-rail-avatar" aria-hidden="true">
               {accountInitials}
             </span>
+            {railExpanded && accountDisplayName ? (
+              <span className="career-account-details">
+                <span className="career-account-name">{accountDisplayName}</span>
+                {accountEmail ? (
+                  <span className="career-account-email">{accountEmail}</span>
+                ) : null}
+              </span>
+            ) : null}
           </button>
         </div>
         {/* Ручка сидит на кромке рельса, как разделитель панелей: прежняя
