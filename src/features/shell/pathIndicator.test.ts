@@ -12,10 +12,10 @@ describe('buildPathIndicator', () => {
       'not-started',
       'not-started',
     ]);
-    expect(steps.find((step) => step.id === 'profile')?.reason).toBe('Резюме не загружено');
+    expect(steps.find((step) => step.id === 'profile')?.reason).toBe('Нет данных');
     // Интервью has no data source in the product yet — it stays neutral
     // rather than borrowing another step's state.
-    expect(steps.find((step) => step.id === 'interviews')?.reason).toBe('Интервью не назначено');
+    expect(steps.find((step) => step.id === 'interviews')?.reason).toBe('Не назначено');
   });
 
   it('reads «Профиль» and «Роль» from the journey track', () => {
@@ -36,7 +36,7 @@ describe('buildPathIndicator', () => {
     });
     expect(steps.find((step) => step.id === 'role')).toMatchObject({
       state: 'in-progress',
-      reason: 'Проверяем рынок',
+      reason: 'Проверяем',
     });
   });
 
