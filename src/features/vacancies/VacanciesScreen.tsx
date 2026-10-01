@@ -14,7 +14,7 @@ import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
-import type { PathDestination, PathStep } from '../shell/pathIndicator';
+import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -25,7 +25,7 @@ import { CareerTooltip } from '../shell/CareerTooltip';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
-  readonly onNavigate: (destination: PathDestination) => void;
+  readonly onNavigate: (destination: PathDestination, options?: NavigationOptions) => void;
 }
 
 export interface VacanciesScreenProps {
@@ -435,7 +435,6 @@ function VacanciesFiltersSection({
   board,
   actions,
   candidateLevel,
-  onOpenProfile,
   subscriptionsCount,
   savedSearchesOpen,
   onToggleSavedSearches,
@@ -446,7 +445,6 @@ function VacanciesFiltersSection({
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly candidateLevel?: string | null;
-  readonly onOpenProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly subscriptionsCount?: number;
   readonly savedSearchesOpen: boolean;
   readonly onToggleSavedSearches: () => void;
@@ -467,17 +465,6 @@ function VacanciesFiltersSection({
       savedSearchesCount={subscriptionsCount}
       savedSearchesOpen={savedSearchesOpen}
       onToggleSavedSearches={onToggleSavedSearches}
-      onOpenProfileLevel={
-        onOpenProfile
-          ? () =>
-              onOpenProfile({
-                requirement: candidateLevel ?? '',
-                vacancyId: 'level',
-                vacancyTitle: candidateLevel ?? '',
-                vacancyCompany: '',
-              })
-          : undefined
-      }
     />
   );
 }
@@ -591,7 +578,6 @@ function VacanciesScreenContent({
         board={board}
         actions={actions}
         candidateLevel={input.candidateLevel}
-        onOpenProfile={input.onOpenProfile}
         subscriptionsCount={input.subscriptions?.length}
         savedSearchesOpen={savedSearchesOpen}
         onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}

@@ -16,6 +16,8 @@ import type { VacancyApplications } from './useVacancyApplications';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { ApplicationView } from '../applications/applicationsApi';
+import { extractVacancyRequirements, LEVEL_HUMAN_NAMES } from './vacancyLevel';
+import { VacancyInterviewForm } from './VacancyInterviewForm';
 
 export interface VacancyRowProps {
   readonly item: MatchedVacancyItem;
@@ -137,6 +139,37 @@ interface SummaryProps {
   readonly onSelect: () => void;
 }
 
+function VacancyRowTitleCol({
+  cluster,
+  skillMatching,
+  skillMissing,
+  trust,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly skillMatching: readonly string[];
+  readonly skillMissing: readonly string[];
+  readonly trust: ReturnType<typeof vacancyTrustSignals>;
+}) {
+  const total = skillMatching.length + skillMissing.length;
+  return (
+    <span className="vac-title-col">
+      <span className="vac-title">{cluster.canonicalTitle}</span>
+      <span className="vac-sub">{vacancySubtitle(cluster)}</span>
+      <VacancyReqTag
+        matching={skillMatching.length}
+        total={total}
+        missing={skillMissing.length}
+      />
+      <VacancyTrustTag trust={trust} />
+    </span>
+  );
+}
+
+function VacancyRowChevron({ isSelected }: { readonly isSelected: boolean }) {
+  const Icon = isSelected ? CaretUp : CaretDown;
+  return <Icon className="vac-chevron" size={16} aria-hidden="true" />;
+}
+
 function VacancyRowSummary({
   cluster,
   explanation,
@@ -146,9 +179,11 @@ function VacancyRowSummary({
   trust,
   onSelect,
 }: SummaryProps) {
-  const matchingCount = explanation.matchingPoints?.length ?? 0;
-  const missingCount = explanation.missingPoints?.length ?? 0;
-  const total = matchingCount + missingCount;
+  const { skillMatching, skillMissing } = extractVacancyRequirements(
+    explanation.matchingPoints,
+    explanation.missingPoints,
+    cluster.skills,
+  );
 
   return (
     <button
@@ -162,12 +197,12 @@ function VacancyRowSummary({
         {logoInitials(cluster.canonicalCompany)}
       </span>
       <span className="vac-main">
-        <span className="vac-title-col">
-          <span className="vac-title">{cluster.canonicalTitle}</span>
-          <span className="vac-sub">{vacancySubtitle(cluster)}</span>
-          <VacancyReqTag matching={matchingCount} total={total} missing={missingCount} />
-          <VacancyTrustTag trust={trust} />
-        </span>
+        <VacancyRowTitleCol
+          cluster={cluster}
+          skillMatching={skillMatching}
+          skillMissing={skillMissing}
+          trust={trust}
+        />
 
         <VacancyRowMeta
           comp={formatCompensationCompact(cluster.salary)}
@@ -182,11 +217,7 @@ function VacancyRowSummary({
         </span>
       </span>
 
-      {isSelected ? (
-        <CaretUp className="vac-chevron" size={16} aria-hidden="true" />
-      ) : (
-        <CaretDown className="vac-chevron" size={16} aria-hidden="true" />
-      )}
+      <VacancyRowChevron isSelected={isSelected} />
     </button>
   );
 }
@@ -231,8 +262,8 @@ function VacancyDetailGrid({
   onAddToProfile,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
-  readonly matchingPoints: string[];
-  readonly missingPoints: string[];
+  readonly matchingPoints: readonly string[];
+  readonly missingPoints: readonly string[];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
   return (
@@ -395,57 +426,6 @@ function VacancyActionButtons({
         Сопроводительное письмо
       </button>
     </div>
-  );
-}
-
-function VacancyInterviewForm({
-  scheduledLocal,
-  savingSchedule,
-  scheduleError,
-  onChangeDate,
-  onClose,
-  onSubmit,
-}: {
-  readonly scheduledLocal: string;
-  readonly savingSchedule: boolean;
-  readonly scheduleError?: string;
-  readonly onChangeDate: (val: string) => void;
-  readonly onClose: () => void;
-  readonly onSubmit: (e: FormEvent) => void;
-}) {
-  return (
-    <form
-      className="vacancies-interview-assignment"
-      aria-label="Назначить интервью"
-      onSubmit={onSubmit}
-    >
-      <label>
-        Дата и время интервью
-        <input
-          type="datetime-local"
-          required
-          value={scheduledLocal}
-          onChange={(e) => onChangeDate(e.target.value)}
-        />
-      </label>
-      {scheduleError ? (
-        <p className="vacancies-interview-error" role="alert">
-          {scheduleError}
-        </p>
-      ) : null}
-      <div className="action-row">
-        <button type="button" className="btn btn-secondary" onClick={onClose}>
-          Отмена
-        </button>
-        <button
-          type="submit"
-          className="btn btn-primary"
-          disabled={!scheduledLocal || savingSchedule}
-        >
-          {savingSchedule ? 'Сохраняем…' : 'Сохранить и открыть подготовку'}
-        </button>
-      </div>
-    </form>
   );
 }
 
@@ -638,10 +618,44 @@ function externalApplyProps(rowState: {
   };
 }
 
+function DetailRequirementsSection({
+  cluster,
+  explanation,
+  onAddToProfile,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly explanation: MatchedVacancyItem['explanation'];
+  readonly onAddToProfile?: VacancyRowProps['onAddToProfile'];
+}) {
+  const { skillMatching, skillMissing, vacancyLevel } = extractVacancyRequirements(
+    explanation.matchingPoints,
+    explanation.missingPoints,
+    cluster.skills,
+  );
+  const total = skillMatching.length + skillMissing.length;
+  return (
+    <>
+      {vacancyLevel ? (
+        <p className="vac-level-row">
+          Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[vacancyLevel]}</strong>
+        </p>
+      ) : null}
+      <p className="req-summary">
+        {total > 0
+          ? `Требования вакансии: ${skillMatching.length} из ${total} подтверждены фактами профиля`
+          : 'Требования вакансии не указаны в явном виде'}
+      </p>
+      <VacancyDetailGrid
+        cluster={cluster}
+        matchingPoints={skillMatching}
+        missingPoints={skillMissing}
+        onAddToProfile={onAddToProfile}
+      />
+    </>
+  );
+}
+
 function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
-  const matchingPoints = explanation.matchingPoints ?? [];
-  const missingPoints = explanation.missingPoints ?? [];
-  const total = matchingPoints.length + missingPoints.length;
   const { interviewState, appliedState, trust } = rowState;
   const source = vacancySourceLabels(cluster.sources)[0];
 
@@ -649,16 +663,9 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
     <div className="vac-detail vacancies-detail-col vacancies-detail-panel">
       <DetailTrustAlert trust={trust} />
       {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
-      <p className="req-summary">
-        {total > 0
-          ? `Требования вакансии: ${matchingPoints.length} из ${total} подтверждены фактами профиля`
-          : 'Требования вакансии не указаны в явном виде'}
-      </p>
-
-      <VacancyDetailGrid
+      <DetailRequirementsSection
         cluster={cluster}
-        matchingPoints={matchingPoints}
-        missingPoints={missingPoints}
+        explanation={explanation}
         onAddToProfile={rowProps.onAddToProfile}
       />
 

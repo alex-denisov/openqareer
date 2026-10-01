@@ -273,4 +273,73 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(1);
     expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(1);
   });
+
+  describe('D15: фильтрация колонки Интервью', () => {
+    it('показывает только колонку Интервью и пометку «Показаны отклики на этапе «Интервью» · Показать все»', () => {
+      const apps = [
+        application({ id: 'a1', stage: 'applied', vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' } }),
+        application({ id: 'a2', stage: 'interview', vacancy: { title: 'Interview Role', company: 'Comp B', url: '', source: 'hh' } }),
+      ];
+
+      act(() => {
+        root.render(
+          <ResponsesBoard
+            state={readyState(apps)}
+            onOpenVacancies={() => {}}
+            initialStageFilter="interview"
+          />,
+        );
+      });
+
+      expect(container.textContent).toContain('Показаны отклики на этапе «Интервью»');
+      expect(container.textContent).toContain('Показать все');
+      expect(container.textContent).toContain('Interview Role');
+      expect(container.textContent).not.toContain('Applied Role');
+      // Only interview column is rendered
+      const columnHeaders = Array.from(container.querySelectorAll('.career-responses-column-head h2')).map(
+        (el) => el.textContent,
+      );
+      expect(columnHeaders).toEqual(['Интервью']);
+
+      // Клик по «Показать все» снимает фильтр
+      const resetBtn = container.querySelector('.career-responses-filter-reset') as HTMLButtonElement;
+      act(() => {
+        resetBtn.click();
+      });
+
+      expect(container.textContent).not.toContain('Показаны отклики на этапе «Интервью»');
+      expect(container.textContent).toContain('Applied Role');
+      const allHeaders = Array.from(container.querySelectorAll('.career-responses-column-head h2')).map(
+        (el) => el.textContent,
+      );
+      expect(allHeaders.length).toBe(6);
+    });
+
+    it('показывает пустое состояние «Интервью пока не назначены», если откликов на этапе интервью нет', () => {
+      const apps = [
+        application({ id: 'a1', stage: 'applied', vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' } }),
+      ];
+
+      act(() => {
+        root.render(
+          <ResponsesBoard
+            state={readyState(apps)}
+            onOpenVacancies={() => {}}
+            initialStageFilter="interview"
+          />,
+        );
+      });
+
+      expect(container.textContent).toContain('Интервью пока не назначены');
+      const resetBtn = container.querySelector('button') as HTMLButtonElement;
+      expect(resetBtn.textContent).toContain('Открыть все отклики');
+
+      act(() => {
+        resetBtn.click();
+      });
+
+      expect(container.textContent).not.toContain('Интервью пока не назначены');
+      expect(container.textContent).toContain('Applied Role');
+    });
+  });
 });

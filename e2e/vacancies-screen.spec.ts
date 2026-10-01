@@ -1194,4 +1194,63 @@ test.describe('B250 vacancies screen', () => {
     await expect(tooltipBubble).toContainText('Уровень: рядом');
     await page.screenshot({ path: 'output/playwright/B343/tooltip-fit-dot-390.png' });
   });
+
+  test('уровень кандидата берётся из профиля, уровень вакансии отделён от навыков (D28)', async ({
+    page,
+  }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile-390';
+    if (!isMobile) {
+      await page.setViewportSize({ width: 1176, height: 900 });
+    }
+    await stubSession(page, {
+      matchedItems: [
+        {
+          cluster: cluster('c-d28', 'VP of Engineering', 'TechCorp', {
+            canonicalLocation: 'Москва',
+            isRemote: true,
+            skills: ['Architecture'],
+          }),
+          explanation: explanation('c-d28', {
+            matchingPoints: ['Architecture'],
+            missingPoints: ['vp', 'PostgreSQL'],
+          }),
+        },
+      ],
+      total: 1,
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    // (a) Проверка группы фильтра «Уровень»
+    if (isMobile) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
+    }
+    const filtersPanel = page.locator('.filters-panel');
+    await expect(filtersPanel.locator('.level-note')).toHaveText(
+      'Уровень берётся из опыта в профиле',
+    );
+    await expect(filtersPanel.getByText('изменить в профиле')).not.toBeVisible();
+    if (isMobile) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
+    }
+
+    // (б) Разбор вакансии: уровень отделен от навыков
+    const vacancyItem = page.locator('.vac-list-item').first();
+    if ((await vacancyItem.locator('.vac-row').getAttribute('aria-expanded')) !== 'true') {
+      await vacancyItem.locator('.vac-row').click();
+    }
+    const detail = vacancyItem.locator('.vac-detail');
+    await expect(detail).toBeVisible();
+    await expect(detail.locator('.vac-level-row')).toHaveText('Уровень вакансии: VP');
+    await expect(detail).toContainText('PostgreSQL');
+    await expect(detail.locator('.vac-detail-grid')).not.toContainText('vp');
+
+    // Screenshot for evidence
+    const label = isMobile ? '390' : '1176';
+    await page.screenshot({
+      path: `output/playwright/B344/d28-vacancies-level-${label}.png`,
+      fullPage: true,
+    });
+  });
 });

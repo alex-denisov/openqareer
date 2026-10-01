@@ -77,13 +77,28 @@ describe('TodayScreen (B251 S5)', () => {
     const html = renderTodayScreen();
 
     expect(html).toContain('3</span>');
-    expect(html).toContain('follow-up назначено на сегодня');
-    expect(html).toContain('follow-up просрочено');
+    expect(html).toContain('напоминание компании на сегодня');
+    expect(html).toContain('напоминание просрочено');
+    expect(html).not.toContain('follow-up');
+    expect(html).not.toContain('Follow-up');
     expect(html.match(/class="career-today-digest-number"/gu)).toHaveLength(4);
     expect(html).toContain('class="career-today-digest-number">1</span>');
     expect(html).toContain('кампания VP Technology Ops');
     expect(html).toContain('Peraton — 6 дней тишины');
     expect(html).toContain('HRTx Inc. · раунд 2');
+
+    const htmlMultiple = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        digest: {
+          ...snapshot.digest,
+          followUpsDueToday: 5,
+          followUpsOverdue: 5,
+        },
+      },
+    });
+    expect(htmlMultiple).toContain('напоминаний компании на сегодня');
+    expect(htmlMultiple).toContain('напоминаний просрочено');
   });
 
   it('marks the first queue row with an accent border, not an overlapping flag', () => {
@@ -111,7 +126,7 @@ describe('TodayScreen (B251 S5)', () => {
   it('renders follow-ups by due date', () => {
     const html = renderTodayScreen();
 
-    expect(html).toContain('Follow-up по срокам');
+    expect(html).toContain('Напоминания компании по срокам');
     expect(html).toContain('Peraton — Enterprise Architect');
     expect(html).toContain('сегодня');
   });

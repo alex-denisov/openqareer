@@ -577,7 +577,7 @@ function VacancyRow({
             </span>
           </CareerTooltip>
         ) : (
-          <CareerTooltip content="Отметьте после отклика на площадке. Только так мы узнаём об отклике, а дата попадёт в воронку и follow-up.">
+          <CareerTooltip content="Отметьте после отклика на площадке. Только так мы узнаём об отклике, а дата попадёт в воронку и напоминание компании.">
             <button
               type="button"
               className="career-vacancy-action"

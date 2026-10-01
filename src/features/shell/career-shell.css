@@ -985,7 +985,7 @@
   display: none;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -13883,6 +13883,29 @@ button.chip {
   margin: 0;
 }
 
+.vac-level-row {
+  display: block;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.vac-level-row strong {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.vacancies-detail-level-row {
+  display: block;
+  font-size: var(--career-text-sm);
+  color: var(--career-text-soft);
+  margin: 0 0 var(--career-space-2);
+}
+
+.vacancies-detail-level-row strong {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
 .req-summary {
   display: block;
   font-size: var(--career-text-xs);
@@ -14286,6 +14309,36 @@ button.chip {
 .career-responses-board-wrap {
   display: flex;
   flex-direction: column;
+}
+
+.career-responses-filter-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-top: var(--career-space-1);
+  margin-bottom: var(--career-space-2);
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.career-responses-filter-notice-sep {
+  color: var(--career-text-dim);
+}
+
+.career-responses-filter-reset {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: var(--career-text-xs);
+  color: var(--career-accent);
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.career-responses-filter-reset:hover {
+  text-decoration: none;
 }
 
 .career-responses-legend {

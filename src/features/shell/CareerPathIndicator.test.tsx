@@ -16,7 +16,7 @@ describe('CareerPathIndicator', () => {
     expect(html).toContain('Отклики');
     expect(html).toContain('Интервью');
     expect(html.match(/career-path-step/gu)?.length).toBe(5);
-    expect(html).toContain('Резюме не загружено');
+    expect(html).toContain('Нет данных');
   });
 
   it('marks a finished step "done" and drops its reason line', () => {
@@ -70,6 +70,41 @@ describe('CareerPathIndicator', () => {
     );
 
     expect(html).not.toContain('career-path-step" data-state="active"');
+  });
+
+  it('D9: ни одна подпись статуса не длиннее 14 символов', () => {
+    const testCases = [
+      { matchedPoolCount: 0, confirmedApplications: 0 },
+      { matchedPoolCount: 15, confirmedApplications: 0, activeSection: 'opportunities' },
+      { matchedPoolCount: 0, confirmedApplications: 1, activeResponses: 3 },
+      {
+        matchedPoolCount: 5,
+        confirmedApplications: 0,
+        nearestInterview: { company: 'SuperLongCompanyNameThatExceedsLimit', scheduledAt: '2026-10-01T10:00:00Z' },
+      },
+      {
+        track: [
+          { id: 'career-picture', label: 'Карьерная картина', status: 'active', reason: 'Собираем опыт, предпочтения и ограничения.' },
+          { id: 'role-market', label: 'Роль и рынок', status: 'waiting', reason: 'Сверяем роль со свежей выборкой рынка.' },
+        ],
+        matchedPoolCount: 0,
+        confirmedApplications: 0,
+      },
+    ] as const;
+
+    for (const input of testCases) {
+      const steps = buildPathIndicator(input);
+      for (const step of steps) {
+        expect(step.reason.length).toBeLessThanOrEqual(14);
+      }
+    }
+  });
+
+  it('D15: шаг «Интервью» передаёт destination responses и options { stage: "interview" }', () => {
+    const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
+    const interviewStep = steps.find((step) => step.id === 'interviews');
+    expect(interviewStep?.destination).toBe('responses');
+    expect(interviewStep?.navigationOptions).toEqual({ stage: 'interview' });
   });
 });
 

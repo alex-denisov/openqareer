@@ -31,18 +31,9 @@ export function ProfileDocumentMenu({
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
 }) {
-  const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ResumeFormatMode>('stanford-pdf');
   const projection = useMemo(() => previewProjection(draft, memory), [draft, memory]);
   const document = useMemo(() => selectDocument(projection, 'master'), [projection]);
-
-  if (!open) {
-    return (
-      <button type="button" className="career-quiet-button" onClick={() => setOpen(true)}>
-        Документ и форматы
-      </button>
-    );
-  }
 
   return (
     <div className="career-profile-screen-document-menu">
@@ -104,9 +95,6 @@ export function ProfileDocumentMenu({
             JSON
           </button>
         </div>
-        <button type="button" className="career-quiet-button" onClick={() => setOpen(false)}>
-          Закрыть
-        </button>
       </div>
       <div className="career-profile-screen-document-preview">
         {format === 'stanford-pdf' ? (

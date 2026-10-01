@@ -24,7 +24,7 @@ describe('waitingLabel', () => {
         whoseTurn: 'candidate',
         followUp: { dueAt: '2026-09-01', urgency: 'stale', source: 'standard_schedule', daysSinceContact: 12 },
       }).text,
-    ).toBe('Follow-up просрочен');
+    ).toBe('Напоминание компании просрочено');
   });
 
   it('shows calendar days once a follow-up is due', () => {
@@ -34,7 +34,7 @@ describe('waitingLabel', () => {
         whoseTurn: 'candidate',
         followUp: { dueAt: '2026-09-01', urgency: 'due', source: 'standard_schedule', daysSinceContact: 6 },
       }).text,
-    ).toBe('Follow-up сегодня · 6 дней');
+    ).toBe('Напоминание компании сегодня · 6 дней');
   });
 
   it('asks for interview prep ahead of the follow-up formula', () => {
@@ -55,7 +55,7 @@ describe('waitingLabel', () => {
         ...base,
         followUp: { dueAt: '2026-09-10', urgency: 'upcoming', source: 'standard_schedule', daysSinceContact: 1 },
       }),
-    ).toEqual({ text: 'Отправлен · рано для follow-up', on: 'them' });
+    ).toEqual({ text: 'Отправлен · рано для напоминания компании', on: 'them' });
   });
 
   it('defaults to waiting for the company otherwise', () => {

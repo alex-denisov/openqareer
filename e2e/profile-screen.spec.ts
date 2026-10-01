@@ -1201,4 +1201,25 @@ test.describe('B265 Profile screen', () => {
       path: testInfo.outputPath('profile-search-consent-390.png'),
     });
   });
+
+  test('D24: вкладка «Документ и форматы» сразу раскрыта без дублирующей кнопки', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openProfile(page);
+
+    const docTab = page
+      .locator('.career-profile-screen-tabs')
+      .getByRole('button', { name: 'Документ и форматы' });
+    await docTab.click();
+
+    await expect(page.locator('.career-profile-screen-document-menu')).toBeVisible();
+    await expect(page.locator('.career-resume-formats')).toBeVisible();
+    await expect(page.locator('.career-resume-formats')).toContainText('Stanford PDF');
+    await expect(
+      page.locator('.career-profile-screen-view > button.career-quiet-button'),
+    ).toHaveCount(0);
+  });
 });

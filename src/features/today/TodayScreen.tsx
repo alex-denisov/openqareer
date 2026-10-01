@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { LinkedinDraftCard } from './LinkedinDraftCard';
 import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
-import { pluralRu } from '../../../shared/pluralRu';
+import { pluralRu, pluralWordRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySinceLastVisit, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
-import { buildReturningDigestItems, companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
+import {
+  buildReturningDigestItems,
+  companyInitials,
+  digestBasis,
+  followUpStatusLabel,
+  formatQueueTitle,
+} from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 import { CareerTooltip } from '../shell/CareerTooltip';
 
@@ -235,13 +241,21 @@ function TodayDigestRow({ digest }: { digest: TodayDigest }) {
       />
       <DigestCard
         value={digest.followUpsDueToday}
-        label="follow-up назначено на сегодня"
+        label={pluralWordRu(digest.followUpsDueToday, [
+          'напоминание компании на сегодня',
+          'напоминания компании на сегодня',
+          'напоминаний компании на сегодня',
+        ])}
         basis={digestBasis('followUp', digest)}
         attention={digest.followUpsDueToday > 0}
       />
       <DigestCard
         value={digest.followUpsOverdue}
-        label="follow-up просрочено"
+        label={pluralWordRu(digest.followUpsOverdue, [
+          'напоминание просрочено',
+          'напоминания просрочено',
+          'напоминаний просрочено',
+        ])}
         basis={null}
         attention={digest.followUpsOverdue > 0}
       />
@@ -466,10 +480,10 @@ function QueueRow({
       <span className="career-today-item-logo">{companyInitials(item.company)}</span>
       <div className="career-today-item-body">
         <span className={`career-today-item-kind${isAccentKind ? ' is-accent' : ''}`}>
-          {item.eyebrow ?? queueKindLabel(item)}
+          {(item.eyebrow ?? queueKindLabel(item)).replace(/follow-up/gi, 'Напоминание компании')}
         </span>
         <div className="career-today-item-title">
-          {item.company ? `${item.company} — ${item.title}` : item.title}
+          {formatQueueTitle(item.company, item.title)}
         </div>
         <div className="career-today-item-meta">
           <span className="metric">{secondLine}</span>
@@ -596,13 +610,13 @@ function TodayFollowUps({
 }) {
   if (followUps.length === 0) return null;
   return (
-    <section className="career-today-followups" aria-label="Follow-up по срокам">
-      <h2>Follow-up по срокам</h2>
+    <section className="career-today-followups" aria-label="Напоминания компании по срокам">
+      <h2>Напоминания компании по срокам</h2>
       <ul>
         {followUps.map((item) => (
           <li key={item.applicationId} className="career-today-followup-item">
             <span className="career-today-followup-who">
-              {item.company ? `${item.company} — ${item.title}` : item.title}
+              {formatQueueTitle(item.company, item.title)}
             </span>
             <span className={`career-today-followup-when metric is-${item.status}`}>
               {followUpStatusLabel(item.status)}
@@ -653,7 +667,7 @@ function MarkFollowUpButton({
 function queueKindLabel(item: TodayQueueItem): string {
   if (item.kind === 'new_vacancy') return 'Новая вакансия';
   if (item.kind === 'shortlist') return 'Из подборки';
-  if (item.kind === 'follow_up') return 'Follow-up';
+  if (item.kind === 'follow_up') return 'Напоминание компании';
   if (item.kind === 'interview') return 'Интервью';
   return 'Ваш ход';
 }

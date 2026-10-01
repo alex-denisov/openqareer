@@ -153,6 +153,23 @@ describe('VacancyRow (B266/B324)', () => {
       const html = render({ item: noReqs });
       expect(html).not.toContain('vac-req');
     });
+
+    it('separates seniority level from skills list and displays human level row (D28)', () => {
+      const levelItem: MatchedVacancyItem = {
+        ...item(),
+        explanation: {
+          ...item().explanation,
+          matchingPoints: ['System Architecture'],
+          missingPoints: ['vp', 'PostgreSQL'],
+        },
+      };
+      const html = render({ item: levelItem, isSelected: true });
+      expect(html).toContain('Требования: <span class="num">1 из 2</span>');
+      expect(html).toContain('Уровень вакансии: <strong>VP</strong>');
+      expect(html).toContain('PostgreSQL');
+      expect(html).not.toMatch(/<li class="req-no">[^<]*<span>vp<\/span>/);
+      expect(html).toContain('Требования вакансии: 1 из 2 подтверждены фактами профиля');
+    });
   });
 
   describe('B262 · trust signals in vacancy row', () => {

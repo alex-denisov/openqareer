@@ -1,4 +1,5 @@
 import type { CareerJourney } from '../journey/careerJourneyEngine';
+import type { ApplicationStage } from '../../../shared/applicationStage';
 
 /**
  * A narrow subset of `ShellSection`/`CareerCabinetView` — the only screens a
@@ -7,6 +8,10 @@ import type { CareerJourney } from '../journey/careerJourneyEngine';
  * `onNavigate` callbacks accept different (but overlapping) view unions.
  */
 export type PathDestination = 'profile' | 'career' | 'opportunities' | 'responses';
+
+export interface NavigationOptions {
+  readonly stage?: ApplicationStage;
+}
 
 /**
  * B248 — the cross-screen path indicator: Профиль → Роль → Подборка →
@@ -30,6 +35,8 @@ export interface PathStep {
   readonly reason: string;
   /** Nearest existing screen the step opens on click. */
   readonly destination: PathDestination;
+  /** D15: Параметры навигации (например, фильтр этапа 'interview'). */
+  readonly navigationOptions?: NavigationOptions;
 }
 
 type TrackItem = NonNullable<CareerJourney['track']>[number];
@@ -59,17 +66,25 @@ export interface PathIndicatorInput {
 }
 
 
-const NO_JOURNEY_REASON = 'Резюме не загружено';
-const NO_INTERVIEW_DATA_REASON = 'Интервью не назначено';
+const NO_JOURNEY_REASON = 'Нет данных';
+const NO_INTERVIEW_DATA_REASON = 'Не назначено';
 
-function formatInterviewReason(scheduledAt: string): string {
-  const date = new Date(scheduledAt);
-  if (Number.isNaN(date.getTime())) return 'Дата уточняется';
-  const weekday = new Intl.DateTimeFormat('ru-RU', { weekday: 'long' }).format(date);
-  const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit' }).format(
-    date,
-  );
-  return `${weekday}, ${time}`;
+/** Сокращает подпись статуса шага до ≤ 14 символов (D9: например «Собираем», «Готово», «Нет данных»). */
+export function compactReason(rawReason: string | undefined): string {
+  if (!rawReason) return 'Нет данных';
+  if (rawReason.length <= 14) return rawReason;
+  if (rawReason.startsWith('Собираем')) return 'Собираем';
+  if (rawReason.startsWith('Опорные факты') || rawReason.startsWith('Ролевая гипотеза')) return 'Готово';
+  if (rawReason.startsWith('Сверяем') || rawReason.startsWith('Проверяем')) return 'Проверяем';
+  if (rawReason.startsWith('Ждёт')) return 'Ждёт опыта';
+  if (rawReason.startsWith('Резюме не') || rawReason.startsWith('Нет данных')) return 'Нет данных';
+  if (rawReason.startsWith('Роль не')) return 'Не выбрана';
+  if (rawReason.startsWith('Кампания вернула')) return 'Готово';
+  if (rawReason.startsWith('Кампания не') || rawReason.includes('пул по роли')) return 'Пул пуст';
+  if (rawReason.startsWith('Есть подтверждённый') || rawReason.startsWith('Есть отклик')) return 'Есть отклик';
+  if (rawReason.startsWith('Откликов нет')) return 'Нет откликов';
+  if (rawReason.startsWith('Интервью не')) return 'Не назначено';
+  return rawReason.slice(0, 14).trim();
 }
 
 function trackState(item: TrackItem | undefined): PathStepState {
@@ -140,10 +155,12 @@ function shortlistStepOf(input: PathIndicatorInput): PathStep {
     isCurrent: false,
     reason:
       state === 'done'
-        ? 'Кампания вернула вакансии'
+        ? 'Готово'
         : input.matchedPoolCount > 0
-          ? `${input.matchedPoolCount} в подборке`
-          : 'Кампания не запущена или пул по роли пуст',
+          ? `${input.matchedPoolCount} в подборке`.length <= 14
+            ? `${input.matchedPoolCount} в подборке`
+            : `${input.matchedPoolCount} в пуле`
+          : 'Пул пуст',
     destination: 'opportunities',
   };
 }
@@ -159,8 +176,8 @@ function responsesStepOf(input: PathIndicatorInput): PathStep {
     state === 'in-progress'
       ? `${active} в работе`
       : state === 'done'
-        ? 'Есть подтверждённый отклик'
-        : 'Откликов нет — начните с очереди дня';
+        ? 'Есть отклик'
+        : 'Нет откликов';
   return {
     id: 'responses',
     label: 'Отклики',
@@ -173,13 +190,16 @@ function responsesStepOf(input: PathIndicatorInput): PathStep {
 
 function interviewsStepOf(input: PathIndicatorInput): PathStep {
   if (input.nearestInterview) {
+    const comp = input.nearestInterview.company;
+    const reason = comp.length <= 14 ? comp : 'Назначено';
     return {
       id: 'interviews',
       label: 'Интервью',
       state: 'in-progress',
       isCurrent: false,
-      reason: `${input.nearestInterview.company} · ${formatInterviewReason(input.nearestInterview.scheduledAt)}`,
+      reason,
       destination: 'responses',
+      navigationOptions: { stage: 'interview' },
     };
   }
   return {
@@ -189,6 +209,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
     isCurrent: false,
     reason: NO_INTERVIEW_DATA_REASON,
     destination: 'responses',
+    navigationOptions: { stage: 'interview' },
   };
 }
 
@@ -206,7 +227,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       label: 'Профиль',
       state: trackState(profileItem),
       isCurrent: false,
-      reason: profileItem?.reason ?? NO_JOURNEY_REASON,
+      reason: compactReason(profileItem?.reason ?? NO_JOURNEY_REASON),
       destination: 'profile',
     },
     {
@@ -214,7 +235,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       label: 'Роль',
       state: trackState(roleItem),
       isCurrent: false,
-      reason: roleItem?.reason ?? 'Роль не выбрана',
+      reason: compactReason(roleItem?.reason ?? 'Не выбрана'),
       destination: 'career',
     },
     shortlistStepOf(input),
@@ -230,6 +251,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
 
   return stepsWithSequentialState.map((step) => ({
     ...step,
+    reason: compactReason(step.reason),
     isCurrent: currentStepId !== null && step.id === currentStepId,
   }));
 }

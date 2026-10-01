@@ -116,9 +116,9 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('vacancy-facet-count');
   });
 
-  it('shows the derived candidate level', () => {
-    expect(render().toString()).toContain('изменить в профиле');
-    expect(render().toString()).not.toContain('из профиля');
+  it('shows that level is derived from profile experience without an edit link (D28)', () => {
+    expect(render().toString()).toContain('Уровень берётся из опыта в профиле');
+    expect(render().toString()).not.toContain('изменить в профиле');
   });
 
   it('lists every matched vacancy as a row', () => {

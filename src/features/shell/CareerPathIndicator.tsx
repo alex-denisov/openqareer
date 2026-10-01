@@ -1,10 +1,10 @@
 import { PathCheckIcon } from './sectionIcons';
-import type { PathDestination, PathStep } from './pathIndicator';
+import type { NavigationOptions, PathDestination, PathStep } from './pathIndicator';
 
 
 interface CareerPathIndicatorProps {
   readonly steps: readonly PathStep[];
-  readonly onNavigate: (destination: PathDestination) => void;
+  readonly onNavigate: (destination: PathDestination, options?: NavigationOptions) => void;
 }
 
 function stepDataState(step: PathStep): 'done' | 'active' | 'pending' {
@@ -58,7 +58,7 @@ function DesktopPathSteps({ steps, onNavigate }: CareerPathIndicatorProps) {
           <button
             type="button"
             className="career-path-btn"
-            onClick={() => onNavigate(step.destination)}
+            onClick={() => onNavigate(step.destination, step.navigationOptions)}
             aria-current={step.isCurrent ? 'step' : undefined}
             aria-label={`${step.label}. ${step.state === 'done' ? 'Готово' : step.reason}`}
           >
@@ -89,7 +89,7 @@ function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
       <button
         type="button"
         className="career-path-mobile-summary"
-        onClick={() => onNavigate(current.step.destination)}
+        onClick={() => onNavigate(current.step.destination, current.step.navigationOptions)}
         aria-label={`Шаг ${current.index + 1} из ${steps.length}. ${current.step.label}. ${current.step.reason}`}
       >
         <span className="career-path-mobile-dots" aria-hidden="true">

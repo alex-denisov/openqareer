@@ -529,6 +529,37 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
   });
 
+  test('B344 D9: на 1176 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
+    page,
+  }) => {
+    await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    await openSection(page, 'Вакансии');
+    const reasons = page.locator('.career-path-reason:visible');
+    const count = await reasons.count();
+    for (let i = 0; i < count; i++) {
+      const reasonEl = reasons.nth(i);
+      const text = (await reasonEl.textContent()) ?? '';
+      expect(text.length).toBeLessThanOrEqual(14);
+      const textOverflow = await reasonEl.evaluate(
+        (el) => window.getComputedStyle(el).textOverflow,
+      );
+      expect(textOverflow).not.toBe('ellipsis');
+    }
+
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1176.png' });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page
+      .locator('.career-path')
+      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
+  });
+
   test('capture B335 screenshots: rail expanded, collapsed and mobile', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });

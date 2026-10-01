@@ -119,6 +119,18 @@ describe('VacancyDetailPanel (B250)', () => {
     expect(html).not.toContain('Требования вакансии, которых нет в вашем профиле');
   });
 
+  it('separates seniority level from missing requirements and renders level row (D28)', () => {
+    const html = render({
+      item: item({
+        matchingPoints: ['Kubernetes'],
+        missingPoints: ['vp', 'Опыт публичной компании'],
+      }),
+    });
+    expect(html).toContain('Уровень вакансии: <strong>VP</strong>');
+    expect(html).toContain('Опыт публичной компании');
+    expect(html).not.toMatch(/<li class="vacancies-req-no">[^<]*<span>vp<\/span>/);
+  });
+
   it('hides the company-signal grid entirely — no enrichment field exists yet', () => {
     const html = render();
     expect(html).not.toContain('vacancies-signals');

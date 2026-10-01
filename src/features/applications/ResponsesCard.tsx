@@ -257,7 +257,7 @@ function FollowUpSentControl({
             .finally(() => setSaving(false));
         }}
       >
-        {saving ? 'Сохраняем…' : 'Отметить follow-up отправленным'}
+        {saving ? 'Сохраняем…' : 'Отметить напоминание компании отправленным'}
       </button>
     </div>
   );
