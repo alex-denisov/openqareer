@@ -552,4 +552,42 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
     await page.screenshot({ path: 'output/playwright/B335/rail-390.png' });
   });
+
+  test('capture B336 screenshots: languages, sources and tariffs', async ({ page }) => {
+    await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    // Profile screen: languages
+    await page.locator('button[aria-label="Профиль"]:visible').first().click();
+    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+
+    const languagesHeading = page.getByRole('heading', { name: 'Языки', exact: true });
+    await expect(languagesHeading).toBeVisible();
+    await languagesHeading.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
+
+    // Sources (reputation audit) unscanned state: click tab «Проверка по источникам»
+    await page.getByRole('button', { name: 'Проверка по источникам' }).click();
+    const sourcesHeading = page.getByRole('heading', { name: 'Что о вас находят открытые источники', exact: true });
+    await expect(sourcesHeading).toBeVisible();
+    await sourcesHeading.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'output/playwright/B336/sources-1176.png' });
+
+    // Tariffs at 1176
+    const tariffsTrigger = page.locator('.career-rail-plan:visible, .career-mobile-tariffs:visible').first();
+    await tariffsTrigger.click();
+    await expect(page.getByRole('heading', { name: 'Сколько делать за вас', exact: true })).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
+
+    // Tariffs at 390
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    const mobileTariffsTrigger = page.locator('.career-mobile-tariffs:visible, .career-rail-plan:visible').first();
+    await mobileTariffsTrigger.click();
+    await expect(page.getByRole('heading', { name: 'Сколько делать за вас', exact: true })).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B336/tariffs-390.png' });
+  });
 });

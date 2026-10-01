@@ -306,7 +306,7 @@ describe('CareerWorkspaceShell', () => {
 
     expect(html).toContain('Доступно сейчас');
     expect(html).toContain('Ручное сопровождение');
-    expect(html).toContain('Автоматизация пока недоступна');
+    expect(html).toContain('Пока недоступна');
   });
 
   it('labels an old saved market sample as stale rather than fresh', () => {

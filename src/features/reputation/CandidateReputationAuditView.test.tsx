@@ -110,4 +110,43 @@ describe('CandidateReputationAuditView', () => {
     );
     expect(html).toContain('Сетевой сбой при получении отчета');
   });
+
+  it('B336: отображает честный заголовок, кнопку без «повторный» и нейтральные статусы при not_scanned', () => {
+    const unverifiedAudit: CandidateReputationAudit = {
+      id: 'audit-unscanned-1',
+      candidateId: 'cand-1',
+      status: 'completed',
+      overallStatus: 'not_scanned',
+      score: 0,
+      consistencyDiscrepancies: [],
+      reputationRisks: [],
+      consentAction: 'Источники цифрового следа не подключены: результат не является оценкой безопасности.',
+      startedAt: '2026-09-30T01:39:18.512Z',
+    };
+
+    const htmlWithoutLinkedIn = renderToStaticMarkup(
+      <CandidateReputationAuditView
+        candidateId="cand-1"
+        initialAudit={unverifiedAudit}
+        linkedInConnected={false}
+      />,
+    );
+    expect(htmlWithoutLinkedIn).toContain('Согласованность истории между источниками');
+    expect(htmlWithoutLinkedIn).not.toContain('Cross-Source');
+    expect(htmlWithoutLinkedIn).toContain('Запустить проверку');
+    expect(htmlWithoutLinkedIn).not.toContain('Запустить повторный анализ');
+    expect(htmlWithoutLinkedIn).toContain('Не проверялось: источники не подключены');
+    expect(htmlWithoutLinkedIn).toContain('Не проверялось: публичные публикации не сканировались');
+    expect(htmlWithoutLinkedIn).not.toContain('безопасности..');
+
+    const htmlWithLinkedIn = renderToStaticMarkup(
+      <CandidateReputationAuditView
+        candidateId="cand-1"
+        initialAudit={unverifiedAudit}
+        linkedInConnected={true}
+      />,
+    );
+    expect(htmlWithLinkedIn).toContain('Не проверялось: проверка открытых источников ещё не запускалась');
+    expect(htmlWithLinkedIn).not.toContain('безопасности..');
+  });
 });

@@ -42,6 +42,12 @@ describe('CareerTariffsView', () => {
     expect(html).not.toContain('test-account');
     expect(html).not.toContain('receipts');
   });
+
+  it('B336: у плана Автоматизация подпись «Пока недоступна» без повтора', () => {
+    expect(html).toContain('Пока недоступна');
+    expect(html).not.toContain('пока недоступно');
+    expect(html).not.toContain('Автоматизация пока недоступна · пока недоступно');
+  });
 });
 
 describe('CareerTariffsView · заявка на план с консультантом', () => {
@@ -69,7 +75,7 @@ describe('CareerTariffsView · заявка на план с консульта�
     });
   }
 
-  it('sends the request to the server and confirms only after it is stored', async () => {
+  it('sends the request to the server and confirms only after it is stored with formatted date', async () => {
     const fetchSpy = vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
     vi.spyOn(apiClient, 'readData')
       .mockResolvedValueOnce([] as never)
@@ -91,13 +97,46 @@ describe('CareerTariffsView · заявка на план с консульта�
       '/api/v1/candidate/plan-requests',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(container.textContent).toContain('Заявка отправлена — свяжемся в течение рабочего дня');
+    expect(container.textContent).toContain('Заявка отправлена 25 сентября — свяжемся в течение рабочего дня');
     expect(
       [...container.querySelectorAll('button')].some(
         (button) => button.textContent === 'Оставить заявку',
       ),
     ).toBe(false);
     vi.restoreAllMocks();
+  });
+
+  it('B336: если у сохранённой заявки нет даты, пишет «Заявка уже отправлена»', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
+    vi.spyOn(apiClient, 'readData').mockResolvedValueOnce([
+      { planId: 'consultant' },
+    ] as never);
+    mount();
+    // Wait for initial load
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.textContent).toContain('Заявка уже отправлена');
+    vi.restoreAllMocks();
+  });
+
+  it('B336: для плана Автоматизация показывает нейтральные точки вместо галочек', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => {
+      root.render(<CareerTariffsView onOpenCoach={() => undefined} />);
+    });
+    const picker = container.querySelector('.career-plan-picker') as HTMLElement;
+    const autoButton = [...picker.querySelectorAll('button')].find((button) =>
+      button.textContent?.includes('Автоматизация'),
+    ) as HTMLButtonElement;
+    act(() => {
+      autoButton.click();
+    });
+    const pointsList = container.querySelector('.career-plan-detail ul') as HTMLElement;
+    expect(pointsList.querySelectorAll('.career-plan-point-dot').length).toBeGreaterThan(0);
+    expect(pointsList.querySelectorAll('svg:not(.career-plan-point-dot)').length).toBe(0);
   });
 
   it('says the request did not go through when the server fails', async () => {

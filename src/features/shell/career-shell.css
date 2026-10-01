@@ -3245,7 +3245,7 @@
 
 .career-plan-layout {
   display: grid;
-  grid-template-columns: minmax(210px, 0.62fr) minmax(0, 1.38fr);
+  grid-template-columns: minmax(280px, 1fr) minmax(0, 1.38fr);
   gap: clamp(28px, 6vw, 72px);
 }
 
@@ -3332,6 +3332,15 @@
 
 .career-plan-detail li svg {
   color: var(--career-success);
+}
+
+.career-plan-detail li .career-plan-point-dot {
+  width: 6px;
+  height: 6px;
+  margin-inline: 5px;
+  border-radius: 50%;
+  background: var(--career-text-dim);
+  flex: none;
 }
 
 .career-plan-note {
@@ -8459,6 +8468,7 @@
 
 .career-plan-current {
   display: inline-block;
+  white-space: nowrap;
   margin-inline-start: 8px;
   padding: 2px 8px;
   border-radius: 999px;
@@ -10339,6 +10349,10 @@
   background: var(--career-surface);
   color: var(--career-success);
   font-size: var(--career-text-sm);
+}
+
+.career-reputation-empty-box.is-unscanned {
+  color: var(--career-text-dim);
 }
 
 .career-reputation-list {
