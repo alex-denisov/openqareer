@@ -348,7 +348,11 @@ test.describe('B089 administrator console', () => {
                 body: await response.text(),
               };
             }
-            if (command === 'start_tunnel' || command === 'stop_tunnel' || command === 'open_connector_session') {
+            if (
+              command === 'start_tunnel' ||
+              command === 'stop_tunnel' ||
+              command === 'open_connector_session'
+            ) {
               (
                 window as unknown as { __linkedinSessionBridgeState: typeof sessionBridgeState }
               ).__linkedinSessionBridgeState.calls.push(command);
@@ -513,7 +517,11 @@ test.describe('B089 administrator console', () => {
         () =>
           (
             window as unknown as {
-              __linkedinSessionBridgeState: { exports: number; localProfileClears: number; calls: string[] };
+              __linkedinSessionBridgeState: {
+                exports: number;
+                localProfileClears: number;
+                calls: string[];
+              };
             }
           ).__linkedinSessionBridgeState,
       );

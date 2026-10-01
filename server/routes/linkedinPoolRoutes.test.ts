@@ -173,7 +173,10 @@ describe('admin LinkedIn pool tunnel', () => {
       url: '/api/v1/admin/linkedin/desktop-tunnel',
       headers: { cookie: await signIn(app, CANDIDATE) },
     });
-    const anonymous = await app.inject({ method: 'GET', url: '/api/v1/admin/linkedin/desktop-tunnel' });
+    const anonymous = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/desktop-tunnel',
+    });
     expect(candidate.statusCode).toBe(403);
     expect(anonymous.statusCode).toBe(401);
     expect(candidate.body).not.toContain('tunnel-test-password');

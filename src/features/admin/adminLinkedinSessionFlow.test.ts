@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isClosedSessionWindow, startAdminLinkedinRoute, transferFailureCopy } from './adminLinkedinSessionFlow';
+import {
+  isClosedSessionWindow,
+  startAdminLinkedinRoute,
+  transferFailureCopy,
+} from './adminLinkedinSessionFlow';
 
 describe('isClosedSessionWindow (B325)', () => {
   it('treats the Tauri missing-window rejection as a closed window', () => {
