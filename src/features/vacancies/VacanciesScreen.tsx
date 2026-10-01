@@ -21,6 +21,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import { VacancyMapView } from './VacancyMapView';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -300,14 +301,15 @@ function VacanciesListHeader({
       )}
       <span className="fit-legend">
         Совпадение: роль · уровень · география
-        <button
-          type="button"
-          className="info-btn"
-          aria-label="Как устроен порядок и что значит «в базе»"
-          title="Порядок задаёт сервер: сначала роль, уровень и география, затем совпавшие требования; фантомные и сомнительные вакансии ниже, с причиной. «В базе» — дни с первого сбора записи, а не дата публикации."
-        >
-          <Info size={16} aria-hidden="true" />
-        </button>
+        <CareerTooltip content="Порядок задаёт сервер: сначала роль, уровень и география, затем совпавшие требования; фантомные и сомнительные вакансии ниже, с причиной. «В базе» — дни с первого сбора записи, а не дата публикации.">
+          <button
+            type="button"
+            className="info-btn"
+            aria-label="Как устроен порядок и что значит «в базе»"
+          >
+            <Info size={16} aria-hidden="true" />
+          </button>
+        </CareerTooltip>
       </span>
     </div>
   );

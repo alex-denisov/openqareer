@@ -5,6 +5,7 @@ import {
   UploadSimple,
   type Icon,
 } from '@phosphor-icons/react';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 export type OnboardingSourceCardChoice = 'pdf' | 'profile-import' | 'none';
 
@@ -86,21 +87,27 @@ export function OnboardingSourceCards(props: OnboardingSourceCardsProps) {
     <div className="career-onboarding-source-grid" role="group" aria-label="Источник опыта">
       {cards.map((card) => {
         const closed = props.lockedTo !== undefined && props.lockedTo !== card.group;
-        return (
+        const cardButton = (
           <button
-            key={card.id}
             type="button"
             className={`career-onboarding-source-card ${card.selected ? 'is-selected' : ''}`}
             aria-pressed={card.selected}
             aria-disabled={closed ? true : undefined}
             data-blocked={closed ? 'true' : undefined}
-            title={closed ? props.lockReason : undefined}
             onClick={closed ? undefined : card.onClick}
           >
             <card.icon size={26} weight={card.selected ? 'fill' : 'regular'} />
             <strong>{card.title}</strong>
             <span>{card.detail}</span>
           </button>
+        );
+
+        return closed && props.lockReason ? (
+          <CareerTooltip key={card.id} content={props.lockReason}>
+            {cardButton}
+          </CareerTooltip>
+        ) : (
+          <span key={card.id}>{cardButton}</span>
         );
       })}
     </div>

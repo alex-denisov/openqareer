@@ -533,7 +533,7 @@ describe('CareerWorkspaceShell brand chrome', () => {
     it('names the current plan on the account trigger while the diagnostic is unfinished', () => {
       const html = renderToStaticMarkup(firstTime);
 
-      expect(html).toContain(`title="Аккаунт и тарифы. План «${CURRENT_PLAN.name}»"`);
+      expect(html).toContain(`Аккаунт и тарифы. План «${CURRENT_PLAN.name}»`);
     });
 
     it('drops the contextless global expert door', () => {

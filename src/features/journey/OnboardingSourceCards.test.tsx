@@ -56,7 +56,7 @@ describe('OnboardingSourceCards', () => {
       /<button[^>]*>[\s\S]*?Профиль LinkedIn[\s\S]*?<\/button>/,
     );
     expect(linkedinButtonMatch?.[0]).toContain('aria-disabled="true"');
-    expect(linkedinButtonMatch?.[0]).toContain('title="PDF уже прочитан."');
+    expect(html).toContain('PDF уже прочитан.');
   });
 
   it('reflects a connected LinkedIn profile even while the source is generically "profile-import"', () => {

@@ -61,7 +61,6 @@ function DesktopPathSteps({ steps, onNavigate }: CareerPathIndicatorProps) {
             onClick={() => onNavigate(step.destination)}
             aria-current={step.isCurrent ? 'step' : undefined}
             aria-label={`${step.label}. ${step.state === 'done' ? 'Готово' : step.reason}`}
-            title={step.reason}
           >
             <span className="career-path-dot" aria-hidden="true">
               {step.state === 'done' ? <PathCheckIcon size={13} /> : null}
@@ -115,7 +114,6 @@ function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
           className="career-quiet-button career-path-mobile-role"
           onClick={() => onNavigate(roleStep.destination)}
           aria-label={`${roleStep.label}. ${roleStep.state === 'done' ? 'Готово' : roleStep.reason}`}
-          title={roleStep.reason}
         >
           Настроить роль
         </button>

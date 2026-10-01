@@ -20,6 +20,7 @@ import type { IntakeSourceLockState } from './intakeSourceLock';
 import type { ConnectedProfileSource } from './connectedProfileSource';
 import { pluralRu } from '../../../shared/pluralRu';
 import { LOCAL_PDF_MAX_BYTES, megabytes } from '../../../shared/fileLimits';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 export type SourceChoice = 'profile-import' | 'pdf' | 'text' | 'none';
 
@@ -325,7 +326,7 @@ function PlatformCardAction({
   onConnect: () => void;
   onDisconnect: () => void;
 }) {
-  return (
+  const button = (
     <button
       type="button"
       className={`career-platform-card-action ${
@@ -333,13 +334,14 @@ function PlatformCardAction({
       }`}
       disabled={disabled}
       aria-disabled={blocked ? true : undefined}
-      title={blockedReason}
       aria-label={blocked ? `Подключить ${name}. ${blockedReason}` : undefined}
       onClick={blocked ? undefined : connected ? onDisconnect : onConnect}
     >
       {connected ? 'Отключить' : 'Подключить'}
     </button>
   );
+
+  return blockedReason ? <CareerTooltip content={blockedReason}>{button}</CareerTooltip> : button;
 }
 
 interface PlatformCardProps {
@@ -479,7 +481,7 @@ function SourceButton({
   closedReason?: string;
   onClick: () => void;
 }) {
-  return (
+  const button = (
     <button
       type="button"
       className={selected ? 'is-selected' : ''}
@@ -487,11 +489,13 @@ function SourceButton({
       aria-disabled={disabled ? true : undefined}
       data-blocked={disabled ? 'true' : undefined}
       aria-label={closedReason ? `${label}. ${closedReason}` : undefined}
-      title={closedReason ?? label}
       onClick={disabled ? undefined : onClick}
     >
       <ItemIcon size={20} weight={selected ? 'fill' : 'regular'} />
       <span>{label}</span>
     </button>
   );
+
+  const tooltipContent = closedReason ?? label;
+  return tooltipContent ? <CareerTooltip content={tooltipContent}>{button}</CareerTooltip> : button;
 }

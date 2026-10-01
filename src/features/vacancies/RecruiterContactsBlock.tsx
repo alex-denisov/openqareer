@@ -70,20 +70,23 @@ function EmailAction({ email }: { readonly email: string }) {
 
   return (
     <div className="career-recruiter-email-wrap">
-      <a href={`mailto:${email}`} className="career-recruiter-link" title="Написать письмо">
-        <EnvelopeSimple size={15} aria-hidden="true" />
-        <span>{email}</span>
-      </a>
-      <button
-        type="button"
-        className="career-recruiter-copy-btn"
-        onClick={handleCopy}
-        title="Скопировать адрес"
-        aria-label="Скопировать адрес"
-      >
-        <Copy size={13} aria-hidden="true" />
-        {copied && <span className="career-recruiter-copied">Адрес скопирован</span>}
-      </button>
+      <CareerTooltip content="Написать письмо">
+        <a href={`mailto:${email}`} className="career-recruiter-link">
+          <EnvelopeSimple size={15} aria-hidden="true" />
+          <span>{email}</span>
+        </a>
+      </CareerTooltip>
+      <CareerTooltip content="Скопировать адрес">
+        <button
+          type="button"
+          className="career-recruiter-copy-btn"
+          onClick={handleCopy}
+          aria-label="Скопировать адрес"
+        >
+          <Copy size={13} aria-hidden="true" />
+          {copied && <span className="career-recruiter-copied">Адрес скопирован</span>}
+        </button>
+      </CareerTooltip>
     </div>
   );
 }

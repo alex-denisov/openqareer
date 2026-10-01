@@ -1155,4 +1155,43 @@ test.describe('B250 vacancies screen', () => {
     });
     await errorPage.close();
   });
+
+  test('B343: tooltip shows on hover on fit dot and rail toggle switches caption', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1176, height: 800 });
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    // 1. Hover fit dot -> shows "Уровень: рядом"
+    const nearbyDot = page.locator('.fit-dot.is-nearby').first();
+    await nearbyDot.hover();
+    const tooltipBubble = page.locator('.career-tooltip-bubble[data-open="true"]');
+    await expect(tooltipBubble).toBeVisible();
+    await expect(tooltipBubble).toContainText('Уровень: рядом');
+    await page.screenshot({ path: 'output/playwright/B343/tooltip-fit-dot-1176.png' });
+
+    // 2. Rail toggle button -> test expand/collapse tooltip
+    const railToggle = page.locator('.career-rail-toggle');
+    await railToggle.hover();
+    await expect(tooltipBubble).toContainText('Развернуть панель');
+    await page.screenshot({ path: 'output/playwright/B343/tooltip-rail-toggle-1176.png' });
+
+    await railToggle.click();
+    await railToggle.hover();
+    await expect(tooltipBubble).toContainText('Свернуть панель');
+
+    // Also capture at 1440 and 390 per spec §5.4
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await nearbyDot.hover();
+    await expect(tooltipBubble).toContainText('Уровень: рядом');
+    await page.screenshot({ path: 'output/playwright/B343/tooltip-fit-dot-1440.png' });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await nearbyDot.hover();
+    await expect(tooltipBubble).toContainText('Уровень: рядом');
+    await page.screenshot({ path: 'output/playwright/B343/tooltip-fit-dot-390.png' });
+  });
 });
