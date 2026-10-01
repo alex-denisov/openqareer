@@ -14271,10 +14271,13 @@ button.chip {
 .career-responses-board {
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: 272px;
+  grid-auto-columns: minmax(220px, 1fr);
   gap: var(--career-space-4);
   overflow-x: auto;
-  padding-bottom: var(--career-space-3);
+  min-height: 640px;
+  padding-bottom: var(--career-space-8);
+  scrollbar-width: thin;
+  scrollbar-color: var(--career-line-strong) transparent;
 }
 
 .career-responses-column {
@@ -14325,10 +14328,30 @@ button.chip {
   display: flex;
   flex-direction: column;
   gap: var(--career-space-2);
+  cursor: pointer;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.career-responses-card:hover {
+  border-color: var(--career-line-strong);
 }
 
 .career-responses-card.is-your-turn {
   border-color: color-mix(in oklch, var(--career-warning) 45%, var(--career-line));
+}
+
+.career-responses-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  cursor: pointer;
+  outline: none;
+}
+
+.career-responses-card-body:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+  border-radius: var(--career-radius-sm);
 }
 
 .career-responses-card-role {
@@ -14464,17 +14487,20 @@ button.chip {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
   border-radius: var(--career-radius-sm);
   border: 1px solid transparent;
   background: none;
-  color: var(--career-text-dim);
+  color: var(--career-text-soft);
   cursor: pointer;
 }
 
 .career-responses-menu-wrap > button:hover {
-  color: var(--career-text-soft);
+  color: var(--career-text);
   border-color: var(--career-line);
   background: var(--career-surface-raised);
 }
@@ -14526,35 +14552,74 @@ button.chip {
 .career-responses-stage-control label {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
 }
 
-.career-responses-stage-control select,
-.career-responses-stage-control input {
-  background: var(--career-surface);
-  border: 1px solid var(--career-line);
+.career-responses-select-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.career-responses-select-wrap select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  background: var(--career-bg);
+  border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   color: var(--career-text);
-  padding: 6px 8px;
+  padding: 8px 30px 8px 10px;
   font-size: var(--career-text-aux);
+  cursor: pointer;
+}
+
+.career-responses-select-wrap select:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 1px;
+}
+
+.career-responses-select-caret {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
+  color: var(--career-text-dim);
+}
+
+.career-responses-stage-control input[type='date'],
+.career-responses-stage-control input {
+  background: var(--career-bg);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  padding: 8px 10px;
+  font-size: var(--career-text-aux);
+  resize: none;
+  min-height: 36px;
+}
+
+.career-responses-stage-control input::-webkit-resizer {
+  display: none;
 }
 
 .career-responses-note-field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
 }
 
 .career-responses-note-field textarea {
-  background: var(--career-surface);
-  border: 1px solid var(--career-line);
+  background: var(--career-bg);
+  border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   color: var(--career-text);
-  padding: 6px 8px;
+  padding: 8px 10px;
   font-size: var(--career-text-aux);
   resize: vertical;
   min-height: 44px;
@@ -14607,9 +14672,13 @@ button.chip {
 
 @media (max-width: 760px) {
   .career-responses-board {
-    grid-auto-columns: 84vw;
-    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
-    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent);
+    display: flex;
+    flex-direction: column;
+    gap: var(--career-space-6);
+    overflow-x: visible;
+    min-height: auto;
+    mask-image: none;
+    -webkit-mask-image: none;
   }
 }
 

@@ -1,5 +1,11 @@
-import { useState } from 'react';
-import { ArrowClockwise, DotsThreeVertical, FileText, Warning } from '@phosphor-icons/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ArrowClockwise,
+  CaretDown,
+  DotsThreeVertical,
+  FileText,
+  Warning,
+} from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
@@ -24,6 +30,9 @@ interface ResponsesCardProps {
   readonly application: ApplicationView;
   readonly failed: boolean;
   readonly conflicted: boolean;
+  readonly isMenuOpen?: boolean;
+  readonly onToggleMenu?: () => void;
+  readonly onCloseMenu?: () => void;
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
   readonly onRetry: () => void;
@@ -51,37 +60,124 @@ function waitingLabelFor(application: ApplicationView) {
   });
 }
 
-export function ResponsesCard({
-  application,
-  failed,
-  conflicted,
-  onChangeStage,
-  onScheduleInterview,
-  onRetry,
-  onRefresh,
-  onSaveNote,
-  onMarkFollowUpSent,
-  onSkip,
-}: ResponsesCardProps) {
+function useCardMenuState(
+  isMenuOpen: boolean | undefined,
+  onToggleMenu: (() => void) | undefined,
+  onCloseMenu: (() => void) | undefined,
+) {
+  const [localMenuOpen, setLocalMenuOpen] = useState(false);
+  const menuOpen = isMenuOpen !== undefined ? isMenuOpen : localMenuOpen;
+  const toggleMenu = onToggleMenu ?? (() => setLocalMenuOpen((open) => !open));
+  const closeMenu = useCallback(
+    () => (onCloseMenu ? onCloseMenu() : setLocalMenuOpen(false)),
+    [onCloseMenu],
+  );
+  const cardRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+    const handlePointerDown = (event: MouseEvent | PointerEvent) => {
+      if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
+        closeMenu();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [menuOpen, closeMenu]);
+
+  const handleCardClick = (event: React.MouseEvent) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea, label')) return;
+    toggleMenu();
+  };
+
+  const handleBodyKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleMenu();
+    }
+  };
+
+  return { menuOpen, toggleMenu, closeMenu, cardRef, handleCardClick, handleBodyKeyDown };
+}
+
+function CardHeaderContent({
+  title,
+  company,
+  hasMaterials,
+}: {
+  title: string;
+  company: string;
+  hasMaterials: boolean;
+}) {
+  return (
+    <>
+      <div className="career-responses-card-role">{title}</div>
+      <div className="career-responses-card-company">{company}</div>
+      <MaterialsBadge hasMaterials={hasMaterials} />
+    </>
+  );
+}
+
+function CardTopBody({
+  vacancy,
+  materials,
+  onClick,
+  onKeyDown,
+}: {
+  vacancy?: ApplicationView['vacancy'];
+  materials: ApplicationView['materials'];
+  onClick: (event: React.MouseEvent) => void;
+  onKeyDown: (event: React.KeyboardEvent) => void;
+}) {
+  const company = vacancy?.companyHidden
+    ? 'компания скрыта'
+    : vacancy?.company || 'компания не указана';
+  const hasMaterials = Boolean(materials.coverLetter || materials.resume);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className="career-responses-card-body"
+      onClick={onClick}
+      onKeyDown={onKeyDown}
+    >
+      <CardHeaderContent
+        title={vacancy?.title ?? 'Без названия'}
+        company={company}
+        hasMaterials={hasMaterials}
+      />
+    </div>
+  );
+}
+
+export function ResponsesCard(props: ResponsesCardProps) {
+  const { application, failed, conflicted, isMenuOpen, onToggleMenu, onCloseMenu } = props;
+  const { menuOpen, toggleMenu, closeMenu, cardRef, handleCardClick, handleBodyKeyDown } =
+    useCardMenuState(isMenuOpen, onToggleMenu, onCloseMenu);
   const label = waitingLabelFor(application);
 
   return (
     <article
+      ref={cardRef}
       className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}`}
       data-cluster={application.clusterId ?? ''}
     >
-      <div className="career-responses-card-role">
-        {application.vacancy?.title ?? 'Без названия'}
-      </div>
-      <div className="career-responses-card-company">
-        {application.vacancy?.companyHidden
-          ? 'компания скрыта'
-          : application.vacancy?.company || 'компания не указана'}
-      </div>
-      <MaterialsBadge
-        hasMaterials={application.materials.coverLetter || application.materials.resume}
+      <CardTopBody
+        vacancy={application.vacancy}
+        materials={application.materials}
+        onClick={handleCardClick}
+        onKeyDown={handleBodyKeyDown}
       />
-      <CardAlerts failed={failed} conflicted={conflicted} onRetry={onRetry} onRefresh={onRefresh} />
+      <CardAlerts failed={failed} conflicted={conflicted} onRetry={props.onRetry} onRefresh={props.onRefresh} />
       {application.stage === 'interview' ? (
         <PrepareInterviewControl application={application} />
       ) : null}
@@ -89,12 +185,15 @@ export function ResponsesCard({
         application={application}
         labelText={label.text}
         labelOn={label.on}
-        onChangeStage={onChangeStage}
-        onScheduleInterview={onScheduleInterview}
-        onSaveNote={onSaveNote}
-        onSkip={onSkip}
+        menuOpen={menuOpen}
+        onToggleMenu={toggleMenu}
+        onCloseMenu={closeMenu}
+        onChangeStage={props.onChangeStage}
+        onScheduleInterview={props.onScheduleInterview}
+        onSaveNote={props.onSaveNote}
+        onSkip={props.onSkip}
       />
-      <FollowUpSentControl application={application} onMark={onMarkFollowUpSent} />
+      <FollowUpSentControl application={application} onMark={props.onMarkFollowUpSent} />
     </article>
   );
 }
@@ -171,57 +270,92 @@ interface CardFooterProps {
   application: ApplicationView;
   labelText: string;
   labelOn: 'you' | 'them' | null;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
   onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }
 
+interface CardMenuWrapProps {
+  application: ApplicationView;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
+  onSaveNote: (notes: string) => void;
+  onSkip: (reasonId: SkipReasonId) => void;
+}
+
+function CardMenuWrap(props: CardMenuWrapProps) {
+  const { application, menuOpen, onToggleMenu, onCloseMenu } = props;
+  return (
+    <div className="career-responses-menu-wrap">
+      <button
+        type="button"
+        aria-label="Действия с карточкой"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleMenu();
+        }}
+      >
+        <DotsThreeVertical size={18} />
+      </button>
+      {menuOpen ? (
+        <CardMenu
+          application={application}
+          onChangeStage={(stage, occurredAt) => {
+            props.onChangeStage(stage, occurredAt);
+            onCloseMenu();
+          }}
+          onScheduleInterview={(scheduledAt) => {
+            onCloseMenu();
+            return props.onScheduleInterview(scheduledAt);
+          }}
+          onSaveNote={(notes) => {
+            props.onSaveNote(notes);
+            onCloseMenu();
+          }}
+          onSkip={(reasonId) => {
+            props.onSkip(reasonId);
+            onCloseMenu();
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function CardFooter({
   application,
   labelText,
   labelOn,
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
   onChangeStage,
   onScheduleInterview,
   onSaveNote,
   onSkip,
 }: CardFooterProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="career-responses-card-footer">
       <span className={`career-responses-waiting ${labelOn ? `is-on-${labelOn}` : 'is-closed'}`}>
         {labelText}
       </span>
-      <div className="career-responses-menu-wrap">
-        <button
-          type="button"
-          aria-label="Действия с карточкой"
-          onClick={() => setMenuOpen((open) => !open)}
-        >
-          <DotsThreeVertical size={16} />
-        </button>
-        {menuOpen ? (
-          <CardMenu
-            application={application}
-            onChangeStage={(stage, occurredAt) => {
-              onChangeStage(stage, occurredAt);
-              setMenuOpen(false);
-            }}
-            onScheduleInterview={(scheduledAt) => {
-              setMenuOpen(false);
-              return onScheduleInterview(scheduledAt);
-            }}
-            onSaveNote={(notes) => {
-              onSaveNote(notes);
-              setMenuOpen(false);
-            }}
-            onSkip={(reasonId) => {
-              onSkip(reasonId);
-              setMenuOpen(false);
-            }}
-          />
-        ) : null}
-      </div>
+      <CardMenuWrap
+        application={application}
+        menuOpen={menuOpen}
+        onToggleMenu={onToggleMenu}
+        onCloseMenu={onCloseMenu}
+        onChangeStage={onChangeStage}
+        onScheduleInterview={onScheduleInterview}
+        onSaveNote={onSaveNote}
+        onSkip={onSkip}
+      />
     </div>
   );
 }
@@ -295,6 +429,7 @@ function StageChangeControl({
       {dirty ? (
         <button
           type="button"
+          className="career-btn career-btn-primary career-btn-sm"
           onClick={() =>
             saveStageChange({
               nextStage,
@@ -320,15 +455,18 @@ function StageSelect({
   onChange: (stage: ApplicationStage) => void;
 }) {
   return (
-    <label>
+    <label className="career-responses-select-field">
       Этап
-      <select value={value} onChange={(event) => onChange(event.target.value as ApplicationStage)}>
-        {APPLICATION_STAGES.map((stageOption) => (
-          <option key={stageOption} value={stageOption}>
-            {STAGE_LABEL[stageOption]}
-          </option>
-        ))}
-      </select>
+      <div className="career-responses-select-wrap">
+        <select value={value} onChange={(event) => onChange(event.target.value as ApplicationStage)}>
+          {APPLICATION_STAGES.map((stageOption) => (
+            <option key={stageOption} value={stageOption}>
+              {STAGE_LABEL[stageOption]}
+            </option>
+          ))}
+        </select>
+        <CaretDown size={14} className="career-responses-select-caret" aria-hidden="true" />
+      </div>
     </label>
   );
 }

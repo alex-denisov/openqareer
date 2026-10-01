@@ -528,4 +528,149 @@ test.describe('B232 readability gate', () => {
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
   });
+
+  test('capture B337 screenshots: responses board fit and card menu', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'run once from desktop-1440');
+    const sampleApplications = [
+      {
+        id: 'app-1',
+        candidateId: 'candidate-b251',
+        clusterId: null,
+        stage: 'saved',
+        closedReason: null,
+        processProfile: 'standard',
+        vacancy: {
+          title: 'Cloud & Infra Solution Architect',
+          company: 'Sonsoft Inc',
+          url: 'https://hh.ru/vacancy/1',
+          source: 'hh',
+        },
+        notes: 'Интересный проект',
+        followUpDueAt: null,
+        stageChangedAt: '2026-09-20T10:00:00.000Z',
+        version: 1,
+        createdAt: '2026-09-15T10:00:00.000Z',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        followUp: null,
+        whoseTurn: 'candidate',
+        materials: { coverLetter: false, resume: false },
+        nearestInterview: null,
+      },
+      {
+        id: 'app-2',
+        candidateId: 'candidate-b251',
+        clusterId: null,
+        stage: 'applied',
+        closedReason: null,
+        processProfile: 'standard',
+        vacancy: {
+          title: 'Enterprise Architect, Senior Advisor',
+          company: 'Peraton',
+          url: 'https://hh.ru/vacancy/2',
+          source: 'hh',
+        },
+        notes: null,
+        followUpDueAt: '2026-10-05T00:00:00.000Z',
+        stageChangedAt: '2026-09-20T10:00:00.000Z',
+        version: 1,
+        createdAt: '2026-09-15T10:00:00.000Z',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        followUp: null,
+        whoseTurn: 'company',
+        materials: { coverLetter: true, resume: true },
+        nearestInterview: null,
+      },
+      {
+        id: 'app-3',
+        candidateId: 'candidate-b251',
+        clusterId: null,
+        stage: 'responded',
+        closedReason: null,
+        processProfile: 'standard',
+        vacancy: {
+          title: 'Enterprise Architect Director',
+          company: 'HRTx, Inc.',
+          url: 'https://hh.ru/vacancy/3',
+          source: 'hh',
+        },
+        notes: null,
+        followUpDueAt: null,
+        stageChangedAt: '2026-09-20T10:00:00.000Z',
+        version: 1,
+        createdAt: '2026-09-15T10:00:00.000Z',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        followUp: null,
+        whoseTurn: 'candidate',
+        materials: { coverLetter: true, resume: true },
+        nearestInterview: null,
+      },
+      {
+        id: 'app-4',
+        candidateId: 'candidate-b251',
+        clusterId: null,
+        stage: 'interview',
+        closedReason: null,
+        processProfile: 'standard',
+        vacancy: {
+          title: 'VP of Platform Architecture',
+          company: 'Cisco Systems',
+          url: 'https://hh.ru/vacancy/4',
+          source: 'hh',
+        },
+        notes: 'Технический скрининг пройден',
+        followUpDueAt: null,
+        stageChangedAt: '2026-09-20T10:00:00.000Z',
+        version: 1,
+        createdAt: '2026-09-15T10:00:00.000Z',
+        updatedAt: '2026-09-20T10:00:00.000Z',
+        followUp: null,
+        whoseTurn: 'company',
+        materials: { coverLetter: true, resume: true },
+        nearestInterview: {
+          date: '2026-10-03T14:00:00.000Z',
+          format: 'online',
+          interviewer: 'VP Engineering',
+        },
+      },
+    ];
+
+    await mockSignedInCabinet(page);
+    await page.route('**/api/v1/candidate/applications*', async (route) => {
+      await route.fulfill({ json: { data: sampleApplications } });
+    });
+
+    // Viewport 1176: desktop app window
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    await page.locator('button[aria-label="Отклики"]:visible').first().click();
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+    await expect(page.locator('.career-responses-card')).toHaveCount(4);
+
+    const colSaved = page.locator('.career-responses-column[aria-label="Хочу"]');
+    const colApplied = page.locator('.career-responses-column[aria-label="Откликнулся"]');
+    const colResponded = page.locator('.career-responses-column[aria-label="Ответ"]');
+    const colInterview = page.locator('.career-responses-column[aria-label="Интервью"]');
+    await expect(colSaved).toBeVisible();
+    await expect(colApplied).toBeVisible();
+    await expect(colResponded).toBeVisible();
+    await expect(colInterview).toBeVisible();
+
+    await page.screenshot({ path: 'output/playwright/B337/board-1176.png' });
+
+    // Open card menu by clicking card body
+    await page.locator('.career-responses-card-body').first().click();
+    await expect(page.locator('.career-responses-card-menu')).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B337/card-menu-1176.png' });
+
+    // Viewport 390: mobile layout
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    await page.locator('button[aria-label="Отклики"]:visible').first().click();
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B337/board-390.png' });
+  });
 });
