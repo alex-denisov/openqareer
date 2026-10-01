@@ -11,7 +11,7 @@ import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
-import { VacanciesScreen } from '../vacancies/VacanciesScreen';
+import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
@@ -470,15 +470,10 @@ function CabinetSection({
     );
   }
   return (
-    <VacanciesScreen
-      matched={pool.matched}
-      total={pool.total || pool.matched.length}
-      campaign={pool.campaign}
-      candidateLevel={pool.candidateLevel}
-      loading={pool.loading}
-      failed={pool.failed}
-      failureSourceLabel={pool.failureSourceLabel}
-      onRetry={pool.refresh}
+    <VacanciesPoolScreen
+      pool={pool}
+      subscriptions={data.snapshot?.vacancySubscriptions}
+      onRefreshSubscriptions={data.refresh}
       applications={vacancyApplications}
       onMarkAlreadyApplied={onMarkAlreadyApplied}
       onScheduleInterview={onScheduleInterview}

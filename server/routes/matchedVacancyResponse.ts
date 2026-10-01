@@ -1,3 +1,4 @@
+import { buildMatchedVacancyFacets } from '../vacancies/matchedVacancyFacets';
 import { campaignMeta } from './campaignContext';
 import type { CampaignResolution } from '../vacancies/campaign';
 
@@ -14,7 +15,7 @@ export function unconfirmedCandidateMatchResponse(
       total: 0,
       offset,
       nextOffset: null,
-      ...(offset === 0 ? { pageOffsets: [0] } : {}),
+      ...(offset === 0 ? { pageOffsets: [0], facets: buildMatchedVacancyFacets([]) } : {}),
       campaign: campaignMeta(campaign),
     },
   };

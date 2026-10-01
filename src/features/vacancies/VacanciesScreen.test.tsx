@@ -83,6 +83,9 @@ function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) 
     <VacanciesScreen
       matched={[matchedItem('c-1', 'VP Technology Ops')]}
       total={61}
+      facets={{ total: 61, regions: [{ id: 'mena', count: 61 }], remote: 0,
+        levels: [{ level: 'vp', count: 61 }], roles: [{ role: 'VP Technology Ops', count: 34 },
+          { role: 'COO', count: 6 }], sources: [] }}
       campaign={campaign}
       candidateLevel="VP / C-level"
       now="2026-09-24T09:00:00.000Z"
@@ -100,13 +103,14 @@ describe('VacanciesScreen (B250)', () => {
 
   it('shows every role hypothesis as a chip with its vacancy count, and marks the hypothesis', () => {
     const html = render();
-    expect(html).toContain('VP Technology Ops (34)');
-    expect(html).toContain('COO (6) — гипотеза');
-    expect(html).toContain('vacancies-chip-hypothesis');
+    expect(html).toContain('VP Technology Ops ·');
+    expect(html).toContain('COO ·');
+    expect(html).toContain('vacancy-facet-count');
   });
 
   it('shows the derived candidate level', () => {
-    expect(render().toString()).toContain('VP / C-level');
+    expect(render().toString()).toContain('изменить в профиле');
+    expect(render().toString()).not.toContain('из профиля');
   });
 
   it('lists every matched vacancy as a row', () => {
@@ -134,8 +138,8 @@ describe('VacanciesScreen (B250)', () => {
     const html = render({
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
-    expect(html).toContain('Все роли кампании');
-    expect(html).toMatch(/vacancies-chip-accent is-selected"[^>]*>\s*Все роли кампании/);
+    expect(html).not.toContain('Все роли кампании');
+    expect(html).toContain('Фильтры · 0 активных');
   });
 
   it('does not render without a campaign or a level', () => {
@@ -143,7 +147,7 @@ describe('VacanciesScreen (B250)', () => {
   });
 
   it('marks counts of zero and five as a hypothesis, but not eight', () => {
-    const empty = render({ campaign: campaignWithCount(0), matched: [], total: 0 });
+    const empty = render({ campaign: campaignWithCount(0), matched: [], total: 0, facets: undefined });
     expect(empty).toContain('По роли VP Technology Ops найдено 0 вакансий');
     expect(empty).toContain('По роли VP Technology Ops пока нет вакансий');
 
@@ -155,7 +159,7 @@ describe('VacanciesScreen (B250)', () => {
   });
 
   it('не показывает блок «Сохранённые запросы» на экране «Вакансии»', () => {
-    const html = render({ matched: [], total: 0 });
+    const html = render({ matched: [], total: 0, facets: undefined });
 
     expect(html).not.toContain('career-vacancy-saved');
     expect(html).not.toContain('Новый запрос к площадке');
@@ -188,7 +192,7 @@ describe('VacanciesScreen (B250)', () => {
         suggestedRegions: ['mena'],
       },
     });
-    expect(html).toContain('Добавить: MENA');
+    expect(html).not.toContain('Добавить: MENA');
   });
 
   it('кампания с origin: profile читается как без ограничения (regions=[]) и предлагает подсказку (C63)', () => {
@@ -199,7 +203,7 @@ describe('VacanciesScreen (B250)', () => {
       },
     });
     expect(html).not.toContain('Расширить географию');
-    expect(html).toContain('Добавить: MENA');
+    expect(html).not.toContain('Добавить: MENA');
   });
 
   it('кампания с явным пустым выбором (без ограничения) не предлагает «Расширить географию» (C63)', () => {

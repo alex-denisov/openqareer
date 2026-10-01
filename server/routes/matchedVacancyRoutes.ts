@@ -1,10 +1,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { ZodError } from 'zod';
 import { performance } from 'node:perf_hooks';
-import { z } from 'zod';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
+import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
+import { buildMatchedVacancyFacets } from '../vacancies/matchedVacancyFacets';
+import { filterMatchedVacancies, matchedVacanciesQuerySchema, type MatchedVacancyFilters } from '../vacancies/matchedVacancyFilters';
 import { markGeography } from '../vacancies/vacancyGeography';
 import {
   invalidateAllMatchedVacancies,
@@ -21,10 +24,6 @@ import { authenticateCandidate, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
-
-const matchedVacanciesQuerySchema = z.object({
-  offset: z.coerce.number().int().min(0).default(0),
-});
 
 /** Первый запрос к конкретному движку равен первому запросу процесса в runtime. */
 const observedMatchEngines = new WeakSet<object>();
@@ -63,22 +62,20 @@ function buildMatchedResponse(
   candidateId: string,
   targetLevel: ReturnType<typeof readTargetLevel>,
   titleParseStore: RouteDeps['titleParseStore'],
-  offset: number,
+  filters: MatchedVacancyFilters,
 ) {
+  const { offset } = filters;
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = finishMatchedVacancies(
-    snapshot,
-    targetRoles,
-    campaign,
-    candidateStore,
-    candidateId,
-  );
+  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId);
   const hypothesisSnapshot = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
     : snapshot;
   const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
   const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
-  const page = buildMatchedVacancyPage(matched, offset);
+  const readLevel = (item: MatchedVacancyItem) => titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
+  const facets = offset === 0 ? buildMatchedVacancyFacets(matched, targetRoles, readLevel) : undefined;
+  const filtered = filterMatchedVacancies(matched, filters, targetRoles, readLevel);
+  const page = buildMatchedVacancyPage(filtered, offset);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
@@ -87,7 +84,8 @@ function buildMatchedResponse(
   return {
     data,
     page,
-    preloadIds: matched.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
+    facets,
+    preloadIds: filtered.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
     campaignWithHypotheses,
     pageAndExplanationsMs,
     titleParseAndLevelsMs: elapsedMs(titleParseStartedAt),
@@ -158,7 +156,7 @@ async function readMatchedPage(
   targetLevel: ReturnType<typeof readTargetLevel>,
   campaign: CampaignResolution,
   titleParseStore: RouteDeps['titleParseStore'],
-  offset: number,
+  filters: MatchedVacancyFilters,
 ) {
   const startedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
@@ -177,7 +175,7 @@ async function readMatchedPage(
       candidateId,
       targetLevel,
       titleParseStore,
-      offset,
+      filters,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
   };
@@ -198,6 +196,7 @@ function matchedVacancyResponse(
       ...(response.page.pageOffsets ? { pageOffsets: response.page.pageOffsets } : {}),
       campaign: campaignMeta(response.campaignWithHypotheses),
       candidateLevel: targetLevel ?? null,
+      ...(response.facets ? { facets: response.facets } : {}),
     },
   };
 }
@@ -212,7 +211,8 @@ const handleMatchedVacancies: Handler = async (
   observedMatchEngines.add(multiSourceEngine);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { offset } = matchedVacanciesQuerySchema.parse(request.query);
+  const filters = matchedVacanciesQuerySchema.parse(request.query);
+  const { offset } = filters;
   const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
   const campaign = readCampaign(candidateStore, candidate.id);
@@ -220,39 +220,34 @@ const handleMatchedVacancies: Handler = async (
   const candidateCampaignMs = elapsedMs(candidateCampaignStartedAt);
 
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
+    filterMatchedVacancies([], filters, targetRoles);
     return unconfirmedCandidateMatchResponse(request.id, offset, campaign);
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const { response, semanticQueryAndSqlMs } = await readMatchedPage(
-    multiSourceEngine,
-    candidateStore,
-    candidate.id,
-    confirmedSkills,
-    targetRoles,
-    targetLevel,
-    campaign,
-    titleParseStore,
-    offset,
+    multiSourceEngine, candidateStore, candidate.id, confirmedSkills,
+    targetRoles, targetLevel, campaign, titleParseStore, filters,
   );
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
   preloadTopMatchedDescriptions(multiSourceEngine, response.preloadIds, offset, request);
 
-  logMatchedTiming(
-    request,
-    config.matchMode ?? 'legacy',
-    cold,
-    candidateCampaignMs,
-    semanticQueryAndSqlMs,
-    response,
-    requestStartedAt,
-  );
+  logMatchedTiming(request, config.matchMode ?? 'legacy', cold,
+    candidateCampaignMs, semanticQueryAndSqlMs, response, requestStartedAt);
 
   return matchedVacancyResponse(response, request.id, targetLevel);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, handleMatchedVacancies));
+  app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, async (routeDeps, request, reply) => {
+    try {
+      return await handleMatchedVacancies(routeDeps, request, reply);
+    } catch (error) {
+      if (!(error instanceof ZodError)) throw error;
+      return reply.code(400).send({ error: { code: 'invalid_query',
+        message: 'Неизвестное значение фильтра вакансий', requestId: request.id, retryable: false } });
+    }
+  }));
 }

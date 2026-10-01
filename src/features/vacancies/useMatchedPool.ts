@@ -1,3 +1,5 @@
+import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
+import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { useCallback, useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import { getMatchedVacancyPage, getVacancySources } from '../coach/coachApi';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -5,6 +7,8 @@ import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { collectMatchedPool, withDeadline } from './vacancyRead';
 
 export interface MatchedPool {
+  readonly facets?: MatchedVacancyFacets;
+  readonly setFilters?: (filters: VacanciesScreenState) => void;
   readonly matched: MatchedVacancyItem[];
   readonly total: number;
   readonly poolTotal: number;
@@ -21,6 +25,7 @@ export interface MatchedPool {
 }
 
 interface PoolReaderSetters {
+  readonly setFacets: Dispatch<SetStateAction<MatchedVacancyFacets | undefined>>;
   readonly setMatched: Dispatch<SetStateAction<MatchedVacancyItem[]>>;
   readonly setTotal: Dispatch<SetStateAction<number>>;
   readonly setPoolTotal: Dispatch<SetStateAction<number>>;
@@ -34,6 +39,14 @@ interface PoolReaderSetters {
 
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
 export function useMatchedPool(provided?: MatchedPool): MatchedPool {
+  const [facets, setFacets] = useState<MatchedVacancyFacets>();
+  const [filters, setFilterState] = useState<VacanciesScreenState>();
+  const setFilters = useCallback((value: VacanciesScreenState) => {
+    const active = value.roles.length + value.regions.length + (value.levels?.length ?? 0) +
+      (value.sources?.length ?? 0) + Number(value.remoteOnly);
+    setFilterState((previous) => active || previous ? value : undefined);
+  }, []);
+  const initialPool = filters ? undefined : provided;
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
   const [total, setTotal] = useState(0);
   const [poolTotal, setPoolTotal] = useState(0);
@@ -46,35 +59,20 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [readAttempt, setReadAttempt] = useState(0);
   const refresh = useCallback(() => setReadAttempt((attempt) => attempt + 1), []);
 
-  useMatchedPoolReader(provided, readAttempt, {
-    setMatched,
-    setTotal,
-    setPoolTotal,
-    setLoading,
-    setFailed,
-    setComplete,
-    setCampaign,
-    setCandidateLevel,
-    setFailureSourceLabel,
+  useMatchedPoolReader(initialPool, readAttempt, filters, {
+    setFacets, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
+    setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
-
-  return provided ?? {
-    matched,
-    total,
-    poolTotal,
-    loading,
-    failed,
-    complete,
-    campaign,
-    candidateLevel,
-    failureSourceLabel,
-    refresh,
+  return initialPool ? { ...initialPool, setFilters } : {
+    facets, setFilters, matched, total, poolTotal, loading, failed, complete,
+    campaign, candidateLevel, failureSourceLabel, refresh,
   };
 }
 
 function useMatchedPoolReader(
   provided: MatchedPool | undefined,
   readAttempt: number,
+  filters: VacanciesScreenState | undefined,
   setters: PoolReaderSetters,
 ): void {
   const {
@@ -92,7 +90,7 @@ function useMatchedPoolReader(
     if (provided) return;
     let active = true;
     resetPoolRead(setters);
-    void loadMatchedPool(setters, () => active).finally(() => {
+    void loadMatchedPool(setters, () => active, filters).finally(() => {
       if (active) setLoading(false);
     });
     return () => {
@@ -101,6 +99,7 @@ function useMatchedPoolReader(
   }, [
     provided,
     readAttempt,
+    filters,
     setMatched,
     setTotal,
     setPoolTotal,
@@ -128,12 +127,14 @@ function resetPoolRead(setters: PoolReaderSetters): void {
 async function loadMatchedPool(
   setters: PoolReaderSetters,
   isActive: () => boolean,
+  filters?: VacanciesScreenState,
 ): Promise<void> {
   try {
     const pool = await collectMatchedPool<MatchedVacancyItem>(
       (offset) =>
-        withDeadline((signal) => getMatchedVacancyPage(offset, signal)).then((page) => {
+        withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters)).then((page) => {
           if (offset === 0 && isActive()) {
+            if (page.facets) setters.setFacets(page.facets);
             if (page.campaign) setters.setCampaign(page.campaign);
             if (page.candidateLevel !== undefined) setters.setCandidateLevel(page.candidateLevel);
           }

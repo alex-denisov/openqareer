@@ -91,3 +91,27 @@ describe('отказ чтения подбора называется отказ
     );
   });
 });
+
+describe('B338 сводка и параметры выбранных фильтров', () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it('сохраняет сводку и передаёт повторяемые значения на первой странице', async () => {
+    const facets = { total: 8, regions: [{ id: 'eu', count: 8 }], remote: 2,
+      levels: [], roles: [], sources: [] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      data: [], meta: { total: 2, facets },
+    }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const page = await getMatchedVacancyPage(0, undefined, {
+      roles: ['COO', 'CTO'], regions: ['eu', 'us'], levels: ['head', 'unknown'],
+      sources: ['hh', 'remotive'], remoteOnly: true,
+    });
+    expect(page.facets).toEqual(facets);
+    const query = new URL(String(fetchMock.mock.calls[0][0]), 'https://example.com').searchParams;
+    expect(query.getAll('region')).toEqual(['eu', 'us']);
+    expect(query.getAll('level')).toEqual(['head', 'unknown']);
+    expect(query.getAll('source')).toEqual(['hh', 'remotive']);
+    expect(query.getAll('role')).toEqual(['COO', 'CTO']);
+    expect(query.get('offset')).toBe('0');
+    expect(query.get('remote')).toBe('1');
+  });
+});

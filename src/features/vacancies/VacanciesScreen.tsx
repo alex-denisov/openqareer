@@ -1,3 +1,4 @@
+import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Info, List, MagnifyingGlass, MapTrifold, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -30,6 +31,8 @@ export interface VacanciesPathIndicator {
 }
 
 export interface VacanciesScreenProps {
+  readonly facets?: MatchedVacancyFacets;
+  readonly onFiltersChange?: (state: VacanciesScreenState) => void;
   readonly matched: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly campaign?: CampaignMetaView;
@@ -81,12 +84,15 @@ function useVacanciesScreenBoard(
   matched: readonly MatchedVacancyItem[],
   campaign: CampaignMetaView | undefined,
   now: string,
+  onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
 ) {
   const { roles, regions, suggestedRegions } = extractBoardRegions(campaign);
   const [state, setState] = useState<VacanciesScreenState>({
     roles: [],
-    regions,
-    remoteOnly: campaign?.remoteOnly ?? false,
+    regions: [],
+    levels: [],
+    sources: [],
+    remoteOnly: false,
   });
   // `undefined` — nothing chosen yet, so the default vacancy opens once the
   // pool arrives; `null` — the candidate collapsed the row and wants none open
@@ -102,17 +108,10 @@ function useVacanciesScreenBoard(
   }, [matched, selectedId]);
 
   useEffect(() => {
-    if (!campaign) return;
-    const effectiveRegions = extractBoardRegions(campaign).regions;
-    setState((current: VacanciesScreenState) => ({
-      ...current,
-      roles: current.roles.filter((role: string) => campaign.roles.value.includes(role)),
-      regions: current.regions.length > 0 ? current.regions : effectiveRegions,
-      remoteOnly: campaign?.remoteOnly ?? false,
-    }));
-  }, [campaign]);
+    onFiltersChange?.(state);
+  }, [state, onFiltersChange]);
 
-  const filtered = useMemo(() => filterByScreenState(matched, state, now), [matched, state, now]);
+  const filtered = useMemo(() => filterByScreenState(matched, onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state, now), [matched, state, now, onFiltersChange]);
 
   return {
     roles,
@@ -340,7 +339,9 @@ function SavedSearchesSection({
   subscriptions,
   onClose,
   onRefresh,
+  defaultQuery,
 }: {
+  readonly defaultQuery?: string;
   readonly open: boolean;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onClose: () => void;
@@ -357,6 +358,7 @@ function SavedSearchesSection({
       </div>
       <SavedSearchesPanel
         subscriptions={subscriptions ?? []}
+        defaultQuery={defaultQuery}
         onRefresh={onRefresh ?? (async () => {})}
       />
     </div>
@@ -419,7 +421,9 @@ function VacanciesFiltersSection({
   savedSearchesOpen,
   onToggleSavedSearches,
   onReset,
+  facets,
 }: {
+  readonly facets?: MatchedVacancyFacets;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly candidateLevel?: string | null;
@@ -432,6 +436,7 @@ function VacanciesFiltersSection({
   return (
     <VacanciesFilters
       state={board.state}
+      facets={facets}
       onChange={board.setState}
       onReset={onReset}
       roleHypotheses={board.roleHypotheses}
@@ -462,7 +467,7 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
   const { campaign, matched, now: providedNow } = input;
   const now = providedNow ?? new Date().toISOString();
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
-  const board = useVacanciesScreenBoard(matched, activeCampaign, now);
+  const board = useVacanciesScreenBoard(matched, activeCampaign, now, input.onFiltersChange);
   const actions = useVacancyCampaignActions(activeCampaign, {
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
     onRetry: input.onRetry,
@@ -472,7 +477,7 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
   const [savedSearchesOpen, setSavedSearchesOpen] = useState(false);
 
   const resetFilters = () =>
-    board.setState({ roles: [], regions: board.regions, remoteOnly: false, selectedCity: undefined });
+    board.setState({ roles: [], regions: [], levels: [], sources: [], remoteOnly: false });
 
   return {
     now,
@@ -508,6 +513,13 @@ function buildListProps(
   };
 }
 
+function ResultCount({ input, shown }: { readonly input: VacanciesScreenProps; readonly shown: number }) {
+  if (!input.facets) return null;
+  return <p className="list-hint" aria-live="polite">
+    Показано <span className="vacancy-facet-count">{shown}</span> из <span className="vacancy-facet-count">{input.facets.total}</span>
+  </p>;
+}
+
 function VacanciesScreenContent({
   input,
   screenState,
@@ -522,6 +534,7 @@ function VacanciesScreenContent({
     <div className="vacancies-content">
       <VacancyHypothesisSection campaign={activeCampaign} board={board} actions={actions} />
       <VacanciesFiltersSection
+        facets={input.facets}
         board={board}
         actions={actions}
         candidateLevel={input.candidateLevel}
@@ -532,17 +545,19 @@ function VacanciesScreenContent({
         onReset={resetFilters}
       />
       <SavedSearchesSection
+        defaultQuery={board.state.roles[0] ?? board.primaryRole}
         open={savedSearchesOpen}
         subscriptions={input.subscriptions}
         onClose={() => setSavedSearchesOpen(false)}
         onRefresh={input.onRefreshSubscriptions}
       />
+      <ResultCount input={input} shown={board.state.selectedCity ? board.filtered.length : input.total} />
       <VacanciesMainBody
         loading={Boolean(input.loading)}
         failed={Boolean(input.failed)}
         failureSourceLabel={input.failureSourceLabel}
         onRetry={input.onRetry}
-        matchedLength={input.matched.length}
+        matchedLength={input.facets?.total ?? input.matched.length}
         primaryRole={board.primaryRole}
         total={input.total ?? input.matched.length}
         filtered={board.filtered}
@@ -621,8 +636,8 @@ function applyCampaignUpdate(
   setScreenState((current: VacanciesScreenState) => ({
     ...current,
     roles: addedRole ? [...current.roles, addedRole] : current.roles,
-    regions: campaign.regions.value,
-    remoteOnly: campaign.remoteOnly ?? false,
+    regions: current.regions,
+    remoteOnly: current.remoteOnly,
   }));
 }
 

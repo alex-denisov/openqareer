@@ -132,7 +132,7 @@ export function evaluateLevelMatch(
   return difference > 0 ? 'above' : 'below';
 }
 
-function levelFromRank(rank: number | null): SeniorityLevel | undefined {
+export function levelFromRank(rank: number | null): SeniorityLevel | undefined {
   if (rank === null || !Number.isInteger(rank)) return undefined;
   return (Object.keys(LEVEL_RANK) as SeniorityLevel[]).find((level) => LEVEL_RANK[level] === rank);
 }
