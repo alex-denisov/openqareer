@@ -118,7 +118,12 @@ async function overflow(page) {
 }
 
 async function assertVisible(page, locator, what) {
-  if (!(await locator.first().isVisible().catch(() => false))) {
+  if (
+    !(await locator
+      .first()
+      .isVisible()
+      .catch(() => false))
+  ) {
     problems.push(`missing: ${what}`);
   }
 }
@@ -224,7 +229,11 @@ async function checkConnectedCardState(page, viewport) {
   if ((await otherConnect.getAttribute('aria-disabled')) !== 'true') {
     problems.push(`desktop ${viewport.name}: LinkedIn stayed connectable under a connected hh.ru`);
   }
-  const reason = (await otherConnect.getAttribute('title')) ?? '';
+  // B343: подсказка — свой тултип, связанный через aria-describedby, а не title.
+  const describedBy = (await otherConnect.getAttribute('aria-describedby')) ?? '';
+  const reason = describedBy
+    ? ((await page.locator(`[id="${describedBy}"]`).textContent()) ?? '')
+    : ((await otherConnect.getAttribute('title')) ?? '');
   if (!reason.includes('сначала отключите hh.ru')) {
     problems.push(`desktop ${viewport.name}: the closed LinkedIn card gives no reason on hover`);
   }
