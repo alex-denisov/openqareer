@@ -166,6 +166,20 @@ describe('collectMatchedPool со списком смещений (B211)', () =>
     expect(result.items).toContain(`item-${TOTAL - 1}`);
   });
 
+  it('повторяет непришедшую страницу один раз и собирает пул целиком по порядку (B338)', async () => {
+    const flaky = offsets[3];
+    let failures = 0;
+    const result = await collectMatchedPool<string>(async (offset) => {
+      if (offset === flaky && failures === 0) {
+        failures += 1;
+        throw new Error('timeout');
+      }
+      return planned(offset);
+    });
+    expect(result.complete).toBe(true);
+    expect(result.items).toEqual(Array.from({ length: TOTAL }, (_, i) => `item-${i}`));
+  });
+
   it('соблюдает потолок страниц и в параллельном чтении', async () => {
     let calls = 0;
     const result = await collectMatchedPool<string>(async (offset) => {

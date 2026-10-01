@@ -100,25 +100,31 @@ async function readPlannedPages<T>(
   onPage?: (items: readonly T[], total: number) => void,
 ): Promise<MatchedPoolRead<T>> {
   const rest = planned.slice(1, Math.max(1, pageLimit));
-  let missed = rest.length < planned.length - 1;
-
-  for (let start = 0; start < rest.length; start += MATCHED_POOL_READ_WIDTH) {
-    const wave = rest.slice(start, start + MATCHED_POOL_READ_WIDTH);
-    const answers = await Promise.all(
-      // Непришедшая страница не отменяет остальных: пул уходит в чтение
-      // целиком, а провалившееся место остаётся честной дырой в счётчике.
-      wave.map((offset) => loadPage(offset).then((page) => page.items).catch(() => null)),
-    );
-    for (const answer of answers) {
-      if (answer === null) {
-        missed = true;
-        continue;
-      }
-      items.push(...answer);
-      onPage?.(answer, first.total);
+  const pages = new Map<number, readonly T[]>();
+  const readWaves = async (offsets: readonly number[]) => {
+    for (let start = 0; start < offsets.length; start += MATCHED_POOL_READ_WIDTH) {
+      const wave = offsets.slice(start, start + MATCHED_POOL_READ_WIDTH);
+      // Непришедшая страница не отменяет остальных: её место ждёт повтора.
+      const answers = await Promise.all(
+        wave.map((offset) =>
+          loadPage(offset)
+            .then((page) => page.items)
+            .catch(() => null),
+        ),
+      );
+      answers.forEach((answer, index) => {
+        if (answer === null) return;
+        pages.set(wave[index], answer);
+        onPage?.(answer, first.total);
+      });
     }
-  }
-
+  };
+  await readWaves(rest);
+  // B338: через медленный канал часть страниц не укладывается в срок, хотя
+  // сервер их отдал, — один повтор после основного прохода.
+  await readWaves(rest.filter((offset) => !pages.has(offset)));
+  for (const offset of rest) items.push(...(pages.get(offset) ?? []));
+  const missed = rest.length < planned.length - 1 || rest.some((offset) => !pages.has(offset));
   return { items, total: first.total, complete: !missed };
 }
 
