@@ -37,6 +37,7 @@ import {
   type CadencePageKind,
   type DayPlan,
 } from './linkedinCadencePolicy';
+import { createLinkedinStealthContext } from './linkedinStealthBrowser';
 
 export {
   hasLinkedinExecutorDailyCapacity,
@@ -272,7 +273,9 @@ export class LinkedinPoolCompanyPageExecutor {
     const hash = companyHash(companyName);
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
     this.activeBrowser = await this.browserFactory();
-    this.activeContext = await this.activeBrowser.newContext();
+    this.activeContext = await createLinkedinStealthContext(this.activeBrowser, {
+      timezone,
+    });
     await this.activeContext.addCookies(playwrightCookies(cookies));
     const page = await this.activeContext.newPage();
     const searchUrl = linkedinCompanySearchUrl(companyName);

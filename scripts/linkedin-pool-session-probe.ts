@@ -11,6 +11,10 @@
 import { pathToFileURL } from 'node:url';
 import { readServerConfig } from '../server/config';
 import { SqliteLinkedinPoolRepository } from '../server/linkedinPool/sqliteLinkedinPoolRepository';
+import {
+  createLinkedinStealthContext,
+  getLinkedinChromiumLaunchArgs,
+} from '../server/linkedinPool/linkedinStealthBrowser';
 
 const FEED_URL = 'https://www.linkedin.com/feed/';
 
@@ -28,6 +32,19 @@ export function classifyLinkedinLanding(url: string, hasGlobalNav: boolean, titl
   return 'unknown';
 }
 
+function mapSessionCookies(cookies: readonly { name: string; value: string; domain: string; path: string; httpOnly: boolean; secure: boolean; sameSite?: string; expiresAt?: number }[]) {
+  return cookies.map((cookie) => ({
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.domain,
+    path: cookie.path,
+    httpOnly: cookie.httpOnly,
+    secure: cookie.secure,
+    ...(cookie.sameSite ? { sameSite: cookie.sameSite as 'Lax' | 'Strict' | 'None' } : {}),
+    ...(cookie.expiresAt ? { expires: cookie.expiresAt } : {}),
+  }));
+}
+
 async function main(): Promise<void> {
   const accountId = process.argv[2];
   if (!accountId) throw new Error('usage: linkedin-pool-session-probe <accountId>');
@@ -42,23 +59,18 @@ async function main(): Promise<void> {
     console.log(JSON.stringify({ verdict: 'no_server_session' }));
     return;
   }
+  const account = repository.findAccount(accountId);
   const module = process.env.OPENQAREER_PLAYWRIGHT_MODULE?.trim();
   const { chromium } = await import(module ? pathToFileURL(module).href : 'playwright');
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    args: getLinkedinChromiumLaunchArgs(),
+  });
   try {
-    const context = await browser.newContext();
-    await context.addCookies(
-      cookies.map((cookie) => ({
-        name: cookie.name,
-        value: cookie.value,
-        domain: cookie.domain,
-        path: cookie.path,
-        httpOnly: cookie.httpOnly,
-        secure: cookie.secure,
-        ...(cookie.sameSite ? { sameSite: cookie.sameSite } : {}),
-        ...(cookie.expiresAt ? { expires: cookie.expiresAt } : {}),
-      })),
-    );
+    const context = await createLinkedinStealthContext(browser, {
+      timezone: account?.timezone || 'Europe/Berlin',
+    });
+    await context.addCookies(mapSessionCookies(cookies));
     const page = await context.newPage();
     const response = await page.goto(FEED_URL, { waitUntil: 'domcontentloaded', timeout: 45_000 });
     await page.waitForTimeout(4_000);

@@ -10,6 +10,7 @@ import {
   LinkedinPoolCompanyPageExecutor,
   readLinkedinPoolExecutorConfig,
 } from './linkedinPool/companyPageExecutor';
+import { getLinkedinChromiumLaunchArgs } from './linkedinPool/linkedinStealthBrowser';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
@@ -69,7 +70,10 @@ const linkedinPoolExecutor =
         // Только по требованию: на проде playwright ставится отдельно (B309, B313).
         browserFactory: async () => {
           const { chromium } = await import(playwrightModuleSpecifier());
-          return chromium.launch({ headless: true });
+          return chromium.launch({
+            headless: true,
+            args: getLinkedinChromiumLaunchArgs(),
+          });
         },
         notifyOwner: (message) => notifyOwner(config, message),
       })
