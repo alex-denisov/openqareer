@@ -210,7 +210,7 @@ function recommendAfterSent(
   if (followUpAt <= current) {
     return fromOutcome(latest, {
       code: 'follow-up-now',
-      title: 'Проверить статус и сделать один follow-up',
+      title: 'Проверить статус и сделать одно напоминание компании',
       reason:
         'Наступила выбранная вами дата проверки. Сначала проверьте площадку, затем решите, уместен ли один контакт.',
       dueAt: latest.followUpAt,

@@ -34,11 +34,11 @@ function closedLabel(stage: string, closedReason: string | null): WaitingLabel {
 function candidateTurnLabel(input: WaitingLabelInput): string {
   if (input.stage === 'saved' && !input.hasMaterials) return 'Соберите письмо';
   if (input.followUp?.urgency === 'stale' || input.followUp?.urgency === 'overdue') {
-    return 'Follow-up просрочен';
+    return 'Напоминание компании просрочено';
   }
   if (input.followUp?.urgency === 'due') {
     const days = input.followUp.daysSinceContact;
-    return `Follow-up сегодня · ${pluralRu(days, ['день', 'дня', 'дней'])}`;
+    return `Напоминание компании сегодня · ${pluralRu(days, ['день', 'дня', 'дней'])}`;
   }
   if (input.nearestInterviewNeedsPrep) return 'Подготовиться к интервью';
   if (input.stage === 'offer') return 'Примите решение по офферу';
@@ -46,7 +46,9 @@ function candidateTurnLabel(input: WaitingLabelInput): string {
 }
 
 function companyTurnLabel(input: WaitingLabelInput): string {
-  if (input.followUp?.urgency === 'upcoming') return 'Отправлен · рано для follow-up';
+  if (input.followUp?.urgency === 'upcoming') {
+    return 'Отправлен · рано для напоминания компании';
+  }
   return 'Ждём ответа компании';
 }
 

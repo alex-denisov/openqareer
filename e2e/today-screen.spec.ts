@@ -379,7 +379,7 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
     await expect(page.locator('.career-today-digest')).toContainText('12');
     await expect(page.locator('.career-today-digest')).toContainText(
-      'follow-up назначено на сегодня',
+      'напоминание компании на сегодня',
     );
     await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
 
@@ -399,7 +399,9 @@ test.describe('B251 today screen', () => {
     await expect(secondRow).toContainText('Peraton');
     await expect(page.locator('body')).not.toContainText('Следующее действие');
 
-    await expect(page.locator('.career-today-followups')).toContainText('Follow-up по срокам');
+    await expect(page.locator('.career-today-followups')).toContainText(
+      'Напоминания компании по срокам',
+    );
     await expect(page.locator('.career-today-since-hint')).toContainText(
       'Genetec запросили доступность на этой неделе',
     );

@@ -410,11 +410,11 @@ test.describe('B251 responses screen', () => {
     await openResponses(page);
 
     const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
-    await card.getByRole('button', { name: 'Отметить follow-up отправленным' }).click();
-    await expect(card.getByRole('button', { name: 'Отметить follow-up отправленным' })).toHaveCount(
-      0,
-    );
-    await expect(card).toContainText('Отправлен · рано для follow-up');
+    await card.getByRole('button', { name: 'Отметить напоминание компании отправленным' }).click();
+    await expect(
+      card.getByRole('button', { name: 'Отметить напоминание компании отправленным' }),
+    ).toHaveCount(0);
+    await expect(card).toContainText('Отправлен · рано для напоминания компании');
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {

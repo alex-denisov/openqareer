@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pluralRu } from './pluralRu';
+import { pluralRu, pluralWordRu } from './pluralRu';
 
 const FORMS: [string, string, string] = ['вакансия', 'вакансии', 'вакансий'];
 
@@ -22,5 +22,14 @@ describe('pluralRu', () => {
     expect(pluralRu(11, FORMS)).toBe('11 вакансий');
     expect(pluralRu(14, FORMS)).toBe('14 вакансий');
     expect(pluralRu(25, FORMS)).toBe('25 вакансий');
+  });
+});
+
+describe('pluralWordRu', () => {
+  it('returns the word form without the leading count', () => {
+    expect(pluralWordRu(1, FORMS)).toBe('вакансия');
+    expect(pluralWordRu(2, FORMS)).toBe('вакансии');
+    expect(pluralWordRu(5, FORMS)).toBe('вакансий');
+    expect(pluralWordRu(21, FORMS)).toBe('вакансия');
   });
 });
