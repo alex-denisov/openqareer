@@ -71,7 +71,9 @@ ssh_private_key_base64="$(base64 -w 0 "$CLIENT_KEY")"
 ssh_host_key="$(awk '{ print $1 " " $2 }' /etc/ssh/ssh_host_ed25519_key.pub)"
 ssh_host_key_base64="$(printf '%s' "$ssh_host_key" | base64 -w 0)"
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_SERVER openqareer.com
-upsert_env_value OPENQAREER_DESKTOP_TUNNEL_PORT 22
+# openqareer.com resolves to the Russian-reachable relay, whose :22 is its own
+# sshd; the relay forwards :2222 to this host's :22 (deploy/bootstrap-ru-relay.sh).
+upsert_env_value OPENQAREER_DESKTOP_TUNNEL_PORT "${OPENQAREER_DESKTOP_TUNNEL_PORT:-2222}"
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_SSH_USER "$TUNNEL_USER"
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_SSH_PRIVATE_KEY_BASE64 "$ssh_private_key_base64"
 upsert_env_value OPENQAREER_DESKTOP_TUNNEL_SSH_HOST_KEY_BASE64 "$ssh_host_key_base64"

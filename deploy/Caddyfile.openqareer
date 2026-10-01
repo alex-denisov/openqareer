@@ -1,6 +1,9 @@
 {
 	servers :443 {
 		protocols h1
+		# Russian-reachable relay (deploy/bootstrap-ru-relay.sh): its X-Forwarded-For
+		# names the real client, everyone else's is ignored.
+		trusted_proxies static 107.172.153.202/32
 	}
 }
 
@@ -52,5 +55,8 @@ openqareer.com {
 		-Server
 	}
 
-	reverse_proxy 127.0.0.1:3210
+	reverse_proxy 127.0.0.1:3210 {
+		# One hop, the real client: rate limits must not merge every relayed user.
+		header_up X-Forwarded-For {client_ip}
+	}
 }
