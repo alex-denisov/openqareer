@@ -303,7 +303,6 @@ function VacancyLevelChip({ match }: { readonly match: VacancyLevelMatch }) {
   return (
     <span
       className={`vacancies-chip${match === 'match' ? ' is-selected' : ''}${match === 'unknown' ? ' is-unknown' : ''}`}
-      title={label}
       aria-label={label}
     >
       {label}

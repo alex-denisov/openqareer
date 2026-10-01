@@ -10,6 +10,7 @@ import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySinceLastVisit, T
 import { formatTodaySalary } from './todayCompensation';
 import { buildReturningDigestItems, companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
 
@@ -503,18 +504,20 @@ function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
 }
 
 function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title?: string }) {
-  if (ok === null) {
-    return (
-      <span className="career-today-fit-dot is-unknown" title={title} aria-label={title}>
-        {label} —
-      </span>
-    );
-  }
-  return (
-    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`} title={title}>
+  const content = ok === null ? (
+    <span className="career-today-fit-dot is-unknown" aria-label={title}>
+      {label} —
+    </span>
+  ) : (
+    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
       {ok ? label : `${label} —`}
     </span>
   );
+
+  if (title) {
+    return <CareerTooltip content={title}>{content}</CareerTooltip>;
+  }
+  return content;
 }
 
 /** Where «Открыть» on a queue card leads (B331: the button had no handler). */

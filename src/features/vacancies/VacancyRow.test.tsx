@@ -75,7 +75,7 @@ describe('VacancyRow (B266/B324)', () => {
     };
     const html = render({ item: missGeo });
     expect(html).toContain('fit-dot is-no');
-    expect(html).toContain('title="География: не совпадает"');
+    expect(html).toContain('География: не совпадает');
   });
 
   it('keeps an unknown level neutral and names the missing signal', () => {
@@ -86,7 +86,7 @@ describe('VacancyRow (B266/B324)', () => {
     const html = render({ item: unknown });
 
     expect(html).toContain('fit-dot is-unknown');
-    expect(html).toContain('title="Уровень не распознан"');
+    expect(html).toContain('Уровень не распознан');
     expect(html).toContain('aria-label="Уровень не распознан"');
   });
 
@@ -97,7 +97,7 @@ describe('VacancyRow (B266/B324)', () => {
     };
     const html = render({ item: nearby });
     expect(html).toContain('fit-dot is-nearby');
-    expect(html).toContain('title="Уровень: рядом"');
+    expect(html).toContain('Уровень: рядом');
   });
 
   it('labels adjacent roles separately from target-function matches', () => {
@@ -107,7 +107,7 @@ describe('VacancyRow (B266/B324)', () => {
     };
     const html = render({ item: adjacent });
     expect(html).toContain('fit-dot is-nearby');
-    expect(html).toContain('title="Роль: смежная (рядом)"');
+    expect(html).toContain('Роль: смежная (рядом)');
   });
 
   it('is a real button, not a non-interactive element carrying a role', () => {

@@ -410,60 +410,63 @@ export function CareerWorkspaceShell({
               behind the avatar. Expanded rail names the plan and offers
               «Улучшить»; collapsed rail keeps the icon alone, with the plan
               in its accessible name. */}
-          <button
-            className={`career-rail-plan ${activeView === 'tariffs' ? 'is-active' : ''}`}
-            type="button"
-            onClick={() => navigate('tariffs')}
-            aria-current={activeView === 'tariffs' ? 'page' : undefined}
-            aria-label={`Тарифы, план ${planName}`}
-            title={`Тарифы. План «${planName}»`}
-          >
-            <Diamond
-              size={22}
-              weight={activeView === 'tariffs' ? 'fill' : 'regular'}
-              aria-hidden="true"
-            />
-            {railExpanded ? (
-              <span className="career-rail-plan-text">
-                <b>План · {planName}</b>
-                <span>Улучшить</span>
+          <CareerTooltip content={`Тарифы. План «${planName}»`}>
+            <button
+              className={`career-rail-plan ${activeView === 'tariffs' ? 'is-active' : ''}`}
+              type="button"
+              onClick={() => navigate('tariffs')}
+              aria-current={activeView === 'tariffs' ? 'page' : undefined}
+              aria-label={`Тарифы, план ${planName}`}
+            >
+              <Diamond
+                size={22}
+                weight={activeView === 'tariffs' ? 'fill' : 'regular'}
+                aria-hidden="true"
+              />
+              {railExpanded ? (
+                <span className="career-rail-plan-text">
+                  <b>План · {planName}</b>
+                  <span>Улучшить</span>
+                </span>
+              ) : null}
+            </button>
+          </CareerTooltip>
+          <CareerTooltip content={`Аккаунт и тарифы. План «${planName}»`}>
+            <button
+              className="career-account-button"
+              type="button"
+              disabled={sessionPending}
+              onClick={() => setAccountOpen(true)}
+              aria-label="Открыть аккаунт"
+            >
+              <span className="career-rail-avatar" aria-hidden="true">
+                {accountInitials}
               </span>
-            ) : null}
-          </button>
-          <button
-            className="career-account-button"
-            type="button"
-            disabled={sessionPending}
-            onClick={() => setAccountOpen(true)}
-            aria-label="Открыть аккаунт"
-            title={`Аккаунт и тарифы. План «${planName}»`}
-          >
-            <span className="career-rail-avatar" aria-hidden="true">
-              {accountInitials}
-            </span>
-            {railExpanded && accountDisplayName ? (
-              <span className="career-account-details">
-                <span className="career-account-name">{accountDisplayName}</span>
-                {accountEmail ? (
-                  <span className="career-account-email">{accountEmail}</span>
-                ) : null}
-              </span>
-            ) : null}
-          </button>
+              {railExpanded && accountDisplayName ? (
+                <span className="career-account-details">
+                  <span className="career-account-name">{accountDisplayName}</span>
+                  {accountEmail ? (
+                    <span className="career-account-email">{accountEmail}</span>
+                  ) : null}
+                </span>
+              ) : null}
+            </button>
+          </CareerTooltip>
         </div>
         {/* Ручка сидит на кромке рельса, как разделитель панелей: прежняя
             строка «Свернуть» занимала пункт меню и читалась как раздел. */}
-        <button
-          className="career-rail-toggle"
-          type="button"
-          onClick={toggleRail}
-          aria-expanded={railExpanded}
-          aria-controls="career-rail"
-          aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-          title={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-        >
-          {railExpanded ? <CaretLeft size={12} /> : <CaretRight size={12} />}
-        </button>
+        <CareerTooltip content={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}>
+          <button
+            className="career-rail-toggle"
+            type="button"
+            onClick={toggleRail}
+            aria-expanded={railExpanded}
+            aria-controls="career-rail"
+            aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
+          >
+            {railExpanded ? <CaretLeft size={12} /> : <CaretRight size={12} />}
+          </button>
+        </CareerTooltip>
       </aside>
 
       {/* Narrow screens hide the rail, so this bar carries the two controls
@@ -717,7 +720,6 @@ function NavigationButton({
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
       aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
-      title={disabled ? (lockedReason ?? label) : undefined}
       {...tooltipProps}
     >
       <ItemIcon size={22} active={active} />

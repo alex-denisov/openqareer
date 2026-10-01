@@ -1,4 +1,6 @@
+import type { ReactNode } from 'react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 function WaveIcon() {
   return (
@@ -24,6 +26,26 @@ function DashIcon() {
   );
 }
 
+function FitDotView({
+  className,
+  label,
+  tooltip,
+  icon,
+}: {
+  readonly className: string;
+  readonly label: string;
+  readonly tooltip: string;
+  readonly icon: ReactNode;
+}) {
+  return (
+    <CareerTooltip content={tooltip}>
+      <span className={className} role="img" aria-label={label}>
+        {icon}
+      </span>
+    </CareerTooltip>
+  );
+}
+
 export function RoleFitDot({
   roleMatch,
   adjacent,
@@ -33,39 +55,41 @@ export function RoleFitDot({
 }) {
   if (adjacent) {
     return (
-      <span
+      <FitDotView
         className="fit-dot is-nearby"
-        role="img"
-        aria-label="Роль: рядом. Смежная роль вне семейств кампании"
-        title="Роль: смежная (рядом)"
-      >
-        <WaveIcon />
-      </span>
+        label="Роль: рядом. Смежная роль вне семейств кампании"
+        tooltip="Роль: смежная (рядом)"
+        icon={<WaveIcon />}
+      />
     );
   }
   if (roleMatch === 'target') {
     return (
-      <span className="fit-dot is-yes" role="img" aria-label="Роль: совпадает" title="Роль: совпадает">
-        <CheckIcon />
-      </span>
+      <FitDotView
+        className="fit-dot is-yes"
+        label="Роль: совпадает"
+        tooltip="Роль: совпадает"
+        icon={<CheckIcon />}
+      />
     );
   }
   if (roleMatch === 'partial') {
     return (
-      <span
+      <FitDotView
         className="fit-dot is-nearby"
-        role="img"
-        aria-label="Роль: рядом. Функция совпадает, уровень рядом"
-        title="Роль: рядом"
-      >
-        <WaveIcon />
-      </span>
+        label="Роль: рядом. Функция совпадает, уровень рядом"
+        tooltip="Роль: рядом"
+        icon={<WaveIcon />}
+      />
     );
   }
   return (
-    <span className="fit-dot is-no" role="img" aria-label="Роль: не совпадает" title="Роль: не совпадает">
-      <DashIcon />
-    </span>
+    <FitDotView
+      className="fit-dot is-no"
+      label="Роль: не совпадает"
+      tooltip="Роль: не совпадает"
+      icon={<DashIcon />}
+    />
   );
 }
 
@@ -76,9 +100,12 @@ export function LevelFitDot({
 }) {
   if (levelMatch === 'match') {
     return (
-      <span className="fit-dot is-yes" role="img" aria-label="Уровень: совпадает" title="Уровень: совпадает">
-        <CheckIcon />
-      </span>
+      <FitDotView
+        className="fit-dot is-yes"
+        label="Уровень: совпадает"
+        tooltip="Уровень: совпадает"
+        icon={<CheckIcon />}
+      />
     );
   }
   if (levelMatch === 'below' || levelMatch === 'above') {
@@ -87,41 +114,51 @@ export function LevelFitDot({
         ? 'Вакансия ниже целевого уровня'
         : 'Вакансия выше целевого уровня';
     return (
-      <span
+      <FitDotView
         className="fit-dot is-nearby"
-        role="img"
-        aria-label={`Уровень: рядом. ${desc}`}
-        title="Уровень: рядом"
-      >
-        <WaveIcon />
-      </span>
+        label={`Уровень: рядом. ${desc}`}
+        tooltip="Уровень: рядом"
+        icon={<WaveIcon />}
+      />
     );
   }
   if (levelMatch === 'unknown') {
     return (
-      <span className="fit-dot is-unknown" role="img" aria-label="Уровень не распознан" title="Уровень не распознан">
-        ?
-      </span>
+      <FitDotView
+        className="fit-dot is-unknown"
+        label="Уровень не распознан"
+        tooltip="Уровень не распознан"
+        icon="?"
+      />
     );
   }
   return (
-    <span className="fit-dot is-no" role="img" aria-label="Уровень: не совпадает" title="Уровень: не совпадает">
-      <DashIcon />
-    </span>
+    <FitDotView
+      className="fit-dot is-no"
+      label="Уровень: не совпадает"
+      tooltip="Уровень: не совпадает"
+      icon={<DashIcon />}
+    />
   );
 }
 
 export function GeoFitDot({ outsideGeo }: { readonly outsideGeo?: boolean }) {
   if (!outsideGeo) {
     return (
-      <span className="fit-dot is-yes" role="img" aria-label="География: совпадает" title="География: совпадает">
-        <CheckIcon />
-      </span>
+      <FitDotView
+        className="fit-dot is-yes"
+        label="География: совпадает"
+        tooltip="География: совпадает"
+        icon={<CheckIcon />}
+      />
     );
   }
   return (
-    <span className="fit-dot is-no" role="img" aria-label="География: не совпадает" title="География: не совпадает">
-      <DashIcon />
-    </span>
+    <FitDotView
+      className="fit-dot is-no"
+      label="География: не совпадает"
+      tooltip="География: не совпадает"
+      icon={<DashIcon />}
+    />
   );
 }

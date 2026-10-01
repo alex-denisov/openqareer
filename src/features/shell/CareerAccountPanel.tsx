@@ -27,6 +27,7 @@ import {
   type AuthUser,
 } from '../coach/coachApi';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
+import { CareerTooltip } from './CareerTooltip';
 import {
   MIN_PASSWORD_LENGTH,
   getEmailError,
@@ -411,24 +412,25 @@ export function CareerAccountPanel({
 
       <div className="career-account-body">
         {onOpenTariffs ? (
-          <button
-            type="button"
-            className="career-account-tariffs-button"
-            disabled={!tariffsAvailable}
-            onClick={onOpenTariffs}
-            aria-label={
-              !tariffsAvailable && tariffsLockedReason
-                ? `Тарифы. ${tariffsLockedReason}`
-                : `Тарифы, текущий план «${tariffsPlanName}»`
-            }
-            title={!tariffsAvailable ? (tariffsLockedReason ?? 'Тарифы') : 'Тарифы'}
-          >
-            <span>
-              <b>Тарифы</b>
-              <span>план «{tariffsPlanName}»</span>
-            </span>
-            <CaretRight size={16} aria-hidden="true" />
-          </button>
+          <CareerTooltip content={!tariffsAvailable ? (tariffsLockedReason ?? 'Тарифы') : 'Тарифы'}>
+            <button
+              type="button"
+              className="career-account-tariffs-button"
+              disabled={!tariffsAvailable}
+              onClick={onOpenTariffs}
+              aria-label={
+                !tariffsAvailable && tariffsLockedReason
+                  ? `Тарифы. ${tariffsLockedReason}`
+                  : `Тарифы, текущий план «${tariffsPlanName}»`
+              }
+            >
+              <span>
+                <b>Тарифы</b>
+                <span>план «{tariffsPlanName}»</span>
+              </span>
+              <CaretRight size={16} aria-hidden="true" />
+            </button>
+          </CareerTooltip>
         ) : null}
         {user === undefined ? <p>Проверяем сессию…</p> : null}
         {user ? (

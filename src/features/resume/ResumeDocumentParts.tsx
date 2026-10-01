@@ -1,6 +1,7 @@
 import { Plus, Trash, WarningCircle } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
 import type { ResumeUnknown } from './resumeTypes';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 /** Provenance is never optional: a claim without its memory id is unverifiable. */
 /**
@@ -10,9 +11,11 @@ import type { ResumeUnknown } from './resumeTypes';
  */
 export function EvidenceChip({ memoryId }: { memoryId: string }) {
   return (
-    <span className="career-resume-evidence" title={`Факт: ${memoryId}`}>
-      Источник: {evidenceOriginLabel(memoryId)}
-    </span>
+    <CareerTooltip content={`Факт: ${memoryId}`}>
+      <span className="career-resume-evidence">
+        Источник: {evidenceOriginLabel(memoryId)}
+      </span>
+    </CareerTooltip>
   );
 }
 

@@ -14757,6 +14757,42 @@ button.chip {
   display: none;
 }
 
+/* CareerTooltip (B343): custom tooltip replacing native title in desktop and web */
+.career-tooltip-bubble {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  max-width: 280px;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width, 1px) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md, 10px);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+  pointer-events: none;
+  box-shadow: var(--career-shadow-tooltip);
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.career-tooltip-bubble[data-open='true'] {
+  display: block;
+  opacity: 1;
+  visibility: visible;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-tooltip-bubble {
+    transition: none;
+    animation: none;
+  }
+}
+
 /* «Добавить вручную» (B331): fields inside the shared dialog shell. */
 .career-responses-manual-form {
   display: grid;

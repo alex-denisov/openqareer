@@ -15,6 +15,7 @@ import {
   triggerFileDownload,
   triggerResumePrint,
 } from './resumeExport';
+import { CareerTooltip } from '../shell/CareerTooltip';
 
 interface ResumeStudioHeadProps {
   readonly variant: ResumeVariantId;
@@ -265,36 +266,39 @@ function ResumeExportActions({
   return (
     <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
       {format === 'stanford-pdf' ? (
-        <button
-          type="button"
-          className="career-resume-export-button"
-          onClick={triggerResumePrint}
-          title="Распечатать или сохранить Stanford Resume в PDF"
-        >
-          <Printer size={15} />
-          Печать / PDF
-        </button>
+        <CareerTooltip content="Распечатать или сохранить Stanford Resume в PDF">
+          <button
+            type="button"
+            className="career-resume-export-button"
+            onClick={triggerResumePrint}
+          >
+            <Printer size={15} />
+            Печать / PDF
+          </button>
+        </CareerTooltip>
       ) : null}
       {format === 'ats-text' ? (
+        <CareerTooltip content="Скачать ровно тот ATS-текст, который показан ниже">
+          <button
+            type="button"
+            className="career-resume-export-button"
+            onClick={handleExportText}
+          >
+            <FileText size={15} />
+            TXT (ATS)
+          </button>
+        </CareerTooltip>
+      ) : null}
+      <CareerTooltip content="Скачать структурированные данные резюме в JSON">
         <button
           type="button"
           className="career-resume-export-button"
-          onClick={handleExportText}
-          title="Скачать ровно тот ATS-текст, который показан ниже"
+          onClick={handleExportJson}
         >
-          <FileText size={15} />
-          TXT (ATS)
+          <FileCode size={15} />
+          JSON
         </button>
-      ) : null}
-      <button
-        type="button"
-        className="career-resume-export-button"
-        onClick={handleExportJson}
-        title="Скачать структурированные данные резюме в JSON"
-      >
-        <FileCode size={15} />
-        JSON
-      </button>
+      </CareerTooltip>
     </div>
   );
 }
