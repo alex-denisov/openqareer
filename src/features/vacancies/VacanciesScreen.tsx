@@ -20,10 +20,7 @@ import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { pluralRu } from '../../../shared/pluralRu';
 import { VacancyMapView } from './VacancyMapView';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
-import {
-  VacanciesFilters,
-  type VacanciesScreenState,
-} from './VacanciesScreenFilters';
+import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -111,7 +108,15 @@ function useVacanciesScreenBoard(
     onFiltersChange?.(state);
   }, [state, onFiltersChange]);
 
-  const filtered = useMemo(() => filterByScreenState(matched, onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state, now), [matched, state, now, onFiltersChange]);
+  const filtered = useMemo(
+    () =>
+      filterByScreenState(
+        matched,
+        onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state,
+        now,
+      ),
+    [matched, state, now, onFiltersChange],
+  );
 
   return {
     roles,
@@ -189,8 +194,8 @@ function VacanciesErrorState({
       </span>
       <h3>Не удалось загрузить подборку</h3>
       <p>
-        Не удалось загрузить общий пул вакансий. {failureSourceLabel ?? 'Площадка hh.ru не ответила.'} Роль и
-        география сохранены.
+        Не удалось загрузить общий пул вакансий.{' '}
+        {failureSourceLabel ?? 'Площадка hh.ru не ответила.'} Роль и география сохранены.
       </p>
       {onRetry ? (
         <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
@@ -213,10 +218,12 @@ function VacanciesEmptyPoolState({
       <span className="state-icon" aria-hidden="true">
         <MagnifyingGlass size={20} />
       </span>
-      <h3>{primaryRole ? `По роли ${primaryRole} пока нет вакансий` : 'Для подбора не выбрана роль'}</h3>
+      <h3>
+        {primaryRole ? `По роли ${primaryRole} пока нет вакансий` : 'Для подбора не выбрана роль'}
+      </h3>
       <p>
-        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить регионы или
-        включить удалённый поиск.
+        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить
+        регионы или включить удалённый поиск.
       </p>
       {onRetry ? (
         <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
@@ -267,18 +274,28 @@ interface ListContentProps {
   readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
+  readonly countShownAbove: boolean;
 }
 
-function VacanciesListHeader({ totalCount }: { readonly totalCount: number }) {
+function VacanciesListHeader({
+  totalCount,
+  countShownAbove,
+}: {
+  readonly totalCount: number;
+  readonly countShownAbove: boolean;
+}) {
+  // B338-2: при сводке число уже стоит строкой «Показано N из M» над списком.
   return (
     <div className="list-head vacancies-list-head">
-      <span className="list-hint vacancies-list-hint">
-        {`${pluralRu(totalCount, [
-          'вакансия',
-          'вакансии',
-          'вакансий',
-        ])} · показаны совпадающие по роли и уровню`}
-      </span>
+      {countShownAbove ? null : (
+        <span className="list-hint vacancies-list-hint">
+          {`${pluralRu(totalCount, [
+            'вакансия',
+            'вакансии',
+            'вакансий',
+          ])} · показаны совпадающие по роли и уровню`}
+        </span>
+      )}
       <span className="fit-legend">
         Совпадение: роль · уровень · география
         <button
@@ -307,11 +324,12 @@ function VacanciesListContent(props: ListContentProps) {
     onOpenNetworking,
     onOpenResponses,
     onAddToProfile,
+    countShownAbove,
   } = props;
 
   return (
     <div className="vacancies-list-container">
-      <VacanciesListHeader totalCount={total || items.length} />
+      <VacanciesListHeader totalCount={total || items.length} countShownAbove={countShownAbove} />
 
       <ul className="vac-list">
         {items.map((item) => (
@@ -383,10 +401,7 @@ function VacanciesMainBody(props: {
   if (props.loading) return <VacanciesSkeletonStack />;
   if (props.failed) {
     return (
-      <VacanciesErrorState
-        failureSourceLabel={props.failureSourceLabel}
-        onRetry={props.onRetry}
-      />
+      <VacanciesErrorState failureSourceLabel={props.failureSourceLabel} onRetry={props.onRetry} />
     );
   }
   if (props.matchedLength === 0) {
@@ -510,14 +525,47 @@ function buildListProps(
     onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
     onOpenResponses: input.onOpenResponses,
     onAddToProfile: input.onOpenProfile,
+    countShownAbove: Boolean(input.facets),
   };
 }
 
-function ResultCount({ input, shown }: { readonly input: VacanciesScreenProps; readonly shown: number }) {
+function ResultCount({
+  input,
+  shown,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly shown: number;
+}) {
   if (!input.facets) return null;
-  return <p className="list-hint" aria-live="polite">
-    Показано <span className="vacancy-facet-count">{shown}</span> из <span className="vacancy-facet-count">{input.facets.total}</span>
-  </p>;
+  return (
+    <p className="list-hint" aria-live="polite">
+      Показано <span className="vacancy-facet-count">{shown}</span> из{' '}
+      <span className="vacancy-facet-count">{input.facets.total}</span>
+    </p>
+  );
+}
+
+function mainBodyProps(
+  input: VacanciesScreenProps,
+  screenState: ReturnType<typeof useVacanciesScreenState>,
+) {
+  const { board, viewMode, resetFilters } = screenState;
+  return {
+    loading: Boolean(input.loading),
+    failed: Boolean(input.failed),
+    failureSourceLabel: input.failureSourceLabel,
+    onRetry: input.onRetry,
+    matchedLength: input.facets?.total ?? input.matched.length,
+    primaryRole: board.primaryRole,
+    total: input.total ?? input.matched.length,
+    filtered: board.filtered,
+    viewMode,
+    onResetFilters: resetFilters,
+    selectedCity: board.state.selectedCity,
+    onSelectCity: (city?: string) =>
+      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city })),
+    listProps: buildListProps(input, screenState),
+  };
 }
 
 function VacanciesScreenContent({
@@ -527,7 +575,7 @@ function VacanciesScreenContent({
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
 }) {
-  const { board, actions, activeCampaign, savedSearchesOpen, setSavedSearchesOpen, resetFilters, viewMode } =
+  const { board, actions, activeCampaign, savedSearchesOpen, setSavedSearchesOpen, resetFilters } =
     screenState;
 
   return (
@@ -551,22 +599,11 @@ function VacanciesScreenContent({
         onClose={() => setSavedSearchesOpen(false)}
         onRefresh={input.onRefreshSubscriptions}
       />
-      <ResultCount input={input} shown={board.state.selectedCity ? board.filtered.length : input.total} />
-      <VacanciesMainBody
-        loading={Boolean(input.loading)}
-        failed={Boolean(input.failed)}
-        failureSourceLabel={input.failureSourceLabel}
-        onRetry={input.onRetry}
-        matchedLength={input.facets?.total ?? input.matched.length}
-        primaryRole={board.primaryRole}
-        total={input.total ?? input.matched.length}
-        filtered={board.filtered}
-        viewMode={viewMode}
-        onResetFilters={resetFilters}
-        selectedCity={board.state.selectedCity}
-        onSelectCity={(city) => board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }))}
-        listProps={buildListProps(input, screenState)}
+      <ResultCount
+        input={input}
+        shown={board.state.selectedCity ? board.filtered.length : input.total}
       />
+      <VacanciesMainBody {...mainBodyProps(input, screenState)} />
     </div>
   );
 }
@@ -586,7 +623,10 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
 
       {input.pathIndicator ? (
         <nav className="path-strip" aria-label="Путь кампании">
-          <CareerPathIndicator steps={input.pathIndicator.steps} onNavigate={input.pathIndicator.onNavigate} />
+          <CareerPathIndicator
+            steps={input.pathIndicator.steps}
+            onNavigate={input.pathIndicator.onNavigate}
+          />
         </nav>
       ) : null}
 

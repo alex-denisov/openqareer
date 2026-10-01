@@ -98,7 +98,9 @@ describe('VacanciesScreen (B250)', () => {
   it('shows the campaign role in the eyebrow and the total in the list hint', () => {
     const html = render();
     expect(html).toContain('Кампания · VP Technology Ops');
-    expect(html).toContain('61 вакансия');
+    // B338-2: число стоит одной строкой «Показано N из M» над списком.
+    expect(html).toContain('Показано');
+    expect(html).not.toContain('показаны совпадающие по роли и уровню');
   });
 
   it('shows every role hypothesis as a chip with its vacancy count, and marks the hypothesis', () => {

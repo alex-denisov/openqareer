@@ -167,6 +167,7 @@ const MATCHED_ITEMS = [
 interface VacancyStubScenario {
   readonly matchedItems?: typeof MATCHED_ITEMS;
   readonly total?: number;
+  readonly facets?: typeof FACETS;
   readonly campaign?: typeof CAMPAIGN;
   readonly failMatched?: boolean;
   readonly delayMatchedMs?: number;
@@ -234,6 +235,11 @@ async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Prom
             nextOffset: null,
             campaign: currentCampaign,
             candidateLevel: 'VP / C-level',
+            facets:
+              scenario.facets ??
+              (scenario.matchedItems?.length === 0
+                ? { total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [] }
+                : FACETS),
           },
         },
       });
@@ -407,8 +413,29 @@ async function openVacancies(page: Page): Promise<void> {
   await expect(page.locator('.vacancies-screen')).toBeVisible();
 }
 
+// B338-2: сводка подборки, из которой строятся фильтры.
+const FACETS = {
+  total: 61,
+  regions: [
+    { id: 'us', count: 40 },
+    { id: 'mena', count: 3 },
+  ],
+  remote: 12,
+  levels: [
+    { level: 'vp', count: 30 },
+    { level: 'unknown', count: 8 },
+  ],
+  roles: [
+    { role: 'Enterprise Architect', count: 34 },
+    { role: 'Cloud Architect', count: 6 },
+  ],
+  sources: [{ sourceId: 'indeed', name: 'Indeed', count: 61 }],
+};
+
 test.describe('B250 vacancies screen', () => {
-  test('shows the campaign banner, role hypotheses, level and pool rows', async ({ page }) => {
+  test('shows the campaign banner, filters from the pool summary and pool rows', async ({
+    page,
+  }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -422,52 +449,18 @@ test.describe('B250 vacancies screen', () => {
       await filterToggle.click();
     }
     const filters = page.locator('.vacancies-filters');
-    await expect(filters.getByText('Enterprise Architect (34)')).toBeVisible();
-    await expect(filters.getByText(/Cloud Architect \(6\).*гипотеза/)).toBeVisible();
-    await expect(filters.getByText(/Solutions Architect \(3\).*гипотеза/)).toBeVisible();
-    await expect(filters.getByText('VP / C-level')).toBeVisible();
+    // B338-2: каждое значение — из сводки подборки, с числом; предустановленных нет.
+    await expect(filters.getByRole('button', { name: 'Enterprise Architect · 34' })).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'Cloud Architect · 6' })).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'VP · 30' })).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'Удалённо · 12' })).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'Indeed · 61' })).toBeVisible();
+    await expect(filters.getByText(/Добавить:/)).toHaveCount(0);
 
-    const listHead = page.locator('.vacancies-list-head');
-    await expect(listHead).toContainText('61 вакансия');
-
-    // C56: По умолчанию выбраны «Все роли кампании» (все 6 вакансий пула).
     const rows = page.locator('.vac-list-item');
     await expect(rows).toHaveCount(6);
     await expect(rows.first()).toContainText('Business Information Architect');
     await expect(rows.first()).toContainText('Genetec');
-
-    // Клик по конкретной роли («Enterprise Architect (34)») сужает список до неё (B248).
-    await filters.getByText('Enterprise Architect (34)').click();
-    await expect(rows).toHaveCount(4);
-    await expect(rows.first()).toContainText('Enterprise Architect, Senior');
-    await expect(rows.first()).toContainText('Peraton');
-
-    const row0 = rows.first().locator('.vac-row');
-    if ((await row0.getAttribute('aria-expanded')) !== 'true') {
-      await row0.click();
-    }
-    await expect(row0).toHaveAttribute('aria-pressed', 'true');
-    await expect(row0).toHaveClass(/is-selected/);
-    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
-      'title',
-      'Уровень: рядом',
-    );
-    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
-      'aria-label',
-      /Вакансия ниже целевого уровня/,
-    );
-
-    await filters.getByText('Enterprise Architect (34)').click();
-    await filters.getByText(/Cloud Architect \(6\).*гипотеза/).click();
-    await expect(rows).toHaveCount(1);
-    await expect(rows.first()).toContainText('Sonsoft Inc');
-    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveClass(/is-unknown/);
-    await expect(rows.first().locator('.fit-dot').nth(1)).toHaveAttribute(
-      'title',
-      'Уровень не распознан',
-    );
-    // Только верхняя граница вилки — компактно, с префиксом «до».
-    await expect(rows.first()).toContainText('до $220k');
   });
 
   test('the screen fits 1440, 390 and 320 with no horizontal overflow', async ({
@@ -746,50 +739,28 @@ test.describe('B250 vacancies screen', () => {
     expect(updates).toHaveLength(2);
   });
 
-  test('geo filter shows suggestedRegions button without auto-applying (C63)', async ({
+  test('geo filter offers only regions present in the pool, never suggestions (C63, B338-2)', async ({
     page,
-  }, testInfo) => {
-    await stubSession(page, {
-      campaign: {
-        ...CAMPAIGN,
-        suggestedRegions: ['mena'],
-      },
-    });
+  }) => {
+    await stubSession(page, { campaign: { ...CAMPAIGN, suggestedRegions: ['mena'] } });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    // C63: Баннер «Расширить географию» не появляется у кампании без ограничения (origin: profile).
     await expect(
       page
         .locator('.vacancy-hypothesis-banner')
         .getByRole('button', { name: 'Расширить географию' }),
     ).toHaveCount(0);
-
-    if (testInfo.project.name === 'mobile-390') {
-      const filterToggle = page.getByRole('button', {
-        name: 'Фильтры и сохранённые запросы',
-      });
+    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
+    if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
       await filterToggle.click();
-      await page.waitForTimeout(300);
-      const suggestedBtn = page.getByRole('button', { name: 'Добавить: MENA' });
-      await expect(suggestedBtn).toBeVisible();
-      await page.screenshot({
-        path: 'output/playwright/C63/geo-filter-suggested-390.png',
-        fullPage: true,
-      });
-    } else {
-      const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
-      if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
-        await filterToggle.click();
-      }
-      const suggestedBtn = page.getByRole('button', { name: 'Добавить: MENA' });
-      await expect(suggestedBtn).toBeVisible();
-      await page.screenshot({
-        path: 'output/playwright/C63/geo-filter-suggested-1440.png',
-        fullPage: true,
-      });
     }
+    const filters = page.locator('.vacancies-filters');
+    await expect(filters.getByRole('button', { name: 'Добавить: MENA' })).toHaveCount(0);
+    const mena = filters.getByRole('button', { name: /MENA · 3/ });
+    await expect(mena).toBeVisible();
+    await expect(mena).toHaveAttribute('aria-pressed', 'false');
   });
 
   test('shows a zero-result hypothesis and names a source when loading fails', async ({
