@@ -286,7 +286,7 @@ function VacanciesListHeader({
 }) {
   // B338-2: при сводке число уже стоит строкой «Показано N из M» над списком.
   return (
-    <div className="list-head vacancies-list-head">
+    <div className={`list-head vacancies-list-head${countShownAbove ? ' has-count-above' : ''}`}>
       {countShownAbove ? null : (
         <span className="list-hint vacancies-list-hint">
           {`${pluralRu(totalCount, [

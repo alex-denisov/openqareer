@@ -14206,6 +14206,12 @@ button.chip {
     gap: var(--career-space-1);
   }
 
+  /* B338-2: при строке «Показано N из M» легенда — лишняя строка, первая
+     карточка уходила под нижнюю навигацию; точки подписаны сами. */
+  .vacancies-list-head.has-count-above {
+    display: none;
+  }
+
   .vac-main .vac-fit {
     grid-column: 1 / -1;
     grid-row: 2;
