@@ -134,4 +134,27 @@ describe('career coach domain contract', () => {
       }),
     ).toThrow();
   });
+
+  it('supports interview phase, stageContext and rejectedProposals (B340 S1)', () => {
+    const input = coachTurnInputSchema.parse({
+      candidateReference: 'candidate-test-002',
+      phase: 'interview',
+      stageContext: 'Вакансия: Tech Lead\nКомпания: FinTech',
+      rejectedProposals: ['Отклонено: headline — не совпадает стиль'],
+      messages: [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: 'Как подготовиться к вопросам про архитектуру?',
+        },
+      ],
+    });
+
+    expect(input.phase).toBe('interview');
+    const serialized = JSON.parse(serializeCoachInput(input));
+    expect(serialized.phase).toBe('interview');
+    expect(serialized.stageContext).toBe('Вакансия: Tech Lead\nКомпания: FinTech');
+    expect(serialized.rejectedProposals).toEqual(['Отклонено: headline — не совпадает стиль']);
+  });
 });
+

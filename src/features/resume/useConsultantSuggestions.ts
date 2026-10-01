@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { type CareerCommand } from '../coach/coachApi';
+import { rejectCoachProposal, type CareerCommand } from '../coach/coachApi';
+import { computeProposalKey } from '../../../shared/consultantProposalKey';
 import {
   approveCareerCommand,
   getCareerCommands,
@@ -71,9 +72,18 @@ export function useConsultantSuggestions(
     [load, onProfileUpdated],
   );
 
-  const dismissSuggestion = useCallback((suggestion: InlineSuggestionItem) => {
-    setDismissedIds((prev) => new Set([...prev, suggestion.id]));
-  }, []);
+  const dismissSuggestion = useCallback(
+    async (suggestion: InlineSuggestionItem) => {
+      setDismissedIds((prev) => new Set([...prev, suggestion.id]));
+      const key = computeProposalKey(suggestion.section, suggestion.proposedText);
+      try {
+        await rejectCoachProposal({ proposalKey: key });
+      } catch {
+        // Safe against transient error: dismissedIds keeps UI clean
+      }
+    },
+    [],
+  );
 
   const revertSuggestion = useCallback(
     async (suggestion: InlineSuggestionItem) => {

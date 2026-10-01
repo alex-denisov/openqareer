@@ -23,6 +23,8 @@ import type {
   CoachPhase,
   CoachTurnInput,
   CoachTurnResult,
+  CoachTurnStage,
+  CoachTurnSubject,
   MemoryCandidate,
 } from '../domain/coach';
 import type { ExperienceDossier } from '../domain/dossier';
@@ -206,6 +208,16 @@ export interface TurnRequest {
   content: string;
   marketQuery?: string;
   phase: CoachPhase;
+  stage?: CoachTurnStage;
+  subject?: CoachTurnSubject;
+  stageContext?: string;
+  isService?: boolean;
+}
+
+export interface ConsultantRejection {
+  proposalKey: string;
+  reason: string | null;
+  createdAt: string;
 }
 
 export type StartedTurn =
@@ -219,6 +231,8 @@ export type StartedTurn =
         messages: CoachMessage[];
         knowledgeContext: NonNullable<CoachTurnInput['knowledgeContext']>;
         resumeContext?: CoachTurnInput['resumeContext'];
+        stageContext?: string;
+        rejectedProposals?: string[];
       };
     }
   | {
@@ -332,7 +346,14 @@ export interface CandidateStore {
     errorCode: string,
   ): void;
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
-  getSnapshot(candidateId: string): CandidateSnapshot;
+  getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
+  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[];
+  rejectConsultantProposal(
+    candidateId: string,
+    proposalKey: string,
+    reason?: string,
+  ): void;
+  getConsultantRejections(candidateId: string): ConsultantRejection[];
   addManualExperienceFact(
     candidateId: string,
     memoryId: string,
@@ -600,9 +621,23 @@ export interface CandidateStore {
     commandId: string,
     command: CareerCommandRecord,
   ): CareerCommandRecord;
+  getInterviewSubject(
+    candidateId: string,
+    interviewId: string,
+  ): CandidateInterviewSubject | null;
   exportCandidate(candidateId: string): CandidateExport;
   deleteCandidate(candidateId: string): boolean;
   close(): void;
+}
+
+export interface CandidateInterviewSubject {
+  readonly id: string;
+  readonly applicationId: string;
+  readonly round: number;
+  readonly scheduledAt: string | null;
+  readonly stage: string;
+  readonly vacancyTitle?: string;
+  readonly vacancyCompany?: string;
 }
 
 export type PlanRequestId = 'consultant' | 'automation';

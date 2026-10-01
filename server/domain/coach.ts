@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
-const COACH_PHASES = ['discovery', 'evidence', 'role', 'market', 'resume', 'targeting'] as const;
+const COACH_PHASES = [
+  'discovery',
+  'evidence',
+  'role',
+  'market',
+  'resume',
+  'targeting',
+  'interview',
+] as const;
 
 const MEMORY_KINDS = ['fact', 'preference', 'hypothesis', 'open-question'] as const;
 
@@ -209,6 +217,8 @@ export const coachTurnInputSchema = z.object({
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
   resumeContext: resumeContextSchema.optional(),
+  stageContext: z.string().trim().max(10_000).optional(),
+  rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
   messages: z.array(coachMessageSchema).min(1).max(30),
   knowledgeContext: knowledgeContextSchema.optional(),
   marketObservations: z.array(marketObservationSchema).max(20).optional(),
@@ -299,6 +309,33 @@ export type CoachPhase = (typeof COACH_PHASES)[number];
 export type CareerRole = (typeof CAREER_ROLES)[number];
 export type CareerActionProposal = z.infer<typeof careerActionProposalSchema>;
 export type MarketObservation = z.infer<typeof marketObservationSchema>;
+
+export const COACH_TURN_STAGES = [
+  'today',
+  'profile',
+  'career',
+  'vacancies',
+  'responses',
+  'interviews',
+] as const;
+
+export const coachTurnStageSchema = z.enum(COACH_TURN_STAGES);
+export type CoachTurnStage = (typeof COACH_TURN_STAGES)[number];
+
+export const coachTurnSubjectSchema = z.object({
+  kind: z.enum(['vacancy', 'application', 'interview']),
+  id: z.string().trim().min(1).max(200),
+});
+export type CoachTurnSubject = z.infer<typeof coachTurnSubjectSchema>;
+
+export const STAGE_TO_PHASE: Record<CoachTurnStage, CoachPhase> = {
+  today: 'discovery',
+  profile: 'resume',
+  career: 'role',
+  vacancies: 'market',
+  responses: 'targeting',
+  interviews: 'interview',
+};
 
 export const COACH_TURN_JSON_SCHEMA = {
   type: 'object',
@@ -497,6 +534,10 @@ export function serializeCoachInput(input: CoachTurnInput): string {
     dataClass: input.dataClass,
     locale: input.locale,
     phase: input.phase,
+    ...(input.stageContext ? { stageContext: input.stageContext } : {}),
+    ...(input.rejectedProposals && input.rejectedProposals.length > 0
+      ? { rejectedProposals: input.rejectedProposals }
+      : {}),
     ...(input.resumeContext ? { resumeContext: input.resumeContext } : {}),
     activeRole: input.activeRole ?? 'career_consultant',
     priorRoleContributions: input.priorRoleContributions ?? [],

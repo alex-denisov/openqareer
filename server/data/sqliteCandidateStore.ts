@@ -12,13 +12,14 @@ import {
   type ResumeEvidenceSnapshot,
 } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
-import type { CoachTurnInput } from '../domain/coach';
+import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
 import type {
   CandidateCredentials,
   CandidateExport,
   CandidateIdentity,
   CandidateSnapshot,
   CandidateStore,
+  ConsultantRejection,
   MemoryChange,
   StartedTurn,
   StoredAssessment,
@@ -181,10 +182,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   /** See `sqliteCandidateStoreApplicationMethods.ts` for what this wires in. */
   private wireApplicationTrackerMethods(): void {
-    Object.assign(
-      this,
-      createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id)),
-    );
+    Object.assign(this, createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id), this.database));
   }
 
   private wireDocumentMethods(): void {
@@ -290,7 +288,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.conversations.failTurn(candidateId, idempotencyKey, errorCode);
   }
 
-  getSnapshot(candidateId: string): CandidateSnapshot {
+  getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
     return {
       candidate,
@@ -300,7 +298,7 @@ export class SqliteCandidateStore implements CandidateStore {
         lastImportedAt: connection.lastImportedAt,
         factCount: connection.receipt.factCount,
       })),
-      ...this.conversations.snapshotParts(candidateId),
+      ...this.conversations.snapshotParts(candidateId, stage),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: this.resumeRepository.get(candidateId),
@@ -309,11 +307,22 @@ export class SqliteCandidateStore implements CandidateStore {
     };
   }
 
-  createVacancySubscription(
-    candidateId: string,
-    input: VacancySubscriptionInput,
-    now: string,
-  ): StoredVacancySubscription {
+  getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[] {
+    this.requireCandidate(candidateId);
+    return this.conversations.getMessages(candidateId, stage);
+  }
+
+  rejectConsultantProposal(candidateId: string, proposalKey: string, reason?: string): void {
+    this.requireCandidate(candidateId);
+    this.conversations.rejectConsultantProposal(candidateId, proposalKey, reason);
+  }
+
+  getConsultantRejections(candidateId: string): ConsultantRejection[] {
+    this.requireCandidate(candidateId);
+    return this.conversations.getConsultantRejections(candidateId);
+  }
+
+  createVacancySubscription(candidateId: string, input: VacancySubscriptionInput, now: string): StoredVacancySubscription {
     this.requireCandidate(candidateId);
     return this.vacancyRepository.create(candidateId, input, now);
   }
@@ -454,6 +463,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare linkApplicationMaterial: ApplicationTrackerMethods['linkApplicationMaterial'];
   declare createApplicationInterview: ApplicationTrackerMethods['createApplicationInterview'];
   declare patchApplicationInterview: ApplicationTrackerMethods['patchApplicationInterview'];
+  declare getInterviewSubject: ApplicationTrackerMethods['getInterviewSubject'];
   declare putApplicationOffer: ApplicationTrackerMethods['putApplicationOffer'];
   declare listVacancySkips: ApplicationTrackerMethods['listVacancySkips'];
   declare createVacancySkip: ApplicationTrackerMethods['createVacancySkip'];

@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesBoard } from './ResponsesBoard';
 import type { ApplicationView } from './applicationsApi';
 import type { UseApplications } from './useApplications';
@@ -17,7 +17,12 @@ function application(overrides: Partial<ApplicationView>): ApplicationView {
     stage: 'applied',
     closedReason: null,
     processProfile: 'standard',
-    vacancy: { title: 'Senior Frontend Developer', company: 'FinCloud', url: 'https://x', source: 'hh' },
+    vacancy: {
+      title: 'Senior Frontend Developer',
+      company: 'FinCloud',
+      url: 'https://x',
+      source: 'hh',
+    },
     notes: null,
     followUpDueAt: null,
     stageChangedAt: '2026-09-20T10:00:00.000Z',
@@ -62,7 +67,9 @@ describe('ResponsesBoard columns', () => {
       application({ id: 'a5', stage: 'rejected' }),
       application({ id: 'a6', stage: 'archived' }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    const html = renderToStaticMarkup(
+      <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
+    );
 
     ['Хочу', 'Откликнулся', 'Ответ', 'Интервью', 'Оффер', 'Отказ / Архив'].forEach((label) => {
       expect(html).toContain(label);
@@ -80,12 +87,19 @@ describe('ResponsesBoard columns', () => {
       application({
         id: 'a1',
         stage: 'applied',
-        vacancy: { title: 'Enterprise Architect', company: 'Peraton', url: 'https://x', source: 'hh' },
+        vacancy: {
+          title: 'Enterprise Architect',
+          company: 'Peraton',
+          url: 'https://x',
+          source: 'hh',
+        },
         whoseTurn: 'company',
         materials: { coverLetter: true, resume: true },
       }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    const html = renderToStaticMarkup(
+      <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
+    );
 
     expect(html).toContain('Enterprise Architect');
     expect(html).toContain('Peraton');
@@ -100,7 +114,9 @@ describe('ResponsesBoard columns', () => {
   });
 
   it('renders the empty pipeline copy from the mockup', () => {
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />);
+    const html = renderToStaticMarkup(
+      <ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />,
+    );
     expect(html).toContain('Откликов пока нет');
     expect(html).toContain('Здесь появится карточка каждого отклика');
     expect(html).toContain('Перейти к вакансиям');
@@ -136,9 +152,7 @@ describe('ResponsesBoard columns', () => {
       ...readyState([application({ id: 'a1' })]),
       conflicts: new Set(['a1']),
     };
-    const html = renderToStaticMarkup(
-      <ResponsesBoard state={state} onOpenVacancies={() => {}} />,
-    );
+    const html = renderToStaticMarkup(<ResponsesBoard state={state} onOpenVacancies={() => {}} />);
 
     expect(html).toContain('Карточку изменили в другом окне.');
     expect(html).toContain('Ваши изменения не сохранены.');
@@ -159,7 +173,9 @@ describe('ResponsesBoard columns', () => {
         },
       }),
     ];
-    const html = renderToStaticMarkup(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    const html = renderToStaticMarkup(
+      <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
+    );
 
     expect(html).toContain('VP Technology');
     expect(html).toContain('компания скрыта');
@@ -277,8 +293,16 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
   describe('D15: фильтрация колонки Интервью', () => {
     it('показывает только колонку Интервью и пометку «Показаны отклики на этапе «Интервью» · Показать все»', () => {
       const apps = [
-        application({ id: 'a1', stage: 'applied', vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' } }),
-        application({ id: 'a2', stage: 'interview', vacancy: { title: 'Interview Role', company: 'Comp B', url: '', source: 'hh' } }),
+        application({
+          id: 'a1',
+          stage: 'applied',
+          vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' },
+        }),
+        application({
+          id: 'a2',
+          stage: 'interview',
+          vacancy: { title: 'Interview Role', company: 'Comp B', url: '', source: 'hh' },
+        }),
       ];
 
       act(() => {
@@ -296,28 +320,34 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       expect(container.textContent).toContain('Interview Role');
       expect(container.textContent).not.toContain('Applied Role');
       // Only interview column is rendered
-      const columnHeaders = Array.from(container.querySelectorAll('.career-responses-column-head h2')).map(
-        (el) => el.textContent,
-      );
+      const columnHeaders = Array.from(
+        container.querySelectorAll('.career-responses-column-head h2'),
+      ).map((el) => el.textContent);
       expect(columnHeaders).toEqual(['Интервью']);
 
       // Клик по «Показать все» снимает фильтр
-      const resetBtn = container.querySelector('.career-responses-filter-reset') as HTMLButtonElement;
+      const resetBtn = container.querySelector(
+        '.career-responses-filter-reset',
+      ) as HTMLButtonElement;
       act(() => {
         resetBtn.click();
       });
 
       expect(container.textContent).not.toContain('Показаны отклики на этапе «Интервью»');
       expect(container.textContent).toContain('Applied Role');
-      const allHeaders = Array.from(container.querySelectorAll('.career-responses-column-head h2')).map(
-        (el) => el.textContent,
-      );
+      const allHeaders = Array.from(
+        container.querySelectorAll('.career-responses-column-head h2'),
+      ).map((el) => el.textContent);
       expect(allHeaders.length).toBe(6);
     });
 
     it('показывает пустое состояние «Интервью пока не назначены», если откликов на этапе интервью нет', () => {
       const apps = [
-        application({ id: 'a1', stage: 'applied', vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' } }),
+        application({
+          id: 'a1',
+          stage: 'applied',
+          vacancy: { title: 'Applied Role', company: 'Comp A', url: '', source: 'hh' },
+        }),
       ];
 
       act(() => {
@@ -341,5 +371,85 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       expect(container.textContent).not.toContain('Интервью пока не назначены');
       expect(container.textContent).toContain('Applied Role');
     });
+  });
+
+  it('вызывает onOpenExpert с этапом responses и subject отклика при клике «Обсудить с консультантом»', () => {
+    const onOpenExpert = vi.fn();
+    act(() => {
+      root.render(
+        <ResponsesBoard
+          state={readyState(applications)}
+          onOpenVacancies={() => {}}
+          onOpenExpert={onOpenExpert}
+        />,
+      );
+    });
+
+    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
+    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      roleTitle.click();
+    });
+
+    const discussBtn = Array.from(firstCard.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Обсудить с консультантом'),
+    );
+    expect(discussBtn).toBeDefined();
+
+    act(() => {
+      discussBtn?.click();
+    });
+
+    expect(onOpenExpert).toHaveBeenCalledWith(
+      'responses',
+      { kind: 'application', id: 'a1' },
+      'О вакансии: First Role — Acme',
+    );
+  });
+
+  it('в карточке с этапом interview кнопка Подготовиться открывает модалку с кнопкой Спросить консультанта', () => {
+    const onOpenExpert = vi.fn();
+    const interviewApps = [
+      application({
+        id: 'a-int',
+        stage: 'interview',
+        vacancy: { title: 'Tech Lead', company: 'Yandex', url: 'https://x', source: 'hh' },
+      }),
+    ];
+
+    act(() => {
+      root.render(
+        <ResponsesBoard
+          state={readyState(interviewApps)}
+          onOpenVacancies={() => {}}
+          onOpenExpert={onOpenExpert}
+        />,
+      );
+    });
+
+    const prepBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Подготовиться'),
+    );
+    expect(prepBtn).toBeDefined();
+
+    act(() => {
+      prepBtn?.click();
+    });
+
+    const askBtn = Array.from(document.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Спросить консультанта'),
+    );
+    expect(askBtn).toBeDefined();
+
+    act(() => {
+      askBtn?.click();
+    });
+
+    expect(onOpenExpert).toHaveBeenCalledWith(
+      'interviews',
+      { kind: 'application', id: 'a-int' },
+      'О вакансии: Tech Lead — Yandex',
+    );
   });
 });

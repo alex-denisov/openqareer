@@ -161,4 +161,18 @@ describe('InterviewPrepModal', () => {
     const forbidden = new RegExp(['д', 'о', 'с', 'ь', 'е'].join(''), 'i');
     expect(html).not.toMatch(forbidden);
   });
+
+  it('рендерит кнопку «Спросить консультанта» в шапке при передаче onAskConsultant', () => {
+    const html = renderToStaticMarkup(
+      <InterviewPrepModal
+        isOpen={true}
+        onClose={vi.fn()}
+        vacancy={sampleVacancy}
+        facts={sampleFacts}
+        onAskConsultant={vi.fn()}
+      />,
+    );
+    expect(html).toContain('Спросить консультанта');
+    expect(html).toContain('career-ask-consultant-btn');
+  });
 });

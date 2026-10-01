@@ -5,7 +5,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
-import type { VacancySubscription } from '../coach/coachApi';
+import type { VacancySubscription, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
 import { VacancyRow } from './VacancyRow';
@@ -56,6 +56,7 @@ export interface VacanciesScreenProps {
   readonly onOpenResponses?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
 }
@@ -277,6 +278,7 @@ interface ListContentProps {
   readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
+  readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly countShownAbove: boolean;
 }
 
@@ -328,6 +330,7 @@ function VacanciesListContent(props: ListContentProps) {
     onOpenNetworking,
     onOpenResponses,
     onAddToProfile,
+    onDiscussWithConsultant,
     countShownAbove,
   } = props;
 
@@ -349,6 +352,7 @@ function VacanciesListContent(props: ListContentProps) {
             onOpenNetworking={onOpenNetworking}
             onOpenResponses={onOpenResponses}
             onAddToProfile={onAddToProfile}
+            onDiscussWithConsultant={onDiscussWithConsultant}
           />
         ))}
       </ul>
@@ -516,6 +520,9 @@ function buildListProps(
     onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
     onOpenResponses: input.onOpenResponses,
     onAddToProfile: input.onOpenProfile,
+    onDiscussWithConsultant: input.onOpenExpert
+      ? (cluster) => input.onOpenExpert?.('vacancies', { kind: 'vacancy', id: cluster.id }, `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`)
+      : undefined,
     countShownAbove: Boolean(input.facets),
   };
 }
@@ -610,6 +617,7 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
         title="Вакансии"
         description="Отклик оформляется здесь, без перехода на площадку."
         right={<ViewSwitch viewMode={viewMode} onChange={setViewMode} />}
+        onAskConsultant={input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined}
       />
 
       {input.pathIndicator ? (

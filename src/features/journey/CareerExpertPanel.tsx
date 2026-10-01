@@ -15,15 +15,38 @@ import {
   type AuthUser,
   type CandidateSnapshot,
   type CoachResult,
+  type CoachTurnStage,
+  type CoachTurnSubject,
 } from '../coach/coachApi';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
 
+export const STAGE_TITLE: Record<CoachTurnStage, string> = {
+  profile: 'Профиль',
+  career: 'Карьера',
+  vacancies: 'Вакансии',
+  responses: 'Отклики',
+  interviews: 'Интервью',
+  today: 'Сегодня',
+};
+
+export const STAGE_INITIAL_REPLICA: Record<CoachTurnStage, string> = {
+  profile: 'Покажу, что срежет рекрутер за 30 секунд, и предложу правки по фактам вашего профиля.',
+  career: 'Разберём, какие роли вам реально подходят и как их называют в разных компаниях.',
+  vacancies: 'Выберите вакансию — сравню её требования с вашим опытом и скажу, где пробелы.',
+  responses: 'Подскажу, кому и когда напомнить о себе и что написать.',
+  interviews: 'Соберу вопросы, которые вам вероятно зададут, и ответы из вашего опыта.',
+  today: 'Скажу, какой шаг сегодня даст больше всего.',
+};
+
 interface CareerExpertPanelProps {
   journey?: CareerJourney;
   marketQuery?: string;
+  stage?: CoachTurnStage;
+  subject?: CoachTurnSubject;
+  subjectTitle?: string;
   initialUser: AuthUser | null;
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
@@ -34,6 +57,9 @@ interface CareerExpertPanelProps {
 export function CareerExpertPanel({
   journey,
   marketQuery,
+  stage = 'today',
+  subject,
+  subjectTitle,
   initialUser,
   initialSnapshot,
   onIdentityChange = () => undefined,
@@ -109,7 +135,8 @@ export function CareerExpertPanel({
     }
     let active = true;
     setLoadingSnapshot(true);
-    void getCandidateWithMessages()
+    setLiveResult(undefined);
+    void getCandidateWithMessages(stage)
       .then((candidate) => {
         if (active) setSnapshot(candidate);
       })
@@ -122,7 +149,7 @@ export function CareerExpertPanel({
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [user, stage]);
 
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
@@ -168,6 +195,8 @@ export function CareerExpertPanel({
       const result = await sendCoachTurn({
         content: clean,
         marketQuery: query,
+        stage,
+        subject,
         idempotencyKey,
         messageId,
       });
@@ -188,7 +217,7 @@ export function CareerExpertPanel({
     // кандидата разговор из-за уже полученного ответа (B198).
     if (!delivered) return;
     try {
-      setSnapshot(await getCandidateWithMessages());
+      setSnapshot(await getCandidateWithMessages(stage));
     } catch {
       setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
@@ -218,7 +247,7 @@ export function CareerExpertPanel({
       className="career-expert-panel"
       role="dialog"
       aria-modal="true"
-      aria-label="Карьерный эксперт"
+      aria-label={`Консультант · ${STAGE_TITLE[stage]}`}
     >
       <header>
         <div className="career-expert-identity">
@@ -226,8 +255,8 @@ export function CareerExpertPanel({
             <Sparkle size={18} weight="fill" />
           </span>
           <div>
-            <strong>Карьерный консультант</strong>
-            <small>{user ? 'Персональный карьерный консультант' : 'Защищённый диалог'}</small>
+            <strong>Консультант · {STAGE_TITLE[stage]}</strong>
+            <small>{subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}</small>
           </div>
         </div>
         <button
@@ -275,7 +304,14 @@ export function CareerExpertPanel({
             ) : null}
             <div ref={historyEndRef} aria-hidden="true" />
           </div>
-        ) : null}
+        ) : (
+          <div className="career-dialogue-history" aria-label="История диалога">
+            <article className="career-dialogue-turn is-assistant">
+              <span>Карьерный консультант</span>
+              <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
+            </article>
+          </div>
+        )}
 
         {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
 

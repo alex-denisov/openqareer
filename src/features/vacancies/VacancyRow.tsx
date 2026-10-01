@@ -37,6 +37,7 @@ export interface VacancyRowProps {
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+  readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
 }
 
 function logoInitials(company: string): string {
@@ -78,7 +79,10 @@ function VacancyReqTag({
       <span className="vac-req is-ok">
         <Check size={14} weight="bold" aria-hidden="true" />
         <span>
-          Требования: <span className="num">{matching} из {total}</span>
+          Требования:{' '}
+          <span className="num">
+            {matching} из {total}
+          </span>
         </span>
       </span>
     );
@@ -155,11 +159,7 @@ function VacancyRowTitleCol({
     <span className="vac-title-col">
       <span className="vac-title">{cluster.canonicalTitle}</span>
       <span className="vac-sub">{vacancySubtitle(cluster)}</span>
-      <VacancyReqTag
-        matching={skillMatching.length}
-        total={total}
-        missing={skillMissing.length}
-      />
+      <VacancyReqTag matching={skillMatching.length} total={total} missing={skillMissing.length} />
       <VacancyTrustTag trust={trust} />
     </span>
   );
@@ -381,6 +381,7 @@ interface ActionButtonsProps {
   readonly onConfirmSent: () => void;
   readonly onConfirmAlreadyApplied?: () => void;
   readonly onOpenNetworking?: () => void;
+  readonly onDiscussWithConsultant?: () => void;
   readonly onOpenInfo: () => void;
   readonly onOpenPitch: () => void;
 }
@@ -395,6 +396,7 @@ function VacancyActionButtons({
   onConfirmSent,
   onConfirmAlreadyApplied,
   onOpenNetworking,
+  onDiscussWithConsultant,
   onOpenInfo,
   onOpenPitch,
 }: ActionButtonsProps) {
@@ -411,6 +413,16 @@ function VacancyActionButtons({
           onConfirmAlreadyApplied={onConfirmAlreadyApplied}
         />
       )}
+
+      {onDiscussWithConsultant ? (
+        <button
+          type="button"
+          className="btn btn-secondary action-btn"
+          onClick={onDiscussWithConsultant}
+        >
+          Обсудить с консультантом
+        </button>
+      ) : null}
 
       {onOpenNetworking ? (
         <button type="button" className="btn btn-secondary action-btn" onClick={onOpenNetworking}>
@@ -450,7 +462,11 @@ function useVacancyRowInterview(
     setSavingSchedule(true);
     setScheduleError(undefined);
     try {
-      const res = await onScheduleInterview(cluster.id, date.toISOString(), vacancySnapshot(cluster));
+      const res = await onScheduleInterview(
+        cluster.id,
+        date.toISOString(),
+        vacancySnapshot(cluster),
+      );
       setScheduleOpen(false);
       setPrepApplication(res);
     } catch {
@@ -552,11 +568,7 @@ function RecruiterSection({ cluster }: { readonly cluster: MatchedVacancyItem['c
   );
 }
 
-function DetailTrustAlert({
-  trust,
-}: {
-  readonly trust: ReturnType<typeof vacancyTrustSignals>;
-}) {
+function DetailTrustAlert({ trust }: { readonly trust: ReturnType<typeof vacancyTrustSignals> }) {
   if (trust.level === 'ok' || trust.reasons.length === 0) return null;
   return (
     <div
@@ -655,6 +667,34 @@ function DetailRequirementsSection({
   );
 }
 
+function buildActionButtonsProps(
+  rowProps: DetailProps['rowProps'],
+  rowState: DetailProps['rowState'],
+  cluster: DetailProps['cluster'],
+) {
+  const { interviewState, appliedState } = rowState;
+  return {
+    alreadyApplied: rowState.alreadyApplied,
+    savingApplied: appliedState.savingApplied,
+    onOpenResponses: rowProps.onOpenResponses,
+    onToggleSchedule: rowProps.onScheduleInterview
+      ? () => interviewState.setScheduleOpen((prev) => !prev)
+      : undefined,
+    ...externalApplyProps(rowState),
+    onConfirmAlreadyApplied: rowProps.onMarkAlreadyApplied
+      ? () => void appliedState.handleConfirmAlreadyApplied()
+      : undefined,
+    onOpenNetworking: rowProps.onOpenNetworking
+      ? () => rowProps.onOpenNetworking!(cluster)
+      : undefined,
+    onDiscussWithConsultant: rowProps.onDiscussWithConsultant
+      ? () => rowProps.onDiscussWithConsultant!(cluster)
+      : undefined,
+    onOpenInfo: () => rowState.setInfoOpen(true),
+    onOpenPitch: () => rowState.setPitchOpen(true),
+  };
+}
+
 function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const { interviewState, appliedState, trust } = rowState;
   const source = vacancySourceLabels(cluster.sources)[0];
@@ -671,27 +711,7 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 
       <RecruiterSection cluster={cluster} />
 
-      <VacancyActionButtons
-        alreadyApplied={rowState.alreadyApplied}
-        savingApplied={appliedState.savingApplied}
-        onOpenResponses={rowProps.onOpenResponses}
-        onToggleSchedule={
-          rowProps.onScheduleInterview
-            ? () => interviewState.setScheduleOpen((prev) => !prev)
-            : undefined
-        }
-        {...externalApplyProps(rowState)}
-        onConfirmAlreadyApplied={
-          rowProps.onMarkAlreadyApplied
-            ? () => void appliedState.handleConfirmAlreadyApplied()
-            : undefined
-        }
-        onOpenNetworking={
-          rowProps.onOpenNetworking ? () => rowProps.onOpenNetworking!(cluster) : undefined
-        }
-        onOpenInfo={() => rowState.setInfoOpen(true)}
-        onOpenPitch={() => rowState.setPitchOpen(true)}
-      />
+      <VacancyActionButtons {...buildActionButtonsProps(rowProps, rowState, cluster)} />
 
       <DetailInterviewSection
         appliedError={appliedState.appliedError}

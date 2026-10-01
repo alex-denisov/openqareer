@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { coachTurnStageSchema, coachTurnSubjectSchema } from '../domain/coach';
 import { getEmailError, getNameError, getPasswordError } from '../../shared/accountValidation';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { linkedinProfileV2Schema } from '../../shared/linkedinProfileV2';
@@ -324,6 +325,14 @@ export const coachTurnRequestSchema = z.object({
   messageId: z.string().uuid(),
   content: z.string().trim().min(1).max(8_000),
   marketQuery: z.string().trim().min(2).max(200).optional(),
+  stage: coachTurnStageSchema.optional(),
+  subject: coachTurnSubjectSchema.optional(),
+  isService: z.boolean().optional(),
+});
+
+export const coachProposalRejectRequestSchema = z.object({
+  proposalKey: z.string().trim().min(1).max(200),
+  reason: z.string().trim().max(1_000).optional(),
 });
 
 export const careerCommandRequestSchema = z.object({

@@ -1054,3 +1054,7 @@ CREATE TABLE IF NOT EXISTS plan_requests (
 // B267 срез 1 — модель разбора названий вакансий. Вынесена в
 // `titleParseSchema.ts`, чтобы держать этот файл под гейтом 800 строк.
 export { MIGRATION_35 } from './titleParseSchema';
+
+// B340 срез 1 — раздельные ленты консультанта и отклонение правок.
+export { MIGRATION_36 } from './stageCoachSchema';
+

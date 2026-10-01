@@ -94,6 +94,67 @@ describe('CareerExpertPanel copy', () => {
     expect(html).not.toContain('Карьерный советник');
     expect(html).not.toContain('сообщение карьерному советнику');
   });
+
+  it('renders stage title and static initial replica for each stage', () => {
+    const profileHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="profile" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(profileHtml).toContain('Консультант · Профиль');
+    expect(profileHtml).toContain(
+      'Покажу, что срежет рекрутер за 30 секунд, и предложу правки по фактам вашего профиля.',
+    );
+
+    const careerHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="career" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(careerHtml).toContain('Консультант · Карьера');
+    expect(careerHtml).toContain(
+      'Разберём, какие роли вам реально подходят и как их называют в разных компаниях.',
+    );
+
+    const vacanciesHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="vacancies" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(vacanciesHtml).toContain('Консультант · Вакансии');
+    expect(vacanciesHtml).toContain(
+      'Выберите вакансию — сравню её требования с вашим опытом и скажу, где пробелы.',
+    );
+
+    const responsesHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="responses" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(responsesHtml).toContain('Консультант · Отклики');
+    expect(responsesHtml).toContain('Подскажу, кому и когда напомнить о себе и что написать.');
+
+    const interviewsHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="interviews" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(interviewsHtml).toContain('Консультант · Интервью');
+    expect(interviewsHtml).toContain(
+      'Соберу вопросы, которые вам вероятно зададут, и ответы из вашего опыта.',
+    );
+
+    const todayHtml = renderToStaticMarkup(
+      <CareerExpertPanel stage="today" initialUser={null} onClose={() => undefined} />,
+    );
+    expect(todayHtml).toContain('Консультант · Сегодня');
+    expect(todayHtml).toContain('Скажу, какой шаг сегодня даст больше всего.');
+  });
+
+  it('renders subject title when provided', () => {
+    const html = renderToStaticMarkup(
+      <CareerExpertPanel
+        stage="vacancies"
+        subject={{ kind: 'vacancy', id: 'vac-1' }}
+        subjectTitle="О вакансии: Senior Backend — BigTech"
+        initialUser={null}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Консультант · Вакансии');
+    expect(html).toContain('О вакансии: Senior Backend — BigTech');
+  });
 });
 
 /**

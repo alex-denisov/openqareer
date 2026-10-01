@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
+import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
@@ -31,10 +32,12 @@ export function ResponsesBoard({
   state,
   onOpenVacancies,
   initialStageFilter,
+  onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   initialStageFilter?: ApplicationStage;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [stageFilter, setStageFilter] = useState<ApplicationStage | null>(
     initialStageFilter ?? null,
@@ -51,9 +54,7 @@ export function ResponsesBoard({
     );
   }
 
-  const interviewApplications = state.applications.filter(
-    (app) => app.stage === 'interview',
-  );
+  const interviewApplications = state.applications.filter((app) => app.stage === 'interview');
 
   if (stageFilter === 'interview' && interviewApplications.length === 0) {
     return <InterviewEmptyState onClear={() => setStageFilter(null)} />;
@@ -69,6 +70,7 @@ export function ResponsesBoard({
       onOpenVacancies={onOpenVacancies}
       stageFilter={stageFilter}
       onClearFilter={() => setStageFilter(null)}
+      onOpenExpert={onOpenExpert}
     />
   );
 }
@@ -95,9 +97,7 @@ function EmptyState({
     <>
       <div className="career-responses-empty">
         <h3>Откликов пока нет</h3>
-        <p>
-          Здесь появится карточка каждого отклика с материалами и следующим шагом.
-        </p>
+        <p>Здесь появится карточка каждого отклика с материалами и следующим шагом.</p>
         <p className="career-responses-empty-step">
           Откликнитесь на вакансию из подборки, чтобы начать.
         </p>
@@ -173,11 +173,7 @@ function FilterNotice({ onClear }: { onClear: () => void }) {
     <div className="career-responses-filter-notice" role="status">
       <span>Показаны отклики на этапе «Интервью»</span>
       <span className="career-responses-filter-notice-sep">·</span>
-      <button
-        type="button"
-        className="career-responses-filter-reset"
-        onClick={onClear}
-      >
+      <button type="button" className="career-responses-filter-reset" onClick={onClear}>
         Показать все
       </button>
     </div>
@@ -192,6 +188,7 @@ function BoardColumnsList({
   onCloseMenu,
   onOpenVacancies,
   onAddManual,
+  onOpenExpert,
 }: {
   columns: readonly Column[];
   state: UseApplications;
@@ -200,6 +197,7 @@ function BoardColumnsList({
   onCloseMenu: () => void;
   onOpenVacancies: () => void;
   onAddManual: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
     <div className="career-responses-board">
@@ -213,6 +211,7 @@ function BoardColumnsList({
           onCloseMenu={onCloseMenu}
           onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
           onAddManual={column.key === 'saved' ? onAddManual : undefined}
+          onOpenExpert={onOpenExpert}
         />
       ))}
     </div>
@@ -224,11 +223,13 @@ function ReadyBoard({
   onOpenVacancies,
   stageFilter,
   onClearFilter,
+  onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   stageFilter?: ApplicationStage | null;
   onClearFilter?: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [addingManual, setAddingManual] = useState(false);
   const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
@@ -251,6 +252,7 @@ function ReadyBoard({
         onCloseMenu={() => setActiveMenuCardId(null)}
         onOpenVacancies={onOpenVacancies}
         onAddManual={() => setAddingManual(true)}
+        onOpenExpert={onOpenExpert}
       />
       {addingManual ? (
         <ManualCardForm
@@ -283,6 +285,7 @@ interface BoardColumnProps {
   onCloseMenu: () => void;
   onOpenVacancies?: () => void;
   onAddManual?: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }
 
 function ColumnHeader({ label, count }: { label: string; count: number }) {
@@ -300,12 +303,14 @@ function ColumnCardItem({
   isMenuOpen,
   onToggleMenu,
   onCloseMenu,
+  onOpenExpert,
 }: {
   application: ApplicationView;
   state: UseApplications;
   isMenuOpen: boolean;
   onToggleMenu: (id: string) => void;
   onCloseMenu: () => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
     <ResponsesCard
@@ -315,12 +320,9 @@ function ColumnCardItem({
       isMenuOpen={isMenuOpen}
       onToggleMenu={() => onToggleMenu(application.id)}
       onCloseMenu={onCloseMenu}
-      onChangeStage={(stage, occurredAt) =>
-        state.changeStage(application.id, stage, occurredAt)
-      }
-      onScheduleInterview={(scheduledAt) =>
-        state.scheduleInterview(application.id, scheduledAt)
-      }
+      onOpenExpert={onOpenExpert}
+      onChangeStage={(stage, occurredAt) => state.changeStage(application.id, stage, occurredAt)}
+      onScheduleInterview={(scheduledAt) => state.scheduleInterview(application.id, scheduledAt)}
       onRetry={() => state.retryStageChange(application.id)}
       onRefresh={state.reload}
       onSaveNote={(notes) => state.saveNote(application.id, notes)}
@@ -338,6 +340,7 @@ function BoardColumn({
   onCloseMenu,
   onOpenVacancies,
   onAddManual,
+  onOpenExpert,
 }: BoardColumnProps) {
   const cards = state.applications.filter((application) =>
     column.stages.includes(application.stage),
@@ -354,6 +357,7 @@ function BoardColumn({
             isMenuOpen={activeMenuCardId === application.id}
             onToggleMenu={onToggleMenu}
             onCloseMenu={onCloseMenu}
+            onOpenExpert={onOpenExpert}
           />
         ))}
         {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}
@@ -399,11 +403,7 @@ function AddCardControl({
       </button>
       {onAddManual ? (
         <div className="career-responses-menu-wrap">
-          <button
-            type="button"
-            aria-label="Ещё способы добавить карточку"
-            onClick={onToggleMenu}
-          >
+          <button type="button" aria-label="Ещё способы добавить карточку" onClick={onToggleMenu}>
             <DotsThreeVertical size={18} />
           </button>
           {menuOpen ? (

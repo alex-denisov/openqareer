@@ -226,7 +226,7 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
     const rail = page.locator('aside#career-rail');
-    await expect(rail.locator('.career-nav-button span')).toHaveCount(5);
+    await expect(rail.locator('.career-nav-button span')).toHaveCount(4);
     const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
       nodes.map((node) => ({
         text: node.textContent,
