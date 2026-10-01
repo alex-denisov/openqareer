@@ -9,6 +9,7 @@ import type { CandidateMemory } from '../coach/coachApi';
 import { sendCoachTurn } from '../coach/coachApi';
 import { prepareCareerCommand } from '../coach/careerCommandApi';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
+import { extractSeniorityLevelFromPoint, LEVEL_HUMAN_NAMES } from '../vacancies/vacancyLevel';
 
 interface VacancyRequirementAssistantProps {
   readonly draft: ResumeDraft;
@@ -239,10 +240,19 @@ function ManualFactForm(props: ManualFactFormProps) {
 export function VacancyRequirementAssistant(props: VacancyRequirementAssistantProps) {
   const { draft, request, onHandled, onManualFactAdded } = props;
   const { mode, error, hasEvidence, markRequestHandled } = useRequirementProposal(props);
+  const seniorityLevel = extractSeniorityLevelFromPoint(request.requirement);
   return (
     <div className="career-vacancy-requirement-assistant">
       <p className="career-vacancy-requirement-label">
-        Требование вакансии: <strong>{request.requirement}</strong>
+        {seniorityLevel ? (
+          <>
+            Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[seniorityLevel]}</strong>
+          </>
+        ) : (
+          <>
+            Требование вакансии: <strong>{request.requirement}</strong>
+          </>
+        )}
       </p>
       {mode === 'checking' ? <p role="status">Проверяем, подтверждает ли это ваш опыт.</p> : null}
       {mode === 'manual' ? (

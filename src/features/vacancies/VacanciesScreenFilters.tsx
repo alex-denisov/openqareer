@@ -4,6 +4,7 @@ import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets'
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { pluralRu } from '../../../shared/pluralRu';
 import { VacancyAddRoleRow } from './VacancyAddRoleRow';
+import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
 
 export interface VacanciesScreenState {
   readonly roles: readonly string[];
@@ -53,11 +54,7 @@ function regionLabel(id: string): string {
 }
 
 const LEVEL_LABELS: Readonly<Record<string, string>> = {
-  ic: 'Специалист',
-  lead: 'Лид',
-  head: 'Руководитель',
-  vp: 'VP',
-  'c-level': 'C-level',
+  ...LEVEL_HUMAN_NAMES,
   unknown: 'Неизвестно',
 };
 
@@ -124,23 +121,13 @@ function FacetGroup({
           />
         ))}
       </div>
-      {field === 'levels' ? <ProfileLevelLink onClick={props.onOpenProfileLevel} /> : null}
+      {field === 'levels' ? <ProfileLevelNote /> : null}
     </div>
   );
 }
 
-function ProfileLevelLink({ onClick }: { readonly onClick?: () => void }) {
-  return (
-    <p className="level-note">
-      {onClick ? (
-        <button type="button" onClick={onClick}>
-          изменить в профиле
-        </button>
-      ) : (
-        <a href="#profile">изменить в профиле</a>
-      )}
-    </p>
-  );
+function ProfileLevelNote() {
+  return <p className="level-note">Уровень берётся из опыта в профиле</p>;
 }
 
 function RemoteGroup({ props }: { readonly props: VacanciesScreenFiltersProps }) {

@@ -13883,6 +13883,29 @@ button.chip {
   margin: 0;
 }
 
+.vac-level-row {
+  display: block;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.vac-level-row strong {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
+.vacancies-detail-level-row {
+  display: block;
+  font-size: var(--career-text-sm);
+  color: var(--career-text-soft);
+  margin: 0 0 var(--career-space-2);
+}
+
+.vacancies-detail-level-row strong {
+  color: var(--career-text);
+  font-weight: 600;
+}
+
 .req-summary {
   display: block;
   font-size: var(--career-text-xs);

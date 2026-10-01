@@ -17,27 +17,17 @@ import { vacancyLevelMatchLabel } from './vacancyLevelMatch';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
+import { extractVacancyRequirements, LEVEL_HUMAN_NAMES } from './vacancyLevel';
 
 /**
- * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`. Сетка
- * «Стадия компании / Кто рекрутирует / Причина открытия роли / Подчинение»
- * рисует только то, что реально есть в `companyFeatures`: обогатитель этих
- * четырёх полей ещё не построен (`mockup-data-gap.md`), так что сегодня блок
- * скрыт целиком, а не подставляет пустые строки.
+ * Детальная панель «Вакансии» (B248/B250) — макет `vacancies.html`.
  */
 interface VacancyDetailPanelProps {
   readonly item: MatchedVacancyItem;
   readonly now: string;
   readonly applications?: VacancyApplications;
-  readonly onMarkAlreadyApplied?: (
-    clusterId: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<void>;
-  readonly onScheduleInterview?: (
-    clusterId: string,
-    scheduledAt: string,
-    vacancy: VacancyApplicationSnapshot,
-  ) => Promise<ApplicationView>;
+  readonly onMarkAlreadyApplied?: (clusterId: string, vacancy: VacancyApplicationSnapshot) => Promise<void>;
+  readonly onScheduleInterview?: (clusterId: string, scheduledAt: string, vacancy: VacancyApplicationSnapshot) => Promise<ApplicationView>;
   readonly onBack: () => void;
   /** Opens «Отклики» after the candidate confirms an application (B251 F5,
    * C47): without this door the tracker card was reachable only by rail
@@ -201,18 +191,29 @@ function VacancyProfileEvidence({
   readonly signals: ReturnType<typeof vacancySignals>;
   readonly onAddToProfile?: VacancyDetailPanelProps['onAddToProfile'];
 }) {
+  const { skillMatching, skillMissing, vacancyLevel } = extractVacancyRequirements(
+    explanation.matchingPoints,
+    explanation.missingPoints,
+    cluster.skills,
+  );
+
   return (
     <>
       <VacancySignalGrid signals={signals} />
       <div className="vacancies-detail-requirements">
+        {vacancyLevel ? (
+          <p className="vacancies-detail-level-row">
+            Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[vacancyLevel]}</strong>
+          </p>
+        ) : null}
         <VacancyRequirementList
           title="Совпадает по фактам профиля"
-          points={explanation.matchingPoints}
+          points={skillMatching}
           tone="yes"
         />
         <VacancyMissingRequirements
           cluster={cluster}
-          points={explanation.missingPoints}
+          points={skillMissing}
           onAddToProfile={onAddToProfile}
         />
       </div>

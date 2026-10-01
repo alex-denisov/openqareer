@@ -431,7 +431,6 @@ function VacanciesFiltersSection({
   board,
   actions,
   candidateLevel,
-  onOpenProfile,
   subscriptionsCount,
   savedSearchesOpen,
   onToggleSavedSearches,
@@ -442,7 +441,6 @@ function VacanciesFiltersSection({
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly candidateLevel?: string | null;
-  readonly onOpenProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly subscriptionsCount?: number;
   readonly savedSearchesOpen: boolean;
   readonly onToggleSavedSearches: () => void;
@@ -463,17 +461,6 @@ function VacanciesFiltersSection({
       savedSearchesCount={subscriptionsCount}
       savedSearchesOpen={savedSearchesOpen}
       onToggleSavedSearches={onToggleSavedSearches}
-      onOpenProfileLevel={
-        onOpenProfile
-          ? () =>
-              onOpenProfile({
-                requirement: candidateLevel ?? '',
-                vacancyId: 'level',
-                vacancyTitle: candidateLevel ?? '',
-                vacancyCompany: '',
-              })
-          : undefined
-      }
     />
   );
 }
@@ -586,7 +573,6 @@ function VacanciesScreenContent({
         board={board}
         actions={actions}
         candidateLevel={input.candidateLevel}
-        onOpenProfile={input.onOpenProfile}
         subscriptionsCount={input.subscriptions?.length}
         savedSearchesOpen={savedSearchesOpen}
         onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}
