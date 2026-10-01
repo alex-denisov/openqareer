@@ -631,4 +631,47 @@ test.describe('B251 today screen', () => {
     await banner.locator('[data-testid="since-visit-interview"]').click();
     await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
   });
+
+  test('B344 D10: карточка очереди показывает «Компания не указана — Должность» вместо ФИО рекрутёра', async ({
+    page,
+  }) => {
+    const customSnapshot = {
+      ...TODAY_SNAPSHOT,
+      queue: [
+        {
+          kind: 'new_vacancy' as const,
+          clusterId: 'cl-recruiter',
+          title: 'Head of Engineering',
+          company: 'Глушкова Ксения Евгеньевна',
+          eyebrow: 'сегодня',
+          dueAt: null,
+          salary: null,
+          location: 'Москва',
+          fit: null,
+        },
+      ],
+    };
+
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await stubSession(page, customSnapshot);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+
+    const queueItem = page
+      .locator('.career-today-item:not([data-testid="consultant-queue-card"])')
+      .first();
+    const titleEl = queueItem.locator('.career-today-item-title');
+    await expect(titleEl).toHaveText('Компания не указана — Head of Engineering');
+    await expect(titleEl).not.toContainText('Глушкова');
+
+    const logoEl = queueItem.locator('.career-today-item-logo');
+    await expect(logoEl).toHaveText('—');
+
+    await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-1176.png' });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(titleEl).toHaveText('Компания не указана — Head of Engineering');
+    await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-390.png' });
+  });
 });

@@ -8,7 +8,13 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
 import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySinceLastVisit, TodaySnapshot } from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
-import { buildReturningDigestItems, companyInitials, digestBasis, followUpStatusLabel } from './todayFormat';
+import {
+  buildReturningDigestItems,
+  companyInitials,
+  digestBasis,
+  followUpStatusLabel,
+  formatQueueTitle,
+} from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
@@ -468,7 +474,7 @@ function QueueRow({
           {item.eyebrow ?? queueKindLabel(item)}
         </span>
         <div className="career-today-item-title">
-          {item.company ? `${item.company} — ${item.title}` : item.title}
+          {formatQueueTitle(item.company, item.title)}
         </div>
         <div className="career-today-item-meta">
           <span className="metric">{secondLine}</span>
@@ -599,7 +605,7 @@ function TodayFollowUps({
         {followUps.map((item) => (
           <li key={item.applicationId} className="career-today-followup-item">
             <span className="career-today-followup-who">
-              {item.company ? `${item.company} — ${item.title}` : item.title}
+              {formatQueueTitle(item.company, item.title)}
             </span>
             <span className={`career-today-followup-when metric is-${item.status}`}>
               {followUpStatusLabel(item.status)}

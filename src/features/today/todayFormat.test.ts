@@ -3,6 +3,7 @@ import {
   buildReturningDigestItems,
   companyInitials,
   formatInterviewDate,
+  formatQueueTitle,
   nextInterviewBasis,
 } from './todayFormat';
 
@@ -136,5 +137,31 @@ describe('todayFormat (B255 returning user digest)', () => {
       'America/New_York',
     );
     expect(newYorkTime).toContain('10:00');
+  });
+
+  describe('D10: сборка заголовка карточки очереди', () => {
+    it('форматирует «Компания — Должность» для валидной компании', () => {
+      expect(formatQueueTitle('Acme Corp', 'Head of Product')).toBe('Acme Corp — Head of Product');
+    });
+
+    it('подставляет «Компания не указана — Должность», если компании нет', () => {
+      expect(formatQueueTitle(null, 'Head of Product')).toBe('Компания не указана — Head of Product');
+      expect(formatQueueTitle('', 'Head of Product')).toBe('Компания не указана — Head of Product');
+      expect(formatQueueTitle('   ', 'Head of Product')).toBe('Компания не указана — Head of Product');
+    });
+
+    it('не пропускает ФИО человека в заголовок, подставляя «Компания не указана»', () => {
+      expect(formatQueueTitle('Глушкова Ксения Евгеньевна', 'Head of Engineering')).toBe(
+        'Компания не указана — Head of Engineering',
+      );
+      expect(formatQueueTitle('Иванов Иван Иванович', 'CTO')).toBe('Компания не указана — CTO');
+      expect(formatQueueTitle('Петрова Анна', 'VP of Engineering')).toBe(
+        'Компания не указана — VP of Engineering',
+      );
+    });
+
+    it('companyInitials возвращает «—» для ФИО человека', () => {
+      expect(companyInitials('Глушкова Ксения Евгеньевна')).toBe('—');
+    });
   });
 });
