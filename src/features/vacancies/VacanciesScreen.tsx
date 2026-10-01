@@ -513,10 +513,10 @@ function buildListProps(
   };
 }
 
-function ResultCount({ input }: { readonly input: VacanciesScreenProps }) {
+function ResultCount({ input, shown }: { readonly input: VacanciesScreenProps; readonly shown: number }) {
   if (!input.facets) return null;
   return <p className="list-hint" aria-live="polite">
-    Показано <span className="vacancy-facet-count">{input.total}</span> из <span className="vacancy-facet-count">{input.facets.total}</span>
+    Показано <span className="vacancy-facet-count">{shown}</span> из <span className="vacancy-facet-count">{input.facets.total}</span>
   </p>;
 }
 
@@ -551,7 +551,7 @@ function VacanciesScreenContent({
         onClose={() => setSavedSearchesOpen(false)}
         onRefresh={input.onRefreshSubscriptions}
       />
-      <ResultCount input={input} />
+      <ResultCount input={input} shown={board.state.selectedCity ? board.filtered.length : input.total} />
       <VacanciesMainBody
         loading={Boolean(input.loading)}
         failed={Boolean(input.failed)}
