@@ -29,6 +29,8 @@ export interface VacanciesPathIndicator {
 
 export interface VacanciesScreenProps {
   readonly facets?: MatchedVacancyFacets;
+  /** `false` — подборка прочитана не целиком: счётчик говорит «Загружено». */
+  readonly poolComplete?: boolean;
   readonly onFiltersChange?: (state: VacanciesScreenState) => void;
   readonly matched: readonly MatchedVacancyItem[];
   readonly total: number;
@@ -537,9 +539,10 @@ function ResultCount({
   readonly shown: number;
 }) {
   if (!input.facets) return null;
+  const verb = input.poolComplete === false ? 'Загружено' : 'Показано';
   return (
     <p className="list-hint" aria-live="polite">
-      Показано <span className="vacancy-facet-count">{shown}</span> из{' '}
+      {verb} <span className="vacancy-facet-count">{shown}</span> из{' '}
       <span className="vacancy-facet-count">{input.facets.total}</span>
     </p>
   );

@@ -95,6 +95,12 @@ function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) 
 }
 
 describe('VacanciesScreen (B250)', () => {
+  it('says «Загружено N из M» while the pool is still incomplete (B338)', () => {
+    const html = render({ total: 1, poolComplete: false });
+    expect(html).toContain('Загружено');
+    expect(html).not.toContain('Показано');
+  });
+
   it('shows the campaign role in the eyebrow and the total in the list hint', () => {
     const html = render();
     expect(html).toContain('Кампания · VP Technology Ops');
