@@ -892,8 +892,8 @@ test.describe('B265 Profile screen', () => {
     });
 
     await openProfile(page);
-    await page.locator('button[aria-label="Консультант"]:visible').click();
-    const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
+    await page.locator('button:has-text("Спросить консультанта"):visible').click();
+    const expert = page.getByRole('dialog', { name: /^Консультант · / });
     await expert
       .getByLabel('Сообщение карьерному консультанту')
       .fill('Обнови раздел «Обо мне» по фактам профиля.');

@@ -198,7 +198,7 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     // sign-in window goes with it.
     await expect(dialog).toHaveCount(0);
     const card = page.locator('.career-platform-card', { hasText: 'hh.ru' });
-    await expect(card.getByText('Подключено')).toBeVisible();
+    await expect(card.getByText('Подключено', { exact: true })).toBeVisible();
     await expect(card.getByRole('button', { name: 'Отключить' })).toBeVisible();
 
     const calls = await page.evaluate(
@@ -220,7 +220,9 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
 
     await expect(dialog).toHaveCount(0);
     await expect(
-      page.locator('.career-platform-card', { hasText: 'hh.ru' }).getByText('Подключено'),
+      page
+        .locator('.career-platform-card', { hasText: 'hh.ru' })
+        .getByText('Подключено', { exact: true }),
     ).toBeVisible();
     // No dead end, and no sentence blaming the resume for a missing window.
     await expect(page.getByText('Импортировать выбранное резюме не удалось')).toHaveCount(0);

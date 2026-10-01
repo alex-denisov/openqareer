@@ -1090,7 +1090,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const shell = page.getByTestId('career-shell');
   await shell.waitFor({ state: 'visible', timeout: 10_000 });
 
-  for (const label of ['Сегодня', 'Профиль', 'Вакансии', 'Отклики', 'Консультант']) {
+  for (const label of ['Сегодня', 'Профиль', 'Вакансии', 'Отклики']) {
     assert(
       (await page.locator(`button[aria-label="${label}"]`).count()) >= 2,
       `${viewport.name}: invariant navigation is missing ${label}`,
@@ -1125,8 +1125,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // B169 §8 / B248 — «Консультант» is its own rail item now, not a fold
   // under the home profile card (that fold lived on the now-dead
   // `CareerHome`).
-  await page.locator('button[aria-label="Консультант"]:visible').click();
-  const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
+  await page.locator('button:has-text("Спросить консультанта"):visible').click();
+  const expert = page.getByRole('dialog', { name: /^Консультант · / });
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {

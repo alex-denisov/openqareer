@@ -156,8 +156,8 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   // screen's consultant fold is gone; the rail's «Консультант» item opens the
   // drawer once the career picture exists.
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Консультант"]:visible').first().click();
-  const dialog = page.getByRole('dialog', { name: 'Карьерный эксперт' });
+  await page.locator('button:has-text("Спросить консультанта"):visible').first().click();
+  const dialog = page.getByRole('dialog', { name: /^Консультант · / });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 
   const approvalRequest = page.waitForRequest(
