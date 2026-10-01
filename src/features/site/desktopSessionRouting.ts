@@ -1,11 +1,17 @@
+/**
+ * Any signed-in principal belongs in the workspace. Keying this on a candidate
+ * profile sent a valid administrator session back to the login form on every
+ * start, because an administrator has no candidate profile.
+ */
 export function resolvedDesktopSessionPath(
   currentPath: string,
-  hasCandidateSession: boolean,
+  session: { readonly candidateId?: string | null } | null | undefined,
 ): string | undefined {
-  if (hasCandidateSession && (currentPath === '/login' || currentPath === '/')) {
+  const signedIn = Boolean(session);
+  if (signedIn && (currentPath === '/login' || currentPath === '/')) {
     return '/app';
   }
-  if (!hasCandidateSession && currentPath === '/app') {
+  if (!signedIn && currentPath === '/app') {
     return '/login';
   }
   return undefined;

@@ -132,7 +132,7 @@ export default function App() {
         invalidStorage: result.status === 'invalid' && !workspace,
       });
       if (isDesktop) {
-        const resolvedPath = resolvedDesktopSessionPath(currentPath, Boolean(session?.candidateId));
+        const resolvedPath = resolvedDesktopSessionPath(currentPath, session);
         if (resolvedPath) navigate(resolvedPath);
       }
     } catch (error) {

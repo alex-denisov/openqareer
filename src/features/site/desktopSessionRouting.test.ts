@@ -6,15 +6,21 @@ import {
 
 describe('resolvedDesktopSessionPath', () => {
   it('returns an expired desktop workspace session to login', () => {
-    expect(resolvedDesktopSessionPath('/app', false)).toBe('/login');
+    expect(resolvedDesktopSessionPath('/app', null)).toBe('/login');
   });
 
   it('returns an authenticated desktop session to the workspace', () => {
-    expect(resolvedDesktopSessionPath('/login', true)).toBe('/app');
+    expect(resolvedDesktopSessionPath('/login', { candidateId: 'c-1' })).toBe('/app');
+  });
+
+  it('keeps a signed-in administrator, who has no candidate profile, out of the login form', () => {
+    const admin = { candidateId: null };
+    expect(resolvedDesktopSessionPath('/login', admin)).toBe('/app');
+    expect(resolvedDesktopSessionPath('/app', admin)).toBeUndefined();
   });
 
   it('does not rewrite unrelated routes', () => {
-    expect(resolvedDesktopSessionPath('/signup', false)).toBeUndefined();
+    expect(resolvedDesktopSessionPath('/signup', null)).toBeUndefined();
   });
 });
 
