@@ -3,9 +3,6 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
-
-
-
 const BROWSER_WALK_MESSAGES = [
   {
     id: 'message-long-user',
@@ -20,7 +17,6 @@ const BROWSER_WALK_MESSAGES = [
       'Зафиксировал измеримый результат. Чтобы превратить его в полноценный карьерный эпизод, уточним роль, зону ответственности, период и ключевые решения.',
   },
 ];
-
 
 const viewports = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -49,32 +45,43 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // B159: собранный каркас спрашивает у продакшена его SHA, чтобы сказать
   // кандидату, отстала ли сборка. В гейте бэкенда нет, поэтому `/health`
   // отвечает тем же, чем прод, — сорока символами SHA.
-  await page.route((url) => url.pathname === '/health', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/plain; charset=utf-8',
-      body: 'b159b159b159b159b159b159b159b159b159b159',
-    });
-  });
-  await page.route((url) => url.pathname.startsWith('/api/v1/auth'), async (route) => {
-    const request = route.request();
-    const pathname = new URL(request.url()).pathname;
-    if (pathname.endsWith('/logout')) authenticated = false;
-    if (pathname.endsWith('/register') || pathname.endsWith('/login')) authenticated = true;
-    if (request.method() === 'POST' && pathname.endsWith('/logout')) {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
-      return;
-    }
-    await route.fulfill({
-      status: pathname.endsWith('/register') ? 201 : 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: authenticated
-          ? { username: pathname.endsWith('/register') ? 'fresh.candidate' : 'candidate.test', role: 'candidate', isTest: !pathname.endsWith('/register'), candidateId: 'candidate-browser-test' }
-          : null,
-      }),
-    });
-  });
+  await page.route(
+    (url) => url.pathname === '/health',
+    async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'text/plain; charset=utf-8',
+        body: 'b159b159b159b159b159b159b159b159b159b159',
+      });
+    },
+  );
+  await page.route(
+    (url) => url.pathname.startsWith('/api/v1/auth'),
+    async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.endsWith('/logout')) authenticated = false;
+      if (pathname.endsWith('/register') || pathname.endsWith('/login')) authenticated = true;
+      if (request.method() === 'POST' && pathname.endsWith('/logout')) {
+        await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+        return;
+      }
+      await route.fulfill({
+        status: pathname.endsWith('/register') ? 201 : 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: authenticated
+            ? {
+                username: pathname.endsWith('/register') ? 'fresh.candidate' : 'candidate.test',
+                role: 'candidate',
+                isTest: !pathname.endsWith('/register'),
+                candidateId: 'candidate-browser-test',
+              }
+            : null,
+        }),
+      });
+    },
+  );
   await page.route('**/api/v1/account', async (route) => {
     await route.fulfill({
       status: 200,
@@ -240,9 +247,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
             },
           },
           documents: [],
-          vacancySubscriptions: createdVacancyView
-            ? [createdVacancyView.subscription]
-            : [],
+          vacancySubscriptions: createdVacancyView ? [createdVacancyView.subscription] : [],
         },
       }),
     });
@@ -364,12 +369,20 @@ async function verifyViewport(browser, baseUrl, viewport) {
   });
   // B266: экран «Тарифы» спрашивает уже отправленные заявки на план.
   await page.route('**/api/v1/candidate/plan-requests', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
   });
   // B318: «Сегодня» показывает последние черновики LinkedIn; без ответа
   // прогон записывал 502, который увидел бы и кандидат (B331).
   await page.route('**/api/v1/candidate/drafts*', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [] }),
+    });
   });
   // Гипотезы роли считает сервер (B180, срез 1б): «Главная» спрашивает их
   // отдельным маршрутом, и без ответа прогон записал бы 502, который увидел бы
@@ -789,7 +802,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ data: { consent: { granted: false, policyVersion: '', updatedAt: '' } } }),
+      body: JSON.stringify({
+        data: { consent: { granted: false, policyVersion: '', updatedAt: '' } },
+      }),
     });
   });
   await page.route('**/api/v1/candidate/vacancy-sources', async (route) => {
@@ -821,7 +836,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
             name: 'Remotive',
             market: 'Международный remote',
             transport: 'public_api',
-            searchCoverage: 'Совпадения в общей выборке до 50 remote-вакансий; задержка источника до 24 часов',
+            searchCoverage:
+              'Совпадения в общей выборке до 50 remote-вакансий; задержка источника до 24 часов',
             attributionUrl: 'https://remotive.com/',
             documentationUrl: 'https://remotive.com/remote-jobs/api',
             reviewedAt: '2026-08-13',
@@ -916,8 +932,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
           capturedAt: '2026-08-10T00:00:00.000Z',
           accessPath: 'official_api',
           facts: [
-            { kind: 'headline', value: 'Synthetic Product Lead', sourceLocator: 'public-meta:1', confidence: 'public-metadata' },
-            { kind: 'summary', value: 'Builds evidence-led products.', sourceLocator: 'public-meta:2', confidence: 'public-metadata' },
+            {
+              kind: 'headline',
+              value: 'Synthetic Product Lead',
+              sourceLocator: 'public-meta:1',
+              confidence: 'public-metadata',
+            },
+            {
+              kind: 'summary',
+              value: 'Builds evidence-led products.',
+              sourceLocator: 'public-meta:2',
+              confidence: 'public-metadata',
+            },
           ],
         },
       }),
@@ -1025,7 +1051,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: landing links are inert before hydration`,
   );
   assert(
-    (await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).count()) === 1,
+    (await page
+      .getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' })
+      .count()) === 1,
     `${viewport.name}: landing page heading is absent from initial HTML`,
   );
 
@@ -1054,10 +1082,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
         outcomes: [],
       }),
     );
-    localStorage.setItem(
-      'candidate-workspace-owner',
-      'candidate-browser-test',
-    );
+    localStorage.setItem('candidate-workspace-owner', 'candidate-browser-test');
   });
 
   // Navigate to candidate workspace
@@ -1104,35 +1129,31 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const expert = page.getByRole('dialog', { name: 'Карьерный эксперт' });
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
-  const dialogueContainment = await page
-    .locator('.career-dialogue-history')
-    .evaluate((history) => {
-      const boundary = history
-        .closest('.career-expert-panel')
-        .getBoundingClientRect();
-      const paragraphs = [...history.querySelectorAll('p')].map((paragraph) => {
-        const rect = paragraph.getBoundingClientRect();
-        return {
-          left: Math.round(rect.left),
-          right: Math.round(rect.right),
-          clientWidth: paragraph.clientWidth,
-          scrollWidth: paragraph.scrollWidth,
-        };
-      });
+  const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {
+    const boundary = history.closest('.career-expert-panel').getBoundingClientRect();
+    const paragraphs = [...history.querySelectorAll('p')].map((paragraph) => {
+      const rect = paragraph.getBoundingClientRect();
       return {
-        contained: paragraphs.every(
-          (paragraph) =>
-            paragraph.left >= boundary.left - 1 &&
-            paragraph.right <= boundary.right + 1 &&
-            paragraph.scrollWidth <= paragraph.clientWidth + 1,
-        ),
-        boundary: {
-          left: Math.round(boundary.left),
-          right: Math.round(boundary.right),
-        },
-        paragraphs,
+        left: Math.round(rect.left),
+        right: Math.round(rect.right),
+        clientWidth: paragraph.clientWidth,
+        scrollWidth: paragraph.scrollWidth,
       };
     });
+    return {
+      contained: paragraphs.every(
+        (paragraph) =>
+          paragraph.left >= boundary.left - 1 &&
+          paragraph.right <= boundary.right + 1 &&
+          paragraph.scrollWidth <= paragraph.clientWidth + 1,
+      ),
+      boundary: {
+        left: Math.round(boundary.left),
+        right: Math.round(boundary.right),
+      },
+      paragraphs,
+    };
+  });
   assert(
     dialogueContainment.contained,
     `${viewport.name}: long dialogue text escaped the expert drawer ${JSON.stringify(dialogueContainment)}`,
@@ -1141,7 +1162,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.waitFor({ state: 'hidden' });
 
   // «Поиск» остаётся без отдельного пункта рельса; кампания открывается шагом «Роль».
-  await page.getByRole('button', { name: /^Роль\./ }).first().click();
+  await page
+    .getByRole('button', { name: /^Роль\./ })
+    .first()
+    .click();
   await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
   await page.getByRole('heading', { name: /Кампания:/u }).waitFor();
   await page.getByRole('heading', { name: 'Воронка' }).waitFor();
@@ -1192,8 +1216,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
     fullPage: true,
   });
 
-  // Отклик из карточки (B251 F5, C47): «Откликнуться» ведёт на площадку и
-  // одним кликом ставит запись «applied» — только она попадает в «Отклики».
+  // Отклик из карточки (B251 F5, C47, B341): «Откликнуться» ведёт на площадку,
+  // запись «applied» ставит только подтверждение «Да, отклик отправлен».
   // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
   const firstRowToggle = vacancyRows.first().locator('button[aria-expanded]').first();
   if ((await firstRowToggle.getAttribute('aria-expanded')) !== 'true') {
@@ -1201,6 +1225,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
   }
   await page.locator('.vacancies-detail-panel').waitFor();
   await page.getByRole('button', { name: 'Откликнуться' }).click();
+  assert(
+    page.__recordedApplications.length === 0,
+    `${viewport.name}: отклик отмечен без подтверждения`,
+  );
+  await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
   const recorded = page.__recordedApplications;
   assert(
     recorded.length === 1 && recorded[0].status === 'applied' && Boolean(recorded[0].clusterId),
@@ -1229,10 +1258,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // button with the same accessible name — it is the one outside the tab
   // group, and the only «Документ и форматы» button left once the tab bar
   // shows «Документ и форматы» as already active.
-  await page
-    .getByRole('button', { name: 'Документ и форматы', exact: true })
-    .last()
-    .click();
+  await page.getByRole('button', { name: 'Документ и форматы', exact: true }).last().click();
   await page.getByRole('group', { name: 'Формат позиционирования' }).waitFor();
   await page.getByRole('group', { name: 'Экспорт резюме' }).waitFor();
   await mkdir('output/playwright', { recursive: true });
@@ -1245,7 +1271,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // карточки выше обязан появиться здесь карточкой трекера, без тупика.
   await page.locator('button[aria-label="Отклики"]:visible').click();
   await page.getByRole('heading', { name: 'Отклики', exact: true }).waitFor();
-  await page.locator('.career-responses-card', { hasText: 'Продуктовый аналитик' }).first().waitFor();
+  await page
+    .locator('.career-responses-card', { hasText: 'Продуктовый аналитик' })
+    .first()
+    .waitFor();
 
   // B248 (owner decision 2026-09-23): the rail no longer carries its own
   // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
@@ -1299,10 +1328,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
-  assert(
-    accountRestart,
-    `${viewport.name}: logout/re-registration retained candidate workspace`,
-  );
+  assert(accountRestart, `${viewport.name}: logout/re-registration retained candidate workspace`);
 
   await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
   assert(
@@ -1347,13 +1373,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.evaluate(() => localStorage.getItem('candidate-workspace')),
   );
   assert(
-    sourceCleanWorkspace.linkedinUrl === undefined
-      && sourceCleanWorkspace.hhUrl === undefined
-      && sourceCleanWorkspace.resumeSource === 'text'
-      && sourceCleanWorkspace.resumeText === ''
-      && sourceCleanWorkspace.targetDirection === 'Вице-президент по операциям'
-      && sourceCleanWorkspace.regions.includes('ru')
-      && sourceCleanWorkspace.profileFacts?.length !== 2,
+    sourceCleanWorkspace.linkedinUrl === undefined &&
+      sourceCleanWorkspace.hhUrl === undefined &&
+      sourceCleanWorkspace.resumeSource === 'text' &&
+      sourceCleanWorkspace.resumeText === '' &&
+      sourceCleanWorkspace.targetDirection === 'Вице-президент по операциям' &&
+      sourceCleanWorkspace.regions.includes('ru') &&
+      sourceCleanWorkspace.profileFacts?.length !== 2,
     `${viewport.name}: source switch retained stale profile evidence`,
   );
 
@@ -1382,24 +1408,27 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   });
   const page = await context.newPage();
   let authenticated = false;
-  await page.route((url) => url.pathname.startsWith('/api/v1/auth'), async (route) => {
-    const pathname = new URL(route.request().url()).pathname;
-    if (pathname.endsWith('/login')) authenticated = true;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        data: authenticated
-          ? {
-              username: 'returning.candidate',
-              role: 'candidate',
-              isTest: true,
-              candidateId: 'candidate-expired-session',
-            }
-          : null,
-      }),
-    });
-  });
+  await page.route(
+    (url) => url.pathname.startsWith('/api/v1/auth'),
+    async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname.endsWith('/login')) authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: authenticated
+            ? {
+                username: 'returning.candidate',
+                role: 'candidate',
+                isTest: true,
+                candidateId: 'candidate-expired-session',
+              }
+            : null,
+        }),
+      });
+    },
+  );
   await page.route('**/api/v1/account', async (route) => {
     await route.fulfill({
       status: 200,
@@ -1458,10 +1487,17 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
             locale: 'ru-RU',
             createdAt: '2026-08-10T00:00:00.000Z',
           },
-          messages: [], memory: [], turns: [], assessments: [], documents: [],
-          germanyMarket: null, vacancySubscriptions: [],
+          messages: [],
+          memory: [],
+          turns: [],
+          assessments: [],
+          documents: [],
+          germanyMarket: null,
+          vacancySubscriptions: [],
           dossier: {
-            sections: [], confirmedCount: 0, proposedCount: 0,
+            sections: [],
+            confirmedCount: 0,
+            proposedCount: 0,
             readiness: { complete: false, unresolvedQuestions: 1, checks: [] },
           },
         },
@@ -1487,10 +1523,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
         outcomes: [],
       }),
     );
-    localStorage.setItem(
-      'candidate-workspace-owner',
-      'candidate-expired-session',
-    );
+    localStorage.setItem('candidate-workspace-owner', 'candidate-expired-session');
   });
   await page.goto(`${baseUrl}app?expired-session-restore`, {
     waitUntil: 'networkidle',
