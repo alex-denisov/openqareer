@@ -1,4 +1,5 @@
 import type { CareerJourney } from '../journey/careerJourneyEngine';
+import type { ApplicationStage } from '../../../shared/applicationStage';
 
 /**
  * A narrow subset of `ShellSection`/`CareerCabinetView` — the only screens a
@@ -7,6 +8,10 @@ import type { CareerJourney } from '../journey/careerJourneyEngine';
  * `onNavigate` callbacks accept different (but overlapping) view unions.
  */
 export type PathDestination = 'profile' | 'career' | 'opportunities' | 'responses';
+
+export interface NavigationOptions {
+  readonly stage?: ApplicationStage;
+}
 
 /**
  * B248 — the cross-screen path indicator: Профиль → Роль → Подборка →
@@ -30,6 +35,8 @@ export interface PathStep {
   readonly reason: string;
   /** Nearest existing screen the step opens on click. */
   readonly destination: PathDestination;
+  /** D15: Параметры навигации (например, фильтр этапа 'interview'). */
+  readonly navigationOptions?: NavigationOptions;
 }
 
 type TrackItem = NonNullable<CareerJourney['track']>[number];
@@ -192,6 +199,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
       isCurrent: false,
       reason,
       destination: 'responses',
+      navigationOptions: { stage: 'interview' },
     };
   }
   return {
@@ -201,6 +209,7 @@ function interviewsStepOf(input: PathIndicatorInput): PathStep {
     isCurrent: false,
     reason: NO_INTERVIEW_DATA_REASON,
     destination: 'responses',
+    navigationOptions: { stage: 'interview' },
   };
 }
 

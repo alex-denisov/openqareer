@@ -37,6 +37,7 @@ import type {
   VacancyProfileRequirement,
   VacancyProfileRequirementRequest,
 } from '../vacancies/vacancyProfileRequirement';
+import type { NavigationOptions } from '../shell/pathIndicator';
 import type { CareerCabinetView } from './cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
@@ -44,9 +45,10 @@ export type { CareerCabinetView } from './cabinetViews';
 
 interface CareerCabinetProps {
   view: CareerCabinetView;
+  navigationOptions?: NavigationOptions;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
-  onNavigate: (view: CareerCabinetView) => void;
+  onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
@@ -62,6 +64,7 @@ interface CareerCabinetProps {
 // eslint-disable-next-line max-lines-per-function
 export function CareerCabinet({
   view,
+  navigationOptions,
   session,
   workspace,
   onNavigate,
@@ -286,6 +289,7 @@ export function CareerCabinet({
             profileTab={profileTab}
             vacancyProfileRequest={vacancyProfileRequest}
             consultantAction={journey?.reasonedAction}
+            navigationOptions={navigationOptions}
             onNavigate={onNavigate}
             onOpenProfileRequirement={openProfileRequirement}
             onVacancyRequirementHandled={clearProfileRequirement}
@@ -358,6 +362,7 @@ function CabinetSection({
   profileTab,
   vacancyProfileRequest,
   consultantAction,
+  navigationOptions,
   onNavigate,
   onOpenProfileRequirement,
   onVacancyRequirementHandled,
@@ -367,6 +372,7 @@ function CabinetSection({
   onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
+  navigationOptions?: NavigationOptions;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   targetDirection: string;
@@ -466,6 +472,7 @@ function CabinetSection({
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
+        initialStageFilter={navigationOptions?.stage}
       />
     );
   }

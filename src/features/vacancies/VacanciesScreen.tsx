@@ -14,7 +14,7 @@ import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
-import type { PathDestination, PathStep } from '../shell/pathIndicator';
+import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -24,7 +24,7 @@ import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFi
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
-  readonly onNavigate: (destination: PathDestination) => void;
+  readonly onNavigate: (destination: PathDestination, options?: NavigationOptions) => void;
 }
 
 export interface VacanciesScreenProps {

@@ -502,4 +502,62 @@ test.describe('B251 responses screen', () => {
     await expect(page.locator('.career-expert-error')).toBeVisible();
     await expect(page.locator('.career-expert-error button')).toContainText('Повторить');
   });
+
+  test('D15: клик по шагу «Интервью» фильтрует доску откликов до этапа интервью', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    await expect(page.locator('.career-responses-column')).toHaveCount(6);
+    await expect(
+      page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
+    ).toBeVisible();
+
+    // Кликаем по шагу «Интервью» в индикаторе пути (на десктопе кнопка шага, на мобильном саммари)
+    const interviewBtn = page.locator('.career-path-btn').filter({ hasText: 'Интервью' });
+    if (await interviewBtn.isVisible()) {
+      await interviewBtn.click();
+    } else {
+      await page.locator('.career-path-mobile-summary:visible').click();
+    }
+
+    // Доска отфильтрована: видна только колонка «Интервью» и пометка
+    await expect(page.locator('.career-responses-filter-notice')).toContainText(
+      'Показаны отклики на этапе «Интервью»',
+    );
+    await expect(page.locator('.career-responses-column')).toHaveCount(1);
+    await expect(page.locator('.career-responses-column-head h2')).toHaveText('Интервью');
+    await expect(page.locator('.career-responses-card')).toHaveCount(1);
+    await expect(page.locator('.career-responses-card')).toContainText(
+      'Enterprise Architect Director — раунд 2',
+    );
+    await expect(page.locator('.career-responses-card').filter({ hasText: 'Peraton' })).toHaveCount(
+      0,
+    );
+
+    // Скриншоты для D15 на 1176 и 390
+    await mkdir('output/playwright/B344', { recursive: true });
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.screenshot({
+      path: 'output/playwright/B344/d15-responses-interview-filter-1176.png',
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: 'output/playwright/B344/d15-responses-interview-filter-390.png',
+      fullPage: true,
+    });
+
+    // Возвращаем десктоп и снимаем фильтр
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.locator('.career-responses-filter-reset').click();
+    await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
+    await expect(page.locator('.career-responses-column')).toHaveCount(6);
+    await expect(
+      page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
+    ).toBeVisible();
+  });
 });

@@ -99,5 +99,12 @@ describe('CareerPathIndicator', () => {
       }
     }
   });
+
+  it('D15: шаг «Интервью» передаёт destination responses и options { stage: "interview" }', () => {
+    const steps = buildPathIndicator({ matchedPoolCount: 0, confirmedApplications: 0 });
+    const interviewStep = steps.find((step) => step.id === 'interviews');
+    expect(interviewStep?.destination).toBe('responses');
+    expect(interviewStep?.navigationOptions).toEqual({ stage: 'interview' });
+  });
 });
 

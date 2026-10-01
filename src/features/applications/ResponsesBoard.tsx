@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
@@ -30,18 +30,47 @@ const COLUMNS: readonly Column[] = [
 export function ResponsesBoard({
   state,
   onOpenVacancies,
+  initialStageFilter,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  initialStageFilter?: ApplicationStage;
 }) {
+  const [stageFilter, setStageFilter] = useState<ApplicationStage | null>(
+    initialStageFilter ?? null,
+  );
+
+  useEffect(() => {
+    setStageFilter(initialStageFilter ?? null);
+  }, [initialStageFilter]);
+
   if (state.status === 'loading') return <LoadingState />;
   if (state.status === 'error') {
     return (
       <ErrorState message={state.error ?? ''} offline={state.offline} onRetry={state.reload} />
     );
   }
-  if (state.applications.length === 0) return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
-  return <ReadyBoard state={state} onOpenVacancies={onOpenVacancies} />;
+
+  const interviewApplications = state.applications.filter(
+    (app) => app.stage === 'interview',
+  );
+
+  if (stageFilter === 'interview' && interviewApplications.length === 0) {
+    return <InterviewEmptyState onClear={() => setStageFilter(null)} />;
+  }
+
+  if (state.applications.length === 0) {
+    return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
+  }
+
+  return (
+    <ReadyBoard
+      state={state}
+      onOpenVacancies={onOpenVacancies}
+      stageFilter={stageFilter}
+      onClearFilter={() => setStageFilter(null)}
+    />
+  );
 }
 
 function LoadingState() {
@@ -102,6 +131,23 @@ function EmptyState({
   );
 }
 
+function InterviewEmptyState({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="career-responses-empty" role="status">
+      <h3>Интервью пока не назначены</h3>
+      <div className="career-responses-empty-actions">
+        <button
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          onClick={onClear}
+        >
+          Открыть все отклики
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ErrorState({
   message,
   offline,
@@ -122,41 +168,90 @@ function ErrorState({
   );
 }
 
+function FilterNotice({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="career-responses-filter-notice" role="status">
+      <span>Показаны отклики на этапе «Интервью»</span>
+      <span className="career-responses-filter-notice-sep">·</span>
+      <button
+        type="button"
+        className="career-responses-filter-reset"
+        onClick={onClear}
+      >
+        Показать все
+      </button>
+    </div>
+  );
+}
+
+function BoardColumnsList({
+  columns,
+  state,
+  activeMenuCardId,
+  onToggleMenu,
+  onCloseMenu,
+  onOpenVacancies,
+  onAddManual,
+}: {
+  columns: readonly Column[];
+  state: UseApplications;
+  activeMenuCardId: string | null;
+  onToggleMenu: (cardId: string) => void;
+  onCloseMenu: () => void;
+  onOpenVacancies: () => void;
+  onAddManual: () => void;
+}) {
+  return (
+    <div className="career-responses-board">
+      {columns.map((column) => (
+        <BoardColumn
+          key={column.key}
+          column={column}
+          state={state}
+          activeMenuCardId={activeMenuCardId}
+          onToggleMenu={onToggleMenu}
+          onCloseMenu={onCloseMenu}
+          onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
+          onAddManual={column.key === 'saved' ? onAddManual : undefined}
+        />
+      ))}
+    </div>
+  );
+}
+
 function ReadyBoard({
   state,
   onOpenVacancies,
+  stageFilter,
+  onClearFilter,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  stageFilter?: ApplicationStage | null;
+  onClearFilter?: () => void;
 }) {
   const [addingManual, setAddingManual] = useState(false);
   const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
 
-  const handleToggleMenu = (cardId: string) => {
-    setActiveMenuCardId((current) => (current === cardId ? null : cardId));
-  };
-
-  const handleCloseMenu = () => {
-    setActiveMenuCardId(null);
-  };
+  const visibleColumns = stageFilter
+    ? COLUMNS.filter((column) => column.stages.includes(stageFilter))
+    : COLUMNS;
 
   return (
     <div className="career-responses-board-wrap">
+      {stageFilter === 'interview' && onClearFilter ? (
+        <FilterNotice onClear={onClearFilter} />
+      ) : null}
       <Legend />
-      <div className="career-responses-board">
-        {COLUMNS.map((column) => (
-          <BoardColumn
-            key={column.key}
-            column={column}
-            state={state}
-            activeMenuCardId={activeMenuCardId}
-            onToggleMenu={handleToggleMenu}
-            onCloseMenu={handleCloseMenu}
-            onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
-            onAddManual={column.key === 'saved' ? () => setAddingManual(true) : undefined}
-          />
-        ))}
-      </div>
+      <BoardColumnsList
+        columns={visibleColumns}
+        state={state}
+        activeMenuCardId={activeMenuCardId}
+        onToggleMenu={(id) => setActiveMenuCardId((cur) => (cur === id ? null : id))}
+        onCloseMenu={() => setActiveMenuCardId(null)}
+        onOpenVacancies={onOpenVacancies}
+        onAddManual={() => setAddingManual(true)}
+      />
       {addingManual ? (
         <ManualCardForm
           onCancel={() => setAddingManual(false)}

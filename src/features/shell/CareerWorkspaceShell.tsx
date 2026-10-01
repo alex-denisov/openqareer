@@ -29,7 +29,7 @@ import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
 import { CareerPathIndicator } from './CareerPathIndicator';
-import { buildPathIndicator } from './pathIndicator';
+import { buildPathIndicator, type NavigationOptions } from './pathIndicator';
 import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
 import { isSectionNavigable, sectionLockReason, type ShellSection } from './shellNavigation';
 
@@ -293,9 +293,12 @@ export function CareerWorkspaceShell({
     });
   }
 
-  function navigate(view: ShellView) {
+  const [navigationOptions, setNavigationOptions] = useState<NavigationOptions | undefined>();
+
+  function navigate(view: ShellView, options?: NavigationOptions) {
     if (!isNavigable(view)) return;
     setActiveView(view);
+    setNavigationOptions(options);
     setExpertOpen(false);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
@@ -557,6 +560,7 @@ export function CareerWorkspaceShell({
             <CareerCabinet
               key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
               view={activeView as CareerCabinetView}
+              navigationOptions={navigationOptions}
               session={cabinetSession}
               workspace={visibleWorkspace}
               onNavigate={navigate}
