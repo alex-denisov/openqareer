@@ -138,6 +138,14 @@ export type ClusterProjection = UnifiedVacancy;
 /** По умолчанию отбираем 500 кандидатов для расчёта соответствия (B221 срез 2). */
 export const DEFAULT_MATCH_CANDIDATE_LIMIT = 500;
 
+/**
+ * Семантический подбор читает больше (B338): у руководящих кампаний в пуле
+ * тысячи подходящих записей, и 500 самых новых строк после склейки давали
+ * ~190 карточек из ~2 000. Замер на проде 01.10: 5 000 строк — 0.8 с против
+ * 0.56 с для 500, чтение идёт в отдельном процессе и кешируется снимком.
+ */
+export const SEMANTIC_MATCH_CANDIDATE_LIMIT = 3000;
+
 export interface MatchCandidateQueryOptions {
   readonly limit?: number;
   readonly nowMs?: number;

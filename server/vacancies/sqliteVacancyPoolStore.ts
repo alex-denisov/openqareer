@@ -31,6 +31,7 @@ import type { FunctionCode } from '../../shared/roleTaxonomy';
 import {
   clusterProjectionOf,
   DEFAULT_MATCH_CANDIDATE_LIMIT,
+  SEMANTIC_MATCH_CANDIDATE_LIMIT,
   extractMatchTerms,
   freshnessWindow,
   normalizeQuery,
@@ -648,7 +649,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       ? candidate.semanticRoleFunctions
       : this.resolveSemanticFunctions(candidate);
     if (semanticFunctions.length > 0) {
-      const query = this.semanticQuery(candidate, semanticFunctions, window, preferRemote, limit);
+      const semanticLimit = options?.limit ?? SEMANTIC_MATCH_CANDIDATE_LIMIT;
+      const query = this.semanticQuery(
+        candidate,
+        semanticFunctions,
+        window,
+        preferRemote,
+        semanticLimit,
+      );
       const rows = await this.readMatchRows(query, false);
       const results: UnifiedVacancy[] = [];
       for (const row of rows) {
