@@ -33,7 +33,7 @@ afterEach(async () => {
     rmSync(resource.directory, { recursive: true, force: true });
   }
 });
-async function createApp() {
+async function createApp(overrides: Partial<ServerConfig> = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-linkedin-routes-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({ databasePath, encryptionKey: Buffer.alloc(32, 8) });
@@ -65,6 +65,7 @@ async function createApp() {
     secureCookies: false,
     allowedOrigins: ['http://localhost:3000'],
     seedAccounts: [],
+    ...overrides,
   };
   const app = await buildApp({
     config,
@@ -140,6 +141,55 @@ async function createReadyAccount(
   expect(complete.statusCode).toBe(200);
   return accountId;
 }
+
+const TUNNEL: NonNullable<ServerConfig['desktopTunnel']> = {
+  remoteServer: 'openqareer.com',
+  remotePort: 2222,
+  sshUser: 'openqareer-tunnel',
+  sshPrivateKeyBase64: 'c3NoLXRlc3Qta2V5',
+  sshHostKeyBase64: 'c3NoLWhvc3Qta2V5',
+  proxyUsername: 'oq_test',
+  proxyPassword: 'tunnel-test-password',
+  localSocksPort: 1080,
+  localHttpPort: 18081,
+};
+
+describe('admin LinkedIn pool tunnel', () => {
+  it('gives the protected route to an admin so the pool login leaves from the server address', async () => {
+    const app = await createApp({ desktopTunnel: TUNNEL });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/desktop-tunnel',
+      headers: { cookie: await signIn(app, ADMIN) },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toEqual(TUNNEL);
+  });
+
+  it('refuses the admin tunnel to a candidate and to an anonymous caller', async () => {
+    const app = await createApp({ desktopTunnel: TUNNEL });
+    const candidate = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/desktop-tunnel',
+      headers: { cookie: await signIn(app, CANDIDATE) },
+    });
+    const anonymous = await app.inject({ method: 'GET', url: '/api/v1/admin/linkedin/desktop-tunnel' });
+    expect(candidate.statusCode).toBe(403);
+    expect(anonymous.statusCode).toBe(401);
+    expect(candidate.body).not.toContain('tunnel-test-password');
+  });
+
+  it('says the route is not configured instead of returning an empty tunnel', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/admin/linkedin/desktop-tunnel',
+      headers: { cookie: await signIn(app, ADMIN) },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe('desktop_tunnel_unavailable');
+  });
+});
 
 describe('admin LinkedIn pool boundary', () => {
   it('does not disclose the pool route or identifier to a candidate', async () => {

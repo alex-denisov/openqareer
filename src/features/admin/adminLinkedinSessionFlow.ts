@@ -1,5 +1,11 @@
 import { useEffect } from 'react';
-import { apiErrorMessage } from '../coach/apiClient';
+import { apiErrorMessage, apiFetch } from '../coach/apiClient';
+import {
+  startTunnel,
+  stopTunnel,
+  type TunnelConfig,
+  type TunnelStatusReport,
+} from '../../services/desktop/desktopBridge';
 import {
   inspectSessionPage,
   type ManagedSessionKey,
@@ -21,6 +27,46 @@ const ADMIN_WAITING_COPY: Record<SessionWaitingStage, string> = {
   captcha: 'Пройдите CAPTCHA в открытом окне LinkedIn.',
   unrecognised: 'Вход ещё не подтверждён. Откройте свой профиль в окне LinkedIn.',
 };
+
+export interface AdminLinkedinRouteDependencies {
+  readonly fetchBootstrap?: () => Promise<Response>;
+  readonly startTunnel?: (config: TunnelConfig) => Promise<TunnelStatusReport>;
+}
+
+/**
+ * Raises the protected route before the pool login window opens, always: the
+ * session is replayed from the server, so the login has to leave from the same
+ * address or LinkedIn challenges it as a second location. No silent fallback
+ * to the direct route — a login from the admin's own address is the failure
+ * this exists to prevent.
+ */
+export async function startAdminLinkedinRoute(
+  dependencies: AdminLinkedinRouteDependencies = {},
+): Promise<void> {
+  const response = await (
+    dependencies.fetchBootstrap ?? (() => apiFetch('/api/v1/admin/linkedin/desktop-tunnel'))
+  )();
+  if (response.status === 401 || response.status === 403) throw new Error('admin_session_expired');
+  if (!response.ok) throw new Error('admin_tunnel_unavailable');
+  const payload = (await response.json().catch(() => ({}))) as { data?: TunnelConfig };
+  if (!payload.data) throw new Error('admin_tunnel_unavailable');
+  const tunnel = await (dependencies.startTunnel ?? startTunnel)(payload.data).catch(() => null);
+  if (tunnel?.state !== 'running') throw new Error('admin_tunnel_start_failed');
+}
+
+/** Drops the protected route once the pool login is over; nothing to act on if it fails. */
+export async function endAdminLinkedinRoute(): Promise<void> {
+  await stopTunnel().catch(() => undefined);
+}
+
+export function adminRouteFailureCopy(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  if (message === 'admin_session_expired') return 'Сессия администратора истекла. Войдите заново.';
+  if (message === 'admin_tunnel_unavailable') {
+    return 'Защищённый маршрут на сервере не настроен. Вход в LinkedIn не открыт, чтобы не войти с вашего адреса.';
+  }
+  return 'Не удалось поднять туннель до сервера. Вход в LinkedIn не открыт, чтобы не войти с вашего адреса. Повторите.';
+}
 
 /** The admin closed the LinkedIn window: not a failure, just the end of this check (B325). */
 export function isClosedSessionWindow(reason: unknown): boolean {
@@ -104,6 +150,7 @@ export function useAdminLinkedinLoginPolling(
         if (cancelled) return;
         if (isClosedSessionWindow(reason)) {
           finished = true;
+          void endAdminLinkedinRoute();
           setActiveLogin(undefined);
           setError(undefined);
           setNotice('Окно LinkedIn закрыто до подтверждения входа. Нажмите «Проверить в приложении» ещё раз.');

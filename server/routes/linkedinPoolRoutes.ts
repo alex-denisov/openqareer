@@ -283,7 +283,37 @@ async function handleDelete(deps: LinkedinPoolDeps, request: FastifyRequest, rep
   }
 }
 
+/**
+ * The pool login must leave from the server's own address: the session it
+ * produces is replayed by the server, and LinkedIn challenges a session that
+ * appears from a second location. Same protected route as candidates get.
+ */
+async function handleDesktopTunnel(
+  deps: LinkedinPoolDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const principal = requireAdmin(deps, request, reply);
+  if (!principal) return;
+  if (!deps.config.desktopTunnel) {
+    return sendError(
+      reply,
+      request,
+      503,
+      'desktop_tunnel_unavailable',
+      'Защищённый маршрут LinkedIn сейчас не настроен.',
+      true,
+    );
+  }
+  return { data: deps.config.desktopTunnel, meta: { requestId: request.id } };
+}
+
 export function registerLinkedinPoolRoutes(app: FastifyInstance, deps: LinkedinPoolDeps): void {
+  app.get(
+    '/api/v1/admin/linkedin/desktop-tunnel',
+    { config: { rateLimit: { max: 20, timeWindow: '15 minutes' } } },
+    withDeps(deps, handleDesktopTunnel),
+  );
   app.get('/api/v1/admin/linkedin/accounts', withDeps(deps, handleList));
   app.post('/api/v1/admin/linkedin/accounts', withDeps(deps, handleCreate));
   app.patch('/api/v1/admin/linkedin/accounts/:accountId', withDeps(deps, handlePatch));

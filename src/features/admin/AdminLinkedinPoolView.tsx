@@ -21,6 +21,9 @@ import {
   resizeConnectorSession,
 } from '../connections/connectorSession';
 import {
+  adminRouteFailureCopy,
+  endAdminLinkedinRoute,
+  startAdminLinkedinRoute,
   transferFailureCopy,
   useAdminLinkedinLoginPolling,
   type ActiveLinkedinLogin,
@@ -300,12 +303,20 @@ export function AdminLinkedinPoolView() {
     setError(undefined);
     setNotice(undefined);
     try {
+      await startAdminLinkedinRoute();
+    } catch (reason: unknown) {
+      setError(adminRouteFailureCopy(reason));
+      setBusyAccountId(undefined);
+      return;
+    }
+    try {
       const started = await requestAdminLinkedinLogin(account.id);
       const opened = await openManagedLinkedinSession(
         started.account.profileIsolationId,
         managedLinkedinSessionLayout(window.innerWidth, window.innerHeight),
       );
       if (!opened.opened) {
+        await endAdminLinkedinRoute();
         await completeAdminLinkedinLogin(account.id, started.lease.handle, { state: 'login_required' }).catch(() => undefined);
         setError(managedOpenFailureCopy(opened.reason));
         refresh();
@@ -319,6 +330,7 @@ export function AdminLinkedinPoolView() {
       setNotice('Проверяем отдельный профиль LinkedIn. Если вход требуется, завершите его в открытом окне.');
       refresh();
     } catch (reason: unknown) {
+      await endAdminLinkedinRoute();
       setError(apiErrorMessage(reason, 'Не удалось запросить ручной вход.'));
     } finally {
       setBusyAccountId(undefined);
@@ -355,6 +367,7 @@ export function AdminLinkedinPoolView() {
     try {
       const session = await persistSession(login);
       storedOnServer = true;
+      await endAdminLinkedinRoute();
       await clearPoolSessionProfile(login.sessionKey);
       setActiveLogin(undefined);
       setVerifiedSessionAccountId(undefined);
@@ -468,6 +481,7 @@ export function AdminLinkedinPoolView() {
     if (activeLogin?.accountId !== account.id) return;
     setBusyAccountId(account.id);
     await closeConnectorSession('linkedin', activeLogin.sessionKey).catch(() => undefined);
+    await endAdminLinkedinRoute();
     await completeAdminLinkedinLogin(account.id, activeLogin.handle, { state: 'login_required' }).catch(() => undefined);
     setActiveLogin(undefined);
     setVerifiedSessionAccountId(undefined);
