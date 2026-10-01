@@ -322,7 +322,7 @@ test.describe('B089 administrator console', () => {
       } catch {
         // The test page uses an HTTP origin, but keep the bridge deterministic if that changes.
       }
-      const sessionBridgeState = { exports: 0, localProfileClears: 0 };
+      const sessionBridgeState = { exports: 0, localProfileClears: 0, calls: [] as string[] };
       (
         window as unknown as { __linkedinSessionBridgeState: typeof sessionBridgeState }
       ).__linkedinSessionBridgeState = sessionBridgeState;
@@ -347,6 +347,17 @@ test.describe('B089 administrator console', () => {
                 headers: Object.fromEntries(response.headers.entries()),
                 body: await response.text(),
               };
+            }
+            if (command === 'start_tunnel' || command === 'stop_tunnel' || command === 'open_connector_session') {
+              (
+                window as unknown as { __linkedinSessionBridgeState: typeof sessionBridgeState }
+              ).__linkedinSessionBridgeState.calls.push(command);
+            }
+            if (command === 'start_tunnel') {
+              return { state: 'running', local_http_endpoint: '127.0.0.1:18081' };
+            }
+            if (command === 'stop_tunnel') {
+              return { state: 'stopped' };
             }
             if (command === 'open_connector_session') {
               return { opened: true, label: 'connector-linkedin-pool-test', reason: null };
@@ -388,6 +399,24 @@ test.describe('B089 administrator console', () => {
           },
         };
     }, syntheticCookies);
+
+    await page.route('**/api/v1/admin/linkedin/desktop-tunnel', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            remoteServer: 'openqareer.com',
+            remotePort: 2222,
+            sshUser: 'openqareer-tunnel',
+            sshPrivateKeyBase64: 'c3ludGhldGlj',
+            sshHostKeyBase64: 'c3ludGhldGlj',
+            proxyUsername: 'oq_e2e',
+            proxyPassword: 'synthetic-proxy-password',
+            localSocksPort: 1080,
+            localHttpPort: 18081,
+          },
+        },
+      }),
+    );
 
     let loginVerified = false;
     let serverSession: Record<string, unknown> | null = null;
@@ -484,7 +513,7 @@ test.describe('B089 administrator console', () => {
         () =>
           (
             window as unknown as {
-              __linkedinSessionBridgeState: { exports: number; localProfileClears: number };
+              __linkedinSessionBridgeState: { exports: number; localProfileClears: number; calls: string[] };
             }
           ).__linkedinSessionBridgeState,
       );
@@ -545,6 +574,10 @@ test.describe('B089 administrator console', () => {
     expect(uploadAttempts).toBe(2);
     expect((await readBridgeState()).exports).toBe(2);
     expect((await readBridgeState()).localProfileClears).toBe(2);
+    const calls = (await readBridgeState()).calls;
+    expect(calls.indexOf('start_tunnel')).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf('start_tunnel')).toBeLessThan(calls.indexOf('open_connector_session'));
+    expect(calls).toContain('stop_tunnel');
     expect(uploadedCookies).toEqual(syntheticCookies);
     expect(JSON.stringify(serverSession)).not.toContain('synthetic-session-secret-e2e');
   });
