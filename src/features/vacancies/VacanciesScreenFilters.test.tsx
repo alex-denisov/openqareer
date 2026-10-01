@@ -104,38 +104,21 @@ describe('VacanciesFilters toggle and role limit', () => {
     container.remove();
   });
 
-  it('disables role input and shows warning when 10/10 roles limit is reached', () => {
-    const tenRoles = Array.from({ length: 10 }, (_, i) => `Role ${i + 1}`);
+  it('renders only result facets with mono counts and hides empty groups', () => {
     const container = document.createElement('div');
-    document.body.appendChild(container);
     const root = createRoot(container);
-    act(() => {
-      root.render(
-        <VacanciesFilters
-          {...defaultProps}
-          campaignRoles={tenRoles}
-          roleHypotheses={tenRoles.map((role) => ({ role, vacancyCount: 5, isHypothesis: false }))}
-        />,
-      );
-    });
-
-    // Expand filters
-    const toggle = container.querySelector('.vacancies-mobile-filter-toggle') as HTMLButtonElement;
-    act(() => {
-      toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
-
-    const input = container.querySelector('.add-role-input') as HTMLInputElement;
-    expect(input.disabled).toBe(true);
-
-    const button = container.querySelector('.add-role-row button') as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-
-    const note = container.querySelector('.role-limit-note') as HTMLParagraphElement;
-    expect(note.classList.contains('is-warning')).toBe(true);
-    expect(note.textContent).toContain('Достигнут предел — 10 из 10 ролей. Уберите одну, чтобы добавить другую.');
-
+    act(() => root.render(<VacanciesFilters {...defaultProps} facets={{
+      total: 8, regions: [{ id: 'mena', count: 8 }], remote: 0,
+      levels: [], roles: [{ role: 'COO', count: 8 }], sources: [],
+    }} />));
+    expect(container.textContent).toContain('MENA · 8');
+    expect(container.textContent).toContain('COO · 8');
+    expect(container.textContent).not.toContain('Добавить:');
+    expect(container.textContent).not.toContain('Backend Engineer');
+    expect(container.textContent).not.toContain('Формат работы');
+    expect(container.textContent).not.toContain('Уровень');
+    expect(container.textContent).not.toContain('Источник');
+    expect(container.querySelector('.vacancy-facet-count')?.textContent).toBe('8');
     act(() => root.unmount());
-    container.remove();
   });
 });

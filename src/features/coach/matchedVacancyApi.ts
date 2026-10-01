@@ -1,3 +1,5 @@
+import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
+import type { VacanciesScreenState } from '../vacancies/VacanciesScreenFilters';
 import type { MatchedVacancyItem } from './cabinetTypes';
 import {
   API_MUTATION_TIMEOUT_MS,
@@ -57,6 +59,7 @@ export interface CandidateCampaignUpdate {
 }
 
 export interface MatchedVacancyPage {
+  readonly facets?: MatchedVacancyFacets;
   readonly items: MatchedVacancyItem[];
   readonly total: number;
   readonly nextOffset: number | null;
@@ -75,9 +78,10 @@ export interface MatchedVacancyPage {
 export async function getMatchedVacancyPage(
   offset = 0,
   signal?: AbortSignal,
+  filters?: VacanciesScreenState,
 ): Promise<MatchedVacancyPage> {
   const response = await apiFetch(
-    `/api/v1/candidate/matched-vacancies?offset=${encodeURIComponent(String(offset))}`,
+    `/api/v1/candidate/matched-vacancies?${matchedVacancyQuery(offset, filters)}`,
     { signal },
   );
   if (!response.ok) {
@@ -86,6 +90,7 @@ export async function getMatchedVacancyPage(
   const envelope = (await response.json()) as {
     data?: unknown;
     meta?: {
+      facets?: MatchedVacancyFacets;
       total?: unknown;
       nextOffset?: unknown;
       pageOffsets?: unknown;
@@ -109,6 +114,7 @@ export async function getMatchedVacancyPage(
       : undefined;
   return {
     items,
+    ...(envelope.meta?.facets ? { facets: envelope.meta.facets } : {}),
     total,
     nextOffset,
     ...(pageOffsets ? { pageOffsets } : {}),
@@ -117,6 +123,19 @@ export async function getMatchedVacancyPage(
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
   };
+}
+
+export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenState): string {
+  const query = new URLSearchParams({ offset: String(offset) });
+  const groups = [
+    ['region', filters?.regions], ['level', filters?.levels],
+    ['source', filters?.sources], ['role', filters?.roles],
+  ] as const;
+  for (const [key, values] of groups) {
+    for (const value of values ?? []) query.append(key, value);
+  }
+  if (filters?.remoteOnly) query.set('remote', '1');
+  return query.toString();
 }
 
 export async function saveCandidateCampaign(

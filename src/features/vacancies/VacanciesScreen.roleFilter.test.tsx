@@ -46,6 +46,9 @@ const campaign: CampaignMetaView = {
   ],
 };
 
+const facets = { total: 2, regions: [{ id: 'mena' as const, count: 2 }], remote: 0, levels: [],
+  roles: [{ role: 'VP Technology Ops', count: 1 }, { role: 'COO', count: 1 }], sources: [] };
+
 describe('VacanciesScreen — фильтр ролей (C56)', () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -68,6 +71,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
           matched={[matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')]}
           total={2}
           campaign={campaign}
+          facets={facets}
           now="2026-09-24T09:00:00.000Z"
         />,
       );
@@ -77,7 +81,8 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
     const allRolesButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Все роли кампании',
     );
-    expect(allRolesButton?.getAttribute('aria-pressed')).toBe('true');
+    expect(allRolesButton).toBeUndefined();
+    expect(container.textContent).toContain('Фильтры · 0 активных');
   });
 
   it('сужает список до выбранной роли и позволяет вернуться ко «Всем ролям»', async () => {
@@ -87,6 +92,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
           matched={[matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')]}
           total={2}
           campaign={campaign}
+          facets={facets}
           now="2026-09-24T09:00:00.000Z"
         />,
       );
@@ -104,50 +110,24 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
     const allRolesButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Все роли кампании',
     );
-    await act(async () => allRolesButton?.click());
+    expect(allRolesButton).toBeUndefined();
+    await act(async () => cooButton?.click());
     const restoredList = container.querySelector('.vac-list');
     expect(restoredList?.textContent).toContain('VP Technology Ops');
     expect(restoredList?.textContent).toContain('COO');
   });
 
-  it('нажатие «Добавить: MENA» добавляет регион в фильтр (C63)', async () => {
-    await act(async () => {
-      root.render(
-        <VacanciesScreen
-          matched={[
-            matchedItem('c-1', 'VP Technology Ops'),
-            {
-              ...matchedItem('c-2', 'COO'),
-              cluster: {
-                ...matchedItem('c-2', 'COO').cluster,
-                canonicalLocation: 'Лондон',
-              },
-            },
-          ]}
-          total={2}
-          campaign={{
-            ...campaign,
-            regions: { value: [], origin: 'default' },
-            suggestedRegions: ['mena'],
-          }}
-          now="2026-09-24T09:00:00.000Z"
-        />,
-      );
-    });
-
-    const addMenaButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Добавить: MENA'),
-    );
-    expect(addMenaButton).toBeDefined();
-
-    expect(container.querySelector('.vac-list')?.textContent).toContain('VP Technology Ops');
-    expect(container.querySelector('.vac-list')?.textContent).toContain('COO');
-
-    await act(async () => addMenaButton?.click());
-
-    const menaChip = Array.from(container.querySelectorAll('.vacancies-chip')).find((chip) =>
-      chip.textContent === 'MENA',
-    );
-    expect(menaChip?.classList.contains('is-selected')).toBe(true);
+  it('изменение фильтра запрашивает первую страницу, без подсказок из кампании', async () => {
+    const changes: unknown[] = [];
+    await act(async () => root.render(<VacanciesScreen
+      matched={[matchedItem('c-1', 'VP Technology Ops')]} total={2} facets={facets}
+      campaign={{ ...campaign, suggestedRegions: ['us'], remoteOnly: true }}
+      onFiltersChange={(state) => changes.push(state)} />));
+    expect(container.textContent).not.toContain('Добавить:');
+    expect(changes[0]).toEqual({ roles: [], regions: [], levels: [], sources: [], remoteOnly: false });
+    const region = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('MENA · 2'));
+    await act(async () => region?.click());
+    expect(changes.at(-1)).toEqual({ roles: [], regions: ['mena'], levels: [], sources: [], remoteOnly: false });
   });
 });

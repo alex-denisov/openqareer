@@ -21,6 +21,7 @@ describe('unconfirmedCandidateMatchResponse', () => {
         offset: 0,
         nextOffset: null,
         pageOffsets: [0],
+        facets: { total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [] },
         campaign: campaignMeta(campaign),
       },
     });

@@ -14798,3 +14798,29 @@ button.chip {
   margin: 0;
   accent-color: var(--career-accent);
 }
+
+.vacancy-facet-count {
+  font-family: var(--font-mono);
+}
+
+.vacancy-facet-chip,
+.vacancy-facet-chip.is-selected {
+  background: transparent;
+  border-width: var(--career-border-width);
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-2) var(--career-space-3);
+  min-width: var(--career-target-min);
+  max-width: 100%;
+  gap: var(--career-space-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.vacancy-facet-chip:hover {
+  border-color: var(--career-accent);
+}
+
+.vacancy-facet-chip:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}

@@ -43,7 +43,7 @@ function pool(prefix: string, size: number): MatchedVacancyItem[] {
   })) as unknown as MatchedVacancyItem[];
 }
 
-async function createPagingApp(waitForMatching?: Promise<void>) {
+async function createPagingApp(waitForMatching?: Promise<void>, items?: MatchedVacancyItem[], unconfirmed = false) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -51,7 +51,7 @@ async function createPagingApp(waitForMatching?: Promise<void>) {
   const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
   // Без подтверждённого профиля подбора нет вовсе (B161): целевую роль даёт
   // черновик резюме — самый короткий честный путь к непустому подбору.
-  candidateStore.saveResumeDraft(
+  if (!unconfirmed) candidateStore.saveResumeDraft(
     candidate.id,
     { ...EMPTY_RESUME_DRAFT, targetRole: 'Инженер данных' },
     [],
@@ -64,7 +64,7 @@ async function createPagingApp(waitForMatching?: Promise<void>) {
       await waitForMatching;
       // Каждый пересчёт возвращает другой пул: так видно, из скольких списков
       // собралось одно чтение.
-      return pool(`пул-${call}`, 40);
+      return items ?? pool(`пул-${call}`, 40);
     },
     restore: () => ({ clusters: 0, sources: 0 }),
   };
@@ -99,6 +99,58 @@ describe('чтение подбора страницами', () => {
       expect(Array.isArray(connections.json().data)).toBe(true);
     } finally { finish(); }
     expect((await matched).statusCode).toBe(200);
+  });
+
+  it('проверяет неизвестные источники и роли даже без подтверждённого профиля', async () => {
+    const { app, authorization } = await createPagingApp(undefined, undefined, true);
+    for (const query of ['source=unknown', 'role=unknown']) {
+      const response = await app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
+        headers: { authorization } });
+      expect(response.statusCode).toBe(400);
+    }
+    const empty = await app.inject({ url: '/api/v1/candidate/matched-vacancies', headers: { authorization } });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().meta.facets.total).toBe(0);
+  });
+
+  it('сужает смешанную подборку до пагинации по регионам, источникам и удалёнке', async () => {
+    const items = pool('mixed', 40).map((item, index) => ({ ...item, cluster: {
+      ...item.cluster, canonicalLocation: index < 30 ? 'Berlin' : 'Dubai',
+      isRemote: index >= 30, sources: [{ sourceId: index < 30 ? 'eu-jobs' : 'mena-jobs',
+        sourceName: 'Работа', sourceType: 'direct' as const, sourceUrl: '', observedAt: '' }],
+    } }));
+    const { app, authorization } = await createPagingApp(undefined, items);
+    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
+      headers: { authorization } });
+    const first = (await get('region=eu&source=eu-jobs')).json();
+    expect(first.meta.total).toBe(30);
+    expect(first.meta.facets.total).toBe(40);
+    expect(first.meta.facets.regions).toEqual([{ id: 'eu', count: 30 }, { id: 'mena', count: 10 }]);
+    const page = (await get('region=eu&source=eu-jobs&offset=20')).json();
+    expect(page.meta.total).toBe(30);
+    expect(page.data).toHaveLength(10);
+    expect(page.data.every((item: MatchedVacancyItem) => item.cluster.canonicalLocation === 'Berlin')).toBe(true);
+    const remote = (await get('remote=1&source=mena-jobs')).json();
+    expect(remote.meta.total).toBe(10);
+    expect(remote.meta.facets.total).toBe(40);
+  });
+
+  it('сводка охватывает снимок, фильтры применяются до страницы и значения проверяются', async () => {
+    const { app, authorization } = await createPagingApp();
+    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
+      headers: { authorization } });
+    const first = await get('offset=0');
+    expect(first.json().meta.facets.total).toBe(40);
+    expect(first.json().meta.facets.regions).toEqual([{ id: 'ru', count: 40 }]);
+    const excluded = await get('region=eu');
+    expect(excluded.json().meta.total).toBe(0);
+    expect(excluded.json().meta.facets.total).toBe(40);
+    const repeated = await get('region=eu&region=ru&level=unknown');
+    expect(repeated.json().meta.total).toBe(40);
+    expect((await get('offset=20')).json().meta.facets).toBeUndefined();
+    for (const query of ['level=invalid', 'region=invalid', 'remote=yes', 'source=invalid', 'role=invalid']) {
+      expect((await get(query)).statusCode).toBe(400);
+    }
   });
 
   it('все страницы одного чтения приходят из одного снимка', async () => {
