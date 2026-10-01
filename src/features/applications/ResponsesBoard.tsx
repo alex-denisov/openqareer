@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import type { ApplicationView } from './applicationsApi';
 import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
@@ -129,6 +130,16 @@ function ReadyBoard({
   onOpenVacancies: () => void;
 }) {
   const [addingManual, setAddingManual] = useState(false);
+  const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
+
+  const handleToggleMenu = (cardId: string) => {
+    setActiveMenuCardId((current) => (current === cardId ? null : cardId));
+  };
+
+  const handleCloseMenu = () => {
+    setActiveMenuCardId(null);
+  };
+
   return (
     <div className="career-responses-board-wrap">
       <Legend />
@@ -138,6 +149,9 @@ function ReadyBoard({
             key={column.key}
             column={column}
             state={state}
+            activeMenuCardId={activeMenuCardId}
+            onToggleMenu={handleToggleMenu}
+            onCloseMenu={handleCloseMenu}
             onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
             onAddManual={column.key === 'saved' ? () => setAddingManual(true) : undefined}
           />
@@ -166,49 +180,96 @@ function Legend() {
   );
 }
 
+interface BoardColumnProps {
+  column: Column;
+  state: UseApplications;
+  activeMenuCardId: string | null;
+  onToggleMenu: (cardId: string) => void;
+  onCloseMenu: () => void;
+  onOpenVacancies?: () => void;
+  onAddManual?: () => void;
+}
+
+function ColumnHeader({ label, count }: { label: string; count: number }) {
+  return (
+    <header className="career-responses-column-head">
+      <h2>{label}</h2>
+      <span className="career-responses-column-count">{count}</span>
+    </header>
+  );
+}
+
+function ColumnCardItem({
+  application,
+  state,
+  isMenuOpen,
+  onToggleMenu,
+  onCloseMenu,
+}: {
+  application: ApplicationView;
+  state: UseApplications;
+  isMenuOpen: boolean;
+  onToggleMenu: (id: string) => void;
+  onCloseMenu: () => void;
+}) {
+  return (
+    <ResponsesCard
+      application={application}
+      failed={state.failedChanges.has(application.id)}
+      conflicted={state.conflicts.has(application.id)}
+      isMenuOpen={isMenuOpen}
+      onToggleMenu={() => onToggleMenu(application.id)}
+      onCloseMenu={onCloseMenu}
+      onChangeStage={(stage, occurredAt) =>
+        state.changeStage(application.id, stage, occurredAt)
+      }
+      onScheduleInterview={(scheduledAt) =>
+        state.scheduleInterview(application.id, scheduledAt)
+      }
+      onRetry={() => state.retryStageChange(application.id)}
+      onRefresh={state.reload}
+      onSaveNote={(notes) => state.saveNote(application.id, notes)}
+      onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
+      onSkip={(reasonId) => void state.skip(application, reasonId)}
+    />
+  );
+}
+
 function BoardColumn({
   column,
   state,
+  activeMenuCardId,
+  onToggleMenu,
+  onCloseMenu,
   onOpenVacancies,
   onAddManual,
-}: {
-  column: Column;
-  state: UseApplications;
-  onOpenVacancies?: () => void;
-  onAddManual?: () => void;
-}) {
+}: BoardColumnProps) {
   const cards = state.applications.filter((application) =>
     column.stages.includes(application.stage),
   );
   return (
     <section className="career-responses-column" aria-label={column.label}>
-      <header className="career-responses-column-head">
-        <h2>{column.label}</h2>
-        <span className="career-responses-column-count">{cards.length}</span>
-      </header>
+      <ColumnHeader label={column.label} count={cards.length} />
       <div className="career-responses-column-body">
         {cards.map((application) => (
-          <ResponsesCard
+          <ColumnCardItem
             key={application.id}
             application={application}
-            failed={state.failedChanges.has(application.id)}
-            conflicted={state.conflicts.has(application.id)}
-            onChangeStage={(stage, occurredAt) =>
-              state.changeStage(application.id, stage, occurredAt)
-            }
-            onScheduleInterview={(scheduledAt) =>
-              state.scheduleInterview(application.id, scheduledAt)
-            }
-            onRetry={() => state.retryStageChange(application.id)}
-            onRefresh={state.reload}
-            onSaveNote={(notes) => state.saveNote(application.id, notes)}
-            onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
-            onSkip={(reasonId) => void state.skip(application, reasonId)}
+            state={state}
+            isMenuOpen={activeMenuCardId === application.id}
+            onToggleMenu={onToggleMenu}
+            onCloseMenu={onCloseMenu}
           />
         ))}
         {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}
         {onOpenVacancies ? (
-          <AddCardControl onOpenVacancies={onOpenVacancies} onAddManual={onAddManual} />
+          <AddCardControl
+            menuOpen={activeMenuCardId === 'add-manual'}
+            onToggleMenu={() => onToggleMenu('add-manual')}
+            onCloseMenu={onCloseMenu}
+            onOpenVacancies={onOpenVacancies}
+            onAddManual={onAddManual}
+          />
         ) : null}
       </div>
     </section>
@@ -224,13 +285,18 @@ function OfferPlaceholder() {
 }
 
 function AddCardControl({
+  menuOpen,
+  onToggleMenu,
+  onCloseMenu,
   onOpenVacancies,
   onAddManual,
 }: {
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
   onOpenVacancies: () => void;
   onAddManual?: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="career-responses-add-card-row">
       <button type="button" className="career-responses-add-card" onClick={onOpenVacancies}>
@@ -241,16 +307,16 @@ function AddCardControl({
           <button
             type="button"
             aria-label="Ещё способы добавить карточку"
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={onToggleMenu}
           >
-            <DotsThreeVertical size={16} />
+            <DotsThreeVertical size={18} />
           </button>
           {menuOpen ? (
             <div className="career-responses-card-menu">
               <button
                 type="button"
                 onClick={() => {
-                  setMenuOpen(false);
+                  onCloseMenu();
                   onAddManual();
                 }}
               >

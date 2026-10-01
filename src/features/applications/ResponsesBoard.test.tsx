@@ -1,8 +1,13 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ResponsesBoard } from './ResponsesBoard';
 import type { ApplicationView } from './applicationsApi';
 import type { UseApplications } from './useApplications';
+
+(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function application(overrides: Partial<ApplicationView>): ApplicationView {
   return {
@@ -158,5 +163,114 @@ describe('ResponsesBoard columns', () => {
 
     expect(html).toContain('VP Technology');
     expect(html).toContain('компания скрыта');
+  });
+});
+
+describe('ResponsesBoard card menu interactions (B337)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  const applications = [
+    application({
+      id: 'a1',
+      stage: 'saved',
+      vacancy: { title: 'First Role', company: 'Acme', url: 'https://x', source: 'hh' },
+    }),
+    application({
+      id: 'a2',
+      stage: 'saved',
+      vacancy: { title: 'Second Role', company: 'Beta', url: 'https://y', source: 'hh' },
+    }),
+  ];
+
+  it('открывает меню карточки по клику на тело карточки', () => {
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    });
+
+    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(0);
+
+    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
+    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      roleTitle.click();
+    });
+
+    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+  });
+
+  it('закрывает открытое меню по нажатию Escape', () => {
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    });
+
+    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
+    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      roleTitle.click();
+    });
+    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(0);
+  });
+
+  it('закрывает меню по клику снаружи карточки', () => {
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    });
+
+    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
+    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      roleTitle.click();
+    });
+    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+
+    act(() => {
+      document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+    });
+    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(0);
+  });
+
+  it('держит открытым ровно одно меню на доске: открытие второй карточки закрывает первую', () => {
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
+    });
+
+    const cards = container.querySelectorAll('.career-responses-card');
+    const firstRole = cards[0].querySelector('.career-responses-card-role') as HTMLElement;
+    const secondRole = cards[1].querySelector('.career-responses-card-role') as HTMLElement;
+
+    act(() => {
+      firstRole.click();
+    });
+    expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(1);
+    expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(0);
+
+    act(() => {
+      secondRole.click();
+    });
+    expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(0);
+    expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(1);
+    expect(container.querySelectorAll('.career-responses-card-menu').length).toBe(1);
   });
 });
