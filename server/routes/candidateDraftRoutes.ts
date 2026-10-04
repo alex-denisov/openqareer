@@ -15,6 +15,11 @@ const createSchema = z.object({ kind: z.enum(['post', 'comment']), topic: z.stri
 const statusSchema = z.object({ status: z.enum(['copied', 'rejected']) });
 const limitSchema = z.object({ limit: z.coerce.number().int().min(1).max(50).default(20) });
 
+// Причина сбоя модели без текста запроса: имя и первые 200 символов сообщения причины.
+function describeCause(err: unknown): string | undefined {
+  const cause = err instanceof Error ? err.cause : undefined;
+  return cause instanceof Error ? `${cause.name}: ${cause.message.slice(0, 200)}` : undefined;
+}
 function authenticate(deps: CandidateDraftRouteDeps, request: FastifyRequest, reply: FastifyReply, mutate = false): CandidateIdentity | null {
   if (mutate && !hasSafeMutationOrigin(request, deps.config)) { csrfError(request, reply); return null; }
   return authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
@@ -40,7 +45,7 @@ async function generate(deps: CandidateDraftRouteDeps, request: FastifyRequest, 
       .map(fact => ({ ref: fact.id, statement: fact.statement }));
     text = (await deps.linkedinDraftWriter.writeDraft({ ...input, profileHeadline: account.headline, facts })).text;
   } catch (err) {
-    request.log.error({ code: 'draft_writer_unavailable', failureType: err instanceof Error ? err.name : 'UnknownError', candidateId: candidate.id }, 'candidate-draft-writer-failed');
+    request.log.error({ code: 'draft_writer_unavailable', failureType: err instanceof Error ? err.name : 'UnknownError', cause: describeCause(err), candidateId: candidate.id }, 'candidate-draft-writer-failed');
     return sendError(reply, request, 503, 'draft_writer_unavailable', 'Не получилось подготовить черновик. Попробуйте позже.', false);
   }
   const targetPostUrl = input.kind === 'comment' && /^https?:\/\/\S+$/u.test(input.sourceText ?? '') ? input.sourceText : null;

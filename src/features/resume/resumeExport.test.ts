@@ -1,6 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ResumeDocument } from './resumeTypes';
-import { exportResumeAsJson, exportResumeAsPlainText, resumeExportFileName } from './resumeExport';
+import {
+  exportResumeAsJson,
+  exportResumeAsPlainText,
+  resumeExportFileName,
+  triggerFileDownload,
+} from './resumeExport';
+
+const desktop = vi.hoisted(() => ({ active: false }));
+const saveDialog = vi.hoisted(() => vi.fn());
+const writeTextFile = vi.hoisted(() => vi.fn());
+vi.mock('../../services/desktop/desktopBridge', () => ({
+  isTauriEnvironment: () => desktop.active,
+  invokeDesktopCommand: vi.fn(),
+}));
+vi.mock('@tauri-apps/plugin-dialog', () => ({ save: saveDialog }));
+vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile }));
+
+beforeEach(() => vi.clearAllMocks());
+afterEach(() => {
+  desktop.active = false;
+});
 
 function minimalDocument(overrides?: Partial<ResumeDocument>): ResumeDocument {
   return {
@@ -61,28 +81,57 @@ describe('resumeExport', () => {
       experience: [
         {
           id: 'exp-1',
-          title: { value: 'Lead DevOps Engineer', memoryId: 'm-6', sourceMessageIds: [], reviewFlags: [] },
+          title: {
+            value: 'Lead DevOps Engineer',
+            memoryId: 'm-6',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
           employer: { value: 'TechCorp', memoryId: 'm-7', sourceMessageIds: [], reviewFlags: [] },
           location: { value: 'Москва', memoryId: 'm-8', sourceMessageIds: [], reviewFlags: [] },
           startDate: { value: '2021', memoryId: 'm-9', sourceMessageIds: [], reviewFlags: [] },
           endDate: null,
           current: { value: true, memoryId: 'm-10', sourceMessageIds: [], reviewFlags: [] },
           bullets: [
-            { value: 'Сократил время деплоя с 45 до 8 минут.', memoryId: 'm-11', sourceMessageIds: [], reviewFlags: [] },
-            { value: 'Внедрил Kubernetes кластер на 120 нод.', memoryId: 'm-12', sourceMessageIds: [], reviewFlags: [] },
+            {
+              value: 'Сократил время деплоя с 45 до 8 минут.',
+              memoryId: 'm-11',
+              sourceMessageIds: [],
+              reviewFlags: [],
+            },
+            {
+              value: 'Внедрил Kubernetes кластер на 120 нод.',
+              memoryId: 'm-12',
+              sourceMessageIds: [],
+              reviewFlags: [],
+            },
           ],
         },
       ],
       education: [
         {
           id: 'edu-1',
-          institution: { value: 'МГТУ им. Баумана', memoryId: 'm-13', sourceMessageIds: [], reviewFlags: [] },
-          qualification: { value: 'Информатика и вычислительная техника', memoryId: 'm-14', sourceMessageIds: [], reviewFlags: [] },
+          institution: {
+            value: 'МГТУ им. Баумана',
+            memoryId: 'm-13',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
+          qualification: {
+            value: 'Информатика и вычислительная техника',
+            memoryId: 'm-14',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
           startDate: { value: '2012', memoryId: 'm-15', sourceMessageIds: [], reviewFlags: [] },
           endDate: { value: '2018', memoryId: 'm-16', sourceMessageIds: [], reviewFlags: [] },
         },
       ],
-      skills: [{ id: 's-1', name: 'Kubernetes' }, { id: 's-2', name: 'Terraform' }, { id: 's-3', name: 'Go' }],
+      skills: [
+        { id: 's-1', name: 'Kubernetes' },
+        { id: 's-2', name: 'Terraform' },
+        { id: 's-3', name: 'Go' },
+      ],
       languages: [
         {
           id: 'lang-1',
@@ -142,5 +191,24 @@ describe('resumeExport', () => {
 
     const jsonName = resumeExportFileName(doc, 'json');
     expect(jsonName).toBe('resume-germany-ivan-ivanov.json');
+  });
+
+  it('writes a Tauri export to the path chosen in the save dialog', async () => {
+    desktop.active = true;
+    saveDialog.mockResolvedValue('/Users/test/Downloads/profile.json');
+    writeTextFile.mockResolvedValue(undefined);
+
+    const path = await triggerFileDownload('profile.json', '{"name":"Ada"}', 'application/json');
+
+    expect(path).toBe('/Users/test/Downloads/profile.json');
+    expect(writeTextFile).toHaveBeenCalledWith(path, '{"name":"Ada"}');
+  });
+
+  it('does not report success when the save dialog is cancelled', async () => {
+    desktop.active = true;
+    saveDialog.mockResolvedValue(null);
+
+    await expect(triggerFileDownload('profile.json', '{}', 'application/json')).resolves.toBeNull();
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowsClockwise,
   CheckCircle,
@@ -506,6 +507,7 @@ function VacancySourceTestModal({
   source: AdminVacancySource;
   onClose: () => void;
 }) {
+  useEscapeLayer(onClose);
   const [query, setQuery] = useState('Developer');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<VacancySourceTestResult>();

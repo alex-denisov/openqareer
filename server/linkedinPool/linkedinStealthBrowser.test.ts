@@ -34,14 +34,14 @@ describe('linkedinStealthBrowser', () => {
       expect(options.userAgent).not.toContain('Headless');
     });
 
-    it('includes Client Hints matching the userAgent and platform', () => {
+    // Прод 04.10: Sec-Fetch-* и sec-ch-* на каждом запросе роняли загрузку скриптов
+    // static.licdn.com (net::ERR_INVALID_ARGUMENT) — страница людей не отрисовывалась.
+    // Эти заголовки браузер выставляет сам; подменяем только язык.
+    it('sends only Accept-Language and leaves Sec-Fetch and Client Hints to the browser', () => {
       const options = getLinkedinStealthContextOptions();
       const headers = options.extraHTTPHeaders as Record<string, string>;
-      expect(headers).toBeDefined();
-      expect(headers['sec-ch-ua-mobile']).toBe('?0');
-      expect(headers['sec-ch-ua']).toContain('Chrome');
-      expect(headers['sec-ch-ua-platform']).toBe('"Linux"');
       expect(headers['Accept-Language']).toContain('en-US');
+      expect(Object.keys(headers).filter((name) => /^sec-|^upgrade-/iu.test(name))).toEqual([]);
     });
   });
 

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowLeft,
   ArrowRight,
@@ -25,23 +26,13 @@ export function HhSkillQuizSimulator({
   onClose,
   onBadgeEarned,
 }: HhSkillQuizSimulatorProps) {
+  useEscapeLayer(onClose);
   const dialogRef = useRef<HTMLDivElement>(null);
   const quizzes = getAvailableSkillQuizzes();
   const [selectedQuiz, setSelectedQuiz] = useState<SkillQuiz | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<QuizEvaluationResult | null>(null);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
 
   function startQuiz(quiz: SkillQuiz) {
     setSelectedQuiz(quiz);

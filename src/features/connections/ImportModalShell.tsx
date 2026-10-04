@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import { X } from '@phosphor-icons/react';
 
 interface ImportModalShellProps {
@@ -48,6 +49,7 @@ export function ImportModalShell({
 }: ImportModalShellProps) {
   const card = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
+  useEscapeLayer(onClose, isOpen);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -57,11 +59,6 @@ export function ImportModalShell({
         : null;
     closeButton.current?.focus();
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
       if (event.key !== 'Tab' || !card.current) return;
       const focusable = card.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
       if (focusable.length === 0) return;

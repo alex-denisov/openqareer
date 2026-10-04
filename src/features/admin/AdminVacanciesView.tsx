@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import { ArrowSquareOut, CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import { employerLabel } from '../../../shared/employerLabel';
 import {
@@ -82,29 +83,27 @@ function SourceSelect({
   sources?: Array<{ sourceId: string; sourceName: string; count: number }>;
 }) {
   const [needle, setNeedle] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
   const pickerRef = useRef<HTMLDetailsElement>(null);
+  useEscapeLayer(() => {
+    if (!pickerRef.current) return;
+    pickerRef.current.open = false;
+    pickerRef.current.querySelector('summary')?.focus();
+  }, pickerOpen);
   useEffect(() => {
     const closeOutside = (event: PointerEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(event.target as Node)) pickerRef.current.open = false;
     };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && pickerRef.current?.open) {
-        pickerRef.current.open = false;
-        pickerRef.current.querySelector('summary')?.focus();
-      }
-    };
     document.addEventListener('pointerdown', closeOutside);
-    document.addEventListener('keydown', closeOnEscape);
     return () => {
       document.removeEventListener('pointerdown', closeOutside);
-      document.removeEventListener('keydown', closeOnEscape);
     };
   }, []);
   const named = sourceCountLabel(sources);
   const current = sources?.find((source) => source.sourceId === value);
   const options = sources?.filter((source) => source.sourceName.toLocaleLowerCase('ru-RU').includes(needle.toLocaleLowerCase('ru-RU')) || source.sourceId.toLocaleLowerCase('ru-RU').includes(needle.toLocaleLowerCase('ru-RU'))) ?? [];
   return (
-    <details className="admin-source-picker" ref={pickerRef}>
+    <details className="admin-source-picker" ref={pickerRef} onToggle={(event) => setPickerOpen(event.currentTarget.open)}>
       <summary>{current ? current.sourceName : named === null ? 'Все источники' : `Все источники (${named})`} <CaretDown size={16} aria-hidden="true" /></summary>
       <div className="admin-source-picker__menu">
         <label>Найти источник<input type="search" value={needle} onChange={(event) => setNeedle(event.target.value)} placeholder="Название или ID" /></label>

@@ -2053,7 +2053,8 @@
 }
 
 .career-profile-overview span {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   line-height: 1.45;
@@ -2392,7 +2393,8 @@
 
 .career-market-vacancies strong,
 .career-market-vacancies small {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-market-vacancies small {
@@ -3175,7 +3177,8 @@
 .career-action-proposals .career-command-receipt {
   display: block;
   margin-top: 7px;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   color: var(--career-success);
 }
 
@@ -5281,7 +5284,8 @@
 .career-resume-excluded > li > code {
   font-size: var(--career-text-xs);
   color: var(--career-text-dim);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-resume-stale > li {
@@ -5294,7 +5298,8 @@
 .career-resume-evidence-line {
   font-size: var(--career-text-xs);
   color: var(--career-text-soft);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-resume-conventions > li {
@@ -6144,7 +6149,8 @@
   overflow-x: auto;
   font-family: var(--career-font-mono, monospace);
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-error-boundary-actions {
@@ -8282,7 +8288,8 @@
   display: grid;
   gap: 2px;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-vacancy-title strong {
@@ -8613,7 +8620,8 @@
 }
 
 .career-job-title strong {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   font-size: var(--career-text-xs);
   font-weight: 650;
 }
@@ -8821,7 +8829,8 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-funnel-untracked-label {
@@ -8830,7 +8839,8 @@
   font-size: var(--career-text-xs);
   line-height: 1.2;
   text-align: center;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .career-strategy-untracked {
@@ -8867,7 +8877,8 @@
 
   .career-funnel-label {
     text-align: center;
-    overflow-wrap: anywhere;
+    overflow-wrap: break-word;
+    hyphens: auto;
   }
 }
 
@@ -8880,7 +8891,8 @@
 .career-automation-panel .career-pill {
   min-width: 0;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
   white-space: normal;
 }
 
@@ -14970,7 +14982,8 @@ button.chip {
   max-width: 100%;
   gap: var(--career-space-2);
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 
 .vacancy-facet-chip:hover {
