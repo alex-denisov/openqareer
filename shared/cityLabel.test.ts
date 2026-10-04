@@ -28,6 +28,14 @@ describe('название города на карте', () => {
     expect(normalizeCityLabel('New York')).toBe('New York');
   });
 
+  it('снимает обозначение города и уточнение метро или района', () => {
+    expect(normalizeCityLabel('г. Москва')).toBe('Москва');
+    expect(normalizeCityLabel('город Москва')).toBe('Москва');
+    expect(normalizeCityLabel('Москва, м. Курская')).toBe('Москва');
+    expect(normalizeCityLabel('Москва (Центральный район)')).toBe('Москва');
+    expect(normalizeCityLabel('Москва, Россия')).toBe('Москва');
+  });
+
   it('снимает пометку об удалённости, оставляя место', () => {
     expect(normalizeCityLabel('Ireland (Remote)')).toBe('Ireland');
     expect(normalizeCityLabel('Remote - Texas')).toBe('Texas');
