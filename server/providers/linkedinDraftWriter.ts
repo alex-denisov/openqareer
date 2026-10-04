@@ -3,7 +3,6 @@ import { VertexTokenProvider, vertexPublisherBaseUrl, retryOn429 } from './verte
 import { geminiResponseSchema } from './geminiSchema';
 import {
   withinTimeBudget,
-  COVER_LETTER_BUDGET_MS,
   type CoverLetterWriterConfig,
   type CoverLetterOutcome,
 } from './coverLetterWriter';
@@ -31,6 +30,8 @@ export class DraftWriterUnavailableError extends Error {
     super('draft_writer_unavailable', options);
   }
 }
+// Пост до 1300 символов не укладывается в 9 с бюджета сопроводительного письма (прод 04.10).
+export const LINKEDIN_DRAFT_BUDGET_MS = 40_000;
 const responseSchema = z.object({ text: z.string().trim().min(1) }).strict();
 export const LINKEDIN_DRAFT_JSON_SCHEMA = {
   name: 'linkedin_draft',
@@ -98,14 +99,19 @@ export class LlmLinkedinDraftWriter implements LinkedinDraftWriter {
 export class QueuedLinkedinDraftWriter implements LinkedinDraftWriter {
   constructor(
     private readonly stages: readonly LinkedinDraftWriter[],
-    private readonly budgetMs = COVER_LETTER_BUDGET_MS,
+    private readonly budgetMs = LINKEDIN_DRAFT_BUDGET_MS,
   ) {}
   async writeDraft(input: LinkedinDraftWriteInput): Promise<{ text: string }> {
     const result = await withinTimeBudget(
       this.run(input, Date.now() + this.budgetMs),
       this.budgetMs,
     );
-    if (!result.body) throw new DraftWriterUnavailableError();
+    if (!result.body)
+      throw new DraftWriterUnavailableError({
+        cause: new Error(
+          `${result.failure?.stage ?? 'unknown'}_${result.failure?.kind ?? 'failure'}`,
+        ),
+      });
     return { text: result.body };
   }
   private async run(input: LinkedinDraftWriteInput, deadline: number): Promise<CoverLetterOutcome> {

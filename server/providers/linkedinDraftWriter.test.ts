@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   LlmLinkedinDraftWriter,
   QueuedLinkedinDraftWriter,
+  LINKEDIN_DRAFT_BUDGET_MS,
   buildLinkedinDraftWriter,
 } from './linkedinDraftWriter';
 const input = {
@@ -127,4 +128,15 @@ it('does not call a fallback after the total writing budget expires', async () =
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('gives a draft a longer budget than a cover letter, so a 1300-character post can finish', () => {
+  // Прод 04.10: оба черновика падали ровно на 9 с бюджета сопроводительного письма.
+  expect(LINKEDIN_DRAFT_BUDGET_MS).toBeGreaterThanOrEqual(30_000);
+});
+it('keeps the last stage error as the cause when every stage fails', async () => {
+  const failing = { writeDraft: () => Promise.reject(new Error('vertex 400')) };
+  await expect(new QueuedLinkedinDraftWriter([failing]).writeDraft(input)).rejects.toMatchObject({
+    cause: { message: 'vertex 400' },
+  });
 });
