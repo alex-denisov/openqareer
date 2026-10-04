@@ -166,7 +166,8 @@ function MapPinNode({
       <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
       {showLabel ? (
         <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
-          {city.city} ({city.count})
+          <tspan>{city.city}</tspan>
+          <tspan className="career-map-label-count"> · {city.count}</tspan>
         </text>
       ) : null}
     </g>
@@ -252,11 +253,15 @@ function CityChips({
             type="button"
             className={`career-chip ${isSelected ? "is-active" : ""}`}
             aria-pressed={isSelected}
+            aria-label={`Город ${c.city}: ${c.count} вакансий`}
             onClick={() => onSelectCity(isSelected ? undefined : c.city)}
           >
             <MapPin size={13} aria-hidden="true" />
             <span>{c.city}</span>
-            <strong>{c.count}</strong>
+            <span className="career-map-city-count">
+              <span aria-hidden="true">·</span>
+              <span className="career-map-city-count-value">{c.count}</span>
+            </span>
           </button>
         );
       })}

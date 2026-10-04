@@ -97,8 +97,9 @@ describe("подписи городов не наезжают друг на др
       />,
     );
 
-    expect(html).toContain("Amsterdam (2)");
-    expect(html).not.toContain("Haarlem (1)");
+    expect(html).toContain('<tspan>Amsterdam</tspan>');
+    expect(html).toContain('<tspan class="career-map-label-count"> · 2</tspan>');
+    expect(html).not.toContain('<tspan>Haarlem</tspan>');
     // Точка соседнего хаба остаётся: он есть на карте и кликабелен.
     expect(html).toContain("Город Haarlem: 1 вакансий");
   });
