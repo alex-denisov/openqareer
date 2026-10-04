@@ -27,9 +27,11 @@ function useAddRole(onAddCustomRole: (title: string) => Promise<boolean>, isLimi
 export function VacancyAddRoleRow({
   roleCount,
   onAddCustomRole,
+  inputRef,
 }: {
   readonly roleCount: number;
   readonly onAddCustomRole: (title: string) => Promise<boolean>;
+  readonly inputRef?: React.Ref<HTMLInputElement>;
 }) {
   const isLimitReached = roleCount >= CAMPAIGN_ROLE_LIMIT;
   const { title, setTitle, saving, add } = useAddRole(onAddCustomRole, isLimitReached);
@@ -42,6 +44,7 @@ export function VacancyAddRoleRow({
       </p>
       <div className="add-role-row">
         <input
+          ref={inputRef}
           className="add-role-input"
           type="text"
           placeholder="Своя формулировка роли…"

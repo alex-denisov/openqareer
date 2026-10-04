@@ -181,13 +181,27 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 async function openCareer(page: Page): Promise<void> {
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  // «Поиск» остаётся без отдельного пункта рельса; шаг «Роль» открывает кампанию.
-  await page
-    .getByRole('button', { name: /^Роль\./ })
-    .first()
-    .click();
-  // «Поиск» стал кампанией из макета; предпосылки маршрута живут в ней (B179).
-  await expect(page.locator('.career-campaign')).toBeVisible();
+  const desktopRole = page.locator('.career-path-desktop').getByRole('button', { name: /^Роль\./ });
+  if (await desktopRole.isVisible()) {
+    await desktopRole.first().click();
+  } else {
+    const mobileRole = page.locator('.career-path-mobile-role');
+    if (await mobileRole.isVisible()) {
+      await mobileRole.first().click();
+    } else {
+      const mobileSummary = page.locator('.career-path-mobile-summary');
+      if (await mobileSummary.isVisible()) {
+        await mobileSummary.click();
+      } else {
+        await page
+          .getByRole('button', { name: /Роль\./ })
+          .first()
+          .click();
+      }
+    }
+  }
+  // Шаг «Роль» открывает «Вакансии», предпосылки живут в панели фильтров (B366).
+  await expect(page.locator('.career-route-premises')).toBeVisible();
 }
 
 test.describe('B160 route premises are editable in the cabinet', () => {

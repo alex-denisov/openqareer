@@ -1,4 +1,4 @@
-.career-drafts { min-width: 0; padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); overflow-wrap: anywhere; }
+.career-drafts { min-width: 0; padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); overflow-wrap: break-word; hyphens: auto; }
 .career-drafts h2 { margin: 0; font-size: var(--career-text-md); }
 .career-drafts p, .career-drafts label, .career-drafts-recent { font-size: var(--career-text-xs); line-height: 1.45; }
 .career-drafts > p { color: var(--career-text-soft); margin: var(--career-space-2) 0 var(--career-space-3); }

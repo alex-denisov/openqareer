@@ -23,6 +23,8 @@ import { SavedSearchesPanel } from './SavedSearchesPanel';
 import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
 import { CareerTooltip } from '../shell/CareerTooltip';
 
+import type { RoutePremisesDraft } from '../cabinet/routePremises';
+
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
   readonly onNavigate: (destination: PathDestination, options?: NavigationOptions) => void;
@@ -59,6 +61,10 @@ export interface VacanciesScreenProps {
   readonly onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+  readonly focusRoleFilter?: boolean;
 }
 
 function extractBoardRegions(campaign?: CampaignMetaView) {
@@ -444,6 +450,10 @@ function VacanciesFiltersSection({
   onToggleSavedSearches,
   onReset,
   facets,
+  premises,
+  premisesLoading,
+  onSavePremises,
+  focusRole,
 }: {
   readonly facets?: MatchedVacancyFacets;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
@@ -453,6 +463,10 @@ function VacanciesFiltersSection({
   readonly savedSearchesOpen: boolean;
   readonly onToggleSavedSearches: () => void;
   readonly onReset: () => void;
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+  readonly focusRole?: boolean;
 }) {
   return (
     <VacanciesFilters
@@ -469,6 +483,10 @@ function VacanciesFiltersSection({
       savedSearchesCount={subscriptionsCount}
       savedSearchesOpen={savedSearchesOpen}
       onToggleSavedSearches={onToggleSavedSearches}
+      premises={premises}
+      premisesLoading={premisesLoading}
+      onSavePremises={onSavePremises}
+      focusRole={focusRole}
     />
   );
 }
@@ -589,6 +607,10 @@ function VacanciesScreenContent({
         savedSearchesOpen={savedSearchesOpen}
         onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}
         onReset={resetFilters}
+        premises={input.premises}
+        premisesLoading={input.premisesLoading}
+        onSavePremises={input.onSavePremises}
+        focusRole={input.focusRoleFilter}
       />
       <SavedSearchesSection
         defaultQuery={board.state.roles[0] ?? board.primaryRole}

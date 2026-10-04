@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BookmarkSimple, Funnel } from '@phosphor-icons/react';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { pluralRu } from '../../../shared/pluralRu';
 import { VacancyAddRoleRow } from './VacancyAddRoleRow';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
+import { CareerRoutePremises } from '../cabinet/CareerRoutePremises';
+import { CareerRoutePremisesEditor } from '../cabinet/CareerRoutePremisesEditor';
+import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 export interface VacanciesScreenState {
   readonly roles: readonly string[];
@@ -35,6 +38,10 @@ export interface VacanciesScreenFiltersProps {
   readonly onToggleSavedSearches?: () => void;
   readonly onOpenProfileLevel?: () => void;
   readonly onAddCustomRole?: (title: string) => Promise<boolean>;
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+  readonly focusRole?: boolean;
 }
 
 export function countActiveFilters(state: VacanciesScreenState): number {
@@ -146,52 +153,79 @@ function RemoteGroup({ props }: { readonly props: VacanciesScreenFiltersProps })
   );
 }
 
-function FacetGroups({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+function RoleFilterSection({
+  props,
+  roleInputRef,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly roleInputRef?: React.Ref<HTMLInputElement>;
+}) {
+  if (!props.onAddCustomRole) return null;
+  return (
+    <div className="field-group" data-testid="role-filter">
+      <VacancyAddRoleRow
+        roleCount={props.campaignRoles?.length ?? 0}
+        onAddCustomRole={props.onAddCustomRole}
+        inputRef={roleInputRef}
+      />
+    </div>
+  );
+}
+
+function FacetGroups({
+  props,
+  roleInputRef,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly roleInputRef?: React.Ref<HTMLInputElement>;
+}) {
   const facets = props.facets;
-  if (!facets) return null;
   return (
     <>
-      <FacetGroup
-        title="География"
-        field="regions"
-        props={props}
-        options={facets.regions.map(({ id, count }) => ({ id, label: regionLabel(id), count }))}
-      />
-      <RemoteGroup props={props} />
-      <FacetGroup
-        title="Уровень"
-        field="levels"
-        props={props}
-        options={facets.levels.map(({ level, count }) => ({
-          id: level,
-          label: LEVEL_LABELS[level],
-          count,
-        }))}
-      />
-      <FacetGroup
-        title="Роль"
-        field="roles"
-        props={props}
-        options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
-      />
-      {props.onAddCustomRole ? (
-        <div className="field-group">
-          <VacancyAddRoleRow
-            roleCount={props.campaignRoles?.length ?? 0}
-            onAddCustomRole={props.onAddCustomRole}
+      {facets ? (
+        <>
+          <FacetGroup
+            title="География"
+            field="regions"
+            props={props}
+            options={facets.regions.map(({ id, count }) => ({
+              id,
+              label: regionLabel(id),
+              count,
+            }))}
           />
-        </div>
+          <RemoteGroup props={props} />
+          <FacetGroup
+            title="Уровень"
+            field="levels"
+            props={props}
+            options={facets.levels.map(({ level, count }) => ({
+              id: level,
+              label: LEVEL_LABELS[level],
+              count,
+            }))}
+          />
+          <FacetGroup
+            title="Роль"
+            field="roles"
+            props={props}
+            options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
+          />
+        </>
       ) : null}
-      <FacetGroup
-        title="Источник"
-        field="sources"
-        props={props}
-        options={facets.sources.map(({ sourceId, name, count }) => ({
-          id: sourceId,
-          label: name,
-          count,
-        }))}
-      />
+      <RoleFilterSection props={props} roleInputRef={roleInputRef} />
+      {facets ? (
+        <FacetGroup
+          title="Источник"
+          field="sources"
+          props={props}
+          options={facets.sources.map(({ sourceId, name, count }) => ({
+            id: sourceId,
+            label: name,
+            count,
+          }))}
+        />
+      ) : null}
     </>
   );
 }
@@ -219,29 +253,109 @@ function SavedSearchesButton({ props }: { readonly props: VacanciesScreenFilters
   );
 }
 
+function PremisesFilterSection({
+  premises,
+  premisesLoading,
+  onSavePremises,
+}: {
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  if (!premises) return null;
+  if (editing) {
+    return (
+      <CareerRoutePremisesEditor
+        initial={premises}
+        saving={saving}
+        error={error}
+        onCancel={() => setEditing(false)}
+        onSave={(draft) => {
+          setSaving(true);
+          setError(undefined);
+          void onSavePremises?.(draft)
+            .then(() => setEditing(false))
+            .catch((reason: unknown) =>
+              setError(reason instanceof Error ? reason.message : 'Не удалось сохранить.'),
+            )
+            .finally(() => setSaving(false));
+        }}
+      />
+    );
+  }
+  return (
+    <CareerRoutePremises
+      targetRole={premises.targetRole}
+      regions={premises.regions}
+      workMode={premises.workMode ?? undefined}
+      editDisabled={premisesLoading}
+      onEdit={() => setEditing(true)}
+    />
+  );
+}
+
+function FiltersBar({
+  expanded,
+  onToggle,
+  activeCount,
+  onReset,
+  props,
+}: {
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+  readonly activeCount: number;
+  readonly onReset: () => void;
+  readonly props: VacanciesScreenFiltersProps;
+}) {
+  return (
+    <div className="filters-bar">
+      <button
+        type="button"
+        className="filters-toggle vacancies-mobile-filter-toggle"
+        aria-expanded={expanded}
+        aria-label="Фильтры и сохранённые запросы"
+        onClick={onToggle}
+      >
+        <Funnel weight="bold" aria-hidden="true" />
+        <span>Фильтры · {pluralRu(activeCount, ['активный', 'активных', 'активных'])}</span>
+      </button>
+      {activeCount > 0 ? (
+        <button type="button" className="filters-reset" onClick={onReset}>
+          Сбросить
+        </button>
+      ) : null}
+      <SavedSearchesButton props={props} />
+    </div>
+  );
+}
+
 export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
-  const [expanded, setExpanded] = useState(false);
-  const activeCount = countActiveFilters(props.state);
+  const [expanded, setExpanded] = useState(() => Boolean(props.focusRole));
+  const roleInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (props.focusRole) {
+      setExpanded(true);
+      const timer = setTimeout(() => {
+        roleInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [props.focusRole]);
+
   return (
     <>
-      <div className="filters-bar">
-        <button
-          type="button"
-          className="filters-toggle vacancies-mobile-filter-toggle"
-          aria-expanded={expanded}
-          aria-label="Фильтры и сохранённые запросы"
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <Funnel weight="bold" aria-hidden="true" />
-          <span>Фильтры · {pluralRu(activeCount, ['активный', 'активных', 'активных'])}</span>
-        </button>
-        {activeCount > 0 ? (
-          <button type="button" className="filters-reset" onClick={props.onReset}>
-            Сбросить
-          </button>
-        ) : null}
-        <SavedSearchesButton props={props} />
-      </div>
+      <FiltersBar
+        expanded={expanded}
+        onToggle={() => setExpanded((value) => !value)}
+        activeCount={countActiveFilters(props.state)}
+        onReset={props.onReset}
+        props={props}
+      />
       <div
         className={`filters-panel vacancies-filters${expanded ? ' is-expanded is-mobile-open' : ''}`}
         aria-label="Фильтры"
@@ -252,7 +366,12 @@ export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
             Свернуть
           </button>
         </div>
-        <FacetGroups props={props} />
+        <PremisesFilterSection
+          premises={props.premises}
+          premisesLoading={props.premisesLoading}
+          onSavePremises={props.onSavePremises}
+        />
+        <FacetGroups props={props} roleInputRef={roleInputRef} />
       </div>
     </>
   );

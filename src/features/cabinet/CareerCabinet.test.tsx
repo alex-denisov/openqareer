@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CareerCabinet } from './CareerCabinet';
-import { CareerRoutePremises } from '../search/RoutePremises';
+import { CareerRoutePremises } from './CareerRoutePremises';
 import type { CareerCabinetView } from './cabinetViews';
 import type { CandidateSnapshot } from '../coach/coachApi';
 import type { CareerCabinetData } from './useCareerCabinetData';
@@ -163,7 +163,7 @@ describe('CareerCabinet composition', () => {
   });
 
   it('projects the regions the candidate chose instead of an empty geography (B158, B160)', () => {
-    const html = renderCabinet('career');
+    const html = renderCabinet('opportunities');
 
     expect(html).toContain('Где');
     expect(html).toContain('Россия');
@@ -185,9 +185,8 @@ describe('CareerCabinet composition', () => {
       },
     };
 
-    const html = renderCabinet('career');
+    const html = renderCabinet('opportunities');
 
-    expect(html).toContain('Кампания: «VP of Technology &amp; Operations»');
     expect(html).toContain('<dd>VP of Technology &amp; Operations</dd>');
     expect(html).not.toContain('Senior Software Engineer');
   });
@@ -222,16 +221,15 @@ describe('CareerCabinet composition', () => {
 
   // B233: «ATS-читаемость» и «Следующее действие» живут на Главной; на Поиске
   // тот же блок стоял целиком второй раз (аудит 2026-09-20, находка 6).
-  it('does not repeat the ATS readability and next action block on «Поиск» (B233)', () => {
-    const html = renderCabinet('career');
+  it('does not repeat the ATS readability and next action block on «Вакансии» (B233, B366)', () => {
+    const html = renderCabinet('opportunities');
 
-    expect(html).toContain('Кампания:');
     expect(html).not.toContain('ATS-читаемость');
     expect(html).not.toContain('Один шаг на сегодня');
   });
 
   it('keeps the strategist dialogue out of every section, it lives in «Эксперт»', () => {
-    for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
+    for (const view of ['today', 'profile', 'opportunities'] as const) {
       expect(renderCabinet(view)).not.toContain('Диалог со стратегом');
     }
   });
@@ -249,50 +247,29 @@ describe('CareerCabinet composition', () => {
     expect(resume).toContain('career-resume-studio');
   });
 
-  // «Пульт» развёл рынок на два раздела: кампания живёт в «Поиске», пул — в
-  // «Вакансиях». Панель рынка и доска маршрута макетом не предусмотрены и
-  // удалены вместе с ними (B179).
-  it('gives «Поиск» the campaign screen', () => {
+  it('redirects «career» to opportunities and keeps conditions in vacancies (B366)', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Кампания:');
-    expect(html).toContain('Воронка');
-    expect(html).toContain('Очередь на сегодня');
     expect(html).toContain('Роль, регион, формат');
-    // Регулярные выборки ушли отсюда в панель фильтров «Вакансий» — туда, где
-    // кандидат смотрит сам пул (решение владельца 2026-09-02, B181).
-    expect(html).not.toContain('Регулярный поиск');
+    expect(html).not.toContain('Очередь на сегодня');
+    expect(html).not.toContain('Воронка');
   });
 
   it('gives «Вакансии» the pool board', () => {
     const html = renderCabinet('opportunities');
 
-    expect(html).toContain('career-cabinet-view-opportunities');
+    expect(html).toContain('Роль, регион, формат');
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 
-  it('does not fabricate candidate or provider outcomes when server data is absent', () => {
-    const html = renderCabinet('career');
-
-    // Неизмеряемое стоит прочерком и словами, а не нулём: ноль означал бы,
-    // что мы посмотрели и не нашли (B179).
-    expect(html).toContain('не отслеживаем: площадки не сообщают');
-    expect(html).not.toContain('Индекс соответствия');
-    expect(html).not.toContain('Авто-поднятие резюме');
-    expect(html).not.toContain('откликов отправлено');
-    expect(html).not.toContain('Verified Badge');
-    expect(html).not.toContain('Tech Enterprise');
-    expect(html).not.toContain('Технологическая компания');
-  });
-
   it('never claims data is current, because that claim can never be false', () => {
-    for (const view of ['today', 'profile', 'career', 'opportunities'] as const) {
+    for (const view of ['today', 'profile', 'opportunities'] as const) {
       expect(renderCabinet(view)).not.toContain('Данные актуальны');
     }
   });
 
   it('uses the shared header and never puts a date in it', () => {
-    for (const view of ['today', 'profile', 'career', 'responses'] as const) {
+    for (const view of ['today', 'profile', 'opportunities', 'responses'] as const) {
       expect(renderCabinet(view)).toContain('career-page-header');
     }
 
@@ -303,10 +280,9 @@ describe('CareerCabinet composition', () => {
 });
 
 describe('CareerCabinet vacancies tab (B181, B250)', () => {
-  it('не оставляет регулярные выборки на экране кампании', () => {
-    const html = renderCabinet('career');
+  it('не оставляет регулярные выборки в «Вакансиях»', () => {
+    const html = renderCabinet('opportunities');
     expect(html).not.toContain('Регулярные выборки');
-    expect(html).not.toContain('Регулярный поиск');
   });
 
   it('показывает пустое состояние, если для подбора не выбрана роль', () => {
