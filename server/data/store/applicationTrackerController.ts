@@ -31,8 +31,6 @@ import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './erro
 export interface ReadApplicationOptions {
   readonly now?: string;
   readonly timezoneOffsetMinutes?: number;
-  /** `GET /applications` closed-vacancy check (architecture.md §4): reads several clusters by primary key, no pool scan. */
-  readonly isVacancyGone?: (clusterId: string) => boolean;
 }
 
 /**
@@ -78,11 +76,7 @@ export class ApplicationTrackerController {
     });
   }
 
-  /**
-   * Ленивый перенос старых `applied` перед каждым чтением; идемпотентен.
-   * Затем — автоматический архив карточек, чья вакансия пропала с площадки
-   * (`options.isVacancyGone`), тоже идемпотентно.
-   */
+  /** Ленивый перенос старых `applied` перед каждым чтением; идемпотентен. */
   list(candidateId: string, options: ReadApplicationOptions = {}): ApplicationView[] {
     const legacyApplied = this.legacyApplications
       .list(candidateId)
@@ -93,12 +87,7 @@ export class ApplicationTrackerController {
         appliedAt: application.appliedAt,
       }));
     this.applications.migrateLegacyApplied(candidateId, legacyApplied);
-    const applications = this.applications.list(candidateId).map((application) => {
-      if (!options.isVacancyGone || !application.clusterId) return application;
-      if (application.stage === 'archived' || application.stage === 'rejected') return application;
-      if (!options.isVacancyGone(application.clusterId)) return application;
-      return this.applications.archiveClosedVacancy(candidateId, application, options.now);
-    });
+    const applications = this.applications.list(candidateId);
     return applications.map((application) => this.toView(application, options));
   }
 
