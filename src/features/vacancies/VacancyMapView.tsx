@@ -4,6 +4,7 @@ import type { MatchedVacancyItem } from "../coach/cabinetTypes";
 import { calculateVacancyFacets, type CityFacet } from "./vacancyFacets";
 import { employerLabel } from "../../../shared/employerLabel";
 import { VacancyConditionBadges } from "./vacancyConditions";
+import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
 
 interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
@@ -12,14 +13,11 @@ interface VacancyMapViewProps {
 }
 
 function projectCoords(lat: number, lng: number): { x: number; y: number } {
-  const minLng = -15;
-  const maxLng = 60;
-  const minLat = 30;
-  const maxLat = 65;
-  const clampedLng = Math.max(minLng, Math.min(maxLng, lng));
+  const minLat = -60;
+  const maxLat = 85;
   const clampedLat = Math.max(minLat, Math.min(maxLat, lat));
-  const x = Math.round(60 + ((clampedLng - minLng) / (maxLng - minLng)) * 780);
-  const y = Math.round(440 - ((clampedLat - minLat) / (maxLat - minLat)) * 380);
+  const x = Math.round(((lng + 180) / 360) * 900);
+  const y = Math.round(((maxLat - clampedLat) / (maxLat - minLat)) * 480);
   return { x, y };
 }
 
@@ -212,14 +210,14 @@ function MapSvg({
       viewBox="0 0 900 480"
       className="career-map-svg"
       role="img"
-      aria-label="Карта распределения вакансий"
+      aria-label="Контуры стран и расположение городов"
     >
-      <defs>
-        <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
-          <path d="M 60 0 L 0 0 0 60" fill="none" stroke="currentColor" strokeOpacity="0.06" strokeWidth="1" />
-        </pattern>
-      </defs>
-      <rect width="900" height="480" fill="url(#grid)" className="career-map-bg" />
+      <rect width="900" height="480" className="career-map-bg" aria-hidden="true" />
+      <g className="career-map-country-contours" aria-hidden="true">
+        {NATURAL_EARTH_COUNTRY_CONTOURS.map((contour, index) => (
+          <path key={index} d={contour} fillRule="evenodd" className="career-map-country" />
+        ))}
+      </g>
       {withReadableLabels(cities, selectedCity).map(({ city: c, showLabel }) => (
         <MapPinNode
           key={c.city}
