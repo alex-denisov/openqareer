@@ -433,6 +433,70 @@ const FACETS = {
 };
 
 test.describe('B250 vacancies screen', () => {
+  test('links an archived application from its vacancy row to the open archive', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/applications**', async (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') {
+        return route.fulfill({
+          json: {
+            data: [
+              {
+                id: 'archived-c-1',
+                candidateId: CANDIDATE.candidateId,
+                clusterId: 'c-1',
+                stage: 'archived',
+                closedReason: 'vacancy_closed',
+                archiveReason: 'vacancy_closed',
+                archivePreviousStage: 'applied',
+                archiveStaleDays: 30,
+                processProfile: 'standard',
+                vacancy: {
+                  title: 'Business Information Architect',
+                  company: 'Genetec',
+                  url: 'https://example.com/vacancy',
+                  source: 'test',
+                },
+                notes: null,
+                followUpDueAt: null,
+                stageChangedAt: '2026-09-20T08:00:00.000Z',
+                version: 2,
+                createdAt: '2026-09-20T08:00:00.000Z',
+                updatedAt: '2026-09-20T08:00:00.000Z',
+                followUp: null,
+                whoseTurn: null,
+                materials: { coverLetter: false, resume: false },
+                nearestInterview: null,
+              },
+            ],
+          },
+        });
+      }
+      return route.fallback();
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const row = page.locator('.vac-row').filter({ hasText: 'Business Information Architect' });
+    await expect(row).toContainText('Отклик в архиве');
+    await expect(row).not.toContainText('Отклик отмечен');
+    const openArchive = page.getByRole('button', { name: 'Открыть архив' });
+    if (!(await openArchive.isVisible())) await row.click();
+    await openArchive.click();
+
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+    const archiveToggle = page.getByRole('button', { name: 'Архив · 1' });
+    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(archiveToggle).toBeFocused();
+    await expect(archiveToggle).toBeInViewport();
+    await expect(page.locator('.career-responses-archive-card')).toContainText(
+      'Business Information Architect',
+    );
+  });
+
   test('shows the campaign banner, filters from the pool summary and pool rows', async ({
     page,
   }) => {

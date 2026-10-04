@@ -1,10 +1,14 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 
-export async function captureCareerHarness(page: Page, path: string): Promise<void> {
-  const rendered = await page.evaluate(async () => {
-    const shell = document.querySelector<HTMLElement>('.career-shell');
-    if (!shell) throw new Error('career_harness_not_found');
+export async function captureCareerHarness(
+  page: Page,
+  path: string,
+  selector = '.career-shell',
+): Promise<void> {
+  const rendered = await page.evaluate(async (targetSelector) => {
+    const root = document.querySelector<HTMLElement>(targetSelector);
+    if (!root) throw new Error('career_harness_not_found');
     const linkedStyles = Array.from(
       document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
     );
@@ -14,9 +18,13 @@ export async function captureCareerHarness(page: Page, path: string): Promise<vo
     const inlineCss = Array.from(document.querySelectorAll('style')).map(
       (style) => style.textContent ?? '',
     );
-    return { css: [...inlineCss, ...linkedCss].join('\n'), html: shell.outerHTML };
-  });
-  writeFileSync(path, renderPage(rendered.css, rendered.html));
+    return { css: [...inlineCss, ...linkedCss].join('\n'), html: root.outerHTML };
+  }, selector);
+  const html =
+    selector === '.career-shell'
+      ? rendered.html
+      : `<div class="career-shell"><main class="career-cabinet"><div class="career-responses-board-wrap">${rendered.html}</div></main></div>`;
+  writeFileSync(path, renderPage(rendered.css, html));
 
   const colors = Array.from(new Set(rendered.css.match(/oklch\([^)]*\)/gu) ?? []));
   const resolvedColors = await page.evaluate((values) => {
@@ -36,7 +44,7 @@ export async function captureCareerHarness(page: Page, path: string): Promise<vo
     /oklch\([^)]*\)/gu,
     (color) => replacements.get(color) ?? color,
   );
-  writeFileSync(path.replace(/\.html$/u, '.rgb.html'), renderPage(rgbCss, rendered.html));
+  writeFileSync(path.replace(/\.html$/u, '.rgb.html'), renderPage(rgbCss, html));
 }
 
 function renderPage(css: string, html: string): string {

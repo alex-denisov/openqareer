@@ -458,6 +458,7 @@ export class SqliteCandidateStore implements CandidateStore {
   declare getApplication: ApplicationTrackerMethods['getApplication'];
   declare createApplication: ApplicationTrackerMethods['createApplication'];
   declare patchApplication: ApplicationTrackerMethods['patchApplication'];
+  declare restoreApplication: ApplicationTrackerMethods['restoreApplication'];
   declare recordApplicationEvent: ApplicationTrackerMethods['recordApplicationEvent'];
   declare applicationFunnel: ApplicationTrackerMethods['applicationFunnel'];
   declare linkApplicationMaterial: ApplicationTrackerMethods['linkApplicationMaterial'];

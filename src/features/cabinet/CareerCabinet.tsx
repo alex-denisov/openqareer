@@ -126,6 +126,15 @@ export function CareerCabinet({
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
+  const archivedApplicationClusterIds = useMemo(
+    () =>
+      new Set(
+        applicationsTracker.applications
+          .filter((application) => application.stage === 'archived' && application.clusterId)
+          .map((application) => application.clusterId as string),
+      ),
+    [applicationsTracker.applications],
+  );
   const recordConfirmedVacancy = vacancyApplications.recordConfirmed;
   const refreshApplications = applicationsTracker.refreshApplications;
   const addManualCard = applicationsTracker.addManualCard;
@@ -310,6 +319,7 @@ export function CareerCabinet({
             vacancyApplications={trackedVacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
+            archivedApplicationClusterIds={archivedApplicationClusterIds}
             onMarkAlreadyApplied={markVacancyAlreadyApplied}
             onScheduleInterview={scheduleVacancyInterview}
             data={data}
@@ -384,6 +394,7 @@ function CabinetSection({
   vacancyApplications,
   pathIndicatorSteps,
   applicationsTracker,
+  archivedApplicationClusterIds,
   onMarkAlreadyApplied,
   onScheduleInterview,
   data,
@@ -410,6 +421,7 @@ function CabinetSection({
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   applicationsTracker: ReturnType<typeof useApplications>;
+  archivedApplicationClusterIds: ReadonlySet<string>;
   onMarkAlreadyApplied: (clusterId: string, vacancy: VacancyApplicationSnapshot) => Promise<void>;
   onScheduleInterview: (
     clusterId: string,
@@ -420,7 +432,7 @@ function CabinetSection({
   profileTab: ProfileTab;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   consultantAction?: ReasonedCareerAction;
-  onNavigate: (view: CareerCabinetView) => void;
+  onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenProfileRequirement: (context: VacancyProfileRequirement) => void;
   onVacancyRequirementHandled: () => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
@@ -503,6 +515,7 @@ function CabinetSection({
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
         initialStageFilter={navigationOptions?.stage}
+        initialArchiveOpen={navigationOptions?.openArchive}
         onOpenExpert={onOpenExpert}
       />
     );
@@ -513,9 +526,11 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions}
       onRefreshSubscriptions={data.refresh}
       applications={vacancyApplications}
+      archivedApplicationClusterIds={archivedApplicationClusterIds}
       onMarkAlreadyApplied={onMarkAlreadyApplied}
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
+      onOpenArchive={() => onNavigate('responses', { openArchive: true })}
       onOpenProfile={onOpenProfileRequirement}
       onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}

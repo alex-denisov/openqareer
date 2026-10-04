@@ -18,7 +18,9 @@ export interface ApplicationInterviewSummary {
   readonly round: number;
 }
 
-export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {}
+export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {
+  readonly archiveStaleDays?: number;
+}
 
 export interface ApplicationDerivedFields {
   readonly followUp: FollowUpStatus | null;

@@ -11,6 +11,7 @@ export type PathDestination = 'profile' | 'career' | 'opportunities' | 'response
 
 export interface NavigationOptions {
   readonly stage?: ApplicationStage;
+  readonly openArchive?: boolean;
 }
 
 /**

@@ -64,6 +64,18 @@ export async function patchApplication(
   return readDataObject<ApplicationView>(response);
 }
 
+export async function restoreApplicationFromArchive(
+  id: string,
+  expectedVersion: number,
+): Promise<ApplicationView> {
+  const response = await apiFetch(`/api/v1/candidate/applications/${encodeURIComponent(id)}/restore`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedVersion }),
+  });
+  return readDataObject<ApplicationView>(response);
+}
+
 export interface ScheduleApplicationInterviewInput {
   readonly round: number;
   readonly scheduledAt?: string | null;

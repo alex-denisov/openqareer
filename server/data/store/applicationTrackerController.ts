@@ -22,6 +22,7 @@ import type { SqliteDocumentRepository } from '../sqliteDocumentRepository';
 import type { SealedText } from '../sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../../../shared/applicationArchive';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
@@ -31,6 +32,7 @@ import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './erro
 export interface ReadApplicationOptions {
   readonly now?: string;
   readonly timezoneOffsetMinutes?: number;
+  readonly archiveStaleDays?: number;
 }
 
 /**
@@ -109,8 +111,24 @@ export class ApplicationTrackerController {
     return this.toView(created, {});
   }
 
-  patch(candidateId: string, applicationId: string, input: PatchApplicationInput): ApplicationView {
-    return this.toView(this.applications.patch(candidateId, applicationId, input), {});
+  patch(
+    candidateId: string,
+    applicationId: string,
+    input: PatchApplicationInput,
+    archiveStaleDays = DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+  ): ApplicationView {
+    const application = this.applications.patch(candidateId, applicationId, input);
+    return this.toView(application, { archiveStaleDays });
+  }
+
+  restoreFromArchive(
+    candidateId: string,
+    applicationId: string,
+    expectedVersion: number,
+    archiveStaleDays = DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+  ): ApplicationView {
+    const restored = this.applications.restoreFromArchive(candidateId, applicationId, expectedVersion);
+    return this.toView(restored, { archiveStaleDays });
   }
 
   recordEvent(
@@ -256,7 +274,11 @@ export class ApplicationTrackerController {
       now: options.now,
       timezoneOffsetMinutes: options.timezoneOffsetMinutes,
     });
-    return { ...application, ...derived };
+    return {
+      ...application,
+      ...derived,
+      archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+    };
   }
 }
 

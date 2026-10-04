@@ -503,6 +503,14 @@ export interface CandidateStore {
     candidateId: string,
     applicationId: string,
     input: PatchApplicationInput,
+    archiveStaleDays?: number,
+  ): ApplicationView;
+
+  restoreApplication(
+    candidateId: string,
+    applicationId: string,
+    expectedVersion: number,
+    archiveStaleDays?: number,
   ): ApplicationView;
 
   /** `POST /applications/:id/events` (B251, S2). */

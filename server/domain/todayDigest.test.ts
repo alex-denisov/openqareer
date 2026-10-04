@@ -9,6 +9,8 @@ function application(overrides: Partial<ApplicationView> = {}): ApplicationView 
     clusterId: 'cluster-1',
     stage: 'applied',
     closedReason: null,
+    archiveReason: null,
+    archivePreviousStage: null,
     processProfile: 'standard',
     vacancy: { title: 'Продуктовый аналитик', company: 'FinCloud', url: '', source: '' },
     notes: null,

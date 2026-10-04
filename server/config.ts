@@ -2,6 +2,7 @@ import { readVertexConfig, type VertexConfig } from './providers/vertexAi';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
+import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../shared/applicationArchive';
 import {
   allowedModels,
   getProviderCatalogStatus,
@@ -53,6 +54,12 @@ const configSchema = z.object({
     return decoded;
   }),
   OPENQAREER_DATABASE_PATH: z.string().min(1).default('data/openqareer.db'),
+  OPENQAREER_APPLICATION_ARCHIVE_STALE_DAYS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(3_650)
+    .default(DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS),
   // Подбор по смыслу (B267 S3): по умолчанию старое поведение, включается
   // явно, пока не приняты срезы S4/S5 (план §7, риски §8).
   OPENQAREER_MATCH_MODE: z.enum(['legacy', 'semantic']).default('legacy'),
@@ -134,6 +141,7 @@ export interface ServerConfig {
   previewToken: string;
   dataEncryptionKey: Buffer;
   databasePath: string;
+  applicationArchiveStaleDays?: number;
   /** Смысловой подбор вакансий по функции и уровню, флаг B267 S3. */
   /** Необязательно для тестовых литералов `ServerConfig`: отсутствие значит legacy. */
   matchMode?: 'legacy' | 'semantic';
@@ -277,6 +285,7 @@ export function readServerConfig(
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
     dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,
     databasePath: parsed.OPENQAREER_DATABASE_PATH,
+    applicationArchiveStaleDays: parsed.OPENQAREER_APPLICATION_ARCHIVE_STALE_DAYS,
     matchMode: parsed.OPENQAREER_MATCH_MODE,
     linkedinRuntimeRoot: parsed.OPENQAREER_LINKEDIN_RUNTIME_ROOT,
     model: personalRoute.model,

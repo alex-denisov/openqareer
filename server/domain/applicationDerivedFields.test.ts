@@ -9,6 +9,8 @@ function application(overrides: Partial<StoredApplication> = {}): StoredApplicat
     clusterId: 'cluster-1',
     stage: 'applied',
     closedReason: null,
+    archiveReason: null,
+    archivePreviousStage: null,
     processProfile: 'standard',
     vacancy: null,
     notes: null,

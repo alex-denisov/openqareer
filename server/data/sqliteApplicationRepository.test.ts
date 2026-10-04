@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { MIGRATION_33 } from './sqliteSchema';
+import { MIGRATION_33, MIGRATION_38 } from './sqliteSchema';
 import { SealedText } from './sealedText';
 import { SqliteApplicationRepository } from './sqliteApplicationRepository';
 import { ApplicationNotFoundError, ApplicationVersionConflictError } from './store/errors';
@@ -11,6 +11,13 @@ const vacancy = {
   company: 'FinCloud',
   url: 'https://example.test/jobs/1',
   source: 'src-remotive',
+};
+
+const closureEvidence = {
+  kind: 'archived_marker' as const,
+  sourceId: vacancy.source,
+  vacancyUrl: vacancy.url,
+  observedAt: '2026-09-24T10:00:00.000Z',
 };
 
 class ConcurrentPatchSealedText extends SealedText {
@@ -27,6 +34,7 @@ function createRepo(): { repo: SqliteApplicationRepository; database: DatabaseSy
   const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
   database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
   database.exec(MIGRATION_33);
+  database.exec(MIGRATION_38);
   database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
   const repo = new SqliteApplicationRepository(database, new SealedText(randomBytes(32)));
   return { repo, database };
@@ -67,6 +75,118 @@ describe('SqliteApplicationRepository', () => {
     expect(events[1]).toMatchObject({ fromStage: 'saved', toStage: 'applied', provenance: 'candidate' });
   });
 
+  it('records candidate and previous stage when a candidate archives a card', () => {
+    const { repo } = createRepo();
+    const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+
+    const archived = repo.patch('candidate-1', created.id, {
+      expectedVersion: created.version,
+      stage: 'archived',
+    });
+
+    expect(archived).toMatchObject({
+      stage: 'archived',
+      archiveReason: 'candidate',
+      archivePreviousStage: 'applied',
+    });
+  });
+
+  it('keeps a candidate archive reason when the card is older than the stale threshold', () => {
+    const { repo } = createRepo();
+    const created = repo.create(
+      'candidate-1',
+      { clusterId: 'cluster-1', stage: 'applied', vacancy },
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    const archived = repo.patch(
+      'candidate-1',
+      created.id,
+      { expectedVersion: created.version, stage: 'archived' },
+      '2026-02-01T00:00:00.000Z',
+    );
+
+    expect(archived.archiveReason).toBe('candidate');
+  });
+
+  it('archives a stale card only through the configured system transition', () => {
+    const { repo } = createRepo();
+    const created = repo.create(
+      'candidate-1',
+      { clusterId: 'cluster-1', stage: 'applied', vacancy },
+      '2026-01-01T00:00:00.000Z',
+    );
+
+    const archived = repo.archiveStale(
+      'candidate-1',
+      created.id,
+      '2026-02-01T00:00:00.000Z',
+      30,
+    );
+
+    expect(archived).toMatchObject({
+      stage: 'archived',
+      archiveReason: 'stale',
+      archivePreviousStage: 'applied',
+    });
+  });
+
+  it('restores an archived card to its previous stage and clears archive metadata', () => {
+    const { repo } = createRepo();
+    const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+    const archived = repo.patch('candidate-1', created.id, {
+      expectedVersion: created.version,
+      stage: 'archived',
+    });
+
+    const restored = repo.restoreFromArchive('candidate-1', created.id, archived.version);
+
+    expect(restored).toMatchObject({
+      stage: 'applied',
+      archiveReason: null,
+      archivePreviousStage: null,
+      version: 3,
+    });
+    expect(repo.listEvents('candidate-1', created.id).at(-1)).toMatchObject({
+      fromStage: 'archived',
+      toStage: 'applied',
+      provenance: 'candidate',
+    });
+  });
+
+  it('maps a legacy archive without a reason and derives its previous stage from history', () => {
+    const { repo, database } = createRepo();
+    database
+      .prepare(
+        `INSERT INTO applications
+          (id, candidate_id, stage, stage_changed_at, created_at, updated_at)
+         VALUES ('legacy-archive', 'candidate-1', 'archived', 'now', 'now', 'now')`,
+      )
+      .run();
+    database
+      .prepare(
+        `INSERT INTO application_events
+          (id, application_id, candidate_id, kind, from_stage, to_stage, occurred_at, recorded_at, provenance)
+         VALUES ('legacy-archive-event', 'legacy-archive', 'candidate-1', 'stage', 'interview', 'archived', 'then', 'then', 'system')`,
+      )
+      .run();
+
+    const archived = repo.get('candidate-1', 'legacy-archive');
+
+    expect(archived).toMatchObject({
+      stage: 'archived',
+      archiveReason: 'unknown',
+      archivePreviousStage: 'interview',
+    });
+
+    const restored = repo.restoreFromArchive('candidate-1', 'legacy-archive', 1);
+    expect(restored).toMatchObject({
+      stage: 'interview',
+      archiveReason: null,
+      archivePreviousStage: null,
+    });
+  });
+
   it('allows manual transitions in any direction, including backwards', () => {
     const { repo } = createRepo();
     const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'interview' });
@@ -90,6 +210,7 @@ describe('SqliteApplicationRepository', () => {
     const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
     database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
     database.exec(MIGRATION_33);
+    database.exec(MIGRATION_38);
     database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
     const key = randomBytes(32);
     const coordinatedSealedText = new ConcurrentPatchSealedText(key);
@@ -221,19 +342,49 @@ describe('SqliteApplicationRepository', () => {
 
   describe('archiveClosedVacancy', () => {
     it('archives a card with a system event and vacancy_closed reason', () => {
-      const { repo } = createRepo();
+      const { repo, database } = createRepo();
       const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
-      const archived = repo.archiveClosedVacancy('candidate-1', created);
+      const archived = repo.archiveClosedVacancy('candidate-1', created, closureEvidence);
       expect(archived.stage).toBe('archived');
       expect(archived.closedReason).toBe('vacancy_closed');
+      expect(archived.archiveReason).toBe('vacancy_closed');
+      expect(archived.archivePreviousStage).toBe('applied');
+      const restored = repo.restoreFromArchive('candidate-1', created.id, archived.version);
+      expect(restored).toMatchObject({ stage: 'applied', closedReason: null, archiveReason: null });
       const events = repo.listEvents('candidate-1', created.id);
-      expect(events.at(-1)).toMatchObject({ toStage: 'archived', provenance: 'system' });
+      expect(events.at(-2)).toMatchObject({ toStage: 'archived', provenance: 'system' });
+      expect(events.at(-1)).toMatchObject({ fromStage: 'archived', toStage: 'applied' });
+      const closure = database
+        .prepare("SELECT payload_cipher FROM application_events WHERE to_stage = 'archived'")
+        .get() as { payload_cipher: string | null };
+      expect(closure.payload_cipher).toEqual(expect.any(String));
+    });
+
+    it('rejects a closure proof for another source', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+
+      expect(() =>
+        repo.archiveClosedVacancy('candidate-1', created, { ...closureEvidence, sourceId: 'other-source' }),
+      ).toThrow('confirmed vacancy closure evidence is required');
+      expect(repo.get('candidate-1', created.id)?.stage).toBe('applied');
+    });
+
+    it('does not archive a card changed after the confirmed evidence was read', () => {
+      const { repo } = createRepo();
+      const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
+      repo.patch('candidate-1', created.id, { expectedVersion: created.version, stage: 'interview' });
+
+      expect(() => repo.archiveClosedVacancy('candidate-1', created, closureEvidence)).toThrow(
+        ApplicationVersionConflictError,
+      );
+      expect(repo.get('candidate-1', created.id)?.stage).toBe('interview');
     });
 
     it('is idempotent: does not touch an already-archived or rejected card', () => {
       const { repo } = createRepo();
       const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'rejected', vacancy });
-      const untouched = repo.archiveClosedVacancy('candidate-1', created);
+      const untouched = repo.archiveClosedVacancy('candidate-1', created, closureEvidence);
       expect(untouched).toEqual(created);
       expect(repo.listEvents('candidate-1', created.id)).toHaveLength(1);
     });
@@ -244,7 +395,12 @@ describe('SqliteApplicationRepository', () => {
       const { repo } = createRepo();
       const created = repo.create('candidate-1', { clusterId: 'cluster-1', stage: 'applied', vacancy });
       expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T00:00:00.000Z')).toBe(0);
-      repo.archiveClosedVacancy('candidate-1', created, '2026-09-24T10:00:00.000Z');
+      repo.archiveClosedVacancy(
+        'candidate-1',
+        created,
+        closureEvidence,
+        '2026-09-24T10:00:00.000Z',
+      );
       expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T00:00:00.000Z')).toBe(1);
       expect(repo.countSystemClosuresSince('candidate-1', '2026-09-24T11:00:00.000Z')).toBe(0);
     });

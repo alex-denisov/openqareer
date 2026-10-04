@@ -7,6 +7,7 @@ import {
   createVacancySkip,
   listApplications,
   patchApplication,
+  restoreApplicationFromArchive,
   recordFollowUpSent,
   type ApplicationView,
   type CreateApplicationInput,
@@ -46,6 +47,7 @@ export interface UseApplications {
    * card's own «Подготовиться» would have no date and no prep door. */
   readonly scheduleInterview: (id: string, scheduledAt: string) => Promise<void>;
   readonly retryStageChange: (id: string) => void;
+  readonly restoreFromArchive: (application: ApplicationView) => Promise<void>;
   readonly markFollowUpSent: (id: string) => Promise<void>;
   readonly saveNote: (id: string, notes: string) => void;
   readonly addManualCard: (input: CreateApplicationInput) => Promise<ApplicationView>;
@@ -173,6 +175,13 @@ export function useApplications(): UseApplications {
     [changeStage, failedChanges],
   );
 
+  const restoreFromArchive = useCallback(async (application: ApplicationView) => {
+    const restored = await restoreApplicationFromArchive(application.id, application.version);
+    setApplications((list) => replaceApplication(list, restored));
+    setFailedChanges((map) => withoutKey(map, application.id));
+    setConflicts((set) => without(set, application.id));
+  }, []);
+
   const markFollowUpSent = useCallback(async (id: string) => {
     const saved = await recordFollowUpSent(id);
     setApplications((list) => replaceApplication(list, saved));
@@ -228,6 +237,7 @@ export function useApplications(): UseApplications {
     changeStage,
     scheduleInterview,
     retryStageChange,
+    restoreFromArchive,
     markFollowUpSent,
     saveNote,
     addManualCard,
