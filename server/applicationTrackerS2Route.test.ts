@@ -410,23 +410,17 @@ function expiredCluster(id: string): VacancyCluster {
   };
 }
 
-describe('applications route · vacancy closed on the platform (owner decision 2026-09-23 22:26)', () => {
-  it('auto-archives the card with a system event and vacancy_closed reason, idempotently', async () => {
+describe('applications route · disappearance from the active pool', () => {
+  it('keeps an active application when its vacancy is only absent from the active pool', async () => {
     const engine = new MultiSourceVacancyEngine({});
     (engine as unknown as { clusters: VacancyCluster[] }).clusters = [expiredCluster('cluster-1')];
     const { app, authorization } = await createApp(engine);
     const id = await createCard(app, authorization, 'cluster-1', 'applied');
 
-    const firstRead = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const firstCard = firstRead.json().data.find((a: { id: string }) => a.id === id);
-    expect(firstCard.stage).toBe('archived');
-    expect(firstCard.closedReason).toBe('vacancy_closed');
-
-    // Idempotent: a second read does not append a second system event.
-    await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const secondRead = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const secondCard = secondRead.json().data.find((a: { id: string }) => a.id === id);
-    expect(secondCard.version).toBe(firstCard.version);
+    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const card = list.json().data.find((a: { id: string }) => a.id === id);
+    expect(card.stage).toBe('applied');
+    expect(card.version).toBe(1);
   });
 
   it('leaves an unknown clusterId alone (never seen ≠ gone)', async () => {

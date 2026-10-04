@@ -93,14 +93,13 @@ const patchApplicationSchema = z.object({
 const listApplicationsQuerySchema = z.object({ tz: timezoneOffsetSchema });
 
 const handleListApplications: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const { tz } = listApplicationsQuerySchema.parse(request.query ?? {});
   return {
     data: candidateStore.listApplications(candidate.id, {
       timezoneOffsetMinutes: tz,
-      isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
     }),
     meta: { requestId: request.id },
   };
@@ -254,15 +253,13 @@ function todayNewVacancies(
  * силе — считаем один раз на снимок, а не на каждый запрос).
  */
 const handleToday: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
+  const { authService, candidateStore, config, titleParseStore } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   todayQuerySchema.parse(request.query ?? {});
 
   const since = candidateStore.getSinceLastVisit(candidate.id);
-  const applications = candidateStore.listApplications(candidate.id, {
-    isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
-  });
+  const applications = candidateStore.listApplications(candidate.id);
 
   const { matched, targetRoles, targetLevel } = await readTodayMatchedVacancies(deps, candidate.id);
   const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore) ?? [];
