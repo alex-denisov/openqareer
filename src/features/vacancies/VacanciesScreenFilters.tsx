@@ -172,6 +172,47 @@ function RoleFilterSection({
   );
 }
 
+// География, удалённость, уровень и роль — из выдачи, с числами
+function PrimaryFacetGroups({
+  props,
+  facets,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly facets: NonNullable<VacanciesScreenFiltersProps['facets']>;
+}) {
+  return (
+    <>
+      <FacetGroup
+        title="География"
+        field="regions"
+        props={props}
+        options={facets.regions.map(({ id, count }) => ({
+          id,
+          label: regionLabel(id),
+          count,
+        }))}
+      />
+      <RemoteGroup props={props} />
+      <FacetGroup
+        title="Уровень"
+        field="levels"
+        props={props}
+        options={facets.levels.map(({ level, count }) => ({
+          id: level,
+          label: LEVEL_LABELS[level],
+          count,
+        }))}
+      />
+      <FacetGroup
+        title="Роль"
+        field="roles"
+        props={props}
+        options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
+      />
+    </>
+  );
+}
+
 function FacetGroups({
   props,
   roleInputRef,
@@ -184,33 +225,7 @@ function FacetGroups({
     <>
       {facets ? (
         <>
-          <FacetGroup
-            title="География"
-            field="regions"
-            props={props}
-            options={facets.regions.map(({ id, count }) => ({
-              id,
-              label: regionLabel(id),
-              count,
-            }))}
-          />
-          <RemoteGroup props={props} />
-          <FacetGroup
-            title="Уровень"
-            field="levels"
-            props={props}
-            options={facets.levels.map(({ level, count }) => ({
-              id: level,
-              label: LEVEL_LABELS[level],
-              count,
-            }))}
-          />
-          <FacetGroup
-            title="Роль"
-            field="roles"
-            props={props}
-            options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
-          />
+          <PrimaryFacetGroups props={props} facets={facets} />
         </>
       ) : null}
       <RoleFilterSection props={props} roleInputRef={roleInputRef} />
