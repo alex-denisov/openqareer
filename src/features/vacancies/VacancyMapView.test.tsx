@@ -50,19 +50,88 @@ describe("B203: VacancyMapView Component", () => {
     makeItem("v3", "UnknownLocationCo"),
   ];
 
-  it("renders map header with honest counts and denominators", () => {
+  it("renders map header with honest denominators and missing-place counts", () => {
     const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
 
-    expect(html).toContain("<strong>2</strong> на карте");
-    expect(html).toContain("<strong>1</strong> без точных координат");
-    expect(html).toContain("города-хаба");
+    expect(html).toContain("На карте <strong>2</strong> из <strong>3</strong>");
+    expect(html).toContain("без города: <strong>1</strong>");
+    expect(html).toContain("город не распознан: <strong>0</strong>");
+    expect(html.indexOf('career-map-canvas-container')).toBeLessThan(
+      html.indexOf('career-map-header'),
+    );
   });
+
+  it('показывает без города и нераспознанные названия раздельно', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[
+          makeItem('mapped', 'Miro', 'Amsterdam', { lat: 52.3676, lng: 4.9041 }),
+          makeItem('missing', 'UnknownLocationCo'),
+          makeItem('unresolved', 'UnknownCityCo', 'Unknown Vacancy City'),
+        ]}
+        onSelectCity={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('На карте <strong>1</strong> из <strong>3</strong>');
+    expect(html).toContain('без города: <strong>1</strong>');
+    expect(html).toContain('город не распознан: <strong>1</strong>');
+  });
+
+  it('разделяет город и моноширинный счётчик в списке и на карте', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[
+          makeItem('v1', 'Miro', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
+          makeItem('v2', 'ASML', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
+          makeItem('v3', '10up', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
+          makeItem('v4', 'LocalCo', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
+        ]}
+        onSelectCity={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('<span>Almaty</span>');
+    expect(html).toContain(
+      '<span class="career-map-city-count"><span aria-hidden="true">·</span><span class="career-map-city-count-value">4</span></span>',
+    );
+    expect(html).toContain('<tspan class="career-map-label-count"> · 4</tspan>');
+  });
+
+  it('при выборе города оставляет в списке все его координатные варианты', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[
+          makeItem('ru', 'Russian Company', 'Москва', { lat: 55.75204, lng: 37.61781 }),
+          makeItem('en', 'English Company', 'Moscow', { lat: 55.75204, lng: 37.61781 }),
+        ]}
+        selectedCity="Москва"
+        onSelectCity={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('Frontend Engineer ru');
+    expect(html).toContain('Frontend Engineer en');
+  });
+
 
   it("renders city pins and list with names and counts", () => {
     const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
 
     expect(html).toContain("Амстердам");
     expect(html).toContain("Велдховен");
+  });
+
+  it('рисует локальные контуры стран, а город выбирается доступной кнопкой', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
+    );
+    const countryContours = html.match(/class="career-map-country"/gu) ?? [];
+
+    expect(html).toContain('role="img" aria-label="Контуры стран и расположение городов"');
+    expect(countryContours).toHaveLength(177);
+    expect(html).toContain('aria-label="Город Амстердам: 1 вакансий"');
+    expect(html).not.toContain('role="button" aria-label="Город Амстердам: 1 вакансий"');
   });
 
   it("highlights selected city when passed", () => {
@@ -75,7 +144,7 @@ describe("B203: VacancyMapView Component", () => {
   it("renders unmapped vacancies section honestly", () => {
     const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
 
-    expect(html).toContain("Без точных координат");
+    expect(html).toContain("Не показаны на карте");
     expect(html).toContain("UnknownLocationCo");
   });
 });

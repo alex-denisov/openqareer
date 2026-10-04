@@ -22,6 +22,7 @@ import { VacancyMapView } from './VacancyMapView';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { matchesVacancyCity } from './vacancyFacets';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -733,7 +734,8 @@ function filterByScreenState(
   now: string,
 ): MatchedVacancyItem[] {
   void now;
-  return items.filter(({ cluster }) => {
+  return items.filter((item) => {
+    const { cluster } = item;
     if (
       state.roles.length > 0 &&
       !state.roles.some((role: string) => titleMatchesRole(cluster.canonicalTitle, role))
@@ -748,12 +750,7 @@ function filterByScreenState(
       );
       if (!inRegion && !cluster.isRemote) return false;
     }
-    if (state.selectedCity) {
-      const location = cluster.canonicalLocation?.toLocaleLowerCase('ru-RU') ?? '';
-      const city = cluster.companyFeatures?.city?.toLocaleLowerCase('ru-RU') ?? '';
-      const target = state.selectedCity.toLocaleLowerCase('ru-RU');
-      if (!location.includes(target) && !city.includes(target)) return false;
-    }
+    if (state.selectedCity && !matchesVacancyCity(item, state.selectedCity, items)) return false;
     return true;
   });
 }

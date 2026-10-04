@@ -150,6 +150,22 @@ describe('buildMatchedVacancyPage', () => {
     expect(enriched.cluster.companyFeatures?.coordinates).toBeDefined();
     expect(enriched.cluster.companyFeatures?.coordinates?.lat).toBeCloseTo(52.3676, 1);
   });
+
+  it('сохраняет координаты, уже переданные вместе с вакансией', () => {
+    const source = item(8);
+    const explicitPoint = { lat: 12.3456, lng: -65.4321 };
+    const vacancy: MatchedVacancyItem = {
+      ...source,
+      cluster: {
+        ...source.cluster,
+        canonicalLocation: 'Москва',
+        companyFeatures: { city: 'Москва', coordinates: explicitPoint },
+      },
+    };
+
+    const [enriched] = buildMatchedVacancyPage([vacancy], 0).items;
+    expect(enriched?.cluster.companyFeatures?.coordinates).toEqual(explicitPoint);
+  });
 });
 
 describe('место вакансии на карте называется честно (B203)', () => {
@@ -162,6 +178,12 @@ describe('место вакансии на карте называется че�
     const [first] = buildMatchedVacancyPage([withLocation('Italy')], 0).items;
     expect(first?.cluster.companyFeatures?.city).toBeUndefined();
     expect(first?.cluster.companyFeatures?.country).toBe('Italy');
+  });
+
+  it('страна без города остаётся в счёте «без города», а не становится точкой-хабом', () => {
+    const [first] = buildMatchedVacancyPage([withLocation('Germany')], 0).items;
+    expect(first?.cluster.companyFeatures?.city).toBeUndefined();
+    expect(first?.cluster.companyFeatures?.coordinates).toBeUndefined();
   });
 
   it('страновая приставка площадки снимается с названия города', () => {
@@ -178,6 +200,50 @@ describe('место вакансии на карте называется че�
       0,
     ).items;
     expect(first?.cluster.companyFeatures?.city).toBeUndefined();
+  });
+});
+
+describe('локальное геокодирование набора из 190 вакансий (B365)', () => {
+  const fixtureCityLocations = [
+    'Москва',
+    'Moscow, Russia',
+    'г. Москва',
+    'Москва, м. Курская',
+    'Санкт-Петербург',
+    'СПб',
+    'Алматы, Казахстан',
+    'Almaty',
+    'Дубай, ОАЭ',
+    'Dubai, UAE',
+    'Амстердам, Нидерланды',
+    'Amsterdam, Netherlands',
+    'Велдховен, Нидерланды',
+    'Veldhoven, Netherlands',
+    'Berlin, Germany',
+    'London, United Kingdom',
+    'Yerevan, Armenia',
+    'San Francisco, United States',
+    'Lisbon, Portugal',
+    'Porto, Portugal',
+  ] as const;
+  const fixture = Array.from({ length: 190 }, (_, index) => {
+    const source = item(1_000 + index);
+    const city = index < 180 ? fixtureCityLocations[index % fixtureCityLocations.length] : undefined;
+    return {
+      ...source,
+      cluster: { ...source.cluster, canonicalLocation: city },
+    };
+  });
+
+  it('оставляет без координат только вакансии, где город действительно не указан', () => {
+    const resolved = buildMatchedVacancyPage(fixture, 0, 1_000_000).items;
+    const withoutCoordinates = resolved.filter(
+      (entry) => entry.cluster.companyFeatures?.coordinates === undefined,
+    );
+
+    expect(resolved).toHaveLength(190);
+    expect(withoutCoordinates).toHaveLength(10);
+    expect(withoutCoordinates.every((entry) => !entry.cluster.companyFeatures?.city)).toBe(true);
   });
 });
 

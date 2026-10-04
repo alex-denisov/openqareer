@@ -1,7 +1,7 @@
 import React from "react";
 import { ArrowSquareOut, MapPin, Globe } from "@phosphor-icons/react";
 import type { MatchedVacancyItem } from "../coach/cabinetTypes";
-import { calculateVacancyFacets, type CityFacet } from "./vacancyFacets";
+import { calculateVacancyFacets, hasMapCityCoordinates, type CityFacet } from "./vacancyFacets";
 import { employerLabel } from "../../../shared/employerLabel";
 import { VacancyConditionBadges } from "./vacancyConditions";
 import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
@@ -21,12 +21,34 @@ function projectCoords(lat: number, lng: number): { x: number; y: number } {
   return { x, y };
 }
 
-function formatHubNoun(count: number): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return "город-хаб";
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "города-хаба";
-  return "городов-хабов";
+function coordinateKey(point: { readonly lat: number; readonly lng: number }): string {
+  return `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`;
+}
+
+function getMapVacancies(
+  items: readonly MatchedVacancyItem[],
+  cities: readonly CityFacet[],
+  selectedCity?: string,
+) {
+  const mappedItems: MatchedVacancyItem[] = [];
+  const unmappedItems: MatchedVacancyItem[] = [];
+  for (const item of items) {
+    (hasMapCityCoordinates(item) ? mappedItems : unmappedItems).push(item);
+  }
+  const selectedHub = cities.find((city) => city.city === selectedCity)?.coordinates;
+  const selectedHubKey = selectedHub ? coordinateKey(selectedHub) : undefined;
+  const displayedMapped = selectedCity
+    ? mappedItems.filter((item) => {
+        const coordinates = item.cluster.companyFeatures?.coordinates;
+        return (
+          (selectedHubKey !== undefined &&
+            coordinates !== undefined &&
+            coordinateKey(coordinates) === selectedHubKey) ||
+          item.cluster.companyFeatures?.city === selectedCity
+        );
+      })
+    : mappedItems;
+  return { displayedMapped, unmappedItems };
 }
 
 export function VacancyMapView({
@@ -35,32 +57,23 @@ export function VacancyMapView({
   onSelectCity,
 }: VacancyMapViewProps): React.JSX.Element {
   const facets = calculateVacancyFacets(items);
-  const mappedItems = items.filter(
-    (item) => item.cluster.companyFeatures?.coordinates !== undefined,
-  );
-  const unmappedItems = items.filter(
-    (item) => item.cluster.companyFeatures?.coordinates === undefined,
-  );
-
-  const displayedMapped = selectedCity
-    ? mappedItems.filter((i) => i.cluster.companyFeatures?.city === selectedCity)
-    : mappedItems;
+  const { displayedMapped, unmappedItems } = getMapVacancies(items, facets.cities, selectedCity);
 
   return (
     <div className="career-vacancy-map-view vacancy-map-view">
-      <MapHeader
-        onMapCount={facets.onMap.count}
-        unmappedCount={facets.onMap.unmappedCount}
-        citiesCount={facets.cities.length}
-      />
-
       <div className="career-map-canvas-container">
         <MapSvg
           cities={facets.cities}
           selectedCity={selectedCity}
-          onSelectCity={onSelectCity}
         />
       </div>
+
+      <MapHeader
+        onMapCount={facets.onMap.count}
+        total={facets.onMap.total}
+        missingCityCount={facets.onMap.missingCityCount}
+        unresolvedCityCount={facets.onMap.unresolvedCityCount}
+      />
 
       <CityChips
         cities={facets.cities}
@@ -110,19 +123,21 @@ function SelectedCityBar({
 
 function MapHeader({
   onMapCount,
-  unmappedCount,
-  citiesCount,
+  total,
+  missingCityCount,
+  unresolvedCityCount,
 }: {
   onMapCount: number;
-  unmappedCount: number;
-  citiesCount: number;
+  total: number;
+  missingCityCount: number;
+  unresolvedCityCount: number;
 }) {
   return (
     <div className="career-map-header">
-      <p className="career-vacancy-count">
-        <strong>{onMapCount}</strong> на карте ·{" "}
-        <strong>{unmappedCount}</strong> без точных координат ·{" "}
-        <strong>{citiesCount}</strong> {formatHubNoun(citiesCount)}
+      <p className="career-vacancy-count" aria-live="polite">
+        На карте <strong>{onMapCount}</strong> из <strong>{total}</strong> · без города:{" "}
+        <strong>{missingCityCount}</strong> · город не распознан:{" "}
+        <strong>{unresolvedCityCount}</strong>
       </p>
     </div>
   );
@@ -140,26 +155,15 @@ function MapPinNode({
   city,
   isSelected,
   showLabel,
-  onClick,
 }: {
   city: CityFacet;
   isSelected: boolean;
   showLabel: boolean;
-  onClick: () => void;
 }) {
   if (!city.coordinates) return null;
   const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
   return (
-    <g
-      className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}
-      onClick={onClick}
-      tabIndex={0}
-      role="button"
-      aria-label={`Город ${city.city}: ${city.count} вакансий`}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onClick();
-      }}
-    >
+    <g className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}>
       <circle cx={x} cy={y} r={isSelected ? 16 : 10} className="career-map-pulse" />
       <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
       {showLabel ? (
@@ -199,11 +203,9 @@ function withReadableLabels(
 function MapSvg({
   cities,
   selectedCity,
-  onSelectCity,
 }: {
   cities: readonly CityFacet[];
   selectedCity?: string;
-  onSelectCity: (city?: string) => void;
 }) {
   return (
     <svg
@@ -224,7 +226,6 @@ function MapSvg({
           city={c}
           isSelected={selectedCity === c.city}
           showLabel={showLabel}
-          onClick={() => onSelectCity(selectedCity === c.city ? undefined : c.city)}
         />
       ))}
     </svg>
@@ -317,9 +318,9 @@ function UnmappedVacanciesSection({
   return (
     <section className="career-map-unmapped-section">
       <header>
-        <h3>Без точных координат ({items.length})</h3>
+        <h3>Не показаны на карте ({items.length})</h3>
         <p className="career-cabinet-tag">
-          У этих вакансий город не указан или пока не сопоставлен с координатами IT-хабов.
+          У этих вакансий город не указан или его координаты не удалось сопоставить с локальным справочником.
           Данные не отбрасываются и остаются доступными для поиска:
         </p>
       </header>

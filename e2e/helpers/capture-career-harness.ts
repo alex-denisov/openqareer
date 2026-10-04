@@ -1,10 +1,16 @@
 import { writeFileSync } from 'node:fs';
 import type { Page } from '@playwright/test';
 
-export async function captureCareerHarness(page: Page, path: string): Promise<void> {
-  const rendered = await page.evaluate(async () => {
+export async function captureCareerHarness(
+  page: Page,
+  path: string,
+  selector?: string,
+): Promise<void> {
+  const rendered = await page.evaluate(async (targetSelector) => {
     const shell = document.querySelector<HTMLElement>('.career-shell');
     if (!shell) throw new Error('career_harness_not_found');
+    const target = targetSelector ? shell.querySelector<HTMLElement>(targetSelector) : shell;
+    if (!target) throw new Error('career_harness_target_not_found');
     const linkedStyles = Array.from(
       document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
     );
@@ -14,9 +20,12 @@ export async function captureCareerHarness(page: Page, path: string): Promise<vo
     const inlineCss = Array.from(document.querySelectorAll('style')).map(
       (style) => style.textContent ?? '',
     );
-    return { css: [...inlineCss, ...linkedCss].join('\n'), html: shell.outerHTML };
-  });
-  writeFileSync(path, renderPage(rendered.css, rendered.html));
+    const html = targetSelector
+      ? `<div class="career-shell">${target.outerHTML}</div>`
+      : target.outerHTML;
+    return { css: [...inlineCss, ...linkedCss].join('\n'), html, title: document.title };
+  }, selector);
+  writeFileSync(path, renderPage(rendered.css, rendered.html, rendered.title));
 
   const colors = Array.from(new Set(rendered.css.match(/oklch\([^)]*\)/gu) ?? []));
   const resolvedColors = await page.evaluate((values) => {
@@ -36,9 +45,23 @@ export async function captureCareerHarness(page: Page, path: string): Promise<vo
     /oklch\([^)]*\)/gu,
     (color) => replacements.get(color) ?? color,
   );
-  writeFileSync(path.replace(/\.html$/u, '.rgb.html'), renderPage(rgbCss, rendered.html));
+  writeFileSync(
+    path.replace(/\.html$/u, '.rgb.html'),
+    renderPage(rgbCss, rendered.html, rendered.title),
+  );
 }
 
-function renderPage(css: string, html: string): string {
-  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}</style></head><body>${html}</body></html>`;
+function renderPage(css: string, html: string, title: string): string {
+  const safeTitle = title.replace(
+    /[&<>"']/gu,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character] ?? character,
+  );
+  return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeTitle}</title><style>${css}</style></head><body>${html}</body></html>`;
 }
