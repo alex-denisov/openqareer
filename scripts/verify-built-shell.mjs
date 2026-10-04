@@ -1161,33 +1161,17 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  // «Поиск» остаётся без отдельного пункта рельса; кампания открывается шагом «Роль».
+  // B366: шаг «Роль» открывает «Вакансии» с условиями поиска; отдельного экрана кампании нет.
   await page
     .getByRole('button', { name: /^Роль\./ })
     .first()
     .click();
-  await page.getByRole('heading', { name: 'Поиск', exact: true }).waitFor();
-  await page.getByRole('heading', { name: /Кампания:/u }).waitFor();
-  await page.getByRole('heading', { name: 'Воронка' }).waitFor();
-  await page.getByRole('heading', { name: 'Очередь на сегодня' }).waitFor();
+  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
   await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
-  const funnelLabels = (
-    await page.locator('.career-funnel .career-funnel-label').allInnerTexts()
-  ).map((label) => label.trim().toLocaleLowerCase('ru-RU'));
-  const campaignFunnel = funnelLabels.length === 6 && funnelLabels.includes('открыто');
   assert(
-    campaignFunnel,
-    `${viewport.name}: воронка кампании не отрисовалась ${JSON.stringify(funnelLabels)}`,
+    (await page.getByRole('heading', { name: 'Поиск', exact: true }).count()) === 0,
+    `${viewport.name}: шаг «Роль» снова открыл скрытый экран «Поиск»`,
   );
-  const untracked = await page.locator('.career-funnel li.is-untracked').count();
-  assert(
-    untracked === 3 && /не отслеживаем/iu.test(await page.locator('.career-campaign').innerText()),
-    `${viewport.name}: кампания выдаёт неизмеренное за ноль (${untracked})`,
-  );
-  const campaignQueue =
-    (await page.getByRole('heading', { name: 'Автоматизация', exact: true }).count()) === 1 &&
-    (await page.getByRole('button', { name: 'Посмотреть тарифы', exact: true }).count()) === 1;
-  assert(campaignQueue, `${viewport.name}: автоматизация по тарифу не отрисовалась`);
 
   // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
   // `VacanciesScreen` (список + детальная карточка), а не старую
@@ -1395,8 +1379,6 @@ async function verifyViewport(browser, baseUrl, viewport) {
     interactiveMs,
     overflow,
     accountRestart,
-    campaignFunnel,
-    campaignQueue,
   };
 }
 
@@ -1566,8 +1548,6 @@ try {
     results.push(result);
     candidateResults.push({
       viewport: result.viewport,
-      campaignFunnel: result.campaignFunnel,
-      campaignQueue: result.campaignQueue,
     });
   }
   const sessionRestore = await verifyExpiredSessionRestore(browser, baseUrl);
