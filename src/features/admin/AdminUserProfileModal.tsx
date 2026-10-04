@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   CreditCard,
   ShieldCheck,
@@ -50,12 +51,9 @@ function extractError(err: unknown): string {
 // ---------- Modal shell ----------
 
 function ModalOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') onClose();
-  };
+  useEscapeLayer(onClose);
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
-    <div className="admin-modal-overlay" role="dialog" aria-modal="true" onKeyDown={handleKeyDown}>
+    <div className="admin-modal-overlay" role="dialog" aria-modal="true">
       <button type="button" className="admin-modal-backdrop" aria-label="Закрыть" onClick={onClose} tabIndex={-1} />
       <div className="admin-modal admin-modal--large">
         {children}

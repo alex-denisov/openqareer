@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowRight,
   PaperPlaneTilt,
@@ -88,17 +89,13 @@ export function CareerExpertPanel({
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  useEscapeLayer(onClose);
 
   useEffect(() => {
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
       if (event.key !== 'Tab' || !panel.current) return;
       const focusable = Array.from(
         panel.current.querySelectorAll<HTMLElement>(
@@ -256,7 +253,9 @@ export function CareerExpertPanel({
           </span>
           <div>
             <strong>Консультант · {STAGE_TITLE[stage]}</strong>
-            <small>{subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}</small>
+            <small>
+              {subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}
+            </small>
           </div>
         </div>
         <button

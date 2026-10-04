@@ -11,6 +11,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   canSendInvite,
   getOutreachQuota,
@@ -562,6 +563,7 @@ function useModalA11y(
   onClose: () => void,
   containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
+  useEscapeLayer(onClose, isOpen);
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
     const prevActive = document.activeElement as HTMLElement | null;
@@ -570,11 +572,6 @@ function useModalA11y(
     containerRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
       if (e.key !== 'Tab') return;
       const focusable = Array.from(
         containerRef.current?.querySelectorAll<HTMLElement>(

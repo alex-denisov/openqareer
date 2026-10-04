@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowClockwise,
   CaretDown,
@@ -211,25 +212,15 @@ export function AdminLinkedinPoolView() {
   const [sortBy, setSortBy] = useState<'name' | 'state' | 'verified'>('name');
   const [descending, setDescending] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createDetailsRef = useRef<HTMLDetailsElement>(null);
-
-  useEffect(() => {
-    if (!confirmDelete) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setConfirmDelete(undefined);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmDelete]);
-
-  useEffect(() => {
-    if (!confirmTransferAccountId) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setConfirmTransferAccountId(undefined);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmTransferAccountId]);
+  useEscapeLayer(() => setConfirmDelete(undefined), Boolean(confirmDelete));
+  useEscapeLayer(() => setConfirmTransferAccountId(undefined), Boolean(confirmTransferAccountId));
+  useEscapeLayer(() => {
+    if (!createDetailsRef.current) return;
+    createDetailsRef.current.open = false;
+    createDetailsRef.current.querySelector('summary')?.focus();
+  }, createMenuOpen);
 
   useEffect(() => {
     if (!activeLogin) return;
@@ -533,7 +524,7 @@ export function AdminLinkedinPoolView() {
         </button>
       </header>
 
-      <details className="admin-linkedin-create" ref={createDetailsRef}>
+      <details className="admin-linkedin-create" ref={createDetailsRef} onToggle={(event) => setCreateMenuOpen(event.currentTarget.open)}>
         <summary><Plus size={18} aria-hidden="true" /> Добавить аккаунт</summary>
       <form className="admin-linkedin-add" onSubmit={(event) => void addAccount(event)}>
         <div className="admin-linkedin-add__heading">
