@@ -17,6 +17,8 @@ function card(id: string, stage: ApplicationView['stage'] = 'saved'): Applicatio
     clusterId: `cluster-${id}`,
     stage,
     closedReason: null,
+    archiveReason: null,
+    archivePreviousStage: null,
     processProfile: 'standard',
     vacancy: { title: `Role ${id}`, company: 'Acme', url: 'https://example.com', source: 'hh' },
     notes: null,

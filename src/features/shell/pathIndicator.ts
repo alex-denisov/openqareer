@@ -13,6 +13,7 @@ export interface NavigationOptions {
   readonly stage?: ApplicationStage;
   readonly focusRoleFilter?: boolean;
   readonly focusFilter?: 'role';
+  readonly openArchive?: boolean;
 }
 
 /**

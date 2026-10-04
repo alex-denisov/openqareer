@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
+import type { VacancyApplications } from './useVacancyApplications';
 import { VacanciesScreen } from './VacanciesScreen';
 
 function matchedItem(
@@ -95,6 +96,24 @@ function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) 
 }
 
 describe('VacanciesScreen (B250)', () => {
+  it('shows an archived response instead of an active application mark', () => {
+    const applications: VacancyApplications = {
+      applications: [],
+      byCluster: new Map(),
+      unsaved: new Set(),
+      record: vi.fn(),
+      recordConfirmed: vi.fn(),
+    };
+    const html = render({
+      matched: [matchedItem('c-1', 'VP Technology Ops')],
+      applications,
+      archivedApplicationClusterIds: new Set(['c-1']),
+    });
+
+    expect(html).toContain('Отклик в архиве');
+    expect(html).not.toContain('Отклик отмечен');
+  });
+
   it('says «Загружено N из M» while the pool is still incomplete (B338)', () => {
     const html = render({ total: 1, poolComplete: false });
     expect(html).toContain('Загружено');

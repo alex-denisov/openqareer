@@ -47,6 +47,7 @@ export interface VacanciesScreenProps {
   readonly now?: string;
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
+  readonly archivedApplicationClusterIds?: ReadonlySet<string>;
   readonly onMarkAlreadyApplied?: (
     clusterId: string,
     vacancy: VacancyApplicationSnapshot,
@@ -57,6 +58,7 @@ export interface VacanciesScreenProps {
     vacancy: VacancyApplicationSnapshot,
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
@@ -280,10 +282,12 @@ interface ListContentProps {
   readonly selectedId?: string | null;
   readonly onToggleSelect: (id: string) => void;
   readonly applications?: VacanciesScreenProps['applications'];
+  readonly archivedApplicationClusterIds?: ReadonlySet<string>;
   readonly onMarkAlreadyApplied?: VacanciesScreenProps['onMarkAlreadyApplied'];
   readonly onScheduleInterview?: VacanciesScreenProps['onScheduleInterview'];
   readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly countShownAbove: boolean;
@@ -332,10 +336,12 @@ function VacanciesListContent(props: ListContentProps) {
     selectedId,
     onToggleSelect,
     applications,
+    archivedApplicationClusterIds,
     onMarkAlreadyApplied,
     onScheduleInterview,
     onOpenNetworking,
     onOpenResponses,
+    onOpenArchive,
     onAddToProfile,
     onDiscussWithConsultant,
     countShownAbove,
@@ -354,10 +360,12 @@ function VacanciesListContent(props: ListContentProps) {
             isSelected={selectedId === item.cluster.id}
             onSelect={() => onToggleSelect(item.cluster.id)}
             applications={applications}
+            archivedApplicationClusterIds={archivedApplicationClusterIds}
             onMarkAlreadyApplied={onMarkAlreadyApplied}
             onScheduleInterview={onScheduleInterview}
             onOpenNetworking={onOpenNetworking}
             onOpenResponses={onOpenResponses}
+            onOpenArchive={onOpenArchive}
             onAddToProfile={onAddToProfile}
             onDiscussWithConsultant={onDiscussWithConsultant}
           />
@@ -534,10 +542,12 @@ function buildListProps(
     selectedId: screenState.board.selectedId,
     onToggleSelect: screenState.board.toggleSelect,
     applications: input.applications,
+    archivedApplicationClusterIds: input.archivedApplicationClusterIds,
     onMarkAlreadyApplied: input.onMarkAlreadyApplied,
     onScheduleInterview: input.onScheduleInterview,
     onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
     onOpenResponses: input.onOpenResponses,
+    onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: input.onOpenExpert
       ? (cluster) => input.onOpenExpert?.('vacancies', { kind: 'vacancy', id: cluster.id }, `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`)

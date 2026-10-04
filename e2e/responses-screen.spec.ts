@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 /**
  * B251 S3 — экран «Отклики» (канбан пайплайна из макета
@@ -59,6 +60,8 @@ function application(overrides: Record<string, unknown>) {
     clusterId: overrides.clusterId ?? null,
     stage: 'applied',
     closedReason: null,
+    archiveReason: null,
+    archivePreviousStage: null,
     processProfile: 'standard',
     vacancy: null,
     notes: null,
@@ -71,6 +74,7 @@ function application(overrides: Record<string, unknown>) {
     whoseTurn: 'company',
     materials: { coverLetter: true, resume: true },
     nearestInterview: null,
+    archiveStaleDays: 30,
     ...overrides,
   };
 }
@@ -309,7 +313,118 @@ test.describe('B251 responses screen', () => {
     await expect.poll(() => columnCount('Ответ')).toBe('1');
     await expect.poll(() => columnCount('Интервью')).toBe('1');
     await expect.poll(() => columnCount('Оффер')).toBe('0');
-    await expect.poll(() => columnCount('Отказ / Архив')).toBe('2');
+    await expect.poll(() => columnCount('Отказ')).toBe('1');
+    await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
+  });
+
+  test('shows three archive reasons and restores a card to its previous stage', async ({
+    page,
+  }, testInfo) => {
+    const archivedApplications = [
+      application({
+        id: 'archive-candidate',
+        clusterId: 'cluster-candidate',
+        stage: 'archived',
+        archiveReason: 'candidate',
+        archivePreviousStage: 'applied',
+        vacancy: { title: 'Role moved by candidate', company: 'Acme', url: '', source: 'test' },
+      }),
+      application({
+        id: 'archive-closed',
+        clusterId: 'cluster-closed',
+        stage: 'archived',
+        archiveReason: 'vacancy_closed',
+        archivePreviousStage: 'responded',
+        vacancy: { title: 'Role closed on source', company: 'Beta', url: '', source: 'test' },
+      }),
+      application({
+        id: 'archive-stale',
+        clusterId: 'cluster-stale',
+        stage: 'archived',
+        archiveReason: 'stale',
+        archivePreviousStage: 'interview',
+        archiveStaleDays: 30,
+        vacancy: { title: 'Role without movement', company: 'Gamma', url: '', source: 'test' },
+      }),
+    ];
+
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.route('**/api/v1/candidate/applications**', async (route) => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (request.method() === 'GET' && pathname === '/api/v1/candidate/applications') {
+        return route.fulfill({ json: { data: archivedApplications } });
+      }
+      if (request.method() === 'POST' && pathname.endsWith('/restore')) {
+        const id = pathname.split('/').at(-2);
+        const archived = archivedApplications.find((item) => item.id === id);
+        if (!archived)
+          return route.fulfill({ status: 404, json: { error: { message: 'not found' } } });
+        return route.fulfill({
+          json: {
+            data: {
+              ...archived,
+              stage: archived.archivePreviousStage,
+              archiveReason: null,
+              archivePreviousStage: null,
+              version: archived.version + 1,
+            },
+          },
+        });
+      }
+      return route.fallback();
+    });
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    const archiveToggle = page.getByRole('button', { name: 'Архив · 3' });
+    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'false');
+    await archiveToggle.click();
+    const archiveCards = page.locator('.career-responses-archive-card');
+    await expect(archiveCards).toHaveCount(3);
+    await expect(archiveCards.filter({ hasText: 'Role moved by candidate' })).toContainText(
+      'Вы перенесли в архив',
+    );
+    await expect(archiveCards.filter({ hasText: 'Role closed on source' })).toContainText(
+      'Вакансия закрыта',
+    );
+    await expect(archiveCards.filter({ hasText: 'Role without movement' })).toContainText(
+      'Нет движения 30 дней',
+    );
+
+    if (testInfo.project.name === 'desktop-1440') {
+      await mkdir('output/playwright/B363', { recursive: true });
+      await page.setViewportSize({ width: 1176, height: 900 });
+      await page.screenshot({ path: 'output/playwright/B363/responses-1176.png', fullPage: true });
+      await captureCareerHarness(
+        page,
+        'output/playwright/B363/archive-harness.html',
+        '.career-responses-archive',
+      );
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.screenshot({ path: 'output/playwright/B363/responses-390.png', fullPage: true });
+      await archiveToggle.evaluate((toggle) =>
+        toggle.scrollIntoView({ block: 'start', behavior: 'instant' }),
+      );
+      await page.screenshot({ path: 'output/playwright/B363/archive-390.png' });
+      await page.setViewportSize({ width: 1176, height: 900 });
+      await archiveToggle.evaluate((toggle) =>
+        toggle.scrollIntoView({ block: 'start', behavior: 'instant' }),
+      );
+      await page.screenshot({ path: 'output/playwright/B363/archive-1176.png' });
+    }
+
+    await archiveCards
+      .filter({ hasText: 'Role moved by candidate' })
+      .getByRole('button', { name: 'Вернуть в работу' })
+      .click();
+
+    await expect(page.getByRole('button', { name: 'Архив · 2' })).toBeVisible();
+    await expect(
+      page.locator('.career-responses-column[aria-label="Откликнулся"] .career-responses-card'),
+    ).toContainText('Role moved by candidate');
   });
 
   test('shows role, company and hidden-company copy on cards', async ({ page }) => {
@@ -513,7 +628,9 @@ test.describe('B251 responses screen', () => {
 
     await expect(page.locator('.career-responses-column')).toHaveCount(6);
     await expect(
-      page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
+      page
+        .locator('.career-responses-column .career-responses-card')
+        .filter({ hasText: 'Peraton' }),
     ).toBeVisible();
 
     // Кликаем по шагу «Интервью» в индикаторе пути (на десктопе кнопка шага, на мобильном саммари)
@@ -530,13 +647,10 @@ test.describe('B251 responses screen', () => {
     );
     await expect(page.locator('.career-responses-column')).toHaveCount(1);
     await expect(page.locator('.career-responses-column-head h2')).toHaveText('Интервью');
-    await expect(page.locator('.career-responses-card')).toHaveCount(1);
-    await expect(page.locator('.career-responses-card')).toContainText(
-      'Enterprise Architect Director — раунд 2',
-    );
-    await expect(page.locator('.career-responses-card').filter({ hasText: 'Peraton' })).toHaveCount(
-      0,
-    );
+    const interviewCards = page.locator('.career-responses-column .career-responses-card');
+    await expect(interviewCards).toHaveCount(1);
+    await expect(interviewCards).toContainText('Enterprise Architect Director — раунд 2');
+    await expect(interviewCards.filter({ hasText: 'Peraton' })).toHaveCount(0);
 
     // Скриншоты для D15 на 1176 и 390
     await mkdir('output/playwright/B344', { recursive: true });

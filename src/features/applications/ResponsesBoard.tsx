@@ -6,6 +6,7 @@ import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
+import { ArchivedResponsesSection } from './ArchivedResponsesSection';
 
 interface Column {
   readonly key: string;
@@ -19,7 +20,7 @@ const COLUMNS: readonly Column[] = [
   { key: 'responded', label: 'Ответ', stages: ['responded'] },
   { key: 'interview', label: 'Интервью', stages: ['interview'] },
   { key: 'offer', label: 'Оффер', stages: ['offer'] },
-  { key: 'closed', label: 'Отказ / Архив', stages: ['rejected', 'archived'] },
+  { key: 'closed', label: 'Отказ', stages: ['rejected'] },
 ];
 
 /**
@@ -32,11 +33,13 @@ export function ResponsesBoard({
   state,
   onOpenVacancies,
   initialStageFilter,
+  initialArchiveOpen,
   onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   initialStageFilter?: ApplicationStage;
+  initialArchiveOpen?: boolean;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [stageFilter, setStageFilter] = useState<ApplicationStage | null>(
@@ -69,6 +72,7 @@ export function ResponsesBoard({
       state={state}
       onOpenVacancies={onOpenVacancies}
       stageFilter={stageFilter}
+      initialArchiveOpen={initialArchiveOpen}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
@@ -222,12 +226,14 @@ function ReadyBoard({
   state,
   onOpenVacancies,
   stageFilter,
+  initialArchiveOpen,
   onClearFilter,
   onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   stageFilter?: ApplicationStage | null;
+  initialArchiveOpen?: boolean;
   onClearFilter?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
@@ -254,16 +260,31 @@ function ReadyBoard({
         onAddManual={() => setAddingManual(true)}
         onOpenExpert={onOpenExpert}
       />
-      {addingManual ? (
-        <ManualCardForm
-          onCancel={() => setAddingManual(false)}
-          onSubmit={async (input) => {
-            await state.addManualCard(input);
-            setAddingManual(false);
-          }}
-        />
-      ) : null}
+      <ArchivedResponsesSection
+        applications={state.applications.filter((application) => application.stage === 'archived')}
+        initiallyOpen={initialArchiveOpen}
+        onRestore={state.restoreFromArchive}
+      />
+      {addingManual ? <ManualCardFormDialog state={state} onCancel={() => setAddingManual(false)} /> : null}
     </div>
+  );
+}
+
+function ManualCardFormDialog({
+  state,
+  onCancel,
+}: {
+  readonly state: UseApplications;
+  readonly onCancel: () => void;
+}) {
+  return (
+    <ManualCardForm
+      onCancel={onCancel}
+      onSubmit={async (input) => {
+        await state.addManualCard(input);
+        onCancel();
+      }}
+    />
   );
 }
 

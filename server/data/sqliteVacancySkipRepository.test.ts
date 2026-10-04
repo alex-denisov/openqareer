@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
-import { MIGRATION_33 } from './sqliteSchema';
+import { MIGRATION_33, MIGRATION_38 } from './sqliteSchema';
 import { SealedText } from './sealedText';
 import { SqliteApplicationRepository } from './sqliteApplicationRepository';
 import { SqliteVacancySkipRepository } from './sqliteVacancySkipRepository';
@@ -12,6 +12,7 @@ function createRepos() {
   const database = new DatabaseSync(':memory:', { enableForeignKeyConstraints: true });
   database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
   database.exec(MIGRATION_33);
+  database.exec(MIGRATION_38);
   database.prepare("INSERT INTO candidates (id) VALUES ('candidate-1')").run();
   const applications = new SqliteApplicationRepository(database, new SealedText(randomBytes(32)));
   const skips = new SqliteVacancySkipRepository(database);
@@ -32,6 +33,10 @@ describe('SqliteVacancySkipRepository', () => {
     const archived = applications.get('candidate-1', created.id);
     expect(archived?.stage).toBe('archived');
     expect(archived?.closedReason).toBe('geo-format');
+    expect(archived?.archiveReason).toBe('candidate');
+    expect(archived?.archivePreviousStage).toBe('saved');
+    const restored = applications.restoreFromArchive('candidate-1', created.id, archived!.version);
+    expect(restored).toMatchObject({ stage: 'saved', closedReason: null, archiveReason: null });
   });
 
   it('does not touch a card that already moved past saved', () => {

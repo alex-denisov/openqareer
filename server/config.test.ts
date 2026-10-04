@@ -38,6 +38,22 @@ describe('server configuration', () => {
     ).toThrow();
   });
 
+  it('uses the configured archive inactivity threshold', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url).applicationArchiveStaleDays).toBe(30);
+    expect(
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_APPLICATION_ARCHIVE_STALE_DAYS: '45' },
+        import.meta.url,
+      ).applicationArchiveStaleDays,
+    ).toBe(45);
+    expect(() =>
+      readServerConfig(
+        { ...validEnvironment, OPENQAREER_APPLICATION_ARCHIVE_STALE_DAYS: '0' },
+        import.meta.url,
+      ),
+    ).toThrow();
+  });
+
   it('подбор по умолчанию остаётся legacy, флаг включает semantic (B267 S3)', () => {
     expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
       matchMode: 'legacy',

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { CaretDown, CaretUp, Check, Warning } from '@phosphor-icons/react';
+import { Archive, CaretDown, CaretUp, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancyAge } from './vacancyFilters';
 import { formatCompensationCompact } from './vacancyCompensation';
@@ -18,6 +18,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { extractVacancyRequirements, LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import { VacancyInterviewForm } from './VacancyInterviewForm';
+import { NotAppliedActions, VacancyMoreActions, VacancyRowMeta } from './VacancyRowElements';
 
 export interface VacancyRowProps {
   readonly item: MatchedVacancyItem;
@@ -25,6 +26,7 @@ export interface VacancyRowProps {
   readonly isSelected: boolean;
   readonly onSelect: () => void;
   readonly applications?: VacancyApplications;
+  readonly archivedApplicationClusterIds?: ReadonlySet<string>;
   readonly onMarkAlreadyApplied?: (
     clusterId: string,
     vacancy: VacancyApplicationSnapshot,
@@ -36,6 +38,7 @@ export interface VacancyRowProps {
   ) => Promise<ApplicationView>;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
 }
@@ -111,33 +114,12 @@ function VacancyTrustTag({ trust }: { readonly trust: ReturnType<typeof vacancyT
   );
 }
 
-function VacancyRowMeta({
-  comp,
-  age,
-  alreadyApplied,
-}: {
-  readonly comp: string;
-  readonly age: ReturnType<typeof vacancyAge>;
-  readonly alreadyApplied: boolean;
-}) {
-  const ageText = age.days === 0 ? 'сегодня' : age.label;
-  return (
-    <span>
-      <span className="vac-comp">{comp}</span>
-      <span className="vac-age">
-        {alreadyApplied
-          ? `Отклик отмечен · ${age.days === 0 ? 'сегодня' : `${age.label} назад`}`
-          : `в базе ${ageText}`}
-      </span>
-    </span>
-  );
-}
-
 interface SummaryProps {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly isSelected: boolean;
   readonly alreadyApplied: boolean;
+  readonly applicationArchived: boolean;
   readonly age: ReturnType<typeof vacancyAge>;
   readonly trust: ReturnType<typeof vacancyTrustSignals>;
   readonly onSelect: () => void;
@@ -175,6 +157,7 @@ function VacancyRowSummary({
   explanation,
   isSelected,
   alreadyApplied,
+  applicationArchived,
   age,
   trust,
   onSelect,
@@ -188,7 +171,7 @@ function VacancyRowSummary({
   return (
     <button
       type="button"
-      className={`vac-row${isSelected ? ' is-selected' : ''}${alreadyApplied ? ' is-applied' : ''}`}
+      className={`vac-row${isSelected ? ' is-selected' : ''}${alreadyApplied && !applicationArchived ? ' is-applied' : ''}${applicationArchived ? ' is-archived' : ''}`}
       aria-pressed={isSelected}
       aria-expanded={isSelected}
       onClick={onSelect}
@@ -208,6 +191,7 @@ function VacancyRowSummary({
           comp={formatCompensationCompact(cluster.salary)}
           age={age}
           alreadyApplied={alreadyApplied}
+          applicationArchived={applicationArchived}
         />
 
         <span className="vac-fit">
@@ -305,13 +289,49 @@ function VacancyDetailGrid({
   );
 }
 
+interface ActionButtonsProps {
+  readonly alreadyApplied: boolean;
+  readonly applicationArchived: boolean;
+  readonly savingApplied: boolean;
+  readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
+  readonly onToggleSchedule?: () => void;
+  readonly externalOpened: boolean;
+  readonly onApplyExternal: () => void;
+  readonly onConfirmSent: () => void;
+  readonly onConfirmAlreadyApplied?: () => void;
+  readonly onOpenNetworking?: () => void;
+  readonly onDiscussWithConsultant?: () => void;
+  readonly onOpenInfo: () => void;
+  readonly onOpenPitch: () => void;
+}
+
 function AppliedActions({
+  applicationArchived,
   onOpenResponses,
+  onOpenArchive,
   onToggleSchedule,
 }: {
+  readonly applicationArchived: boolean;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onToggleSchedule?: () => void;
 }) {
+  if (applicationArchived) {
+    return (
+      <>
+        <span className="applied-note is-archived">
+          <Archive size={14} aria-hidden="true" />
+          Отклик в архиве
+        </span>
+        {onOpenArchive ? (
+          <button type="button" className="btn btn-secondary action-btn" onClick={onOpenArchive}>
+            Открыть архив
+          </button>
+        ) : null}
+      </>
+    );
+  }
   return (
     <>
       <span className="applied-note">
@@ -332,64 +352,12 @@ function AppliedActions({
   );
 }
 
-function NotAppliedActions({
-  savingApplied,
-  externalOpened,
-  onApplyExternal,
-  onConfirmSent,
-  onConfirmAlreadyApplied,
-}: {
-  readonly savingApplied: boolean;
-  readonly externalOpened: boolean;
-  readonly onApplyExternal: () => void;
-  readonly onConfirmSent: () => void;
-  readonly onConfirmAlreadyApplied?: () => void;
-}) {
-  if (externalOpened) {
-    return (
-      <button type="button" className="btn btn-primary action-btn" onClick={onConfirmSent}>
-        Да, отклик отправлен
-      </button>
-    );
-  }
-  return (
-    <>
-      <button type="button" className="btn btn-primary action-btn" onClick={onApplyExternal}>
-        Откликнуться
-      </button>
-      {onConfirmAlreadyApplied ? (
-        <button
-          type="button"
-          className="btn btn-secondary action-btn"
-          disabled={savingApplied}
-          onClick={onConfirmAlreadyApplied}
-        >
-          {savingApplied ? 'Сохраняем…' : 'Я уже откликнулся'}
-        </button>
-      ) : null}
-    </>
-  );
-}
-
-interface ActionButtonsProps {
-  readonly alreadyApplied: boolean;
-  readonly savingApplied: boolean;
-  readonly onOpenResponses?: () => void;
-  readonly onToggleSchedule?: () => void;
-  readonly externalOpened: boolean;
-  readonly onApplyExternal: () => void;
-  readonly onConfirmSent: () => void;
-  readonly onConfirmAlreadyApplied?: () => void;
-  readonly onOpenNetworking?: () => void;
-  readonly onDiscussWithConsultant?: () => void;
-  readonly onOpenInfo: () => void;
-  readonly onOpenPitch: () => void;
-}
-
 function VacancyActionButtons({
   alreadyApplied,
+  applicationArchived,
   savingApplied,
   onOpenResponses,
+  onOpenArchive,
   onToggleSchedule,
   externalOpened,
   onApplyExternal,
@@ -402,33 +370,20 @@ function VacancyActionButtons({
 }: ActionButtonsProps) {
   return (
     <div className="action-row vacancies-detail-actions">
-      {alreadyApplied ? (
-        <AppliedActions onOpenResponses={onOpenResponses} onToggleSchedule={onToggleSchedule} />
-      ) : (
-        <NotAppliedActions
-          savingApplied={savingApplied}
-          externalOpened={externalOpened}
-          onApplyExternal={onApplyExternal}
-          onConfirmSent={onConfirmSent}
-          onConfirmAlreadyApplied={onConfirmAlreadyApplied}
-        />
-      )}
+      <VacancyStatusActions
+        alreadyApplied={alreadyApplied}
+        applicationArchived={applicationArchived}
+        savingApplied={savingApplied}
+        onOpenResponses={onOpenResponses}
+        onOpenArchive={onOpenArchive}
+        onToggleSchedule={onToggleSchedule}
+        externalOpened={externalOpened}
+        onApplyExternal={onApplyExternal}
+        onConfirmSent={onConfirmSent}
+        onConfirmAlreadyApplied={onConfirmAlreadyApplied}
+      />
 
-      {onDiscussWithConsultant ? (
-        <button
-          type="button"
-          className="btn btn-secondary action-btn"
-          onClick={onDiscussWithConsultant}
-        >
-          Обсудить с консультантом
-        </button>
-      ) : null}
-
-      {onOpenNetworking ? (
-        <button type="button" className="btn btn-secondary action-btn" onClick={onOpenNetworking}>
-          Нетворкинг
-        </button>
-      ) : null}
+      <VacancyMoreActions onDiscussWithConsultant={onDiscussWithConsultant} onOpenNetworking={onOpenNetworking} />
 
       <button type="button" className="btn btn-secondary action-btn" onClick={onOpenInfo}>
         Подробнее
@@ -438,6 +393,42 @@ function VacancyActionButtons({
         Сопроводительное письмо
       </button>
     </div>
+  );
+}
+
+function VacancyStatusActions(
+  props: Pick<
+    ActionButtonsProps,
+    | 'alreadyApplied'
+    | 'applicationArchived'
+    | 'savingApplied'
+    | 'onOpenResponses'
+    | 'onOpenArchive'
+    | 'onToggleSchedule'
+    | 'externalOpened'
+    | 'onApplyExternal'
+    | 'onConfirmSent'
+    | 'onConfirmAlreadyApplied'
+  >,
+) {
+  if (props.alreadyApplied) {
+    return (
+      <AppliedActions
+        applicationArchived={props.applicationArchived}
+        onOpenResponses={props.onOpenResponses}
+        onOpenArchive={props.onOpenArchive}
+        onToggleSchedule={props.onToggleSchedule}
+      />
+    );
+  }
+  return (
+    <NotAppliedActions
+      savingApplied={props.savingApplied}
+      externalOpened={props.externalOpened}
+      onApplyExternal={props.onApplyExternal}
+      onConfirmSent={props.onConfirmSent}
+      onConfirmAlreadyApplied={props.onConfirmAlreadyApplied}
+    />
   );
 }
 
@@ -520,6 +511,7 @@ function useVacancyRowState({
   item,
   now,
   applications,
+  archivedApplicationClusterIds,
   onMarkAlreadyApplied,
   onScheduleInterview,
 }: VacancyRowProps) {
@@ -529,6 +521,7 @@ function useVacancyRowState({
   const interviewState = useVacancyRowInterview(cluster, onScheduleInterview);
   const appliedState = useVacancyRowApplied(cluster, onMarkAlreadyApplied);
   const application = applications?.byCluster.get(cluster.id);
+  const applicationArchived = archivedApplicationClusterIds?.has(cluster.id) ?? false;
 
   // B341: открытие сайта ещё не отклик — отмечаем только по подтверждению.
   const [externalOpened, setExternalOpened] = useState(false);
@@ -543,7 +536,8 @@ function useVacancyRowState({
   return {
     age: vacancyAge(cluster, now),
     trust: vacancyTrustSignals(cluster, now),
-    alreadyApplied: application?.status === 'applied',
+    alreadyApplied: applicationArchived || application?.status === 'applied',
+    applicationArchived,
     infoOpen,
     setInfoOpen,
     pitchOpen,
@@ -675,8 +669,10 @@ function buildActionButtonsProps(
   const { interviewState, appliedState } = rowState;
   return {
     alreadyApplied: rowState.alreadyApplied,
+    applicationArchived: rowState.applicationArchived,
     savingApplied: appliedState.savingApplied,
     onOpenResponses: rowProps.onOpenResponses,
+    onOpenArchive: rowProps.onOpenArchive,
     onToggleSchedule: rowProps.onScheduleInterview
       ? () => interviewState.setScheduleOpen((prev) => !prev)
       : undefined,
@@ -777,6 +773,7 @@ export function VacancyRow(props: VacancyRowProps) {
         explanation={explanation}
         isSelected={isSelected}
         alreadyApplied={rowState.alreadyApplied}
+        applicationArchived={rowState.applicationArchived}
         age={rowState.age}
         trust={rowState.trust}
         onSelect={onSelect}

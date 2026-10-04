@@ -16,6 +16,7 @@ export default defineConfig({
       // in this tree.
       '**/.claude/worktrees/**',
       '**/prototypes/**',
+      '**/output/**',
       '**/node_modules/**',
       '**/dist/**',
     ],
