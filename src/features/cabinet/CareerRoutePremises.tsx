@@ -6,8 +6,7 @@ import {
 
 /**
  * Предпосылки маршрута: роль, география и формат — то, из чего собирается
- * поисковый запрос. Блок переехал сюда вместе с «Поиском», который стал
- * кампанией из макета «Пульт» (B179).
+ * поисковый запрос (B366: живут в панели фильтров «Вакансий»).
  */
 export function CareerRoutePremises({
   targetRole,
@@ -16,14 +15,14 @@ export function CareerRoutePremises({
   editDisabled = false,
   onEdit,
 }: {
-  targetRole?: string;
-  regions: readonly CandidateRegion[];
-  workMode?: AccountSnapshot['profile']['workMode'];
-  editDisabled?: boolean;
-  onEdit: () => void;
+  readonly targetRole?: string;
+  readonly regions: readonly CandidateRegion[];
+  readonly workMode?: AccountSnapshot['profile']['workMode'];
+  readonly editDisabled?: boolean;
+  readonly onEdit: () => void;
 }) {
   return (
-    <section className="career-route-premises" aria-labelledby="career-route-premises-title">
+    <section className="career-route-premises" aria-labelledby="career-route-premises-title" lang="ru">
       <header>
         <div>
           <span className="career-cabinet-kicker">Условия поиска</span>

@@ -156,8 +156,8 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
   }
   const landmark = {
     Сегодня: page.locator('.career-today'),
-    // C68 вернул шаг «Роль» на экран кампании: там правятся роль, регион и формат.
-    Роль: page.locator('.career-campaign').first(),
+    // B366: шаг «Роль» открывает экран «Вакансии» с фокусом на фильтре ролей.
+    Роль: page.locator('.vacancies-content').first(),
     Вакансии: page.locator('.vac-list-item').first(),
   }[label];
   await expect(landmark).toBeVisible();
@@ -244,7 +244,7 @@ test.describe('B232 readability gate', () => {
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Роль', '.career-campaign'],
+      ['Роль', '.vacancies-screen'],
       ['Подборка', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
       ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],

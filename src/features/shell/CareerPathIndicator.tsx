@@ -112,7 +112,7 @@ function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
         <button
           type="button"
           className="career-quiet-button career-path-mobile-role"
-          onClick={() => onNavigate(roleStep.destination)}
+          onClick={() => onNavigate(roleStep.destination, roleStep.navigationOptions)}
           aria-label={`${roleStep.label}. ${roleStep.state === 'done' ? 'Готово' : roleStep.reason}`}
         >
           Настроить роль
