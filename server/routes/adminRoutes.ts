@@ -16,6 +16,7 @@ import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
 import { registerLinkedinPoolRoutes } from './linkedinPoolRoutes';
+import { cancelFootprintRunForCandidate } from '../osint/candidateFootprintWorker';
 import {
   adminVacancyQuerySchema,
   adminAuditQuerySchema,
@@ -120,8 +121,13 @@ async function handleDeleteUser(deps: RouteDeps, request: FastifyRequest, reply:
   if (!principal) return;
   const { userId } = request.params as { userId: string };
   try {
+    const user = deps.authService.getUser?.(userId);
     if (deps.authService.deleteUserByAdmin) {
       deps.authService.deleteUserByAdmin(userId, principal);
+    }
+    if (user?.candidateId) {
+      cancelFootprintRunForCandidate(user.candidateId);
+      deps.candidateReputationRepo?.deleteFootprintAuditsByCandidateId(user.candidateId);
     }
     return { data: { success: true }, meta: { requestId: request.id } };
   } catch (err: unknown) {

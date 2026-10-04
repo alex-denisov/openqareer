@@ -14,6 +14,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { cancelFootprintRunForUser } from '../osint/candidateFootprintWorker';
 
 const postConsentSchema = z.object({
   versionId: z.string().min(1),
@@ -186,6 +187,10 @@ async function handleDeleteConsent(
     );
   }
 
+  if (capability === 'digital_footprint') {
+    cancelFootprintRunForUser(userId);
+    deps.candidateReputationRepo?.deleteFootprintAuditsByUserId(userId);
+  }
   const consent = deps.capabilityConsentStore.revokeConsent(userId, capability);
   return {
     data: {

@@ -8,7 +8,9 @@ import type {
   ReputationOverallStatus,
   ReputationRiskItem,
 } from '../../shared/candidateReputation';
+import type { CandidateFootprintAudit, CandidateFootprintFinding, FootprintReview } from '../../shared/candidateFootprint';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
+import { SealedText } from './sealedText';
 
 export const CANDIDATE_REPUTATION_AUDITS_SCHEMA = `
 CREATE TABLE IF NOT EXISTS candidate_reputation_audits (
@@ -25,6 +27,17 @@ CREATE TABLE IF NOT EXISTS candidate_reputation_audits (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_candidate_reputation_audits_candidate
   ON candidate_reputation_audits(candidate_id, started_at);
+`;
+
+export const CANDIDATE_FOOTPRINT_AUDITS_SCHEMA = `
+CREATE TABLE IF NOT EXISTS candidate_footprint_audits (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  payload_cipher TEXT NOT NULL
+) STRICT;
+CREATE INDEX IF NOT EXISTS idx_candidate_footprint_audits_candidate
+  ON candidate_footprint_audits(candidate_id, started_at);
 `;
 
 const CANDIDATE_REPUTATION_AUDITS_SCHEMA_WITH_FK = CANDIDATE_REPUTATION_AUDITS_SCHEMA.replace(
@@ -45,9 +58,38 @@ interface CandidateReputationAuditRow {
   completed_at: string | null;
 }
 
+interface CandidateFootprintAuditRow {
+  readonly id: string;
+  readonly candidate_id: string;
+  readonly started_at: string;
+  readonly payload_cipher: string;
+}
+
+function footprintAssociatedData(candidateId: string, auditId: string): string {
+  return `candidate-footprint:${candidateId}:${auditId}`;
+}
+
+function openFootprintAudit(
+  sealedText: SealedText,
+  row: CandidateFootprintAuditRow,
+): CandidateFootprintAudit {
+  const opened: unknown = JSON.parse(
+    sealedText.open(row.payload_cipher, footprintAssociatedData(row.candidate_id, row.id)),
+  );
+  if (
+    !opened || typeof opened !== 'object' ||
+    (opened as CandidateFootprintAudit).id !== row.id ||
+    (opened as CandidateFootprintAudit).candidateId !== row.candidate_id
+  ) {
+    throw new Error('candidate footprint payload does not match its row');
+  }
+  return opened as CandidateFootprintAudit;
+}
+
 export type CandidateReputationRepoOptions =
   | DatabaseSync
-  | { databasePath: string };
+  | { databasePath: string; encryptionKey?: Buffer }
+  | { database: DatabaseSync; encryptionKey: Buffer };
 
 function parseJsonArray<T>(raw: string): T[] {
   try {
@@ -104,11 +146,16 @@ function auditToParams(audit: CandidateReputationAudit): SQLInputValue[] {
 
 export class SqliteCandidateReputationRepository {
   private readonly database: DatabaseSync;
+  private readonly sealedText?: SealedText;
 
   constructor(options: CandidateReputationRepoOptions) {
     if (options instanceof DatabaseSync) {
       this.database = options;
+    } else if ('database' in options) {
+      this.database = options.database;
+      this.sealedText = new SealedText(options.encryptionKey);
     } else {
+      if (options.encryptionKey) this.sealedText = new SealedText(options.encryptionKey);
       if (options.databasePath !== ':memory:') {
         mkdirSync(dirname(options.databasePath), { recursive: true });
       }
@@ -119,6 +166,7 @@ export class SqliteCandidateReputationRepository {
     }
     this.database.exec('PRAGMA foreign_keys = ON;');
     this.database.exec(CANDIDATE_REPUTATION_AUDITS_SCHEMA);
+    this.database.exec(CANDIDATE_FOOTPRINT_AUDITS_SCHEMA);
     const tableSql = this.database
       .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_reputation_audits'")
       .get() as { sql?: string } | undefined;
@@ -229,6 +277,81 @@ export class SqliteCandidateReputationRepository {
     return rows.map(toAudit).map((audit) =>
       options?.trustedOnly ? sanitizeUntrustedSafeScore(audit) : audit,
     );
+  }
+
+  saveFootprintAudit(audit: CandidateFootprintAudit): void {
+    if (!this.sealedText) throw new Error('candidate footprint storage requires the data encryption key');
+    const payload = this.sealedText.seal(
+      JSON.stringify(audit),
+      footprintAssociatedData(audit.candidateId, audit.id),
+    );
+    this.database.prepare(`
+      INSERT OR REPLACE INTO candidate_footprint_audits
+        (id, candidate_id, started_at, payload_cipher)
+      VALUES (?, ?, ?, ?)
+    `).run(audit.id, audit.candidateId, audit.startedAt, payload);
+  }
+
+  getLatestFootprintAudit(candidateId: string): CandidateFootprintAudit | null {
+    if (!this.sealedText) throw new Error('candidate footprint storage requires the data encryption key');
+    const row = this.database.prepare(`
+      SELECT id, candidate_id, started_at, payload_cipher
+      FROM candidate_footprint_audits
+      WHERE candidate_id = ?
+      ORDER BY started_at DESC, id DESC
+      LIMIT 1
+    `).get(candidateId) as unknown as CandidateFootprintAuditRow | undefined;
+    return row ? openFootprintAudit(this.sealedText, row) : null;
+  }
+
+  listFootprintAudits(candidateId: string): readonly CandidateFootprintAudit[] {
+    if (!this.sealedText) throw new Error('candidate footprint storage requires the data encryption key');
+    const rows = this.database.prepare(`
+      SELECT id, candidate_id, started_at, payload_cipher
+      FROM candidate_footprint_audits
+      WHERE candidate_id = ?
+      ORDER BY started_at ASC, id ASC
+    `).all(candidateId) as unknown as readonly CandidateFootprintAuditRow[];
+    return rows.map((row) => openFootprintAudit(this.sealedText!, row));
+  }
+
+  updateFootprintFindingReview(
+    candidateId: string,
+    findingId: string,
+    review: FootprintReview,
+  ): CandidateFootprintAudit | null {
+    const audit = this.getLatestFootprintAudit(candidateId);
+    if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;
+    const findings: readonly CandidateFootprintFinding[] = audit.findings.map((finding) =>
+      finding.id === findingId ? {
+        ...finding,
+        review,
+        match: review === 'confirmed_self' ? 'confirmed_self'
+          : review === 'not_self' ? 'not_self' : finding.automatedMatch,
+      } : finding,
+    );
+    const updated = { ...audit, findings };
+    this.saveFootprintAudit(updated);
+    return updated;
+  }
+
+  deleteFootprintAuditsByCandidateId(candidateId: string): number {
+    return Number(this.database.prepare(
+      'DELETE FROM candidate_footprint_audits WHERE candidate_id = ?',
+    ).run(candidateId).changes);
+  }
+
+  deleteFootprintAuditsByUserId(userId: string): number {
+    const hasUsers = this.database.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'",
+    ).get() !== undefined;
+    if (!hasUsers) return this.deleteFootprintAuditsByCandidateId(userId);
+    return Number(this.database.prepare(`
+      DELETE FROM candidate_footprint_audits
+      WHERE candidate_id = ? OR candidate_id IN (
+        SELECT candidate_id FROM users WHERE id = ? AND candidate_id IS NOT NULL
+      )
+    `).run(userId, userId).changes);
   }
 
   close(): void {

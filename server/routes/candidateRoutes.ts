@@ -49,6 +49,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { cancelFootprintRunForCandidate } from '../osint/candidateFootprintWorker';
 import {
   assessmentIdSchema,
   candidateCreateSchema,
@@ -225,9 +226,11 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  cancelFootprintRunForCandidate(candidate.id);
   deps.capabilityConsentStore?.deleteForCandidate(candidate.id);
-  candidateStore.deleteCandidate(candidate.id);
+  candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
+  candidateStore.deleteCandidate(candidate.id);
   recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
   recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);
   return reply.code(204).send();
@@ -249,6 +252,8 @@ const handleExportCandidate: Handler = async (
       // Keep the singular key for clients that have not migrated yet.
       reputationAudit:
         candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
+      footprintAudits:
+        candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
     },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };

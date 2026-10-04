@@ -248,7 +248,8 @@ describe('ProfileScreenSurface — states', () => {
       />,
     );
     expect(auditHtml).not.toContain('sec-experience');
-    expect(auditHtml).toContain('career-reputation-surface');
+    expect(auditHtml).toContain('career-footprint-surface');
+    expect(auditHtml).toContain('Скоро: ждёт утверждения текста согласия');
   });
 
   it('renders languages with CEFR badge and certifications in their own section separate from courses (B265)', () => {
@@ -309,4 +310,3 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('Tech Academy');
   });
 });
-

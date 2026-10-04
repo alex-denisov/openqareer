@@ -10107,412 +10107,545 @@
   }
 }
 
-/* Candidate Reputation & Self-OSINT Surface (B224) */
-.career-reputation-surface {
+/* B367 — «Как вас видят»: план, честные статусы и кандидатские отметки. */
+.career-footprint-surface {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  box-sizing: border-box;
+  gap: var(--career-space-6);
+  inline-size: 100%;
+  min-inline-size: 0;
 }
 
-.career-reputation-header h2 {
-  margin: 0 0 6px;
-  font-size: var(--career-text-lg);
-  font-weight: 700;
+.career-footprint-header h2 {
+  margin: 0 0 var(--career-space-2);
   color: var(--career-text);
+  font-size: var(--career-text-xl);
+  font-weight: 700;
 }
 
-.career-reputation-intro {
+.career-footprint-header p,
+.career-footprint-section-heading p {
   margin: 0;
-  font-size: var(--career-text-sm);
   color: var(--career-text-soft);
-}
-
-.career-reputation-error-alert {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
-  border-radius: var(--career-radius-sm);
-  background: var(--career-danger-soft);
-  border: 1px solid var(--career-danger);
-  color: var(--career-danger);
-  font-size: var(--career-text-sm);
-}
-
-.career-reputation-unstarted-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 16px;
-  padding: 36px 24px;
-  border-radius: var(--career-radius-md);
-  border: 1px dashed var(--career-line-strong);
-  background: var(--career-surface);
-}
-
-.career-reputation-unstarted-header {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: var(--career-accent);
-}
-
-.career-reputation-unstarted-header h3 {
-  margin: 0;
-  font-size: var(--career-text-lg);
-  font-weight: 700;
-  color: var(--career-text);
-}
-
-.career-reputation-unstarted-desc {
-  max-width: 560px;
-  margin: 0;
   font-size: var(--career-text-sm);
   line-height: 1.5;
-  color: var(--career-text-soft);
 }
 
-.career-reputation-primary-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 10px 24px;
-  font-size: var(--career-text-md);
-  font-weight: 600;
-  border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-accent);
-  color: var(--career-accent-ink);
-  background: var(--career-accent);
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.1s ease;
-}
-
-.career-reputation-primary-button:hover:not(:disabled) {
-  filter: brightness(1.08);
-}
-
-.career-reputation-primary-button:focus-visible {
-  outline: 2px solid var(--career-accent);
-  outline-offset: 2px;
-}
-
-.career-reputation-primary-button:active:not(:disabled) {
-  transform: scale(0.98);
-}
-
-.career-reputation-primary-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.career-reputation-disclaimer {
-  max-width: 580px;
-  margin: 8px 0 0;
-  font-size: var(--career-text-xs);
-  line-height: 1.45;
-  color: var(--career-text-dim);
-}
-
-.career-reputation-running-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 40px 24px;
+.career-footprint-plan,
+.career-footprint-consent,
+.career-footprint-status-section,
+.career-footprint-finding,
+.career-footprint-empty-plan,
+.career-footprint-empty-results,
+.career-footprint-running,
+.career-footprint-loading,
+.career-footprint-delete-confirm {
+  min-inline-size: 0;
+  border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-md);
-  border: 1px solid var(--career-line);
   background: var(--career-surface);
-  color: var(--career-accent);
 }
 
-.career-reputation-running-card p {
-  margin: 0;
-  font-size: var(--career-text-sm);
-  color: var(--career-text-soft);
+.career-footprint-plan,
+.career-footprint-consent,
+.career-footprint-status-section {
+  padding: var(--career-space-5);
 }
 
-.career-reputation-results {
+.career-footprint-section-heading,
+.career-footprint-finding-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+}
+
+.career-footprint-section-heading h3,
+.career-footprint-status-section h3,
+.career-footprint-findings > h3,
+.career-footprint-consent h3 {
+  margin: 0 0 var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  font-weight: 700;
+}
+
+.career-footprint-count,
+.career-footprint-finding-date {
+  color: var(--career-text-dim);
+  font-family: var(--font-mono);
+  font-size: var(--career-text-xs);
+}
+
+.career-footprint-query-list,
+.career-footprint-status-list,
+.career-footprint-findings ul,
+.career-footprint-consent ul {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  margin: var(--career-space-4) 0 0;
+  padding: 0;
+  border: 0;
+  list-style: none;
 }
 
-.career-reputation-score-banner {
+.career-footprint-query-list {
+  position: relative;
+}
+
+.career-footprint-query {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+  min-inline-size: 0;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  cursor: pointer;
+}
+
+.career-footprint-query:hover:not(.is-unavailable) {
+  border-color: var(--career-line-strong);
+  background: var(--career-surface-raised);
+}
+
+.career-footprint-query:focus-within,
+.career-footprint-ownership:focus-within {
+  outline: 2px solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-footprint-query input,
+.career-footprint-ownership input {
+  flex: none;
+  inline-size: var(--career-space-5);
+  block-size: var(--career-space-5);
+  accent-color: var(--career-accent);
+}
+
+.career-footprint-query-copy {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  padding: 18px 22px;
-  border-radius: var(--career-radius-md);
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  inline-size: 100%;
+  overflow-wrap: anywhere;
+  font-size: var(--career-text-sm);
 }
 
-.career-reputation-score-banner.is-safe {
-  border-color: var(--career-success);
-  background: var(--career-success-soft);
+.career-footprint-query-copy small {
+  color: var(--career-warning);
+  font-size: var(--career-text-xs);
 }
 
-.career-reputation-score-banner.is-attention {
-  border-color: var(--career-warning);
-  background: var(--career-warning-soft);
+.career-footprint-query.is-unavailable {
+  color: var(--career-text-soft);
+  cursor: not-allowed;
 }
 
-.career-reputation-score-banner.is-critical {
-  border-color: var(--career-danger);
-  background: var(--career-danger-soft);
-}
-
-.career-reputation-status-badge {
+.career-footprint-empty-plan,
+.career-footprint-empty-results,
+.career-footprint-running,
+.career-footprint-loading {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: var(--career-text-md);
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
 }
 
-.career-reputation-score-banner.is-safe .career-reputation-status-badge {
-  color: var(--career-success);
+.career-footprint-empty-plan p,
+.career-footprint-empty-results p {
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 
-.career-reputation-score-banner.is-attention .career-reputation-status-badge {
+.career-footprint-disclosure {
+  margin: calc(var(--career-space-4) * -1) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-footprint-consent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+}
+
+.career-footprint-consent.is-pending {
+  flex-direction: row;
+  align-items: center;
+  border-color: var(--career-warning);
+  background: var(--career-warning-soft);
   color: var(--career-warning);
 }
 
-.career-reputation-score-banner.is-critical .career-reputation-status-badge {
-  color: var(--career-danger);
+.career-footprint-consent p {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
 }
 
-.career-reputation-score-wrap {
+.career-footprint-consent ul {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
+.career-footprint-consent li {
+  min-inline-size: 0;
+  padding-inline-start: var(--career-space-4);
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-ownership {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+  padding-block: var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.career-footprint-ownership input {
+  margin-block-start: var(--career-space-1);
+}
+
+.career-footprint-actions,
+.career-footprint-delete-confirm > div,
+.career-footprint-review-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: var(--career-text-md);
-  color: var(--career-text);
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
 }
 
-.career-reputation-score-value {
-  font-size: var(--career-text-lg);
-  font-weight: 800;
-  color: var(--career-text);
-}
-
-.career-reputation-recheck-button {
+.career-footprint-primary-button,
+.career-footprint-secondary-button,
+.career-footprint-review-actions button,
+.career-footprint-delete-trigger,
+.career-footprint-delete-confirm button,
+.career-footprint-alert button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 6px 14px;
-  font-size: var(--career-text-sm);
-  font-weight: 600;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  max-inline-size: 100%;
+  padding: var(--career-space-2) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-line);
   color: var(--career-text);
   background: var(--career-surface-raised);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  text-align: start;
+  overflow-wrap: anywhere;
   cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
 }
 
-.career-reputation-recheck-button:hover:not(:disabled) {
+.career-footprint-primary-button {
+  border-color: var(--career-accent);
+  color: var(--career-accent-ink);
+  background: var(--career-accent);
+}
+
+.career-footprint-primary-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.career-footprint-secondary-button:hover:not(:disabled),
+.career-footprint-review-actions button:hover:not(:disabled),
+.career-footprint-delete-confirm button:hover:not(:disabled),
+.career-footprint-alert button:hover:not(:disabled) {
   border-color: var(--career-accent);
   background: var(--career-bg-elevated);
 }
 
-.career-reputation-recheck-button:focus-visible {
+.career-footprint-primary-button:focus-visible,
+.career-footprint-secondary-button:focus-visible,
+.career-footprint-review-actions button:focus-visible,
+.career-footprint-delete-trigger:focus-visible,
+.career-footprint-delete-confirm button:focus-visible,
+.career-footprint-alert button:focus-visible,
+.career-footprint-hidden summary:focus-visible,
+.career-footprint-finding a:focus-visible {
   outline: 2px solid var(--career-accent);
-  outline-offset: 2px;
+  outline-offset: var(--career-space-1);
 }
 
-.career-reputation-recheck-button:active:not(:disabled) {
-  transform: scale(0.97);
+.career-footprint-primary-button:active:not(:disabled),
+.career-footprint-secondary-button:active:not(:disabled),
+.career-footprint-review-actions button:active:not(:disabled),
+.career-footprint-delete-confirm button:active:not(:disabled) {
+  transform: translateY(var(--career-space-1));
 }
 
-.career-reputation-recheck-button:disabled {
+.career-footprint-primary-button:disabled,
+.career-footprint-secondary-button:disabled,
+.career-footprint-review-actions button:disabled,
+.career-footprint-delete-confirm button:disabled,
+.career-footprint-alert button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.career-reputation-section h3 {
-  margin: 0 0 12px;
-  font-size: var(--career-text-md);
-  font-weight: 700;
-  color: var(--career-text);
+.career-footprint-review-actions button[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
 }
 
-.career-reputation-empty-box {
+.career-footprint-delete-trigger {
+  border-color: var(--career-danger);
+  color: var(--career-danger);
+  background: transparent;
+}
+
+.career-footprint-delete-confirm {
   display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border-color: var(--career-danger);
+}
+
+.career-footprint-delete-confirm p {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
+.career-footprint-delete-confirm button:last-child {
+  border-color: var(--career-danger);
+  color: var(--career-danger);
+}
+
+.career-footprint-running {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+}
+
+.career-footprint-running span,
+.career-footprint-loading {
+  color: var(--career-text-soft);
+}
+
+.career-footprint-status-section h3,
+.career-footprint-findings > h3 {
+  margin-block-end: var(--career-space-3);
+}
+
+.career-footprint-status-list {
+  margin-block-start: 0;
+}
+
+.career-footprint-status-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-  border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+  min-inline-size: 0;
+  padding-block: var(--career-space-2);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-footprint-status-row:last-child {
+  border-block-end: 0;
+}
+
+.career-footprint-status-name,
+.career-footprint-status-label {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-status-label {
+  color: var(--career-text-dim);
+  text-align: end;
+}
+
+.career-footprint-status-row.is-checked {
+  color: var(--career-success);
+}
+
+.career-footprint-status-row.is-pending {
+  color: var(--career-accent);
+}
+
+.career-footprint-status-row.is-error,
+.career-footprint-status-row.is-unavailable {
+  color: var(--career-warning);
+}
+
+.career-footprint-findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-footprint-finding-group {
+  min-inline-size: 0;
+}
+
+.career-footprint-finding-group h4 {
+  margin: 0 0 var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 700;
+}
+
+.career-footprint-finding-group ul,
+.career-footprint-hidden ul {
+  margin-block-start: 0;
+}
+
+.career-footprint-finding {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+}
+
+.career-footprint-finding-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.career-footprint-finding-heading strong {
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-finding-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+}
+
+.career-footprint-finding-date,
+.career-footprint-finding-sources {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-finding-detail {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-finding-sources {
+  margin: 0;
+}
+
+.career-footprint-finding a {
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  color: var(--career-accent);
+  font-size: var(--career-text-sm);
+  text-decoration: underline;
+  text-underline-offset: var(--career-space-1);
+  overflow-wrap: anywhere;
+}
+
+.career-footprint-notice {
+  margin: 0;
   color: var(--career-success);
   font-size: var(--career-text-sm);
 }
 
-.career-reputation-empty-box.is-unscanned {
-  color: var(--career-text-dim);
-}
-
-.career-reputation-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.career-reputation-item {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px 18px;
-  border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
-}
-
-.career-reputation-item.is-critical {
-  border-color: var(--career-danger);
-}
-
-.career-reputation-item.is-warning {
-  border-color: var(--career-warning);
-}
-
-.career-reputation-item-header {
+.career-footprint-alert {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.career-reputation-item-title {
-  font-size: var(--career-text-md);
-  font-weight: 700;
-  color: var(--career-text);
-}
-
-.career-reputation-pill {
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  padding: 2px 8px;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-danger);
   border-radius: var(--career-radius-sm);
-  border: 1px solid currentColor;
-}
-
-.career-reputation-pill.is-critical {
   color: var(--career-danger);
   background: var(--career-danger-soft);
-}
-
-.career-reputation-pill.is-warning {
-  color: var(--career-warning);
-  background: var(--career-warning-soft);
-}
-
-.career-reputation-platform-pill {
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--career-radius-sm);
-  border: 1px solid var(--career-line);
-  color: var(--career-text-soft);
-  background: var(--career-surface-raised);
-}
-
-.career-reputation-discrepancy-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
   font-size: var(--career-text-sm);
-  color: var(--career-text-soft);
 }
 
-.career-reputation-discrepancy-grid code {
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--career-bg-elevated);
-  color: var(--career-text);
-  font-size: var(--career-text-xs);
+.career-footprint-alert span {
+  flex: 1 1 var(--career-space-8);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 
-.career-reputation-sublabel {
-  color: var(--career-text-dim);
-  font-weight: 600;
+.career-footprint-hidden {
+  min-inline-size: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  padding-block-start: var(--career-space-3);
 }
 
-.career-reputation-excerpt {
-  margin: 0;
-  padding: 8px 12px;
-  border-left: 3px solid var(--career-accent);
-  background: var(--career-bg-elevated);
-  font-size: var(--career-text-sm);
-  font-style: italic;
-  color: var(--career-text);
-}
-
-.career-reputation-source-link {
-  font-size: var(--career-text-xs);
-  color: var(--career-accent);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.career-reputation-source-link:hover {
-  filter: brightness(1.15);
-}
-
-.career-reputation-source-link:focus-visible {
-  outline: 2px solid var(--career-accent);
-}
-
-.career-reputation-remediation-box {
+.career-footprint-hidden summary {
+  min-block-size: var(--career-target-min);
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
-  border: 1px solid var(--career-line);
-  font-size: var(--career-text-xs);
   color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  cursor: pointer;
 }
 
-.career-reputation-remediation-box.is-risk {
-  background: var(--career-warning-soft);
-  border-color: var(--career-warning);
-  color: var(--career-warning);
-}
-
-.career-reputation-footer {
-  margin-top: 12px;
-  font-size: var(--career-text-xs);
-  color: var(--career-text-dim);
-  line-height: 1.4;
+.career-sr-only {
+  position: absolute;
+  inline-size: var(--career-space-1);
+  block-size: var(--career-space-1);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 @media (max-width: 768px) {
-  .career-reputation-score-banner {
-    flex-direction: column;
-    align-items: flex-start;
+  .career-footprint-status-row {
+    grid-template-columns: auto minmax(0, 1fr);
   }
-  .career-reputation-discrepancy-grid {
-    grid-template-columns: 1fr;
+  .career-footprint-status-label {
+    grid-column: 2;
+    text-align: start;
+  }
+  .career-footprint-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .career-footprint-actions > * {
+    inline-size: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-footprint-surface .spin {
+    animation: none;
   }
 }
 

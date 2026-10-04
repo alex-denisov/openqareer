@@ -18,6 +18,8 @@ export default defineConfig({
       '**/prototypes/**',
       '**/node_modules/**',
       '**/dist/**',
+      // Игнорируем изолированный набор зависимостей и логи гейтов из worktree.
+      '**/output/**',
     ],
     coverage: {
       provider: 'v8',

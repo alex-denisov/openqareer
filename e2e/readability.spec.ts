@@ -599,10 +599,10 @@ test.describe('B232 readability gate', () => {
     await languagesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
 
-    // Sources (reputation audit) unscanned state: click tab «Проверка по источникам»
-    await page.getByRole('button', { name: 'Проверка по источникам' }).click();
+    // B367: self-audit tab remains behind the consent-approval gate.
+    await page.getByRole('button', { name: 'Как вас видят' }).click();
     const sourcesHeading = page.getByRole('heading', {
-      name: 'Что о вас находят открытые источники',
+      name: 'Как вас видят',
       exact: true,
     });
     await expect(sourcesHeading).toBeVisible();

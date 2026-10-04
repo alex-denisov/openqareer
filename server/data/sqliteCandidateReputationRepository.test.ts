@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import type { CandidateReputationAudit } from '../../shared/candidateReputation';
+import type { CandidateFootprintAudit } from '../../shared/candidateFootprint';
 import { SqliteCandidateReputationRepository } from './sqliteCandidateReputationRepository';
 
 describe('SqliteCandidateReputationRepository', () => {
@@ -136,5 +137,53 @@ describe('SqliteCandidateReputationRepository', () => {
     db.exec("DELETE FROM candidates WHERE id = 'cand-100'");
 
     expect(repo.getLatestAudit('cand-100')).toBeNull();
+  });
+
+  it('encrypts footprint receipts and updates review only inside the candidate-owned audit', () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateReputationRepository({
+      database: db,
+      encryptionKey: Buffer.alloc(32, 9),
+    });
+    const footprint: CandidateFootprintAudit = {
+      id: 'footprint-1',
+      candidateId: 'cand-100',
+      state: 'completed',
+      selectedQueryIds: ['plan-id'],
+      adapterStatuses: [],
+      findings: [{
+        id: 'finding-1',
+        adapter: 'exa',
+        kind: 'mention',
+        url: 'https://public.example/profile',
+        title: 'Maria profile',
+        detail: 'Public project page',
+        match: 'likely_self',
+        observedAt: '2026-10-04T12:00:00.000Z',
+        receipt: { method: 'POST', source: 'Exa', query: 'Maria Petrova Analytical Engines' },
+        receipts: [{ method: 'POST', source: 'Exa', query: 'Maria Petrova Analytical Engines' }],
+        sources: ['exa'],
+        automatedMatch: 'likely_self',
+        review: 'unreviewed',
+      }],
+      ownershipConfirmedAt: '2026-10-04T12:00:00.000Z',
+      startedAt: '2026-10-04T12:00:00.000Z',
+      completedAt: '2026-10-04T12:00:02.000Z',
+    };
+
+    repo.saveFootprintAudit(footprint);
+    const row = db.prepare(
+      'SELECT payload_cipher FROM candidate_footprint_audits WHERE id = ?',
+    ).get('footprint-1') as { payload_cipher: string };
+    expect(row.payload_cipher).not.toContain('Maria Petrova');
+    expect(repo.getLatestFootprintAudit('cand-100')).toEqual(footprint);
+
+    expect(repo.updateFootprintFindingReview('cand-100', 'finding-1', 'confirmed_self')?.findings[0]?.review)
+      .toBe('confirmed_self');
+    const cleared = repo.updateFootprintFindingReview('cand-100', 'finding-1', 'unreviewed');
+    expect(cleared?.findings[0]).toMatchObject({ review: 'unreviewed', match: 'likely_self' });
+    expect(repo.updateFootprintFindingReview('cand-other', 'finding-1', 'not_self')).toBeNull();
+    expect(repo.deleteFootprintAuditsByCandidateId('cand-100')).toBe(1);
+    expect(repo.getLatestFootprintAudit('cand-100')).toBeNull();
   });
 });

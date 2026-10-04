@@ -8,7 +8,7 @@ import {
   type ImportedSourceSummary,
 } from '../coach/coachApi';
 import { applyRoutePremises } from '../cabinet/routePremises';
-import { CandidateReputationAuditView } from '../reputation/CandidateReputationAuditView';
+import { CandidateFootprintAuditView } from '../reputation/CandidateFootprintAuditView';
 import { normalizeCandidateRegions } from '../workspace/candidateRegions';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { ProfileAboutSection } from './ProfileAboutSection';
@@ -254,10 +254,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
       {tab === 'documents' ? (
         <ProfileDocumentMenu draft={draft} memory={memory} />
       ) : tab === 'audit' ? (
-        <CandidateReputationAuditView
-          candidateId={candidateId}
-          linkedInConnected={connections?.some((c) => c.platform === 'linkedin' && c.status === 'connected')}
-        />
+        <CandidateFootprintAuditView key={candidateId} candidateId={candidateId} />
       ) : (
         <>
           <ProfileAnchorNav />
