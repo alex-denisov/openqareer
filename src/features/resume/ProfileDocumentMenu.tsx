@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FileCode, FileText, Printer } from '@phosphor-icons/react';
+import { FileCode, FileText } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
 import { ResumeAtsView } from './ResumeAtsView';
 import { ResumeDocumentView } from './ResumeDocumentView';
@@ -9,8 +9,8 @@ import {
   formatResumeAsAtsText,
   resumeExportFileName,
   triggerFileDownload,
-  triggerResumePrint,
 } from './resumeExport';
+import { ResumePrintAction } from './ResumePrintAction';
 import { FORMAT_LABELS } from './resumeLabels';
 import { previewProjection, selectDocument } from './resumeStudioModel';
 import type { ResumeDraft, ResumeFormatMode } from './resumeTypes';
@@ -52,16 +52,7 @@ export function ProfileDocumentMenu({
           ))}
         </div>
         <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
-          {format === 'stanford-pdf' ? (
-            <button
-              type="button"
-              className="career-resume-export-button"
-              onClick={triggerResumePrint}
-            >
-              <Printer size={15} />
-              Печать / PDF
-            </button>
-          ) : null}
+          {format === 'stanford-pdf' ? <ResumePrintAction /> : null}
           {format === 'ats-text' ? (
             <button
               type="button"

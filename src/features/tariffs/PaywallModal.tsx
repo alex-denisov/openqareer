@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Check, X } from '@phosphor-icons/react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   TARIFF_BENEFITS,
   TARIFF_PLANS,
@@ -76,14 +77,7 @@ function PaywallHeader({ onClose }: { readonly onClose: () => void }) {
 }
 
 function useEscapeKey(isOpen: boolean, onClose: () => void) {
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  useEscapeLayer(onClose, isOpen);
 }
 
 function useDialogFocus(isOpen: boolean, modalRef: { current: HTMLDivElement | null }) {

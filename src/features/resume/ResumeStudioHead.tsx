@@ -1,4 +1,4 @@
-import { FloppyDisk, Printer, FileText, FileCode } from '@phosphor-icons/react';
+import { FloppyDisk, FileText, FileCode } from '@phosphor-icons/react';
 import { FORMAT_LABELS, VARIANT_LABELS, VARIANT_SHORT_LABELS } from './resumeLabels';
 import type { ResumeStatusSummary } from './resumeStudioModel';
 import type {
@@ -13,9 +13,9 @@ import {
   exportResumeAsJson,
   resumeExportFileName,
   triggerFileDownload,
-  triggerResumePrint,
 } from './resumeExport';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { ResumePrintAction } from './ResumePrintAction';
 
 interface ResumeStudioHeadProps {
   readonly variant: ResumeVariantId;
@@ -241,7 +241,6 @@ function formatMoment(value: string): string {
   }).format(parsed);
 }
 
-// eslint-disable-next-line max-lines-per-function
 function ResumeExportActions({
   document,
   draft,
@@ -267,34 +266,19 @@ function ResumeExportActions({
     <div className="career-resume-export-group" role="group" aria-label="Экспорт резюме">
       {format === 'stanford-pdf' ? (
         <CareerTooltip content="Распечатать или сохранить Stanford Resume в PDF">
-          <button
-            type="button"
-            className="career-resume-export-button"
-            onClick={triggerResumePrint}
-          >
-            <Printer size={15} />
-            Печать / PDF
-          </button>
+          <ResumePrintAction />
         </CareerTooltip>
       ) : null}
       {format === 'ats-text' ? (
         <CareerTooltip content="Скачать ровно тот ATS-текст, который показан ниже">
-          <button
-            type="button"
-            className="career-resume-export-button"
-            onClick={handleExportText}
-          >
+          <button type="button" className="career-resume-export-button" onClick={handleExportText}>
             <FileText size={15} />
             TXT (ATS)
           </button>
         </CareerTooltip>
       ) : null}
       <CareerTooltip content="Скачать структурированные данные резюме в JSON">
-        <button
-          type="button"
-          className="career-resume-export-button"
-          onClick={handleExportJson}
-        >
+        <button type="button" className="career-resume-export-button" onClick={handleExportJson}>
           <FileCode size={15} />
           JSON
         </button>

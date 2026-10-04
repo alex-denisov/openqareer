@@ -25,6 +25,7 @@ use serde::{Deserialize, Serialize};
 use sidecar_lifecycle::sweep_leftover_runtimes;
 use std::sync::Arc;
 use tauri::{AppHandle, Manager, State, Url};
+use tauri_plugin_fs::FsExt;
 use tunnel_manager::{TunnelConfig, TunnelManager, TunnelStatusReport};
 
 pub struct AppState {
@@ -187,6 +188,73 @@ async fn desktop_native_fetch(
         headers: response_headers,
         body,
     })
+}
+
+#[tauri::command]
+async fn print_resume(app: AppHandle) -> Result<bool, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "print_resume: main webview unavailable".to_string())?;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        window
+            .with_webview(move |webview| unsafe {
+                let view: &objc2_web_kit::WKWebView = &*webview.inner().cast();
+                let print_info = objc2_app_kit::NSPrintInfo::sharedPrintInfo();
+                let operation = view.printOperationWithPrintInfo(&print_info);
+                let _ = sender.send(operation.runOperation());
+            })
+            .map_err(|error| format!("print_resume: {error}"))?;
+        return receiver
+            .await
+            .map_err(|_| "print_resume: native print operation did not finish".to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("print_resume: native printing is unavailable on this platform".to_string())
+    }
+}
+
+#[tauri::command]
+async fn save_resume_pdf(app: AppHandle, path: String) -> Result<bool, String> {
+    if !std::path::Path::new(&path).is_absolute() || !path.to_ascii_lowercase().ends_with(".pdf") {
+        return Err("save_resume_pdf: choose an absolute PDF file path".to_string());
+    }
+    if !app.fs_scope().is_allowed(&path) {
+        return Err("save_resume_pdf: choose the destination in the save dialog".to_string());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let window = app
+            .get_webview_window("main")
+            .ok_or_else(|| "save_resume_pdf: main webview unavailable".to_string())?;
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        window
+            .with_webview(move |webview| unsafe {
+                let view: &objc2_web_kit::WKWebView = &*webview.inner().cast();
+                let print_info = objc2_app_kit::NSPrintInfo::sharedPrintInfo();
+                let native_view: &objc2_app_kit::NSView = &*(view as *const _ as *const _);
+                let destination = objc2_foundation::NSString::from_str(&path);
+                let operation = objc2_app_kit::NSPrintOperation::PDFOperationWithView_insideRect_toPath_printInfo(
+                    native_view,
+                    native_view.bounds(),
+                    &destination,
+                    &print_info,
+                );
+                let _ = sender.send(operation.runOperation());
+            })
+            .map_err(|error| format!("save_resume_pdf: {error}"))?;
+        return receiver
+            .await
+            .map_err(|_| "save_resume_pdf: PDF operation did not finish".to_string());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("save_resume_pdf: native PDF export is unavailable on this platform".to_string())
+    }
 }
 
 /// Opens the platform's own sign-in page in a window this application owns.
@@ -372,6 +440,8 @@ fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         // A reload of our own page destroys the interface that owned the
         // platform sign-in window, but not the window: it stayed on screen with
         // no control left that could close it (owner report, 2026-08-26).
@@ -389,6 +459,8 @@ fn main() {
             stop_tunnel,
             execute_local_action,
             desktop_native_fetch,
+            print_resume,
+            save_resume_pdf,
             bind_connector_account,
             open_connector_session,
             export_pool_session,

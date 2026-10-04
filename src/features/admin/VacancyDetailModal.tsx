@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   Buildings,
   Check,
@@ -231,15 +232,14 @@ function useAdminVacancy(vacancyId: string) {
 }
 
 export function VacancyDetailModal({ vacancyId, onClose }: { vacancyId: string; onClose: () => void }) {
+  useEscapeLayer(onClose);
   const { vacancy, error } = useAdminVacancy(vacancyId);
   return (
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <div
       className="admin-modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby="vacancy-modal-title"
-      onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}
     >
       <button type="button" className="admin-modal-backdrop" aria-label="Закрыть модальное окно" onClick={onClose} tabIndex={-1} />
       <div className="admin-modal admin-modal--large">

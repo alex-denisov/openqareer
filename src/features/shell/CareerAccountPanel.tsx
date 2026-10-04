@@ -44,6 +44,9 @@ import { buildFreshnessLine } from './buildFreshness';
 import { clearOutreachStore } from '../outreach/outreachTrackingStore';
 import { useBuildFreshness } from './useBuildFreshness';
 import { TimezoneSelect } from './TimezoneSelect';
+import { registerEscapeLayer } from './escapeLayers';
+import { triggerFileDownload } from '../resume/resumeExport';
+import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 
 interface CareerAccountPanelProps {
   initialUser?: AuthUser | null;
@@ -118,12 +121,7 @@ export function CareerAccountPanel({
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        onClose();
-        return;
-      }
+    const handleTab = (event: KeyboardEvent) => {
       if (event.key !== 'Tab' || !panel.current) return;
       const focusable = Array.from(
         panel.current.querySelectorAll<HTMLElement>(
@@ -141,12 +139,14 @@ export function CareerAccountPanel({
         first.focus();
       }
     };
-    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleTab);
     return () => {
-      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('keydown', handleTab);
       returnFocusTo?.focus();
     };
   }, [onClose]);
+
+  useEffect(() => registerEscapeLayer(onClose), [onClose]);
 
   useEffect(() => {
     setUser(initialUser);
@@ -176,7 +176,6 @@ export function CareerAccountPanel({
   async function submitAuth(event: React.FormEvent) {
     event.preventDefault();
     setError(undefined);
-    setNotice(undefined);
 
     if (mode === 'register') {
       // Check every field at once so the candidate fixes one form, not one
@@ -322,17 +321,16 @@ export function CareerAccountPanel({
   async function downloadExport() {
     setBusy(true);
     setError(undefined);
+    setNotice(undefined);
     try {
       const exported = await exportCandidateData();
-      const url = URL.createObjectURL(
-        new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }),
+      const path = await triggerFileDownload(
+        'openqareer-candidate-export.json',
+        JSON.stringify(exported, null, 2),
+        'application/json;charset=utf-8',
       );
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'openqareer-candidate-export.json';
-      link.click();
-      URL.revokeObjectURL(url);
-      setNotice('Экспорт подготовлен и передан браузеру.');
+      if (path) setNotice(`Сохранено: ${path}`);
+      else if (!isTauriEnvironment()) setNotice('Экспорт загружен в браузере.');
     } catch (reason) {
       setError(accountError(reason));
     } finally {
