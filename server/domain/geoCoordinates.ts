@@ -1,4 +1,19 @@
+import { gunzipSync } from 'node:zlib';
 import { isCountryName } from '../../shared/placeNames';
+import { GEONAMES_CITY_DATA_GZIP_BASE64 } from './geonamesCityData';
+
+type GeoNamesCityRow = readonly [countryCode: string, lat: number, lng: number, names: readonly string[]];
+type GeoNamesCountryRow = readonly [code: string, iso3: string, name: string];
+
+interface GeoNamesSnapshot {
+  readonly cities: readonly GeoNamesCityRow[];
+  readonly countries: readonly GeoNamesCountryRow[];
+}
+
+interface CityCandidate {
+  readonly countryCode: string;
+  readonly point: GeoPoint;
+}
 export interface GeoPoint {
   readonly lat: number;
   readonly lng: number;
@@ -131,9 +146,132 @@ const COUNTRY_COORDINATES: Readonly<Record<string, GeoPoint>> = {
 function normalizeGeoKey(text?: string): string {
   if (!text) return '';
   return text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]/gu, '')
-    .trim();
+    .normalize('NFKC')
+    .toLocaleLowerCase('ru-RU')
+    .replace(/ё/gu, 'е')
+    .replace(/\([^)]*\)/gu, ' ')
+    .split(/[;,|]/u, 1)[0]
+    .replace(/^(?:г(?:ород)?(?:\.|\s)+)\s*/u, '')
+    .replace(/\s+(?:м\.|метро|район|рай\.|округ|district|neighborhood)\b.*$/iu, '')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+const GEO_NAMES_DATA = JSON.parse(
+  gunzipSync(Buffer.from(GEONAMES_CITY_DATA_GZIP_BASE64.join(''), 'base64')).toString('utf8'),
+) as GeoNamesSnapshot;
+
+function buildCityIndex(rows: readonly GeoNamesCityRow[]): ReadonlyMap<string, readonly CityCandidate[]> {
+  const index = new Map<string, CityCandidate[]>();
+  for (const [countryCode, lat, lng, names] of rows) {
+    const candidate = { countryCode, point: { lat, lng } };
+    for (const name of names) {
+      const key = normalizeGeoKey(name);
+      if (!key) continue;
+      const candidates = index.get(key) ?? [];
+      candidates.push(candidate);
+      index.set(key, candidates);
+    }
+  }
+  return index;
+}
+
+const GEO_NAMES_CITY_INDEX = buildCityIndex(GEO_NAMES_DATA.cities);
+
+function buildCountryIndex(rows: readonly GeoNamesCountryRow[]): ReadonlyMap<string, string> {
+  const index = new Map<string, string>();
+  for (const [code, iso3, name] of rows) {
+    for (const alias of [code, iso3, name]) {
+      const key = normalizeGeoKey(alias);
+      if (key) index.set(key, code);
+    }
+  }
+  for (const [code, aliases] of Object.entries(LOCAL_COUNTRY_ALIASES)) {
+    for (const alias of aliases) index.set(normalizeGeoKey(alias), code);
+  }
+  return index;
+}
+
+const LOCAL_COUNTRY_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  AE: ['ОАЭ', 'Объединённые Арабские Эмираты', 'Объединенные Арабские Эмираты', 'UAE'],
+  AM: ['Армения'],
+  BY: ['Беларусь', 'Белоруссия'],
+  CA: ['Канада'],
+  CY: ['Кипр'],
+  DE: ['Германия'],
+  ES: ['Испания'],
+  FR: ['Франция'],
+  GB: ['Великобритания', 'Соединённое Королевство', 'Соединенное Королевство', 'UK'],
+  GE: ['Грузия'],
+  IE: ['Ирландия'],
+  IN: ['Индия'],
+  IT: ['Италия'],
+  KZ: ['Казахстан'],
+  NL: ['Нидерланды', 'Netherlands', 'The Netherlands'],
+  PL: ['Польша'],
+  PT: ['Португалия'],
+  RU: ['Россия', 'Российская Федерация'],
+  SG: ['Сингапур'],
+  US: ['США', 'Соединённые Штаты', 'Соединенные Штаты', 'Соединённые Штаты Америки', 'Соединенные Штаты Америки'],
+  UZ: ['Узбекистан'],
+};
+
+const GEO_NAMES_COUNTRY_INDEX = buildCountryIndex(GEO_NAMES_DATA.countries);
+
+const LEGACY_CITY_COORDINATES_BY_KEY = new Map(
+  Object.entries(CITY_COORDINATES).map(([name, point]) => [normalizeGeoKey(name), point] as const),
+);
+
+const LEGACY_CITY_COUNTRY_ALIASES: readonly (readonly [string, readonly string[]])[] = [
+  ['NL', ['amsterdam', 'амстердам', 'eindhoven', 'эйндховен', 'veldhoven', 'велдховен', 'utrecht', 'утрехт', 'rotterdam', 'роттердам', 'nijmegen', 'неймеген', 'thehague', 'гаага']],
+  ['DE', ['berlin', 'берлин', 'munich', 'мюнхен', 'frankfurt', 'франкфурт', 'hamburg', 'гамбург', 'cologne', 'кёльн', 'dusseldorf', 'дюссельдорф']],
+  ['GB', ['london', 'лондон', 'manchester', 'манчестер', 'cambridge', 'кембридж', 'edinburgh', 'эдинбург']],
+  ['AM', ['yerevan', 'ереван']],
+  ['GE', ['tbilisi', 'тбилиси']],
+  ['RS', ['belgrade', 'белград', 'novisad', 'новисад']],
+  ['CY', ['limassol', 'лимасол', 'лимассол', 'nicosia', 'никосия']],
+  ['AE', ['dubai', 'дубай', 'abudhabi', 'абудаби']],
+  ['KZ', ['almaty', 'алматы', 'astana', 'астана']],
+  ['PL', ['warsaw', 'варшава', 'krakow', 'краков']],
+  ['PT', ['lisbon', 'лиссабон', 'porto', 'порту']],
+  ['ES', ['barcelona', 'барселона', 'madrid', 'мадрид']],
+  ['FR', ['paris', 'париж']],
+  ['US', ['newyork', 'ньюйорк', 'sanfrancisco', 'санфранциско']],
+  ['IE', ['dublin', 'дублин']],
+  ['SG', ['singapore', 'сингапур']],
+];
+
+const LEGACY_CITY_COUNTRY_CODE_BY_KEY = new Map(
+  LEGACY_CITY_COUNTRY_ALIASES.flatMap(([countryCode, names]) =>
+    names.map((name) => [normalizeGeoKey(name), countryCode] as const),
+  ),
+);
+
+function uniqueCandidatePoint(candidates: readonly CityCandidate[]): GeoPoint | undefined {
+  const points = new Map<string, GeoPoint>();
+  for (const candidate of candidates) {
+    const key = `${candidate.point.lat},${candidate.point.lng}`;
+    points.set(key, candidate.point);
+  }
+  return points.size === 1 ? points.values().next().value : undefined;
+}
+
+function lookupGeoNamesCity(cityKey: string, country?: string): GeoPoint | undefined {
+  const candidates = GEO_NAMES_CITY_INDEX.get(cityKey);
+  if (!candidates) return undefined;
+  const countryCode = country ? GEO_NAMES_COUNTRY_INDEX.get(normalizeGeoKey(country)) : undefined;
+  if (!countryCode) return uniqueCandidatePoint(candidates);
+  return uniqueCandidatePoint(candidates.filter((candidate) => candidate.countryCode === countryCode));
+}
+
+function lookupLegacyCity(cityKey: string, country?: string): GeoPoint | undefined {
+  const point = LEGACY_CITY_COORDINATES_BY_KEY.get(cityKey);
+  const cityCountryCode = LEGACY_CITY_COUNTRY_CODE_BY_KEY.get(cityKey);
+  if (!point || !cityCountryCode) return undefined;
+  if (!country) return point;
+  const countryCode = GEO_NAMES_COUNTRY_INDEX.get(normalizeGeoKey(country));
+  return countryCode === cityCountryCode ? point : undefined;
 }
 
 /**
@@ -161,9 +299,11 @@ export function lookupLocationCoordinates(
 ): GeoPoint | undefined {
   if (city) {
     const cityKey = normalizeGeoKey(city);
-    if (cityKey && CITY_COORDINATES[cityKey]) {
-      return CITY_COORDINATES[cityKey];
-    }
+    const dataPoint = cityKey ? lookupGeoNamesCity(cityKey, country) : undefined;
+    if (dataPoint) return dataPoint;
+    if (cityKey && GEO_NAMES_CITY_INDEX.has(cityKey)) return undefined;
+    if (cityKey) return lookupLegacyCity(cityKey, country);
+    return undefined;
   }
 
   if (country) {

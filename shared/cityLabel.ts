@@ -19,6 +19,7 @@ const LIST_SEPARATORS = /[;|/]|\s+·\s+/;
  * и срезать по нему — переименовать город.
  */
 const COUNTRY_PREFIX = /^\p{L}{2}[\p{L}\s.]{0,18}?\s+[-–—]\s+(?=\p{L})/u;
+const CITY_PREFIX = /^(?:г(?:ород)?(?:\.|\s)+)\s*/iu;
 
 /** `(Remote)`, `(Hybrid)`, `(On-site)` — формат работы, а не часть названия. */
 const MODE_SUFFIX = /\s*\((?:remote|hybrid|on-?site|удал[её]нно|гибрид)\)\s*$/iu;
@@ -44,6 +45,7 @@ const OFFICE_SUFFIX =
 
 /** Форма работы перед местом: «Remote - Texas», «Hybrid Berlin». */
 const MODE_PREFIX = /^(?:remote|hybrid|on-?site|удал[её]нно|гибрид)\s+(?=\p{L})/iu;
+const DISTRICT_SUFFIX = /(?:^|,?\s+)(?:м\.|метро|район|рай\.|округ|district|neighborhood)(?=\s|$).*$/iu;
 
 export function normalizeCityLabel(raw?: string): string | undefined {
   if (!raw) return undefined;
@@ -52,10 +54,12 @@ export function normalizeCityLabel(raw?: string): string | undefined {
   if (LIST_SEPARATORS.test(trimmed)) return undefined;
 
   const withoutMode = trimmed.replace(MODE_SUFFIX, '').replace(MODE_PREFIX, '').trim();
-  const withoutPrefix = withoutMode.replace(COUNTRY_PREFIX, '').trim();
-  if (OFFICE_ONLY.test(withoutPrefix)) return undefined;
-  const withoutOffice = withoutPrefix.replace(OFFICE_SUFFIX, '').trim();
-  const label = withoutOffice || withoutMode;
+  const place = withoutMode.split(',')[0]?.trim() ?? '';
+  const withoutPrefix = place.replace(COUNTRY_PREFIX, '').replace(CITY_PREFIX, '').trim();
+  const withoutQualifier = withoutPrefix.replace(/\s*\([^)]*\)\s*/gu, ' ').replace(DISTRICT_SUFFIX, '').trim();
+  if (OFFICE_ONLY.test(withoutQualifier)) return undefined;
+  const withoutOffice = withoutQualifier.replace(OFFICE_SUFFIX, '').trim();
+  const label = withoutOffice || withoutQualifier || withoutMode;
 
   if (!label) return undefined;
   // «Remote», «Hybrid», «EMEA», «Home Office» — это не города, а способ работы
