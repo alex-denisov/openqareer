@@ -433,6 +433,70 @@ const FACETS = {
 };
 
 test.describe('B250 vacancies screen', () => {
+  test('links an archived application from its vacancy row to the open archive', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/applications**', async (route) => {
+      const request = route.request();
+      if (request.method() === 'GET') {
+        return route.fulfill({
+          json: {
+            data: [
+              {
+                id: 'archived-c-1',
+                candidateId: CANDIDATE.candidateId,
+                clusterId: 'c-1',
+                stage: 'archived',
+                closedReason: 'vacancy_closed',
+                archiveReason: 'vacancy_closed',
+                archivePreviousStage: 'applied',
+                archiveStaleDays: 30,
+                processProfile: 'standard',
+                vacancy: {
+                  title: 'Business Information Architect',
+                  company: 'Genetec',
+                  url: 'https://example.com/vacancy',
+                  source: 'test',
+                },
+                notes: null,
+                followUpDueAt: null,
+                stageChangedAt: '2026-09-20T08:00:00.000Z',
+                version: 2,
+                createdAt: '2026-09-20T08:00:00.000Z',
+                updatedAt: '2026-09-20T08:00:00.000Z',
+                followUp: null,
+                whoseTurn: null,
+                materials: { coverLetter: false, resume: false },
+                nearestInterview: null,
+              },
+            ],
+          },
+        });
+      }
+      return route.fallback();
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const row = page.locator('.vac-row').filter({ hasText: 'Business Information Architect' });
+    await expect(row).toContainText('Отклик в архиве');
+    await expect(row).not.toContainText('Отклик отмечен');
+    const openArchive = page.getByRole('button', { name: 'Открыть архив' });
+    if (!(await openArchive.isVisible())) await row.click();
+    await openArchive.click();
+
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+    const archiveToggle = page.getByRole('button', { name: 'Архив · 1' });
+    await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
+    await expect(archiveToggle).toBeFocused();
+    await expect(archiveToggle).toBeInViewport();
+    await expect(page.locator('.career-responses-archive-card')).toContainText(
+      'Business Information Architect',
+    );
+  });
+
   test('shows the campaign banner, filters from the pool summary and pool rows', async ({
     page,
   }) => {
@@ -973,7 +1037,7 @@ test.describe('B250 vacancies screen', () => {
     await mapTab.click();
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
 
-    // Select city on map
+    // Город выбирается кнопкой в списке под картой.
     const cityBtn = page.locator('.vacancy-map-cities button').first();
     if (await cityBtn.isVisible()) {
       await cityBtn.click();
@@ -982,6 +1046,121 @@ test.describe('B250 vacancies screen', () => {
     // Switch back to list view
     await listTab.click();
     await expect(page.locator('.vacancies-list-container')).toBeVisible();
+  });
+
+  test('B365: офлайн-карта считает города, объединяет координатные варианты и снимается на двух ширинах', async ({
+    page,
+  }, testInfo) => {
+    if (testInfo.project.name !== 'desktop-1440') {
+      test.skip(true, 'B365 captures both target widths in one browser session');
+    }
+
+    const cityRows = [
+      { location: 'Москва', city: 'Москва', coordinates: { lat: 55.75204, lng: 37.61781 } },
+      { location: 'Moscow, Russia', city: 'Moscow', coordinates: { lat: 55.75204, lng: 37.61781 } },
+      { location: undefined, city: undefined, coordinates: undefined },
+      { location: 'Unknown Vacancy City', city: 'Unknown Vacancy City', coordinates: undefined },
+    ];
+    const mapItems = MATCHED_ITEMS.slice(0, cityRows.length).map((base, index) => {
+      const row = cityRows[index];
+      const id = `b365-map-${index + 1}`;
+      return {
+        ...base,
+        cluster: cluster(id, base.cluster.canonicalTitle, base.cluster.canonicalCompany, {
+          canonicalLocation: row.location,
+          companyFeatures: { city: row.city, coordinates: row.coordinates },
+        }),
+        explanation: explanation(id),
+      };
+    });
+
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await stubSession(page, { matchedItems: mapItems, total: mapItems.length });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    await page.locator('.view-switch[role="tablist"]').getByRole('tab', { name: 'Карта' }).click();
+    const mapView = page.locator('.vacancy-map-view');
+    await expect(mapView).toBeVisible();
+    await expect(mapView.locator('.career-map-header')).toContainText('На карте 2 из 4');
+    await expect(mapView.locator('.career-map-header')).toContainText('без города: 1');
+    await expect(mapView.locator('.career-map-header')).toContainText('город не распознан: 1');
+    await expect(mapView.locator('.career-map-country')).toHaveCount(177);
+    const mapCanvas = mapView.locator('.career-map-canvas-container');
+    await page.evaluate(() => {
+      const main = document.querySelector<HTMLElement>('.career-main');
+      const canvas = document.querySelector<HTMLElement>('.career-map-canvas-container');
+      const topbar = document.querySelector<HTMLElement>('.career-topbar');
+      if (!main || !canvas) return;
+      const topInset = (topbar?.getBoundingClientRect().bottom ?? 0) + 8;
+      const delta = canvas.getBoundingClientRect().top - topInset;
+      if (getComputedStyle(main).overflowY === 'auto') main.scrollTop += delta;
+      else window.scrollBy(0, delta);
+    });
+    await expect(mapCanvas).toBeVisible();
+    await page.screenshot({
+      path: 'output/playwright/B365/map-1176.png',
+      animations: 'disabled',
+    });
+    await mapCanvas.screenshot({
+      path: 'output/playwright/B365/map-canvas-1176.png',
+      animations: 'disabled',
+    });
+    await captureCareerHarness(
+      page,
+      'output/playwright/B365/map-view.html',
+      '.career-vacancy-map-view',
+    );
+
+    const moscowChip = mapView
+      .locator('.career-map-city-chips')
+      .getByRole('button', { name: 'Город Москва: 2 вакансий' });
+    await expect(moscowChip).toBeVisible();
+    const chipBox = await moscowChip.boundingBox();
+    expect(chipBox?.width).toBeGreaterThanOrEqual(44);
+    expect(chipBox?.height).toBeGreaterThanOrEqual(44);
+    await moscowChip.click();
+    await expect(
+      mapView.locator('.career-map-cards-grid').first().locator('.career-map-card'),
+    ).toHaveCount(2);
+    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Genetec');
+    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Peraton');
+    await mapView.getByRole('button', { name: 'Все города на карте' }).click();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.evaluate(() => {
+      document.querySelector<HTMLElement>('.career-main')?.scrollTo(0, 0);
+      window.scrollTo(0, 0);
+    });
+    await expect(mapView.locator('.career-map-header')).toContainText('На карте 2 из 4');
+    await expect(mapView.locator('.career-map-svg')).toBeVisible();
+    await page.evaluate(() => {
+      const main = document.querySelector<HTMLElement>('.career-main');
+      const canvas = document.querySelector<HTMLElement>('.career-map-canvas-container');
+      const topbar = document.querySelector<HTMLElement>('.career-topbar');
+      if (!main || !canvas) return;
+      const topInset = (topbar?.getBoundingClientRect().bottom ?? 0) + 8;
+      const delta = canvas.getBoundingClientRect().top - topInset;
+      if (getComputedStyle(main).overflowY === 'auto') main.scrollTop += delta;
+      else window.scrollBy(0, delta);
+    });
+    await expect(moscowChip).toBeVisible();
+    const mobileChipBox = await moscowChip.boundingBox();
+    expect(mobileChipBox?.width).toBeGreaterThanOrEqual(44);
+    expect(mobileChipBox?.height).toBeGreaterThanOrEqual(44);
+    await page.screenshot({
+      path: 'output/playwright/B365/map-390.png',
+      animations: 'disabled',
+    });
+    await mapCanvas.screenshot({
+      path: 'output/playwright/B365/map-canvas-390.png',
+      animations: 'disabled',
+    });
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    );
+    expect(overflows).toBe(false);
   });
 
   test('B324: role limit 10/10, adding and removing custom role in filter panel', async ({

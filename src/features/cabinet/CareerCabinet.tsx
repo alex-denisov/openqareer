@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import {
@@ -12,7 +12,6 @@ import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
 import { TodayScreen } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
-import { SearchCampaign } from '../search/SearchCampaign';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
@@ -34,7 +33,6 @@ import {
   type RoutePremisesDraft,
 } from './routePremises';
 import { cabinetJourney } from './cabinetJourney';
-import { useCareerStrategy, type CareerStrategyRead } from './useCareerStrategy';
 import { isClosedApplicationStage } from '../../../shared/applicationStage';
 import { countConfirmedApplications } from '../../../shared/vacancyApplication';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
@@ -54,7 +52,6 @@ function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
     case 'resume':
       return 'profile';
     case 'career':
-      return 'career';
     case 'opportunities':
       return 'vacancies';
     case 'responses':
@@ -119,13 +116,19 @@ export function CareerCabinet({
         : workspace,
     [targetDirection, workspace],
   );
-  // Выбранная роль — версионированный объект, а не свободная строка анкеты:
-  // кампания «Поиск» берёт направление из него (B180, срез 2).
-  const strategy = useCareerStrategy();
   const vacancyApplications = useVacancyApplications();
   // B251 S3 — трекер откликов читает свой собственный API, независимо от
   // ручного лога `useVacancyApplications` (совместимость со старым `.app`).
   const applicationsTracker = useApplications();
+  const archivedApplicationClusterIds = useMemo(
+    () =>
+      new Set(
+        applicationsTracker.applications
+          .filter((application) => application.stage === 'archived' && application.clusterId)
+          .map((application) => application.clusterId as string),
+      ),
+    [applicationsTracker.applications],
+  );
   const recordConfirmedVacancy = vacancyApplications.recordConfirmed;
   const refreshApplications = applicationsTracker.refreshApplications;
   const addManualCard = applicationsTracker.addManualCard;
@@ -305,11 +308,11 @@ export function CareerCabinet({
             session={session}
             workspace={workspace}
             targetDirection={targetDirection}
-            strategy={strategy}
             pool={pool}
             vacancyApplications={trackedVacancyApplications}
             pathIndicatorSteps={pathIndicatorSteps}
             applicationsTracker={applicationsTracker}
+            archivedApplicationClusterIds={archivedApplicationClusterIds}
             onMarkAlreadyApplied={markVacancyAlreadyApplied}
             onScheduleInterview={scheduleVacancyInterview}
             data={data}
@@ -379,11 +382,11 @@ function CabinetSection({
   session,
   workspace,
   targetDirection,
-  strategy,
   pool,
   vacancyApplications,
   pathIndicatorSteps,
   applicationsTracker,
+  archivedApplicationClusterIds,
   onMarkAlreadyApplied,
   onScheduleInterview,
   data,
@@ -405,11 +408,11 @@ function CabinetSection({
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   targetDirection: string;
-  strategy: CareerStrategyRead;
   pool: ReturnType<typeof useMatchedPool>;
   vacancyApplications: ReturnType<typeof useVacancyApplications>;
   pathIndicatorSteps?: ReturnType<typeof buildPathIndicator>;
   applicationsTracker: ReturnType<typeof useApplications>;
+  archivedApplicationClusterIds: ReadonlySet<string>;
   onMarkAlreadyApplied: (clusterId: string, vacancy: VacancyApplicationSnapshot) => Promise<void>;
   onScheduleInterview: (
     clusterId: string,
@@ -420,7 +423,7 @@ function CabinetSection({
   profileTab: ProfileTab;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   consultantAction?: ReasonedCareerAction;
-  onNavigate: (view: CareerCabinetView) => void;
+  onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenProfileRequirement: (context: VacancyProfileRequirement) => void;
   onVacancyRequirementHandled: () => void;
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
@@ -429,6 +432,12 @@ function CabinetSection({
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
+  useEffect(() => {
+    if (view === 'career') {
+      onNavigate('opportunities');
+    }
+  }, [view, onNavigate]);
+
   if (view === 'today') {
     return (
       <TodaySection
@@ -472,37 +481,14 @@ function CabinetSection({
       />
     );
   }
-  // «Поиск» — одна кампания: на чём ищем (роль, регион, маршрут) и чем ищем
-  // (регулярные выборки по источникам). Раньше это были два раздела, и
-  // кандидат настраивал поиск отдельно от того, ради чего он идёт.
-  if (view === 'career') {
-    return (
-      <div className="career-search-board">
-        <SearchCampaign
-          targetDirection={targetDirection}
-          strategy={strategy.strategy}
-          premises={routePremisesDraft({
-            workspace,
-            account: data.account,
-            visibleTargetRole: targetDirection,
-          })}
-          premisesLoading={data.loading}
-          onSavePremises={onSavePremises}
-          onOpenVacancies={() => onNavigate('opportunities')}
-          onOpenTariffs={onOpenTariffs ?? (() => undefined)}
-        />
-        {/* Регулярные выборки переехали в панель фильтров «Вакансий» (B181), а
-            «ATS-читаемость» и «Следующее действие» живут на Главной: здесь тот
-            же блок стоял целиком второй раз (B233, аудит 2026-09-20). */}
-      </div>
-    );
-  }
+
   if (view === 'responses') {
     return (
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
         initialStageFilter={navigationOptions?.stage}
+        initialArchiveOpen={navigationOptions?.openArchive}
         onOpenExpert={onOpenExpert}
       />
     );
@@ -513,12 +499,22 @@ function CabinetSection({
       subscriptions={data.snapshot?.vacancySubscriptions}
       onRefreshSubscriptions={data.refresh}
       applications={vacancyApplications}
+      archivedApplicationClusterIds={archivedApplicationClusterIds}
       onMarkAlreadyApplied={onMarkAlreadyApplied}
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
+      onOpenArchive={() => onNavigate('responses', { openArchive: true })}
       onOpenProfile={onOpenProfileRequirement}
       onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
+      premises={routePremisesDraft({
+        workspace,
+        account: data.account,
+        visibleTargetRole: targetDirection,
+      })}
+      premisesLoading={data.loading}
+      onSavePremises={onSavePremises}
+      focusRoleFilter={view === 'career' || Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')}
     />
   );
 }

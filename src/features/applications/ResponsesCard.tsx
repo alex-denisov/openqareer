@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowClockwise,
   CaretDown,
@@ -82,21 +83,17 @@ function useCardMenuState(
     [onCloseMenu],
   );
   const cardRef = useRef<HTMLElement | null>(null);
+  useEscapeLayer(closeMenu, menuOpen);
 
   useEffect(() => {
     if (!menuOpen) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeMenu();
-    };
     const handlePointerDown = (event: MouseEvent | PointerEvent) => {
       if (cardRef.current && !cardRef.current.contains(event.target as Node)) {
         closeMenu();
       }
     };
-    document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('pointerdown', handlePointerDown);
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('pointerdown', handlePointerDown);
     };
   }, [menuOpen, closeMenu]);
@@ -186,7 +183,12 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onClick={handleCardClick}
         onKeyDown={handleBodyKeyDown}
       />
-      <CardAlerts failed={failed} conflicted={conflicted} onRetry={props.onRetry} onRefresh={props.onRefresh} />
+      <CardAlerts
+        failed={failed}
+        conflicted={conflicted}
+        onRetry={props.onRetry}
+        onRefresh={props.onRefresh}
+      />
       {application.stage === 'interview' ? (
         <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
       ) : null}
@@ -216,11 +218,7 @@ function PrepareInterviewControl({
   onOpenExpert,
 }: {
   application: ApplicationView;
-  onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const handleAskConsultant = onOpenExpert
@@ -505,7 +503,10 @@ function StageSelect({
     <label className="career-responses-select-field">
       Этап
       <div className="career-responses-select-wrap">
-        <select value={value} onChange={(event) => onChange(event.target.value as ApplicationStage)}>
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value as ApplicationStage)}
+        >
           {APPLICATION_STAGES.map((stageOption) => (
             <option key={stageOption} value={stageOption}>
               {STAGE_LABEL[stageOption]}

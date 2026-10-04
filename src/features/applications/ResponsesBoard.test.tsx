@@ -16,6 +16,8 @@ function application(overrides: Partial<ApplicationView>): ApplicationView {
     clusterId: 'cl1',
     stage: 'applied',
     closedReason: null,
+    archiveReason: null,
+    archivePreviousStage: null,
     processProfile: 'standard',
     vacancy: {
       title: 'Senior Frontend Developer',
@@ -33,6 +35,7 @@ function application(overrides: Partial<ApplicationView>): ApplicationView {
     whoseTurn: 'company',
     materials: { coverLetter: true, resume: true },
     nearestInterview: null,
+    archiveStaleDays: 30,
     ...overrides,
   };
 }
@@ -47,6 +50,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     reload: () => {},
     refreshApplications: async () => applications,
     changeStage: () => {},
+    restoreFromArchive: async () => {},
     scheduleInterview: async () => {},
     retryStageChange: () => {},
     markFollowUpSent: async () => {},
@@ -58,7 +62,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
 }
 
 describe('ResponsesBoard columns', () => {
-  it('groups applications into the six mockup columns with counts', () => {
+  it('groups active applications into columns and counts archived cards separately', () => {
     const applications = [
       application({ id: 'a1', stage: 'saved' }),
       application({ id: 'a2', stage: 'applied' }),
@@ -71,15 +75,17 @@ describe('ResponsesBoard columns', () => {
       <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
     );
 
-    ['Хочу', 'Откликнулся', 'Ответ', 'Интервью', 'Оффер', 'Отказ / Архив'].forEach((label) => {
+    ['Хочу', 'Откликнулся', 'Ответ', 'Интервью', 'Оффер', 'Отказ'].forEach((label) => {
       expect(html).toContain(label);
     });
     // The offer column has no cards and shows a zero count.
     const offerHead = html.indexOf('<h2>Оффер</h2>');
     expect(html.slice(offerHead, offerHead + 100)).toMatch(/>0</);
     // Rejected and archived share the sixth column.
-    const closedHead = html.indexOf('<h2>Отказ / Архив</h2>');
-    expect(html.slice(closedHead, closedHead + 100)).toMatch(/>2</);
+    const closedHead = html.indexOf('<h2>Отказ</h2>');
+    expect(html.slice(closedHead, closedHead + 100)).toMatch(/>1</);
+    expect(html).toContain('Архив');
+    expect(html).toContain('1');
   });
 
   it('renders card role, company and waiting label', () => {

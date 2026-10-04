@@ -10,6 +10,7 @@ import {
   ApplicationVersionConflictError,
 } from './store/errors';
 import type { VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
+import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS, type ApplicationArchiveReason } from '../../shared/applicationArchive';
 
 export type ApplicationProcessProfile = 'standard' | 'executive';
 export type ApplicationEventProvenance = 'candidate' | 'migrated' | 'legacy_client' | 'system';
@@ -31,12 +32,21 @@ export interface StoredApplicationEvent {
   readonly provenance: ApplicationEventProvenance;
 }
 
+export interface ConfirmedVacancyClosureEvidence {
+  readonly kind: 'archived_marker' | 'confirmed_gone_response';
+  readonly sourceId: string;
+  readonly vacancyUrl: string;
+  readonly observedAt: string;
+}
+
 export interface StoredApplication {
   readonly id: string;
   readonly candidateId: string;
   readonly clusterId: string | null;
   readonly stage: ApplicationStage;
   readonly closedReason: string | null;
+  readonly archiveReason: ApplicationArchiveReason | null;
+  readonly archivePreviousStage: ApplicationStage | null;
   readonly processProfile: ApplicationProcessProfile;
   readonly vacancy: VacancyApplicationSnapshot | null;
   readonly notes: string | null;
@@ -71,6 +81,8 @@ interface ApplicationRow {
   cluster_id: string | null;
   stage: string;
   closed_reason: string | null;
+  archive_reason: ApplicationArchiveReason | null;
+  archive_previous_stage: ApplicationStage | null;
   process_profile: string;
   vacancy_cipher: string | null;
   notes_cipher: string | null;
@@ -98,7 +110,7 @@ export class SqliteApplicationRepository {
   list(candidateId: string): StoredApplication[] {
     const rows = this.database
       .prepare(
-        `SELECT id, candidate_id, cluster_id, stage, closed_reason, process_profile,
+        `SELECT id, candidate_id, cluster_id, stage, closed_reason, archive_reason, archive_previous_stage, process_profile,
                 vacancy_cipher, notes_cipher, follow_up_due_at, stage_changed_at,
                 version, created_at, updated_at
            FROM applications
@@ -112,7 +124,7 @@ export class SqliteApplicationRepository {
   get(candidateId: string, id: string): StoredApplication | null {
     const row = this.database
       .prepare(
-        `SELECT id, candidate_id, cluster_id, stage, closed_reason, process_profile,
+        `SELECT id, candidate_id, cluster_id, stage, closed_reason, archive_reason, archive_previous_stage, process_profile,
                 vacancy_cipher, notes_cipher, follow_up_due_at, stage_changed_at,
                 version, created_at, updated_at
            FROM applications
@@ -125,7 +137,7 @@ export class SqliteApplicationRepository {
   private findByCluster(candidateId: string, clusterId: string): StoredApplication | null {
     const row = this.database
       .prepare(
-        `SELECT id, candidate_id, cluster_id, stage, closed_reason, process_profile,
+        `SELECT id, candidate_id, cluster_id, stage, closed_reason, archive_reason, archive_previous_stage, process_profile,
                 vacancy_cipher, notes_cipher, follow_up_due_at, stage_changed_at,
                 version, created_at, updated_at
            FROM applications
@@ -154,8 +166,9 @@ export class SqliteApplicationRepository {
       .prepare(
         `INSERT INTO applications
           (id, candidate_id, cluster_id, stage, process_profile, vacancy_cipher,
+           archive_reason, archive_previous_stage,
            follow_up_due_at, stage_changed_at, version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, 1, ?, ?)`,
       )
       .run(
         id,
@@ -166,6 +179,7 @@ export class SqliteApplicationRepository {
         input.vacancy
           ? this.sealedText.seal(JSON.stringify(input.vacancy), vacancyAssociatedData(candidateId, id))
           : null,
+        input.stage === 'archived' ? 'candidate' : null,
         occurredAt,
         now,
         now,
@@ -209,6 +223,8 @@ export class SqliteApplicationRepository {
         occurredAt,
         now,
         nextNotesCipher,
+        stageChanged ? (nextStage === 'archived' ? 'candidate' : null) : undefined,
+        stageChanged && nextStage === 'archived' ? current.stage : stageChanged ? null : undefined,
       ),
     );
   }
@@ -335,33 +351,119 @@ export class SqliteApplicationRepository {
     return current;
   }
 
-  /**
-   * A tracked vacancy disappeared from the pool (architecture.md §4, owner
-   * decision 2026-09-23 22:26): move the card to `archived` with
-   * `closed_reason = 'vacancy_closed'` and a `system`-provenance event.
-   * Idempotent — a closed/rejected card is left alone, so a second read of
-   * `GET /applications` never double-archives or double-writes the event.
-   */
+  /** Только подтверждённый ответ площадки может записать причину `vacancy_closed`. */
   archiveClosedVacancy(
     candidateId: string,
     application: StoredApplication,
+    evidence: ConfirmedVacancyClosureEvidence,
     now = new Date().toISOString(),
   ): StoredApplication {
-    if (application.stage === 'archived' || application.stage === 'rejected') return application;
-    this.database
-      .prepare(
-        `UPDATE applications SET stage = 'archived', closed_reason = 'vacancy_closed',
-           stage_changed_at = ?, version = version + 1, updated_at = ?
-         WHERE candidate_id = ? AND id = ?`,
-      )
-      .run(now, now, candidateId, application.id);
-    this.insertEvent(
-      candidateId,
-      application.id,
-      { kind: 'stage', fromStage: application.stage, toStage: 'archived', occurredAt: now, provenance: 'system' },
-      now,
-    );
-    return this.get(candidateId, application.id) as StoredApplication;
+    return this.transaction(() => {
+      const current = this.get(candidateId, application.id);
+      if (!current) throw new ApplicationNotFoundError();
+      if (current.stage === 'archived' || current.stage === 'rejected') return current;
+      if (current.version !== application.version) {
+        throw new ApplicationVersionConflictError(current.version);
+      }
+      assertClosureEvidence(current, evidence);
+      const result = this.database
+        .prepare(
+          `UPDATE applications SET stage = 'archived', closed_reason = 'vacancy_closed',
+             archive_reason = 'vacancy_closed', archive_previous_stage = ?,
+             stage_changed_at = ?, version = version + 1, updated_at = ?
+           WHERE candidate_id = ? AND id = ? AND version = ? AND stage = ?`,
+        )
+        .run(current.stage, now, now, candidateId, current.id, current.version, current.stage);
+      if (result.changes !== 1) {
+        const latest = this.get(candidateId, current.id);
+        if (!latest) throw new ApplicationNotFoundError();
+        throw new ApplicationVersionConflictError(latest.version);
+      }
+      this.insertEvent(
+        candidateId,
+        current.id,
+        { kind: 'stage', fromStage: current.stage, toStage: 'archived', occurredAt: now, provenance: 'system' },
+        now,
+        this.sealedText.seal(
+          JSON.stringify({ closureEvidence: evidence }),
+          eventAssociatedData(candidateId, current.id),
+        ),
+      );
+      return this.get(candidateId, current.id) as StoredApplication;
+    });
+  }
+
+  /** Переносит отклик в архив по системному сроку бездействия, если политика включена. */
+  archiveStale(
+    candidateId: string,
+    applicationId: string,
+    now: string,
+    staleDays: number = DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+  ): StoredApplication {
+    const current = this.get(candidateId, applicationId);
+    if (!current) throw new ApplicationNotFoundError();
+    if (current.stage === 'archived' || current.stage === 'rejected') return current;
+    const inactivity = Date.parse(now) - Date.parse(current.stageChangedAt);
+    if (inactivity < staleDays * 24 * 60 * 60 * 1_000) return current;
+    return this.transaction(() => {
+      const result = this.database
+        .prepare(
+          `UPDATE applications SET stage = 'archived', archive_reason = 'stale',
+             archive_previous_stage = ?, stage_changed_at = ?, version = version + 1, updated_at = ?
+           WHERE candidate_id = ? AND id = ? AND version = ? AND stage <> 'archived'`,
+        )
+        .run(current.stage, now, now, candidateId, applicationId, current.version);
+      if (result.changes !== 1) {
+        const latest = this.get(candidateId, applicationId);
+        if (!latest) throw new ApplicationNotFoundError();
+        throw new ApplicationVersionConflictError(latest.version);
+      }
+      this.insertEvent(
+        candidateId,
+        applicationId,
+        { kind: 'stage', fromStage: current.stage, toStage: 'archived', occurredAt: now, provenance: 'system' },
+        now,
+      );
+      return this.get(candidateId, applicationId) as StoredApplication;
+    });
+  }
+
+  restoreFromArchive(
+    candidateId: string,
+    applicationId: string,
+    expectedVersion: number,
+    now = new Date().toISOString(),
+  ): StoredApplication {
+    return this.transaction(() => {
+      const current = this.get(candidateId, applicationId);
+      if (!current) throw new ApplicationNotFoundError();
+      if (current.stage !== 'archived') return current;
+      if (current.version !== expectedVersion) {
+        throw new ApplicationVersionConflictError(current.version);
+      }
+      const previousStage = current.archivePreviousStage ?? 'applied';
+      const result = this.database
+        .prepare(
+          `UPDATE applications SET stage = ?,
+             closed_reason = CASE WHEN ? = 'rejected' THEN closed_reason ELSE NULL END,
+             archive_reason = NULL, archive_previous_stage = NULL,
+             stage_changed_at = ?, version = version + 1, updated_at = ?
+           WHERE candidate_id = ? AND id = ? AND version = ? AND stage = 'archived'`,
+        )
+        .run(previousStage, previousStage, now, now, candidateId, applicationId, expectedVersion);
+      if (result.changes !== 1) {
+        const latest = this.get(candidateId, applicationId);
+        if (!latest) throw new ApplicationNotFoundError();
+        throw new ApplicationVersionConflictError(latest.version);
+      }
+      this.insertEvent(
+        candidateId,
+        applicationId,
+        { kind: 'stage', fromStage: 'archived', toStage: previousStage, occurredAt: now, provenance: 'candidate' },
+        now,
+      );
+      return this.get(candidateId, applicationId) as StoredApplication;
+    });
   }
 
   /**
@@ -404,6 +506,7 @@ export class SqliteApplicationRepository {
     this.database
       .prepare(
         `UPDATE applications SET stage = 'archived', closed_reason = ?,
+           archive_reason = 'candidate', archive_previous_stage = 'saved',
            stage_changed_at = ?, version = version + 1, updated_at = ?
          WHERE candidate_id = ? AND id = ?`,
       )
@@ -537,11 +640,15 @@ export class SqliteApplicationRepository {
     occurredAt: string,
     now: string,
     nextNotesCipher: string | null,
+    archiveReason: ApplicationArchiveReason | null | undefined,
+    archivePreviousStage: ApplicationStage | null | undefined,
   ): StoredApplication {
     const result = this.database
       .prepare(
         `UPDATE applications SET
            stage = ?, notes_cipher = ?, process_profile = ?, follow_up_due_at = ?,
+           archive_reason = CASE WHEN ? THEN ? ELSE archive_reason END,
+           archive_previous_stage = CASE WHEN ? THEN ? ELSE archive_previous_stage END,
            stage_changed_at = ?, version = version + 1, updated_at = ?
          WHERE candidate_id = ? AND id = ? AND version = ?`,
       )
@@ -550,6 +657,10 @@ export class SqliteApplicationRepository {
         nextNotesCipher,
         input.processProfile ?? current.processProfile,
         input.followUpDueAt !== undefined ? input.followUpDueAt : current.followUpDueAt,
+        archiveReason !== undefined ? 1 : 0,
+        archiveReason ?? null,
+        archivePreviousStage !== undefined ? 1 : 0,
+        archivePreviousStage ?? null,
         stageChanged ? occurredAt : current.stageChangedAt,
         now,
         candidateId,
@@ -561,16 +672,24 @@ export class SqliteApplicationRepository {
       if (!latest) throw new ApplicationNotFoundError();
       throw new ApplicationVersionConflictError(latest.version);
     }
-    if (stageChanged) {
-      this.insertEvent(candidateId, id, {
-        kind: 'stage',
-        fromStage: current.stage,
-        toStage: nextStage,
-        occurredAt,
-        provenance: 'candidate',
-      }, now);
-    }
+    if (stageChanged) this.recordCandidateStageEvent(candidateId, id, current.stage, nextStage, occurredAt, now);
     return this.get(candidateId, id) as StoredApplication;
+  }
+
+  private recordCandidateStageEvent(
+    candidateId: string,
+    applicationId: string,
+    fromStage: ApplicationStage,
+    toStage: ApplicationStage,
+    occurredAt: string,
+    recordedAt: string,
+  ): void {
+    this.insertEvent(
+      candidateId,
+      applicationId,
+      { kind: 'stage', fromStage, toStage, occurredAt, provenance: 'candidate' },
+      recordedAt,
+    );
   }
 
   private transaction<T>(operation: () => T): T {
@@ -593,6 +712,10 @@ export class SqliteApplicationRepository {
       clusterId: row.cluster_id,
       stage: row.stage as ApplicationStage,
       closedReason: row.closed_reason,
+      archiveReason: row.archive_reason ?? (row.stage === 'archived' ? 'unknown' : null),
+      archivePreviousStage:
+        row.archive_previous_stage ??
+        (row.stage === 'archived' ? this.previousArchivedStage(row.candidate_id, row.id) : null),
       processProfile: row.process_profile as ApplicationProcessProfile,
       vacancy: row.vacancy_cipher
         ? (JSON.parse(
@@ -609,7 +732,39 @@ export class SqliteApplicationRepository {
       updatedAt: row.updated_at,
     };
   }
+
+  private previousArchivedStage(candidateId: string, applicationId: string): ApplicationStage | null {
+    const event = this.database
+      .prepare(
+        `SELECT from_stage FROM application_events
+          WHERE candidate_id = ? AND application_id = ? AND kind = 'stage' AND to_stage = 'archived'
+          ORDER BY recorded_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(candidateId, applicationId) as { from_stage: string | null } | undefined;
+    return event?.from_stage && event.from_stage !== 'archived' && isKnownStage(event.from_stage)
+      ? event.from_stage
+      : null;
+  }
 }
+
+function assertClosureEvidence(
+  application: StoredApplication,
+  evidence: ConfirmedVacancyClosureEvidence,
+): void {
+  if (
+    !application.vacancy?.url ||
+    evidence.sourceId !== application.vacancy.source ||
+    evidence.vacancyUrl !== application.vacancy.url ||
+    !Number.isFinite(Date.parse(evidence.observedAt))
+  ) {
+    throw new Error('confirmed vacancy closure evidence is required');
+  }
+}
+
+function isKnownStage(value: string): value is ApplicationStage {
+  return ['saved', 'applied', 'responded', 'interview', 'offer', 'rejected', 'archived'].includes(value);
+}
+
 
 function vacancyAssociatedData(candidateId: string, applicationId: string): string {
   return `candidate:${candidateId}:application:${applicationId}:vacancy`;

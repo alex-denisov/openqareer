@@ -320,7 +320,7 @@ describe('TodayScreen (B251 S5)', () => {
       expect(consultantTargetView('profile')).toBe('profile');
       expect(consultantTargetView('evidence')).toBe('profile');
       expect(consultantTargetView('coach')).toBe('profile');
-      expect(consultantTargetView('career')).toBe('career');
+      expect(consultantTargetView('career')).toBe('opportunities');
       expect(consultantTargetView('search')).toBe('opportunities');
     });
   });

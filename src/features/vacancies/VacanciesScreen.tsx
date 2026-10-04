@@ -22,6 +22,9 @@ import { VacancyMapView } from './VacancyMapView';
 import { SavedSearchesPanel } from './SavedSearchesPanel';
 import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { matchesVacancyCity } from './vacancyFacets';
+
+import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -44,6 +47,7 @@ export interface VacanciesScreenProps {
   readonly now?: string;
   readonly pathIndicator?: VacanciesPathIndicator;
   readonly applications?: VacancyApplications;
+  readonly archivedApplicationClusterIds?: ReadonlySet<string>;
   readonly onMarkAlreadyApplied?: (
     clusterId: string,
     vacancy: VacancyApplicationSnapshot,
@@ -54,11 +58,16 @@ export interface VacanciesScreenProps {
     vacancy: VacancyApplicationSnapshot,
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+  readonly focusRoleFilter?: boolean;
 }
 
 function extractBoardRegions(campaign?: CampaignMetaView) {
@@ -273,10 +282,12 @@ interface ListContentProps {
   readonly selectedId?: string | null;
   readonly onToggleSelect: (id: string) => void;
   readonly applications?: VacanciesScreenProps['applications'];
+  readonly archivedApplicationClusterIds?: ReadonlySet<string>;
   readonly onMarkAlreadyApplied?: VacanciesScreenProps['onMarkAlreadyApplied'];
   readonly onScheduleInterview?: VacanciesScreenProps['onScheduleInterview'];
   readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
+  readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly countShownAbove: boolean;
@@ -325,10 +336,12 @@ function VacanciesListContent(props: ListContentProps) {
     selectedId,
     onToggleSelect,
     applications,
+    archivedApplicationClusterIds,
     onMarkAlreadyApplied,
     onScheduleInterview,
     onOpenNetworking,
     onOpenResponses,
+    onOpenArchive,
     onAddToProfile,
     onDiscussWithConsultant,
     countShownAbove,
@@ -347,10 +360,12 @@ function VacanciesListContent(props: ListContentProps) {
             isSelected={selectedId === item.cluster.id}
             onSelect={() => onToggleSelect(item.cluster.id)}
             applications={applications}
+            archivedApplicationClusterIds={archivedApplicationClusterIds}
             onMarkAlreadyApplied={onMarkAlreadyApplied}
             onScheduleInterview={onScheduleInterview}
             onOpenNetworking={onOpenNetworking}
             onOpenResponses={onOpenResponses}
+            onOpenArchive={onOpenArchive}
             onAddToProfile={onAddToProfile}
             onDiscussWithConsultant={onDiscussWithConsultant}
           />
@@ -444,6 +459,10 @@ function VacanciesFiltersSection({
   onToggleSavedSearches,
   onReset,
   facets,
+  premises,
+  premisesLoading,
+  onSavePremises,
+  focusRole,
 }: {
   readonly facets?: MatchedVacancyFacets;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
@@ -453,6 +472,10 @@ function VacanciesFiltersSection({
   readonly savedSearchesOpen: boolean;
   readonly onToggleSavedSearches: () => void;
   readonly onReset: () => void;
+  readonly premises?: RoutePremisesDraft;
+  readonly premisesLoading?: boolean;
+  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
+  readonly focusRole?: boolean;
 }) {
   return (
     <VacanciesFilters
@@ -469,6 +492,10 @@ function VacanciesFiltersSection({
       savedSearchesCount={subscriptionsCount}
       savedSearchesOpen={savedSearchesOpen}
       onToggleSavedSearches={onToggleSavedSearches}
+      premises={premises}
+      premisesLoading={premisesLoading}
+      onSavePremises={onSavePremises}
+      focusRole={focusRole}
     />
   );
 }
@@ -515,10 +542,12 @@ function buildListProps(
     selectedId: screenState.board.selectedId,
     onToggleSelect: screenState.board.toggleSelect,
     applications: input.applications,
+    archivedApplicationClusterIds: input.archivedApplicationClusterIds,
     onMarkAlreadyApplied: input.onMarkAlreadyApplied,
     onScheduleInterview: input.onScheduleInterview,
     onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
     onOpenResponses: input.onOpenResponses,
+    onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: input.onOpenExpert
       ? (cluster) => input.onOpenExpert?.('vacancies', { kind: 'vacancy', id: cluster.id }, `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`)
@@ -589,6 +618,10 @@ function VacanciesScreenContent({
         savedSearchesOpen={savedSearchesOpen}
         onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}
         onReset={resetFilters}
+        premises={input.premises}
+        premisesLoading={input.premisesLoading}
+        onSavePremises={input.onSavePremises}
+        focusRole={input.focusRoleFilter}
       />
       <SavedSearchesSection
         defaultQuery={board.state.roles[0] ?? board.primaryRole}
@@ -733,7 +766,8 @@ function filterByScreenState(
   now: string,
 ): MatchedVacancyItem[] {
   void now;
-  return items.filter(({ cluster }) => {
+  return items.filter((item) => {
+    const { cluster } = item;
     if (
       state.roles.length > 0 &&
       !state.roles.some((role: string) => titleMatchesRole(cluster.canonicalTitle, role))
@@ -748,12 +782,7 @@ function filterByScreenState(
       );
       if (!inRegion && !cluster.isRemote) return false;
     }
-    if (state.selectedCity) {
-      const location = cluster.canonicalLocation?.toLocaleLowerCase('ru-RU') ?? '';
-      const city = cluster.companyFeatures?.city?.toLocaleLowerCase('ru-RU') ?? '';
-      const target = state.selectedCity.toLocaleLowerCase('ru-RU');
-      if (!location.includes(target) && !city.includes(target)) return false;
-    }
+    if (state.selectedCity && !matchesVacancyCity(item, state.selectedCity, items)) return false;
     return true;
   });
 }

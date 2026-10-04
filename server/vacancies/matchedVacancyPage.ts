@@ -66,7 +66,7 @@ function extractLocationCoordinates(
     // хаб, и выдавать её за точку на карте нельзя (B203).
     city = named && isKnownCountry(named) ? undefined : named;
     country = parts[1] || (named && isKnownCountry(named) ? named : undefined);
-    coordinates = lookupLocationCoordinates(city, country);
+    coordinates = city ? lookupLocationCoordinates(city, country) : undefined;
   }
 
   if (!coordinates && company && company.locations.length > 0) {

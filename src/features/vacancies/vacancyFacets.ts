@@ -9,6 +9,8 @@ export interface FacetMetric {
 
 export interface MapFacetMetric extends FacetMetric {
   readonly unmappedCount: number;
+  readonly missingCityCount: number;
+  readonly unresolvedCityCount: number;
 }
 
 export interface CityFacet {
@@ -58,12 +60,25 @@ function hasCoordinates(
   );
 }
 
+function vacancyCityName(item: MatchedVacancyItem): string | undefined {
+  const featureCity = normalizeCityLabel(item.cluster.companyFeatures?.city);
+  if (featureCity && !isCountryName(featureCity)) return featureCity;
+  const locationCity = extractCityFromLocation(item.cluster.canonicalLocation);
+  return locationCity && !isCountryName(locationCity) ? locationCity : undefined;
+}
+
+export function hasMapCityCoordinates(item: MatchedVacancyItem): boolean {
+  return hasCoordinates(item.cluster.companyFeatures) && vacancyCityName(item) !== undefined;
+}
+
 function countMetrics(items: readonly MatchedVacancyItem[]) {
   let relocation = 0;
   let currencyRemote = 0;
   let russianAbroad = 0;
   let fullRemote = 0;
   let onMap = 0;
+  let missingCityCount = 0;
+  let unresolvedCityCount = 0;
 
   for (const item of items) {
     const feat = item.cluster.companyFeatures;
@@ -71,10 +86,17 @@ function countMetrics(items: readonly MatchedVacancyItem[]) {
     if (feat?.currencyRemote) currencyRemote += 1;
     if (feat?.russianAbroad) russianAbroad += 1;
     if (hasFullRemote(item)) fullRemote += 1;
-    if (hasCoordinates(feat)) onMap += 1;
+    const city = vacancyCityName(item);
+    if (!city) {
+      missingCityCount += 1;
+    } else if (hasCoordinates(feat)) {
+      onMap += 1;
+    } else {
+      unresolvedCityCount += 1;
+    }
   }
 
-  return { relocation, currencyRemote, russianAbroad, fullRemote, onMap };
+  return { relocation, currencyRemote, russianAbroad, fullRemote, onMap, missingCityCount, unresolvedCityCount };
 }
 
 function aggregateIndustries(items: readonly MatchedVacancyItem[]) {
@@ -126,11 +148,10 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
   for (const item of items) {
     const feat = item.cluster.companyFeatures;
     if (!hasCoordinates(feat)) continue;
-    const city =
-      normalizeCityLabel(feat.city) ?? extractCityFromLocation(item.cluster.canonicalLocation);
+    const city = vacancyCityName(item);
     // Страна — не городской хаб: «USA 12» в списке городов раздувает счёт и
     // обещает точку там, где её нет (B203, прод 2026-09-06).
-    if (!city || isCountryName(city)) continue;
+    if (!city) continue;
 
     const key = hubKey(feat.coordinates);
     const existing = map.get(key) ?? {
@@ -173,7 +194,13 @@ export function calculateVacancyFacets(items: readonly MatchedVacancyItem[]): Va
     currencyRemote: { count: metrics.currencyRemote, total },
     russianAbroad: { count: metrics.russianAbroad, total },
     fullRemote: { count: metrics.fullRemote, total },
-    onMap: { count: metrics.onMap, total, unmappedCount: total - metrics.onMap },
+    onMap: {
+      count: metrics.onMap,
+      total,
+      unmappedCount: total - metrics.onMap,
+      missingCityCount: metrics.missingCityCount,
+      unresolvedCityCount: metrics.unresolvedCityCount,
+    },
     industries: aggregateIndustries(items),
     cities: aggregateCities(items),
   };
@@ -183,26 +210,64 @@ function matchesIndustry(feat: VacancyCompanyFeatures | undefined, target: strin
   return feat?.industry?.toLowerCase().trim() === target.toLowerCase().trim();
 }
 
-function matchesCity(item: MatchedVacancyItem, target: string): boolean {
+function coordinateHubKey(point: { readonly lat: number; readonly lng: number }): string {
+  return `${point.lat.toFixed(3)},${point.lng.toFixed(3)}`;
+}
+
+function selectedCityCoordinates(
+  items: readonly MatchedVacancyItem[],
+  target: string,
+): { readonly lat: number; readonly lng: number } | undefined {
+  const targetName = normalizeCityLabel(target)?.toLocaleLowerCase('ru-RU');
+  if (!targetName) return undefined;
+  return items.find((item) => {
+    const city = vacancyCityName(item)?.toLocaleLowerCase('ru-RU');
+    return city === targetName && hasCoordinates(item.cluster.companyFeatures);
+  })?.cluster.companyFeatures?.coordinates;
+}
+
+function matchesCity(
+  item: MatchedVacancyItem,
+  target: string,
+  targetCoordinates?: { readonly lat: number; readonly lng: number },
+): boolean {
   const feat = item.cluster.companyFeatures;
-  const q = target.toLowerCase().trim();
-  if (feat?.city?.toLowerCase().trim() === q) return true;
+  if (
+    targetCoordinates &&
+    hasCoordinates(feat) &&
+    coordinateHubKey(feat.coordinates) === coordinateHubKey(targetCoordinates)
+  ) {
+    return true;
+  }
+  const targetName = normalizeCityLabel(target)?.toLocaleLowerCase('ru-RU');
+  const city = vacancyCityName(item)?.toLocaleLowerCase('ru-RU');
+  if (city && targetName && city === targetName) return true;
+  const q = target.toLocaleLowerCase('ru-RU').trim();
   return Boolean(item.cluster.canonicalLocation?.toLowerCase().includes(q));
+}
+
+export function matchesVacancyCity(
+  item: MatchedVacancyItem,
+  target: string,
+  items: readonly MatchedVacancyItem[],
+): boolean {
+  return matchesCity(item, target, selectedCityCoordinates(items, target));
 }
 
 export function filterVacanciesByFacets(
   items: readonly MatchedVacancyItem[],
   filters: VacancyFacetFilters,
 ): MatchedVacancyItem[] {
+  const selectedCoordinates = filters.city ? selectedCityCoordinates(items, filters.city) : undefined;
   return items.filter((item) => {
     const feat = item.cluster.companyFeatures;
     if (filters.relocationOnly && !feat?.relocation) return false;
     if (filters.currencyRemoteOnly && !feat?.currencyRemote) return false;
     if (filters.russianAbroadOnly && !feat?.russianAbroad) return false;
     if (filters.fullRemoteOnly && !hasFullRemote(item)) return false;
-    if (filters.onMapOnly && !hasCoordinates(feat)) return false;
+    if (filters.onMapOnly && !hasMapCityCoordinates(item)) return false;
     if (filters.industry && !matchesIndustry(feat, filters.industry)) return false;
-    if (filters.city && !matchesCity(item, filters.city)) return false;
+    if (filters.city && !matchesCity(item, filters.city, selectedCoordinates)) return false;
     return true;
   });
 }

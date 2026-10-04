@@ -9,17 +9,10 @@ const DEFAULT_VIEWPORT = { width: 1440, height: 900 } as const;
 const MODERN_CHROME_USER_AGENT =
   'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
+// Sec-Fetch-* и sec-ch-* браузер выставляет сам и по-разному для документа и скриптов;
+// подмена на каждом запросе роняла загрузку скриптов LinkedIn (прод 04.10).
 const CLIENT_HINTS_HEADERS: Readonly<Record<string, string>> = {
   'Accept-Language': 'en-US,en;q=0.9',
-  'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"',
-  'sec-ch-ua-mobile': '?0',
-  'sec-ch-ua-platform': '"Linux"',
-  'sec-ch-ua-platform-version': '"6.5.0"',
-  'Upgrade-Insecure-Requests': '1',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'none',
-  'Sec-Fetch-User': '?1',
 };
 
 export function getLinkedinChromiumLaunchArgs(options: { proxyUrl?: string } = {}): string[] {

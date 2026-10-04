@@ -11,6 +11,9 @@ export type PathDestination = 'profile' | 'career' | 'opportunities' | 'response
 
 export interface NavigationOptions {
   readonly stage?: ApplicationStage;
+  readonly focusRoleFilter?: boolean;
+  readonly focusFilter?: 'role';
+  readonly openArchive?: boolean;
 }
 
 /**
@@ -63,6 +66,8 @@ export interface PathIndicatorInput {
   readonly activeSection?: string;
   /** C73: Whether responses contain any application in interview stage. */
   readonly hasInterviewStage?: boolean;
+  /** B366: Whether opportunities screen was opened with role filter focused. */
+  readonly focusRoleFilter?: boolean;
 }
 
 
@@ -111,6 +116,7 @@ export function currentStepForSection(
   options?: {
     readonly hasInterviewStage?: boolean;
     readonly nearestInterview?: { readonly company: string; readonly scheduledAt: string } | null;
+    readonly focusRoleFilter?: boolean;
   },
 ): PathStepId | null {
   if (!section || section === 'today' || section === 'tariffs') {
@@ -119,10 +125,13 @@ export function currentStepForSection(
   if (section === 'profile' || section === 'resume') {
     return 'profile';
   }
-  if (section === 'career') {
+  if (section === 'career' || section === 'role') {
     return 'role';
   }
   if (section === 'opportunities') {
+    if (options?.focusRoleFilter) {
+      return 'role';
+    }
     return 'shortlist';
   }
   if (section === 'responses') {
@@ -236,7 +245,8 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
       state: trackState(roleItem),
       isCurrent: false,
       reason: compactReason(roleItem?.reason ?? 'Не выбрана'),
-      destination: 'career',
+      destination: 'opportunities',
+      navigationOptions: { focusRoleFilter: true, focusFilter: 'role' },
     },
     shortlistStepOf(input),
     responsesStepOf(input),
@@ -247,6 +257,7 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
   const currentStepId = currentStepForSection(input.activeSection, {
     hasInterviewStage: input.hasInterviewStage,
     nearestInterview: input.nearestInterview,
+    focusRoleFilter: input.focusRoleFilter,
   });
 
   return stepsWithSequentialState.map((step) => ({

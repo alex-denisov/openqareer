@@ -27,8 +27,7 @@ const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
 export function consultantTargetView(
   destination: ReasonedCareerAction['destination'],
 ): CareerCabinetView {
-  if (destination === 'career') return 'career';
-  if (destination === 'search') return 'opportunities';
+  if (destination === 'career' || destination === 'search') return 'opportunities';
   return 'profile';
 }
 

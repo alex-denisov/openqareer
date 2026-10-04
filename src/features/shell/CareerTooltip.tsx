@@ -10,6 +10,7 @@ import {
   isValidElement,
   type RefObject,
 } from 'react';
+import { useEscapeLayer } from './escapeLayers';
 
 export interface TooltipTriggerProps {
   readonly onMouseEnter?: (e: React.MouseEvent) => void;
@@ -54,7 +55,8 @@ function calculateCoords(
   const width = tooltip?.offsetWidth ?? ESTIMATED_WIDTH;
   const height = tooltip?.offsetHeight ?? ESTIMATED_HEIGHT;
 
-  const placeAbove = side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
+  const placeAbove =
+    side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
   const top = placeAbove
     ? Math.max(SCREEN_PADDING, rect.top - height - TOOLTIP_MARGIN)
     : rect.bottom + TOOLTIP_MARGIN;
@@ -73,6 +75,7 @@ function useTooltipPosition(
   isVisible: boolean,
   hide: () => void,
 ) {
+  useEscapeLayer(hide, isVisible);
   const applyCoords = useCallback(() => {
     if (!tooltipRef.current) return;
     const coords = calculateCoords(triggerRef.current, tooltipRef.current, side);
@@ -84,16 +87,10 @@ function useTooltipPosition(
     if (!isVisible) return;
     applyCoords();
 
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') hide();
-    };
-
-    window.addEventListener('keydown', onKeyDown);
     window.addEventListener('scroll', applyCoords, true);
     window.addEventListener('resize', applyCoords);
 
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('scroll', applyCoords, true);
       window.removeEventListener('resize', applyCoords);
     };
@@ -135,10 +132,7 @@ function useTooltipVisibility(disabled: boolean, hasContent: boolean) {
   return { isVisible, show, hide };
 }
 
-function bindTriggerRef(
-  child: ReactElement,
-  triggerRef: { current: HTMLElement | null },
-) {
+function bindTriggerRef(child: ReactElement, triggerRef: { current: HTMLElement | null }) {
   return (node: HTMLElement | null) => {
     triggerRef.current = node;
     const existingRef = (child as { ref?: unknown }).ref;
@@ -216,13 +210,7 @@ export function CareerTooltip({
     return children;
   }
 
-  const clonedChild = cloneTriggerChild(
-    children,
-    triggerRef,
-    show,
-    hide,
-    tooltipId,
-  );
+  const clonedChild = cloneTriggerChild(children, triggerRef, show, hide, tooltipId);
 
   if (!content) return clonedChild;
 

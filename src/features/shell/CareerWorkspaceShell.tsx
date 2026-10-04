@@ -302,9 +302,11 @@ export function CareerWorkspaceShell({
   const [navigationOptions, setNavigationOptions] = useState<NavigationOptions | undefined>();
 
   function navigate(view: ShellView, options?: NavigationOptions) {
-    if (!isNavigable(view)) return;
-    setActiveView(view);
-    setNavigationOptions(options);
+    const target = view === 'career' ? 'opportunities' : view;
+    const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
+    if (!isNavigable(target)) return;
+    setActiveView(target);
+    setNavigationOptions(targetOptions);
     setExpertConfig((prev) => ({ ...prev, open: false }));
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
@@ -314,6 +316,13 @@ export function CareerWorkspaceShell({
       });
     });
   }
+
+  useEffect(() => {
+    if (activeView === 'career') {
+      setActiveView('opportunities');
+      setNavigationOptions({ focusRoleFilter: true });
+    }
+  }, [activeView]);
 
   const openExpert = useCallback(
     (stage?: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => {

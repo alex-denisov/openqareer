@@ -9,6 +9,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
+import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   generateInterviewPrepBrief,
   type CompanyOverview,
@@ -398,6 +399,7 @@ function useModalAccessibility(
   onClose: () => void,
   containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
+  useEscapeLayer(onClose, isOpen);
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
     const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -407,11 +409,6 @@ function useModalAccessibility(
     containerRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
       if (e.key !== 'Tab') return;
       const focusable = Array.from(
         containerRef.current?.querySelectorAll<HTMLElement>(

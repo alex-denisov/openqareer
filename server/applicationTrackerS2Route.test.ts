@@ -410,23 +410,17 @@ function expiredCluster(id: string): VacancyCluster {
   };
 }
 
-describe('applications route · vacancy closed on the platform (owner decision 2026-09-23 22:26)', () => {
-  it('auto-archives the card with a system event and vacancy_closed reason, idempotently', async () => {
+describe('applications route · disappearance from the active pool', () => {
+  it('keeps an active application when its vacancy is only absent from the active pool', async () => {
     const engine = new MultiSourceVacancyEngine({});
     (engine as unknown as { clusters: VacancyCluster[] }).clusters = [expiredCluster('cluster-1')];
     const { app, authorization } = await createApp(engine);
     const id = await createCard(app, authorization, 'cluster-1', 'applied');
 
-    const firstRead = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const firstCard = firstRead.json().data.find((a: { id: string }) => a.id === id);
-    expect(firstCard.stage).toBe('archived');
-    expect(firstCard.closedReason).toBe('vacancy_closed');
-
-    // Idempotent: a second read does not append a second system event.
-    await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const secondRead = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
-    const secondCard = secondRead.json().data.find((a: { id: string }) => a.id === id);
-    expect(secondCard.version).toBe(firstCard.version);
+    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const card = list.json().data.find((a: { id: string }) => a.id === id);
+    expect(card.stage).toBe('applied');
+    expect(card.version).toBe(1);
   });
 
   it('leaves an unknown clusterId alone (never seen ≠ gone)', async () => {
@@ -435,5 +429,69 @@ describe('applications route · vacancy closed on the platform (owner decision 2
     const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
     const card = list.json().data.find((a: { id: string }) => a.id === id);
     expect(card.stage).toBe('applied');
+  });
+});
+
+describe('applications route · restore archived card', () => {
+  it('returns the card to its previous stage with an optimistic version check', async () => {
+    const { app, authorization } = await createApp();
+    const id = await createCard(app, authorization, 'cluster-restore', 'interview');
+    await app.inject({
+      method: 'PATCH',
+      url: `${APPLICATIONS_URL}/${id}`,
+      headers: { authorization, ...ORIGIN },
+      payload: { expectedVersion: 1, stage: 'archived' },
+    });
+
+    const restored = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/restore`,
+      headers: { authorization, ...ORIGIN },
+      payload: { expectedVersion: 2 },
+    });
+
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json().data).toMatchObject({
+      stage: 'interview',
+      archiveReason: null,
+      archivePreviousStage: null,
+      version: 3,
+    });
+  });
+
+  it('does not restore a card owned by another candidate', async () => {
+    const { app, authorization, candidateStore } = await createApp();
+    const id = await createCard(app, authorization, 'cluster-private', 'applied');
+    const otherCandidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/restore`,
+      headers: { authorization: `Bearer ${otherCandidate.accessToken}`, ...ORIGIN },
+      payload: { expectedVersion: 1 },
+    });
+
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('returns 409 when the archived card has changed since the board loaded it', async () => {
+    const { app, authorization } = await createApp();
+    const id = await createCard(app, authorization, 'cluster-version', 'applied');
+    await app.inject({
+      method: 'PATCH',
+      url: `${APPLICATIONS_URL}/${id}`,
+      headers: { authorization, ...ORIGIN },
+      payload: { expectedVersion: 1, stage: 'archived' },
+    });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `${APPLICATIONS_URL}/${id}/restore`,
+      headers: { authorization, ...ORIGIN },
+      payload: { expectedVersion: 1 },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error.code).toBe('application_version_conflict');
   });
 });

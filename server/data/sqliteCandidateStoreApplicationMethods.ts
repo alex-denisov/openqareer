@@ -41,7 +41,18 @@ export interface ApplicationTrackerMethods {
     candidateId: string,
     input: CreateApplicationInput & { manualVacancy?: VacancyApplicationSnapshot },
   ): ApplicationView;
-  patchApplication(candidateId: string, applicationId: string, input: PatchApplicationInput): ApplicationView;
+  patchApplication(
+    candidateId: string,
+    applicationId: string,
+    input: PatchApplicationInput,
+    archiveStaleDays?: number,
+  ): ApplicationView;
+  restoreApplication(
+    candidateId: string,
+    applicationId: string,
+    expectedVersion: number,
+    archiveStaleDays?: number,
+  ): ApplicationView;
   recordApplicationEvent(
     candidateId: string,
     applicationId: string,
@@ -96,7 +107,6 @@ function createCoreApplicationMethods(
   | 'listApplications'
   | 'getApplication'
   | 'createApplication'
-  | 'patchApplication'
   | 'recordApplicationEvent'
   | 'applicationFunnel'
 > {
@@ -121,10 +131,6 @@ function createCoreApplicationMethods(
       requireCandidate(candidateId);
       return tracker.create(candidateId, input);
     },
-    patchApplication(candidateId, applicationId, input) {
-      requireCandidate(candidateId);
-      return tracker.patch(candidateId, applicationId, input);
-    },
     recordApplicationEvent(candidateId, applicationId, input) {
       requireCandidate(candidateId);
       return tracker.recordEvent(candidateId, applicationId, input);
@@ -132,6 +138,22 @@ function createCoreApplicationMethods(
     applicationFunnel(candidateId) {
       requireCandidate(candidateId);
       return tracker.funnel(candidateId);
+    },
+  };
+}
+
+function createApplicationMutationMethods(
+  tracker: ApplicationTrackerController,
+  requireCandidate: RequireCandidate,
+): Pick<ApplicationTrackerMethods, 'patchApplication' | 'restoreApplication'> {
+  return {
+    patchApplication(candidateId, applicationId, input, archiveStaleDays) {
+      requireCandidate(candidateId);
+      return tracker.patch(candidateId, applicationId, input, archiveStaleDays);
+    },
+    restoreApplication(candidateId, applicationId, expectedVersion, archiveStaleDays) {
+      requireCandidate(candidateId);
+      return tracker.restoreFromArchive(candidateId, applicationId, expectedVersion, archiveStaleDays);
     },
   };
 }
@@ -276,6 +298,7 @@ export function createApplicationTrackerMethods(
 ): ApplicationTrackerMethods {
   return {
     ...createCoreApplicationMethods(tracker, requireCandidate),
+    ...createApplicationMutationMethods(tracker, requireCandidate),
     ...createInterviewApplicationMethods(tracker, requireCandidate, database),
     ...createVacancyJourneyMethods(tracker, requireCandidate),
   };

@@ -105,7 +105,13 @@ describe("B203: Vacancy Facets and Map/Feature Projections", () => {
       expect(facets.currencyRemote).toEqual({ count: 2, total: 4 });
       expect(facets.russianAbroad).toEqual({ count: 1, total: 4 });
       expect(facets.fullRemote).toEqual({ count: 2, total: 4 });
-      expect(facets.onMap).toEqual({ count: 2, total: 4, unmappedCount: 2 });
+      expect(facets.onMap).toEqual({
+        count: 2,
+        total: 4,
+        unmappedCount: 2,
+        missingCityCount: 0,
+        unresolvedCityCount: 2,
+      });
 
       expect(facets.industries).toHaveLength(4);
       expect(facets.industries[0].count).toBe(1);
@@ -121,9 +127,32 @@ describe("B203: Vacancy Facets and Map/Feature Projections", () => {
       const facets = calculateVacancyFacets([]);
       expect(facets.total).toBe(0);
       expect(facets.relocation).toEqual({ count: 0, total: 0 });
-      expect(facets.onMap).toEqual({ count: 0, total: 0, unmappedCount: 0 });
+      expect(facets.onMap).toEqual({
+        count: 0,
+        total: 0,
+        unmappedCount: 0,
+        missingCityCount: 0,
+        unresolvedCityCount: 0,
+      });
       expect(facets.industries).toEqual([]);
       expect(facets.cities).toEqual([]);
+    });
+
+    it('не считает центр страны городской точкой', () => {
+      const countryOnly = makeItem('country-only', 'CountryOnlyCo', {
+        location: 'Germany',
+        features: { city: 'Germany', coordinates: { lat: 51.1657, lng: 10.4515 } },
+      });
+      const facets = calculateVacancyFacets([countryOnly]);
+
+      expect(facets.onMap).toEqual({
+        count: 0,
+        total: 1,
+        unmappedCount: 1,
+        missingCityCount: 1,
+        unresolvedCityCount: 0,
+      });
+      expect(filterVacanciesByFacets([countryOnly], { onMapOnly: true })).toEqual([]);
     });
 
     it("formats honest denominator label according to B192", () => {
@@ -162,11 +191,32 @@ describe("B203: Vacancy Facets and Map/Feature Projections", () => {
       expect(filtered[0].cluster.canonicalCompany).toBe("ASML");
     });
 
-    it("filters by city", () => {
+  it("filters by city", () => {
       const filtered = filterVacanciesByFacets(sampleItems, { city: "Амстердам" });
       expect(filtered).toHaveLength(1);
-      expect(filtered[0].cluster.canonicalCompany).toBe("Miro");
-    });
+    expect(filtered[0].cluster.canonicalCompany).toBe("Miro");
+  });
+
+  it('фильтр выбранного города включает латинские варианты с теми же координатами', () => {
+    const point = { lat: 55.75204, lng: 37.61781 };
+    const items = [
+      makeItem('moscow-ru', 'RussianCo', {
+        location: 'Москва',
+        features: { city: 'Москва', coordinates: point },
+      }),
+      makeItem('moscow-en', 'EnglishCo', {
+        location: 'Moscow, Russia',
+        features: { city: 'Moscow', country: 'Russia', coordinates: point },
+      }),
+      makeItem('spb', 'PiterCo', {
+        location: 'Санкт-Петербург',
+        features: { city: 'Санкт-Петербург', coordinates: { lat: 59.93863, lng: 30.31413 } },
+      }),
+    ];
+
+    const filtered = filterVacanciesByFacets(items, { city: 'Москва' });
+    expect(filtered.map((item) => item.cluster.id)).toEqual(['moscow-ru', 'moscow-en']);
+  });
 
     it("filters by onMapOnly (requires recognized coordinates)", () => {
       const filtered = filterVacanciesByFacets(sampleItems, { onMapOnly: true });

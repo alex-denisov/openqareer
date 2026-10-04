@@ -11,6 +11,7 @@ import {
 } from '@phosphor-icons/react';
 import { requestVacancyPitch, type VacancyPitchResult } from './vacancyPitchApi';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { useEscapeLayer } from '../shell/escapeLayers';
 
 export type PitchFormatTab = 'email' | 'linkedin' | 'ats';
 export type PitchTone = 'executive' | 'confident' | 'technical';
@@ -591,9 +592,7 @@ function usePitchFetcher(
       })
       .catch((err) => {
         if (isMounted) {
-          setError(
-            err instanceof Error ? err.message : 'Не удалось подготовить текст. Повторите.',
-          );
+          setError(err instanceof Error ? err.message : 'Не удалось подготовить текст. Повторите.');
           setLoading(false);
         }
       });
@@ -610,6 +609,7 @@ function useModalAccessibility(
   onClose: () => void,
   containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
+  useEscapeLayer(onClose, isOpen);
   useEffect(() => {
     if (!isOpen || typeof document === 'undefined') return;
     const previousActiveElement = document.activeElement as HTMLElement | null;
@@ -620,11 +620,6 @@ function useModalAccessibility(
     containerRef.current?.focus();
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
       if (e.key !== 'Tab') return;
       const focusable = Array.from(
         containerRef.current?.querySelectorAll<HTMLElement>(

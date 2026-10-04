@@ -16,6 +16,7 @@ export default defineConfig({
       // in this tree.
       '**/.claude/worktrees/**',
       '**/prototypes/**',
+      '**/output/**',
       '**/node_modules/**',
       '**/dist/**',
       // Игнорируем изолированный набор зависимостей и логи гейтов из worktree.

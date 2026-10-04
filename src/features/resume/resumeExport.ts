@@ -1,9 +1,4 @@
-import type {
-  ResumeDocument,
-  ResumeDraft,
-  ResumeExperience,
-  ResumeEducation,
-} from './resumeTypes';
+import type { ResumeDocument, ResumeDraft, ResumeExperience, ResumeEducation } from './resumeTypes';
 
 /**
  * Generates clean, ATS-optimized plain text from a ResumeDocument.
@@ -31,7 +26,9 @@ export function exportResumeAsPlainText(doc: ResumeDocument): string {
   const education = buildEducationSection(doc.education);
   if (education) sections.push(education);
 
-  const skills = (doc.skills ?? []).map((s) => s.name?.trim()).filter((s): s is string => Boolean(s));
+  const skills = (doc.skills ?? [])
+    .map((s) => s.name?.trim())
+    .filter((s): s is string => Boolean(s));
   if (skills.length > 0) {
     sections.push(`НАВЫКИ\n${skills.join(', ')}`);
   }
@@ -149,10 +146,12 @@ function buildRecommendationsSection(doc: ResumeDocument): string {
   const items = doc.recommendations
     .map((r) => {
       const authorName = (r.author ?? r.recommender ?? '').trim();
-      const author = [authorName, r.role?.trim(), r.organization?.trim()].filter(Boolean).join(', ');
+      const author = [authorName, r.role?.trim(), r.organization?.trim()]
+        .filter(Boolean)
+        .join(', ');
       const text = (r.text ?? '').trim();
       if (!author && !text) return '';
-      return author && text ? `${author}\n${text}` : (author || text);
+      return author && text ? `${author}\n${text}` : author || text;
     })
     .filter(Boolean);
 
@@ -177,10 +176,38 @@ export function resumeExportFileName(doc: ResumeDocument, ext: 'txt' | 'json' | 
 }
 
 const RU_TO_LATIN: Record<string, string> = {
-  а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'yo', ж: 'zh',
-  з: 'z', и: 'i', й: 'y', к: 'k', л: 'l', м: 'm', н: 'n', о: 'o',
-  п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f', х: 'kh', ц: 'ts',
-  ч: 'ch', ш: 'sh', щ: 'shch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu',
+  а: 'a',
+  б: 'b',
+  в: 'v',
+  г: 'g',
+  д: 'd',
+  е: 'e',
+  ё: 'yo',
+  ж: 'zh',
+  з: 'z',
+  и: 'i',
+  й: 'y',
+  к: 'k',
+  л: 'l',
+  м: 'm',
+  н: 'n',
+  о: 'o',
+  п: 'p',
+  р: 'r',
+  с: 's',
+  т: 't',
+  у: 'u',
+  ф: 'f',
+  х: 'kh',
+  ц: 'ts',
+  ч: 'ch',
+  ш: 'sh',
+  щ: 'shch',
+  ъ: '',
+  ы: 'y',
+  ь: '',
+  э: 'e',
+  ю: 'yu',
   я: 'ya',
 };
 
@@ -190,16 +217,30 @@ function slugifyLatin(text: string): string {
   for (const char of lower) {
     translit += RU_TO_LATIN[char] ?? char;
   }
-  return translit
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'resume';
+  return translit.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'resume';
 }
 
 /**
  * Triggers a browser file download for text/json content.
  */
-export function triggerFileDownload(fileName: string, content: string, mimeType: string): void {
-  if (typeof document === 'undefined') return;
+export async function triggerFileDownload(
+  fileName: string,
+  content: string,
+  mimeType: string,
+): Promise<string | null> {
+  if (isTauriEnvironment()) {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const { writeTextFile } = await import('@tauri-apps/plugin-fs');
+    const extension = fileName.split('.').at(-1) ?? 'txt';
+    const path = await save({
+      defaultPath: fileName,
+      filters: [{ name: extension.toUpperCase(), extensions: [extension] }],
+    });
+    if (!path) return null;
+    await writeTextFile(path, content);
+    return path;
+  }
+  if (typeof document === 'undefined') return null;
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
@@ -209,15 +250,34 @@ export function triggerFileDownload(fileName: string, content: string, mimeType:
   anchor.click();
   document.body.removeChild(anchor);
   URL.revokeObjectURL(url);
+  return null;
 }
 
 /**
  * Triggers browser native print for PDF saving.
  */
-export function triggerResumePrint(): void {
-  if (typeof window !== 'undefined') {
-    window.print();
+export async function triggerResumePrint(): Promise<boolean> {
+  if (isTauriEnvironment()) {
+    const printed = await invokeDesktopCommand<boolean>('print_resume');
+    if (printed !== true) throw new Error('native_print_unavailable');
+    return true;
   }
+  if (typeof window === 'undefined') return false;
+  window.print();
+  return true;
+}
+
+export async function saveResumeAsPdf(): Promise<string | null> {
+  if (!isTauriEnvironment()) return null;
+  const { save } = await import('@tauri-apps/plugin-dialog');
+  const path = await save({
+    defaultPath: 'openqareer-resume.pdf',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }],
+  });
+  if (!path) return null;
+  const saved = await invokeDesktopCommand<boolean>('save_resume_pdf', { path });
+  if (saved !== true) throw new Error('native_pdf_save_failed');
+  return path;
 }
 
 /**
@@ -275,7 +335,7 @@ function formatAtsHeader(doc: ResumeDocument, draft: ResumeDraft): string | null
 }
 
 function formatAtsLanguages(doc: ResumeDocument, draft: ResumeDraft): string | null {
-  const languagesList = (doc.languages.length > 0 ? doc.languages : draft.languages ?? [])
+  const languagesList = (doc.languages.length > 0 ? doc.languages : (draft.languages ?? []))
     .map((l) => {
       const name =
         'name' in l && typeof l.name === 'object' && l.name !== null
@@ -351,3 +411,4 @@ function formatAtsEducation(education: readonly ResumeEducation[]): string {
     .filter(Boolean)
     .join('\n');
 }
+import { isTauriEnvironment, invokeDesktopCommand } from '../../services/desktop/desktopBridge';

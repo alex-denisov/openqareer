@@ -90,17 +90,19 @@ const patchApplicationSchema = z.object({
   followUpDueAt: isoDateField.nullable().optional(),
 });
 
+const restoreApplicationSchema = z.object({ expectedVersion: z.number().int().nonnegative() });
+
 const listApplicationsQuerySchema = z.object({ tz: timezoneOffsetSchema });
 
 const handleListApplications: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const { tz } = listApplicationsQuerySchema.parse(request.query ?? {});
   return {
     data: candidateStore.listApplications(candidate.id, {
       timezoneOffsetMinutes: tz,
-      isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
+      archiveStaleDays: config.applicationArchiveStaleDays,
     }),
     meta: { requestId: request.id },
   };
@@ -128,8 +130,29 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const applicationId = (request.params as { id: string }).id;
   const body = patchApplicationSchema.parse(request.body);
-  const patched = candidateStore.patchApplication(candidate.id, applicationId, body);
+  const patched = candidateStore.patchApplication(
+    candidate.id,
+    applicationId,
+    body,
+    config.applicationArchiveStaleDays,
+  );
   return { data: patched, meta: { requestId: request.id } };
+};
+
+const handleRestoreApplication: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const applicationId = (request.params as { id: string }).id;
+  const body = restoreApplicationSchema.parse(request.body);
+  const restored = candidateStore.restoreApplication(
+    candidate.id,
+    applicationId,
+    body.expectedVersion,
+    config.applicationArchiveStaleDays,
+  );
+  return { data: restored, meta: { requestId: request.id } };
 };
 
 const recordEventSchema = z.object({
@@ -254,15 +277,13 @@ function todayNewVacancies(
  * силе — считаем один раз на снимок, а не на каждый запрос).
  */
 const handleToday: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
+  const { authService, candidateStore, config, titleParseStore } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   todayQuerySchema.parse(request.query ?? {});
 
   const since = candidateStore.getSinceLastVisit(candidate.id);
-  const applications = candidateStore.listApplications(candidate.id, {
-    isVacancyGone: (clusterId) => multiSourceEngine.isKnownVacancyGone(clusterId),
-  });
+  const applications = candidateStore.listApplications(candidate.id);
 
   const { matched, targetRoles, targetLevel } = await readTodayMatchedVacancies(deps, candidate.id);
   const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore) ?? [];
@@ -299,6 +320,11 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     '/api/v1/candidate/applications/:id',
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handlePatchApplication),
+  );
+  app.post(
+    '/api/v1/candidate/applications/:id/restore',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRestoreApplication),
   );
   app.get('/api/v1/candidate/applications/funnel', withDeps(deps, handleApplicationFunnel));
   app.post(

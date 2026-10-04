@@ -22,6 +22,7 @@ import type { SqliteDocumentRepository } from '../sqliteDocumentRepository';
 import type { SealedText } from '../sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../../../shared/applicationArchive';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyDecision } from '../../vacancies/applyVacancyDecisions';
 import { deriveApplicationFields, type ApplicationView } from '../../domain/applicationDerivedFields';
@@ -31,8 +32,7 @@ import { ApplicationNotFoundError, CandidateDocumentNotFoundError } from './erro
 export interface ReadApplicationOptions {
   readonly now?: string;
   readonly timezoneOffsetMinutes?: number;
-  /** `GET /applications` closed-vacancy check (architecture.md §4): reads several clusters by primary key, no pool scan. */
-  readonly isVacancyGone?: (clusterId: string) => boolean;
+  readonly archiveStaleDays?: number;
 }
 
 /**
@@ -78,11 +78,7 @@ export class ApplicationTrackerController {
     });
   }
 
-  /**
-   * Ленивый перенос старых `applied` перед каждым чтением; идемпотентен.
-   * Затем — автоматический архив карточек, чья вакансия пропала с площадки
-   * (`options.isVacancyGone`), тоже идемпотентно.
-   */
+  /** Ленивый перенос старых `applied` перед каждым чтением; идемпотентен. */
   list(candidateId: string, options: ReadApplicationOptions = {}): ApplicationView[] {
     const legacyApplied = this.legacyApplications
       .list(candidateId)
@@ -93,12 +89,7 @@ export class ApplicationTrackerController {
         appliedAt: application.appliedAt,
       }));
     this.applications.migrateLegacyApplied(candidateId, legacyApplied);
-    const applications = this.applications.list(candidateId).map((application) => {
-      if (!options.isVacancyGone || !application.clusterId) return application;
-      if (application.stage === 'archived' || application.stage === 'rejected') return application;
-      if (!options.isVacancyGone(application.clusterId)) return application;
-      return this.applications.archiveClosedVacancy(candidateId, application, options.now);
-    });
+    const applications = this.applications.list(candidateId);
     return applications.map((application) => this.toView(application, options));
   }
 
@@ -120,8 +111,24 @@ export class ApplicationTrackerController {
     return this.toView(created, {});
   }
 
-  patch(candidateId: string, applicationId: string, input: PatchApplicationInput): ApplicationView {
-    return this.toView(this.applications.patch(candidateId, applicationId, input), {});
+  patch(
+    candidateId: string,
+    applicationId: string,
+    input: PatchApplicationInput,
+    archiveStaleDays = DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+  ): ApplicationView {
+    const application = this.applications.patch(candidateId, applicationId, input);
+    return this.toView(application, { archiveStaleDays });
+  }
+
+  restoreFromArchive(
+    candidateId: string,
+    applicationId: string,
+    expectedVersion: number,
+    archiveStaleDays = DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+  ): ApplicationView {
+    const restored = this.applications.restoreFromArchive(candidateId, applicationId, expectedVersion);
+    return this.toView(restored, { archiveStaleDays });
   }
 
   recordEvent(
@@ -267,7 +274,11 @@ export class ApplicationTrackerController {
       now: options.now,
       timezoneOffsetMinutes: options.timezoneOffsetMinutes,
     });
-    return { ...application, ...derived };
+    return {
+      ...application,
+      ...derived,
+      archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
+    };
   }
 }
 
