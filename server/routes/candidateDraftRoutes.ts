@@ -1,3 +1,4 @@
+import { collectDraftFacts } from '../candidate/draftFacts';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { DEFAULT_ACCOUNT_TIMEZONE, formatLocalDate, isValidTimezone } from '../../shared/timezoneUtils';
@@ -40,9 +41,8 @@ async function generate(deps: CandidateDraftRouteDeps, request: FastifyRequest, 
   let text: string;
   try {
     if (!deps.linkedinDraftWriter) throw new Error('draft_writer_unavailable');
-    const facts = deps.candidateStore.getSnapshot(candidate.id).memory
-      .filter(fact => fact.status === 'confirmed' || fact.status === 'corrected').slice(0, 7)
-      .map(fact => ({ ref: fact.id, statement: fact.statement }));
+    const snapshot = deps.candidateStore.getSnapshot(candidate.id);
+    const facts = collectDraftFacts({ memory: snapshot.memory, resume: snapshot.resume });
     text = (await deps.linkedinDraftWriter.writeDraft({ ...input, profileHeadline: account.headline, facts })).text;
   } catch (err) {
     request.log.error({ code: 'draft_writer_unavailable', failureType: err instanceof Error ? err.name : 'UnknownError', cause: describeCause(err), candidateId: candidate.id }, 'candidate-draft-writer-failed');
