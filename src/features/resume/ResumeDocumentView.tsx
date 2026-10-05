@@ -144,8 +144,8 @@ function StanfordHeader({
 
 function IdentitySection({ draft, document, editor }: SectionProps) {
   const contact = draft.candidate.contact;
+  // Город уже стоит в подзаголовке рядом с ролью (B333: в .app он повторялся строкой ниже).
   const contactParts = [
-    contact?.location ?? document.contact.location,
     contact?.phone ?? document.contact.phone,
     contact?.email ?? document.contact.email,
     contact?.links?.[0] ?? document.contact.links?.[0],

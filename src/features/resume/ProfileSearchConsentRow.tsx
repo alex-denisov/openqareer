@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { SearchConsentState } from '../../../shared/searchConsent';
-import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
+import { SEARCH_CONSENT_ACTIVE_TEXT, SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
 import { getSearchConsent, setSearchConsent } from '../vacancies/recruiterContactsApi';
 
 export interface ProfileSearchConsentRowProps {
@@ -123,7 +123,9 @@ export function ProfileSearchConsentRow({
         saving={saving}
         onToggle={handleToggle}
       />
-      <p className="career-profile-screen-search-consent-text">{SEARCH_CONSENT_TEXT}</p>
+      <p className="career-profile-screen-search-consent-text">
+        {granted ? SEARCH_CONSENT_ACTIVE_TEXT : SEARCH_CONSENT_TEXT}
+      </p>
       {error ? (
         <p className="career-profile-screen-search-consent-error" role="alert">
           {error}

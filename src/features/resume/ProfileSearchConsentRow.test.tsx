@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
+import { SEARCH_CONSENT_ACTIVE_TEXT, SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
 import { ProfileSearchConsentRow } from './ProfileSearchConsentRow';
 
 describe('ProfileSearchConsentRow (C64)', () => {
@@ -36,7 +36,9 @@ describe('ProfileSearchConsentRow (C64)', () => {
     expect(html).toContain('включено');
     expect(html).toContain('is-granted');
     expect(html).toContain('обновлено 27 сентября 2026');
-    expect(html).toContain(SEARCH_CONSENT_TEXT);
+    // B333: включённый режим не просит «включите режим».
+    expect(html).toContain(SEARCH_CONSENT_ACTIVE_TEXT);
+    expect(html).not.toContain(SEARCH_CONSENT_TEXT);
     expect(html).toContain('Выключить');
   });
 

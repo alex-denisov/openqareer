@@ -9320,6 +9320,24 @@
     color: #000000 !important;
   }
 
+  /* B333: печатается только документ резюме. Список скрываемых классов ниже
+     устаревал при каждом редизайне оболочки (career-nav-rail → career-rail), и
+     .app печатал весь экран; видимость изолирует документ независимо от классов. */
+  body * {
+    visibility: hidden !important;
+  }
+
+  .career-resume-document,
+  .career-resume-document * {
+    visibility: visible !important;
+  }
+
+  .career-resume-document {
+    position: absolute !important;
+    inset: 0 auto auto 0 !important;
+    width: 100% !important;
+  }
+
   .career-nav-rail,
   .career-mobile-nav,
   .career-cabinet-header,
@@ -14599,7 +14617,8 @@ button.chip {
   grid-auto-columns: minmax(220px, 1fr);
   gap: var(--career-space-4);
   overflow-x: auto;
-  min-height: 640px;
+  /* B333: 640 px уводили «Архив · N» за край окна 1176×806 при паре карточек. */
+  min-height: 360px;
   padding-bottom: var(--career-space-8);
   scrollbar-width: thin;
   scrollbar-color: var(--career-line-strong) transparent;
