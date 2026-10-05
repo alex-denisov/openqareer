@@ -116,10 +116,10 @@
 
 .admin-remote-login__screen img {
   display: block;
-  max-inline-size: 100%;
-  /* Поле ввода и кнопки остаются видны без прокрутки на экране 900 px. */
-  max-block-size: calc(100dvh - 280px);
-  inline-size: auto;
+  /* Страница сервера 1440×900 (16:10). Ширина считается из высоты окна, чтобы
+     поле ввода и кнопки оставались видны без прокрутки на экране 900 px. */
+  inline-size: min(100%, calc((100dvh - 280px) * 1.6));
+  aspect-ratio: 16 / 10;
   block-size: auto;
 }
 
