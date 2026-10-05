@@ -87,7 +87,7 @@ function buildExperienceSection(experiences: readonly ResumeExperience[]): strin
   return blocks.length ? `ОПЫТ РАБОТЫ\n\n${blocks.join('\n\n')}` : '';
 }
 
-function formatExperiencePeriod(exp: ResumeExperience): string {
+export function formatExperiencePeriod(exp: ResumeExperience): string {
   const start = exp.startDate?.value?.trim();
   const isCurrent = exp.current?.value;
   const end = isCurrent ? 'настоящее время' : exp.endDate?.value?.trim();

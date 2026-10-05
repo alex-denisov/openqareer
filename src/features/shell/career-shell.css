@@ -9314,6 +9314,46 @@
   outline-offset: 2px;
 }
 
+/* B333: print-only resume (see ResumePrintDocument) */
+.career-resume-print {
+  display: none;
+}
+
+.career-resume-print h1 {
+  margin: 0;
+  font-size: var(--career-text-xl);
+  font-weight: 700;
+  text-align: center;
+}
+
+.career-resume-print h2 {
+  margin: var(--career-space-4) 0 var(--career-space-2);
+  padding-bottom: var(--career-space-1);
+  border-bottom: var(--career-border-width) solid #000000;
+  font-size: var(--career-text-md);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.career-resume-print h3 {
+  margin: var(--career-space-2) 0 0;
+  font-size: var(--career-text-sm);
+  font-weight: 700;
+}
+
+.career-resume-print p,
+.career-resume-print ul {
+  margin: var(--career-space-1) 0 0;
+}
+
+.career-resume-print-header p {
+  text-align: center;
+}
+
+.career-resume-print ul {
+  padding-left: var(--career-space-5);
+}
+
 @media print {
   body {
     background: #ffffff !important;
@@ -9354,18 +9394,41 @@
     max-width: 100% !important;
   }
 
-  .career-resume-document {
-    border: none !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    background: transparent !important;
-    color: #000000 !important;
+  /* B333: the on-screen document is made of inputs and editor hints; paper
+     gets the read-only .career-resume-print instead. */
+  .career-resume-document,
+  .career-profile-screen-document-preview > :not(.career-resume-print),
+  .career-resume-format-container > :not(.career-resume-print) {
+    display: none !important;
   }
 
-  .career-resume-document section,
-  .career-resume-document article {
+  body * {
+    visibility: hidden !important;
+  }
+
+  .career-resume-print,
+  .career-resume-print * {
+    visibility: visible !important;
+  }
+
+  .career-resume-print {
+    display: block !important;
+    position: absolute;
+    inset: 0 0 auto 0;
+    color: #000000;
+    background: #ffffff;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: var(--career-text-sm);
+    line-height: 1.4;
+  }
+
+  .career-resume-print-entry,
+  .career-resume-print-section > h2 {
     break-inside: avoid;
+  }
+
+  .career-resume-print-section > h2 {
+    break-after: avoid;
   }
 
   .career-resume-stanford-missing {
