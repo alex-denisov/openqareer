@@ -261,7 +261,9 @@ describe('LinkedIn pool executor controls', () => {
   it('keeps every page gap and daily page budget within the B309 limits', () => {
     expect(linkedinExecutorPageDelayMs(() => 0)).toBe(20_000);
     expect(linkedinExecutorPageDelayMs(() => 1)).toBe(60_000);
-    expect(hasLinkedinExecutorDailyCapacity(38)).toBe(true);
+    // B369: компания = 3 страницы (поиск компании, страница компании, поиск людей).
+    expect(hasLinkedinExecutorDailyCapacity(37)).toBe(true);
+    expect(hasLinkedinExecutorDailyCapacity(38)).toBe(false);
     expect(hasLinkedinExecutorDailyCapacity(39)).toBe(false);
     expect(hasLinkedinExecutorDailyCapacity(40)).toBe(false);
   });

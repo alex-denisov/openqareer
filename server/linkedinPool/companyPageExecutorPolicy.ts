@@ -74,7 +74,9 @@ export function readLinkedinPoolExecutorConfig(
 
 /** Режимы выше `warmup` (150–500 страниц в сутки) включаются отдельным явным флагом владельца. */
 function isHighVolumeAllowed(environment: NodeJS.ProcessEnv): boolean {
-  return environment.OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME?.trim().toLowerCase() === 'true';
+  return (
+    environment.OPENQAREER_LINKEDIN_POOL_EXECUTOR_ALLOW_HIGH_VOLUME?.trim().toLowerCase() === 'true'
+  );
 }
 
 export function isLinkedinExecutorWithinHours(now: Date, timezone: string): boolean {
@@ -107,12 +109,17 @@ export function linkedinExecutorPageDelayMs(random: () => number = Math.random):
   const bounded = Number.isFinite(sample) ? Math.min(1, Math.max(0, sample)) : 0.5;
   return (
     LINKEDIN_EXECUTOR_MIN_PAGE_DELAY_MS +
-    Math.round(bounded * (LINKEDIN_EXECUTOR_MAX_PAGE_DELAY_MS - LINKEDIN_EXECUTOR_MIN_PAGE_DELAY_MS))
+    Math.round(
+      bounded * (LINKEDIN_EXECUTOR_MAX_PAGE_DELAY_MS - LINKEDIN_EXECUTOR_MIN_PAGE_DELAY_MS),
+    )
   );
 }
 
+/** Страниц на одну компанию (B369): поиск компании, страница компании, поиск людей. */
+export const LINKEDIN_EXECUTOR_PAGES_PER_COMPANY = 3;
+
 export function hasLinkedinExecutorDailyCapacity(pageCount: number): boolean {
-  return pageCount + 2 <= LINKEDIN_EXECUTOR_DAILY_PAGE_LIMIT;
+  return pageCount + LINKEDIN_EXECUTOR_PAGES_PER_COMPANY <= LINKEDIN_EXECUTOR_DAILY_PAGE_LIMIT;
 }
 
 function isUuid(value: string): boolean {
