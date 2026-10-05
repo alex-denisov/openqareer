@@ -86,7 +86,7 @@ export function AdminLinkedinServerSessionActions({
           onClick={onSave}
         >
           <CloudArrowUp size={18} aria-hidden="true" />{' '}
-          {busy ? 'Переносим сессию…' : 'Перенести сессию на сервер'}
+          {busy ? 'Переносим сессию…' : 'Перенести из приложения (сессия может не прожить)'}
         </button>
       ) : null}
       {canClearLocal ? (

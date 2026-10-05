@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowClockwise,
+  Browser,
   CaretDown,
   Desktop,
   LinkBreak,
@@ -46,6 +47,8 @@ import {
   type LinkedinSessionState,
 } from './linkedinPoolApi';
 import { TimezoneSelect } from '../shell/TimezoneSelect';
+import { AdminLinkedinRemoteLoginPanel } from './AdminLinkedinRemoteLoginPanel';
+import { useRemoteLoginLauncher } from './useRemoteLoginLauncher';
 import {
   DEFAULT_ACCOUNT_TIMEZONE,
   formatTimezoneDisplay,
@@ -214,6 +217,7 @@ export function AdminLinkedinPoolView() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createDetailsRef = useRef<HTMLDetailsElement>(null);
+  const remoteLogin = useRemoteLoginLauncher(setError, refresh);
   useEscapeLayer(() => setConfirmDelete(undefined), Boolean(confirmDelete));
   useEscapeLayer(() => setConfirmTransferAccountId(undefined), Boolean(confirmTransferAccountId));
   useEscapeLayer(() => {
@@ -684,9 +688,25 @@ export function AdminLinkedinPoolView() {
                       <X size={18} aria-hidden="true" /> Закрыть окно
                     </button>
                   ) : null}
-                  {canLogin && activeLogin?.accountId !== account.id ? (
+                  {canLogin ? (
                     <button
                       className="admin-btn admin-btn--primary"
+                      type="button"
+                      disabled={busy || remoteLogin.startingAccountId === account.id}
+                      aria-busy={remoteLogin.startingAccountId === account.id}
+                      onClick={() =>
+                        void remoteLogin.open(account.id, account.adminLabel || account.emailLogin)
+                      }
+                    >
+                      <Browser size={18} aria-hidden="true" />{' '}
+                      {remoteLogin.startingAccountId === account.id
+                        ? 'Открываем браузер сервера…'
+                        : 'Войти в браузере сервера'}
+                    </button>
+                  ) : null}
+                  {canLogin && activeLogin?.accountId !== account.id ? (
+                    <button
+                      className="admin-btn is-secondary"
                       type="button"
                       disabled={busy || Boolean(activeLogin)}
                       onClick={() => void openLogin(account)}
@@ -804,6 +824,9 @@ export function AdminLinkedinPoolView() {
             );
           })}
         </div>
+      ) : null}
+      {remoteLogin.target ? (
+        <AdminLinkedinRemoteLoginPanel {...remoteLogin.target} onClose={remoteLogin.close} />
       ) : null}
     </section>
   );

@@ -55,7 +55,10 @@ describe('AdminLinkedinRemoteLoginPanel', () => {
   }
   const button = (text: string) =>
     [...host.querySelectorAll('button')].find((b) => b.textContent?.includes(text))!;
-  const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
 
   it('labels the dialog and shows the login state, then follows the status', async () => {
     await render();
@@ -71,7 +74,9 @@ describe('AdminLinkedinRemoteLoginPanel', () => {
   });
 
   it('stops polling once closed and says why', async () => {
-    vi.mocked(api.fetchRemoteLoginFrame).mockResolvedValue(frame({ state: 'closed', reason: 'idle' }));
+    vi.mocked(api.fetchRemoteLoginFrame).mockResolvedValue(
+      frame({ state: 'closed', reason: 'idle' }),
+    );
     await render();
     expect(host.textContent).toContain('Закрыто после 10 минут простоя');
     const calls = vi.mocked(api.fetchRemoteLoginFrame).mock.calls.length;
@@ -92,7 +97,16 @@ describe('AdminLinkedinRemoteLoginPanel', () => {
     await render();
     const img = host.querySelector('img')!;
     img.getBoundingClientRect = () =>
-      ({ left: 10, top: 20, width: 720, height: 450, right: 730, bottom: 470, x: 10, y: 20 }) as DOMRect;
+      ({
+        left: 10,
+        top: 20,
+        width: 720,
+        height: 450,
+        right: 730,
+        bottom: 470,
+        x: 10,
+        y: 20,
+      }) as DOMRect;
     await act(async () => {
       img.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 370, clientY: 245 }));
     });
@@ -108,7 +122,10 @@ describe('AdminLinkedinRemoteLoginPanel', () => {
     const input = host.querySelector('input')!;
     expect(input.type).toBe('text');
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'секрет');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'секрет',
+      );
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => button('Отправить').click());
@@ -124,7 +141,10 @@ describe('AdminLinkedinRemoteLoginPanel', () => {
     await render();
     for (const key of ['Enter', 'Tab', 'Backspace']) {
       await act(async () => button(key).click());
-      expect(api.sendRemoteLoginInput).toHaveBeenCalledWith('acc-1', 'login-1', { type: 'key', key });
+      expect(api.sendRemoteLoginInput).toHaveBeenCalledWith('acc-1', 'login-1', {
+        type: 'key',
+        key,
+      });
     }
   });
 

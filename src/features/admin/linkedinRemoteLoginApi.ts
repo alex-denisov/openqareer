@@ -3,14 +3,7 @@ import { apiFetch, readData, throwApiError } from '../coach/apiClient';
 export type RemoteLoginState = 'login' | 'checkpoint' | 'signed_in' | 'closed';
 export type RemoteLoginReason = 'closed_by_admin' | 'idle' | 'persist_failed' | 'shutdown';
 export type RemoteLoginKey =
-  | 'Enter'
-  | 'Tab'
-  | 'Backspace'
-  | 'Escape'
-  | 'ArrowUp'
-  | 'ArrowDown'
-  | 'ArrowLeft'
-  | 'ArrowRight';
+  'Enter' | 'Tab' | 'Backspace' | 'Escape' | 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
 
 export interface RemoteLoginFrame {
   state: RemoteLoginState;
