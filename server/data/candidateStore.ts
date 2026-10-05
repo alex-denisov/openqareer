@@ -551,6 +551,15 @@ export interface CandidateStore {
     respondBy: string | null,
   ): StoredApplicationOffer;
 
+  getApplicationOffer(
+    candidateId: string,
+    applicationId: string,
+  ): StoredApplicationOffer | null;
+
+  listApplicationOffers(
+    candidateId: string,
+  ): StoredApplicationOffer[];
+
   listVacancySkips(candidateId: string): StoredVacancySkip[];
 
   createVacancySkip(

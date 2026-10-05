@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
+import {
+  ArrowClockwise,
+  Briefcase,
+  DotsThreeVertical,
+  Scales,
+  WarningCircle,
+} from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
@@ -7,6 +13,8 @@ import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
+import { OfferComparisonMatrix } from './OfferComparisonMatrix';
+import { OfferEditModal } from './OfferEditModal';
 
 interface Column {
   readonly key: string;
@@ -193,6 +201,8 @@ function BoardColumnsList({
   onOpenVacancies,
   onAddManual,
   onOpenExpert,
+  onOpenCompareOffers,
+  onOpenOfferEdit,
 }: {
   columns: readonly Column[];
   state: UseApplications;
@@ -202,6 +212,8 @@ function BoardColumnsList({
   onOpenVacancies: () => void;
   onAddManual: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenCompareOffers?: () => void;
+  onOpenOfferEdit?: (applicationId: string) => void;
 }) {
   return (
     <div className="career-responses-board">
@@ -216,10 +228,65 @@ function BoardColumnsList({
           onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
           onAddManual={column.key === 'saved' ? onAddManual : undefined}
           onOpenExpert={onOpenExpert}
+          onOpenCompareOffers={onOpenCompareOffers}
+          onOpenOfferEdit={onOpenOfferEdit}
         />
       ))}
     </div>
   );
+}
+
+function BoardModals({
+  state,
+  modals,
+}: {
+  readonly state: UseApplications;
+  readonly modals: ReturnType<typeof useBoardModals>;
+}) {
+  const editingOfferApp = modals.editingOfferId
+    ? state.applications.find((application) => application.id === modals.editingOfferId) ?? null
+    : null;
+
+  return (
+    <>
+      {modals.addingManual ? <ManualCardFormDialog state={state} onCancel={modals.closeManual} /> : null}
+      {modals.comparingOffers ? (
+        <OfferComparisonMatrix
+          applications={state.applications.filter(
+            (application) => application.stage === 'offer' || application.offer !== null,
+          )}
+          onClose={modals.closeCompare}
+          onEditOffer={modals.openEditOffer}
+        />
+      ) : null}
+      {editingOfferApp ? (
+        <OfferEditModal
+          application={editingOfferApp}
+          isOpen={true}
+          onClose={modals.closeEditOffer}
+          onSave={state.saveOffer}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function useBoardModals() {
+  const [addingManual, setAddingManual] = useState(false);
+  const [comparingOffers, setComparingOffers] = useState(false);
+  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
+
+  return {
+    addingManual,
+    comparingOffers,
+    editingOfferId,
+    openManual: () => setAddingManual(true),
+    closeManual: () => setAddingManual(false),
+    openCompare: () => setComparingOffers(true),
+    closeCompare: () => setComparingOffers(false),
+    openEditOffer: (id: string) => setEditingOfferId(id),
+    closeEditOffer: () => setEditingOfferId(null),
+  };
 }
 
 function ReadyBoard({
@@ -237,7 +304,7 @@ function ReadyBoard({
   onClearFilter?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
-  const [addingManual, setAddingManual] = useState(false);
+  const modals = useBoardModals();
   const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
 
   const visibleColumns = stageFilter
@@ -257,15 +324,17 @@ function ReadyBoard({
         onToggleMenu={(id) => setActiveMenuCardId((cur) => (cur === id ? null : id))}
         onCloseMenu={() => setActiveMenuCardId(null)}
         onOpenVacancies={onOpenVacancies}
-        onAddManual={() => setAddingManual(true)}
+        onAddManual={modals.openManual}
         onOpenExpert={onOpenExpert}
+        onOpenCompareOffers={modals.openCompare}
+        onOpenOfferEdit={modals.openEditOffer}
       />
       <ArchivedResponsesSection
         applications={state.applications.filter((application) => application.stage === 'archived')}
         initiallyOpen={initialArchiveOpen}
         onRestore={state.restoreFromArchive}
       />
-      {addingManual ? <ManualCardFormDialog state={state} onCancel={() => setAddingManual(false)} /> : null}
+      <BoardModals state={state} modals={modals} />
     </div>
   );
 }
@@ -307,6 +376,8 @@ interface BoardColumnProps {
   onOpenVacancies?: () => void;
   onAddManual?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenCompareOffers?: () => void;
+  onOpenOfferEdit?: (applicationId: string) => void;
 }
 
 function ColumnHeader({ label, count }: { label: string; count: number }) {
@@ -325,6 +396,7 @@ function ColumnCardItem({
   onToggleMenu,
   onCloseMenu,
   onOpenExpert,
+  onOpenOfferEdit,
 }: {
   application: ApplicationView;
   state: UseApplications;
@@ -332,6 +404,7 @@ function ColumnCardItem({
   onToggleMenu: (id: string) => void;
   onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenOfferEdit?: (applicationId: string) => void;
 }) {
   return (
     <ResponsesCard
@@ -349,7 +422,27 @@ function ColumnCardItem({
       onSaveNote={(notes) => state.saveNote(application.id, notes)}
       onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
       onSkip={(reasonId) => void state.skip(application, reasonId)}
+      onOpenOfferEdit={onOpenOfferEdit}
     />
+  );
+}
+
+function CompareOffersButton({
+  count,
+  onOpen,
+}: {
+  readonly count: number;
+  readonly onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="career-responses-compare-btn"
+      data-testid="compare-offers-btn"
+      onClick={onOpen}
+    >
+      <Scales size={14} /> Сравнить офферы {count > 1 ? `(${count})` : ''}
+    </button>
   );
 }
 
@@ -362,6 +455,8 @@ function BoardColumn({
   onOpenVacancies,
   onAddManual,
   onOpenExpert,
+  onOpenCompareOffers,
+  onOpenOfferEdit,
 }: BoardColumnProps) {
   const cards = state.applications.filter((application) =>
     column.stages.includes(application.stage),
@@ -370,6 +465,9 @@ function BoardColumn({
     <section className="career-responses-column" aria-label={column.label}>
       <ColumnHeader label={column.label} count={cards.length} />
       <div className="career-responses-column-body">
+        {column.key === 'offer' && cards.length > 0 && onOpenCompareOffers ? (
+          <CompareOffersButton count={cards.length} onOpen={onOpenCompareOffers} />
+        ) : null}
         {cards.map((application) => (
           <ColumnCardItem
             key={application.id}
@@ -379,6 +477,7 @@ function BoardColumn({
             onToggleMenu={onToggleMenu}
             onCloseMenu={onCloseMenu}
             onOpenExpert={onOpenExpert}
+            onOpenOfferEdit={onOpenOfferEdit}
           />
         ))}
         {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}

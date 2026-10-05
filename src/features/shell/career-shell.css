@@ -15315,3 +15315,425 @@ button.chip {
   outline: var(--career-border-width) solid var(--career-accent);
   outline-offset: var(--career-space-1);
 }
+
+/* B394 · Сравнение офферов: матрица совокупной компенсации и модальное окно условий */
+.career-offer-matrix-dialog {
+  width: 100%;
+  max-width: 960px;
+  max-height: 90vh;
+  background: var(--career-surface-raised);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--career-shadow-tooltip);
+}
+
+.career-offer-matrix-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: var(--career-space-4) var(--career-space-5);
+  border-bottom: var(--career-border-width) solid var(--career-line);
+  background: var(--career-surface);
+}
+
+.career-offer-matrix-header-title {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+}
+
+.career-offer-matrix-title {
+  margin: 0;
+  font-size: var(--career-text-lg);
+  font-weight: 600;
+  color: var(--career-text);
+}
+
+.career-offer-matrix-subtitle {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+
+.career-offer-matrix-content {
+  padding: var(--career-space-5);
+  overflow-y: auto;
+}
+
+.career-offer-matrix-empty {
+  padding: var(--career-space-6);
+  text-align: center;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-sm);
+}
+
+.career-offer-matrix-desktop-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.career-offer-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.career-offer-matrix-table th,
+.career-offer-matrix-table td {
+  padding: var(--career-space-3) var(--career-space-4);
+  border-bottom: var(--career-border-width) solid var(--career-line);
+  font-size: var(--career-text-xs);
+  text-align: start;
+  vertical-align: top;
+}
+
+.career-offer-matrix-col-param {
+  width: 200px;
+  color: var(--career-text-dim);
+  font-weight: 600;
+}
+
+.career-offer-matrix-th {
+  min-width: 180px;
+  background: var(--career-surface);
+}
+
+.career-offer-matrix-th.is-leader {
+  border-top: 2px solid var(--career-accent);
+  background: var(--career-surface-raised);
+}
+
+.career-offer-matrix-th-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+}
+
+.career-offer-matrix-badge-leader {
+  align-self: flex-start;
+  padding: 2px var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-accent-dim);
+  color: var(--career-accent);
+  font-size: var(--career-text-aux);
+  font-weight: 600;
+}
+
+.career-offer-matrix-company {
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  color: var(--career-text);
+}
+
+.career-offer-matrix-role {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+
+.career-offer-matrix-row-highlight td {
+  background: rgba(56, 189, 148, 0.05);
+}
+
+.career-offer-matrix-td-label {
+  color: var(--career-text-soft);
+  font-weight: 500;
+}
+
+.career-offer-label-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.career-offer-formula-hint {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+  font-weight: normal;
+}
+
+.career-offer-matrix-td-value {
+  color: var(--career-text);
+}
+
+.career-offer-val-bold {
+  font-weight: 600;
+  font-size: var(--career-text-sm);
+  color: var(--career-accent);
+}
+
+.career-offer-source-badge {
+  display: inline-block;
+  padding: 2px var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  border: var(--career-border-width) solid var(--career-line);
+  background: var(--career-surface);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
+}
+
+.career-offer-sub-val {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
+}
+
+.career-offer-empty-field {
+  color: var(--career-text-dim);
+  font-style: italic;
+}
+
+.career-offer-tags-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-1);
+}
+
+.career-offer-tag {
+  display: inline-block;
+  padding: 2px var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-aux);
+}
+
+.career-offer-tag-benefit {
+  background: rgba(56, 189, 148, 0.1);
+  color: var(--career-accent);
+}
+
+.career-offer-tag-risk {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--career-warning);
+}
+
+/* Мобильная стопка строк (390 px и узкие экраны) */
+.career-offer-matrix-mobile-stack {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .career-offer-matrix-desktop-wrap {
+    display: none;
+  }
+
+  .career-offer-matrix-mobile-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--career-space-4);
+  }
+}
+
+.career-offer-mobile-card {
+  background: var(--career-surface);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+}
+
+.career-offer-mobile-card.is-leader {
+  border-color: var(--career-accent);
+}
+
+.career-offer-mobile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+}
+
+.career-offer-mobile-company {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  color: var(--career-text);
+}
+
+.career-offer-mobile-role {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+
+.career-offer-mobile-metric {
+  background: var(--career-surface-raised);
+  padding: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+}
+
+.career-offer-mobile-label {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+  font-weight: 500;
+}
+
+.career-offer-mobile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-xs);
+}
+
+.career-offer-mobile-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+}
+
+/* Модальное окно редактирования условий оффера */
+.career-offer-edit-dialog {
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  background: var(--career-surface-raised);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--career-shadow-tooltip);
+}
+
+.career-offer-edit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--career-space-4) var(--career-space-5);
+  border-bottom: var(--career-border-width) solid var(--career-line);
+  background: var(--career-surface);
+}
+
+.career-offer-edit-title {
+  margin: 0;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+  color: var(--career-text);
+}
+
+.career-offer-edit-subtitle {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  margin-top: 2px;
+}
+
+.career-offer-edit-form {
+  padding: var(--career-space-5);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+}
+
+.career-offer-preview-box {
+  background: var(--career-surface);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+}
+
+.career-offer-preview-label {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-dim);
+}
+
+.career-offer-preview-values {
+  display: flex;
+  align-items: baseline;
+  gap: var(--career-space-3);
+}
+
+.career-offer-preview-total {
+  font-size: var(--career-text-lg);
+  font-weight: 600;
+  color: var(--career-accent);
+}
+
+.career-offer-preview-monthly {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.career-offer-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--career-space-3);
+}
+
+@media (max-width: 480px) {
+  .career-offer-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.career-offer-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+}
+
+.career-offer-field label {
+  font-size: var(--career-text-aux);
+  color: var(--career-text-soft);
+  font-weight: 500;
+}
+
+.career-offer-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--career-space-3);
+  margin-top: var(--career-space-2);
+}
+
+.career-offer-error {
+  font-size: var(--career-text-xs);
+  color: var(--career-warning);
+}
+
+.career-responses-compare-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  min-height: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+  margin-bottom: var(--career-space-2);
+  width: 100%;
+  justify-content: center;
+}
+
+.career-responses-compare-btn:hover {
+  border-color: var(--career-accent);
+  color: var(--career-text);
+}
+
+.career-responses-offer-action {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-1);
+  margin-top: var(--career-space-2);
+}
+
+.career-responses-card-offer-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px var(--career-space-2);
+  background: var(--career-surface-raised);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-aux);
+}
+

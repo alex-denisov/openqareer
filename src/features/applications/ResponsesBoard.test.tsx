@@ -58,6 +58,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     addManualCard: async (input) =>
       application({ clusterId: input.clusterId ?? null, stage: input.stage }),
     skip: async () => {},
+    saveOffer: async () => {},
   };
 }
 

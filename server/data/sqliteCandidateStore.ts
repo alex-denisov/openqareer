@@ -466,6 +466,8 @@ export class SqliteCandidateStore implements CandidateStore {
   declare patchApplicationInterview: ApplicationTrackerMethods['patchApplicationInterview'];
   declare getInterviewSubject: ApplicationTrackerMethods['getInterviewSubject'];
   declare putApplicationOffer: ApplicationTrackerMethods['putApplicationOffer'];
+  declare getApplicationOffer: ApplicationTrackerMethods['getApplicationOffer'];
+  declare listApplicationOffers: ApplicationTrackerMethods['listApplicationOffers'];
   declare listVacancySkips: ApplicationTrackerMethods['listVacancySkips'];
   declare createVacancySkip: ApplicationTrackerMethods['createVacancySkip'];
   declare deleteVacancySkip: ApplicationTrackerMethods['deleteVacancySkip'];

@@ -3,11 +3,18 @@ import type { SealedText } from './sealedText';
 
 export interface ApplicationOfferTerms {
   readonly baseSalary?: number;
+  readonly salaryPeriod?: 'month' | 'year';
   readonly bonus?: number;
   readonly equity?: string;
   readonly currency?: string;
   readonly location?: string;
+  readonly format?: 'remote' | 'hybrid' | 'office' | string;
+  readonly probationPeriodMonths?: number;
+  readonly probationSalary?: number;
+  readonly benefits?: readonly string[];
+  readonly risks?: readonly string[];
   readonly startDate?: string;
+  readonly sourceNote?: string;
 }
 
 export interface StoredApplicationOffer {
@@ -75,6 +82,13 @@ export class SqliteApplicationOfferRepository {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
+  }
+
+  list(applicationIds: readonly string[]): StoredApplicationOffer[] {
+    if (applicationIds.length === 0) return [];
+    return applicationIds
+      .map((id) => this.get(id))
+      .filter((offer): offer is StoredApplicationOffer => offer !== null);
   }
 }
 

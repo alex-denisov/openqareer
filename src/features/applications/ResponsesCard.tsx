@@ -14,6 +14,7 @@ import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import type { ApplicationView } from './applicationsApi';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
+import { calculateOfferCompensation } from './offerCompensation';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
   saved: 'Хочу',
@@ -50,6 +51,7 @@ interface ResponsesCardProps {
   readonly onSaveNote: (notes: string) => void;
   readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onSkip: (reasonId: SkipReasonId) => void;
+  readonly onOpenOfferEdit?: (applicationId: string) => void;
 }
 
 /**
@@ -192,6 +194,12 @@ export function ResponsesCard(props: ResponsesCardProps) {
       {application.stage === 'interview' ? (
         <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
       ) : null}
+      {application.stage === 'offer' ? (
+        <OfferCardControl
+          application={application}
+          onOpenOfferEdit={props.onOpenOfferEdit}
+        />
+      ) : null}
       <CardFooter
         application={application}
         labelText={label.text}
@@ -291,6 +299,40 @@ function FollowUpSentControl({
       >
         {saving ? 'Сохраняем…' : 'Напоминание отправлено'}
       </button>
+    </div>
+  );
+}
+
+function OfferCardControl({
+  application,
+  onOpenOfferEdit,
+}: {
+  application: ApplicationView;
+  onOpenOfferEdit?: (applicationId: string) => void;
+}) {
+  const terms = application.offer?.terms;
+  const breakdown = terms ? calculateOfferCompensation(terms) : null;
+  const currencySymbol = breakdown?.currency === 'RUB' ? '₽' : breakdown?.currency === 'USD' ? '$' : breakdown?.currency === 'EUR' ? '€' : (breakdown?.currency ?? '');
+
+  return (
+    <div className="career-responses-offer-action">
+      {breakdown ? (
+        <div className="career-responses-card-offer-preview">
+          <span className="career-mono">
+            {new Intl.NumberFormat('ru-RU').format(breakdown.monthlyAverage)} {currencySymbol}/мес.
+          </span>
+          <span className="career-offer-source-badge">{breakdown.sourceLabel}</span>
+        </div>
+      ) : null}
+      {onOpenOfferEdit ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          onClick={() => onOpenOfferEdit(application.id)}
+        >
+          {application.offer ? 'Условия оффера' : 'Заполнить оффер'}
+        </button>
+      ) : null}
     </div>
   );
 }
