@@ -34,6 +34,7 @@ import { registerConnectorRoutes } from './routes/connectorRoutes';
 import { registerVacancyRoutes } from './routes/vacancyRoutes';
 import { registerCompanyRoutes } from './routes/companiesRoute';
 import { registerVacancyCatalogRoutes } from './routes/vacancyCatalogRoutes';
+import { registerDesktopDownloadRoutes } from './routes/desktopDownloadRoutes';
 import { registerErrorHandler, registerStaticDelivery } from './routes/runtime';
 import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
@@ -229,6 +230,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: CandidateDraftRoute
   await registerCompanyRoutes(app);
   // Публичный каталог вакансий: без сессии, HTML собирается на запросе (B209).
   registerVacancyCatalogRoutes(app, deps);
+  registerDesktopDownloadRoutes(app, deps);
   registerReputationAuditRoutes(app, deps);
   registerCandidateFootprintRoutes(app, deps);
   registerSearchConsentRoutes(app, deps);

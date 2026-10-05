@@ -197,6 +197,10 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   "$RELEASE_ROOT" "$RELEASE_ROOT/releases" "$RELEASE_ROOT/incoming"
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
   /var/lib/openqareer
+# B334: desktop installer served by /downloads/openqareer-macos.dmg; lives
+# beside the database so the unit's ReadWritePaths already covers it.
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
+  /var/lib/openqareer/downloads
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
   "$RELEASE_ROOT/.ssh"
 
