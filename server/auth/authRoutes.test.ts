@@ -540,6 +540,24 @@ describe('cookie auth routes', () => {
     expect(duplicate.json().error.fields.email).toBeTruthy();
   });
 
+  it('rejects registration with disposable email domain (B347 / US-11.5)', async () => {
+    const app = await createApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {
+        email: 'burner@tempmail.com',
+        displayName: 'Бот',
+        password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+      },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(res.json().error.code).toBe('disposable_email_rejected');
+    expect(res.json().error.message).toContain('Временные и одноразовые');
+  });
+
   it('enforces origin, role and candidate ownership boundaries', async () => {
     const app = await createApp();
     const noOrigin = await app.inject({

@@ -28,7 +28,13 @@ import {
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
   AuthUsernameTakenError,
+  AuthDisposableEmailError,
 } from '../auth/authService';
+import {
+  defaultRegistrationLimiter,
+  parseClientFingerprint,
+  toRegistrationFingerprintLog,
+} from '../auth/registrationAntiAbuse';
 
 function registrationValidationError(
   request: FastifyRequest,
@@ -52,6 +58,9 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
   const parsed = registrationSchema.safeParse(request.body);
   if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
   const body = parsed.data;
+
+  if (await rejectRegistrationIfLimited(deps, request, reply)) return reply;
+
   try {
     const authenticated = await deps.authService.register(
       deriveUsernameFromEmail(body.email, (candidate) =>
@@ -80,6 +89,11 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
       meta: { requestId: request.id },
     });
   } catch (error) {
+    if (error instanceof AuthDisposableEmailError) {
+      return sendError(reply, request, 422, 'disposable_email_rejected', error.message, false, {
+        email: error.message,
+      });
+    }
     if (error instanceof AuthUsernameTakenError || error instanceof AuthEmailTakenError) {
       // Both collisions now trace back to the address: the handle is
       // derived from it, so the address is the field the candidate can act
@@ -92,6 +106,26 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
     }
     throw error;
   }
+}
+
+async function rejectRegistrationIfLimited(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<boolean> {
+  if (deps.config.release === 'test') return false;
+  const fingerprint = parseClientFingerprint(request.headers, request.ip || '127.0.0.1');
+  request.log.info(
+    toRegistrationFingerprintLog(fingerprint, deps.config.dataEncryptionKey),
+    'registration_fingerprint',
+  );
+  const velocity = defaultRegistrationLimiter.checkAndRecord(fingerprint.subnet);
+  if (velocity.allowed) return false;
+  const message = velocity.retryAfterSeconds
+    ? `Слишком много регистраций из вашей сети. Попробуйте через ${velocity.retryAfterSeconds} с.`
+    : 'Слишком много регистраций из вашей сети. Пожалуйста, подождите или обратитесь в поддержку.';
+  sendError(reply, request, 429, 'rate_limit_exceeded', message, false);
+  return true;
 }
 
 async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {

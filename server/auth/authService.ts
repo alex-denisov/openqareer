@@ -44,7 +44,12 @@ import {
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
   AuthUserBlockedError,
+  AuthDisposableEmailError,
 } from './authErrors';
+import {
+  canonicalizeEmail,
+  validateEmailAddress,
+} from './emailNormalization';
 import { isReservedUsername } from '../../shared/reservedUsernames';
 import {
   listUsers as adminListUsers,
@@ -92,6 +97,7 @@ export {
   AuthEmailTakenError,
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
+  AuthDisposableEmailError,
 } from './authErrors';
 import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
@@ -163,10 +169,13 @@ export class AuthService implements SessionAuth {
     profile: RegistrationProfile = {},
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }> {
     const username = normalizeUsername(usernameInput);
-    const email = profile.email ? normalizeEmail(profile.email) : null;
+    const email = profile.email ? canonicalEmailOrThrow(profile.email) : null;
     const displayName = profile.displayName?.trim() || null;
     if (isReservedUsername(username) || this.findUser(username)) {
       throw new AuthUsernameTakenError();
+    }
+    if (email && this.findUserByEmail(email)) {
+      throw new AuthEmailTakenError();
     }
     const salt = randomBytes(16);
     const passwordHash = await derivePassword(password, salt);
@@ -495,7 +504,11 @@ export class AuthService implements SessionAuth {
     const user = this.findUserById(principal.userId);
     if (!user) return null;
     const email =
-      input.email === undefined ? user.email : input.email ? normalizeEmail(input.email) : null;
+      input.email === undefined
+        ? user.email
+        : input.email
+          ? canonicalEmailOrThrow(input.email)
+          : null;
     const owner = email ? this.findUserByEmail(email) : null;
     if (owner && owner.id !== user.id) throw new AuthEmailTakenError();
     const normalizeNullable = (value: string | null | undefined, fallback: string | null) =>
@@ -774,10 +787,18 @@ export class AuthService implements SessionAuth {
   }
 
   private findUserByEmail(email: string): UserRow | null {
-    return (
-      (this.database.prepare(`${USER_SELECT} WHERE users.email = ?`).get(email) as
-        UserRow | undefined) ?? null
-    );
+    const canonical = canonicalizeEmail(email);
+    const raw = email.trim().toLowerCase();
+    const direct = this.database
+      .prepare(`${USER_SELECT} WHERE lower(users.email) = ? OR lower(users.email) = ?`)
+      .get(canonical, raw) as UserRow | undefined;
+    if (direct) return direct;
+
+    const legacy = this.database
+      .prepare('SELECT id, email FROM users WHERE email IS NOT NULL')
+      .all() as Array<{ id: string; email: string }>;
+    const match = legacy.find((user) => canonicalizeEmail(user.email) === canonical);
+    return match ? this.findUserById(match.id) : null;
   }
 }
 
@@ -806,7 +827,14 @@ function normalizeUsername(username: string): string {
 }
 
 function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
+  return canonicalizeEmail(email);
+}
+
+function canonicalEmailOrThrow(email: string): string {
+  const result = validateEmailAddress(email);
+  if (result.valid) return result.canonicalEmail;
+  if (result.reason === 'disposable') throw new AuthDisposableEmailError(result.message);
+  throw new Error(result.message);
 }
 
 function principalFromRow(row: UserRow): AuthPrincipal {

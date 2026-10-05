@@ -32,3 +32,12 @@ export class AuthUserBlockedError extends Error {
     this.name = 'AuthUserBlockedError';
   }
 }
+
+export class AuthDisposableEmailError extends Error {
+  constructor(
+    message = 'Временные и одноразовые почтовые ящики не поддерживаются. Пожалуйста, укажите постоянный рабочий или личный email.',
+  ) {
+    super(message);
+    this.name = 'AuthDisposableEmailError';
+  }
+}
