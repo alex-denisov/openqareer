@@ -55,6 +55,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
       });
     },
   );
+  // B334: лендинг спрашивает, опубликована ли сборка для macOS.
+  await page.route('**/api/v1/desktop/macos', async (route) => {
+    await route.fulfill({ json: { data: { available: false } } });
+  });
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/auth'),
     async (route) => {
