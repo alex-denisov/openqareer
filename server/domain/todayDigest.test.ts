@@ -343,4 +343,36 @@ describe('today queue from the shortlist (B266)', () => {
     expect(fromShortlist).not.toContain('cluster-1');
     expect(snapshot.queue.length).toBeLessThanOrEqual(5);
   });
+
+  it('surfaces follow_up reminder for interview stage application when deadline is due (B393)', () => {
+    const interviewApp = application({
+      id: 'app-interview-1',
+      stage: 'interview',
+      followUp: {
+        dueAt: '2026-10-06T00:00:00.000Z',
+        urgency: 'due',
+        source: 'company_deadline',
+        daysSinceContact: 3,
+      },
+      vacancy: {
+        title: 'Tech Lead',
+        company: 'Инновации',
+        companyHidden: false,
+        source: 'hh',
+        url: 'https://example.com',
+      },
+    });
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [interviewApp],
+      newVacancies: [],
+    });
+
+    expect(snapshot.digest.followUpsDueToday).toBe(1);
+    const queueItem = snapshot.queue.find((q) => q.applicationId === 'app-interview-1');
+    expect(queueItem).toBeDefined();
+    expect(queueItem?.kind).toBe('follow_up');
+    expect(queueItem?.company).toBe('Инновации');
+  });
 });
+

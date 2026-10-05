@@ -3,6 +3,7 @@ import { LinkedinDraftCard } from './LinkedinDraftCard';
 import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu, pluralWordRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { CompanyReminderModal } from './CompanyReminderModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
@@ -538,6 +539,46 @@ export function queueItemTarget(item: TodayQueueItem): CareerCabinetView {
   return item.kind === 'new_vacancy' || item.kind === 'shortlist' ? 'opportunities' : 'responses';
 }
 
+function FollowUpQueueAction({
+  item,
+  isSaving,
+  onMark,
+}: {
+  item: TodayQueueItem;
+  isSaving: boolean;
+  onMark: (applicationId: string) => Promise<void>;
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  if (!item.applicationId) return null;
+  return (
+    <div className="career-today-followup-buttons">
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm career-today-draft-btn"
+        onClick={() => setModalOpen(true)}
+      >
+        Черновик напоминания
+      </button>
+      <MarkFollowUpButton
+        applicationId={item.applicationId}
+        isSaving={isSaving}
+        onMark={onMark}
+      />
+      {modalOpen ? (
+        <CompanyReminderModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onMarkSent={onMark}
+          applicationId={item.applicationId}
+          company={item.company}
+          positionTitle={item.title}
+          promisedDate={item.dueAt}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function QueueAction({
   item,
   onMarkFollowUpSent,
@@ -550,13 +591,13 @@ function QueueAction({
   onNavigate?: (view: CareerCabinetView) => void;
 }) {
   if (item.kind === 'follow_up') {
-    return item.applicationId ? (
-      <MarkFollowUpButton
-        applicationId={item.applicationId}
-        isSaving={markingFollowUpIds.has(item.applicationId)}
+    return (
+      <FollowUpQueueAction
+        item={item}
+        isSaving={item.applicationId ? markingFollowUpIds.has(item.applicationId) : false}
         onMark={onMarkFollowUpSent}
       />
-    ) : null;
+    );
   }
   if (item.kind === 'interview') {
     return <PrepareInterviewButton item={item} />;
@@ -598,6 +639,44 @@ function PrepareInterviewButton({ item }: { item: TodayQueueItem }) {
   );
 }
 
+function FollowUpItemActions({
+  item,
+  isSaving,
+  onMark,
+}: {
+  item: TodayFollowUp;
+  isSaving: boolean;
+  onMark: (applicationId: string) => Promise<void>;
+}) {
+  const [modalOpen, setModalOpen] = useState(false);
+  return (
+    <div className="career-today-followup-buttons">
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm career-today-draft-btn"
+        onClick={() => setModalOpen(true)}
+      >
+        Черновик
+      </button>
+      <MarkFollowUpButton
+        applicationId={item.applicationId}
+        isSaving={isSaving}
+        onMark={onMark}
+      />
+      {modalOpen ? (
+        <CompanyReminderModal
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
+          onMarkSent={onMark}
+          applicationId={item.applicationId}
+          company={item.company}
+          positionTitle={item.title}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function TodayFollowUps({
   followUps,
   onMarkFollowUpSent,
@@ -621,8 +700,8 @@ function TodayFollowUps({
               {followUpStatusLabel(item.status)}
             </span>
             {item.status === 'sent' ? null : (
-              <MarkFollowUpButton
-                applicationId={item.applicationId}
+              <FollowUpItemActions
+                item={item}
                 isSaving={markingFollowUpIds.has(item.applicationId)}
                 onMark={onMarkFollowUpSent}
               />

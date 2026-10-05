@@ -82,4 +82,22 @@ describe('deriveApplicationFields', () => {
     });
     expect(result.whoseTurn).toBe('candidate');
   });
+
+  it('calculates follow-up reminder for interview stage when followUpDueAt is set (B393)', () => {
+    const result = deriveApplicationFields({
+      application: application({
+        stage: 'interview',
+        followUpDueAt: '2024-01-15T00:00:00.000Z',
+      }),
+      events: [stageEvent('interview', '2024-01-10T09:00:00Z')],
+      materials: [],
+      interviews: [],
+      now: '2024-01-15T10:00:00Z',
+    });
+    expect(result.followUp).not.toBeNull();
+    expect(result.followUp?.source).toBe('company_deadline');
+    expect(result.followUp?.urgency).toBe('due');
+    expect(result.followUp?.dueAt).toBe('2024-01-15T00:00:00.000Z');
+  });
 });
+

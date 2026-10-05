@@ -11,7 +11,15 @@ import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/appli
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
-import type { ApplicationView } from './applicationsApi';
+import {
+  patchApplication,
+  patchApplicationInterview,
+  type ApplicationView,
+} from './applicationsApi';
+import {
+  InterviewDebriefModal,
+  type InterviewDebriefSubmitData,
+} from './InterviewDebriefModal';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
 
@@ -45,6 +53,7 @@ interface ResponsesCardProps {
   ) => void;
   readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
+  readonly onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
   readonly onRetry: () => void;
   readonly onRefresh: () => void;
   readonly onSaveNote: (notes: string) => void;
@@ -190,7 +199,14 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onRefresh={props.onRefresh}
       />
       {application.stage === 'interview' ? (
-        <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
+        <div className="career-responses-interview-actions">
+          <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
+          <InterviewDebriefControl
+            application={application}
+            onSaveDebrief={props.onSaveDebrief}
+            onRefresh={props.onRefresh}
+          />
+        </div>
       ) : null}
       <CardFooter
         application={application}
@@ -251,6 +267,69 @@ function PrepareInterviewControl({
             : (application.vacancy?.company ?? undefined),
         }}
         onAskConsultant={handleAskConsultant}
+      />
+    </div>
+  );
+}
+
+async function saveDebriefForApplication(
+  application: ApplicationView,
+  data: InterviewDebriefSubmitData,
+  onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>,
+) {
+  if (onSaveDebrief) {
+    await onSaveDebrief(data);
+    return;
+  }
+  if (application.nearestInterview?.id) {
+    await patchApplicationInterview(application.id, application.nearestInterview.id, {
+      debrief: JSON.stringify(data),
+      followUpDueAt: data.promisedResponseDate,
+    });
+  } else {
+    await patchApplication(application.id, {
+      expectedVersion: application.version,
+      followUpDueAt: data.promisedResponseDate,
+    });
+  }
+}
+
+function InterviewDebriefControl({
+  application,
+  onSaveDebrief,
+  onRefresh,
+}: {
+  application: ApplicationView;
+  onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
+  onRefresh?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const handleSave = async (data: InterviewDebriefSubmitData) => {
+    await saveDebriefForApplication(application, data, onSaveDebrief);
+    onRefresh?.();
+  };
+
+  const company = application.vacancy?.companyHidden
+    ? undefined
+    : (application.vacancy?.company ?? undefined);
+
+  return (
+    <div className="career-responses-debrief-action">
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm"
+        onClick={() => setOpen(true)}
+      >
+        Дебрифинг
+      </button>
+      <InterviewDebriefModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        onSave={handleSave}
+        vacancyTitle={application.vacancy?.title ?? 'Без названия'}
+        company={company}
+        initialPromisedDate={application.followUpDueAt}
       />
     </div>
   );

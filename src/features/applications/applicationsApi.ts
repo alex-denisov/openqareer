@@ -107,6 +107,31 @@ export async function createApplicationInterview(
   return readDataObject<CreatedApplicationInterview>(response);
 }
 
+export interface PatchApplicationInterviewInput {
+  readonly scheduledAt?: string | null;
+  readonly format?: string | null;
+  readonly prepStatus?: 'none' | 'ready';
+  readonly prep?: string | null;
+  readonly debrief?: string | null;
+  readonly followUpDueAt?: string | null;
+}
+
+export async function patchApplicationInterview(
+  applicationId: string,
+  interviewId: string,
+  input: PatchApplicationInterviewInput,
+): Promise<CreatedApplicationInterview> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/interviews/${encodeURIComponent(interviewId)}`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  return readDataObject<CreatedApplicationInterview>(response);
+}
+
 export async function recordFollowUpSent(applicationId: string): Promise<ApplicationView> {
   const response = await apiFetch(
     `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/events`,

@@ -46,7 +46,10 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
     resume: input.materials.some((material) => material.role === 'resume'),
   };
   const nearestInterview = pickNearestInterview(input.interviews, now);
-  const followUp = FOLLOW_UP_ACTIVE_STAGES.has(input.application.stage)
+  const isFollowUpStage =
+    FOLLOW_UP_ACTIVE_STAGES.has(input.application.stage) ||
+    (input.application.stage === 'interview' && Boolean(input.application.followUpDueAt));
+  const followUp = isFollowUpStage
     ? computeFollowUpStatus({
         processProfile: input.application.processProfile,
         appliedAt: applicationAppliedAt(input.application, input.events),

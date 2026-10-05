@@ -18,6 +18,7 @@ const patchInterviewSchema = z.object({
   prepStatus: z.enum(['none', 'ready']).optional(),
   prep: z.string().max(20_000).nullable().optional(),
   debrief: z.string().max(20_000).nullable().optional(),
+  followUpDueAt: isoDateField.nullable().optional(),
 });
 
 const handleCreateInterview: Handler = async (deps, request, reply) => {
@@ -44,6 +45,15 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
     params.iid,
     body,
   );
+  if (body.followUpDueAt !== undefined) {
+    const app = candidateStore.getApplication(candidate.id, params.id);
+    if (app) {
+      candidateStore.patchApplication(candidate.id, params.id, {
+        expectedVersion: app.version,
+        followUpDueAt: body.followUpDueAt,
+      });
+    }
+  }
   return { data: patched, meta: { requestId: request.id } };
 };
 
