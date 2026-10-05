@@ -1222,4 +1222,29 @@ test.describe('B265 Profile screen', () => {
       page.locator('.career-profile-screen-view > button.career-quiet-button'),
     ).toHaveCount(0);
   });
+  test('B333: печатный вид резюме — чистый документ без подсказок редактора', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openProfile(page);
+    await page
+      .locator('.career-profile-screen-tabs')
+      .getByRole('button', { name: 'Документ и форматы' })
+      .click();
+    await expect(page.locator('.career-resume-print')).toHaveCount(1);
+    await page.emulateMedia({ media: 'print' });
+
+    const print = page.locator('.career-resume-print');
+    await expect(print).toBeVisible();
+    await expect(page.locator('.career-resume-document')).toBeHidden();
+    await expect(print).not.toContainText('Добавьте');
+    await expect(print).not.toContainText('Не указано');
+    await expect(print.locator('h1')).toBeVisible();
+
+    await mkdir('output/playwright/B333', { recursive: true });
+    await page.screenshot({ path: 'output/playwright/B333/print-1440.png', fullPage: true });
+    await page.emulateMedia({ media: 'screen' });
+    await expect(print).toBeHidden();
+  });
 });
