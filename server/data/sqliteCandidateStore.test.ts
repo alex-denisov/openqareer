@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { CandidateStoreConflictError } from './store/errors';
 import {
   createCandidate,
@@ -12,6 +13,40 @@ import {
   stores,
   turnRequest,
 } from './sqliteTestHarness';
+
+function nativeResumeImportInput(input: {
+  readonly platform: 'hh' | 'linkedin';
+  readonly digest: string;
+  readonly memoryId: string;
+  readonly statement: string;
+  readonly domain?: 'skill' | 'role-evidence';
+  readonly draft?: ResumeDraft;
+}) {
+  return {
+    evidence: {
+      sourceLabel: `Импорт: ${input.platform}`,
+      sourceDigest: input.digest,
+      entries: [
+        {
+          memoryId: input.memoryId,
+          domain: input.domain ?? 'skill',
+          statement: input.statement,
+        },
+      ],
+    },
+    draft: input.draft ?? EMPTY_RESUME_DRAFT,
+    sourceReceipt: {
+      platform: input.platform,
+      accessMode: 'native_session_snapshot' as const,
+      sourceUrl:
+        input.platform === 'hh'
+          ? 'https://hh.ru/resume/synthetic-source-731'
+          : 'https://www.linkedin.com/in/synthetic-source-731/',
+      capturedAt: '2026-10-05T10:00:00.000Z',
+      importDigest: input.digest,
+    },
+  };
+}
 
 describe('SQLite candidate memory', () => {
   it('isolates candidate tokens, messages and memory', () => {
@@ -419,6 +454,114 @@ describe('SQLite candidate memory', () => {
       status: 'proposed',
       sourceMessageIds: [`deleted-document:${document.id}`],
     });
+  });
+
+  it('keeps one fact across three hh and LinkedIn imports and merges provenance', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const firstId = 'imp1111111111-skill-1';
+    const secondId = 'imp2222222222-skill-1';
+    const thirdId = 'imp3333333333-skill-1';
+    store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'hh',
+        digest: 'a'.repeat(64),
+        memoryId: firstId,
+        statement: 'TypeScript',
+        draft: {
+          ...EMPTY_RESUME_DRAFT,
+          skills: [{ id: firstId, evidenceMemoryId: firstId, name: 'TypeScript' }],
+        },
+      }),
+    );
+    const second = store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'linkedin',
+        digest: 'b'.repeat(64),
+        memoryId: secondId,
+        statement: ' typescript ',
+        draft: {
+          ...EMPTY_RESUME_DRAFT,
+          skills: [{ id: secondId, evidenceMemoryId: secondId, name: 'typescript' }],
+        },
+      }),
+    );
+    const third = store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'hh',
+        digest: 'c'.repeat(64),
+        memoryId: thirdId,
+        statement: 'TYPESCRIPT',
+        draft: {
+          ...EMPTY_RESUME_DRAFT,
+          skills: [{ id: thirdId, evidenceMemoryId: thirdId, name: 'TYPESCRIPT' }],
+        },
+      }),
+    );
+
+    const memory = store.getSnapshot(candidate.id).memory;
+    expect(memory).toHaveLength(1);
+    expect(memory[0]).toMatchObject({
+      id: firstId,
+      sourceMessageIds: [second.evidence.messageId, third.evidence.messageId],
+    });
+    expect(store.getSnapshot(candidate.id).resume?.draft.skills).toEqual([
+      { id: thirdId, evidenceMemoryId: firstId, name: 'TYPESCRIPT' },
+    ]);
+    expect(
+      store.listNativeSourceConnections(candidate.id).map((connection) =>
+        connection.receipt.memoryIds,
+      ),
+    ).toEqual([[firstId], [firstId]]);
+  });
+
+  it('keeps changed values for the same imported profile field in the review queue', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const previousId = 'imp4444444444-exp-1';
+    const nextId = 'imp5555555555-exp-1';
+    store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'hh',
+        digest: 'd'.repeat(64),
+        memoryId: previousId,
+        domain: 'role-evidence',
+        statement: 'Product Manager — Acme (2021 — 2024)',
+      }),
+    );
+
+    store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'hh',
+        digest: 'e'.repeat(64),
+        memoryId: nextId,
+        domain: 'role-evidence',
+        statement: 'Product Director — Acme (2021 — 2024)',
+      }),
+    );
+
+    const memory = store.getSnapshot(candidate.id).memory;
+    expect(memory).toHaveLength(2);
+    expect(memory).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: previousId,
+        statement: 'Product Manager — Acme (2021 — 2024)',
+        status: 'proposed',
+      }),
+      expect.objectContaining({
+        id: nextId,
+        statement: 'Product Director — Acme (2021 — 2024)',
+        status: 'proposed',
+      }),
+    ]));
+    expect(
+      store.listNativeSourceConnections(candidate.id)[0]?.receipt.memoryIds,
+    ).toEqual([nextId]);
   });
 
 
