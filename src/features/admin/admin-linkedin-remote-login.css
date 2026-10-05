@@ -28,9 +28,6 @@
   --career-text-xs: 13px;
   --career-text-sm: 14px;
   --career-text-md: 16px;
-}
-
-.admin-remote-login__backdrop {
   position: fixed;
   inset: 0;
   z-index: 60;
