@@ -11,7 +11,6 @@ import type { RemoteLoginFrame, RemoteLoginInput, RemoteLoginKey } from './linke
 import { frameToPagePoint, remoteLoginStatusText } from './remoteLoginModel';
 import { useRemoteLoginActions } from './useRemoteLoginActions';
 import { useRemoteLoginFrame } from './useRemoteLoginFrame';
-import './admin-linkedin-remote-login.css';
 
 interface PanelProps {
   readonly accountId: string;
