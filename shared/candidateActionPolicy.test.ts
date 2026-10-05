@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkActionCapacity,
+  classifyLinkedinSafetyStopReason,
   DEFAULT_CANDIDATE_ACTION_LIMITS,
   isWithinQuietHours,
 } from './candidateActionPolicy';
@@ -92,5 +93,16 @@ describe('candidateActionPolicy', () => {
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.maxHhAppliesPerDay).toBe(15);
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.maxLinkedinEasyAppliesPerDay).toBe(10);
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.minHhBoostIntervalMinutes).toBe(240);
+  });
+
+  it.each([
+    ['checkpoint_required', 'challenge_required'],
+    ['http_403', 'platform_restricted'],
+    ['rate_limit', 'platform_restricted'],
+    ['unexpected_page', 'unexpected_page'],
+    ['unclassified provider failure', 'provider_error'],
+    [undefined, 'provider_error'],
+  ] as const)('classifies LinkedIn failure %s into a safe stop reason', (signal, expected) => {
+    expect(classifyLinkedinSafetyStopReason(signal)).toBe(expected);
   });
 });

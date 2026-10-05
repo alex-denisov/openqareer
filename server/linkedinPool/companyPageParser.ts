@@ -141,14 +141,65 @@ function companyUrl(value: string): string | undefined {
   }
 }
 
+export type LinkedinPageSafetyStopReason =
+  | 'challenge_required'
+  | 'expired'
+  | 'login_required'
+  | 'platform_restricted'
+  | 'unexpected_page';
+
+export function classifyLinkedinPageSafetySignal(input: {
+  readonly statusCode: number | undefined;
+  readonly url: string;
+  readonly html: string;
+}): LinkedinPageSafetyStopReason | null {
+  if (input.statusCode === 401) return 'expired';
+  if ([403, 429, 999].includes(input.statusCode ?? 0)) return 'platform_restricted';
+  if (input.statusCode !== undefined && (input.statusCode < 200 || input.statusCode >= 300)) {
+    return 'unexpected_page';
+  }
+
+  let pageUrl: URL;
+  try {
+    pageUrl = new URL(input.url);
+  } catch {
+    return 'unexpected_page';
+  }
+  const host = pageUrl.hostname.toLowerCase();
+  const linkedinHost =
+    host === 'linkedin.com' ||
+    host.endsWith('.linkedin.com') ||
+    host === 'linkedin.cn' ||
+    host.endsWith('.linkedin.cn');
+  if (pageUrl.protocol !== 'https:' || pageUrl.port !== '' || !linkedinHost) return 'unexpected_page';
+
+  if (/\/(?:login|uas\/login)(?:\/|\?|$)/iu.test(pageUrl.pathname)) return 'login_required';
+  if (/\/(?:checkpoint|challenge|authwall)(?:\/|\?|$)/iu.test(pageUrl.pathname)) return 'challenge_required';
+
+  const sample = input.html.slice(0, 256 * 1024);
+  if (/name=["']session_key["']/iu.test(sample)) return 'login_required';
+  if (/<form\b[^>]*action=["'][^"']*\/(?:checkpoint|authwall)\//iu.test(sample)) {
+    return 'challenge_required';
+  }
+  const safetyRegion = /<(?:div|main|section|form|iframe)\b(?=[^>]*(?:role=["']alert["']|(?:id|class|data-test-id)=["'][^"']*(?:challenge|checkpoint|authwall|security|verification|captcha|limit|restriction|error)[^"']*["']))[^>]*>[\s\S]{0,4000}?<\/(?:div|main|section|form|iframe)>/giu;
+  const safetyMarkup = [...sample.matchAll(safetyRegion)].map(([markup]) => markup).join(' ');
+  const safetyText = htmlToFeedText(safetyMarkup).replace(/\s+/gu, ' ').toLowerCase();
+  if (/verify your identity|security verification|captcha|checkpoint|challenge/iu.test(safetyText)) {
+    return 'challenge_required';
+  }
+  if (/unusual activity|temporarily restricted|rate limit|too many requests|access denied|account restricted|temporarily blocked/iu.test(safetyText)) {
+    return 'platform_restricted';
+  }
+  if (/something went wrong|page not found|not available|unable to load this page/iu.test(safetyText)) {
+    return 'unexpected_page';
+  }
+  return null;
+}
+
 export function linkedinPageNeedsReauth(input: {
   readonly statusCode: number | undefined;
   readonly url: string;
   readonly html: string;
 }): boolean {
-  if ([401, 403, 429, 999].includes(input.statusCode ?? 0)) return true;
-  if (/\/(?:login|uas\/login|checkpoint|authwall)(?:\/|\?|$)/iu.test(input.url)) return true;
-  return /name=["']session_key["']|\/checkpoint\/|\/authwall\/|verify your identity|security verification/iu.test(
-    input.html.slice(0, 256 * 1024),
-  );
+  return classifyLinkedinPageSafetySignal(input) !== null;
 }

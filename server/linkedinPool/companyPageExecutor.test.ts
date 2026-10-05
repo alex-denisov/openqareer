@@ -377,12 +377,43 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     expect(notifyOwner).toHaveBeenCalledTimes(1);
     expect(repository.list({ limit: 25, offset: 0 }).accounts.find(({ id }) => id === account.id)).toMatchObject({
       state: 'user_action_required',
-      lastFailureCode: 'needs_reauth',
+      lastFailureCode: 'challenge_required',
       serverSession: null,
     });
     expect(repository.list({ limit: 25, offset: 0 }).accounts.find(({ emailLogin }) => emailLogin === 'pool-two@example.test')).toMatchObject({
       state: 'ready',
     });
+  });
+
+  it('pauses after a provider restriction, preserves the session for manual review, and performs no retry', async () => {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    fake.page.goto.mockResolvedValueOnce({ status: () => 403 } as never);
+    const notifyOwner = vi.fn(async () => ({ status: 'sent' as const, httpStatus: 200, messageId: 7 }));
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner,
+      now: () => now,
+      wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
+    });
+
+    await expect(executor.runStep()).resolves.toMatchObject({
+      status: 'needs_reauth',
+      reason: 'platform_restricted',
+      notification: 'sent',
+    });
+    const paused = repository.list({ limit: 25, offset: 0 }).accounts.find(({ id }) => id === account.id);
+    expect(paused).toMatchObject({ state: 'user_action_required', lastFailureCode: 'platform_restricted' });
+    expect(paused?.serverSession).not.toBeNull();
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'needs_reauth' });
+    expect(fake.page.goto).toHaveBeenCalledOnce();
+    expect(notifyOwner).toHaveBeenCalledOnce();
   });
 
   it('treats a LinkedIn redirect loop as a rejected session: stops, marks needs_reauth and notifies', async () => {

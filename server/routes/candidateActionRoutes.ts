@@ -45,6 +45,7 @@ const executeBatchBodySchema = z.object({
 const killSwitchBodySchema = z.object({
   active: z.boolean(),
   reason: z.string().trim().max(500).optional(),
+  platform: z.enum(['hh', 'linkedin']).optional(),
 });
 
 const listReceiptsQuerySchema = z.object({
@@ -152,10 +153,19 @@ async function handleToggleKillSwitch(
   }
 
   const repo = getOrCreateRepo(deps);
-  const scope = `candidate:${candidate.id}`;
+  const scope = parsed.data.platform
+    ? `candidate:${candidate.id}:${parsed.data.platform}`
+    : `candidate:${candidate.id}`;
   repo.setKillSwitch(scope, parsed.data.active, parsed.data.reason);
 
-  return reply.send({ data: { ok: true, active: parsed.data.active, scope } });
+  return reply.send({
+    data: {
+      ok: true,
+      active: parsed.data.active,
+      scope,
+      linkedinSafetyStop: repo.getLinkedinSafetyStopStatus(candidate.id),
+    },
+  });
 }
 
 async function handleGetUsage(
@@ -184,6 +194,7 @@ async function handleGetUsage(
       usage,
       timezone,
       limits: DEFAULT_CANDIDATE_ACTION_LIMITS,
+      linkedinSafetyStop: repo.getLinkedinSafetyStopStatus(candidate.id),
     },
   });
 }

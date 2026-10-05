@@ -1,11 +1,34 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
+import { WarningCircle } from '@phosphor-icons/react';
 import { PaywallModal } from '../tariffs/PaywallModal';
 import { createDraft, DraftApiError, listDrafts, updateDraft, type LinkedinDraft } from './linkedinDraftApi';
+import type { LinkedinSafetyStopReason } from './linkedinActionSafetyApi';
+import { useLinkedinActionSafetyStop } from './useLinkedinActionSafetyStop';
 import './linkedinDraftCard.css';
 const STATUS = { draft: 'черновик', copied: 'скопирован', rejected: 'отклонён' };
 const GENERATION_ERROR = 'Не получилось подготовить черновик. Попробуйте ещё раз';
 
+function linkedinStopCopy(reason: LinkedinSafetyStopReason | null): string {
+  switch (reason) {
+    case 'challenge_required':
+      return 'LinkedIn запросил проверку. Завершите её вручную перед возобновлением.';
+    case 'platform_restricted':
+      return 'LinkedIn ограничил запрос. Проверьте подключение перед возобновлением.';
+    case 'unexpected_page':
+      return 'Получен неожиданный ответ LinkedIn. Проверьте его вручную перед возобновлением.';
+    case 'provider_error':
+      return 'Исполнитель не подтвердил результат. Действия ждут ручной проверки.';
+    case 'manual_pause':
+      return 'Пауза включена вручную.';
+    case 'platform_pause':
+      return 'Пауза действует на уровне сервиса; снять её может администратор.';
+    default:
+      return 'Действия остановлены до ручной проверки.';
+  }
+}
+
 function useLinkedinDraftCard() {
+  const safetyStop = useLinkedinActionSafetyStop();
   const [kind, setKind] = useState<LinkedinDraft['kind']>('comment');
   const [topic, setTopic] = useState('');
   const [sourceText, setSourceText] = useState('');
@@ -44,15 +67,36 @@ function useLinkedinDraftCard() {
     } catch { setError(status === 'copied' ? 'Не получилось скопировать и сохранить статус. Попробуйте ещё раз.' : 'Не получилось отклонить черновик. Попробуйте ещё раз.'); }
     finally { setBusy(false); }
   }
-  return { kind, setKind, topic, setTopic, sourceText, setSourceText, recent, current, busy, error, paywall, setPaywall, prepare, changeStatus };
+  return {
+    kind, setKind, topic, setTopic, sourceText, setSourceText, recent, current,
+    busy, error, paywall, setPaywall, prepare, changeStatus,
+    ...safetyStop,
+  };
 }
 
 export function LinkedinDraftCard({ onOpenTariffs }: { readonly onOpenTariffs?: () => void }) {
   const id = useId();
-  const { kind, setKind, topic, setTopic, sourceText, setSourceText, recent, current, busy, error, paywall, setPaywall, prepare, changeStatus } = useLinkedinDraftCard();
+  const {
+    kind, setKind, topic, setTopic, sourceText, setSourceText, recent, current,
+    busy, error, paywall, setPaywall, prepare, changeStatus,
+    linkedinSafetyStop, safetyStatusLoading, safetyError, safetyNotice, resumingLinkedin, resumeLinkedinManually,
+  } = useLinkedinDraftCard();
   return <section className="career-drafts" aria-labelledby={`${id}-title`}>
     <h2 id={`${id}-title`}>Черновики для LinkedIn</h2>
     <p>Готовим текст — публикуете вы сами</p>
+    {safetyStatusLoading ? <p className="career-drafts-safety-notice" role="status" aria-busy="true">Проверяем статус действий LinkedIn…</p> : null}
+    {linkedinSafetyStop?.paused ? <div className="career-drafts-safety-stop" role="status" aria-busy={resumingLinkedin}>
+      <WarningCircle className="career-drafts-safety-stop__icon" aria-hidden="true" />
+      <div className="career-drafts-safety-stop__content">
+        <p className="career-drafts-safety-stop__title"><strong>Действия LinkedIn приостановлены</strong></p>
+        <p>{linkedinStopCopy(linkedinSafetyStop.reason)}</p>
+        {linkedinSafetyStop.canResume ? <button type="button" className="career-btn career-btn-secondary" disabled={resumingLinkedin} aria-busy={resumingLinkedin} onClick={() => void resumeLinkedinManually()}>
+          {resumingLinkedin ? 'Снимаем паузу…' : 'Возобновить вручную'}
+        </button> : null}
+      </div>
+    </div> : null}
+    {safetyError ? <p className="career-drafts-safety-error" role="alert">{safetyError}</p> : null}
+    {safetyNotice ? <p className="career-drafts-safety-notice" role="status">{safetyNotice}</p> : null}
     <form onSubmit={event => void prepare(event)} aria-busy={busy}>
       <label htmlFor={`${id}-topic`}>Тема</label>
       <input id={`${id}-topic`} value={topic} onChange={event => setTopic(event.target.value)} maxLength={200} required disabled={busy} />

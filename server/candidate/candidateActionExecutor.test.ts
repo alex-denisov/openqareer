@@ -282,5 +282,117 @@ describe('CandidateActionExecutor', () => {
     expect(recordedEvents[0].kind).toBe('promise');
     expect(recordedEvents[0].note).toContain('session_expired');
   });
-});
 
+  it('pauses only this candidate’s LinkedIn actions on a platform restriction and blocks the rest of the batch', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const calls: string[] = [];
+    const runner = {
+      async executeAction(_candidateId: string, action: { platform: string; targetUrl: string }): Promise<CandidateActionResult> {
+        calls.push(action.targetUrl);
+        if (action.targetUrl.includes('restricted')) return {
+          status: 'attempted',
+          failureCode: 'http_429',
+          confirmationUrl: 'https://www.linkedin.com/checkpoint?token=synthetic-secret',
+        };
+        return { status: 'delivered' };
+      },
+    };
+    const executor = new CandidateActionExecutor({ repository: repo, runner });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: '2026-10-01T12:00:00Z',
+      actions: [
+        { platform: 'linkedin', actionKind: 'linkedin_easy_apply', targetUrl: 'https://www.linkedin.com/jobs/restricted' },
+        { platform: 'linkedin', actionKind: 'linkedin_easy_apply', targetUrl: 'https://www.linkedin.com/jobs/next' },
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+      ],
+    });
+
+    expect(calls).toEqual([
+      'https://www.linkedin.com/jobs/restricted',
+      'https://hh.ru/vacancy/123',
+    ]);
+    expect(result.receipts.map(({ failureCode }) => failureCode)).toEqual([
+      'platform_restricted',
+      'kill_switch_active',
+      null,
+    ]);
+    expect(result.receipts[0].confirmationUrl).toBeNull();
+    expect(JSON.stringify(result)).not.toContain('synthetic-secret');
+    expect(result.status).toBe('partial_failure');
+    expect(repo.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({
+      paused: true,
+      reason: 'platform_restricted',
+      canResume: true,
+    });
+  });
+
+  it('stores a safe provider error code instead of raw LinkedIn exception details', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const runner = {
+      async executeAction(): Promise<CandidateActionResult> {
+        throw new Error('https://www.linkedin.com/auth?token=synthetic-secret');
+      },
+    };
+    const executor = new CandidateActionExecutor({ repository: repo, runner });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: '2026-10-01T12:00:00Z',
+      actions: [{ platform: 'linkedin', actionKind: 'linkedin_easy_apply', targetUrl: 'https://www.linkedin.com/jobs/123' }],
+    });
+
+    expect(result.receipts[0].failureCode).toBe('provider_error');
+    expect(JSON.stringify(result)).not.toContain('synthetic-secret');
+    expect(repo.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({ paused: true, reason: 'provider_error' });
+  });
+
+  it('does not dispatch concurrent LinkedIn runner calls for the same candidate', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    let markStarted!: () => void;
+    let releaseRunner!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const blocked = new Promise<void>((resolve) => { releaseRunner = resolve; });
+    const calls: string[] = [];
+    const runner = {
+      async executeAction(_candidateId: string, action: { targetUrl: string }): Promise<CandidateActionResult> {
+        calls.push(action.targetUrl);
+        markStarted();
+        await blocked;
+        return { status: 'delivered' };
+      },
+    };
+    const executor = new CandidateActionExecutor({ repository: repo, runner });
+    const action = {
+      platform: 'linkedin' as const,
+      actionKind: 'linkedin_easy_apply' as const,
+      targetUrl: 'https://www.linkedin.com/jobs/123',
+    };
+    const first = executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: '2026-10-01T12:00:00Z',
+      actions: [action],
+    });
+    await started;
+    const second = executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: '2026-10-01T12:00:00Z',
+      actions: [{ ...action, targetUrl: 'https://www.linkedin.com/jobs/456' }],
+    });
+    releaseRunner();
+    const [firstResult, secondResult] = await Promise.all([first, second]);
+
+    expect(calls).toEqual(['https://www.linkedin.com/jobs/123']);
+    expect(firstResult.status).toBe('completed');
+    expect(secondResult.status).toBe('aborted');
+    expect(secondResult.receipts[0].failureCode).toBe('linkedin_action_in_progress');
+  });
+});

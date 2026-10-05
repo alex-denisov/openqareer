@@ -1,5 +1,5 @@
 import type { Page } from 'playwright';
-import { linkedinPageNeedsReauth } from './companyPageParser';
+import { classifyLinkedinPageSafetySignal, type LinkedinPageSafetyStopReason } from './companyPageParser';
 import { pageDelayMs, type CadencePageKind } from './linkedinCadencePolicy';
 
 type ReaderPage = Pick<Page, 'content' | 'url' | 'close'> & {
@@ -9,7 +9,7 @@ type ReaderPage = Pick<Page, 'content' | 'url' | 'close'> & {
 export interface LinkedinPageRead {
   readonly status: 'ready' | 'needs_reauth' | 'stopped';
   readonly html?: string;
-  readonly reason?: 'challenge_required' | 'expired' | 'login_required';
+  readonly reason?: LinkedinPageSafetyStopReason;
 }
 interface ReaderOptions {
   readonly statusCode?: number;
@@ -22,9 +22,8 @@ interface ReaderOptions {
 async function inspect(page: ReaderPage, statusCode?: number): Promise<LinkedinPageRead> {
   const html = await page.content();
   const url = page.url();
-  if (!linkedinPageNeedsReauth({ statusCode, url, html })) return { status: 'ready', html };
-  const reason = /\/(?:login|uas\/login)(?:\/|\?|$)/iu.test(url)
-    ? 'login_required' : statusCode === 401 ? 'expired' : 'challenge_required';
+  const reason = classifyLinkedinPageSafetySignal({ statusCode, url, html });
+  if (!reason) return { status: 'ready', html };
   // A close failure must not turn a provider block into a retryable error.
   await page.close().catch(() => undefined);
   return { status: 'needs_reauth', reason };

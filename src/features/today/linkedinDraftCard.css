@@ -9,6 +9,15 @@
 .career-drafts [aria-pressed=true] { border-color: var(--career-accent); }
 .career-drafts-result { margin-top: var(--career-space-3); }
 .career-drafts-result p { white-space: pre-wrap; }
+.career-drafts-safety-stop { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--career-space-2); margin-block: var(--career-space-3); padding: var(--career-space-3); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); background: var(--career-bg); color: var(--career-text); overflow-wrap: anywhere; }
+.career-drafts-safety-stop__icon { inline-size: var(--career-space-4); block-size: var(--career-space-4); flex: none; }
+.career-drafts-safety-stop__content { min-inline-size: 0; }
+.career-drafts-safety-stop__content p { margin: 0 0 var(--career-space-2); }
+.career-drafts p.career-drafts-safety-stop__title { font-size: var(--career-text-md); }
+.career-drafts-safety-stop__content p:not(.career-drafts-safety-stop__title) { font-size: var(--career-text-sm); }
+.career-drafts-safety-stop__content .career-btn { margin-block-start: var(--career-space-1); }
+.career-drafts-safety-stop .career-btn[aria-busy=true] { opacity: 1; cursor: progress; }
+.career-drafts p.career-drafts-safety-error, .career-drafts p.career-drafts-safety-notice { margin-block: var(--career-space-3); font-size: var(--career-text-sm); overflow-wrap: anywhere; }
 .career-drafts-recent { margin: var(--career-space-3) 0 0; padding-inline-start: var(--career-space-4); color: var(--career-text-soft); }
 .career-drafts :focus-visible { outline: var(--career-border-width) solid var(--career-accent); outline-offset: var(--career-space-1); }
 .career-drafts :disabled { opacity: .5; cursor: wait; }

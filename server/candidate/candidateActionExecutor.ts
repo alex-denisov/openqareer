@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  classifyLinkedinSafetyStopReason,
   type CandidateActionKind,
   checkActionCapacity,
 } from '../../shared/candidateActionPolicy';
@@ -10,6 +11,9 @@ import {
 } from '../../shared/timezoneUtils';
 import type { SqliteCandidateActionRepository, StoredActionReceipt } from './sqliteCandidateActionRepository';
 import type { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+
+/** Process-local guard matches the single service process; use a shared lock before scaling. */
+const LINKEDIN_CANDIDATES_IN_FLIGHT = new Set<string>();
 
 export interface CandidateApplicationTracker {
   getApplication(candidateId: string, applicationId: string): { version: number; stage: string } | null;
@@ -228,15 +232,32 @@ export class CandidateActionExecutor {
     localDate: string;
   }): Promise<StoredActionReceipt> {
     const { action, candidateId } = params;
+    const linkedin = action.platform === 'linkedin';
+    if (linkedin && LINKEDIN_CANDIDATES_IN_FLIGHT.has(candidateId)) {
+      return this.handleAttemptedAction(params, 'linkedin_action_in_progress');
+    }
+    if (linkedin) LINKEDIN_CANDIDATES_IN_FLIGHT.add(candidateId);
     try {
       const result = await this.runner!.executeAction(candidateId, action);
       if (result.status === 'delivered') {
         return this.handleDeliveredAction(params, result);
       }
+      if (action.platform === 'linkedin') {
+        const reason = classifyLinkedinSafetyStopReason(result.failureCode);
+        this.repository.setKillSwitch(`candidate:${candidateId}:linkedin`, true, reason);
+        return this.handleAttemptedAction(params, reason);
+      }
       return this.handleAttemptedAction(params, result.failureCode ?? 'execution_failed', result);
     } catch (err) {
+      if (action.platform === 'linkedin') {
+        const reason = classifyLinkedinSafetyStopReason(err instanceof Error ? err.message : undefined);
+        this.repository.setKillSwitch(`candidate:${candidateId}:linkedin`, true, reason);
+        return this.handleAttemptedAction(params, reason);
+      }
       const message = err instanceof Error ? err.message : 'unhandled_execution_error';
       return this.handleAttemptedAction(params, message);
+    } finally {
+      if (linkedin) LINKEDIN_CANDIDATES_IN_FLIGHT.delete(candidateId);
     }
   }
 

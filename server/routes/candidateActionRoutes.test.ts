@@ -305,4 +305,34 @@ describe('Candidate Action Routes (B261)', () => {
     expect(body.data.receipts[0].status).toBe('attempted');
     expect(body.data.receipts[0].failureCode).toBe('kill_switch_active');
   });
+
+  it('returns and manually clears only the authenticated candidate’s LinkedIn safety stop', async () => {
+    const { app, candidateToken, candidateId, candidateActionRepository } = await createTestEnv();
+    candidateActionRepository.setKillSwitch(
+      `candidate:${candidateId}:linkedin`,
+      true,
+      'platform_restricted',
+    );
+
+    const statusRes = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/actions/usage',
+      headers: { cookie: candidateToken },
+    });
+    expect(statusRes.statusCode).toBe(200);
+    expect(statusRes.json().data.linkedinSafetyStop).toMatchObject({
+      paused: true,
+      reason: 'platform_restricted',
+      canResume: true,
+    });
+
+    const resumeRes = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/actions/kill-switch',
+      headers: { origin: baseConfig.allowedOrigins[0], cookie: candidateToken },
+      payload: { active: false, platform: 'linkedin' },
+    });
+    expect(resumeRes.statusCode).toBe(200);
+    expect(resumeRes.json().data.linkedinSafetyStop).toMatchObject({ paused: false, reason: null });
+  });
 });

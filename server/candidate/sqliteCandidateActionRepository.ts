@@ -5,7 +5,21 @@ import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import type {
   CandidateActionKind,
   CandidateActionUsageSummary,
+  CandidateLinkedinSafetyStopReason,
 } from '../../shared/candidateActionPolicy';
+import { isCandidateLinkedinSafetyStopReason } from '../../shared/candidateActionPolicy';
+
+export type CandidateLinkedinSafetyStopPublicReason =
+  | CandidateLinkedinSafetyStopReason
+  | 'manual_pause'
+  | 'platform_pause';
+
+export interface CandidateLinkedinSafetyStopStatus {
+  readonly paused: boolean;
+  readonly reason: CandidateLinkedinSafetyStopPublicReason | null;
+  readonly canResume: boolean;
+  readonly updatedAt: string | null;
+}
 
 export interface StoredActionReceipt {
   readonly id: string;
@@ -159,6 +173,7 @@ export class SqliteCandidateActionRepository {
 
   isKillSwitchActive(platform?: 'hh' | 'linkedin', candidateId?: string): boolean {
     const scopes = ['global'];
+    if (platform && candidateId) scopes.push(`candidate:${candidateId}:${platform}`);
     if (platform) scopes.push(`platform:${platform}`);
     if (candidateId) scopes.push(`candidate:${candidateId}`);
 
@@ -169,6 +184,33 @@ export class SqliteCandidateActionRepository {
       )
       .get(...scopes);
     return Boolean(row);
+  }
+
+  getLinkedinSafetyStopStatus(candidateId: string): CandidateLinkedinSafetyStopStatus {
+    const candidateLinkedinScope = `candidate:${candidateId}:linkedin`;
+    const candidateScope = `candidate:${candidateId}`;
+    const scopes = [
+      { scope: candidateLinkedinScope, canResume: true, platformWide: false },
+      { scope: candidateScope, canResume: false, platformWide: false },
+      { scope: 'platform:linkedin', canResume: false, platformWide: true },
+      { scope: 'global', canResume: false, platformWide: true },
+    ];
+    const query = this.database.prepare(
+      'SELECT active, reason, updated_at FROM candidate_action_kill_switches WHERE scope = ?',
+    );
+    for (const item of scopes) {
+      const row = query.get(item.scope) as
+        | { active: number; reason: string | null; updated_at: string }
+        | undefined;
+      if (row?.active !== 1) continue;
+      const reason: CandidateLinkedinSafetyStopPublicReason = item.platformWide
+        ? 'platform_pause'
+        : isCandidateLinkedinSafetyStopReason(row.reason)
+          ? row.reason
+          : 'manual_pause';
+      return { paused: true, reason, canResume: item.canResume, updatedAt: row.updated_at };
+    }
+    return { paused: false, reason: null, canResume: false, updatedAt: null };
   }
 
   setKillSwitch(scope: string, active: boolean, reason?: string): void {

@@ -159,6 +159,26 @@ const TODAY_SNAPSHOT = {
   vacanciesPending: false,
 };
 
+interface LinkedinStopStatusFixture {
+  readonly paused: boolean;
+  readonly reason: string | null;
+  readonly canResume: boolean;
+  readonly updatedAt: string | null;
+}
+
+const LINKEDIN_STOP_STATUS: LinkedinStopStatusFixture = {
+  paused: true,
+  reason: 'platform_restricted' as const,
+  canResume: true,
+  updatedAt: '2026-10-06T10:00:00.000Z',
+};
+const LINKEDIN_RESUMED_STATUS: LinkedinStopStatusFixture = {
+  paused: false,
+  reason: null,
+  canResume: false,
+  updatedAt: null,
+};
+
 function todayApplication(
   id: string,
   company: string,
@@ -269,8 +289,14 @@ const EMPTY_TODAY_SNAPSHOT = {
   vacanciesPending: false,
 };
 
-async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<void> {
+async function stubSession(
+  page: Page,
+  todaySnapshot = TODAY_SNAPSHOT,
+  initialLinkedinStatus: LinkedinStopStatusFixture = LINKEDIN_RESUMED_STATUS,
+): Promise<{ resumeRequest: () => unknown }> {
   let followUpSent = false;
+  let linkedinStatus = initialLinkedinStatus;
+  let resumeRequest: unknown = null;
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -301,6 +327,18 @@ async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<
     if (request.method() === 'GET' && pathname === '/api/v1/candidate/applications') {
       return route.fulfill({ json: { data: TODAY_TRACKER_APPLICATIONS } });
     }
+    if (request.method() === 'GET' && pathname === '/api/v1/candidate/actions/usage') {
+      return route.fulfill({ json: { data: { linkedinSafetyStop: linkedinStatus } } });
+    }
+    if (request.method() === 'POST' && pathname === '/api/v1/candidate/actions/kill-switch') {
+      resumeRequest = request.postDataJSON();
+      linkedinStatus = LINKEDIN_RESUMED_STATUS;
+      return route.fulfill({
+        json: {
+          data: { ok: true, active: false, linkedinSafetyStop: linkedinStatus },
+        },
+      });
+    }
     if (request.method() === 'POST' && pathname === '/api/v1/candidate/visits') {
       return route.fulfill({ json: { data: { since: todaySnapshot.sinceLastVisit.since } } });
     }
@@ -323,6 +361,7 @@ async function stubSession(page: Page, todaySnapshot = TODAY_SNAPSHOT): Promise<
     }
     return route.fulfill({ json: { data: null } });
   });
+  return { resumeRequest: () => resumeRequest };
 }
 
 async function seedWorkspace(page: Page): Promise<void> {
@@ -422,6 +461,46 @@ test.describe('B251 today screen', () => {
     await page.getByRole('button', { name: 'Отметить отправленным' }).first().click();
     await expect(page.getByRole('button', { name: 'Отметить отправленным' })).toHaveCount(0);
     await expect(page.locator('.career-today-followups')).toHaveCount(0);
+  });
+
+  test('B395: shows the LinkedIn stop, then resumes only after a manual candidate action', async ({
+    page,
+  }, testInfo) => {
+    const session = await stubSession(page, TODAY_SNAPSHOT, LINKEDIN_STOP_STATUS);
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const stop = page.getByRole('status').filter({ hasText: 'Действия LinkedIn приостановлены' });
+    await expect(stop).toContainText('LinkedIn ограничил запрос');
+    const resumeButton = page.getByRole('button', { name: 'Возобновить вручную' });
+    await expect(resumeButton).toBeEnabled();
+
+    const width = page.viewportSize()?.width;
+    expect(width).toBe(testInfo.project.name === 'desktop-1440' ? 1440 : 390);
+    await stop.scrollIntoViewIfNeeded();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath(`b395-linkedin-stop-${width}.html`),
+      '.career-drafts',
+    );
+    await captureCareerHarness(page, testInfo.outputPath(`b395-today-${width}.html`));
+    await page.screenshot({
+      path: testInfo.outputPath(`b395-linkedin-stop-${width}.png`),
+      fullPage: true,
+    });
+
+    await resumeButton.click();
+    await expect(page.getByRole('status').filter({ hasText: 'Пауза снята.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Возобновить вручную' })).toHaveCount(0);
+    expect(session.resumeRequest()).toEqual({ active: false, platform: 'linkedin' });
+    await page.screenshot({
+      path: testInfo.outputPath(`b395-linkedin-resumed-${width}.png`),
+      fullPage: true,
+    });
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
