@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { LinkedinDraftCard } from './LinkedinDraftCard';
+import { ExecutiveOnboardingCard } from '../onboarding/ExecutiveOnboardingCard';
 import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu, pluralWordRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
@@ -175,6 +176,7 @@ function TodayContent({
           />
         </div>
       </div>
+      <ExecutiveOnboardingCard />
     </div>
   );
 }
