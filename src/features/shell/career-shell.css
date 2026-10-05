@@ -10703,6 +10703,18 @@
   color: var(--career-warning);
 }
 
+.career-footprint-status-row.is-available {
+  color: var(--career-success);
+}
+
+.career-footprint-status-row.is-prepared {
+  color: var(--career-warning);
+}
+
+.career-footprint-status-row.is-future {
+  color: var(--career-text-dim);
+}
+
 .career-footprint-findings {
   display: flex;
   flex-direction: column;

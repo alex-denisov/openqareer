@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CandidateFootprintAuditSurfaceProps } from './CandidateFootprintAuditSurface';
-import { CandidateFootprintAuditSurface } from './CandidateFootprintAuditSurface';
+import { CandidateFootprintAuditSurface, SourceCapability } from './CandidateFootprintAuditSurface';
 
 function baseProps(
   overrides: Partial<CandidateFootprintAuditSurfaceProps> = {},
@@ -201,6 +201,33 @@ describe('CandidateFootprintAuditSurface', () => {
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
     expect(html).toContain('Скрытые находки (1)');
     expect(html).toContain('Показать');
+  });
+
+  it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', () => {
+    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...baseProps()} />);
+    expect(html).toContain('Метаданные файлов');
+    expect(html).toContain('Секреты в коде');
+    expect(html).toContain('подготовлено');
+  });
+
+  it('B375: SourceCapability корректно отображает статусы available, prepared, future', () => {
+    const availHtml = renderToStaticMarkup(
+      <SourceCapability title="Доступный источник" status="available" />,
+    );
+    expect(availHtml).toContain('is-available');
+    expect(availHtml).toContain('доступно');
+
+    const prepHtml = renderToStaticMarkup(
+      <SourceCapability title="Подготовленный источник" status="prepared" />,
+    );
+    expect(prepHtml).toContain('is-prepared');
+    expect(prepHtml).toContain('подготовлено');
+
+    const futureHtml = renderToStaticMarkup(
+      <SourceCapability title="Планируемый источник" status="future" />,
+    );
+    expect(futureHtml).toContain('is-future');
+    expect(futureHtml).toContain('в планах');
   });
 
   it('B375: отображает блок «Не удалось определить компанию» с кнопкой «Ввести вручную» при наличии неопределённых работодателей', () => {

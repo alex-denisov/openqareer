@@ -10,24 +10,22 @@ import {
   XCircle,
 } from '@phosphor-icons/react';
 import { useState, type JSX } from 'react';
-import type {
-  CandidateFootprintAdapterStatus,
-  CandidateFootprintAudit,
-  CandidateFootprintConsentState,
-  CandidateFootprintFinding,
-  FootprintAdapterId,
-  FootprintReview,
+import {
+  FOOTPRINT_ADAPTER_REGISTRY,
+  type CandidateFootprintAdapterStatus,
+  type CandidateFootprintAudit,
+  type CandidateFootprintConsentState,
+  type CandidateFootprintFinding,
+  type FootprintAdapterId,
+  type FootprintAdapterRegistryItem,
+  type FootprintReview,
+  type SourceCapabilityStatus,
 } from '../../../shared/candidateFootprint';
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
+import { statusMessage } from './candidateFootprintApi';
 
-const ADAPTER_IDS: readonly FootprintAdapterId[] = [
-  'sherlock',
-  'maigret',
-  'hibp',
-  'wayback',
-  'exa',
-];
+const ADAPTER_IDS: readonly FootprintAdapterId[] = ['sherlock', 'maigret', 'hibp', 'wayback', 'exa'];
 
 const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
   sherlock: 'Публичные профили Sherlock',
@@ -41,6 +39,7 @@ export interface CandidateFootprintAuditSurfaceProps {
   readonly plan: readonly PublicFootprintQueryPlanItem[];
   readonly unidentifiedEmployers?: readonly string[];
   readonly sourceAvailability: Readonly<Record<FootprintAdapterId, boolean>>;
+  readonly adapterRegistry?: readonly FootprintAdapterRegistryItem[];
   readonly consent: CandidateFootprintConsentState;
   readonly audit: CandidateFootprintAudit | null;
   readonly selectedQueryIds: ReadonlySet<string>;
@@ -86,18 +85,11 @@ function adapterState(
 }
 
 function adapterIcon(state: CandidateFootprintAdapterStatus['state']) {
-  switch (state) {
-    case 'pending':
-      return CircleNotch;
-    case 'checked':
-      return CheckCircle;
-    case 'source_error':
-      return WarningCircle;
-    case 'not_connected':
-      return Info;
-    case 'not_run':
-      return ShieldCheck;
-  }
+  if (state === 'pending') return CircleNotch;
+  if (state === 'checked') return CheckCircle;
+  if (state === 'source_error') return WarningCircle;
+  if (state === 'not_connected') return Info;
+  return ShieldCheck;
 }
 
 function statusClass(state: CandidateFootprintAdapterStatus['state']): string {
@@ -108,10 +100,30 @@ function statusClass(state: CandidateFootprintAdapterStatus['state']): string {
   return 'is-idle';
 }
 
+export interface SourceCapabilityProps {
+  readonly title: string;
+  readonly status: SourceCapabilityStatus;
+  readonly detail?: string;
+}
+
+export function SourceCapability({ title, status }: SourceCapabilityProps): JSX.Element {
+  const Icon = status === 'available' ? CheckCircle : status === 'prepared' ? Info : CircleNotch;
+  const label =
+    status === 'available' ? 'доступно' : status === 'prepared' ? 'подготовлено' : 'в планах';
+  return (
+    <li className={`career-footprint-status-row is-${status}`}>
+      <Icon aria-hidden="true" />
+      <span className="career-footprint-status-name">{title}</span>
+      <span className="career-footprint-status-label">{label}</span>
+    </li>
+  );
+}
+
 function AdapterStatusList({
   audit,
   sourceAvailability,
-}: Pick<CandidateFootprintAuditSurfaceProps, 'audit' | 'sourceAvailability'>) {
+  adapterRegistry = FOOTPRINT_ADAPTER_REGISTRY,
+}: Pick<CandidateFootprintAuditSurfaceProps, 'audit' | 'sourceAvailability' | 'adapterRegistry'>) {
   return (
     <section className="career-footprint-status-section" aria-labelledby="footprint-status-title">
       <h3 id="footprint-status-title">Состояние источников</h3>
@@ -119,18 +131,6 @@ function AdapterStatusList({
         {ADAPTER_IDS.map((adapterId) => {
           const status = adapterState(adapterId, audit, sourceAvailability);
           const StatusIcon = adapterIcon(status.state);
-          const message =
-            status.state === 'checked'
-              ? status.findingsCount
-                ? 'проверено'
-                : 'ничего не найдено'
-              : status.state === 'pending'
-                ? 'проверяется'
-                : status.state === 'not_connected'
-                  ? 'подготовлено, не подключено'
-                  : status.state === 'source_error'
-                    ? 'ошибка источника'
-                    : 'не запускалось';
           return (
             <li
               key={adapterId}
@@ -138,10 +138,18 @@ function AdapterStatusList({
             >
               <StatusIcon aria-hidden="true" />
               <span className="career-footprint-status-name">{ADAPTER_LABELS[adapterId]}</span>
-              <span className="career-footprint-status-label">{message}</span>
+              <span className="career-footprint-status-label">{statusMessage(status)}</span>
             </li>
           );
         })}
+        {adapterRegistry.map((item) => (
+          <SourceCapability
+            key={item.id}
+            title={item.title}
+            status={item.status}
+            detail={item.description}
+          />
+        ))}
       </ul>
     </section>
   );
@@ -150,10 +158,7 @@ function AdapterStatusList({
 function ManualEmployerForm({
   disabled,
   onAdd,
-}: {
-  readonly disabled: boolean;
-  readonly onAdd: (employer: string) => void;
-}) {
+}: { readonly disabled: boolean; readonly onAdd: (employer: string) => void }) {
   const [value, setValue] = useState('');
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -189,11 +194,7 @@ function UnidentifiedEmployersList({
   unidentifiedEmployers,
   onAddManualEmployer,
   disabled,
-}: {
-  readonly unidentifiedEmployers?: readonly string[];
-  readonly onAddManualEmployer?: (employer: string) => void;
-  readonly disabled: boolean;
-}) {
+}: { readonly unidentifiedEmployers?: readonly string[]; readonly onAddManualEmployer?: (employer: string) => void; readonly disabled: boolean }) {
   if (!unidentifiedEmployers?.length) return null;
   return (
     <div
@@ -265,14 +266,7 @@ function QueryPlanSection({
   selectedQueryIds,
   disabled,
   onToggleQuery,
-}: Pick<
-  CandidateFootprintAuditSurfaceProps,
-  | 'plan'
-  | 'unidentifiedEmployers'
-  | 'onAddManualEmployer'
-  | 'selectedQueryIds'
-  | 'onToggleQuery'
-> & {
+}: Pick<CandidateFootprintAuditSurfaceProps, 'plan' | 'unidentifiedEmployers' | 'onAddManualEmployer' | 'selectedQueryIds' | 'onToggleQuery'> & {
   readonly disabled: boolean;
 }) {
   return (
@@ -311,15 +305,7 @@ function ConsentItemsList() {
 }
 
 type ConsentDisclosureProps = Pick<CandidateFootprintConsentState, 'approved' | 'granted'> &
-  Pick<
-    CandidateFootprintAuditSurfaceProps,
-    | 'ownershipConfirmed'
-    | 'grantingConsent'
-    | 'revokingConsent'
-    | 'onConfirmOwnership'
-    | 'onGrantConsent'
-    | 'onRevokeConsent'
-  >;
+  Pick<CandidateFootprintAuditSurfaceProps, 'ownershipConfirmed' | 'grantingConsent' | 'revokingConsent' | 'onConfirmOwnership' | 'onGrantConsent' | 'onRevokeConsent'>;
 
 function PendingConsent(): JSX.Element {
   return (
@@ -417,11 +403,7 @@ function FindingReviewButtons({
   finding,
   busy,
   onReview,
-}: {
-  readonly finding: CandidateFootprintFinding;
-  readonly busy: boolean;
-  readonly onReview: (findingId: string, review: FootprintReview) => void;
-}) {
+}: { readonly finding: CandidateFootprintFinding; readonly busy: boolean; readonly onReview: (findingId: string, review: FootprintReview) => void }) {
   if (finding.review === 'hidden') {
     return (
       <button type="button" disabled={busy} onClick={() => onReview(finding.id, 'unreviewed')}>
@@ -775,7 +757,11 @@ function FootprintAuditFeedback(props: CandidateFootprintAuditSurfaceProps) {
           Загружаем план проверки.
         </div>
       ) : null}
-      <AdapterStatusList audit={props.audit} sourceAvailability={props.sourceAvailability} />
+      <AdapterStatusList
+        audit={props.audit}
+        sourceAvailability={props.sourceAvailability}
+        adapterRegistry={props.adapterRegistry}
+      />
       <FindingsSection
         audit={props.audit}
         busyFindingId={props.busyFindingId}
