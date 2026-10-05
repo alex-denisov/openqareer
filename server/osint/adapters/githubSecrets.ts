@@ -103,10 +103,7 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
 
   constructor(private readonly fetchFn: typeof fetch = globalThis.fetch) {}
 
-  async run(
-    input: GithubSecretsInput,
-    signal?: AbortSignal,
-  ): Promise<readonly FootprintFinding[]> {
+  async run(input: GithubSecretsInput, signal?: AbortSignal): Promise<readonly FootprintFinding[]> {
     if (signal?.aborted) {
       throw new Error('Операция отменена');
     }
@@ -189,10 +186,26 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
       });
     }
 
-    const content = await this.fetchFileContent(repo.owner.login, repo.name, branch, filePath, signal);
+    const content = await this.fetchFileContent(
+      repo.owner.login,
+      repo.name,
+      branch,
+      filePath,
+      signal,
+    );
     if (!content) return;
 
-    scanTextForSecrets(content, filePath, repo.name, fileUrl, now, receipt, findings, this.id, match);
+    scanTextForSecrets(
+      content,
+      filePath,
+      repo.name,
+      fileUrl,
+      now,
+      receipt,
+      findings,
+      this.id,
+      match,
+    );
   }
 
   private async fetchFileContent(
@@ -232,9 +245,8 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('Операция отменена');
       }
-      throw new FootprintSourceError(
+      throw githubError(
         `Сетевая ошибка при обращении к GitHub: ${err instanceof Error ? err.message : String(err)}`,
-        'github',
         true,
       );
     }
@@ -242,25 +254,25 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
     if (res.status === 403 || res.status === 429) {
       const remaining = res.headers.get('x-ratelimit-remaining');
       if (remaining === '0' || res.status === 429) {
-        throw new FootprintSourceError('лимит GitHub, повторите через час', 'github', true);
+        throw githubError('лимит GitHub, повторите через час', true);
       }
       const body = await res.text().catch(() => '');
       if (body.toLowerCase().includes('rate limit')) {
-        throw new FootprintSourceError('лимит GitHub, повторите через час', 'github', true);
+        throw githubError('лимит GitHub, повторите через час', true);
       }
-      throw new FootprintSourceError(`Доступ к GitHub ограничен (код ${res.status})`, 'github', false);
+      throw githubError(`Доступ к GitHub ограничен (код ${res.status})`, false);
     }
 
     if (!res.ok) {
-      throw new FootprintSourceError(
-        `Ошибка GitHub API: статус ${res.status}`,
-        'github',
-        res.status >= 500,
-      );
+      throw githubError(`Ошибка GitHub API: статус ${res.status}`, res.status >= 500);
     }
 
     return res;
   }
+}
+
+function githubError(message: string, retryable: boolean): FootprintSourceError {
+  return new FootprintSourceError('github', 'source_error', message, retryable);
 }
 
 export const githubSecretsAdapter = new GithubSecretsAdapter();

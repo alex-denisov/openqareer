@@ -34,6 +34,31 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
         json: { data: { consent: { granted: false, policyVersion: '', updatedAt: '' } } },
       });
     }
+    if (path.endsWith('/candidate/footprint/plan')) {
+      return route.fulfill({
+        json: {
+          data: {
+            plan: [],
+            sourceAvailability: {
+              sherlock: true,
+              maigret: true,
+              hibp: false,
+              wayback: true,
+              exa: false,
+            },
+            consent: {
+              approved: false,
+              granted: false,
+              versionId: 'digital_footprint-v1.1',
+            },
+            audit: null,
+          },
+        },
+      });
+    }
+    if (path.endsWith('/candidate/footprint')) {
+      return route.fulfill({ json: { data: { audit: null } } });
+    }
     if (path.endsWith('/candidate/visits') && route.request().method() === 'POST') {
       return route.fulfill({ json: { data: { since: null } } });
     }

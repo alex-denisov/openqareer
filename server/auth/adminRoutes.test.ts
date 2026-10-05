@@ -9,6 +9,8 @@ import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import type { CoachProvider } from '../providers/coachProvider';
 import { AuthService } from './authService';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
+import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
+import type { CandidateFootprintAudit } from '../../shared/candidateFootprint';
 
 /**
  * B089 — the administrator directory. The owner asked for an admin account and
@@ -516,6 +518,23 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
     const candidateUser = directory.json().data.users[0];
     expect(candidateUser.candidateId).toBeTruthy();
 
+    const footprintRepo = new SqliteCandidateReputationRepository({
+      databasePath: join(resources[resources.length - 1]!.directory, 'app.db'),
+      encryptionKey: Buffer.alloc(32, 8),
+    });
+    const footprintAudit: CandidateFootprintAudit = {
+      id: 'admin-delete-footprint',
+      candidateId: candidateUser.candidateId,
+      state: 'completed',
+      selectedQueryIds: ['query-id'],
+      adapterStatuses: [],
+      findings: [],
+      ownershipConfirmedAt: '2026-10-04T12:00:00.000Z',
+      startedAt: '2026-10-04T12:00:00.000Z',
+      completedAt: '2026-10-04T12:00:02.000Z',
+    };
+    footprintRepo.saveFootprintAudit(footprintAudit);
+
     const resource = resources[resources.length - 1];
     resource.candidates.startTurn(
       candidateUser.candidateId,
@@ -548,6 +567,7 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
       .prepare('SELECT COUNT(*) AS c FROM candidates WHERE id = ?')
       .get(candidateUser.candidateId) as { c: number };
     expect(candAfter.c).toBe(0);
+    expect(footprintRepo.getLatestFootprintAudit(candidateUser.candidateId)).toBeNull();
 
     const userAfter = db
       .prepare('SELECT COUNT(*) AS c FROM users WHERE id = ?')
@@ -566,6 +586,7 @@ describe('DELETE /api/v1/admin/users/:userId', () => {
       .get(candidateUser.id) as { action: string; detail: string };
     expect(audit.action).toBe('delete_user');
     expect(audit.detail).toBe('User account and candidate dossier deleted');
+    footprintRepo.close();
   });
 
   it('keeps other candidate dossiers untouched', async () => {

@@ -138,6 +138,7 @@ const recruiterContactsRepo = new SqliteRecruiterContactsRepository({
 });
 const candidateReputationRepo = new SqliteCandidateReputationRepository({
   databasePath: config.databasePath,
+  encryptionKey: config.dataEncryptionKey,
 });
 const searchConsentRepo = new SqliteSearchConsentRepository({
   databasePath: config.databasePath,

@@ -26,6 +26,8 @@ const configSchema = z.object({
   OPENQAREER_PORT: z.coerce.number().int().min(1).max(65_535).default(3_210),
   OPENQAREER_OPENAI_API_KEY: z.string().min(20).optional(),
   OPENQAREER_OPENROUTER_API_KEY: z.string().min(20).optional(),
+  OPENQAREER_HIBP_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_EXA_API_KEY: blankAsUnset(z.string().min(1).max(2_048)),
   // Empty placeholders in the env file mean «not configured yet» (B266).
   OPENQAREER_TELEGRAM_BOT_TOKEN: z.preprocess(
     (value) => (value === '' ? undefined : value),
@@ -135,6 +137,8 @@ export interface ServerConfig {
   port: number;
   openAIKey?: string;
   openRouterKey?: string;
+  hibpApiKey?: string;
+  exaApiKey?: string;
   /** B266: owner alerts (plan requests). Both unset → alerts are silently off. */
   telegramBotToken?: string;
   telegramOwnerChatId?: string;
@@ -280,6 +284,8 @@ export function readServerConfig(
     port: parsed.OPENQAREER_PORT,
     openAIKey: parsed.OPENQAREER_OPENAI_API_KEY,
     openRouterKey: parsed.OPENQAREER_OPENROUTER_API_KEY,
+    hibpApiKey: parsed.OPENQAREER_HIBP_API_KEY,
+    exaApiKey: parsed.OPENQAREER_EXA_API_KEY,
     telegramBotToken: parsed.OPENQAREER_TELEGRAM_BOT_TOKEN,
     telegramOwnerChatId: parsed.OPENQAREER_TELEGRAM_OWNER_CHAT_ID,
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,

@@ -17,14 +17,21 @@ export interface FootprintAdapter<I> {
   run(input: I, signal: AbortSignal): Promise<readonly FootprintFinding[]>;
 }
 
-export class FootprintSourceError extends Error {
-  readonly source: string;
-  readonly retryable: boolean;
+export type FootprintSourceFailure = 'not_connected' | 'source_error';
 
-  constructor(message: string, source: string, retryable = false) {
+export class FootprintSourceError extends Error {
+  readonly name = 'FootprintSourceError';
+
+  constructor(
+    readonly sourceId: string,
+    readonly failure: FootprintSourceFailure,
+    message: string,
+    readonly retryable = false,
+  ) {
     super(message);
-    this.name = 'FootprintSourceError';
-    this.source = source;
-    this.retryable = retryable;
+  }
+
+  get source(): string {
+    return this.sourceId;
   }
 }

@@ -1,13 +1,18 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import { AuthService } from './auth/authService';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { config as baseConfig, successProvider } from './appTestHarness';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import type { FastifyInstance } from 'fastify';
+import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReputationRepository';
+import type { FootprintAdapter, FootprintFinding } from './osint/adapters/footprintAdapter';
+import type { FootprintAdapterSet } from './osint/adapters/createFootprintAdapters';
+import type { FootprintQueryPlanItem } from './osint/candidateFootprintQueryPlan';
+import { startCandidateFootprintAudit, waitForFootprintRun } from './osint/candidateFootprintWorker';
 
 describe('capability consents API routes', () => {
   const openApps: FastifyInstance[] = [];
@@ -53,7 +58,7 @@ describe('capability consents API routes', () => {
     openStores.push(authService);
     openDirs.push(directory);
 
-    return { app, candidateStore, authService, capabilityConsentStore };
+    return { app, candidateStore, authService, capabilityConsentStore, databasePath };
   }
 
   it('возвращает 401 при обращении без авторизации', async () => {
@@ -215,6 +220,71 @@ describe('capability consents API routes', () => {
     expect(afterDelRes.json().data.consent).toBeNull();
   });
 
+  it('отзыв цифрового следа отменяет активный аудит и удаляет его зашифрованные находки', async () => {
+    const { app, authService, candidateStore, capabilityConsentStore, databasePath } = await createTestEnv();
+    const reg = await authService.register('footprint.withdraw', 'valid-password-123', candidateStore);
+    const candidateId = reg.principal.candidate?.id;
+    const userId = reg.principal.userId;
+    expect(candidateId).toBeTruthy();
+    capabilityConsentStore.recordConsent({
+      userId,
+      capability: 'digital_footprint',
+      versionId: 'digital_footprint-v1.1',
+    });
+    const repo = new SqliteCandidateReputationRepository({
+      databasePath,
+      encryptionKey: baseConfig.dataEncryptionKey,
+    });
+    openStores.push(repo);
+    const waybackRun = vi.fn((_input: { profileUrl?: string }, signal: AbortSignal) =>
+      new Promise<readonly FootprintFinding[]>((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+    );
+    const noAdapter = <I>(id: string): FootprintAdapter<I> => ({
+      id,
+      passive: true,
+      run: async (_input: I) => [],
+    });
+    const adapters: FootprintAdapterSet = {
+      sherlock: [],
+      maigret: [],
+      hibp: noAdapter('hibp'),
+      wayback: { id: 'wayback', passive: true, run: waybackRun },
+      exa: noAdapter('exa'),
+    };
+    const plan: FootprintQueryPlanItem[] = [{
+      id: '0123456789abcdef0123',
+      adapterId: 'wayback',
+      kind: 'profile_url',
+      preview: 'Проверить публичную страницу',
+      selectedByDefault: true,
+      input: { profileUrl: 'https://portfolio.example/profile' },
+    }];
+    const pending = startCandidateFootprintAudit({
+      candidateId: candidateId!,
+      userId,
+      plan,
+      selectedQueryIds: [plan[0]!.id],
+      ownershipConfirmedAt: '2026-10-04T12:00:00.000Z',
+      repo,
+      adapters,
+      isAuthorized: () => Boolean(capabilityConsentStore.getActiveConsent(userId, 'digital_footprint')),
+    });
+    await vi.waitFor(() => expect(waybackRun).toHaveBeenCalledTimes(1));
+
+    const deleteResponse = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/me/consents/digital_footprint',
+      headers: { origin: 'http://localhost:3000', authorization: `Bearer ${reg.sessionToken}` },
+    });
+    await waitForFootprintRun(pending.id);
+
+    expect(deleteResponse.statusCode).toBe(200);
+    expect(repo.getLatestFootprintAudit(candidateId!)).toBeNull();
+    expect(capabilityConsentStore.getActiveConsent(userId, 'digital_footprint')).toBeNull();
+  });
+
   it('обеспечивает строгую изоляцию между пользователями', async () => {
     const { app, authService, candidateStore, capabilityConsentStore } = await createTestEnv();
     const userA = await authService.register('user.alpha', 'valid-password-123', candidateStore);
@@ -260,7 +330,7 @@ describe('capability consents API routes', () => {
     capabilityConsentStore.recordConsent({
       userId: user.principal.userId,
       capability: 'digital_footprint',
-      versionId: 'digital_footprint-v1.0',
+      versionId: 'digital_footprint-v1.1',
     });
 
     expect(capabilityConsentStore.listConsents(user.principal.userId)).toHaveLength(2);
@@ -270,4 +340,3 @@ describe('capability consents API routes', () => {
     expect(capabilityConsentStore.listConsents(user.principal.userId)).toHaveLength(0);
   });
 });
-

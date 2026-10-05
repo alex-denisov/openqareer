@@ -40,6 +40,7 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentRepository';
 import { SqliteCapabilityConsentStore } from './auth/capabilityConsentStore';
 import { registerReputationAuditRoutes } from './routes/reputationAuditRoutes';
+import { registerCandidateFootprintRoutes } from './routes/candidateFootprintRoutes';
 import { registerSearchConsentRoutes } from './routes/searchConsentRoutes';
 import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoutes';
 import { SqliteCandidateActionRepository } from './candidate/sqliteCandidateActionRepository';
@@ -229,6 +230,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: CandidateDraftRoute
   // Публичный каталог вакансий: без сессии, HTML собирается на запросе (B209).
   registerVacancyCatalogRoutes(app, deps);
   registerReputationAuditRoutes(app, deps);
+  registerCandidateFootprintRoutes(app, deps);
   registerSearchConsentRoutes(app, deps);
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
@@ -264,7 +266,10 @@ function createCandidateRepositories(options: BuildAppOptions) {
       new SqliteRecruiterContactsRepository({ databasePath: config.databasePath }),
     candidateReputationRepo:
       options.candidateReputationRepo ??
-      new SqliteCandidateReputationRepository({ databasePath: config.databasePath }),
+      new SqliteCandidateReputationRepository({
+        databasePath: config.databasePath,
+        encryptionKey: config.dataEncryptionKey,
+      }),
     searchConsentRepo:
       options.searchConsentRepo ??
       new SqliteSearchConsentRepository({ databasePath: config.databasePath }),

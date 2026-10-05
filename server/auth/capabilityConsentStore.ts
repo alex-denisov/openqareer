@@ -172,6 +172,10 @@ export function deleteCapabilityConsentsForCandidate(
   candidateId: string,
 ): number {
   ensureCapabilityConsentsSchema(database);
+  const hasUsers = database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'users'")
+    .get() !== undefined;
+  if (!hasUsers) return deleteCapabilityConsentsForUser(database, candidateId);
   const result = database
     .prepare(
       `DELETE FROM candidate_capability_consents
@@ -269,4 +273,3 @@ export class SqliteCapabilityConsentStore {
     }
   }
 }
-

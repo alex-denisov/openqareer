@@ -52,7 +52,7 @@ describe('reputation audit API routes', () => {
     expect(json.data.audit).toBeNull();
   });
 
-  it('ignores client-supplied source rows and does not score them as evidence', async () => {
+  it('blocks the legacy start route until the consent text is approved', async () => {
     const app = await createApp();
     const startRes = await app.inject({
       method: 'POST',
@@ -92,14 +92,10 @@ describe('reputation audit API routes', () => {
       },
     });
 
-    expect(startRes.statusCode).toBe(200);
+    expect(startRes.statusCode).toBe(409);
     const startJson = startRes.json();
-    expect(startJson.data.audit).toBeDefined();
-    expect(startJson.data.audit.status).toBe('completed');
-    expect(startJson.data.audit.overallStatus).toBe('not_scanned');
-    expect(startJson.data.audit.consistencyDiscrepancies).toEqual([]);
-    expect(startJson.data.audit.reputationRisks).toEqual([]);
-    expect(startJson.data.audit.consentAction).toContain('не является оценкой безопасности');
+    expect(startJson.error.code).toBe('consent_text_not_approved');
+    expect(startJson.error.message).toContain('Скоро: ждёт утверждения текста согласия');
 
     // Проверяем последующий GET
     const getRes = await app.inject({
@@ -111,6 +107,6 @@ describe('reputation audit API routes', () => {
     });
     expect(getRes.statusCode).toBe(200);
     const getJson = getRes.json();
-    expect(getJson.data.audit.id).toBe(startJson.data.audit.id);
+    expect(getJson.data.audit).toBeNull();
   });
 });

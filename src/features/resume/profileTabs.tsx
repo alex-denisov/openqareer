@@ -37,7 +37,7 @@ export function ProfileTabs({
         aria-pressed={tab === 'audit'}
         onClick={() => onTab('audit')}
       >
-        Проверка по источникам
+        Как вас видят
       </button>
     </div>
   );
