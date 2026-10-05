@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
-export type LinkedinPoolExecutorPageKind = 'company_search' | 'company_people';
+export type LinkedinPoolExecutorPageKind =
+  | 'company_search'
+  | 'company_page'
+  | 'company_people';
 
 export interface LinkedinPoolExecutorDailyUsage {
   readonly pageCount: number;
@@ -71,6 +74,16 @@ export function recordLinkedinExecutorPageAttempt(
     `page=${pageKind};company=${companyHash}`,
     now.toISOString(),
   );
+}
+
+/** Короткая служебная запись журнала исполнителя (без текстов страниц и профилей). */
+export function recordLinkedinExecutorNote(
+  database: DatabaseSync,
+  accountId: string,
+  note: 'exa_not_configured' | 'exa_failed',
+  now: Date,
+): void {
+  insertAudit(database, 'linkedin_executor_note', accountId, note, now.toISOString());
 }
 
 export function getLinkedinExecutorDailyUsage(

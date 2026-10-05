@@ -7,7 +7,7 @@ export interface LinkedinCompanyRecruiterCandidate {
 }
 
 const MAX_HTML_CHARS = 2 * 1024 * 1024;
-const RECRUITER_TITLE = /recruit|talent|human resources|people|hiring|acquisition|\bhr\b|набор|рекрут|персонал|кадр|найм|подбор/iu;
+export const RECRUITER_TITLE = /recruit|talent|human resources|people|hiring|acquisition|\bhr\b|набор|рекрут|персонал|кадр|найм|подбор/iu;
 
 function textFromFirstMatch(html: string, pattern: RegExp): string {
   const match = pattern.exec(html);

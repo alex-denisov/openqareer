@@ -39,6 +39,14 @@ CREATE INDEX IF NOT EXISTS idx_linkedin_pool_company_recruiters_company
   ON linkedin_pool_company_recruiters(company_name);
 CREATE INDEX IF NOT EXISTS idx_linkedin_pool_company_recruiters_observed
   ON linkedin_pool_company_recruiters(observed_at);
+CREATE TABLE IF NOT EXISTS linkedin_pool_company_recruiter_sources (
+  recruiter_id TEXT PRIMARY KEY,
+  source TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS linkedin_pool_exa_company_cache (
+  company_name TEXT PRIMARY KEY COLLATE NOCASE,
+  queried_at TEXT NOT NULL
+) STRICT;
 `;
 
 export function ensureCompanyRecruitersSchema(database: DatabaseSync): void {
