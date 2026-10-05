@@ -1,3 +1,35 @@
+/* Админка живёт на токенах App.css, а --career-* объявлены только внутри
+   .career-shell: панель сводит их к токенам админки. */
+.admin-remote-login__backdrop {
+  --career-accent: var(--primary-accent);
+  --career-accent-ink: var(--brand-ink);
+  --career-bg: var(--bg-dark);
+  --career-bg-elevated: var(--surface);
+  --career-surface: var(--surface-raised);
+  --career-line: var(--line);
+  --career-line-strong: var(--line-strong);
+  --career-text: var(--text-main);
+  --career-text-soft: var(--text-muted);
+  --career-text-dim: var(--text-dim);
+  --career-danger: var(--danger-red);
+  --career-danger-soft: color-mix(in oklch, var(--danger-red) 16%, transparent);
+  --career-success: var(--primary-success);
+  --career-success-soft: color-mix(in oklch, var(--primary-success) 16%, transparent);
+  --career-warning: var(--warning-amber);
+  --career-warning-soft: color-mix(in oklch, var(--warning-amber) 16%, transparent);
+  --career-radius-sm: var(--radius-small);
+  --career-radius-md: var(--radius-medium);
+  --career-border-width: 1px;
+  --career-space-1: 4px;
+  --career-space-2: 8px;
+  --career-space-3: 12px;
+  --career-space-4: 16px;
+  --career-target-min: 44px;
+  --career-text-xs: 13px;
+  --career-text-sm: 14px;
+  --career-text-md: 16px;
+}
+
 .admin-remote-login__backdrop {
   position: fixed;
   inset: 0;
@@ -84,7 +116,10 @@
 
 .admin-remote-login__screen img {
   display: block;
-  inline-size: 100%;
+  max-inline-size: 100%;
+  /* Поле ввода и кнопки остаются видны без прокрутки на экране 900 px. */
+  max-block-size: calc(100dvh - 280px);
+  inline-size: auto;
   block-size: auto;
 }
 
