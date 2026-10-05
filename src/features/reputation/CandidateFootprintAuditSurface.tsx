@@ -276,7 +276,9 @@ function QueryPlanSection({
           <h3 id="footprint-plan-title">План запросов</h3>
           <p>Снимите отметку у тех запросов, которые не хотите запускать.</p>
         </div>
-        <span className="career-footprint-count">{selectedQueryIds.size} выбрано</span>
+        <span className="career-footprint-count">
+          <span className="career-mono">{selectedQueryIds.size}</span> выбрано
+        </span>
       </div>
       <QueryPlanList
         plan={plan}

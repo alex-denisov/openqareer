@@ -82,10 +82,7 @@ function VacancyReqTag({
       <span className="vac-req is-ok">
         <Check size={14} weight="bold" aria-hidden="true" />
         <span>
-          Требования:{' '}
-          <span className="num">
-            {matching} из {total}
-          </span>
+          Требования: <span className="num">{matching}</span> из <span className="num">{total}</span>
         </span>
       </span>
     );
@@ -94,7 +91,7 @@ function VacancyReqTag({
     <span className="vac-req is-none">
       <Warning size={14} aria-hidden="true" />
       <span>
-        Требования: не совпали (<span className="num">0 из {missing}</span>)
+        Требования: не совпали (<span className="num">0</span> из <span className="num">{missing}</span>)
       </span>
     </span>
   );

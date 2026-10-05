@@ -540,4 +540,3 @@ test('B375: состояние источников отображает ада�
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(dir, 'source-status-390.png'), fullPage: true });
 });
-

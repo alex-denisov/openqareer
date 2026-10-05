@@ -133,7 +133,7 @@ describe('VacancyRow (B266/B324)', () => {
   describe('requirements summary in vacancy row', () => {
     it('shows requirements count when requirements exist', () => {
       const html = render();
-      expect(html).toContain('Требования: <span class="num">1 из 2</span>');
+      expect(html).toContain('Требования: <span class="num">1</span> из <span class="num">2</span>');
     });
 
     it('shows warning when requirements do not match (0 of M)', () => {
@@ -142,7 +142,7 @@ describe('VacancyRow (B266/B324)', () => {
         explanation: { ...item().explanation, matchingPoints: [], missingPoints: ['Req 1', 'Req 2'] },
       };
       const html = render({ item: zeroMatched });
-      expect(html).toContain('Требования: не совпали (<span class="num">0 из 2</span>)');
+      expect(html).toContain('Требования: не совпали (<span class="num">0</span> из <span class="num">2</span>)');
     });
 
     it('does not show requirements line when there are no requirements in description', () => {
@@ -164,7 +164,7 @@ describe('VacancyRow (B266/B324)', () => {
         },
       };
       const html = render({ item: levelItem, isSelected: true });
-      expect(html).toContain('Требования: <span class="num">1 из 2</span>');
+      expect(html).toContain('Требования: <span class="num">1</span> из <span class="num">2</span>');
       expect(html).toContain('Уровень вакансии: <strong>VP</strong>');
       expect(html).toContain('PostgreSQL');
       expect(html).not.toMatch(/<li class="req-no">[^<]*<span>vp<\/span>/);

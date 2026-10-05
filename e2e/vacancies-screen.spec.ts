@@ -1226,6 +1226,57 @@ test.describe('B250 vacancies screen', () => {
     await page.screenshot({ path: 'output/playwright/B375/map-390.png' });
   });
 
+  test('B375: моноширинный шрифт ограничен только числами (слова в системном шрифте)', async ({
+    page,
+  }, testInfo) => {
+    if (testInfo.project.name !== 'desktop-1440') {
+      test.skip(true, 'B375 captures target widths in one browser session');
+    }
+
+    await stubSession(page, {
+      matchedItems: [
+        {
+          cluster: cluster('c-mono-1', 'Frontend Engineer', 'Acme', {
+            canonicalLocation: 'Москва',
+            isRemote: true,
+            salary: undefined,
+            skills: ['React', 'TypeScript'],
+          }),
+          explanation: explanation('c-mono-1', {
+            matchingPoints: ['React'],
+            missingPoints: ['GraphQL'],
+          }),
+        },
+      ],
+      total: 1,
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    const vacancyRow = page.locator('.vac-row').first();
+    await expect(vacancyRow).toBeVisible();
+
+    // "не указана" in vac-comp
+    const compEl = vacancyRow.locator('.vac-comp');
+    await expect(compEl).toContainText('не указана');
+
+    // "Требования: 1 из 2"
+    const reqEl = vacancyRow.locator('.vac-req');
+    await expect(reqEl).toContainText('Требования:');
+    await expect(reqEl).toContainText('из');
+
+    // Screenshots at 1440, 1176, 390
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({ path: 'output/playwright/B375/mono-fix-1440.png', fullPage: true });
+
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.screenshot({ path: 'output/playwright/B375/mono-fix-1176.png', fullPage: true });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: 'output/playwright/B375/mono-fix-390.png', fullPage: true });
+  });
+
   test('B324: role limit 10/10, adding and removing custom role in filter panel', async ({
     page,
   }) => {
