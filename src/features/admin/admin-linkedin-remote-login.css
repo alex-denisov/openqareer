@@ -1,0 +1,184 @@
+/* Админка живёт на токенах App.css, а --career-* объявлены только внутри
+   .career-shell: панель сводит их к токенам админки. */
+.admin-remote-login__backdrop {
+  --career-accent: var(--primary-accent);
+  --career-accent-ink: var(--brand-ink);
+  --career-bg: var(--bg-dark);
+  --career-bg-elevated: var(--surface);
+  --career-surface: var(--surface-raised);
+  --career-line: var(--line);
+  --career-line-strong: var(--line-strong);
+  --career-text: var(--text-main);
+  --career-text-soft: var(--text-muted);
+  --career-text-dim: var(--text-dim);
+  --career-danger: var(--danger-red);
+  --career-danger-soft: color-mix(in oklch, var(--danger-red) 16%, transparent);
+  --career-success: var(--primary-success);
+  --career-success-soft: color-mix(in oklch, var(--primary-success) 16%, transparent);
+  --career-warning: var(--warning-amber);
+  --career-warning-soft: color-mix(in oklch, var(--warning-amber) 16%, transparent);
+  --career-radius-sm: var(--radius-small);
+  --career-radius-md: var(--radius-medium);
+  --career-border-width: 1px;
+  --career-space-1: 4px;
+  --career-space-2: 8px;
+  --career-space-3: 12px;
+  --career-space-4: 16px;
+  --career-target-min: 44px;
+  --career-text-xs: 13px;
+  --career-text-sm: 14px;
+  --career-text-md: 16px;
+}
+
+.admin-remote-login__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: var(--career-space-4);
+  background: oklch(10% 0.02 255 / 0.72);
+  overflow-y: auto;
+}
+
+.admin-remote-login {
+  display: grid;
+  gap: var(--career-space-3);
+  inline-size: min(100%, 1040px);
+  max-block-size: 100%;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+}
+
+.admin-remote-login__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+}
+
+.admin-remote-login__head h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--career-text-md);
+}
+
+.admin-remote-login__status,
+.admin-remote-login__error {
+  margin: 0;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.admin-remote-login__status[data-state='signed_in'] {
+  border-color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.admin-remote-login__status[data-state='checkpoint'] {
+  border-color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.admin-remote-login__error {
+  border-color: var(--career-danger);
+  background: var(--career-danger-soft);
+}
+
+.admin-remote-login__screen {
+  display: grid;
+  place-items: center;
+  min-block-size: var(--career-target-min);
+  padding: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg);
+  color: var(--career-text-dim);
+  cursor: crosshair;
+  overflow: hidden;
+}
+
+.admin-remote-login__screen:disabled {
+  cursor: default;
+}
+
+.admin-remote-login__screen img {
+  display: block;
+  max-inline-size: 100%;
+  /* Поле ввода и кнопки остаются видны без прокрутки на экране 900 px. */
+  max-block-size: calc(100dvh - 280px);
+  inline-size: auto;
+  block-size: auto;
+}
+
+.admin-remote-login__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--career-space-2);
+}
+
+.admin-remote-login__field {
+  display: grid;
+  flex: 1 1 240px;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+}
+
+.admin-remote-login__field input {
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-sm);
+}
+
+.admin-remote-login__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  min-inline-size: var(--career-target-min);
+  padding: 0 var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+
+.admin-remote-login__btn.is-primary {
+  border-color: var(--career-accent);
+  background: var(--career-accent);
+  color: var(--career-accent-ink);
+}
+
+.admin-remote-login__btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.admin-remote-login__btn:focus-visible,
+.admin-remote-login__screen:focus-visible,
+.admin-remote-login__field input:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}

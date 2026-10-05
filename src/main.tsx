@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './App.css';
 import './features/shell/career-shell.css';
 import './features/admin/admin-console.css';
+import './features/admin/admin-linkedin-remote-login.css';
 import './features/site/landing.css';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
 import { installExternalLinkInterceptor } from './services/desktop/externalLinkInterceptor';
