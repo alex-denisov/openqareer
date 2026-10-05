@@ -117,6 +117,27 @@ async function discardResponseBody(response: Response): Promise<void> {
   }
 }
 
+/** Необязательные поля тела запроса; без них — прежнее поведение адаптера footprint. */
+export interface ExaSearchOverrides {
+  readonly numResults?: number;
+  readonly includeDomains?: readonly string[];
+  readonly contents?: Readonly<Record<string, unknown>>;
+}
+
+function searchBody(
+  query: string,
+  category: 'people' | undefined,
+  overrides: ExaSearchOverrides,
+): Record<string, unknown> {
+  return {
+    query,
+    numResults: overrides.numResults ?? RESULTS_PER_QUERY,
+    contents: overrides.contents ?? { highlights: true },
+    ...(category ? { category } : {}),
+    ...(overrides.includeDomains ? { includeDomains: overrides.includeDomains } : {}),
+  };
+}
+
 async function runSearch(
   query: string,
   category: 'people' | undefined,
@@ -124,15 +145,12 @@ async function runSearch(
   fetcher: typeof fetch,
   signal: AbortSignal,
   requestGate: FootprintRequestGate,
+  overrides: ExaSearchOverrides = {},
 ): Promise<readonly ExaSearchResult[]> {
+  const limit = overrides.numResults ?? RESULTS_PER_QUERY;
   return requestGate.run('api.exa.ai', signal, async () => {
     const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
-    const body = {
-      query,
-      numResults: RESULTS_PER_QUERY,
-      contents: { highlights: true },
-      ...(category ? { category } : {}),
-    };
+    const body = searchBody(query, category, overrides);
     let response: Response;
     try {
       response = await fetcher(EXA_ENDPOINT, {
@@ -164,7 +182,7 @@ async function runSearch(
     if (!Array.isArray(results) || results.some((result) => !isRecord(result))) {
       throw sourceError('Ответ Exa имеет неподдерживаемый формат.');
     }
-    return results.slice(0, RESULTS_PER_QUERY) as ExaSearchResult[];
+    return results.slice(0, limit) as ExaSearchResult[];
   });
 }
 
@@ -230,6 +248,40 @@ function exaFinding(
     observedAt: now().toISOString(),
     receipt: { method: 'POST', source: SOURCE_NAME, query },
   };
+}
+
+export interface ExaPeopleHit {
+  readonly url: string;
+  readonly title: string;
+  readonly text: string;
+}
+
+/** Поиск людей Exa через тот же транспорт, лимитер и лимит размера ответа, что у адаптера. */
+export async function searchExaPeople(
+  query: string,
+  apiKey: string,
+  signal: AbortSignal,
+  options: { readonly fetch?: typeof fetch; readonly requestGate?: FootprintRequestGate } & ExaSearchOverrides,
+): Promise<readonly ExaPeopleHit[]> {
+  const { fetch: fetcher, requestGate, ...overrides } = options;
+  const results = await runSearch(
+    query,
+    'people',
+    apiKey,
+    fetcher ?? globalThis.fetch,
+    signal,
+    requestGate ?? sharedFootprintRequestGate,
+    overrides,
+  );
+  return results.flatMap((result) =>
+    typeof result.url === 'string'
+      ? [{
+          url: result.url,
+          title: typeof result.title === 'string' ? result.title : '',
+          text: typeof result.text === 'string' ? result.text : '',
+        }]
+      : [],
+  );
 }
 
 export function createExaAdapter(options: ExaAdapterOptions): FootprintAdapter<ExaAdapterInput> {

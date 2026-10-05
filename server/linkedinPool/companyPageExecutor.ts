@@ -2,10 +2,14 @@ import { readLinkedinPage } from './linkedinPageReader';
 import { createHash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Browser, BrowserContext, Page } from 'playwright';
+import { RECRUITER_TITLE, parseLinkedinCompanySearchPageHtml } from './companyPageParser';
 import {
-  parseLinkedinCompanyPeoplePageHtml,
-  parseLinkedinCompanySearchPageHtml,
-} from './companyPageParser';
+  parseLinkedinCompanyIdFromPageHtml,
+  parseLinkedinPeopleSearchPageHtml,
+  type LinkedinPeopleSearchCard,
+} from './peopleSearchParser';
+import { enrichRecruitersFromExa } from './exaRecruiterEnrichment';
+import type { FootprintRequestGate } from '../osint/adapters/requestScheduler';
 import {
   ensureCompanyRecruitersSchema,
   savePoolCompanyRecruiter,
@@ -19,7 +23,9 @@ import {
   getLinkedinExecutorDailyUsage,
   markLinkedinPoolAccountNeedsReauth,
   recordLinkedinExecutorCompanyAttempt,
+  recordLinkedinExecutorNote,
   recordLinkedinExecutorPageAttempt,
+  type LinkedinPoolExecutorPageKind,
   type LinkedinPoolExecutorDailyUsage,
 } from './executorAuditRepository';
 import {
@@ -70,12 +76,28 @@ export interface LinkedinPoolExecutorDependencies {
   readonly database: DatabaseSync;
   readonly browserFactory: () => Promise<Browser>;
   readonly profiles?: LinkedinPoolExecutorProfiles;
+  /** B369: ключ Exa для имён рекрутёров; без ключа обогащение пропускается. */
+  readonly exa?: LinkedinPoolExecutorExa;
   readonly notifyOwner: (text: string) => Promise<OwnerTelegramOutcome>;
   readonly now?: () => Date;
   readonly random?: () => number;
   readonly wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
   readonly planDay?: typeof planDay;
   readonly decide?: typeof decide;
+}
+
+export interface LinkedinPoolExecutorExa {
+  readonly apiKey?: string;
+  readonly fetch?: typeof fetch;
+  readonly requestGate?: FootprintRequestGate;
+}
+
+interface FollowingPageStep {
+  readonly page: Page;
+  readonly hash: string;
+  readonly plan: DayPlan;
+  readonly timezone: string;
+  readonly pagesBefore: number;
 }
 
 interface ReadySession {
@@ -102,6 +124,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private readonly database: DatabaseSync;
   private readonly browserFactory: () => Promise<Browser>;
   private readonly profiles?: LinkedinPoolExecutorProfiles;
+  private readonly exa?: LinkedinPoolExecutorExa;
   private readonly notifyOwner: (text: string) => Promise<OwnerTelegramOutcome>;
   private readonly now: () => Date;
   private readonly random: () => number;
@@ -125,6 +148,7 @@ export class LinkedinPoolCompanyPageExecutor {
     this.database = dependencies.database;
     this.browserFactory = dependencies.browserFactory;
     if (dependencies.profiles) this.profiles = dependencies.profiles;
+    if (dependencies.exa) this.exa = dependencies.exa;
     this.notifyOwner = dependencies.notifyOwner;
     this.now = dependencies.now ?? (() => new Date());
     this.random = dependencies.random ?? Math.random;
@@ -305,24 +329,88 @@ export class LinkedinPoolCompanyPageExecutor {
     const companyUrl = parseLinkedinCompanySearchPageHtml(search.html ?? '', companyName);
     if (!companyUrl) return report('processed', 1, 0);
 
-    const peopleUrl = `${companyUrl}/people/`;
-    await this.waitBetweenPages(detectCadencePageKind(peopleUrl));
-    if (this.stopped) return report('stopped', 1, 0);
-    if (!this.config.enabled) return report('disabled', 1, 0);
-    const midDecision = (this.decideFn ?? decide)(plan, this.now(), pagesBefore + 1, timezone);
-    if (midDecision.status !== 'run') return report(midDecision.status, 1, 0);
+    const step = { page, hash, plan, timezone, pagesBefore };
+    // Страница компании нужна только ради ID фильтра «текущая компания».
+    const profile = await this.readFollowingPage(step, `${companyUrl}/`, 'company_page', 1);
+    if ('report' in profile) return profile.report;
+    const companyId = parseLinkedinCompanyIdFromPageHtml(profile.read.html ?? '');
+    if (!companyId) return report('processed', 2, 0);
 
-    const people = await this.readPage(page, peopleUrl, 'company_people', hash);
-    if (people.status !== 'ready') return this.handlePageFailure(people, 2);
-    const candidates = parseLinkedinCompanyPeoplePageHtml(people.html ?? '');
-    for (const candidate of candidates) {
+    const search3 = await this.readFollowingPage(step, linkedinPeopleSearchUrl(companyId), 'company_people', 2);
+    if ('report' in search3) return search3.report;
+    const cards = parseLinkedinPeopleSearchPageHtml(search3.read.html ?? '');
+    const visible = this.saveVisibleRecruiters(companyName, cards);
+    const fromExa = await this.enrichFromExa(accountId, companyName, cards);
+    return report('processed', 3, visible + fromExa);
+  }
+
+  /** Люди 2-го круга видны сразу: имя и ссылка /in/ сохраняются как есть. */
+  private saveVisibleRecruiters(companyName: string, cards: readonly LinkedinPeopleSearchCard[]): number {
+    let saved = 0;
+    for (const card of cards) {
+      if (!card.fullName || !card.linkedinUrl || !RECRUITER_TITLE.test(card.headline)) continue;
       savePoolCompanyRecruiter(this.repository, {
         companyName,
-        ...candidate,
+        fullName: card.fullName,
+        roleTitle: card.headline,
+        linkedinUrl: card.linkedinUrl,
         observedAt: this.now().toISOString(),
       });
+      saved += 1;
     }
-    return report('processed', 2, candidates.length);
+    return saved;
+  }
+
+  /** Exa — не страница LinkedIn: без ключа или при сбое исполнитель только пишет в журнал. */
+  private async enrichFromExa(
+    accountId: string,
+    companyName: string,
+    cards: readonly LinkedinPeopleSearchCard[],
+  ): Promise<number> {
+    this.pauseController = new AbortController();
+    try {
+      const outcome = await enrichRecruitersFromExa({
+        repository: this.repository,
+        companyName,
+        cards,
+        apiKey: this.exa?.apiKey,
+        ...(this.exa?.fetch ? { fetch: this.exa.fetch } : {}),
+        ...(this.exa?.requestGate ? { requestGate: this.exa.requestGate } : {}),
+        now: this.now,
+        signal: this.pauseController.signal,
+      });
+      if (outcome.status === 'exa_not_configured' || outcome.status === 'failed') {
+        const note = outcome.status === 'failed' ? 'exa_failed' : 'exa_not_configured';
+        recordLinkedinExecutorNote(this.database, accountId, note, this.now());
+      }
+      return outcome.saved;
+    } finally {
+      this.pauseController = undefined;
+    }
+  }
+
+  /** Пауза по cadence и решение о продолжении перед очередной страницей компании. */
+  private async readFollowingPage(
+    step: FollowingPageStep,
+    url: string,
+    pageKind: LinkedinPoolExecutorPageKind,
+    pagesDone: number,
+  ): Promise<{ readonly read: PageRead } | { readonly report: LinkedinPoolExecutorReport }> {
+    await this.waitBetweenPages(detectCadencePageKind(url));
+    if (this.stopped) return { report: report('stopped', pagesDone, 0) };
+    if (!this.config.enabled) return { report: report('disabled', pagesDone, 0) };
+    const decision = (this.decideFn ?? decide)(
+      step.plan,
+      this.now(),
+      step.pagesBefore + pagesDone,
+      step.timezone,
+    );
+    if (decision.status !== 'run') return { report: report(decision.status, pagesDone, 0) };
+    const read = await this.readPage(step.page, url, pageKind, step.hash);
+    if (read.status !== 'ready') {
+      return { report: await this.handlePageFailure(read, pagesDone + 1) };
+    }
+    return { read };
   }
 
   /** Профиль аккаунта под нашей блокировкой; 'busy' — занят входом; undefined — профиля нет. */
@@ -336,7 +424,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private async readPage(
     page: Page,
     url: string,
-    pageKind: 'company_search' | 'company_people',
+    pageKind: LinkedinPoolExecutorPageKind,
     companyHashValue: string,
   ): Promise<PageRead> {
     if (this.stopped) return { status: 'stopped' };
@@ -448,6 +536,14 @@ function companyHash(companyName: string): string {
 function linkedinCompanySearchUrl(companyName: string): string {
   const url = new URL('https://www.linkedin.com/search/results/companies/');
   url.searchParams.set('keywords', companyName);
+  return url.toString();
+}
+
+function linkedinPeopleSearchUrl(companyId: string): string {
+  const url = new URL('https://www.linkedin.com/search/results/people/');
+  url.searchParams.set('keywords', 'recruiter');
+  url.searchParams.set('origin', 'FACETED_SEARCH');
+  url.searchParams.set('currentCompany', JSON.stringify([companyId]));
   return url.toString();
 }
 

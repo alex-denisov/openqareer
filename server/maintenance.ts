@@ -85,6 +85,7 @@ const linkedinPoolExecutor =
             return launchLinkedinPersistentContext(chromium, profileDirectory, { timezone });
           },
         },
+        exa: { apiKey: config.exaApiKey },
         notifyOwner: (message) => notifyOwner(config, message),
       })
     : undefined;

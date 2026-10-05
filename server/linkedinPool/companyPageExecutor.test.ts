@@ -20,10 +20,20 @@ import { planDay } from './linkedinCadencePolicy';
 const actor = { actorUserId: 'admin-user', actorUsername: 'admin.test' };
 const encryptionKey = Buffer.alloc(32, 23);
 const now = new Date('2026-09-29T12:00:00.000Z');
-const peoplePage = readFileSync(
-  fileURLToPath(new URL('./fixtures/company-people-page.html', import.meta.url)),
+const peopleSearchPage = readFileSync(
+  fileURLToPath(new URL('./fixtures/people-search-company-recruiter.html', import.meta.url)),
   'utf8',
+).replace(
+  /<\/body>/iu,
+  `<p><a href="https://www.linkedin.com/in/riley-example/"><span aria-hidden="true">Riley Example</span></a></p>
+   <div><p><span>Senior Talent Acquisition Partner</span></p></div><div><p><span>Utrecht, Netherlands</span></p></div></body>`,
 );
+const companyPage = '<main>urn:li:fsd_company:(11348) urn:li:fsd_company:(11348) urn:li:fsd_company:(5)</main>';
+const exaNick = {
+  url: 'https://es.linkedin.com/in/nick-wadding/en',
+  title: 'Nick Wadding',
+  text: '# Nick Wadding\nRecruiting for Data roles at Northwind Group\nManchester, England, United Kingdom (GB)\n500 connections',
+};
 const resources: Array<{ repository: SqliteLinkedinPoolRepository; directory: string }> = [];
 
 afterEach(() => {
@@ -103,7 +113,9 @@ function fakeBrowser(options?: { challenge?: boolean }) {
         ? '<main>Verify your identity</main>'
         : url.includes('/search/results/companies/')
           ? '<a href="/company/northwind-group/">Northwind Group</a>'
-          : peoplePage;
+          : url.includes('/search/results/people/')
+            ? peopleSearchPage
+            : companyPage;
       return { status: () => 200 };
     }),
     url: () => currentUrl,
@@ -306,12 +318,15 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
 
     await expect(executor.runStep()).resolves.toMatchObject({
       status: 'processed',
-      pageCount: 2,
+      pageCount: 3,
       recruiterCount: 1,
     });
-    expect(fake.navigated).toHaveLength(2);
+    expect(fake.navigated).toHaveLength(3);
     expect(fake.navigated[0]).toContain('/search/results/companies/');
-    expect(fake.navigated[1]).toBe('https://www.linkedin.com/company/northwind-group/people/');
+    expect(fake.navigated[1]).toBe('https://www.linkedin.com/company/northwind-group/');
+    expect(fake.navigated[2]).toBe(
+      'https://www.linkedin.com/search/results/people/?keywords=recruiter&origin=FACETED_SEARCH&currentCompany=%5B%2211348%22%5D',
+    );
     expect(wait).toHaveBeenCalledWith(13_500, expect.any(AbortSignal));
     const rows = repository
       .getDatabase()
@@ -490,6 +505,58 @@ describe('LinkedinPoolCompanyPageExecutor', () => {
     });
     await expect(outsideHours.runStep()).resolves.toMatchObject({ status: 'outside_window' });
     expect(browserFactory).not.toHaveBeenCalled();
+  });
+});
+
+describe('LinkedinPoolCompanyPageExecutor Exa enrichment (B369)', () => {
+  async function runWithExa(exa: { apiKey?: string; fetch?: typeof fetch } | undefined) {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-exa@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    const wait = vi.fn(async () => undefined);
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      now: () => now,
+      random: () => 0.5,
+      wait,
+      decide: () => ({ status: 'run' }),
+      ...(exa ? { exa } : {}),
+    });
+    const report = await executor.runStep();
+    return { repository, account, report, fake, wait };
+  }
+
+  it('проходит 3 страницы с паузами и сохраняет рекрутёров Exa рядом с видимыми', async () => {
+    const fetch = vi.fn(
+      async () => new Response(JSON.stringify({ results: [exaNick] }), { status: 200 }),
+    );
+    const { repository, report, wait } = await runWithExa({ apiKey: 'exa-key', fetch: fetch as never });
+    expect(report).toMatchObject({ status: 'processed', pageCount: 3, recruiterCount: 2 });
+    expect(wait).toHaveBeenCalledWith(13_500, expect.any(AbortSignal));
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const rows = repository
+      .getDatabase()
+      .prepare('SELECT full_name, linkedin_url FROM linkedin_pool_company_recruiters ORDER BY full_name')
+      .all();
+    expect(rows).toEqual([
+      { full_name: 'Nick Wadding', linkedin_url: 'https://www.linkedin.com/in/nick-wadding' },
+      { full_name: 'Riley Example', linkedin_url: 'https://www.linkedin.com/in/riley-example' },
+    ]);
+  });
+
+  it('без ключа Exa пишет exa_not_configured в журнал и не падает', async () => {
+    const { repository, account, report } = await runWithExa(undefined);
+    expect(report).toMatchObject({ status: 'processed', pageCount: 3, recruiterCount: 1 });
+    const notes = repository
+      .getDatabase()
+      .prepare("SELECT detail FROM linkedin_pool_audit WHERE account_id = ? AND action = 'linkedin_executor_note'")
+      .all(account.id);
+    expect(notes).toEqual([{ detail: 'exa_not_configured' }]);
   });
 });
 
