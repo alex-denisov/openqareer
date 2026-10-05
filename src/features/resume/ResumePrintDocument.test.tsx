@@ -106,3 +106,51 @@ describe('ResumePrintDocument', () => {
     expect(html.match(/career-resume-print-entry/gu)).toHaveLength(1);
   });
 });
+
+// .app 05.10: у adenisov.test опыт, образование и языки лежат в черновике, а не в
+// проекции документа — печать их теряла, экран показывал.
+describe('ResumePrintDocument — данные черновика', () => {
+  const draftOnly: ResumeDraft = {
+    ...draft,
+    experience: [
+      {
+        id: 'd1',
+        chronologyMemoryId: 'm1',
+        title: 'VP of Technology',
+        employer: 'Acme',
+        startDate: '2021-03',
+        current: true,
+        bulletMemoryIds: [],
+      },
+    ],
+    education: [
+      {
+        id: 'ed1',
+        evidenceMemoryId: 'm2',
+        institution: 'МГТУ',
+        qualification: 'Инженер',
+        endDate: '2008',
+      },
+    ],
+    languages: [{ id: 'l1', evidenceMemoryId: 'm3', name: 'English', cefr: 'C1' }],
+  };
+  const emptyDocument: ResumeDocument = {
+    ...document,
+    experience: [],
+    education: [],
+    languages: [],
+  };
+  const html = renderToStaticMarkup(
+    <ResumePrintDocument document={emptyDocument} draft={draftOnly} />,
+  );
+
+  it('печатает опыт из черновика', () => {
+    expect(html).toContain('VP of Technology — Acme');
+    expect(html).toContain('2021-03');
+  });
+
+  it('печатает образование и языки из черновика', () => {
+    expect(html).toContain('МГТУ');
+    expect(html).toContain('English (C1)');
+  });
+});

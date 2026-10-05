@@ -1,3 +1,4 @@
+import { mergeEducation, mergeExperience, mergeLanguages } from './resumeDocumentRows';
 import type { ReactNode } from 'react';
 import { formatExperiencePeriod } from './resumeExport';
 import type { ResumeDocument, ResumeDraft } from './resumeTypes';
@@ -34,7 +35,7 @@ function PrintHeader({ document, draft }: ResumePrintDocumentProps) {
       document.contact.telegram,
       contact?.links?.[0] ?? document.contact.links?.[0],
     ],
-    '   ∙   '
+    '   ∙   ',
   );
   const subtitle = joined([role, city], ' | ');
   return (
@@ -46,13 +47,21 @@ function PrintHeader({ document, draft }: ResumePrintDocumentProps) {
   );
 }
 
-function PrintExperience({ document }: { document: ResumeDocument }) {
-  const entries = document.experience
-    .map((exp) => ({
-      id: exp.id,
-      heading: joined([exp.title?.value, exp.employer?.value], ' — '),
-      period: formatExperiencePeriod(exp),
-      bullets: exp.bullets.map((b) => clean(b.value)).filter(Boolean),
+function draftPeriod(start?: string, end?: string, current?: boolean): string {
+  if (!start && !end) return '';
+  return joined([start, current ? 'по настоящее время' : end], ' — ');
+}
+
+/** Опыт как на экране: проекция документа плюс записи черновика (mergeExperience). */
+function PrintExperience({ document, draft }: { document: ResumeDocument; draft: ResumeDraft }) {
+  const entries = mergeExperience(draft, document)
+    .map(({ entry, projected }) => ({
+      id: entry.id,
+      heading: joined([entry.title, entry.employer], ' — '),
+      period: projected
+        ? formatExperiencePeriod(projected)
+        : draftPeriod(entry.startDate, entry.endDate, entry.current),
+      bullets: (projected?.bullets ?? []).map((b) => clean(b.value)).filter(Boolean),
     }))
     .filter((entry) => entry.heading || entry.period || entry.bullets.length > 0);
   if (entries.length === 0) return null;
@@ -86,17 +95,13 @@ function PrintLines({ title, lines }: { title: string; lines: readonly string[] 
   );
 }
 
-function educationLines(document: ResumeDocument): string[] {
-  return document.education
+function educationLines(document: ResumeDocument, draft: ResumeDraft): string[] {
+  return mergeEducation(draft, document)
     .map((edu) =>
       joined(
-        [
-          edu.institution?.value,
-          edu.qualification?.value,
-          joined([edu.startDate?.value, edu.endDate?.value], ' — '),
-        ],
-        ', '
-      )
+        [edu.institution, edu.qualification, joined([edu.startDate, edu.endDate], ' — ')],
+        ', ',
+      ),
     )
     .filter(Boolean);
 }
@@ -117,25 +122,32 @@ function recommendationLines(document: ResumeDocument): string[] {
  */
 export function ResumePrintDocument({ document, draft }: ResumePrintDocumentProps) {
   const about = clean(draft.candidate.about) || clean(document.about);
-  const skills = joined((document.skills ?? []).map((skill) => skill.name), ', ');
+  const skills = joined(
+    (document.skills ?? []).map((skill) => skill.name),
+    ', ',
+  );
   const languages = joined(
-    document.languages.map((lang) =>
-      lang.name?.value
-        ? joined([lang.name.value, lang.cefr?.value ? `(${lang.cefr.value})` : ''], ' ')
-        : ''
+    mergeLanguages(draft, document).map((lang) =>
+      lang.name ? joined([lang.name, lang.cefr ? `(${lang.cefr})` : ''], ' ') : '',
     ),
-    ', '
+    ', ',
   );
   const courses = (document.courses ?? [])
-    .map((course) => joined([course.name, course.institution ?? course.provider, course.year], ' | '))
+    .map((course) =>
+      joined([course.name, course.institution ?? course.provider, course.year], ' | '),
+    )
     .filter(Boolean);
   return (
     <article className="career-resume-print" aria-hidden="true">
       <PrintHeader document={document} draft={draft} />
-      {about ? <PrintSection title="Обо мне"><p>{about}</p></PrintSection> : null}
-      <PrintExperience document={document} />
+      {about ? (
+        <PrintSection title="Обо мне">
+          <p>{about}</p>
+        </PrintSection>
+      ) : null}
+      <PrintExperience document={document} draft={draft} />
       <PrintLines title="Навыки" lines={skills ? [skills] : []} />
-      <PrintLines title="Образование" lines={educationLines(document)} />
+      <PrintLines title="Образование" lines={educationLines(document, draft)} />
       <PrintLines title="Курсы" lines={courses} />
       <PrintLines title="Языки" lines={languages ? [languages] : []} />
       <PrintLines title="Рекомендации" lines={recommendationLines(document)} />
