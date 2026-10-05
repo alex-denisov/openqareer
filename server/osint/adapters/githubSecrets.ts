@@ -245,9 +245,7 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error('Операция отменена');
       }
-      throw new FootprintSourceError(
-        'github',
-        'source_error',
+      throw githubError(
         `Сетевая ошибка при обращении к GitHub: ${err instanceof Error ? err.message : String(err)}`,
         true,
       );
@@ -256,41 +254,25 @@ export class GithubSecretsAdapter implements FootprintAdapter<GithubSecretsInput
     if (res.status === 403 || res.status === 429) {
       const remaining = res.headers.get('x-ratelimit-remaining');
       if (remaining === '0' || res.status === 429) {
-        throw new FootprintSourceError(
-          'github',
-          'source_error',
-          'лимит GitHub, повторите через час',
-          true,
-        );
+        throw githubError('лимит GitHub, повторите через час', true);
       }
       const body = await res.text().catch(() => '');
       if (body.toLowerCase().includes('rate limit')) {
-        throw new FootprintSourceError(
-          'github',
-          'source_error',
-          'лимит GitHub, повторите через час',
-          true,
-        );
+        throw githubError('лимит GitHub, повторите через час', true);
       }
-      throw new FootprintSourceError(
-        'github',
-        'source_error',
-        `Доступ к GitHub ограничен (код ${res.status})`,
-        false,
-      );
+      throw githubError(`Доступ к GitHub ограничен (код ${res.status})`, false);
     }
 
     if (!res.ok) {
-      throw new FootprintSourceError(
-        'github',
-        'source_error',
-        `Ошибка GitHub API: статус ${res.status}`,
-        res.status >= 500,
-      );
+      throw githubError(`Ошибка GitHub API: статус ${res.status}`, res.status >= 500);
     }
 
     return res;
   }
+}
+
+function githubError(message: string, retryable: boolean): FootprintSourceError {
+  return new FootprintSourceError('github', 'source_error', message, retryable);
 }
 
 export const githubSecretsAdapter = new GithubSecretsAdapter();

@@ -281,6 +281,7 @@ test('B367 reviews a mocked background run, records identity feedback, and delet
   await expect(page.getByText('Вы отметили «не я»')).toBeVisible();
   await page.getByRole('button', { name: 'Скрыть' }).click();
   await expect(page.getByText('Скрытые находки (1)')).toBeVisible();
+  await page.getByText('Скрытые находки (1)').click();
   await page.getByRole('button', { name: 'Показать' }).click();
   await expect(page.getByText('Нужно проверить')).toBeVisible();
   await page.getByRole('button', { name: 'Это я' }).click();
