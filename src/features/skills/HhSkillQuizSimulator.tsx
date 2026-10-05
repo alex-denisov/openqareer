@@ -12,27 +12,36 @@ import {
 import {
   getAvailableSkillQuizzes,
   evaluateSkillQuiz,
+  getSkillQuizById,
   type QuizEvaluationResult,
   type SkillQuiz,
 } from '../../services/hhSkillQuizzes';
 
 interface HhSkillQuizSimulatorProps {
+  initialQuizId?: string;
+  initialResult?: QuizEvaluationResult | null;
   onClose: () => void;
   onBadgeEarned?: (badgeTitle: string) => void;
+  onAcceptResult?: (result: QuizEvaluationResult) => void;
 }
 
 // eslint-disable-next-line max-lines-per-function
 export function HhSkillQuizSimulator({
+  initialQuizId,
+  initialResult = null,
   onClose,
   onBadgeEarned,
+  onAcceptResult,
 }: HhSkillQuizSimulatorProps) {
   useEscapeLayer(onClose);
   const dialogRef = useRef<HTMLDivElement>(null);
   const quizzes = getAvailableSkillQuizzes();
-  const [selectedQuiz, setSelectedQuiz] = useState<SkillQuiz | null>(null);
+  const [selectedQuiz, setSelectedQuiz] = useState<SkillQuiz | null>(
+    initialQuizId ? (getSkillQuizById(initialQuizId) ?? null) : null,
+  );
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  const [result, setResult] = useState<QuizEvaluationResult | null>(null);
+  const [result, setResult] = useState<QuizEvaluationResult | null>(initialResult);
 
   function startQuiz(quiz: SkillQuiz) {
     setSelectedQuiz(quiz);
@@ -52,6 +61,13 @@ export function HhSkillQuizSimulator({
     if (res.passed && onBadgeEarned) {
       onBadgeEarned(selectedQuiz.badgeTitle);
     }
+  }
+
+  function handleAccept() {
+    if (result && onAcceptResult) {
+      onAcceptResult(result);
+    }
+    onClose();
   }
 
   return (
@@ -85,11 +101,11 @@ export function HhSkillQuizSimulator({
                 <Sparkle size={24} weight="fill" />
               </div>
               <h2 id="quiz-dialog-title" className="career-quiz-dialog-title">
-                Верификация навыков hh.ru
+                Верификация навыков: hh.ru и LinkedIn
               </h2>
             </div>
             <p className="career-quiz-intro-text">
-              Подготовьтесь и пройдите симуляцию официальных тестов подтверждения навыков hh.ru. Успешное прохождение дает проверенный бейдж в резюме и поднимает профиль в выдаче рекрутеров.
+              Подготовьтесь и пройдите официальные вопросы проверки навыков из банка тестов hh.ru и LinkedIn. Результат обновляет статус факта профиля честно и доказательно.
             </p>
 
             <div className="career-quiz-list">
@@ -103,7 +119,7 @@ export function HhSkillQuizSimulator({
                       {quiz.title}
                     </strong>
                     <span className="career-quiz-item-meta">
-                      {quiz.category} · {quiz.questions.length} вопросов · Порог {quiz.passingScorePercent}%
+                      {quiz.platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'} · {quiz.category} · {quiz.questions.length} вопросов · Порог {quiz.passingScorePercent}%
                     </span>
                   </div>
                   <button
@@ -188,7 +204,7 @@ export function HhSkillQuizSimulator({
           </div>
         ) : null}
 
-        {result && selectedQuiz ? (
+        {result ? (
           <div>
             <div
               className={`career-quiz-result-box ${result.passed ? 'is-passed' : 'is-failed'}`}
@@ -202,8 +218,11 @@ export function HhSkillQuizSimulator({
                 {result.passed ? 'Тест успешно пройден!' : 'Тест не пройден'}
               </h3>
               <p className="career-quiz-result-text">
-                Результат: <strong>{result.scorePercent}%</strong> ({result.correctAnswersCount} из {result.totalQuestions} правильно)
+                Статус: <strong>{result.statusLabel}</strong> ({result.scorePercent}%, {result.correctAnswersCount} из {result.totalQuestions} правильно)
               </p>
+              <small className="career-quiz-item-meta">
+                {result.source} · {result.verifiedAt}
+              </small>
               {result.verifiedBadgeAwarded && result.badge ? (
                 <div
                   className="career-quiz-badge-wrap"
@@ -213,25 +232,29 @@ export function HhSkillQuizSimulator({
               ) : null}
             </div>
 
-            <h4 className="career-quiz-review-heading">Разбор ответов:</h4>
-            <div className="career-quiz-review-list">
-              {result.review.map((item, index) => (
-                <div
-                  key={index}
-                  className="career-quiz-review-item"
-                >
-                  <strong className="career-quiz-review-question">
-                    {index + 1}. {item.question}
-                  </strong>
-                  <span className={`career-quiz-review-status ${item.isCorrect ? 'is-correct' : 'is-incorrect'}`}>
-                    {item.isCorrect ? '✓ Правильно' : '✗ Ошибка в ответе'}
-                  </span>
-                  <small className="career-quiz-review-explanation">
-                    {item.explanation}
-                  </small>
+            {result.review?.length ? (
+              <>
+                <h4 className="career-quiz-review-heading">Разбор ответов:</h4>
+                <div className="career-quiz-review-list">
+                  {result.review.map((item, index) => (
+                    <div
+                      key={index}
+                      className="career-quiz-review-item"
+                    >
+                      <strong className="career-quiz-review-question">
+                        {index + 1}. {item.question}
+                      </strong>
+                      <span className={`career-quiz-review-status ${item.isCorrect ? 'is-correct' : 'is-incorrect'}`}>
+                        {item.isCorrect ? '✓ Правильно' : '✗ Ошибка в ответе'}
+                      </span>
+                      <small className="career-quiz-review-explanation">
+                        {item.explanation}
+                      </small>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : null}
 
             <div className="career-quiz-result-footer">
               <button
@@ -246,10 +269,17 @@ export function HhSkillQuizSimulator({
               </button>
               <button
                 type="button"
-                className="career-primary-button"
+                className="career-quiet-button"
                 onClick={onClose}
               >
-                Готово
+                Закрыть
+              </button>
+              <button
+                type="button"
+                className="career-primary-button"
+                onClick={handleAccept}
+              >
+                Принять результат
               </button>
             </div>
           </div>

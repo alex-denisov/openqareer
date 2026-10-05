@@ -50,6 +50,42 @@ function SkillsEditForm({
   );
 }
 
+function SkillChip({ skill }: { readonly skill: NonNullable<ResumeDraft['skills']>[number] }) {
+  const verifiedClass =
+    skill.status === 'подтверждён'
+      ? 'is-verified'
+      : skill.status === 'не подтверждён'
+        ? 'is-unverified'
+        : '';
+  return (
+    <span key={skill.id} className={`career-profile-screen-tag ${verifiedClass}`}>
+      {skill.name}
+      {skill.status ? (
+        <span className="career-profile-screen-skill-meta">
+          {' '}· {skill.status} ({skill.source ?? 'Банк квизов'} · {skill.verifiedAt ?? ''})
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function SkillGroupsList({ groups }: { readonly groups: ReturnType<typeof categorizeSkills> }) {
+  return (
+    <div className="career-profile-screen-skill-groups">
+      {groups.map((group) => (
+        <div key={group.label}>
+          <span className="career-profile-screen-group-label">{group.label}</span>
+          <div className="career-profile-screen-group-chips">
+            {group.skills.map((skill) => (
+              <SkillChip key={skill.id} skill={skill} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function ProfileSkillsSection({ draft, saving, onSectionSave }: SectionProps) {
   const [editing, setEditing] = useState(false);
   const skills = draft.skills ?? [];
@@ -75,20 +111,7 @@ export function ProfileSkillsSection({ draft, saving, onSectionSave }: SectionPr
           onCancel={() => setEditing(false)}
         />
       ) : skills.length ? (
-        <div className="career-profile-screen-skill-groups">
-          {groups.map((group) => (
-            <div key={group.label}>
-              <span className="career-profile-screen-group-label">{group.label}</span>
-              <div className="career-profile-screen-group-chips">
-                {group.skills.map((skill) => (
-                  <span key={skill.id} className="career-profile-screen-tag">
-                    {skill.name}
-                  </span>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+        <SkillGroupsList groups={groups} />
       ) : (
         <p className="career-profile-screen-empty-note">Навыки ещё не добавлены.</p>
       )}

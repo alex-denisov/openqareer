@@ -23,6 +23,12 @@ import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
+import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
+import {
+  createSkillVerificationProposal,
+  getSkillQuizById,
+  type QuizEvaluationResult,
+} from '../../services/hhSkillQuizzes';
 
 export const STAGE_TITLE: Record<CoachTurnStage, string> = {
   profile: 'Профиль',
@@ -79,6 +85,30 @@ export function CareerExpertPanel({
   const [sending, setSending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
+  const [skillQuizOpen, setSkillQuizOpen] = useState(false);
+
+  function handleAcceptQuizResult(res: QuizEvaluationResult) {
+    const quiz = getSkillQuizById(res.quizId);
+    const skillName = quiz?.title.split(':')[0] ?? res.quizId;
+    const proposal = createSkillVerificationProposal(skillName, res);
+    const turnKey = liveTurnIdempotencyKey ?? crypto.randomUUID();
+    setLiveTurnIdempotencyKey(turnKey);
+    setLiveResult((prev) => ({
+      message:
+        prev?.message ??
+        `Результат квиза: статус навыка ${skillName} — ${res.statusLabel} (${res.source}, дата: ${res.verifiedAt}). Подготовлено предложение правок для профиля с возможностью отката.`,
+      phase: 'discovery',
+      nextQuestion: null,
+      completeness: prev?.completeness ?? { known: [], unknown: [] },
+      safety: { needsHuman: false, reason: null },
+      careerTrack: prev?.careerTrack ?? null,
+      actionProposals: [
+        proposal as unknown as CoachResult['actionProposals'][number],
+        ...(prev?.actionProposals ?? []),
+      ],
+    }));
+    setSkillQuizOpen(false);
+  }
   const pendingOperation = useRef<{
     user: AuthUser;
     content: string;
@@ -312,6 +342,23 @@ export function CareerExpertPanel({
           </div>
         )}
 
+        {stage === 'profile' ? (
+          <div className="career-expert-skill-quiz-prompt" aria-label="Подтверждение навыков">
+            <span>Проверка навыков со стратегом</span>
+            <strong>Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn</strong>
+            <p>
+              3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с источником и датой. Никаких субъективных оценок.
+            </p>
+            <button
+              type="button"
+              className="career-quiet-button"
+              onClick={() => setSkillQuizOpen(true)}
+            >
+              <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
+            </button>
+          </div>
+        ) : null}
+
         {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
 
         {latestResult ? (
@@ -394,6 +441,13 @@ export function CareerExpertPanel({
         <p className="career-expert-error" role="alert">
           {error}
         </p>
+      ) : null}
+
+      {skillQuizOpen ? (
+        <HhSkillQuizSimulator
+          onClose={() => setSkillQuizOpen(false)}
+          onAcceptResult={handleAcceptQuizResult}
+        />
       ) : null}
     </aside>
   );

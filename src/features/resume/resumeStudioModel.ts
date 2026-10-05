@@ -407,6 +407,9 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       evidenceMemoryId: s.evidenceMemoryId,
       name: s.name.trim(),
       level: trimmed(s.level),
+      status: trimmed(s.status),
+      source: trimmed(s.source),
+      verifiedAt: trimmed(s.verifiedAt),
     })),
     education: draft.education.map((entry) => ({
       id: entry.id,
