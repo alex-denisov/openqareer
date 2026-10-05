@@ -16,6 +16,7 @@ import {
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { SiteLink } from './SiteLink';
+import { DesktopDownload } from './DesktopDownload';
 import { LANDING_TITLE } from './siteTitles';
 import { LEGAL_DOCS, legalPath } from '../../../shared/legalRegistry';
 
@@ -359,6 +360,7 @@ function LandingHero({ session, onNavigate }: LandingPageProps) {
       <div className="site-hero-actions">
         <HeroActionButtons session={session} isAdmin={isAdmin} onNavigate={onNavigate} />
       </div>
+      <DesktopDownload />
     </section>
   );
 }

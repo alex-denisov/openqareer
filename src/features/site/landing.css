@@ -210,6 +210,24 @@
   margin-bottom: 52px;
 }
 
+.site-download {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--career-space-2, 8px);
+  margin: calc(-1 * var(--career-space-6, 24px)) 0 var(--career-space-8, 32px);
+}
+
+.site-download-meta,
+.site-download-note {
+  font-size: var(--career-text-xs, 13px);
+  color: var(--career-muted, inherit);
+}
+
+.site-download-mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
 .site-guarantees {
   display: flex;
   align-items: center;
