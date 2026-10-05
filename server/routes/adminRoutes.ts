@@ -16,6 +16,7 @@ import { describeRoleNamerQueue } from '../providers/roleNamer';
 import { CAREER_SUPER_PROMPT_REVISION } from '../prompts/careerSuperPrompt';
 import { registerHhCrawlFilterRoutes } from './hhCrawlFilterRoutes';
 import { registerLinkedinPoolRoutes } from './linkedinPoolRoutes';
+import { registerLinkedinRemoteLoginRoutes } from './linkedinRemoteLoginRoutes';
 import { cancelFootprintRunForCandidate } from '../osint/candidateFootprintWorker';
 import {
   adminVacancyQuerySchema,
@@ -423,6 +424,7 @@ export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps)
   registerCrawlFilter(app, deps);
   registerRuntimeMemory(app, deps);
   registerLinkedinPoolRoutes(app, deps);
+  registerLinkedinRemoteLoginRoutes(app, deps);
   app.get('/api/v1/admin/users', withDeps(deps, handleListUsers));
   app.get('/api/v1/admin/users/:userId', withDeps(deps, handleGetUser));
   app.patch('/api/v1/admin/users/:userId', withDeps(deps, handlePatchUser));

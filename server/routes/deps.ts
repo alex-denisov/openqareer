@@ -75,6 +75,8 @@ export interface RouteDeps {
   candidateReputationRepo?: import('../data/sqliteCandidateReputationRepository').SqliteCandidateReputationRepository;
   /** Реестр управляемых LinkedIn-сессий; доступен только роли admin (B239). */
   linkedinPool?: import('../linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
+  /** Вход в LinkedIn в браузере сервера; только админ (B373). */
+  linkedinRemoteLogin?: import('../linkedinPool/linkedinRemoteLogin').LinkedinRemoteLoginService;
   /** Согласие «Вы в поиске» — единственное видимое кандидату согласие механики B (B263). */
   searchConsentRepo?: import('../data/sqliteSearchConsentRepository').SqliteSearchConsentRepository;
   /** Журнал согласий кандидата на возможности профиля (B263). */

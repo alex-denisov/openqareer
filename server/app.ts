@@ -83,6 +83,7 @@ interface BuildAppOptions {
   candidateActionRepository?: SqliteCandidateActionRepository;
   candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
+  linkedinRemoteLogin?: RouteDeps['linkedinRemoteLogin'];
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
 
   /**
@@ -325,6 +326,7 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Can
     }),
     ...(options.candidateActionExecutor ? { candidateActionExecutor: options.candidateActionExecutor } : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
+    ...(options.linkedinRemoteLogin ? { linkedinRemoteLogin: options.linkedinRemoteLogin } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
 
     searchVacancies,

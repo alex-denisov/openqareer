@@ -1,4 +1,3 @@
-import { pathToFileURL } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { readServerConfig } from './config';
 import { applySqliteBusyTimeout } from './data/sqliteBusyTimeout';
@@ -13,6 +12,7 @@ import {
 import { getLinkedinChromiumLaunchArgs } from './linkedinPool/linkedinStealthBrowser';
 import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
 import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
+import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
@@ -106,12 +106,6 @@ const worker = new MaintenanceWorker({
   ...(linkedinPoolExecutor ? { linkedinPoolExecutor } : {}),
   purgeRecruiters: () => purgeExpiredRecruiters(semanticDatabase, new Date()),
 });
-
-/** На проде playwright-core лежит вне релиза (openqareer-browser-install): путь задаёт окружение. */
-function playwrightModuleSpecifier(): string {
-  const path = process.env.OPENQAREER_PLAYWRIGHT_MODULE?.trim();
-  return path ? pathToFileURL(path).href : 'playwright';
-}
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
   const parsed = Number(value);

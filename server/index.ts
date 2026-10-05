@@ -32,6 +32,11 @@ import { SqliteSearchConsentRepository } from './data/sqliteSearchConsentReposit
 import { buildRecruiterVacancyInput } from './outreach/recruiterIntelligenceInput';
 import { runRecruiterIntelligenceJobs } from './outreach/recruiterIntelligenceWorker';
 import { SqliteLinkedinPoolRepository } from './linkedinPool/sqliteLinkedinPoolRepository';
+import { LinkedinRemoteLoginService } from './linkedinPool/linkedinRemoteLogin';
+import { persistRemoteLogin } from './linkedinPool/linkedinRemoteLoginPersistence';
+import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
+import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
+import { playwrightModuleSpecifier } from './linkedinPool/playwrightModule';
 import { MatchedPoolPrecompute } from './vacancies/matchedPoolPrecompute';
 
 const config = readServerConfig(process.env);
@@ -148,6 +153,20 @@ const linkedinPool = new SqliteLinkedinPoolRepository({
   encryptionKey: config.dataEncryptionKey,
   runtimeRoot: config.linkedinRuntimeRoot,
 });
+// B373: вход в LinkedIn в браузере сервера; Chromium запускается только по запросу админа.
+const linkedinRemoteLogin = new LinkedinRemoteLoginService({
+  profileDirectoryFor: (accountId) => linkedinProfileDirectory(config.databasePath, accountId),
+  launchContext: async (profileDirectory, timezone) => {
+    const { chromium } = await import(playwrightModuleSpecifier());
+    return launchLinkedinPersistentContext(chromium, profileDirectory, { timezone });
+  },
+  onSignedIn: (accountId, cookies, actor) =>
+    persistRemoteLogin(linkedinPool, accountId, cookies, actor),
+  log: {
+    info: (fields, message) => app.log.info(fields, message),
+    warn: (fields, message) => app.log.warn(fields, message),
+  },
+});
 const app = await buildApp({
   config,
   coachProvider,
@@ -160,6 +179,7 @@ const app = await buildApp({
   candidateReputationRepo,
   searchConsentRepo,
   linkedinPool,
+  linkedinRemoteLogin,
   matchedPoolPrecompute,
   runtimeMemory: () => {
     const heap = readProcessHeap();
@@ -325,6 +345,7 @@ async function shutdown(signal: string): Promise<void> {
   if (matchedPoolPrecomputeTimer) clearInterval(matchedPoolPrecomputeTimer);
   if (linkedinPoolSessionExpiryTimer) clearInterval(linkedinPoolSessionExpiryTimer);
   if (linkedinPoolSessionExpiryRetryTimer) clearTimeout(linkedinPoolSessionExpiryRetryTimer);
+  await linkedinRemoteLogin.shutdown();
   await app.close();
   candidateStore.close();
   authService.close();

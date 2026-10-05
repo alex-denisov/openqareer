@@ -245,6 +245,25 @@ export const adminLinkedinPoolParamsSchema = z.object({
   accountId: linkedinAccountIdSchema,
 });
 
+export const adminLinkedinRemoteLoginParamsSchema = z.object({
+  accountId: linkedinAccountIdSchema,
+  loginId: z.string().regex(/^[A-Za-z0-9_-]{20,64}$/u),
+});
+
+/** Вход в браузере сервера (B373): координаты — в пикселях страницы 1440x900. */
+export const adminLinkedinRemoteLoginInputSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('click'),
+    x: z.number().finite().min(0).max(1_440),
+    y: z.number().finite().min(0).max(900),
+  }),
+  z.object({ type: z.literal('text'), text: z.string().min(1).max(256) }),
+  z.object({
+    type: z.literal('key'),
+    key: z.enum(['Enter', 'Tab', 'Backspace', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']),
+  }),
+]);
+
 export const adminLinkedinPoolDeleteSchema = z.object({
   revision: z.number().int().min(0),
 });
