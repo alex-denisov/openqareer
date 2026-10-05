@@ -21,7 +21,13 @@ import type {
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
 
-const ADAPTER_IDS: readonly FootprintAdapterId[] = ['sherlock', 'maigret', 'hibp', 'wayback', 'exa'];
+const ADAPTER_IDS: readonly FootprintAdapterId[] = [
+  'sherlock',
+  'maigret',
+  'hibp',
+  'wayback',
+  'exa',
+];
 
 const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
   sherlock: 'Публичные профили Sherlock',
@@ -67,21 +73,28 @@ function adapterState(
   if (existing?.state === 'not_run' && !availability[adapterId]) {
     return { ...existing, state: 'not_connected' };
   }
-  return existing ?? {
-    adapterId,
-    state: availability[adapterId] ? 'not_run' : 'not_connected',
-    sourcesChecked: 0,
-    findingsCount: 0,
-  };
+  return (
+    existing ?? {
+      adapterId,
+      state: availability[adapterId] ? 'not_run' : 'not_connected',
+      sourcesChecked: 0,
+      findingsCount: 0,
+    }
+  );
 }
 
 function adapterIcon(state: CandidateFootprintAdapterStatus['state']) {
   switch (state) {
-    case 'pending': return CircleNotch;
-    case 'checked': return CheckCircle;
-    case 'source_error': return WarningCircle;
-    case 'not_connected': return Info;
-    case 'not_run': return ShieldCheck;
+    case 'pending':
+      return CircleNotch;
+    case 'checked':
+      return CheckCircle;
+    case 'source_error':
+      return WarningCircle;
+    case 'not_connected':
+      return Info;
+    case 'not_run':
+      return ShieldCheck;
   }
 }
 
@@ -104,14 +117,23 @@ function AdapterStatusList({
         {ADAPTER_IDS.map((adapterId) => {
           const status = adapterState(adapterId, audit, sourceAvailability);
           const StatusIcon = adapterIcon(status.state);
-          const message = status.state === 'checked'
-            ? status.findingsCount ? 'проверено' : 'ничего не найдено'
-            : status.state === 'pending' ? 'проверяется'
-              : status.state === 'not_connected' ? 'источник не подключён'
-                : status.state === 'source_error' ? 'ошибка источника'
-                  : 'не запускалось';
+          const message =
+            status.state === 'checked'
+              ? status.findingsCount
+                ? 'проверено'
+                : 'ничего не найдено'
+              : status.state === 'pending'
+                ? 'проверяется'
+                : status.state === 'not_connected'
+                  ? 'подготовлено, не подключено'
+                  : status.state === 'source_error'
+                    ? 'ошибка источника'
+                    : 'не запускалось';
           return (
-            <li key={adapterId} className={`career-footprint-status-row ${statusClass(status.state)}`}>
+            <li
+              key={adapterId}
+              className={`career-footprint-status-row ${statusClass(status.state)}`}
+            >
               <StatusIcon aria-hidden="true" />
               <span className="career-footprint-status-name">{ADAPTER_LABELS[adapterId]}</span>
               <span className="career-footprint-status-label">{message}</span>
@@ -156,7 +178,7 @@ function QueryPlanSection({
               />
               <span className="career-footprint-query-copy">
                 <span>{item.preview}</span>
-                {!item.available ? <small>Источник не подключён</small> : null}
+                {!item.available ? <small>подготовлено, не подключено</small> : null}
               </span>
             </label>
           ))}
@@ -173,13 +195,25 @@ function QueryPlanSection({
 
 function ConsentItemsList() {
   const document = CAPABILITY_CONSENT_DOCUMENTS.digital_footprint;
-  return <ul>{document.items.map((item) => <li key={item}>{item}</li>)}</ul>;
+  return (
+    <ul>
+      {document.items.map((item) => (
+        <li key={item}>{item}</li>
+      ))}
+    </ul>
+  );
 }
 
-type ConsentDisclosureProps = Pick<CandidateFootprintConsentState, 'approved' | 'granted'> & Pick<
-  CandidateFootprintAuditSurfaceProps,
-  'ownershipConfirmed' | 'grantingConsent' | 'revokingConsent' | 'onConfirmOwnership' | 'onGrantConsent' | 'onRevokeConsent'
->;
+type ConsentDisclosureProps = Pick<CandidateFootprintConsentState, 'approved' | 'granted'> &
+  Pick<
+    CandidateFootprintAuditSurfaceProps,
+    | 'ownershipConfirmed'
+    | 'grantingConsent'
+    | 'revokingConsent'
+    | 'onConfirmOwnership'
+    | 'onGrantConsent'
+    | 'onRevokeConsent'
+  >;
 
 function PendingConsent(): JSX.Element {
   return (
@@ -196,7 +230,9 @@ function GrantedConsent({
 }: Pick<ConsentDisclosureProps, 'revokingConsent' | 'onRevokeConsent'>): JSX.Element {
   return (
     <section className="career-footprint-consent" aria-label="Согласие на цифровой след">
-      <p role="status">Согласие выдано. Отзыв остановит текущую проверку и удалит сохранённые находки.</p>
+      <p role="status">
+        Согласие выдано. Отзыв остановит текущую проверку и удалит сохранённые находки.
+      </p>
       <button
         type="button"
         className="career-footprint-secondary-button"
@@ -215,7 +251,10 @@ function ConsentGrantForm({
   grantingConsent,
   onConfirmOwnership,
   onGrantConsent,
-}: Pick<ConsentDisclosureProps, 'ownershipConfirmed' | 'grantingConsent' | 'onConfirmOwnership' | 'onGrantConsent'>): JSX.Element {
+}: Pick<
+  ConsentDisclosureProps,
+  'ownershipConfirmed' | 'grantingConsent' | 'onConfirmOwnership' | 'onGrantConsent'
+>): JSX.Element {
   return (
     <section className="career-footprint-consent" aria-labelledby="footprint-consent-title">
       <h3 id="footprint-consent-title">Согласие на цифровой след</h3>
@@ -290,7 +329,12 @@ function FindingReviewButtons({
         type="button"
         aria-pressed={finding.review === 'confirmed_self'}
         disabled={busy}
-        onClick={() => onReview(finding.id, finding.review === 'confirmed_self' ? 'unreviewed' : 'confirmed_self')}
+        onClick={() =>
+          onReview(
+            finding.id,
+            finding.review === 'confirmed_self' ? 'unreviewed' : 'confirmed_self',
+          )
+        }
       >
         Это я
       </button>
@@ -298,7 +342,9 @@ function FindingReviewButtons({
         type="button"
         aria-pressed={finding.review === 'not_self'}
         disabled={busy}
-        onClick={() => onReview(finding.id, finding.review === 'not_self' ? 'unreviewed' : 'not_self')}
+        onClick={() =>
+          onReview(finding.id, finding.review === 'not_self' ? 'unreviewed' : 'not_self')
+        }
       >
         Не я
       </button>
@@ -318,10 +364,14 @@ function FindingCard({
   readonly busy: boolean;
   readonly onReview: (findingId: string, review: FootprintReview) => void;
 }) {
-  const SourceIcon = finding.review === 'confirmed_self'
-    ? CheckCircle
-    : finding.review === 'not_self' ? XCircle
-      : finding.review === 'hidden' ? EyeSlash : Info;
+  const SourceIcon =
+    finding.review === 'confirmed_self'
+      ? CheckCircle
+      : finding.review === 'not_self'
+        ? XCircle
+        : finding.review === 'hidden'
+          ? EyeSlash
+          : Info;
   return (
     <li className="career-footprint-finding">
       <div className="career-footprint-finding-heading">
@@ -335,9 +385,7 @@ function FindingCard({
         <span className="career-footprint-finding-date">{observedDate(finding.observedAt)}</span>
       </div>
       <p className="career-footprint-finding-detail">{finding.detail}</p>
-      <p className="career-footprint-finding-sources">
-        Источники: {finding.sources.join(', ')}
-      </p>
+      <p className="career-footprint-finding-sources">Источники: {finding.sources.join(', ')}</p>
       {finding.url ? (
         <a href={finding.url} target="_blank" rel="noopener noreferrer">
           Открыть источник
@@ -361,15 +409,17 @@ function FindingsSection({
   return (
     <section className="career-footprint-findings" aria-labelledby="footprint-findings-title">
       <h3 id="footprint-findings-title">Находки</h3>
-      {groups.length ? groups.map((kind) => (
-        <FindingGroup
-          key={kind}
-          kind={kind}
-          findings={visible.filter((finding) => finding.kind === kind)}
-          busyFindingId={busyFindingId}
-          onReview={onReview}
-        />
-      )) : (
+      {groups.length ? (
+        groups.map((kind) => (
+          <FindingGroup
+            key={kind}
+            kind={kind}
+            findings={visible.filter((finding) => finding.kind === kind)}
+            busyFindingId={busyFindingId}
+            onReview={onReview}
+          />
+        ))
+      ) : (
         <div className="career-footprint-empty-results" role="status">
           <ShieldCheck aria-hidden="true" />
           <p>По выбранным источникам новых находок нет.</p>
@@ -444,7 +494,9 @@ function DeleteConfirmation({
     <div className="career-footprint-delete-confirm" role="group" aria-label="Подтвердить удаление">
       <p>Удалить все сохранённые находки и историю проверок? Запуск придётся выполнить заново.</p>
       <div>
-        <button type="button" disabled={deleting} onClick={onCancelDelete}>Отмена</button>
+        <button type="button" disabled={deleting} onClick={onCancelDelete}>
+          Отмена
+        </button>
         <button type="button" disabled={deleting} onClick={onConfirmDelete}>
           {deleting ? 'Удаляем находки' : 'Удалить все находки'}
         </button>
@@ -474,7 +526,11 @@ function FootprintSurfaceFeedback({
           </button>
         </div>
       ) : null}
-      {notice ? <p className="career-footprint-notice" role="status">{notice}</p> : null}
+      {notice ? (
+        <p className="career-footprint-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -503,17 +559,24 @@ function OwnershipConfirmation({
 
 function FootprintLaunchActions(props: CandidateFootprintAuditSurfaceProps) {
   const running = Boolean(props.starting || props.audit?.state === 'pending');
-  const availableSelection = props.plan.some((item) =>
-    item.available && props.selectedQueryIds.has(item.id),
+  const availableSelection = props.plan.some(
+    (item) => item.available && props.selectedQueryIds.has(item.id),
   );
   const canStart = Boolean(
-    props.consent.approved && props.consent.granted && props.ownershipConfirmed &&
-    availableSelection && !running,
+    props.consent.approved &&
+    props.consent.granted &&
+    props.ownershipConfirmed &&
+    availableSelection &&
+    !running,
   );
-  const launchLabel = running ? 'Проверка выполняется'
-    : !props.consent.approved ? 'Скоро: ждёт утверждения текста согласия'
-      : !props.consent.granted ? 'Сначала выдайте согласие'
-        : !props.ownershipConfirmed ? 'Подтвердите, что данные ваши'
+  const launchLabel = running
+    ? 'Проверка выполняется'
+    : !props.consent.approved
+      ? 'Скоро: ждёт утверждения текста согласия'
+      : !props.consent.granted
+        ? 'Сначала выдайте согласие'
+        : !props.ownershipConfirmed
+          ? 'Подтвердите, что данные ваши'
           : 'Запустить выбранные проверки';
   return (
     <div className="career-footprint-actions">
@@ -541,7 +604,8 @@ function FootprintLaunchActions(props: CandidateFootprintAuditSurfaceProps) {
 }
 
 function FootprintPlanControls(props: CandidateFootprintAuditSurfaceProps) {
-  const { plan, consent, selectedQueryIds, loading, audit, ownershipConfirmed, grantingConsent } = props;
+  const { plan, consent, selectedQueryIds, loading, audit, ownershipConfirmed, grantingConsent } =
+    props;
   const running = audit?.state === 'pending';
   return (
     <>
@@ -552,7 +616,11 @@ function FootprintPlanControls(props: CandidateFootprintAuditSurfaceProps) {
         onToggleQuery={props.onToggleQuery}
       />
       <p className="career-footprint-disclosure">
-        Exa получает выбранные имя, компании и город; ссылка на фото профиля остаётся только для локального сопоставления с URL изображения в ответе Exa. HIBP получает только 6 символов SHA-1-отпечатка почты; сам адрес и пароль не отправляются. Wayback получает выбранную ссылку. Sherlock и Maigret проверяют выбранные страницы только запросом GET, без входа в аккаунты.
+        Exa получает выбранные имя, компании и город; ссылка на фото профиля остаётся только для
+        локального сопоставления с URL изображения в ответе Exa. HIBP получает только 6 символов
+        SHA-1-отпечатка почты; сам адрес и пароль не отправляются. Wayback получает выбранную
+        ссылку. Sherlock и Maigret проверяют выбранные страницы только запросом GET, без входа в
+        аккаунты.
       </p>
       <ConsentDisclosure
         approved={consent.approved}

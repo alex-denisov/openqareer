@@ -55,7 +55,7 @@ describe('CandidateFootprintAuditSurface', () => {
 
     expect(html).toContain('<h2>Как вас видят</h2>');
     expect(html).toContain('Скоро: ждёт утверждения текста согласия');
-    expect(html).toContain('источник не подключён');
+    expect(html).toContain('подготовлено, не подключено');
     expect(html).toContain('не запускалось');
     expect(html).not.toContain('Безопасно');
     expect(html).not.toContain('100 / 100');
@@ -76,21 +76,23 @@ describe('CandidateFootprintAuditSurface', () => {
           checkedAt: '2026-10-04T12:00:00.000Z',
         },
       ],
-      findings: [{
-        id: 'finding-1',
-        adapter: 'sherlock',
-        kind: 'profile',
-        url: 'https://github.com/ada',
-        title: 'GitHub',
-        detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
-        match: 'likely_self',
-        observedAt: '2026-10-04T12:00:00.000Z',
-        receipt: { method: 'GET', source: 'GitHub', query: 'username=ada' },
-        receipts: [{ method: 'GET', source: 'GitHub', query: 'username=ada' }],
-        sources: ['sherlock'],
-        automatedMatch: 'likely_self',
-        review: 'unreviewed',
-      }],
+      findings: [
+        {
+          id: 'finding-1',
+          adapter: 'sherlock',
+          kind: 'profile',
+          url: 'https://github.com/ada',
+          title: 'GitHub',
+          detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
+          match: 'likely_self',
+          observedAt: '2026-10-04T12:00:00.000Z',
+          receipt: { method: 'GET', source: 'GitHub', query: 'username=ada' },
+          receipts: [{ method: 'GET', source: 'GitHub', query: 'username=ada' }],
+          sources: ['sherlock'],
+          automatedMatch: 'likely_self',
+          review: 'unreviewed',
+        },
+      ],
       ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
       startedAt: '2026-10-04T12:00:00.000Z',
       completedAt: '2026-10-04T12:00:02.000Z',
@@ -139,7 +141,7 @@ describe('CandidateFootprintAuditSurface', () => {
       />,
     );
 
-    expect(html.match(/источник не подключён/gu)).toHaveLength(2);
+    expect(html.match(/подготовлено, не подключено/gu)).toHaveLength(3);
   });
 
   it('discloses that the profile photo URL is matched locally and never sent for image search', () => {
@@ -163,21 +165,33 @@ describe('CandidateFootprintAuditSurface', () => {
         state: 'completed',
         selectedQueryIds: [],
         adapterStatuses: [],
-        findings: [{
-          id: 'finding-hidden',
-          adapter: 'wayback',
-          kind: 'archive',
-          url: 'https://web.archive.org/web/20240101000000/https://portfolio.example',
-          title: 'Архивная копия профиля',
-          detail: 'В архиве найден снимок.',
-          match: 'likely_self',
-          observedAt: '2026-10-04T12:00:00.000Z',
-          receipt: { method: 'GET', source: 'Internet Archive CDX', query: 'url=https://portfolio.example' },
-          receipts: [{ method: 'GET', source: 'Internet Archive CDX', query: 'url=https://portfolio.example' }],
-          sources: ['wayback'],
-          automatedMatch: 'likely_self',
-          review: 'hidden',
-        }],
+        findings: [
+          {
+            id: 'finding-hidden',
+            adapter: 'wayback',
+            kind: 'archive',
+            url: 'https://web.archive.org/web/20240101000000/https://portfolio.example',
+            title: 'Архивная копия профиля',
+            detail: 'В архиве найден снимок.',
+            match: 'likely_self',
+            observedAt: '2026-10-04T12:00:00.000Z',
+            receipt: {
+              method: 'GET',
+              source: 'Internet Archive CDX',
+              query: 'url=https://portfolio.example',
+            },
+            receipts: [
+              {
+                method: 'GET',
+                source: 'Internet Archive CDX',
+                query: 'url=https://portfolio.example',
+              },
+            ],
+            sources: ['wayback'],
+            automatedMatch: 'likely_self',
+            review: 'hidden',
+          },
+        ],
         ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
         startedAt: '2026-10-04T12:00:00.000Z',
         completedAt: '2026-10-04T12:00:02.000Z',

@@ -48,14 +48,19 @@ describe('candidate footprint query plan', () => {
 
     const internalPlan = buildCandidateFootprintQueryPlan(draft);
     const publicPlan = toPublicFootprintQueryPlan(internalPlan);
-    const usernames = internalPlan.filter((item): item is typeof item & { input: { readonly username: string } } =>
-      'username' in item.input,
+    const usernames = internalPlan.filter(
+      (item): item is typeof item & { input: { readonly username: string } } =>
+        'username' in item.input,
     );
     const email = internalPlan.find((item) => item.adapterId === 'hibp');
     const contextSearches = internalPlan.filter((item) => item.kind === 'work_context');
 
-    expect(usernames.map((item) => `${item.adapterId}:${item.input.username}`)).toContain('sherlock:maria-dev');
-    expect(usernames.map((item) => `${item.adapterId}:${item.input.username}`)).toContain('maigret:maria-dev');
+    expect(usernames.map((item) => `${item.adapterId}:${item.input.username}`)).toContain(
+      'sherlock:maria-dev',
+    );
+    expect(usernames.map((item) => `${item.adapterId}:${item.input.username}`)).toContain(
+      'maigret:maria-dev',
+    );
     expect(email?.input).toEqual({ email: 'maria@example.test' });
     expect(contextSearches).toHaveLength(3);
     expect(contextSearches.some((item) => item.preview.includes('Analytical Engines'))).toBe(true);
@@ -78,5 +83,56 @@ describe('candidate footprint query plan', () => {
     };
 
     expect(buildCandidateFootprintQueryPlan(draft)).toEqual([]);
+  });
+
+  it('B375: если у кандидата есть ссылка LinkedIn или ник, создаются проверки Sherlock, Maigret и Wayback', () => {
+    const draftWithNick: ResumeDraft = {
+      candidate: {
+        contact: {
+          telegram: '@alexey_lead',
+        },
+      },
+      experience: [],
+      education: [],
+      languages: [],
+    };
+    const planFromNick = buildCandidateFootprintQueryPlan(draftWithNick);
+    expect(planFromNick.some((item) => item.adapterId === 'sherlock')).toBe(true);
+    expect(planFromNick.some((item) => item.adapterId === 'maigret')).toBe(true);
+    expect(planFromNick.some((item) => item.adapterId === 'wayback')).toBe(true);
+
+    const draftWithLinkedin: ResumeDraft = {
+      candidate: {
+        contact: {
+          linkedinUrl: 'https://linkedin.com/in/alexey-denisov',
+        },
+      },
+      experience: [],
+      education: [],
+      languages: [],
+    };
+    const planFromLi = buildCandidateFootprintQueryPlan(draftWithLinkedin);
+    expect(planFromLi.some((item) => item.adapterId === 'sherlock')).toBe(true);
+    expect(planFromLi.some((item) => item.adapterId === 'maigret')).toBe(true);
+    expect(planFromLi.some((item) => item.adapterId === 'wayback')).toBe(true);
+  });
+
+  it('B375: HIBP предлагается отдельным пунктом «Проверить утечки по почте» с пометкой, что нужно согласие', () => {
+    const draft: ResumeDraft = {
+      candidate: {
+        fullName: 'Иван Иванов',
+        contact: {
+          email: 'ivan@example.com',
+        },
+      },
+      experience: [],
+      education: [],
+      languages: [],
+    };
+    const plan = buildCandidateFootprintQueryPlan(draft);
+    const hibpItem = plan.find((item) => item.adapterId === 'hibp');
+    expect(hibpItem).toBeDefined();
+    expect(hibpItem?.preview).toContain('Проверить утечки по почте');
+    expect(hibpItem?.preview).toContain('согласие');
   });
 });

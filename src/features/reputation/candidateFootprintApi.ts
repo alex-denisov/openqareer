@@ -74,10 +74,15 @@ export async function revokeCandidateFootprintConsent(): Promise<void> {
 
 export function statusMessage(status: CandidateFootprintAdapterStatus): string {
   switch (status.state) {
-    case 'pending': return 'проверяется';
-    case 'not_connected': return 'источник не подключён';
-    case 'source_error': return 'ошибка источника';
-    case 'not_run': return 'не запускалось';
-    case 'checked': return status.findingsCount ? 'проверено' : 'ничего не найдено';
+    case 'pending':
+      return 'проверяется';
+    case 'not_connected':
+      return 'подготовлено, не подключено';
+    case 'source_error':
+      return 'ошибка источника';
+    case 'not_run':
+      return 'не запускалось';
+    case 'checked':
+      return status.findingsCount ? 'проверено' : 'ничего не найдено';
   }
 }
