@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowClockwise, Briefcase, DotsThreeVertical, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { UseApplications } from './useApplications';
@@ -16,7 +17,8 @@ interface Column {
 
 const COLUMNS: readonly Column[] = [
   { key: 'saved', label: 'Хочу', stages: ['saved'] },
-  { key: 'applied', label: 'Откликнулся', stages: ['applied'] },
+  { key: 'attempted', label: 'Пробовали отправить', stages: ['applied'] },
+  { key: 'delivered', label: 'Отправлено', stages: ['applied'] },
   { key: 'responded', label: 'Ответ', stages: ['responded'] },
   { key: 'interview', label: 'Интервью', stages: ['interview'] },
   { key: 'offer', label: 'Оффер', stages: ['offer'] },
@@ -342,7 +344,9 @@ function ColumnCardItem({
       onToggleMenu={() => onToggleMenu(application.id)}
       onCloseMenu={onCloseMenu}
       onOpenExpert={onOpenExpert}
-      onChangeStage={(stage, occurredAt) => state.changeStage(application.id, stage, occurredAt)}
+      onChangeStage={(stage, occurredAt, receipt) =>
+        state.changeStage(application.id, stage, occurredAt, receipt)
+      }
       onScheduleInterview={(scheduledAt) => state.scheduleInterview(application.id, scheduledAt)}
       onRetry={() => state.retryStageChange(application.id)}
       onRefresh={state.reload}
@@ -363,8 +367,10 @@ function BoardColumn({
   onAddManual,
   onOpenExpert,
 }: BoardColumnProps) {
-  const cards = state.applications.filter((application) =>
-    column.stages.includes(application.stage),
+  const cards = state.applications.filter(
+    (application) =>
+      column.stages.includes(application.stage) &&
+      (application.stage !== 'applied' || isApplicationInDeliveryColumn(application, column.key)),
   );
   return (
     <section className="career-responses-column" aria-label={column.label}>
@@ -394,6 +400,11 @@ function BoardColumn({
       </div>
     </section>
   );
+}
+
+function isApplicationInDeliveryColumn(application: ApplicationView, columnKey: string): boolean {
+  const state = deliveryState(application.stage, application.deliveryReceipt ?? null);
+  return columnKey === 'attempted' ? state !== 'delivered' : state === 'delivered';
 }
 
 function OfferPlaceholder() {

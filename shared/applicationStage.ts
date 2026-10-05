@@ -21,6 +21,23 @@ export const APPLICATION_STAGES = [
 
 export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
 
+export interface DeliveryReceipt {
+  readonly kind: 'confirmation_url' | 'auto_reply' | 'screenshot' | 'failure_note';
+  readonly value: string;
+}
+
+export type DeliveryState = 'prepared' | 'attempted' | 'delivered' | 'failed';
+
+/** `applied` means only attempted until evidence confirms its outcome. */
+export function deliveryState(
+  stage: ApplicationStage,
+  receipt: DeliveryReceipt | null,
+): DeliveryState {
+  if (stage === 'saved') return 'prepared';
+  if (!receipt) return 'attempted';
+  return receipt.kind === 'failure_note' ? 'failed' : 'delivered';
+}
+
 export function isKnownApplicationStage(value: string): value is ApplicationStage {
   return (APPLICATION_STAGES as readonly string[]).includes(value);
 }

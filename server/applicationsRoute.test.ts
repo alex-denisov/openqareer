@@ -53,9 +53,57 @@ describe('applications route · CRUD', () => {
     expect(created.json().data.stage).toBe('saved');
     expect(created.json().data.version).toBe(1);
 
-    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const list = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(list.statusCode).toBe(200);
     expect(list.json().data).toHaveLength(1);
+  });
+
+  it('returns attempted until an encrypted delivery receipt is recorded', async () => {
+    const { app, authorization } = await createApp();
+    const created = await app.inject({
+      method: 'POST',
+      url: APPLICATIONS_URL,
+      headers: { authorization, ...ORIGIN },
+      payload: { clusterId: 'cluster-receipt', stage: 'applied', manualVacancy: vacancy },
+    });
+    expect(created.json().data.deliveryReceipt).toBeNull();
+
+    const attempted = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
+    expect(attempted.json().data[0]).toMatchObject({ stage: 'applied', deliveryReceipt: null });
+
+    const id = created.json().data.id;
+    const recorded = await app.inject({
+      method: 'PATCH',
+      url: `${APPLICATIONS_URL}/${id}`,
+      headers: { authorization, ...ORIGIN },
+      payload: {
+        expectedVersion: 1,
+        stage: 'applied',
+        deliveryReceipt: { kind: 'confirmation_url', value: 'https://jobs.test/confirmation/123' },
+      },
+    });
+    expect(recorded.statusCode).toBe(200);
+    expect(recorded.json().data.deliveryReceipt).toEqual({
+      kind: 'confirmation_url',
+      value: 'https://jobs.test/confirmation/123',
+    });
+    expect(JSON.stringify(recorded.json().data)).not.toContain('payload_cipher');
+
+    const newAttempt = await app.inject({
+      method: 'PATCH',
+      url: `${APPLICATIONS_URL}/${id}`,
+      headers: { authorization, ...ORIGIN },
+      payload: { expectedVersion: 2, stage: 'applied', deliveryReceipt: null },
+    });
+    expect(newAttempt.json().data.deliveryReceipt).toBeNull();
   });
 
   it('repeated POST with the same clusterId does not duplicate the card', async () => {
@@ -72,7 +120,11 @@ describe('applications route · CRUD', () => {
       headers: { authorization, ...ORIGIN },
       payload: { clusterId: 'cluster-1', stage: 'saved', manualVacancy: vacancy },
     });
-    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const list = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(list.json().data).toHaveLength(1);
   });
 
@@ -183,7 +235,11 @@ describe('applications route · legacy dual-write (architecture.md §4)', () => 
       headers: { authorization, ...ORIGIN },
       payload: { clusterId: 'cluster-1', status: 'applied', vacancy },
     });
-    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const list = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(list.json().data).toHaveLength(1);
     expect(list.json().data[0].stage).toBe('applied');
   });
@@ -205,7 +261,11 @@ describe('applications route · legacy dual-write (architecture.md §4)', () => 
       payload: { clusterId: 'cluster-1', status: 'applied', vacancy },
     });
 
-    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const list = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(list.json().data).toHaveLength(1);
     expect(list.json().data[0].stage).toBe('interview');
   });
@@ -221,11 +281,19 @@ describe('applications route · lazy migration (architecture.md §5)', () => {
       payload: { clusterId: 'cluster-legacy', status: 'applied', vacancy },
     });
 
-    const first = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const first = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(first.json().data).toHaveLength(1);
     expect(first.json().data[0].stage).toBe('applied');
 
-    const second = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const second = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(second.json().data).toHaveLength(1);
   });
 
@@ -238,7 +306,11 @@ describe('applications route · lazy migration (architecture.md §5)', () => {
       payload: { clusterId: 'cluster-opened', status: 'opened', vacancy },
     });
 
-    const list = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    const list = await app.inject({
+      method: 'GET',
+      url: APPLICATIONS_URL,
+      headers: { authorization },
+    });
     expect(list.json().data).toHaveLength(0);
   });
 });

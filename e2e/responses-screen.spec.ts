@@ -291,14 +291,14 @@ async function openResponses(page: Page): Promise<void> {
 }
 
 test.describe('B251 responses screen', () => {
-  test('groups cards into the six mockup columns with matching counts', async ({ page }) => {
+  test('keeps applications without a receipt out of «Отправлено»', async ({ page }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
     const columns = page.locator('.career-responses-column');
-    await expect(columns).toHaveCount(6);
+    await expect(columns).toHaveCount(7);
 
     const columnCount = async (label: string) =>
       page
@@ -309,7 +309,8 @@ test.describe('B251 responses screen', () => {
         .innerText();
 
     await expect.poll(() => columnCount('Хочу')).toBe('2');
-    await expect.poll(() => columnCount('Откликнулся')).toBe('3');
+    await expect.poll(() => columnCount('Пробовали отправить')).toBe('3');
+    await expect.poll(() => columnCount('Отправлено')).toBe('0');
     await expect.poll(() => columnCount('Ответ')).toBe('1');
     await expect.poll(() => columnCount('Интервью')).toBe('1');
     await expect.poll(() => columnCount('Оффер')).toBe('0');
@@ -423,7 +424,9 @@ test.describe('B251 responses screen', () => {
 
     await expect(page.getByRole('button', { name: 'Архив · 2' })).toBeVisible();
     await expect(
-      page.locator('.career-responses-column[aria-label="Откликнулся"] .career-responses-card'),
+      page.locator(
+        '.career-responses-column[aria-label="Пробовали отправить"] .career-responses-card',
+      ),
     ).toContainText('Role moved by candidate');
   });
 
@@ -624,7 +627,7 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
-    await expect(page.locator('.career-responses-column')).toHaveCount(6);
+    await expect(page.locator('.career-responses-column')).toHaveCount(7);
     await expect(
       page
         .locator('.career-responses-column .career-responses-card')
@@ -667,7 +670,7 @@ test.describe('B251 responses screen', () => {
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.locator('.career-responses-filter-reset').click();
     await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
-    await expect(page.locator('.career-responses-column')).toHaveCount(6);
+    await expect(page.locator('.career-responses-column')).toHaveCount(7);
     await expect(
       page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
     ).toBeVisible();

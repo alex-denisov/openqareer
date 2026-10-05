@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import {
   createApplication,
@@ -41,7 +42,12 @@ export interface UseApplications {
   readonly conflicts: ReadonlySet<string>;
   readonly reload: () => void;
   readonly refreshApplications: () => Promise<readonly ApplicationView[]>;
-  readonly changeStage: (id: string, stage: ApplicationStage, occurredAt?: string) => void;
+  readonly changeStage: (
+    id: string,
+    stage: ApplicationStage,
+    occurredAt?: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   /** Moves the card to `interview` and records the interview date (B251 F5):
    * a plain stage patch never fills `nearestInterview`, so «Сегодня» and the
    * card's own «Подготовиться» would have no date and no prep door. */
@@ -107,11 +113,17 @@ export function useApplications(): UseApplications {
       id: string,
       stage: ApplicationStage,
       occurredAt: string | undefined,
+      receipt: DeliveryReceipt | null | undefined,
       snapshot: readonly ApplicationView[],
     ) => {
       const current = snapshot.find((application) => application.id === id);
       if (!current) return;
-      patchApplication(id, { expectedVersion: current.version, stage, occurredAt })
+      patchApplication(id, {
+        expectedVersion: current.version,
+        stage,
+        occurredAt,
+        deliveryReceipt: receipt,
+      })
         .then((saved) => {
           setApplications((list) => replaceApplication(list, saved));
           setFailedChanges((map) => withoutKey(map, id));
@@ -129,11 +141,16 @@ export function useApplications(): UseApplications {
   );
 
   const changeStage = useCallback(
-    (id: string, stage: ApplicationStage, occurredAt?: string) => {
+    (
+      id: string,
+      stage: ApplicationStage,
+      occurredAt?: string,
+      receipt?: DeliveryReceipt | null,
+    ) => {
       setApplications((snapshot) => {
         setFailedChanges((map) => withoutKey(map, id));
         setConflicts((set) => without(set, id));
-        writeStagePatch(id, stage, occurredAt, snapshot);
+        writeStagePatch(id, stage, occurredAt, receipt, snapshot);
         return optimisticStagePatch(snapshot, id, { stage });
       });
     },

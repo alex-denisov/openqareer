@@ -4,6 +4,7 @@ import type {
   StoredApplication,
   StoredApplicationEvent,
 } from '../data/sqliteApplicationRepository';
+import type { DeliveryReceipt } from '../../shared/applicationStage';
 import type { StoredApplicationMaterial } from '../data/sqliteApplicationMaterialsRepository';
 import type { StoredApplicationInterview } from '../data/sqliteApplicationInterviewRepository';
 
@@ -27,6 +28,7 @@ export interface ApplicationDerivedFields {
   readonly whoseTurn: ApplicationTurn;
   readonly materials: { readonly coverLetter: boolean; readonly resume: boolean };
   readonly nearestInterview: ApplicationInterviewSummary | null;
+  readonly deliveryReceipt?: DeliveryReceipt | null;
 }
 
 export interface DeriveApplicationFieldsInput {
@@ -39,7 +41,9 @@ export interface DeriveApplicationFieldsInput {
 }
 
 /** Architecture.md §3: "чья очередь хода", follow-up, and the funnel's per-card summary. */
-export function deriveApplicationFields(input: DeriveApplicationFieldsInput): ApplicationDerivedFields {
+export function deriveApplicationFields(
+  input: DeriveApplicationFieldsInput,
+): ApplicationDerivedFields {
   const now = input.now ?? new Date().toISOString();
   const materials = {
     coverLetter: input.materials.some((material) => material.role === 'cover_letter'),
@@ -75,6 +79,9 @@ export function deriveApplicationFields(input: DeriveApplicationFieldsInput): Ap
           round: nearestInterview.round,
         }
       : null,
+    deliveryReceipt:
+      [...input.events].reverse().find((event) => event.deliveryReceipt !== undefined)
+        ?.deliveryReceipt ?? null,
   };
 }
 
@@ -95,7 +102,10 @@ function followUpSentCount(events: readonly StoredApplicationEvent[]): number {
 }
 
 /** "Последнее из событий: отклик, отправленный follow-up, ответ компании" (architecture.md §3). */
-function lastContactAt(application: StoredApplication, events: readonly StoredApplicationEvent[]): string {
+function lastContactAt(
+  application: StoredApplication,
+  events: readonly StoredApplicationEvent[],
+): string {
   const candidates = events
     .filter(
       (event) =>
@@ -120,5 +130,7 @@ function pickNearestInterview(
 
 function needsPrepSoon(interview: StoredApplicationInterview | null, now: string): boolean {
   if (!interview?.scheduledAt || interview.prepStatus === 'ready') return false;
-  return new Date(interview.scheduledAt).getTime() - new Date(now).getTime() <= INTERVIEW_PREP_WINDOW_MS;
+  return (
+    new Date(interview.scheduledAt).getTime() - new Date(now).getTime() <= INTERVIEW_PREP_WINDOW_MS
+  );
 }
