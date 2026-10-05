@@ -12,6 +12,10 @@ Environment=OPENQAREER_HOST=127.0.0.1
 Environment=OPENQAREER_PORT=3210
 Environment=OPENQAREER_DATABASE_PATH=/var/lib/openqareer/openqareer.db
 Environment=NODE_OPTIONS=--max-old-space-size=1536
+# B373: вход в LinkedIn в браузере сервера запускает Chromium из HTTP-процесса
+# (как у openqareer-maintenance, ставит openqareer-browser-install).
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/openqareer/browser/ms-playwright
+Environment=OPENQAREER_PLAYWRIGHT_MODULE=/opt/openqareer/browser/node_modules/playwright-core/index.mjs
 EnvironmentFile=/etc/openqareer/openqareer.env
 ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/current/server.mjs
 Restart=on-failure
@@ -32,7 +36,8 @@ ProtectSystem=strict
 ReadOnlyPaths=/srv/openqareer
 ReadWritePaths=/var/lib/openqareer
 RestrictAddressFamilies=AF_INET AF_INET6
-RestrictNamespaces=true
+# Песочнице Chromium нужны пользовательские, PID- и сетевые пространства имён.
+RestrictNamespaces=user pid net
 RestrictRealtime=true
 RestrictSUIDSGID=true
 SystemCallArchitectures=native

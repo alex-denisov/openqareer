@@ -38,6 +38,11 @@ import {
   type DayPlan,
 } from './linkedinCadencePolicy';
 import { createLinkedinStealthContext } from './linkedinStealthBrowser';
+import {
+  acquireProfileLock,
+  linkedinProfileExists,
+  releaseProfileLock,
+} from './linkedinProfileDirectory';
 
 export {
   hasLinkedinExecutorDailyCapacity,
@@ -53,11 +58,18 @@ export type {
   LinkedinPoolExecutorStatus,
 } from './companyPageExecutorPolicy';
 
+/** B373: постоянный профиль браузера на аккаунт; вход в браузере сервера создаёт его. */
+export interface LinkedinPoolExecutorProfiles {
+  readonly directoryFor: (accountId: string) => string;
+  readonly launchContext: (profileDirectory: string, timezone: string) => Promise<BrowserContext>;
+}
+
 export interface LinkedinPoolExecutorDependencies {
   readonly config: LinkedinPoolExecutorConfig;
   readonly repository: SqliteLinkedinPoolRepository;
   readonly database: DatabaseSync;
   readonly browserFactory: () => Promise<Browser>;
+  readonly profiles?: LinkedinPoolExecutorProfiles;
   readonly notifyOwner: (text: string) => Promise<OwnerTelegramOutcome>;
   readonly now?: () => Date;
   readonly random?: () => number;
@@ -89,6 +101,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private readonly repository: SqliteLinkedinPoolRepository;
   private readonly database: DatabaseSync;
   private readonly browserFactory: () => Promise<Browser>;
+  private readonly profiles?: LinkedinPoolExecutorProfiles;
   private readonly notifyOwner: (text: string) => Promise<OwnerTelegramOutcome>;
   private readonly now: () => Date;
   private readonly random: () => number;
@@ -96,6 +109,7 @@ export class LinkedinPoolCompanyPageExecutor {
   private readonly planDayFn?: typeof planDay;
   private readonly decideFn?: typeof decide;
   private pauseController?: AbortController;
+  private lockedProfileDirectory?: string;
   private activeBrowser?: Browser;
   private activeContext?: BrowserContext;
   private running = false;
@@ -110,6 +124,7 @@ export class LinkedinPoolCompanyPageExecutor {
     this.repository = dependencies.repository;
     this.database = dependencies.database;
     this.browserFactory = dependencies.browserFactory;
+    if (dependencies.profiles) this.profiles = dependencies.profiles;
     this.notifyOwner = dependencies.notifyOwner;
     this.now = dependencies.now ?? (() => new Date());
     this.random = dependencies.random ?? Math.random;
@@ -271,12 +286,18 @@ export class LinkedinPoolCompanyPageExecutor {
     timezone: string,
   ): Promise<LinkedinPoolExecutorReport> {
     const hash = companyHash(companyName);
+    const profileDirectory = this.profileDirectoryInUse(accountId);
+    // Идёт вход в браузере сервера: профиль занят, исполнитель ждёт.
+    if (profileDirectory === 'busy') return report('account_not_ready');
     recordLinkedinExecutorCompanyAttempt(this.database, accountId, hash, this.now());
-    this.activeBrowser = await this.browserFactory();
-    this.activeContext = await createLinkedinStealthContext(this.activeBrowser, {
-      timezone,
-    });
-    await this.activeContext.addCookies(playwrightCookies(cookies));
+    if (profileDirectory) {
+      this.lockedProfileDirectory = profileDirectory;
+      this.activeContext = await this.profiles!.launchContext(profileDirectory, timezone);
+    } else {
+      this.activeBrowser = await this.browserFactory();
+      this.activeContext = await createLinkedinStealthContext(this.activeBrowser, { timezone });
+      await this.activeContext.addCookies(playwrightCookies(cookies));
+    }
     const page = await this.activeContext.newPage();
     const searchUrl = linkedinCompanySearchUrl(companyName);
     const search = await this.readPage(page, searchUrl, 'company_search', hash);
@@ -302,6 +323,14 @@ export class LinkedinPoolCompanyPageExecutor {
       });
     }
     return report('processed', 2, candidates.length);
+  }
+
+  /** Профиль аккаунта под нашей блокировкой; 'busy' — занят входом; undefined — профиля нет. */
+  private profileDirectoryInUse(accountId: string): string | 'busy' | undefined {
+    if (!this.profiles) return undefined;
+    const directory = this.profiles.directoryFor(accountId);
+    if (!linkedinProfileExists(directory)) return undefined;
+    return acquireProfileLock(directory, 'executor', { now: this.now() }) ? directory : 'busy';
   }
 
   private async readPage(
@@ -387,6 +416,10 @@ export class LinkedinPoolCompanyPageExecutor {
     this.activeBrowser = undefined;
     await context?.close().catch(() => undefined);
     await browser?.close().catch(() => undefined);
+    if (this.lockedProfileDirectory) {
+      releaseProfileLock(this.lockedProfileDirectory, 'executor');
+      this.lockedProfileDirectory = undefined;
+    }
   }
 }
 
