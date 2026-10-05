@@ -9,7 +9,7 @@ import {
   WarningCircle,
   XCircle,
 } from '@phosphor-icons/react';
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type {
   CandidateFootprintAdapterStatus,
   CandidateFootprintAudit,
@@ -39,6 +39,7 @@ const ADAPTER_LABELS: Readonly<Record<FootprintAdapterId, string>> = {
 
 export interface CandidateFootprintAuditSurfaceProps {
   readonly plan: readonly PublicFootprintQueryPlanItem[];
+  readonly unidentifiedEmployers?: readonly string[];
   readonly sourceAvailability: Readonly<Record<FootprintAdapterId, boolean>>;
   readonly consent: CandidateFootprintConsentState;
   readonly audit: CandidateFootprintAudit | null;
@@ -63,6 +64,7 @@ export interface CandidateFootprintAuditSurfaceProps {
   readonly onRequestDelete: () => void;
   readonly onCancelDelete: () => void;
   readonly onConfirmDelete: () => void;
+  readonly onAddManualEmployer?: (employer: string) => void;
 }
 function adapterState(
   adapterId: FootprintAdapterId,
@@ -145,12 +147,132 @@ function AdapterStatusList({
   );
 }
 
-function QueryPlanSection({
+function ManualEmployerForm({
+  disabled,
+  onAdd,
+}: {
+  readonly disabled: boolean;
+  readonly onAdd: (employer: string) => void;
+}) {
+  const [value, setValue] = useState('');
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const trimmed = value.trim();
+    if (trimmed) {
+      onAdd(trimmed);
+      setValue('');
+    }
+  };
+  return (
+    <form className="career-footprint-manual-form" onSubmit={handleSubmit}>
+      <input
+        type="text"
+        className="career-footprint-manual-input"
+        placeholder="Название компании"
+        aria-label="Название компании для ручного ввода"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <button
+        type="submit"
+        className="career-footprint-secondary-button"
+        disabled={disabled || !value.trim()}
+      >
+        Ввести вручную
+      </button>
+    </form>
+  );
+}
+
+function UnidentifiedEmployersList({
+  unidentifiedEmployers,
+  onAddManualEmployer,
+  disabled,
+}: {
+  readonly unidentifiedEmployers?: readonly string[];
+  readonly onAddManualEmployer?: (employer: string) => void;
+  readonly disabled: boolean;
+}) {
+  if (!unidentifiedEmployers?.length) return null;
+  return (
+    <div
+      className="career-footprint-unidentified"
+      role="region"
+      aria-labelledby="footprint-unidentified-title"
+    >
+      <div className="career-footprint-unidentified-header">
+        <WarningCircle aria-hidden="true" />
+        <h4 id="footprint-unidentified-title">Не удалось определить компанию</h4>
+      </div>
+      <p>Описания из опыта работы не попали в план поиска. Вы можете ввести название компании вручную.</p>
+      <ul>
+        {unidentifiedEmployers.map((name) => (
+          <li key={name}>{name}</li>
+        ))}
+      </ul>
+      {onAddManualEmployer ? (
+        <ManualEmployerForm disabled={disabled} onAdd={onAddManualEmployer} />
+      ) : null}
+    </div>
+  );
+}
+
+function QueryPlanList({
   plan,
   selectedQueryIds,
   disabled,
   onToggleQuery,
 }: Pick<CandidateFootprintAuditSurfaceProps, 'plan' | 'selectedQueryIds' | 'onToggleQuery'> & {
+  readonly disabled: boolean;
+}) {
+  if (!plan.length) {
+    return (
+      <div className="career-footprint-empty-plan" role="status">
+        <Info aria-hidden="true" />
+        <p>В профиле пока нет имени, почты или публичных ссылок для плана проверки.</p>
+      </div>
+    );
+  }
+  return (
+    <fieldset className="career-footprint-query-list" disabled={disabled}>
+      <legend className="career-sr-only">Выберите данные для проверки</legend>
+      {plan.map((item) => (
+        <label
+          key={item.id}
+          className={`career-footprint-query ${item.available ? '' : 'is-unavailable'}`}
+        >
+          <input
+            type="checkbox"
+            checked={selectedQueryIds.has(item.id)}
+            disabled={!item.available || disabled}
+            onChange={(event) => onToggleQuery(item.id, event.currentTarget.checked)}
+          />
+          <span className="career-footprint-query-copy">
+            <span>{item.preview}</span>
+            {!item.available ? <small>подготовлено, не подключено</small> : null}
+          </span>
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
+function QueryPlanSection({
+  plan,
+  unidentifiedEmployers,
+  onAddManualEmployer,
+  selectedQueryIds,
+  disabled,
+  onToggleQuery,
+}: Pick<
+  CandidateFootprintAuditSurfaceProps,
+  | 'plan'
+  | 'unidentifiedEmployers'
+  | 'onAddManualEmployer'
+  | 'selectedQueryIds'
+  | 'onToggleQuery'
+> & {
   readonly disabled: boolean;
 }) {
   return (
@@ -162,33 +284,17 @@ function QueryPlanSection({
         </div>
         <span className="career-footprint-count">{selectedQueryIds.size} выбрано</span>
       </div>
-      {plan.length ? (
-        <fieldset className="career-footprint-query-list" disabled={disabled}>
-          <legend className="career-sr-only">Выберите данные для проверки</legend>
-          {plan.map((item) => (
-            <label
-              key={item.id}
-              className={`career-footprint-query ${item.available ? '' : 'is-unavailable'}`}
-            >
-              <input
-                type="checkbox"
-                checked={selectedQueryIds.has(item.id)}
-                disabled={!item.available || disabled}
-                onChange={(event) => onToggleQuery(item.id, event.currentTarget.checked)}
-              />
-              <span className="career-footprint-query-copy">
-                <span>{item.preview}</span>
-                {!item.available ? <small>подготовлено, не подключено</small> : null}
-              </span>
-            </label>
-          ))}
-        </fieldset>
-      ) : (
-        <div className="career-footprint-empty-plan" role="status">
-          <Info aria-hidden="true" />
-          <p>В профиле пока нет имени, почты или публичных ссылок для плана проверки.</p>
-        </div>
-      )}
+      <QueryPlanList
+        plan={plan}
+        selectedQueryIds={selectedQueryIds}
+        disabled={disabled}
+        onToggleQuery={onToggleQuery}
+      />
+      <UnidentifiedEmployersList
+        unidentifiedEmployers={unidentifiedEmployers}
+        onAddManualEmployer={onAddManualEmployer}
+        disabled={disabled}
+      />
     </section>
   );
 }
@@ -604,13 +710,24 @@ function FootprintLaunchActions(props: CandidateFootprintAuditSurfaceProps) {
 }
 
 function FootprintPlanControls(props: CandidateFootprintAuditSurfaceProps) {
-  const { plan, consent, selectedQueryIds, loading, audit, ownershipConfirmed, grantingConsent } =
-    props;
+  const {
+    plan,
+    unidentifiedEmployers,
+    onAddManualEmployer,
+    consent,
+    selectedQueryIds,
+    loading,
+    audit,
+    ownershipConfirmed,
+    grantingConsent,
+  } = props;
   const running = audit?.state === 'pending';
   return (
     <>
       <QueryPlanSection
         plan={plan}
+        unidentifiedEmployers={unidentifiedEmployers}
+        onAddManualEmployer={onAddManualEmployer}
         selectedQueryIds={selectedQueryIds}
         disabled={loading || running}
         onToggleQuery={props.onToggleQuery}

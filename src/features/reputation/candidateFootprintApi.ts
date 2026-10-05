@@ -10,13 +10,19 @@ import { apiFetch, readData } from '../coach/apiClient';
 
 export interface CandidateFootprintPlanResponse {
   readonly plan: readonly PublicFootprintQueryPlanItem[];
+  readonly unidentifiedEmployers?: readonly string[];
   readonly sourceAvailability: Readonly<Record<FootprintAdapterId, boolean>>;
   readonly consent: CandidateFootprintConsentState;
   readonly audit: CandidateFootprintAudit | null;
 }
 
-export async function getCandidateFootprintPlan(): Promise<CandidateFootprintPlanResponse> {
-  const response = await apiFetch('/api/v1/candidate/footprint/plan');
+export async function getCandidateFootprintPlan(
+  manualEmployers?: readonly string[],
+): Promise<CandidateFootprintPlanResponse> {
+  const query = manualEmployers?.length
+    ? `?manualEmployers=${encodeURIComponent(manualEmployers.join(','))}`
+    : '';
+  const response = await apiFetch(`/api/v1/candidate/footprint/plan${query}`);
   return readData<CandidateFootprintPlanResponse>(response);
 }
 
@@ -28,11 +34,16 @@ export async function getCandidateFootprintAudit(): Promise<CandidateFootprintAu
 
 export async function startCandidateFootprintAudit(
   selectedQueryIds: readonly string[],
+  manualEmployers?: readonly string[],
 ): Promise<CandidateFootprintAudit> {
   const response = await apiFetch('/api/v1/candidate/footprint/start', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ selectedQueryIds, confirmedOwnership: true }),
+    body: JSON.stringify({
+      selectedQueryIds,
+      confirmedOwnership: true,
+      ...(manualEmployers?.length ? { manualEmployers } : {}),
+    }),
   });
   const data = await readData<{ audit: CandidateFootprintAudit }>(response);
   return data.audit;

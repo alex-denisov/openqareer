@@ -202,4 +202,20 @@ describe('CandidateFootprintAuditSurface', () => {
     expect(html).toContain('Скрытые находки (1)');
     expect(html).toContain('Показать');
   });
+
+  it('B375: отображает блок «Не удалось определить компанию» с кнопкой «Ввести вручную» при наличии неопределённых работодателей', () => {
+    const props = baseProps({
+      unidentifiedEmployers: [
+        'Enterprise Public Cloud Platform (IaaS / PaaS)',
+        'Corporate University of a Top-Tier Financial Institution',
+      ],
+      onAddManualEmployer: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
+    expect(html).toContain('Не удалось определить компанию');
+    expect(html).toContain('Enterprise Public Cloud Platform (IaaS / PaaS)');
+    expect(html).toContain('Corporate University of a Top-Tier Financial Institution');
+    expect(html).toContain('Ввести вручную');
+  });
 });

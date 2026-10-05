@@ -42,6 +42,7 @@ function useFootprintOperationGeneration() {
 
 function useCandidateFootprintPlanState(candidateId: string) {
   const [plan, setPlan] = useState<readonly PublicFootprintQueryPlanItem[]>([]);
+  const [unidentifiedEmployers, setUnidentifiedEmployers] = useState<readonly string[]>([]);
   const [sourceAvailability, setSourceAvailability] = useState<Record<FootprintAdapterId, boolean>>({
     sherlock: true, maigret: true, hibp: false, wayback: true, exa: false,
   });
@@ -51,27 +52,20 @@ function useCandidateFootprintPlanState(candidateId: string) {
   const [error, setError] = useState<string | undefined>();
   const [notice, setNotice] = useState<string | undefined>();
   const generation = useRef(0);
-  const {
-    get: getOperationGeneration,
-    isCurrent: isOperationCurrent,
-    invalidate: invalidateOperationGeneration,
-  } = useFootprintOperationGeneration();
-  const invalidatePendingRequests = useCallback(() => {
-    generation.current += 1;
-    invalidateOperationGeneration();
-  }, [invalidateOperationGeneration]);
+  const { get, isCurrent, invalidate } = useFootprintOperationGeneration();
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (manual?: readonly string[]) => {
     const current = ++generation.current;
     setLoading(true);
     setError(undefined);
     try {
-      const result = await getCandidateFootprintPlan();
+      const res = await getCandidateFootprintPlan(manual);
       if (current !== generation.current) return;
-      setPlan(result.plan);
-      setSourceAvailability({ ...result.sourceAvailability });
-      setConsent(result.consent);
-      setAudit(result.audit);
+      setPlan(res.plan);
+      setUnidentifiedEmployers(res.unidentifiedEmployers ?? []);
+      setSourceAvailability({ ...res.sourceAvailability });
+      setConsent(res.consent);
+      setAudit(res.audit);
     } catch (cause) {
       if (current === generation.current) setError(errorText(cause, 'Не удалось загрузить план проверки.'));
     } finally {
@@ -81,16 +75,26 @@ function useCandidateFootprintPlanState(candidateId: string) {
 
   useEffect(() => {
     void reload();
-    return () => {
-      generation.current += 1;
-      invalidateOperationGeneration();
-    };
-  }, [candidateId, reload, invalidateOperationGeneration]);
-  useFootprintPolling(audit?.id, audit?.state, setAudit, setError, getOperationGeneration, isOperationCurrent);
+    return () => { generation.current += 1; invalidate(); };
+  }, [candidateId, reload, invalidate]);
+  useFootprintPolling(audit?.id, audit?.state, setAudit, setError, get, isCurrent);
   return {
-    plan, sourceAvailability, consent, audit, setAudit, setConsent, loading, error, setError,
-    notice, setNotice, reload, getOperationGeneration, isOperationCurrent, invalidatePendingRequests,
+    plan, setPlan, unidentifiedEmployers, sourceAvailability, consent, audit, setAudit, setConsent,
+    loading, error, setError, notice, setNotice, reload,
+    getOperationGeneration: get, isOperationCurrent: isCurrent, invalidatePendingRequests: invalidate,
   };
+}
+
+function useManualEmployers(reload: (manual: readonly string[]) => Promise<void>) {
+  const [manualEmployers, setManualEmployers] = useState<readonly string[]>([]);
+  const add = useCallback(async (employer: string) => {
+    const trimmed = employer.trim();
+    if (!trimmed || manualEmployers.includes(trimmed)) return;
+    const next = [...manualEmployers, trimmed];
+    setManualEmployers(next);
+    await reload(next);
+  }, [manualEmployers, reload]);
+  return { manualEmployers, add };
 }
 
 function useFootprintPolling(
@@ -168,6 +172,7 @@ function useFootprintStart(
   setNotice: (notice: string | undefined) => void,
   getOperationGeneration: () => number,
   isOperationCurrent: (expected: number) => boolean,
+  manualEmployers?: readonly string[],
 ) {
   const [starting, setStarting] = useState(false);
   const selectedIds = useMemo(() => [...selectedQueryIds], [selectedQueryIds]);
@@ -177,7 +182,7 @@ function useFootprintStart(
     setError(undefined);
     setNotice(undefined);
     try {
-      const audit = await startCandidateFootprintAudit(selectedIds);
+      const audit = await startCandidateFootprintAudit(selectedIds, manualEmployers);
       if (isOperationCurrent(operationGeneration)) setAudit(audit);
     } catch (cause) {
       if (isOperationCurrent(operationGeneration)) {
@@ -186,7 +191,7 @@ function useFootprintStart(
     } finally {
       setStarting(false);
     }
-  }, [selectedIds, setAudit, setError, setNotice, getOperationGeneration, isOperationCurrent]);
+  }, [selectedIds, manualEmployers, setAudit, setError, setNotice, getOperationGeneration, isOperationCurrent]);
   return { starting, start };
 }
 
@@ -325,12 +330,13 @@ function useFootprintFindingActions(
   return { ...reviewAction, ...deleteAction };
 }
 
-export function CandidateFootprintAuditView({ candidateId }: { readonly candidateId: string }) {
+function useFootprintAuditSurfaceProps(candidateId: string) {
   const data = useCandidateFootprintPlanState(candidateId);
+  const manual = useManualEmployers(data.reload);
   const selection = useFootprintSelection(candidateId, data.plan);
   const start = useFootprintStart(
     selection.selectedQueryIds, data.setAudit, data.setError, data.setNotice,
-    data.getOperationGeneration, data.isOperationCurrent,
+    data.getOperationGeneration, data.isOperationCurrent, manual.manualEmployers,
   );
   const consentGrant = useFootprintConsentGrant(
     data.consent, data.setConsent, data.setError, data.setNotice,
@@ -345,33 +351,38 @@ export function CandidateFootprintAuditView({ candidateId }: { readonly candidat
     data.isOperationCurrent, data.invalidatePendingRequests,
   );
 
-  return (
-    <CandidateFootprintAuditSurface
-      plan={data.plan}
-      sourceAvailability={data.sourceAvailability}
-      consent={data.consent}
-      audit={data.audit}
-      selectedQueryIds={selection.selectedQueryIds}
-      loading={data.loading}
-      starting={start.starting}
-      grantingConsent={consentGrant.grantingConsent}
-      revokingConsent={consentRevocation.revokingConsent}
-      ownershipConfirmed={selection.ownershipConfirmed}
-      busyFindingId={findingActions.busyFindingId}
-      confirmingDelete={findingActions.confirmingDelete}
-      deleting={findingActions.deleting}
-      error={data.error}
-      notice={data.notice}
-      onRetry={() => void data.reload()}
-      onToggleQuery={selection.toggleQuery}
-      onConfirmOwnership={selection.setOwnershipConfirmed}
-      onGrantConsent={() => void consentGrant.grantConsent()}
-      onRevokeConsent={() => void consentRevocation.revokeConsent()}
-      onStart={() => void start.start()}
-      onReview={(findingId, decision) => void findingActions.review(findingId, decision)}
-      onRequestDelete={() => findingActions.setConfirmingDelete(true)}
-      onCancelDelete={() => findingActions.setConfirmingDelete(false)}
-      onConfirmDelete={() => void findingActions.confirmDelete()}
-    />
-  );
+  return {
+    plan: data.plan,
+    unidentifiedEmployers: data.unidentifiedEmployers,
+    sourceAvailability: data.sourceAvailability,
+    consent: data.consent,
+    audit: data.audit,
+    selectedQueryIds: selection.selectedQueryIds,
+    loading: data.loading,
+    starting: start.starting,
+    grantingConsent: consentGrant.grantingConsent,
+    revokingConsent: consentRevocation.revokingConsent,
+    ownershipConfirmed: selection.ownershipConfirmed,
+    busyFindingId: findingActions.busyFindingId,
+    confirmingDelete: findingActions.confirmingDelete,
+    deleting: findingActions.deleting,
+    error: data.error,
+    notice: data.notice,
+    onRetry: () => void data.reload(),
+    onToggleQuery: selection.toggleQuery,
+    onConfirmOwnership: selection.setOwnershipConfirmed,
+    onGrantConsent: () => void consentGrant.grantConsent(),
+    onRevokeConsent: () => void consentRevocation.revokeConsent(),
+    onStart: () => void start.start(),
+    onReview: findingActions.review,
+    onRequestDelete: () => findingActions.setConfirmingDelete(true),
+    onCancelDelete: () => findingActions.setConfirmingDelete(false),
+    onConfirmDelete: () => void findingActions.confirmDelete(),
+    onAddManualEmployer: manual.add,
+  };
+}
+
+export function CandidateFootprintAuditView({ candidateId }: { readonly candidateId: string }) {
+  const props = useFootprintAuditSurfaceProps(candidateId);
+  return <CandidateFootprintAuditSurface {...props} />;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import {
   buildCandidateFootprintQueryPlan,
+  extractUnidentifiedEmployers,
   toPublicFootprintQueryPlan,
 } from './candidateFootprintQueryPlan';
 
@@ -135,4 +136,71 @@ describe('candidate footprint query plan', () => {
     expect(hibpItem?.preview).toContain('Проверить утечки по почте');
     expect(hibpItem?.preview).toContain('согласие');
   });
+
+  it('B375: не включает описания вместо компаний в план запросов и выделяет их как неопределённые', () => {
+    const draft: ResumeDraft = {
+      candidate: {
+        fullName: 'Алексей Иванов',
+      },
+      experience: [
+        {
+          id: 'exp-1',
+          chronologyMemoryId: 'mem-1',
+          title: 'Architect',
+          employer: 'Enterprise Public Cloud Platform (IaaS / PaaS)',
+          current: true,
+          bulletMemoryIds: [],
+        },
+        {
+          id: 'exp-2',
+          chronologyMemoryId: 'mem-2',
+          title: 'Lead',
+          employer: 'Corporate University of a Top-Tier Financial Institution',
+          current: false,
+          bulletMemoryIds: [],
+        },
+        {
+          id: 'exp-3',
+          chronologyMemoryId: 'mem-3',
+          title: 'Senior Engineer',
+          employer: 'Яндекс',
+          current: false,
+          bulletMemoryIds: [],
+        },
+      ],
+      education: [],
+      languages: [],
+    };
+    const plan = buildCandidateFootprintQueryPlan(draft);
+    const employerSearches = plan.filter((item) => item.kind === 'work_context');
+    // Яндекс должен быть в плане
+    expect(employerSearches.some((item) => item.preview.includes('Яндекс'))).toBe(true);
+    // Описания не должны попадать в план
+    expect(
+      employerSearches.some((item) =>
+        item.preview.includes('Enterprise Public Cloud Platform'),
+      ),
+    ).toBe(false);
+    expect(
+      employerSearches.some((item) =>
+        item.preview.includes('Corporate University of a Top-Tier'),
+      ),
+    ).toBe(false);
+
+    // extractUnidentifiedEmployers возвращает неопределённые компании
+    const unidentified = extractUnidentifiedEmployers(draft);
+    expect(unidentified).toEqual([
+      'Enterprise Public Cloud Platform (IaaS / PaaS)',
+      'Corporate University of a Top-Tier Financial Institution',
+    ]);
+
+    // Ручной ввод добавляет компанию в план запросов
+    const planWithManual = buildCandidateFootprintQueryPlan(draft, {
+      manualEmployers: ['Acme Corp', 'Сбер'],
+    });
+    const manualSearches = planWithManual.filter((item) => item.kind === 'work_context');
+    expect(manualSearches.some((item) => item.preview.includes('Acme Corp'))).toBe(true);
+    expect(manualSearches.some((item) => item.preview.includes('Сбер'))).toBe(true);
+  });
 });
+

@@ -445,3 +445,57 @@ test('B375: план цифрового следа включает nick, Waybac
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: join(dir, 'footprint-plan-390.png'), fullPage: true });
 });
+
+test('B375: нормализация работодателей: блок «Не удалось определить компанию» и ручной ввод', async ({
+  page,
+}, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') {
+    test.skip(true, 'B375 captures target widths in one browser session');
+  }
+
+  await openFootprint(page, async (route) => {
+    const request = route.request();
+    if (request.url().includes('/plan')) {
+      return route.fulfill({
+        json: {
+          data: {
+            plan: PLAN,
+            unidentifiedEmployers: [
+              'Enterprise Public Cloud Platform (IaaS / PaaS)',
+              'Corporate University of a Top-Tier Financial Institution',
+            ],
+            sourceAvailability: SOURCE_AVAILABILITY,
+            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            audit: null,
+          },
+        },
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+
+  // Проверка заголовка и списка неопределённых работодателей
+  await expect(page.getByText('Не удалось определить компанию')).toBeVisible();
+  await expect(page.getByText('Enterprise Public Cloud Platform (IaaS / PaaS)')).toBeVisible();
+  await expect(
+    page.getByText('Corporate University of a Top-Tier Financial Institution'),
+  ).toBeVisible();
+
+  // Проверка поля ручного ввода и кнопки
+  await expect(page.getByPlaceholder('Название компании')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ввести вручную' })).toBeVisible();
+
+  // Скриншоты 1440, 1176, 390
+  const dir = join(process.cwd(), 'output', 'playwright', 'B375');
+  await mkdir(dir, { recursive: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: join(dir, 'employer-norm-1440.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await page.screenshot({ path: join(dir, 'employer-norm-1176.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(dir, 'employer-norm-390.png'), fullPage: true });
+});
+

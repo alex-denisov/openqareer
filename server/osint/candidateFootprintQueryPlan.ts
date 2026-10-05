@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { isNamedEmployer, partitionEmployers } from '../../shared/employerLabel';
 import type { FootprintAdapterId } from '../../shared/candidateFootprint';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { MAIGRET_SITES } from './adapters/maigretSiteCatalogue';
@@ -180,14 +181,14 @@ function addWorkContextItems(
   draft: ResumeDraft,
   fullName: string,
   photoUrl?: string,
+  manualEmployers?: readonly string[],
 ): void {
-  const employers = [
-    ...new Set(
-      draft.experience
-        .map((item) => item.employer?.trim())
-        .filter((item): item is string => Boolean(item)),
-    ),
-  ].slice(0, 10);
+  const rawEmployers = draft.experience
+    .map((item) => item.employer?.trim())
+    .filter((item): item is string => Boolean(item));
+  const { validEmployers } = partitionEmployers(rawEmployers);
+  const extra = (manualEmployers ?? []).map((m) => m.trim()).filter(isNamedEmployer);
+  const employers = [...new Set([...validEmployers, ...extra])].slice(0, 10);
   const city = draft.candidate.contact?.location?.trim().slice(0, 120);
   for (const employer of employers) {
     addItem(
@@ -215,6 +216,7 @@ function addIdentityItems(
   list: FootprintQueryPlanItem[],
   draft: ResumeDraft,
   hasUsernames: boolean,
+  manualEmployers?: readonly string[],
 ): void {
   const fullName = draft.candidate.fullName?.trim().replace(/\s+/gu, ' ').slice(0, 160) ?? '';
   const photoUrl = profileUrl(draft.candidate.photoUrl) ?? undefined;
@@ -246,7 +248,7 @@ function addIdentityItems(
       ...(photoUrl ? { photoUrl } : {}),
     },
   );
-  addWorkContextItems(list, draft, fullName, photoUrl);
+  addWorkContextItems(list, draft, fullName, photoUrl, manualEmployers);
 }
 
 function extractUsernamesAndLinks(draft: ResumeDraft): {
@@ -286,19 +288,32 @@ function extractUsernamesAndLinks(draft: ResumeDraft): {
   return { usernames: [...usernames], links: allLinks };
 }
 
+export interface BuildFootprintQueryPlanOptions {
+  readonly manualEmployers?: readonly string[];
+}
+
 export function buildCandidateFootprintQueryPlan(
   draft: ResumeDraft,
+  options?: BuildFootprintQueryPlanOptions,
 ): readonly FootprintQueryPlanItem[] {
   const { usernames, links } = extractUsernamesAndLinks(draft);
   const plan: FootprintQueryPlanItem[] = [];
   addUsernameItems(plan, usernames);
-  addIdentityItems(plan, draft, usernames.length > 0);
+  addIdentityItems(plan, draft, usernames.length > 0, options?.manualEmployers);
   for (const link of links) {
     addItem(plan, 'wayback', 'profile_url', `Проверить архив публичной страницы ${link}`, link, {
       profileUrl: link,
     });
   }
   return plan;
+}
+
+export function extractUnidentifiedEmployers(draft: ResumeDraft): readonly string[] {
+  const rawEmployers = draft.experience
+    .map((item) => item.employer?.trim())
+    .filter((item): item is string => Boolean(item));
+  const { unidentifiedEmployers } = partitionEmployers(rawEmployers);
+  return unidentifiedEmployers;
 }
 
 function usernameFromTelegram(value: string | undefined): string | null {
