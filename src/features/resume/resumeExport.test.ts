@@ -5,14 +5,16 @@ import {
   exportResumeAsPlainText,
   resumeExportFileName,
   triggerFileDownload,
+  triggerResumePrint,
 } from './resumeExport';
 
 const desktop = vi.hoisted(() => ({ active: false }));
 const saveDialog = vi.hoisted(() => vi.fn());
 const writeTextFile = vi.hoisted(() => vi.fn());
+const invokeDesktop = vi.hoisted(() => vi.fn());
 vi.mock('../../services/desktop/desktopBridge', () => ({
   isTauriEnvironment: () => desktop.active,
-  invokeDesktopCommand: vi.fn(),
+  invokeDesktopCommand: invokeDesktop,
 }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ save: saveDialog }));
 vi.mock('@tauri-apps/plugin-fs', () => ({ writeTextFile }));
@@ -210,5 +212,24 @@ describe('resumeExport', () => {
 
     await expect(triggerFileDownload('profile.json', '{}', 'application/json')).resolves.toBeNull();
     expect(writeTextFile).not.toHaveBeenCalled();
+  });
+});
+
+// .app 05.10: «Отмена» в окне печати показывала «Печать недоступна — сохраните PDF».
+describe('triggerResumePrint в .app', () => {
+  afterEach(() => {
+    desktop.active = false;
+  });
+
+  it('отмена печати не считается сбоем', async () => {
+    desktop.active = true;
+    invokeDesktop.mockResolvedValueOnce(false);
+    await expect(triggerResumePrint()).resolves.toBe(false);
+  });
+
+  it('сбой нативной печати поднимает ошибку', async () => {
+    desktop.active = true;
+    invokeDesktop.mockRejectedValueOnce(new Error('print_resume: main webview unavailable'));
+    await expect(triggerResumePrint()).rejects.toThrow();
   });
 });

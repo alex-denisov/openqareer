@@ -258,9 +258,9 @@ export async function triggerFileDownload(
  */
 export async function triggerResumePrint(): Promise<boolean> {
   if (isTauriEnvironment()) {
+    // false — кандидат нажал «Отмена» в окне печати; сбой приходит отказом invoke.
     const printed = await invokeDesktopCommand<boolean>('print_resume');
-    if (printed !== true) throw new Error('native_print_unavailable');
-    return true;
+    return printed === true;
   }
   if (typeof window === 'undefined') return false;
   window.print();
