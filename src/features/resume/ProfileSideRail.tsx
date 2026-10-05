@@ -1,5 +1,7 @@
 import { EnvelopeSimple, Globe, PaperPlaneTilt, Phone } from '@phosphor-icons/react';
 import type { ResumeDraft } from './resumeTypes';
+import { WorkPreferencesPanel } from '../cabinet/WorkPreferencesPanel';
+import { useWorkPreferences } from '../cabinet/useWorkPreferences';
 
 function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
   const contact = draft.candidate.contact;
@@ -27,10 +29,16 @@ function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
   );
 }
 
+function WorkPreferencesRailPanel() {
+  const state = useWorkPreferences();
+  return <WorkPreferencesPanel state={state} />;
+}
+
 export function ProfileSideRail({ draft }: { readonly draft: ResumeDraft }) {
   return (
-    <aside className="career-profile-screen-side-col" aria-label="Контакты">
+    <aside className="career-profile-screen-side-col" aria-label="Контакты и ограничения">
       <ContactsPanel draft={draft} />
+      <WorkPreferencesRailPanel />
     </aside>
   );
 }

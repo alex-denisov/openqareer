@@ -6,6 +6,11 @@ import {
   scoreWorkPreferences,
   type WorkFamilyCode,
   type WorkPreferenceAnswer,
+  type CandidateDecisionProfile,
+  DEFAULT_DECISION_PROFILE,
+  filterVacanciesByDecisionProfile,
+  sanitizeForThirdPartyExport,
+  isDecisionProfileConfidential,
 } from './workPreferences';
 
 /** Ответы «всегда A» удобны для проверки подсчёта, а не для правдоподобия. */
@@ -150,3 +155,128 @@ describe('scoreWorkPreferences', () => {
     expect(result.answered).toBe(0);
   });
 });
+
+describe('Candidate Decision Profile & Hard Constraints (US-03.3 / B384)', () => {
+  it('пустые поля не режут подборку: все вакансии проходят', () => {
+    const vacancies = [
+      { cluster: { id: 'v1', canonicalTitle: 'Dev', salary: { from: 100_000, to: 150_000, currency: 'RUB' }, isRemote: false } },
+      { cluster: { id: 'v2', canonicalTitle: 'Lead', salary: { from: 300_000, to: 400_000, currency: 'RUB' }, isRemote: true } },
+      { cluster: { id: 'v3', canonicalTitle: 'NoPay', isRemote: true } },
+    ];
+
+    expect(filterVacanciesByDecisionProfile(vacancies, null)).toHaveLength(3);
+    expect(filterVacanciesByDecisionProfile(vacancies, DEFAULT_DECISION_PROFILE)).toHaveLength(3);
+    expect(
+      filterVacanciesByDecisionProfile(vacancies, {
+        citizenship: [],
+        languages: [],
+        workFormats: [],
+        salaryFloor: undefined,
+      }),
+    ).toHaveLength(3);
+  });
+
+  it('зарплатный пол исключает вакансии ниже порога', () => {
+    const vacancies = [
+      { cluster: { id: 'low', canonicalTitle: 'Junior', salary: { from: 80_000, to: 120_000, currency: 'RUB' } } },
+      { cluster: { id: 'boundary', canonicalTitle: 'Middle', salary: { from: 180_000, to: 200_000, currency: 'RUB' } } },
+      { cluster: { id: 'high', canonicalTitle: 'Senior', salary: { from: 250_000, to: 350_000, currency: 'RUB' } } },
+      { cluster: { id: 'single_from_low', canonicalTitle: 'M1', salary: { from: 150_000, currency: 'RUB' } } },
+      { cluster: { id: 'single_from_high', canonicalTitle: 'M2', salary: { from: 220_000, currency: 'RUB' } } },
+      { cluster: { id: 'no_salary', canonicalTitle: 'Arch' } },
+    ];
+
+    const profile: CandidateDecisionProfile = {
+      ...DEFAULT_DECISION_PROFILE,
+      salaryFloor: 200_000,
+      salaryCurrency: 'RUB',
+    };
+
+    const filtered = filterVacanciesByDecisionProfile(vacancies, profile);
+    const ids = filtered.map((v) => v.cluster.id);
+
+    // low (до 120k) и single_from_low (от 150k) должны исчезнуть
+    expect(ids).not.toContain('low');
+    expect(ids).not.toContain('single_from_low');
+
+    // boundary (до 200k), high (до 350k), single_from_high (от 220k) остаются
+    expect(ids).toContain('boundary');
+    expect(ids).toContain('high');
+    expect(ids).toContain('single_from_high');
+
+    // Вакансия без указанной зарплаты не должна отсекаться вслепую
+    expect(ids).toContain('no_salary');
+  });
+
+  it('фильтрация по формату работы отсекает несоответствующие форматы', () => {
+    const vacancies = [
+      { cluster: { id: 'remote_job', canonicalTitle: 'Dev', isRemote: true } },
+      { cluster: { id: 'office_job', canonicalTitle: 'Lead', isRemote: false } },
+    ];
+
+    // Только удалёнка
+    const remoteOnlyProfile: CandidateDecisionProfile = {
+      ...DEFAULT_DECISION_PROFILE,
+      workFormats: ['remote_home', 'remote_abroad'],
+    };
+    const remoteFiltered = filterVacanciesByDecisionProfile(vacancies, remoteOnlyProfile);
+    expect(remoteFiltered.map((v) => v.cluster.id)).toEqual(['remote_job']);
+
+    // Только офис
+    const officeOnlyProfile: CandidateDecisionProfile = {
+      ...DEFAULT_DECISION_PROFILE,
+      workFormats: ['office'],
+    };
+    const officeFiltered = filterVacanciesByDecisionProfile(vacancies, officeOnlyProfile);
+    expect(officeFiltered.map((v) => v.cluster.id)).toEqual(['office_job']);
+  });
+
+  it('конфиденциальные поля исключаются из экспорта для третьих лиц', () => {
+    const fullProfile: CandidateDecisionProfile = {
+      citizenship: ['РФ'],
+      taxStatus: 'резидент РФ',
+      languages: [{ language: 'Английский', level: 'C1', certified: true, context: 'IELTS 8.0' }],
+      workFormats: ['remote_home'],
+      salaryFloor: 300_000,
+      salaryCurrency: 'RUB',
+      cushionMonths: 6,
+      hasFamily: true,
+    };
+
+    const candidatePayload = {
+      id: 'candidate-1',
+      fullName: 'Алексей Денисов',
+      targetRole: 'CTO',
+      decisionProfile: fullProfile,
+      salaryFloor: 300_000,
+      cushionMonths: 6,
+      workPreferences: {
+        decisionProfile: fullProfile,
+        salaryFloor: 300_000,
+      },
+    };
+
+    const sanitized = sanitizeForThirdPartyExport(candidatePayload);
+
+    // Ни одно конфиденциальное поле не должно присутствовать во внешней выгрузке
+    expect(sanitized).not.toHaveProperty('decisionProfile');
+    expect(sanitized).not.toHaveProperty('salaryFloor');
+    expect(sanitized).not.toHaveProperty('cushionMonths');
+    expect((sanitized.workPreferences as Record<string, unknown>)).not.toHaveProperty('decisionProfile');
+    expect((sanitized.workPreferences as Record<string, unknown>)).not.toHaveProperty('salaryFloor');
+
+    // Открытые данные сохраняются
+    expect(sanitized.id).toBe('candidate-1');
+    expect(sanitized.fullName).toBe('Алексей Денисов');
+    expect(sanitized.targetRole).toBe('CTO');
+
+    // Проверка ключей через isDecisionProfileConfidential
+    expect(isDecisionProfileConfidential('salaryFloor')).toBe(true);
+    expect(isDecisionProfileConfidential('cushionMonths')).toBe(true);
+    expect(isDecisionProfileConfidential('citizenship')).toBe(true);
+    expect(isDecisionProfileConfidential('taxStatus')).toBe(true);
+    expect(isDecisionProfileConfidential('hasFamily')).toBe(true);
+    expect(isDecisionProfileConfidential('fullName')).toBe(false);
+  });
+});
+
