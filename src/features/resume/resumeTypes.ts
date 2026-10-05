@@ -16,8 +16,11 @@ export type {
   ResumeEvidenceFreshness,
   ResumeExperience,
   ResumeLanguage,
+  ResumeProject,
   ResumeReviewFlag,
   ResumeStudioProjection,
+  TargetedResumeInput,
+  TargetedResumeSlice,
   ResumeUnknown,
   StaleEvidenceReason,
 } from '../../../server/domain/resumeStudio';

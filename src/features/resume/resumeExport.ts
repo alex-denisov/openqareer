@@ -1,4 +1,6 @@
 import type { ResumeDocument, ResumeDraft, ResumeExperience, ResumeEducation } from './resumeTypes';
+import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
+import type { ResumeProject, TargetedResumeSlice } from './resumeTypes';
 
 /**
  * Generates clean, ATS-optimized plain text from a ResumeDocument.
@@ -175,6 +177,13 @@ export function resumeExportFileName(doc: ResumeDocument, ext: 'txt' | 'json' | 
   return `resume-${variant}-${slug}.${ext}`;
 }
 
+export function resumeTargetedExportFileName(
+  doc: ResumeDocument,
+  ext: 'txt' | 'pdf',
+): string {
+  return resumeExportFileName(doc, ext).replace(/^resume-(?:master|germany)-/u, 'resume-targeted-');
+}
+
 const RU_TO_LATIN: Record<string, string> = {
   а: 'a',
   б: 'b',
@@ -267,11 +276,13 @@ export async function triggerResumePrint(): Promise<boolean> {
   return true;
 }
 
-export async function saveResumeAsPdf(): Promise<string | null> {
+export async function saveResumeAsPdf(
+  fileName = 'openqareer-resume.pdf',
+): Promise<string | null> {
   if (!isTauriEnvironment()) return null;
   const { save } = await import('@tauri-apps/plugin-dialog');
   const path = await save({
-    defaultPath: 'openqareer-resume.pdf',
+    defaultPath: fileName,
     filters: [{ name: 'PDF', extensions: ['pdf'] }],
   });
   if (!path) return null;
@@ -311,7 +322,21 @@ export function formatResumeAsAtsText(doc: ResumeDocument, draft: ResumeDraft): 
   const courses = formatAtsCourses(doc, draft);
   if (courses) sections.push(courses);
 
+  const projects = formatAtsProjects(doc.projects ?? []);
+  if (projects) sections.push(projects);
+
   return sections.join('\n\n');
+}
+
+export function formatTargetedResumeAsAtsText(slice: TargetedResumeSlice): string {
+  const sections = [formatResumeAsAtsText(slice.document, EMPTY_RESUME_DRAFT)];
+  if (slice.missingRequirements.length > 0) {
+    const gaps = slice.missingRequirements
+      .map((requirement) => `- ${requirement} - не найдено в мастер-резюме`)
+      .join('\n');
+    sections.push(`=== REQUIREMENT GAPS ===\n${gaps}`);
+  }
+  return sections.filter(Boolean).join('\n\n');
 }
 
 function formatAtsHeader(doc: ResumeDocument, draft: ResumeDraft): string | null {
@@ -369,6 +394,28 @@ function formatAtsCourses(doc: ResumeDocument, draft: ResumeDraft): string | nul
   return coursesList.length > 0
     ? `=== COURSES AND CERTIFICATIONS ===\n${coursesList.join('\n')}`
     : null;
+}
+
+function formatAtsProjects(projects: readonly ResumeProject[]): string | null {
+  const blocks = projects
+    .map((project) => {
+      const name = project.name.value.trim();
+      const employer = project.employer?.value.trim();
+      const heading = [name, employer].filter(Boolean).join(' | ');
+      const start = project.startDate?.value.trim();
+      const end = project.current?.value ? 'настоящее время' : project.endDate?.value.trim();
+      const period = start && end ? `${start} — ${end}` : (start ?? end ?? '');
+      const description = project.description?.value.trim();
+      const skills = project.skills
+        .map((skill) => skill.value.trim())
+        .filter(Boolean)
+        .join(', ');
+      return [heading, period, description, skills ? `Навыки проекта: ${skills}` : '']
+        .filter(Boolean)
+        .join('\n');
+    })
+    .filter(Boolean);
+  return blocks.length > 0 ? `=== PROJECTS ===\n\n${blocks.join('\n\n')}` : null;
 }
 
 function formatAtsExperience(experiences: readonly ResumeExperience[]): string {

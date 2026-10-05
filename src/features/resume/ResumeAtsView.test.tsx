@@ -141,6 +141,17 @@ describe('ResumeAtsView', () => {
     expect(html).toMatch(/Скачать \.txt/u);
   });
 
+  it('asks for vacancy requirements before claiming a targeted resume exists', () => {
+    const html = renderToStaticMarkup(
+      <ResumeAtsView document={mockDocument} draft={mockDraft} />,
+    );
+
+    expect(html).toMatch(/Требования вакансии/u);
+    expect(html).toMatch(/по одному пункту в строке/u);
+    expect(html).toMatch(/Собрать целевое резюме/u);
+    expect(html).not.toMatch(/не найдено в мастер-резюме/u);
+  });
+
   it('contains candidate facts formatted in monospace pre block', () => {
     const html = renderToStaticMarkup(
       <ResumeAtsView document={mockDocument} draft={mockDraft} />,

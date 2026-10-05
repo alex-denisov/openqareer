@@ -64,6 +64,18 @@ export interface ResumeLanguage {
   readonly cefr: ResumeAssertion<CefrLevel> | null;
 }
 
+export interface ResumeProject {
+  readonly id: string;
+  readonly name: ResumeAssertion;
+  readonly description: ResumeAssertion | null;
+  readonly employer: ResumeAssertion | null;
+  readonly startDate: ResumeAssertion | null;
+  readonly endDate: ResumeAssertion | null;
+  readonly current: ResumeAssertion<boolean> | null;
+  readonly url: ResumeAssertion | null;
+  readonly skills: readonly ResumeAssertion[];
+}
+
 export type ResumeUnknownCode =
   | 'missing-full-name'
   | 'missing-contact'
@@ -130,6 +142,7 @@ export interface ResumeDocument {
   readonly courses?: readonly ResumeCourseInput[];
   readonly tests?: readonly ResumeTestInput[];
   readonly recommendations?: readonly ResumeRecommendationInput[];
+  readonly projects?: readonly ResumeProject[];
   readonly languages: readonly ResumeLanguage[];
   readonly additional?: ResumeAdditionalInput | null;
   readonly unknowns: readonly ResumeUnknown[];
@@ -148,6 +161,27 @@ export interface ResumeStudioProjection {
   readonly germanyVariant: ResumeDocument;
   readonly evidenceSnapshot: readonly ResumeEvidenceSnapshot[];
   readonly excludedEvidenceIds: readonly string[];
+}
+
+export interface ResumeRequirementMatch {
+  readonly requirement: string;
+  readonly matched: boolean;
+}
+
+export interface TargetedResumeSlice {
+  readonly document: ResumeDocument;
+  readonly requirements: readonly ResumeRequirementMatch[];
+  readonly matchedRequirements: readonly string[];
+  readonly missingRequirements: readonly string[];
+  readonly detailedExperienceIds: readonly string[];
+  readonly compressedExperienceIds: readonly string[];
+  readonly highlightedProjectIds: readonly string[];
+  readonly estimatedPages: number;
+}
+
+export interface TargetedResumeInput {
+  readonly title?: string | null;
+  readonly requirements: readonly string[];
 }
 
 export type StaleEvidenceReason =

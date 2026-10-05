@@ -5811,6 +5811,34 @@
   align-content: start;
 }
 
+.career-resume-ats-targeting {
+  display: grid;
+  gap: var(--career-space-3);
+  min-width: 0;
+}
+
+.career-resume-ats-targeting > p {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-resume-ats-container > h3,
+.career-resume-ats-container > div > h4 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-resume-ats-container > p {
+  margin-block: var(--career-space-2) 0;
+}
+
+.career-resume-ats-container > ul {
+  margin-block: var(--career-space-2) 0;
+  padding-inline-start: var(--career-space-5);
+}
+
 .career-resume-ats-actions {
   display: flex;
   justify-content: space-between;
@@ -5834,6 +5862,7 @@
 .career-resume-ats-buttons {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -9443,6 +9472,21 @@
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: var(--career-text-sm);
     line-height: 1.4;
+  }
+
+  .career-resume-print .career-resume-ats-pre {
+    color: inherit !important;
+    font-size: var(--career-text-sm);
+  }
+
+  body[data-resume-print-target='targeted'] .career-resume-print-targeted {
+    padding: var(--career-space-8);
+  }
+
+  body[data-resume-print-target='targeted'] .career-resume-print:not(.career-resume-print-targeted),
+  body[data-resume-print-target='targeted'] .career-resume-print:not(.career-resume-print-targeted) * {
+    display: none !important;
+    visibility: hidden !important;
   }
 
   .career-resume-print-entry,

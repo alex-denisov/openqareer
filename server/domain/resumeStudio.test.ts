@@ -175,6 +175,44 @@ describe('Resume Studio canonical projection', () => {
     expect(serialized).not.toContain('Forbidden Religion');
   });
 
+  it('projects only eligible master project facts and keeps their provenance', () => {
+    const input = completeInput();
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [
+        ...input.evidence,
+        evidence('project-platform', 'Подтверждён запуск платформенного проекта.'),
+        evidence('project-proposed', 'Возможно, переписала систему на GraphQL.', {
+          status: 'proposed',
+        }),
+      ],
+      projects: [
+        {
+          id: 'platform-project',
+          evidenceMemoryId: 'project-platform',
+          name: 'Запуск внутренней платформы',
+          description: 'Внедрила Kubernetes для продуктовых команд.',
+          skills: ['Kubernetes'],
+        },
+        {
+          id: 'unconfirmed-project',
+          evidenceMemoryId: 'project-proposed',
+          name: 'Миграция GraphQL',
+        },
+      ],
+    });
+
+    expect(projection.master.projects?.map((project) => project.id)).toEqual([
+      'platform-project',
+    ]);
+    expect(projection.master.projects?.[0]?.name.memoryId).toBe('project-platform');
+    expect(projection.master.projects?.[0]?.skills[0]?.sourceMessageIds).toContain(
+      'message-project-platform',
+    );
+    expect(projection.excludedEvidenceIds).toContain('project-proposed');
+    expect(JSON.stringify(projection.master)).not.toContain('Миграция GraphQL');
+  });
+
   it('keeps missing identity, contact, chronology, education and CEFR explicit', () => {
     const projection = buildResumeStudioProjection({
       candidate: {},
