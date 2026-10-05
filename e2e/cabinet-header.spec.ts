@@ -20,6 +20,10 @@ test('B213: signed-in public header stays inside the viewport', async ({ page },
     browserErrors.push(`request:${new URL(request.url()).pathname}`);
   });
 
+  // B334: лендинг спрашивает, опубликована ли сборка для macOS.
+  await page.route('**/api/v1/desktop/macos', async (route) => {
+    await route.fulfill({ json: { data: { available: false } } });
+  });
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: candidate } });
   });

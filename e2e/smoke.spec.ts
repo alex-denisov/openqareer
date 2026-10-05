@@ -2,6 +2,10 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 test.beforeEach(async ({ page }) => {
+  // B334: лендинг спрашивает, опубликована ли сборка для macOS.
+  await page.route('**/api/v1/desktop/macos', async (route) => {
+    await route.fulfill({ json: { data: { available: false } } });
+  });
   await page.route('**/api/v1/auth/**', async (route) => {
     await route.fulfill({
       status: 200,
