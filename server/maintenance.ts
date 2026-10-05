@@ -11,6 +11,8 @@ import {
   readLinkedinPoolExecutorConfig,
 } from './linkedinPool/companyPageExecutor';
 import { getLinkedinChromiumLaunchArgs } from './linkedinPool/linkedinStealthBrowser';
+import { launchLinkedinPersistentContext } from './linkedinPool/linkedinPersistentContext';
+import { linkedinProfileDirectory } from './linkedinPool/linkedinProfileDirectory';
 import type { LinkedinPoolExecutorConfig } from './linkedinPool/companyPageExecutorPolicy';
 import { notifyOwner } from './notifications/ownerTelegram';
 import { SemanticBackfill } from './vacancies/titleParse/semanticBackfill';
@@ -74,6 +76,14 @@ const linkedinPoolExecutor =
             headless: true,
             args: getLinkedinChromiumLaunchArgs(),
           });
+        },
+        // B373: постоянный профиль аккаунта; без него остаётся путь через cookie.
+        profiles: {
+          directoryFor: (accountId) => linkedinProfileDirectory(config.databasePath, accountId),
+          launchContext: async (profileDirectory, timezone) => {
+            const { chromium } = await import(playwrightModuleSpecifier());
+            return launchLinkedinPersistentContext(chromium, profileDirectory, { timezone });
+          },
         },
         notifyOwner: (message) => notifyOwner(config, message),
       })

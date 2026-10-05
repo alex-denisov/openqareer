@@ -3,11 +3,18 @@ import type { Browser, BrowserContext, BrowserContextOptions } from 'playwright'
 export interface LinkedinStealthOptions {
   readonly timezone?: string;
   readonly proxyUrl?: string;
+  /** Версия запущенного Chromium (`browser.version()`): из неё строится UA. */
+  readonly browserVersion?: string;
 }
 
 const DEFAULT_VIEWPORT = { width: 1440, height: 900 } as const;
-const MODERN_CHROME_USER_AGENT =
-  'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+/** UA честной платформы: Linux и настоящая мажорная версия запущенного Chromium. */
+export function buildLinkedinUserAgent(browserVersion: string): string | undefined {
+  const major = /^(\d{2,3})\./u.exec(browserVersion.trim())?.[1];
+  if (!major) return undefined;
+  return `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+}
 
 // Sec-Fetch-* и sec-ch-* браузер выставляет сам и по-разному для документа и скриптов;
 // подмена на каждом запросе роняла загрузку скриптов LinkedIn (прод 04.10).
@@ -34,12 +41,15 @@ export function getLinkedinChromiumLaunchArgs(options: { proxyUrl?: string } = {
 export function getLinkedinStealthContextOptions(
   options: LinkedinStealthOptions = {},
 ): BrowserContextOptions {
+  const userAgent = options.browserVersion
+    ? buildLinkedinUserAgent(options.browserVersion)
+    : undefined;
   return {
     viewport: DEFAULT_VIEWPORT,
     deviceScaleFactor: 1,
     locale: 'en-US',
     timezoneId: options.timezone ?? 'Europe/Berlin',
-    userAgent: MODERN_CHROME_USER_AGENT,
+    ...(userAgent ? { userAgent } : {}),
     extraHTTPHeaders: CLIENT_HINTS_HEADERS,
   };
 }
@@ -109,10 +119,20 @@ export async function createLinkedinStealthContext(
   browser: Browser,
   options: LinkedinStealthOptions = {},
 ): Promise<BrowserContext> {
-  const contextOptions = getLinkedinStealthContextOptions(options);
+  const browserVersion =
+    options.browserVersion ?? (typeof browser.version === 'function' ? browser.version() : undefined);
+  const contextOptions = getLinkedinStealthContextOptions({
+    ...options,
+    ...(browserVersion ? { browserVersion } : {}),
+  });
   const context = await browser.newContext(contextOptions);
+  await installLinkedinStealthScript(context);
+  return context;
+}
+
+/** Один и тот же отпечаток для чистого и постоянного контекста. */
+export async function installLinkedinStealthScript(context: BrowserContext): Promise<void> {
   if (typeof context.addInitScript === 'function') {
     await context.addInitScript(buildLinkedinStealthInitScript());
   }
-  return context;
 }

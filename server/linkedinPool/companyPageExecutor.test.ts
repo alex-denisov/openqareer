@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -631,5 +631,59 @@ describe('LinkedinPoolCompanyPageExecutor Cadence and Backoff (B316)', () => {
     await executor.runStep();
 
     expect(planSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LinkedinPoolCompanyPageExecutor persistent profile (B373)', () => {
+  async function setup() {
+    const repository = createRepository();
+    const account = await createReadyAccount(repository, 'pool-one@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    const profileDirectory = mkdtempSync(join(tmpdir(), 'openqareer-profile-exec-'));
+    resources.push({ repository: { close: () => undefined } as never, directory: profileDirectory });
+    const launchContext = vi.fn(async () => fake.context as never);
+    const browserFactory = vi.fn(async () => fake.browser as never);
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory,
+      profiles: { directoryFor: () => profileDirectory, launchContext },
+      notifyOwner: async () => ({ status: 'sent', httpStatus: 200, messageId: 1 }),
+      now: () => now,
+      wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
+    });
+    return { executor, fake, launchContext, browserFactory, profileDirectory };
+  }
+
+  it('works inside the account profile without replaying stored cookies', async () => {
+    const { executor, fake, launchContext, browserFactory, profileDirectory } = await setup();
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'processed' });
+    expect(launchContext).toHaveBeenCalledWith(profileDirectory, expect.any(String));
+    expect(browserFactory).not.toHaveBeenCalled();
+    expect(fake.context.addCookies).not.toHaveBeenCalled();
+    expect(fake.context.close).toHaveBeenCalled();
+    expect(existsSync(join(profileDirectory, '.lock'))).toBe(false);
+  });
+
+  it('waits while a browser login holds the profile', async () => {
+    const { executor, launchContext, profileDirectory } = await setup();
+    writeFileSync(
+      join(profileDirectory, '.lock'),
+      JSON.stringify({ pid: process.pid, owner: 'login', at: Date.now() }),
+    );
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'account_not_ready' });
+    expect(launchContext).not.toHaveBeenCalled();
+  });
+
+  it('falls back to stored cookies when the profile does not exist yet', async () => {
+    const { executor, fake, launchContext, browserFactory, profileDirectory } = await setup();
+    rmSync(profileDirectory, { recursive: true, force: true });
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'processed' });
+    expect(launchContext).not.toHaveBeenCalled();
+    expect(browserFactory).toHaveBeenCalled();
+    expect(fake.context.addCookies).toHaveBeenCalled();
   });
 });
