@@ -10,6 +10,7 @@ import {
   resumeExportFileName,
   triggerFileDownload,
 } from './resumeExport';
+import { ResumePrintDocument } from './ResumePrintDocument';
 import { ResumePrintAction } from './ResumePrintAction';
 import { FORMAT_LABELS } from './resumeLabels';
 import { previewProjection, selectDocument } from './resumeStudioModel';
@@ -89,7 +90,10 @@ export function ProfileDocumentMenu({
       </div>
       <div className="career-profile-screen-document-preview">
         {format === 'stanford-pdf' ? (
-          <ResumeDocumentView draft={draft} document={document} evidence={[]} />
+          <>
+            <ResumeDocumentView draft={draft} document={document} evidence={[]} />
+            <ResumePrintDocument document={document} draft={draft} />
+          </>
         ) : null}
         {format === 'ats-text' ? <ResumeAtsView document={document} draft={draft} /> : null}
         {format === 'linkedin-pack' ? (

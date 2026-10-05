@@ -3,6 +3,7 @@ import { ArrowClockwise } from '@phosphor-icons/react';
 import type { CandidateMemory, ImportedSourceSummary } from '../coach/coachApi';
 import { ResumeDossierRail } from './ResumeDossierRail';
 import { ResumeDocumentView } from './ResumeDocumentView';
+import { ResumePrintDocument } from './ResumePrintDocument';
 import { ResumeAtsView } from './ResumeAtsView';
 import { ResumeLinkedInPackView } from './ResumeLinkedInPackView';
 import { ResumeStudioHead } from './ResumeStudioHead';
@@ -194,12 +195,15 @@ function ResumeFormatMain({
   return (
     <main className="career-resume-format-container">
       {format === 'stanford-pdf' && (
-        <ResumeDocumentView
-          draft={draft}
-          document={document}
-          evidence={evidence}
-          editor={editor}
-        />
+        <>
+          <ResumeDocumentView
+            draft={draft}
+            document={document}
+            evidence={evidence}
+            editor={editor}
+          />
+          <ResumePrintDocument document={document} draft={draft} />
+        </>
       )}
       {format === 'ats-text' && (
         <ResumeAtsView document={document} draft={draft} />
