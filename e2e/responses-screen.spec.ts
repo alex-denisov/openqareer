@@ -525,9 +525,9 @@ test.describe('B251 responses screen', () => {
     await openResponses(page);
 
     const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
-    await card.getByRole('button', { name: 'Отметить напоминание компании отправленным' }).click();
+    await card.getByRole('button', { name: 'Напоминание отправлено' }).click();
     await expect(
-      card.getByRole('button', { name: 'Отметить напоминание компании отправленным' }),
+      card.getByRole('button', { name: 'Напоминание отправлено' }),
     ).toHaveCount(0);
     await expect(card).toContainText('Отправлен · рано для напоминания компании');
   });

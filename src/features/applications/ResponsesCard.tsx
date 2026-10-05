@@ -289,7 +289,7 @@ function FollowUpSentControl({
             .finally(() => setSaving(false));
         }}
       >
-        {saving ? 'Сохраняем…' : 'Отметить напоминание компании отправленным'}
+        {saving ? 'Сохраняем…' : 'Напоминание отправлено'}
       </button>
     </div>
   );
