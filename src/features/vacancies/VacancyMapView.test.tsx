@@ -149,11 +149,8 @@ describe("B203: VacancyMapView Component", () => {
   });
 });
 
-describe("подписи городов не наезжают друг на друга", () => {
-  it("рядом стоящие хабы оставляют подпись самому крупному, но точки рисуют обе", () => {
-    // Амстердам и Гаага на карте продукта попадают в одну и ту же область в
-    // несколько пикселей: 2026-09-06 на проде подписи европейских хабов легли
-    // друг на друга и перестали читаться.
+describe("кластеризация и подписи на карте (B375)", () => {
+  it("близкие хабы объединяются в кластер с числом вакансий и списком в подсказке", () => {
     const html = renderToStaticMarkup(
       <VacancyMapView
         items={[
@@ -166,10 +163,25 @@ describe("подписи городов не наезжают друг на др
       />,
     );
 
-    expect(html).toContain('<tspan>Amsterdam</tspan>');
-    expect(html).toContain('<tspan class="career-map-label-count"> · 2</tspan>');
-    expect(html).not.toContain('<tspan>Haarlem</tspan>');
-    // Точка соседнего хаба остаётся: он есть на карте и кликабелен.
+    expect(html).toContain('career-map-cluster-count');
+    expect(html).toContain('>3</text>');
+    expect(html).toContain('Кластер: 3 вакансий');
     expect(html).toContain("Город Haarlem: 1 вакансий");
+  });
+
+  it("показывает Сидней без AU: и страну во всплывающей подсказке", () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[
+          makeItem("v-au", "Atlassian", "AU: Sydney", { lat: -33.8688, lng: 151.2093 }),
+        ]}
+        selectedCity={undefined}
+        onSelectCity={() => {}}
+      />,
+    );
+
+    expect(html).toContain("Сидней");
+    expect(html).not.toContain("AU: Sydney");
+    expect(html).toContain("Австралия");
   });
 });

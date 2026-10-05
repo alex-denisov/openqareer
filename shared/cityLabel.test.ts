@@ -15,6 +15,7 @@ describe('название города на карте', () => {
     expect(normalizeCityLabel('SG - Singapore')).toBe('Singapore');
     expect(normalizeCityLabel('Germany - Berlin')).toBe('Berlin');
     expect(normalizeCityLabel('ES – Barcelona')).toBe('Barcelona');
+    expect(normalizeCityLabel('AU: Sydney')).toBe('Sydney');
   });
 
   it('не режет города, у которых тире внутри имени', () => {

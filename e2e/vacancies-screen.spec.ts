@@ -1163,6 +1163,69 @@ test.describe('B250 vacancies screen', () => {
     expect(overflows).toBe(false);
   });
 
+  test('B375: кластеризация карты вакансий, зум, раскрытие кластера и нормализация AU: Sydney', async ({
+    page,
+  }, testInfo) => {
+    if (testInfo.project.name !== 'desktop-1440') {
+      test.skip(true, 'B375 captures target widths in one browser session');
+    }
+
+    const cityRows = [
+      { location: 'Berlin, Germany', city: 'Berlin', coordinates: { lat: 52.52, lng: 13.405 } },
+      { location: 'Prague, Czechia', city: 'Prague', coordinates: { lat: 50.0755, lng: 14.4378 } },
+      { location: 'Vienna, Austria', city: 'Vienna', coordinates: { lat: 48.2082, lng: 16.3738 } },
+      { location: 'AU: Sydney', city: 'AU: Sydney', coordinates: { lat: -33.8688, lng: 151.2093 } },
+      { location: 'Москва', city: 'Москва', coordinates: { lat: 55.75204, lng: 37.61781 } },
+    ];
+    const mapItems = MATCHED_ITEMS.slice(0, cityRows.length).map((base, index) => {
+      const row = cityRows[index];
+      const id = `b375-map-${index + 1}`;
+      return {
+        ...base,
+        cluster: cluster(id, base.cluster.canonicalTitle, base.cluster.canonicalCompany, {
+          canonicalLocation: row.location,
+          companyFeatures: { city: row.city, coordinates: row.coordinates },
+        }),
+        explanation: explanation(id),
+      };
+    });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await stubSession(page, { matchedItems: mapItems, total: mapItems.length });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+
+    await page.locator('.view-switch[role="tablist"]').getByRole('tab', { name: 'Карта' }).click();
+    const mapView = page.locator('.vacancy-map-view');
+    await expect(mapView).toBeVisible();
+
+    // Sydney normalized to Сидней with tooltip showing Australia
+    const sydneyChip = mapView
+      .locator('.career-map-city-chips')
+      .getByRole('button', { name: /Сидней/ });
+    await expect(sydneyChip).toBeVisible();
+    await expect(sydneyChip).toHaveAttribute('title', 'Австралия');
+
+    // Clusters should exist at zoom=1 (Berlin + Prague + Vienna clustered)
+    const clusterPin = mapView.locator('.career-map-cluster-node').first();
+    await expect(clusterPin).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B375/map-before-1440.png' });
+
+    // Expand cluster on click
+    await clusterPin.click();
+    await page.screenshot({ path: 'output/playwright/B375/map-after-1440.png' });
+    await page.screenshot({ path: 'output/playwright/B375/map-1440.png' });
+
+    // Viewport 1176
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.screenshot({ path: 'output/playwright/B375/map-1176.png' });
+
+    // Viewport 390
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: 'output/playwright/B375/map-390.png' });
+  });
+
   test('B324: role limit 10/10, adding and removing custom role in filter panel', async ({
     page,
   }) => {

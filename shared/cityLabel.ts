@@ -18,7 +18,7 @@ const LIST_SEPARATORS = /[;|/]|\s+·\s+/;
  * вокруг тире обязательны: у «Baden-Baden» и «Winston-Salem» тире внутри имени,
  * и срезать по нему — переименовать город.
  */
-const COUNTRY_PREFIX = /^\p{L}{2}[\p{L}\s.]{0,18}?\s+[-–—]\s+(?=\p{L})/u;
+const COUNTRY_PREFIX = /^(?:\p{L}{2}[\p{L}\s.]{0,18}?\s+[-–—]\s+|[A-Za-z]{2,3}:\s*)(?=\p{L})/u;
 const CITY_PREFIX = /^(?:г(?:ород)?(?:\.|\s)+)\s*/iu;
 
 /** `(Remote)`, `(Hybrid)`, `(On-site)` — формат работы, а не часть названия. */

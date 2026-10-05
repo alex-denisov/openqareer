@@ -133,6 +133,29 @@ function preferredCityName(current: string, candidate: string): string {
   return CYRILLIC.test(candidate) ? candidate : current;
 }
 
+function resolveCityCountry(
+  item: MatchedVacancyItem,
+  city: string,
+): { localizedCity: string; country?: string } {
+  const feat = item.cluster.companyFeatures;
+  const rawCityStr = feat?.city ?? item.cluster.canonicalLocation;
+  let country = feat?.country;
+  if (!country && rawCityStr) {
+    const match = rawCityStr.match(/^([A-Za-z]{2,3}):/u);
+    if (match && match[1].toUpperCase() === 'AU') {
+      country = 'Австралия';
+    }
+  }
+  const isSydney = city.toLowerCase() === 'sydney' || Boolean(rawCityStr?.toLowerCase().includes('sydney'));
+  if (isSydney && !country) {
+    country = 'Австралия';
+  }
+  return {
+    localizedCity: isSydney ? 'Сидней' : city,
+    country,
+  };
+}
+
 function aggregateCities(items: readonly MatchedVacancyItem[]) {
   const map = new Map<
     string,
@@ -153,15 +176,18 @@ function aggregateCities(items: readonly MatchedVacancyItem[]) {
     // обещает точку там, где её нет (B203, прод 2026-09-06).
     if (!city) continue;
 
+    const { localizedCity, country } = resolveCityCountry(item, city);
+
     const key = hubKey(feat.coordinates);
     const existing = map.get(key) ?? {
-      city,
-      country: feat.country,
+      city: localizedCity,
+      country,
       coordinates: feat.coordinates,
       count: 0,
       companies: new Set<string>(),
     };
-    existing.city = preferredCityName(existing.city, city);
+    existing.city = preferredCityName(existing.city, localizedCity);
+    if (!existing.country && country) existing.country = country;
     existing.count += 1;
     if (item.cluster.canonicalCompany) existing.companies.add(item.cluster.canonicalCompany);
     map.set(key, existing);

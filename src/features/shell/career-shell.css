@@ -9137,7 +9137,51 @@
 }
 
 .career-map-pin-group {
+  cursor: pointer;
+}
+
+.career-map-cluster-group {
+  cursor: pointer;
+}
+
+.career-map-cluster-pulse {
+  fill: var(--career-accent-soft);
+  stroke: var(--career-accent);
+  stroke-width: var(--career-border-width);
+}
+
+.career-map-cluster-group:hover .career-map-cluster-pulse,
+.career-map-cluster-group:focus-visible .career-map-cluster-pulse {
+  stroke-width: calc(var(--career-border-width) * 2);
+}
+
+.career-map-cluster-circle {
+  fill: var(--career-accent);
+}
+
+.career-map-cluster-count {
+  font-size: var(--career-text-xs);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  fill: var(--career-accent-ink);
   pointer-events: none;
+}
+
+.career-map-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-top: var(--career-space-2);
+}
+
+.career-map-zoom-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--career-text-md);
+  font-weight: 700;
 }
 
 .career-map-pulse {
