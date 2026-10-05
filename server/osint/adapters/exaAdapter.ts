@@ -124,6 +124,20 @@ export interface ExaSearchOverrides {
   readonly contents?: Readonly<Record<string, unknown>>;
 }
 
+function searchBody(
+  query: string,
+  category: 'people' | undefined,
+  overrides: ExaSearchOverrides,
+): Record<string, unknown> {
+  return {
+    query,
+    numResults: overrides.numResults ?? RESULTS_PER_QUERY,
+    contents: overrides.contents ?? { highlights: true },
+    ...(category ? { category } : {}),
+    ...(overrides.includeDomains ? { includeDomains: overrides.includeDomains } : {}),
+  };
+}
+
 async function runSearch(
   query: string,
   category: 'people' | undefined,
@@ -136,13 +150,7 @@ async function runSearch(
   const limit = overrides.numResults ?? RESULTS_PER_QUERY;
   return requestGate.run('api.exa.ai', signal, async () => {
     const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(15_000)]);
-    const body = {
-      query,
-      numResults: limit,
-      contents: overrides.contents ?? { highlights: true },
-      ...(category ? { category } : {}),
-      ...(overrides.includeDomains ? { includeDomains: overrides.includeDomains } : {}),
-    };
+    const body = searchBody(query, category, overrides);
     let response: Response;
     try {
       response = await fetcher(EXA_ENDPOINT, {
