@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
 import {
@@ -9,6 +10,7 @@ import {
   hasAllowedOrigin,
   publicPrincipal,
   sendError,
+  requireVerifiedEmail,
   sessionCameFromCookie,
   setSessionCookie,
   withDeps,
@@ -20,6 +22,8 @@ import {
   passwordResetRequestSchema,
   passwordResetSchema,
   registrationSchema,
+  emailVerificationCodeSchema,
+  changeUnverifiedEmailSchema,
 } from './schemas';
 import { deriveUsernameFromEmail } from '../../shared/accountValidation';
 import { LEGAL_DOC_SLUGS } from '../../shared/legalRegistry';
@@ -30,7 +34,17 @@ import {
   AuthUsernameTakenError,
   AuthDisposableEmailError,
   AuthEmailDomainUnreachableError,
+  AuthEmailChangeRequiresVerificationError,
 } from '../auth/authService';
+import {
+  AuthEmailVerificationDeliveryError,
+  AuthEmailVerificationExpiredError,
+  AuthEmailVerificationInvalidCodeError,
+  AuthEmailVerificationLockedError,
+  AuthEmailVerificationNotRequiredError,
+  AuthEmailVerificationRateLimitError,
+  AuthEmailVerificationResendTooSoonError,
+} from '../auth/authErrors';
 import {
   defaultRegistrationLimiter,
   parseClientFingerprint,
@@ -72,6 +86,7 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
       {
         email: body.email,
         displayName: body.displayName,
+        clientIp: request.ip,
       },
     );
     // The proof is written with the account, so no user can exist without a
@@ -153,6 +168,137 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
   };
 }
 
+function verificationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof AuthEmailVerificationInvalidCodeError) {
+    return sendError(reply, request, 422, 'email_verification_invalid', error.message, false);
+  }
+  if (error instanceof AuthEmailVerificationExpiredError) {
+    return sendError(reply, request, 410, 'email_verification_expired', error.message, false);
+  }
+  if (error instanceof AuthEmailVerificationLockedError) {
+    return sendError(reply, request, 429, 'email_verification_locked', error.message, false);
+  }
+  if (
+    error instanceof AuthEmailVerificationRateLimitError ||
+    error instanceof AuthEmailVerificationResendTooSoonError
+  ) {
+    reply.header('Retry-After', String(error.retryAfterSeconds));
+    return sendError(
+      reply,
+      request,
+      429,
+      'email_verification_rate_limited',
+      error.message,
+      true,
+      undefined,
+      { retryAfterSeconds: error.retryAfterSeconds },
+    );
+  }
+  if (error instanceof AuthEmailVerificationDeliveryError) {
+    return sendError(reply, request, 503, 'email_verification_delivery_failed', error.message, true);
+  }
+  if (error instanceof AuthEmailVerificationNotRequiredError) {
+    return sendError(reply, request, 409, 'email_already_verified', error.message, false);
+  }
+  if (error instanceof AuthInvalidPasswordError) {
+    return sendError(reply, request, 400, 'current_password_invalid', error.message, false);
+  }
+  if (error instanceof AuthEmailTakenError) {
+    return sendError(reply, request, 409, 'email_taken', 'Этот email уже связан с другим аккаунтом.', false);
+  }
+  if (error instanceof AuthEmailDomainUnreachableError || error instanceof AuthDisposableEmailError) {
+    return sendError(reply, request, 422, 'email_invalid', error.message, false);
+  }
+  return null;
+}
+
+async function handleVerifyEmail(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const parsed = emailVerificationCodeSchema.safeParse(request.body);
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
+  const sessionToken = extractSessionToken(request, deps.config);
+  try {
+    const authenticated = (await deps.authService.verifyEmail?.(sessionToken, parsed.data.code)) ?? null;
+    if (!authenticated) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+    }
+    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    return {
+      data: { ...publicPrincipal(authenticated.principal), sessionToken: authenticated.sessionToken },
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    const mapped = verificationFailure(error, request, reply);
+    if (mapped) return mapped;
+    throw error;
+  }
+}
+
+async function handleResendEmailVerification(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const sessionToken = extractSessionToken(request, deps.config);
+  try {
+    const result =
+      (await deps.authService.resendEmailVerification?.(sessionToken, request.ip)) ?? null;
+    if (!result) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+    }
+    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    return {
+      data: {
+        ...publicPrincipal(result.principal),
+        emailVerificationEmailSent: result.emailVerificationEmailSent,
+        sessionToken,
+      },
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    const mapped = verificationFailure(error, request, reply);
+    if (mapped) return mapped;
+    throw error;
+  }
+}
+
+async function handleChangeUnverifiedEmail(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const parsed = changeUnverifiedEmailSchema.safeParse(request.body);
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
+  const sessionToken = extractSessionToken(request, deps.config);
+  try {
+    const result =
+      (await deps.authService.changeUnverifiedEmail?.(
+        sessionToken,
+        parsed.data.email,
+        parsed.data.currentPassword,
+        request.ip,
+      )) ?? null;
+    if (!result) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+    }
+    setSessionCookie(reply, sessionToken, deps.config.secureCookies);
+    return {
+      data: {
+        ...publicPrincipal(result.principal),
+        emailVerificationEmailSent: result.emailVerificationEmailSent,
+        sessionToken,
+      },
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    const mapped = verificationFailure(error, request, reply);
+    if (mapped) return mapped;
+    throw error;
+  }
+}
+
 async function handleAuthMe(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = authenticateSession(request, deps.authService, deps.config);
   if (!principal) {
@@ -180,6 +326,11 @@ async function handleLogout(deps: RouteDeps, request: FastifyRequest, reply: Fas
 
 async function handleGetAccount(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const account = deps.authService.getAccount?.(sessionToken) ?? null;
   if (!account) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
@@ -190,6 +341,11 @@ async function handleGetAccount(deps: RouteDeps, request: FastifyRequest, reply:
 async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const body = accountProfileSchema.parse(request.body);
   try {
     const account = deps.authService.updateAccount?.(sessionToken, body) ?? null;
@@ -198,6 +354,16 @@ async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, rep
     }
     return { data: account, meta: { requestId: request.id } };
   } catch (error) {
+    if (error instanceof AuthEmailChangeRequiresVerificationError) {
+      return sendError(
+        reply,
+        request,
+        409,
+        'email_change_requires_verification',
+        error.message,
+        false,
+      );
+    }
     if (error instanceof AuthEmailTakenError) {
       return sendError(
         reply,
@@ -215,6 +381,11 @@ async function handleUpdateProfile(deps: RouteDeps, request: FastifyRequest, rep
 async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const body = passwordChangeSchema.parse(request.body);
   try {
     const authenticated =
@@ -249,6 +420,11 @@ async function handleChangePassword(deps: RouteDeps, request: FastifyRequest, re
 async function handleRevokeSessions(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
   const revoked = deps.authService.revokeOtherSessions?.(sessionToken) ?? null;
   if (revoked === null) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
@@ -305,10 +481,30 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
   }
 }
 
+function emailVerificationRateLimitKey(deps: RouteDeps, request: FastifyRequest): string {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  const body = request.body as { email?: unknown } | undefined;
+  const email =
+    typeof body?.email === 'string'
+      ? body.email.trim().toLowerCase()
+      : (principal?.email ?? '').trim().toLowerCase();
+  const identity = email || principal?.userId || 'anonymous';
+  const digest = createHash('sha256').update(identity).digest('hex');
+  return `${request.ip}:${digest}`;
+}
+
 export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   app.post(
     '/api/v1/auth/register',
-    { config: { rateLimit: { max: 3, timeWindow: '30 minutes' } } },
+    {
+      config: {
+        rateLimit: {
+          max: 3,
+          timeWindow: '30 minutes',
+          keyGenerator: (request) => emailVerificationRateLimitKey(deps, request),
+        },
+      },
+    },
     withDeps(deps, handleRegister),
   );
   app.post(
@@ -318,6 +514,8 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
   );
   app.get('/api/v1/auth/me', withDeps(deps, handleAuthMe));
   app.post('/api/v1/auth/logout', withDeps(deps, handleLogout));
+
+  registerEmailVerificationRoutes(app, deps);
 
   app.get('/api/v1/account', withDeps(deps, handleGetAccount));
   app.patch('/api/v1/account/profile', withDeps(deps, handleUpdateProfile));
@@ -334,4 +532,15 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
     { config: { rateLimit: { max: 8, timeWindow: '15 minutes' } } },
     withDeps(deps, handlePasswordReset),
   );
+}
+
+function registerEmailVerificationRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  const rateLimit = (max: number, timeWindow: string) => ({
+    config: {
+      rateLimit: { max, timeWindow, keyGenerator: (request: FastifyRequest) => emailVerificationRateLimitKey(deps, request) },
+    },
+  });
+  app.post('/api/v1/auth/email-verification/verify', rateLimit(10, '15 minutes'), withDeps(deps, handleVerifyEmail));
+  app.post('/api/v1/auth/email-verification/resend', rateLimit(5, '1 hour'), withDeps(deps, handleResendEmailVerification));
+  app.patch('/api/v1/auth/email-verification/address', rateLimit(5, '1 hour'), withDeps(deps, handleChangeUnverifiedEmail));
 }

@@ -10,12 +10,19 @@ export interface AuthPrincipal {
   role: UserRole;
   isTest: boolean;
   candidate: CandidateIdentity | null;
+  emailVerified?: boolean;
+  emailVerificationEmailSent?: boolean;
+  emailVerificationResendAfterSeconds?: number;
 }
 
 export interface RegistrationProfile {
   email?: string;
   displayName?: string;
   timezone?: string;
+  /** Trusted provider assertion; never accepted from the public registration schema. */
+  emailVerified?: boolean;
+  /** Server-derived network context for verification delivery limits. */
+  clientIp?: string;
 }
 
 export interface AccountSnapshot {
@@ -153,6 +160,9 @@ export interface SessionAuth {
   isUsernameTaken(username: string): boolean;
   authenticate(sessionToken: string): AuthPrincipal | null;
   logout(sessionToken: string): void;
+  verifyEmail?(sessionToken: string, code: string): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
+  resendEmailVerification?(sessionToken: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
+  changeUnverifiedEmail?(sessionToken: string, email: string, currentPassword: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
   /** B173: proof of which published documents the account accepted, and when. */
   recordLegalConsent?(input: {

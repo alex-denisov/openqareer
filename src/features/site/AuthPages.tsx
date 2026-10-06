@@ -18,7 +18,7 @@ import {
   legalPath,
 } from '../../../shared/legalRegistry';
 
-interface AuthPageProps {
+export interface AuthPageProps {
   onNavigate: (path: string) => void;
   onSessionChange?: (session: AuthUser | null) => void;
   nextPath?: string;
@@ -26,14 +26,16 @@ interface AuthPageProps {
   notice?: string;
 }
 
-function AuthCardHeader({
+export function AuthCardHeader({
   title,
   subtitle,
   onNavigate,
+  titleId,
 }: {
   title: string;
   subtitle: string;
   onNavigate: (path: string) => void;
+  titleId?: string;
 }) {
   const isDesktop = isTauriEnvironment();
   return (
@@ -49,7 +51,7 @@ function AuthCardHeader({
       >
         <BrandMark variant="lockup" size={32} />
       </a>
-      <h1>{title}</h1>
+      <h1 id={titleId}>{title}</h1>
       <p>{subtitle}</p>
     </div>
   );
@@ -85,7 +87,7 @@ function PasswordRevealButton({
   );
 }
 
-interface AuthInputFieldProps {
+export interface AuthInputFieldProps {
   id: string;
   name?: string;
   label: string;
@@ -101,7 +103,7 @@ interface AuthInputFieldProps {
   action?: React.ReactNode;
 }
 
-function AuthInputField({
+export function AuthInputField({
   id,
   name,
   label,
@@ -171,7 +173,12 @@ function useLoginForm({
     try {
       const user = await login(identifier.trim(), password);
       onSessionChange?.(user);
-      const destination = user.role === 'admin' && nextPath === '/app' ? '/admin' : nextPath;
+      const destination =
+        user.emailVerified === false
+          ? '/verify-email'
+          : user.role === 'admin' && nextPath === '/app'
+            ? '/admin'
+            : nextPath;
       onNavigate(destination);
     } catch (err) {
       if (err instanceof CoachApiError) {
@@ -334,7 +341,7 @@ function useSignupForm({
         legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       });
       onSessionChange?.(user);
-      onNavigate(nextPath);
+      onNavigate(user.emailVerified === false ? '/verify-email' : nextPath);
     } catch (err) {
       if (err instanceof CoachApiError) {
         setError(err.message);

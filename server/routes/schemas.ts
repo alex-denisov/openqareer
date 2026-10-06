@@ -87,6 +87,15 @@ export const passwordResetSchema = z.object({
   newPassword: passwordField,
 });
 
+export const emailVerificationCodeSchema = z.object({
+  code: z.string().regex(/^\d{6}$/u, 'Введите 6 цифр из письма.'),
+});
+
+export const changeUnverifiedEmailSchema = z.object({
+  email: fieldGovernedBy(getEmailError, true),
+  currentPassword: z.string().min(1).max(256),
+});
+
 function hasUnsafeFileNameCharacter(value: string): boolean {
   return [...value].some(
     (character) => character === '/' || character === '\\' || character.charCodeAt(0) < 32,

@@ -72,6 +72,46 @@ describe('server configuration', () => {
     ).toEqual(['acme.test', 'example.com']);
   });
 
+  it('keeps email verification disabled by default and rejects fixed codes in production', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
+      emailVerificationRequired: false,
+      emailVerificationFixedCode: undefined,
+    });
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_EMAIL_VERIFICATION_REQUIRED: 'true',
+          OPENQAREER_TEST_FIXED_CODE: '123456',
+        },
+        import.meta.url,
+      ),
+    ).toMatchObject({
+      emailVerificationRequired: true,
+      emailVerificationFixedCode: '123456',
+    });
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          NODE_ENV: 'production',
+          OPENQAREER_TEST_FIXED_CODE: '123456',
+        },
+        import.meta.url,
+      ),
+    ).toThrow(/OPENQAREER_TEST_FIXED_CODE is development-only/u);
+    expect(() =>
+      readServerConfig(
+        {
+          ...validEnvironment,
+          NODE_ENV: 'production',
+          OPENQAREER_EMAIL_VERIFICATION_REQUIRED: 'true',
+        },
+        import.meta.url,
+      ),
+    ).toThrow(/account email configuration/iu);
+  });
+
   it('подбор по умолчанию остаётся legacy, флаг включает semantic (B267 S3)', () => {
     expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
       matchMode: 'legacy',

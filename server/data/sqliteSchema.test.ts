@@ -11,6 +11,7 @@ import {
   MIGRATION_33,
   MIGRATION_35,
   MIGRATION_36,
+  MIGRATION_39,
 } from './sqliteSchema';
 import { applyMigrations } from './store/applyMigrations';
 
@@ -517,3 +518,25 @@ describe('stage coach schema (B340 slice 1)', () => {
   });
 });
 
+describe('email verification schema migration (B398)', () => {
+  it('creates only its small table and leaves the large users table untouched', () => {
+    const database = new DatabaseSync(':memory:', {
+      enableForeignKeyConstraints: true,
+    });
+
+    applyMigrations(database, (operation) => operation());
+    const userColumns = database
+      .prepare('PRAGMA table_info(users)')
+      .all() as Array<{ name: string }>;
+    const table = database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='email_verifications'")
+      .get();
+
+    expect(table).toEqual({ name: 'email_verifications' });
+    expect(userColumns.map((column) => column.name)).not.toContain('email_verified_at');
+    expect(MIGRATION_39).toMatch(/CREATE TABLE IF NOT EXISTS email_verifications/u);
+    expect(MIGRATION_39).not.toMatch(/ALTER\s+TABLE/iu);
+    expect(() => applyMigrations(database, (operation) => operation())).not.toThrow();
+    database.close();
+  });
+});

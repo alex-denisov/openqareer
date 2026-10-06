@@ -6,6 +6,10 @@
 }
 
 .auth-page-container {
+  --career-target-min: 44px;
+  --career-text-xs: 0.8125rem;
+  --career-space-2: 8px;
+  --career-space-6: 24px;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -41,8 +45,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-block-size: var(--career-target-min);
   margin: 0 auto;
   text-decoration: none;
+}
+
+.auth-page-container a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .auth-card-header h1 {
@@ -99,6 +109,7 @@
 
 .auth-field input {
   width: 100%;
+  min-block-size: var(--career-target-min);
   padding: 12px 15px;
   border: 1px solid var(--career-line, oklch(93% 0.015 255 / 0.16));
   border-radius: 10px;
@@ -125,8 +136,9 @@
 }
 
 .auth-field-action {
+  min-block-size: var(--career-target-min);
   padding: 0;
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
 
 .auth-field-input {
@@ -174,29 +186,31 @@
 }
 
 .auth-field-error {
-  font-size: 0.8rem;
+  font-size: var(--career-text-xs);
   color: oklch(75% 0.18 28);
   margin: 2px 0 0;
 }
 
 .auth-submit-btn {
   width: 100%;
+  min-block-size: var(--career-target-min);
   margin-top: 8px;
   padding: 13px;
   font-size: 0.96rem;
 }
 
 .auth-links {
-  margin-top: 24px;
+  margin-top: var(--career-space-6);
   text-align: center;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  font-size: 0.86rem;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-xs);
 }
 
 .auth-links a,
 .auth-links button {
+  min-block-size: var(--career-target-min);
   background: none;
   border: none;
   color: var(--career-accent, #6fb1fb);

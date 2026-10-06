@@ -88,6 +88,11 @@ const configSchema = z.object({
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
+  OPENQAREER_EMAIL_VERIFICATION_REQUIRED: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
+  OPENQAREER_TEST_FIXED_CODE: blankAsUnset(z.string().regex(/^\d{6}$/u)),
   OPENQAREER_MX_CHECK_BYPASS_DOMAINS: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     z
@@ -194,6 +199,8 @@ export interface ServerConfig {
     from: string;
     publicBaseUrl: string;
   };
+  emailVerificationRequired?: boolean;
+  emailVerificationFixedCode?: string;
   emailMxCheckBypassDomains?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
 }
@@ -268,6 +275,12 @@ export function readServerConfig(
       : (() => {
           throw new Error('complete account email configuration is required');
         })();
+  if (secureCookies && parsed.OPENQAREER_TEST_FIXED_CODE) {
+    throw new Error('OPENQAREER_TEST_FIXED_CODE is development-only');
+  }
+  if (secureCookies && parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED && !accountEmail) {
+    throw new Error('complete account email configuration is required for email verification');
+  }
   const desktopTunnelValues = [
     parsed.OPENQAREER_DESKTOP_TUNNEL_SERVER,
     parsed.OPENQAREER_DESKTOP_TUNNEL_PORT,
@@ -322,6 +335,8 @@ export function readServerConfig(
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
+    emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
+    emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,
     allowedOrigins: secureCookies
       ? [

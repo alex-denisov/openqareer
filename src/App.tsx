@@ -50,6 +50,11 @@ const LandingPage = lazy(loadLandingPage);
 const LegalDocumentPage = lazy(loadLegalDocumentPage);
 const LoginPage = lazy(() => loadAuthPages().then((module) => ({ default: module.LoginPage })));
 const SignupPage = lazy(() => loadAuthPages().then((module) => ({ default: module.SignupPage })));
+const EmailVerificationPage = lazy(() =>
+  import('./features/site/EmailVerificationPage').then((module) => ({
+    default: module.EmailVerificationPage,
+  })),
+);
 const ResetPasswordPage = lazy(() =>
   loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
 );
@@ -170,6 +175,17 @@ export default function App() {
     try {
       session = await getSession();
       if (!isCurrent()) return;
+      if (session?.emailVerified === false) {
+        setState({
+          session,
+          workspace: undefined,
+          invalidStorage: false,
+          onboardingStatusKnown: true,
+          onboardingComplete: false,
+        });
+        if (window.location.pathname !== '/verify-email') navigate('/verify-email');
+        return;
+      }
       const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
       // The server is authoritative for the onboarding gate. A local copy may
       // be stale, so keep the shell skeleton visible until this read succeeds.
@@ -385,14 +401,19 @@ export default function App() {
   function handleSessionChange(session: AuthUser | null) {
     // A delayed restore must never replace a login/logout completed after it.
     const revision = ++sessionRevision.current;
+    const emailVerificationPending = session?.emailVerified === false;
     const result = session?.candidateId
       ? loadWorkspace(window.localStorage, session.candidateId)
       : { status: 'empty' as const };
     setState({
       session,
-      workspace: result.status === 'ready' ? result.workspace : undefined,
-      invalidStorage: result.status === 'invalid',
-      onboardingStatusKnown: !session?.candidateId,
+      workspace: emailVerificationPending
+        ? undefined
+        : result.status === 'ready'
+          ? result.workspace
+          : undefined,
+      invalidStorage: !emailVerificationPending && result.status === 'invalid',
+      onboardingStatusKnown: emailVerificationPending || !session?.candidateId,
       onboardingComplete: false,
     });
     setSessionError(undefined);
@@ -401,6 +422,10 @@ export default function App() {
       clearCareerCabinetCache();
       setIsResolvingSession(false);
       navigate(isDesktop ? '/login' : '/');
+      return;
+    }
+    if (emailVerificationPending) {
+      setIsResolvingSession(false);
       return;
     }
     if (!session?.candidateId) {
@@ -453,6 +478,16 @@ export default function App() {
         <SignupPage onNavigate={navigate} onSessionChange={handleSessionChange} nextPath="/app" />
       );
     }
+    if (currentPath === '/verify-email') {
+      return (
+        <EmailVerificationPage
+          onNavigate={navigate}
+          onSessionChange={handleSessionChange}
+          session={state.session}
+          nextPath="/app"
+        />
+      );
+    }
     if (currentPath === '/reset-password') {
       return <ResetPasswordPage onNavigate={navigate} />;
     }
@@ -464,7 +499,9 @@ export default function App() {
     state.session === undefined ||
     Boolean(
       state.session?.candidateId &&
-        (!state.onboardingStatusKnown || (state.onboardingComplete && !state.workspace)),
+        (state.session.emailVerified === false ||
+          !state.onboardingStatusKnown ||
+          (state.onboardingComplete && !state.workspace)),
     );
   const renderWorkspace = (pending = sessionPending) => (
     <Suspense fallback={<WorkspaceLoadingFallback />}>
@@ -598,7 +635,12 @@ function AuthLoadingFallback() {
 }
 
 export function isAuthPath(path: string): boolean {
-  return path === '/login' || path === '/signup' || path === '/reset-password';
+  return (
+    path === '/login' ||
+    path === '/signup' ||
+    path === '/reset-password' ||
+    path === '/verify-email'
+  );
 }
 
 /** `/admin` and anything under it belong to the administrator console. */

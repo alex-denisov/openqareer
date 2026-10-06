@@ -166,13 +166,32 @@ export function authenticateCandidate(
     ? authorization.slice('Bearer '.length)
     : '';
   const bearerCandidate = candidateStore.authenticate(accessToken);
-  const sessionCandidate = authenticateSession(request, authService, config)?.candidate ?? null;
+  const principal = authenticateSession(request, authService, config);
+  if (!requireVerifiedEmail(request, reply, principal)) return null;
+  const sessionCandidate = principal?.candidate ?? null;
   const candidate = bearerCandidate ?? sessionCandidate;
   if (!candidate) {
     sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия кандидата.', false);
     return null;
   }
   return candidate;
+}
+
+export function requireVerifiedEmail(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  principal: AuthPrincipal | null,
+): boolean {
+  if (principal?.emailVerified !== false) return true;
+  sendError(
+    reply,
+    request,
+    403,
+    'email_unverified',
+    'Подтвердите email, чтобы открыть кабинет.',
+    false,
+  );
+  return false;
 }
 
 export function publicPrincipal(principal: AuthPrincipal) {
@@ -183,6 +202,15 @@ export function publicPrincipal(principal: AuthPrincipal) {
     role: principal.role,
     isTest: principal.isTest,
     candidateId: principal.candidate?.id ?? null,
+    ...(principal.emailVerified === undefined ? {} : { emailVerified: principal.emailVerified }),
+    ...(principal.emailVerified === false
+      ? {
+          emailVerificationEmailSent: principal.emailVerificationEmailSent ?? false,
+          ...(principal.emailVerificationResendAfterSeconds === undefined
+            ? {}
+            : { emailVerificationResendAfterSeconds: principal.emailVerificationResendAfterSeconds }),
+        }
+      : {}),
   };
 }
 
