@@ -11,9 +11,24 @@ test.describe('B376 skill quiz dialogue & verification', () => {
     await mockSignedInCabinet(page);
 
     const viewports = [
-      { name: 'desktop-1440', width: 1440, height: 900, shot: 'output/playwright/B376/b376-desktop-1440.png' },
-      { name: 'laptop-1176', width: 1176, height: 800, shot: 'output/playwright/B376/b376-laptop-1176.png' },
-      { name: 'mobile-390', width: 390, height: 844, shot: 'output/playwright/B376/b376-mobile-390.png' },
+      {
+        name: 'desktop-1440',
+        width: 1440,
+        height: 900,
+        shot: 'output/playwright/B376/b376-desktop-1440.png',
+      },
+      {
+        name: 'laptop-1176',
+        width: 1176,
+        height: 800,
+        shot: 'output/playwright/B376/b376-laptop-1176.png',
+      },
+      {
+        name: 'mobile-390',
+        width: 390,
+        height: 844,
+        shot: 'output/playwright/B376/b376-mobile-390.png',
+      },
     ];
 
     for (const vp of viewports) {
@@ -25,7 +40,10 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       if (vp.width <= 640) {
         await page.locator('.career-mobile-nav').getByRole('button', { name: 'Профиль' }).click();
       } else {
-        await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
+        await page
+          .locator('aside#career-rail nav')
+          .getByRole('button', { name: 'Профиль' })
+          .click();
       }
       await expect(page.locator('#sec-skills')).toBeVisible();
 
@@ -41,7 +59,9 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       // Verify quiz prompt is present
       const quizPrompt = expertPanel.locator('.career-expert-skill-quiz-prompt');
       await expect(quizPrompt).toBeVisible();
-      await expect(quizPrompt).toContainText('Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn');
+      await expect(quizPrompt).toContainText(
+        'Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn',
+      );
 
       // Open quiz simulator
       const startQuizBtn = quizPrompt.getByRole('button', { name: 'Пройти квиз по навыку' });
@@ -52,7 +72,10 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       await expect(modal).toContainText('Верификация навыков: hh.ru и LinkedIn');
 
       // Start TypeScript quiz
-      const startBtn = modal.locator('.career-quiz-item').first().getByRole('button', { name: 'Начать тест' });
+      const startBtn = modal
+        .locator('.career-quiz-item')
+        .first()
+        .getByRole('button', { name: 'Начать тест' });
       await startBtn.click();
 
       // Answer questions
