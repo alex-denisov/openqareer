@@ -802,6 +802,48 @@ async function verifyViewport(browser, baseUrl, viewport) {
     });
   });
   // C64: шапка Профиля читает согласие «Вы в поиске»; в гейте оно не дано.
+  await page.route('**/api/v1/candidate/actions/usage*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          usage: {
+            localDate: '2026-10-01',
+            hhAppliesCount: 0,
+            linkedinEasyAppliesCount: 0,
+            hhBoostsCount: 0,
+            lastHhBoostAt: null,
+          },
+          timezone: 'Europe/Moscow',
+          resetAt: '2026-10-01T21:00:00.000Z',
+          killSwitchActive: false,
+          limits: {
+            maxHhAppliesPerDay: 15,
+            maxLinkedinEasyAppliesPerDay: 10,
+            maxHhBoostsPerDay: 3,
+            minHhBoostIntervalMinutes: 240,
+          },
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/actions/receipts*', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { receipts: [] } }),
+    });
+  });
+  await page.route('**/api/v1/me/consents/actions_on_behalf', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: { capability: 'actions_on_behalf', granted: false, consent: null },
+      }),
+    });
+  });
   await page.route('**/api/v1/candidate/search-consent', async (route) => {
     await route.fulfill({
       status: 200,
