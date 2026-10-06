@@ -16422,3 +16422,76 @@ button.chip {
   font-size: var(--career-text-aux);
 }
 
+/* B413: Чекбокс с явным внешним видом вместо нативного маркера Tauri/WebKit */
+.career-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border: 1px solid var(--career-border);
+  border-radius: var(--career-radius-xs, 4px);
+  background-color: var(--career-surface-card, var(--career-surface));
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  flex: none;
+  transition: border-color var(--career-motion-fast, 180ms) ease, background-color var(--career-motion-fast, 180ms) ease;
+  position: relative;
+}
+
+.career-checkbox:checked {
+  background-color: var(--career-accent);
+  border-color: var(--career-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpolyline points='216 72 104 184 48 128' fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='24'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
+}
+
+.career-checkbox:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-checkbox:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  border-color: var(--career-border-subtle, var(--career-border));
+  background-color: var(--career-surface-muted, var(--career-surface));
+}
+
+.career-checkbox-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-height: 44px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.career-checkbox-label:has(.career-checkbox:disabled) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.career-checkbox-text {
+  font-size: var(--career-text-xs);
+  color: var(--career-text);
+  line-height: 1.4;
+}
+
+.career-checkbox-status {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.career-checkbox-label:has(.career-checkbox:checked) .career-checkbox-status {
+  color: var(--career-signal-green);
+}
+

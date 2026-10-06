@@ -72,13 +72,17 @@ function ConsentPanel({ panel }: { panel: ReturnType<typeof useCandidateActionPa
       <ul>
         {document.items.map((item) => <li key={item}>{item}</li>)}
       </ul>
-      <label className="career-candidate-actions__check">
+      <label className="career-candidate-actions__check career-checkbox-label">
         <input
           type="checkbox"
+          className="career-checkbox"
           checked={panel.consentAccepted}
           onChange={(event) => panel.setConsentAccepted(event.currentTarget.checked)}
         />
-        <span>Я прочитал условия и согласен на действия, которые подтвержу отдельно.</span>
+        <span className="career-checkbox-text">Я прочитал условия и согласен на действия, которые подтвержу отдельно.</span>
+        <span className="career-checkbox-status" aria-live="polite">
+          {panel.consentAccepted ? 'Согласие дано' : 'Согласия нет'}
+        </span>
       </label>
       {panel.consentError ? <Notice role="alert" message={panel.consentError} /> : null}
       {!panel.consentCanBeGiven ? (

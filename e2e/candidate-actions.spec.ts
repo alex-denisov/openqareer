@@ -1,3 +1,4 @@
+import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
@@ -244,4 +245,38 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
       path: testInfo.outputPath('candidate-actions-1280.png'),
     });
   }
+});
+
+test('B413: consent checkbox visual and screenshot 1440 and 390', async ({ page }, testInfo) => {
+  await mockSignedInCabinet(page);
+  await mockCandidateActionApi(page);
+  await page.route('**/api/v1/me/consents/actions_on_behalf', (route) =>
+    route.fulfill({
+      json: {
+        data: {
+          capability: 'actions_on_behalf',
+          granted: false,
+          consent: null,
+        },
+      },
+    }),
+  );
+
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await page.locator('button[aria-label="Отклики"]:visible').first().click();
+
+  const consentSection = page.locator('.career-candidate-actions__consent');
+  await expect(consentSection).toBeVisible();
+
+  const checkbox = consentSection.locator('input.career-checkbox');
+  await expect(checkbox).toBeVisible();
+
+  const statusLabel = consentSection.locator('.career-checkbox-status');
+  await expect(statusLabel).toContainText('Согласия нет');
+
+  await mkdir('output/playwright/B413', { recursive: true });
+  const viewportSuffix = testInfo.project.name === 'mobile-390' ? '390' : '1440';
+  await page.screenshot({
+    path: `output/playwright/B413/consent-checkbox-${viewportSuffix}.png`,
+  });
 });
