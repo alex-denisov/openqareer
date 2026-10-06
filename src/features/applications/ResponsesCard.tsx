@@ -530,17 +530,21 @@ function DeliveryReceiptFields({
 }) {
   return (
     <>
-      <label>
+      <label className="career-responses-select-field">
         Доказательство доставки
-        <select
-          value={kind}
-          onChange={(event) => onKindChange(event.target.value as DeliveryReceipt['kind'])}
-        >
-          <option value="confirmation_url">Ссылка на подтверждение</option>
-          <option value="auto_reply">Письмо автоответа</option>
-          <option value="screenshot">Скриншот</option>
-          <option value="failure_note">Попытка не удалась</option>
-        </select>
+        <div className="career-responses-select-wrap">
+          <select
+            className="career-responses-select"
+            value={kind}
+            onChange={(event) => onKindChange(event.target.value as DeliveryReceipt['kind'])}
+          >
+            <option value="confirmation_url">Ссылка на подтверждение</option>
+            <option value="auto_reply">Письмо автоответа</option>
+            <option value="screenshot">Скриншот</option>
+            <option value="failure_note">Попытка не удалась</option>
+          </select>
+          <CaretDown size={14} className="career-responses-select-caret" aria-hidden="true" />
+        </div>
       </label>
       <label>
         Ссылка или описание доказательства
@@ -566,6 +570,7 @@ function StageSelect({
       Этап
       <div className="career-responses-select-wrap">
         <select
+          className="career-responses-select"
           value={value}
           onChange={(event) => onChange(event.target.value as ApplicationStage)}
         >
