@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LinkedinDraftCard } from './LinkedinDraftCard';
 import * as api from './linkedinDraftApi';
+import * as safetyApi from './linkedinActionSafetyApi';
 
 const draft = { id: 'one', kind: 'comment' as const, topic: 'Тема', text: 'Мой опыт.', status: 'draft' as const };
 describe('LinkedinDraftCard', () => {
@@ -14,6 +15,8 @@ describe('LinkedinDraftCard', () => {
     vi.spyOn(api, 'listDrafts').mockResolvedValue([]);
     vi.spyOn(api, 'createDraft').mockResolvedValue(draft);
     vi.spyOn(api, 'updateDraft').mockImplementation(async (_id, status) => ({ ...draft, status }));
+    vi.spyOn(safetyApi, 'getLinkedinActionSafetyStatus').mockResolvedValue({ paused: false, reason: null, canResume: false, updatedAt: null });
+    vi.spyOn(safetyApi, 'resumeLinkedinActions').mockResolvedValue({ paused: false, reason: null, canResume: false, updatedAt: null });
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: vi.fn().mockResolvedValue(undefined) } });
   });
   afterEach(() => { act(() => root.unmount()); host.remove(); vi.restoreAllMocks(); });
@@ -75,5 +78,55 @@ describe('LinkedinDraftCard', () => {
     vi.mocked(api.createDraft).mockRejectedValue(new Error('private detail'));
     await render(); await prepare(); expect(host.textContent).toContain('Не получилось подготовить черновик. Попробуйте ещё раз');
     expect(host.textContent).not.toContain('private detail');
+  });
+  it('shows a platform stop reason and clears it only after the candidate resumes manually', async () => {
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockResolvedValue({
+      paused: true,
+      reason: 'platform_restricted',
+      canResume: true,
+      updatedAt: null,
+    });
+    vi.mocked(safetyApi.resumeLinkedinActions).mockResolvedValue({ paused: false, reason: null, canResume: false, updatedAt: null });
+
+    await render();
+    expect(host.textContent).toContain('Действия LinkedIn приостановлены');
+    expect(host.textContent).toContain('LinkedIn ограничил запрос');
+
+    await act(async () => button('Возобновить вручную').click());
+    expect(safetyApi.resumeLinkedinActions).toHaveBeenCalledOnce();
+    expect(host.textContent).not.toContain('Действия LinkedIn приостановлены');
+    expect(host.textContent).toContain('Пауза снята. Следующий запуск потребует вашего подтверждения.');
+  });
+  it('keeps the stop visible when manual resume fails', async () => {
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockResolvedValue({
+      paused: true,
+      reason: 'challenge_required',
+      canResume: true,
+      updatedAt: null,
+    });
+    vi.mocked(safetyApi.resumeLinkedinActions).mockRejectedValue(new Error('private detail'));
+
+    await render();
+    await act(async () => button('Возобновить вручную').click());
+
+    expect(host.textContent).toContain('Действия LinkedIn приостановлены');
+    expect(host.textContent).toContain('Не получилось снять паузу');
+    expect(host.textContent).not.toContain('private detail');
+  });
+  it('does not hide an unavailable safety status behind an empty state', async () => {
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockRejectedValue(new Error('private detail'));
+
+    await render();
+
+    expect(host.textContent).toContain('Не удалось проверить статус действий LinkedIn.');
+    expect(host.textContent).not.toContain('private detail');
+  });
+  it('shows that the safety status is still being checked', async () => {
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockReturnValue(new Promise(() => undefined));
+
+    await render();
+
+    expect(host.textContent).toContain('Проверяем статус действий LinkedIn');
+    expect(host.querySelector('[role="status"][aria-busy="true"]')).not.toBeNull();
   });
 });

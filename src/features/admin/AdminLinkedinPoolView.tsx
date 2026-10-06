@@ -49,6 +49,7 @@ import {
 import { TimezoneSelect } from '../shell/TimezoneSelect';
 import { AdminLinkedinRemoteLoginPanel } from './AdminLinkedinRemoteLoginPanel';
 import { useRemoteLoginLauncher } from './useRemoteLoginLauncher';
+import { adminLinkedinFailureCopy } from './linkedinPoolStatusCopy';
 import {
   DEFAULT_ACCOUNT_TIMEZONE,
   formatTimezoneDisplay,
@@ -106,21 +107,6 @@ function formatMoment(value: string | null): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
-}
-
-function failureCopy(code: LinkedinPoolAccount['lastFailureCode']): string | null {
-  switch (code) {
-    case 'session_runtime_unavailable':
-      return 'Окно ручного входа доступно только в приложении OpenQareer Desktop.';
-    case 'provider_probe_unavailable':
-      return 'Автоматическая проверка сессии пока недоступна. Откройте вход в отдельном окне ещё раз.';
-    case 'provider_permission_required':
-      return 'Источник LinkedIn отключён: для него нет разрешения провайдера.';
-    case 'provider_probe_failed':
-      return 'LinkedIn не подтвердил эту сессию. Повторите вход в отдельном окне.';
-    default:
-      return null;
-  }
 }
 
 function capabilityCopy(value: LinkedinPoolAccount['capabilityVerdict']): string {
@@ -652,10 +638,10 @@ export function AdminLinkedinPoolView() {
                       : 'Окно LinkedIn открыто. Ожидаем подтверждение входа…'}
                   </p>
                 ) : null}
-                {failureCopy(account.lastFailureCode) ? (
-                  <p className="admin-linkedin-card__failure">
+                {adminLinkedinFailureCopy(account.lastFailureCode) ? (
+                  <p className="admin-linkedin-card__failure" role="status">
                     <WarningCircle size={16} aria-hidden="true" />
-                    {failureCopy(account.lastFailureCode)}
+                    {adminLinkedinFailureCopy(account.lastFailureCode)}
                   </p>
                 ) : null}
                 <dl className="admin-linkedin-card__meta">

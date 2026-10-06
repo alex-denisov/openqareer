@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkActionCapacity,
+  classifyLinkedinSafetyStopReason,
   DEFAULT_CANDIDATE_ACTION_LIMITS,
   getCandidateActionPauseMs,
   isAllowedCandidateActionTarget,
@@ -100,16 +101,35 @@ describe('candidateActionPolicy', () => {
     expect(isAllowedCandidateActionTarget('hh', 'https://hh.ru/vacancy/123')).toBe(true);
     expect(isAllowedCandidateActionTarget('hh', 'https://www.hh.ru/vacancy/123')).toBe(true);
     expect(isAllowedCandidateActionTarget('hh', 'https://jobs.hh.ru/vacancy/123')).toBe(false);
-    expect(isAllowedCandidateActionTarget('linkedin', 'https://www.linkedin.com/jobs/view/123')).toBe(true);
+    expect(
+      isAllowedCandidateActionTarget('linkedin', 'https://www.linkedin.com/jobs/view/123'),
+    ).toBe(true);
     expect(isAllowedCandidateActionTarget('hh', 'http://hh.ru/vacancy/123')).toBe(false);
     expect(isAllowedCandidateActionTarget('hh', 'https://not-hh.ru/vacancy/123')).toBe(false);
-    expect(isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com.evil.test/jobs/view/123')).toBe(false);
-    expect(isAllowedCandidateActionTarget('linkedin', 'https://user:pass@linkedin.com/jobs/view/123')).toBe(false);
-    expect(isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com:8443/jobs/view/123')).toBe(false);
+    expect(
+      isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com.evil.test/jobs/view/123'),
+    ).toBe(false);
+    expect(
+      isAllowedCandidateActionTarget('linkedin', 'https://user:pass@linkedin.com/jobs/view/123'),
+    ).toBe(false);
+    expect(
+      isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com:8443/jobs/view/123'),
+    ).toBe(false);
   });
 
   it('chooses randomized inter-action pauses within the policy window', () => {
     expect(getCandidateActionPauseMs(() => 0)).toBe(3_000);
     expect(getCandidateActionPauseMs(() => 0.999999)).toBe(30_000);
+  });
+
+  it.each([
+    ['checkpoint_required', 'challenge_required'],
+    ['http_403', 'platform_restricted'],
+    ['rate_limit', 'platform_restricted'],
+    ['unexpected_page', 'unexpected_page'],
+    ['unclassified provider failure', 'provider_error'],
+    [undefined, 'provider_error'],
+  ] as const)('classifies LinkedIn failure %s into a safe stop reason', (signal, expected) => {
+    expect(classifyLinkedinSafetyStopReason(signal)).toBe(expected);
   });
 });

@@ -14,16 +14,38 @@ describe('candidate draft storage', () => {
     const db = new DatabaseSync(databasePath);
     const candidate = store.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
     const repo = new SqliteCandidateDraftRepository(db);
-    repo.create({ candidateId: candidate.id, kind: 'post', topic: 'Опыт', text: 'Мой опыт.', localDate: '2026-09-30' });
+    repo.create({
+      candidateId: candidate.id,
+      kind: 'post',
+      topic: 'Опыт',
+      text: 'Мой опыт.',
+      localDate: '2026-09-30',
+    });
     expect(store.deleteCandidate(candidate.id)).toBe(true);
     expect(repo.listRecent(candidate.id)).toEqual([]);
-    expect(() => repo.create({ candidateId: candidate.id, kind: 'post', topic: 'Опыт', text: 'Опоздавший.', localDate: '2026-09-30' })).toThrow('candidate_not_found');
-    db.close(); store.close(); rmSync(directory, { recursive: true, force: true });
+    expect(() =>
+      repo.create({
+        candidateId: candidate.id,
+        kind: 'post',
+        topic: 'Опыт',
+        text: 'Опоздавший.',
+        localDate: '2026-09-30',
+      }),
+    ).toThrow('candidate_not_found');
+    db.close();
+    store.close();
+    rmSync(directory, { recursive: true, force: true });
   });
   it('persists drafts, scopes reads and status changes, and counts local days by kind', () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateDraftRepository(db);
-    const draft = repo.create({ candidateId: 'alice', kind: 'comment', topic: 'Опыт', text: 'Мой опыт.', localDate: '2026-09-30' });
+    const draft = repo.create({
+      candidateId: 'alice',
+      kind: 'comment',
+      topic: 'Опыт',
+      text: 'Мой опыт.',
+      localDate: '2026-09-30',
+    });
     expect(repo.listRecent('alice')).toEqual([draft]);
     expect(repo.listRecent('bob')).toEqual([]);
     expect(repo.setStatus('bob', draft.id, 'copied')).toBeNull();

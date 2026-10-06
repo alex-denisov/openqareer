@@ -15,11 +15,18 @@ export interface LinkedinPoolExecutorDailyUsage {
 const WORKER_ACTOR = { actorUserId: 'linkedin-pool-worker', actorUsername: 'maintenance' };
 const COMPANY_HASH = /^[a-f0-9]{64}$/u;
 
-/** Сохраняет stop-state в существующей схеме и сразу удаляет bearer cookies. */
-export function markLinkedinPoolAccountNeedsReauth(
+export type LinkedinExecutorStopReason =
+  | 'challenge_required'
+  | 'expired'
+  | 'login_required'
+  | 'platform_restricted'
+  | 'unexpected_page';
+
+/** Persists a manual-review stop; only invalid sessions lose their stored cookies. */
+export function pauseLinkedinPoolAccountForManualReview(
   database: DatabaseSync,
   accountId: string,
-  reason: 'challenge_required' | 'expired' | 'login_required',
+  reason: LinkedinExecutorStopReason,
   now: Date,
 ): boolean {
   database.exec('BEGIN IMMEDIATE');
@@ -35,12 +42,14 @@ export function markLinkedinPoolAccountNeedsReauth(
     database
       .prepare(
         `UPDATE linkedin_pool_accounts SET state = 'user_action_required',
-          last_failure_code = 'needs_reauth', last_heartbeat_at = ?, lease_until = NULL,
+          last_failure_code = ?, last_heartbeat_at = ?, lease_until = NULL,
           revision = revision + 1, updated_at = ? WHERE id = ? AND state = 'ready'`,
       )
-      .run(timestamp, timestamp, accountId);
-    database.prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ?').run(accountId);
-    insertAudit(database, 'needs_reauth', accountId, `reason=${reason}`, timestamp);
+      .run(reason, timestamp, timestamp, accountId);
+    if (reason === 'challenge_required' || reason === 'expired' || reason === 'login_required') {
+      database.prepare('DELETE FROM linkedin_pool_sessions WHERE account_id = ?').run(accountId);
+    }
+    insertAudit(database, 'linkedin_executor_paused', accountId, `reason=${reason}`, timestamp);
     database.exec('COMMIT');
     return true;
   } catch (error) {

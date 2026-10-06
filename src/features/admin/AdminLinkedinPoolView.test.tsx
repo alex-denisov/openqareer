@@ -4,6 +4,7 @@ import {
   AdminLinkedinPoolView,
   isSafeAdminLinkedinSessionPage,
 } from './AdminLinkedinPoolView';
+import { adminLinkedinFailureCopy } from './linkedinPoolStatusCopy';
 
 describe('AdminLinkedinPoolView', () => {
   it('names the admin-only identifier boundary and desktop login flow', () => {
@@ -73,5 +74,11 @@ describe('AdminLinkedinPoolView', () => {
         captcha: false,
       }),
     ).toBe(false);
+  });
+
+  it('shows a plain manual-review reason for safety stops without exposing provider payloads', () => {
+    expect(adminLinkedinFailureCopy('platform_restricted')).toMatch(/остановлен/u);
+    expect(adminLinkedinFailureCopy('unexpected_page')).toMatch(/неожидан/u);
+    expect(adminLinkedinFailureCopy('challenge_required')).toMatch(/вручную/u);
   });
 });

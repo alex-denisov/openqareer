@@ -21,7 +21,10 @@ function sessionResolver(): CandidateActionSessionResolver {
   };
 }
 
-function grantActionConsent(db: DatabaseSync, candidateId = 'cand-1'): SqliteCapabilityConsentStore {
+function grantActionConsent(
+  db: DatabaseSync,
+  candidateId = 'cand-1',
+): SqliteCapabilityConsentStore {
   const store = new SqliteCapabilityConsentStore(db);
   store.recordConsent({
     userId: candidateId,
@@ -42,11 +45,15 @@ describe('CandidateActionExecutor', () => {
       consentStore: grantActionConsent(db),
     });
 
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: true,
-      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
-    })).rejects.toThrow(CandidateRunnerNotConnectedError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+        ],
+      }),
+    ).rejects.toThrow(CandidateRunnerNotConnectedError);
     expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
   });
 
@@ -66,11 +73,15 @@ describe('CandidateActionExecutor', () => {
       consentStore,
     });
 
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: true,
-      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://evil.example/vacancy/123' }],
-    })).rejects.toThrow(CandidateActionTargetError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://evil.example/vacancy/123' },
+        ],
+      }),
+    ).rejects.toThrow(CandidateActionTargetError);
     expect(resolve).not.toHaveBeenCalled();
     expect(run).not.toHaveBeenCalled();
     expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
@@ -144,11 +155,15 @@ describe('CandidateActionExecutor', () => {
       consentStore: grantActionConsent(db),
     });
 
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: false,
-      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
-    })).rejects.toThrow(CandidateConfirmationRequiredError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: false,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+        ],
+      }),
+    ).rejects.toThrow(CandidateConfirmationRequiredError);
   });
 
   it('rejects execution when actions_on_behalf consent is missing', async () => {
@@ -160,11 +175,15 @@ describe('CandidateActionExecutor', () => {
       consentStore: new SqliteCapabilityConsentStore(db),
     });
 
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: true,
-      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
-    })).rejects.toThrow(CandidateConsentRequiredError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+        ],
+      }),
+    ).rejects.toThrow(CandidateConsentRequiredError);
   });
 
   it('executes a confirmed and consented batch and retains only status metadata', async () => {
@@ -182,20 +201,24 @@ describe('CandidateActionExecutor', () => {
       candidateId: 'cand-1',
       confirmedByCandidate: true,
       nowIso: daytime,
-      actions: [{
-        platform: 'hh',
-        actionKind: 'hh_apply',
-        applicationId: 'app-1',
-        targetUrl: 'https://hh.ru/vacancy/123',
-        letterText: 'Сопроводительное письмо',
-      }],
+      actions: [
+        {
+          platform: 'hh',
+          actionKind: 'hh_apply',
+          applicationId: 'app-1',
+          targetUrl: 'https://hh.ru/vacancy/123',
+          letterText: 'Сопроводительное письмо',
+        },
+      ],
     });
 
     expect(result.status).toBe('completed');
     expect(result.receipts[0]?.status).toBe('delivered');
     expect(result.receipts[0]).not.toHaveProperty('targetUrl');
     expect(result.receipts[0]).not.toHaveProperty('letterText');
-    const stored = db.prepare('SELECT target_url, letter_cipher, confirmation_url FROM candidate_action_receipts').get();
+    const stored = db
+      .prepare('SELECT target_url, letter_cipher, confirmation_url FROM candidate_action_receipts')
+      .get();
     expect(stored).toEqual({ target_url: '', letter_cipher: null, confirmation_url: null });
     expect(repo.getDailyUsage('cand-1', '2026-10-01').hhAppliesCount).toBe(1);
   });
@@ -269,7 +292,9 @@ describe('CandidateActionExecutor', () => {
     let release!: () => void;
     const runner = {
       async run(): Promise<RunnerOutcome> {
-        await new Promise<void>((resolve) => { release = resolve; });
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
         return { status: 'delivered', providerStatus: 'hh_response_submitted' };
       },
     };
@@ -287,7 +312,11 @@ describe('CandidateActionExecutor', () => {
       nowIso: daytime,
       actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
     });
-    await vi.waitFor(() => expect(repo.listReceipts('cand-1', 10, '00000000-0000-4000-8000-000000000010')[0]?.status).toBe('pending'));
+    await vi.waitFor(() =>
+      expect(
+        repo.listReceipts('cand-1', 10, '00000000-0000-4000-8000-000000000010')[0]?.status,
+      ).toBe('pending'),
+    );
     release();
     await expect(running).resolves.toMatchObject({ status: 'completed' });
   });
@@ -302,7 +331,9 @@ describe('CandidateActionExecutor', () => {
       sessionResolver: sessionResolver(),
       consentStore: grantActionConsent(db),
       random: () => 0.5,
-      pause: async (milliseconds) => { waits.push(milliseconds); },
+      pause: async (milliseconds) => {
+        waits.push(milliseconds);
+      },
     });
 
     await executor.executeBatch({
@@ -323,7 +354,10 @@ describe('CandidateActionExecutor', () => {
   it('blocks quiet hours and packages that exceed the remaining daily allowance before execution', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-    const run = vi.fn(async (): Promise<RunnerOutcome> => ({ status: 'delivered', providerStatus: 'hh_response_submitted' }));
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({
+      status: 'delivered',
+      providerStatus: 'hh_response_submitted',
+    }));
     const executor = new CandidateActionExecutor({
       repository: repo,
       runner: { run },
@@ -331,24 +365,28 @@ describe('CandidateActionExecutor', () => {
       consentStore: grantActionConsent(db),
     });
 
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: true,
-      nowIso: '2026-10-01T01:00:00Z',
-      clientTimezone: 'Europe/Moscow',
-      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' }],
-    })).rejects.toThrow(CandidateActionLimitError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        nowIso: '2026-10-01T01:00:00Z',
+        clientTimezone: 'Europe/Moscow',
+        actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' }],
+      }),
+    ).rejects.toThrow(CandidateActionLimitError);
     repo.recordActionUsage('cand-1', '2026-10-01', 'hh_apply', daytime);
-    await expect(executor.executeBatch({
-      candidateId: 'cand-1',
-      confirmedByCandidate: true,
-      nowIso: daytime,
-      actions: Array.from({ length: 15 }, (_, index) => ({
-        platform: 'hh' as const,
-        actionKind: 'hh_apply' as const,
-        targetUrl: `https://hh.ru/vacancy/${index + 1}`,
-      })),
-    })).rejects.toThrow(CandidateActionLimitError);
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        nowIso: daytime,
+        actions: Array.from({ length: 15 }, (_, index) => ({
+          platform: 'hh' as const,
+          actionKind: 'hh_apply' as const,
+          targetUrl: `https://hh.ru/vacancy/${index + 1}`,
+        })),
+      }),
+    ).rejects.toThrow(CandidateActionLimitError);
     expect(run).not.toHaveBeenCalled();
   });
 
@@ -358,7 +396,10 @@ describe('CandidateActionExecutor', () => {
     const stages: Record<string, string> = { 'app-1': 'saved', 'app-2': 'saved' };
     const patches: Array<{ applicationId: string; expectedVersion: number; stage?: string }> = [];
     const tracker: CandidateApplicationTracker = {
-      getApplication: (_candidateId, applicationId) => ({ version: 7, stage: stages[applicationId] ?? 'saved' }),
+      getApplication: (_candidateId, applicationId) => ({
+        version: 7,
+        stage: stages[applicationId] ?? 'saved',
+      }),
       patchApplication: (_candidateId, applicationId, patch) => {
         patches.push({ applicationId, ...patch });
         if (patch.stage) stages[applicationId] = patch.stage;
@@ -386,19 +427,167 @@ describe('CandidateActionExecutor', () => {
       confirmedByCandidate: true,
       nowIso: daytime,
       actions: [
-        { platform: 'hh', actionKind: 'hh_apply', applicationId: 'app-1', targetUrl: 'https://hh.ru/vacancy/1' },
-        { platform: 'hh', actionKind: 'hh_apply', applicationId: 'app-2', targetUrl: 'https://hh.ru/vacancy/2' },
+        {
+          platform: 'hh',
+          actionKind: 'hh_apply',
+          applicationId: 'app-1',
+          targetUrl: 'https://hh.ru/vacancy/1',
+        },
+        {
+          platform: 'hh',
+          actionKind: 'hh_apply',
+          applicationId: 'app-2',
+          targetUrl: 'https://hh.ru/vacancy/2',
+        },
       ],
     });
 
     expect(result.status).toBe('partial_failure');
     expect(stages['app-1']).toBe('applied');
     expect(stages['app-2']).toBe('saved');
-    expect(patches).toEqual([{
-      applicationId: 'app-1',
-      expectedVersion: 7,
-      stage: 'applied',
-      occurredAt: '2026-10-01T12:00:00.000Z',
-    }]);
+    expect(patches).toEqual([
+      {
+        applicationId: 'app-1',
+        expectedVersion: 7,
+        stage: 'applied',
+        occurredAt: '2026-10-01T12:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('pauses only this candidate’s LinkedIn actions on a platform restriction and stops the batch', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const calls: string[] = [];
+    const runner = {
+      async run(action: { targetUrl: string }): Promise<RunnerOutcome> {
+        calls.push(action.targetUrl);
+        return { status: 'attempted', failureCode: 'http_429' };
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [
+        {
+          platform: 'linkedin',
+          actionKind: 'linkedin_easy_apply',
+          targetUrl: 'https://www.linkedin.com/jobs/view/1',
+        },
+        {
+          platform: 'linkedin',
+          actionKind: 'linkedin_easy_apply',
+          targetUrl: 'https://www.linkedin.com/jobs/view/2',
+        },
+      ],
+    });
+
+    expect(calls).toEqual(['https://www.linkedin.com/jobs/view/1']);
+    expect(result.receipts).toHaveLength(2);
+    expect(result.receipts[1]?.failureCode).toBe('batch_stopped');
+    expect(repo.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({
+      paused: true,
+      reason: 'platform_restricted',
+      canResume: true,
+    });
+    expect(repo.getLinkedinSafetyStopStatus('cand-2').paused).toBe(false);
+    expect(repo.isKillSwitchActive('hh', 'cand-1')).toBe(false);
+  });
+
+  it('stores a safe provider error code instead of raw LinkedIn exception details', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const runner = {
+      async run(): Promise<RunnerOutcome> {
+        throw new Error('https://www.linkedin.com/auth?token=synthetic-secret');
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [
+        {
+          platform: 'linkedin',
+          actionKind: 'linkedin_easy_apply',
+          targetUrl: 'https://www.linkedin.com/jobs/view/123',
+        },
+      ],
+    });
+
+    expect(JSON.stringify(result)).not.toContain('synthetic-secret');
+    expect(repo.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({
+      paused: true,
+      reason: 'provider_error',
+    });
+  });
+
+  it('does not dispatch concurrent LinkedIn runner calls for the same candidate', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    let markStarted!: () => void;
+    let releaseRunner!: () => void;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const blocked = new Promise<void>((resolve) => {
+      releaseRunner = resolve;
+    });
+    const calls: string[] = [];
+    const runner = {
+      async run(action: { targetUrl: string }): Promise<RunnerOutcome> {
+        calls.push(action.targetUrl);
+        markStarted();
+        await blocked;
+        return { status: 'delivered', providerStatus: 'linkedin_application_submitted' };
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
+    const action = {
+      platform: 'linkedin' as const,
+      actionKind: 'linkedin_easy_apply' as const,
+      targetUrl: 'https://www.linkedin.com/jobs/view/123',
+    };
+    const first = executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [action],
+    });
+    await started;
+    const second = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [action],
+    });
+    releaseRunner();
+    await first;
+
+    expect(calls).toEqual([action.targetUrl]);
+    expect(second.receipts[0]?.failureCode).toBe('linkedin_action_in_progress');
   });
 });

@@ -10,7 +10,7 @@ import {
 import { isLinkedinSessionCookieDomain, type LinkedinSessionCookie } from './sessionContract';
 import {
   getLinkedinExecutorDailyUsage,
-  markLinkedinPoolAccountNeedsReauth,
+  pauseLinkedinPoolAccountForManualReview,
   recordLinkedinExecutorCompanyAttempt,
   recordLinkedinExecutorPageAttempt,
 } from './executorAuditRepository';
@@ -354,7 +354,7 @@ describe('SqliteLinkedinPoolRepository', () => {
     repository.storeSessionCookies(account.id, sessionCookies(), actor);
 
     expect(
-      markLinkedinPoolAccountNeedsReauth(
+      pauseLinkedinPoolAccountForManualReview(
         repository.getDatabase(),
         account.id,
         'challenge_required',
@@ -362,7 +362,7 @@ describe('SqliteLinkedinPoolRepository', () => {
       ),
     ).toBe(true);
     expect(
-      markLinkedinPoolAccountNeedsReauth(
+      pauseLinkedinPoolAccountForManualReview(
         repository.getDatabase(),
         account.id,
         'challenge_required',
@@ -371,7 +371,7 @@ describe('SqliteLinkedinPoolRepository', () => {
     ).toBe(false);
     expect(repository.list({ limit: 25, offset: 0 }).accounts[0]).toMatchObject({
       state: 'user_action_required',
-      lastFailureCode: 'needs_reauth',
+      lastFailureCode: 'challenge_required',
       serverSession: null,
     });
     expect(repository.readSessionCookies(account.id)).toBeNull();
@@ -380,7 +380,7 @@ describe('SqliteLinkedinPoolRepository', () => {
         .getDatabase()
         .prepare('SELECT state, last_failure_code FROM linkedin_pool_accounts WHERE id = ?')
         .get(account.id),
-    ).toEqual({ state: 'user_action_required', last_failure_code: 'needs_reauth' });
+    ).toEqual({ state: 'user_action_required', last_failure_code: 'challenge_required' });
   });
 
   it('persists page budget and company hashes without audit payloads', () => {

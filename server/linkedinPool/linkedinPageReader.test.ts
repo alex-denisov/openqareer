@@ -18,14 +18,16 @@ const signal = () => new AbortController().signal;
 afterEach(() => vi.useRealTimers());
 describe('LinkedIn page reader', () => {
   it.each([
-    ['<main>Verify your identity</main>', 'https://www.linkedin.com/company/northwind/people/', 200],
-    [html, 'https://www.linkedin.com/checkpoint/challenge/', 200],
-    ['<input name="session_key">', 'https://www.linkedin.com/login', 200],
-    [html, 'https://www.linkedin.com/company/northwind/people/', 429],
-  ])('closes blocked HTML before any wheel, geometry read or delay', async (body, url, statusCode) => {
+    ['<main data-test-id="security-verification"><h1>Verify your identity</h1></main>', 'https://www.linkedin.com/company/northwind/people/', 200, 'challenge_required'],
+    [html, 'https://www.linkedin.com/checkpoint/challenge/', 200, 'challenge_required'],
+    ['<input name="session_key">', 'https://www.linkedin.com/login', 200, 'login_required'],
+    [html, 'https://www.linkedin.com/company/northwind/people/', 429, 'platform_restricted'],
+    ['<main><div role="alert">Something went wrong</div></main>', 'https://www.linkedin.com/company/northwind/people/', 200, 'unexpected_page'],
+    [html, 'https://www.linkedin.com/company/northwind/people/', 503, 'unexpected_page'],
+  ] as const)('closes blocked HTML before any wheel, geometry read or delay', async (body, url, statusCode, reason) => {
     const page = fixture(body, url);
     const wait = vi.fn();
-    expect(await readLinkedinPage(page, { statusCode, kind: 'read', signal: signal(), wait, random: () => 0.5 })).toMatchObject({ status: 'needs_reauth' });
+    expect(await readLinkedinPage(page, { statusCode, kind: 'read', signal: signal(), wait, random: () => 0.5 })).toMatchObject({ status: 'needs_reauth', reason });
     expect(page.close).toHaveBeenCalledOnce();
     expect(page.mouse.wheel).not.toHaveBeenCalled();
     expect(page.evaluate).not.toHaveBeenCalled();
@@ -48,7 +50,7 @@ describe('LinkedIn page reader', () => {
     expect(page.locatorClick).not.toHaveBeenCalled();
   });
   it('preserves needs_reauth even if closing the blocked page fails', async () => {
-    const page = fixture('<main>Verify your identity</main>');
+    const page = fixture('<main data-test-id="security-verification"><h1>Verify your identity</h1></main>');
     page.close.mockRejectedValue(new Error('page close failed'));
     expect(await readLinkedinPage(page, { kind: 'read', signal: signal(), random: () => 0.5,
       wait: async () => undefined,
@@ -57,7 +59,7 @@ describe('LinkedIn page reader', () => {
   });
   it('stops immediately when a challenge appears during reading', async () => {
     const page = fixture();
-    page.content.mockResolvedValueOnce(html).mockResolvedValueOnce(html).mockResolvedValue('<main>Verify your identity</main>');
+    page.content.mockResolvedValueOnce(html).mockResolvedValueOnce(html).mockResolvedValue('<main data-test-id="security-verification"><h1>Verify your identity</h1></main>');
     expect(await readLinkedinPage(page, { kind: 'read', signal: signal(), random: () => 0.5, wait: async () => undefined })).toMatchObject({ status: 'needs_reauth' });
     expect(page.mouse.wheel).toHaveBeenCalledTimes(1);
     expect(page.close).toHaveBeenCalledOnce();

@@ -118,6 +118,40 @@ export interface CandidateActionUsageSummary {
 
 export type CandidateActionKind = 'hh_apply' | 'hh_resume_boost' | 'linkedin_easy_apply';
 
+export type CandidateLinkedinSafetyStopReason =
+  | 'challenge_required'
+  | 'platform_restricted'
+  | 'unexpected_page'
+  | 'provider_error';
+
+/** Any non-success from a LinkedIn runner is a stop signal; unknowns fail closed. */
+export function classifyLinkedinSafetyStopReason(
+  signal: string | null | undefined,
+): CandidateLinkedinSafetyStopReason {
+  const value = (signal ?? '').slice(0, 256).toLowerCase();
+  if (/challenge|checkpoint|captcha|verification|login_required|reauth|session_expired/u.test(value)) {
+    return 'challenge_required';
+  }
+  if (/403|429|999|rate.?limit|restrict|forbidden|blocked|access_denied/u.test(value)) {
+    return 'platform_restricted';
+  }
+  if (/unexpected|page|response|html|parse|schema/u.test(value)) {
+    return 'unexpected_page';
+  }
+  return 'provider_error';
+}
+
+export function isCandidateLinkedinSafetyStopReason(
+  value: string | null | undefined,
+): value is CandidateLinkedinSafetyStopReason {
+  return (
+    value === 'challenge_required' ||
+    value === 'platform_restricted' ||
+    value === 'unexpected_page' ||
+    value === 'provider_error'
+  );
+}
+
 export interface ActionCapacityVerdict {
   readonly allowed: boolean;
   readonly code?: 'quiet_hours' | 'daily_limit_reached' | 'boost_interval_unexpired';

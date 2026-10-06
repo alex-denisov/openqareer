@@ -23,6 +23,8 @@ export type LinkedinFailureCode =
   | 'provider_probe_unavailable'
   | 'provider_probe_failed'
   | 'challenge_required'
+  | 'platform_restricted'
+  | 'unexpected_page'
   | 'expired'
   | 'revoked'
   | 'banned'

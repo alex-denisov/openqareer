@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from 'playwright';
 import {
+  classifyLinkedinSafetyStopReason,
   type CandidateActionKind,
   checkActionCapacity,
   getCandidateActionPauseMs,
@@ -14,6 +15,9 @@ import {
 } from '../../shared/timezoneUtils';
 import type { SqliteCandidateActionRepository, StoredActionReceipt } from './sqliteCandidateActionRepository';
 import type { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+
+/** Process-local guard matches the single service process; use a shared lock before scaling. */
+const LINKEDIN_CANDIDATES_IN_FLIGHT = new Set<string>();
 
 export interface CandidateApplicationTracker {
   getApplication(candidateId: string, applicationId: string): { version: number; stage: string } | null;
@@ -318,11 +322,26 @@ export class CandidateActionExecutor {
     // Reserve the daily slot synchronously before the first provider-side effect.
     this.repository.recordActionUsage(input.candidateId, localDate, action.actionKind, now.toISOString());
     const session = prepared.sessions.get(action.platform)!;
+    const linkedin = action.platform === 'linkedin';
+    if (linkedin && LINKEDIN_CANDIDATES_IN_FLIGHT.has(input.candidateId)) {
+      return this.recordAttempted(action, input, prepared, 'linkedin_action_in_progress', now);
+    }
+    if (linkedin) LINKEDIN_CANDIDATES_IN_FLIGHT.add(input.candidateId);
     let outcome: RunnerOutcome;
     try {
       outcome = await this.runner!.run(action, session);
     } catch {
       outcome = { status: 'failed', failureCode: 'runner_error' };
+    } finally {
+      if (linkedin) LINKEDIN_CANDIDATES_IN_FLIGHT.delete(input.candidateId);
+    }
+    if (linkedin && outcome.status !== 'delivered') {
+      // Любой сигнал платформы, кроме успеха, останавливает LinkedIn кандидата; неизвестное — закрыто.
+      this.repository.setKillSwitch(
+        `candidate:${input.candidateId}:linkedin`,
+        true,
+        classifyLinkedinSafetyStopReason(outcome.failureCode),
+      );
     }
     return this.recordOutcome(action, input, prepared, outcome, now);
   }

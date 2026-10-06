@@ -36,11 +36,20 @@ describe('SqliteCandidateActionRepository', () => {
     const repository = new SqliteCandidateActionRepository(database);
     const receipts = repository.listReceipts('candidate-1', 10);
     expect(receipts).toHaveLength(1);
-    expect(receipts[0]).toMatchObject({ id: 'old-1', status: 'delivered', failureCode: 'legacy_failure' });
+    expect(receipts[0]).toMatchObject({
+      id: 'old-1',
+      status: 'delivered',
+      failureCode: 'legacy_failure',
+    });
     expect(receipts[0]).not.toHaveProperty('targetUrl');
     expect(receipts[0]).not.toHaveProperty('letterText');
-    expect(database.prepare('SELECT target_url, confirmation_url, letter_cipher, resume_id FROM candidate_action_receipts').get())
-      .toEqual({ target_url: '', confirmation_url: null, letter_cipher: null, resume_id: null });
+    expect(
+      database
+        .prepare(
+          'SELECT target_url, confirmation_url, letter_cipher, resume_id FROM candidate_action_receipts',
+        )
+        .get(),
+    ).toEqual({ target_url: '', confirmation_url: null, letter_cipher: null, resume_id: null });
 
     const failed = repository.recordReceipt({
       id: 'failed-1',
@@ -53,5 +62,47 @@ describe('SqliteCandidateActionRepository', () => {
       executedAt: '2026-10-01T12:01:00.000Z',
     });
     expect(failed.status).toBe('failed');
+  });
+});
+
+describe('candidate LinkedIn safety stop status', () => {
+  it('reports a candidate-scoped stop reason without returning its storage scope', () => {
+    const repository = new SqliteCandidateActionRepository(new DatabaseSync(':memory:'));
+    repository.setKillSwitch('candidate:cand-1:linkedin', true, 'challenge_required');
+
+    expect(repository.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({
+      paused: true,
+      reason: 'challenge_required',
+      canResume: true,
+    });
+    expect(JSON.stringify(repository.getLinkedinSafetyStopStatus('cand-1'))).not.toContain(
+      'cand-1',
+    );
+    expect(repository.getLinkedinSafetyStopStatus('cand-2')).toMatchObject({
+      paused: false,
+      reason: null,
+    });
+  });
+
+  it('does not disclose a global pause reason or allow a candidate to resume it', () => {
+    const repository = new SqliteCandidateActionRepository(new DatabaseSync(':memory:'));
+    repository.setKillSwitch('platform:linkedin', true, 'private-operator-note');
+
+    expect(repository.getLinkedinSafetyStopStatus('cand-1')).toMatchObject({
+      paused: true,
+      reason: 'platform_pause',
+      canResume: false,
+    });
+    expect(JSON.stringify(repository.getLinkedinSafetyStopStatus('cand-1'))).not.toContain(
+      'private-operator-note',
+    );
+  });
+
+  it('includes the platform-specific candidate scope when enforcing a stop', () => {
+    const repository = new SqliteCandidateActionRepository(new DatabaseSync(':memory:'));
+    repository.setKillSwitch('candidate:cand-1:linkedin', true, 'challenge_required');
+
+    expect(repository.isKillSwitchActive('linkedin', 'cand-1')).toBe(true);
+    expect(repository.isKillSwitchActive('hh', 'cand-1')).toBe(false);
   });
 });

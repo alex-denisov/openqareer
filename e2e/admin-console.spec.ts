@@ -290,6 +290,65 @@ test.describe('B089 administrator console', () => {
     await expect(page.getByRole('alert')).toContainText('приложении OpenQareer Desktop');
   });
 
+  test('B395: the admin sees the reason a LinkedIn pool executor was paused', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page, ADMINISTRATOR);
+    await page.route('**/api/v1/admin/users*', (route) =>
+      route.fulfill({ json: { data: DIRECTORY } }),
+    );
+    await page.route('**/api/v1/admin/linkedin/accounts?*', (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            total: 1,
+            offset: 0,
+            nextOffset: null,
+            accounts: [
+              {
+                id: '2e6f2b8a-1e84-4f07-9c6d-f8b5a4e2e4a1',
+                adminLabel: 'Основной пул',
+                emailLogin: 'pool-admin@example.test',
+                providerAccountMarker: 'synthetic-marker',
+                profileIsolationId: 'profile-1',
+                state: 'user_action_required',
+                lastVerifiedAt: null,
+                lastHeartbeatAt: '2026-10-06T10:00:00.000Z',
+                lastFailureCode: 'platform_restricted',
+                leaseUntil: null,
+                capabilityVerdict: 'not_configured',
+                revision: 1,
+                createdAt: '2026-09-22T00:00:00.000Z',
+                updatedAt: '2026-10-06T10:00:00.000Z',
+                serverSession: null,
+              },
+            ],
+          },
+        },
+      }),
+    );
+
+    await page.goto('/admin', { waitUntil: 'domcontentloaded' });
+    await waitForLiveApp(page);
+    await page.getByRole('button', { name: 'Аккаунты LinkedIn' }).click();
+    await page.getByRole('button', { name: /pool-admin@example\.test/ }).click();
+
+    const stopReason = page.getByRole('status').filter({
+      hasText: 'Исполнитель остановлен: LinkedIn ограничил запрос.',
+    });
+    await expect(stopReason).toBeVisible();
+    const width = page.viewportSize()?.width;
+    expect(width).toBe(testInfo.project.name === 'desktop-1440' ? 1440 : 390);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+    await page.screenshot({
+      path: testInfo.outputPath(`b395-admin-linkedin-stop-${width}.png`),
+      fullPage: true,
+    });
+  });
+
   test('requires transfer confirmation, clears the local profile, and offers retry when save fails', async ({
     page,
   }, testInfo) => {

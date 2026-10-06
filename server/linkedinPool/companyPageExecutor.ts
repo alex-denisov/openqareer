@@ -21,7 +21,7 @@ import type { LinkedinSessionCookie } from './sessionContract';
 import type { OwnerTelegramOutcome } from '../notifications/ownerTelegram';
 import {
   getLinkedinExecutorDailyUsage,
-  markLinkedinPoolAccountNeedsReauth,
+  pauseLinkedinPoolAccountForManualReview,
   recordLinkedinExecutorCompanyAttempt,
   recordLinkedinExecutorNote,
   recordLinkedinExecutorPageAttempt,
@@ -107,7 +107,7 @@ interface ReadySession {
 interface PageRead {
   readonly status: 'ready' | 'needs_reauth' | 'transient_failure' | 'stopped';
   readonly html?: string;
-  readonly reason?: 'challenge_required' | 'expired' | 'login_required';
+  readonly reason?: 'challenge_required' | 'expired' | 'login_required' | 'platform_restricted' | 'unexpected_page';
   readonly failure?: string;
 }
 
@@ -245,8 +245,8 @@ export class LinkedinPoolCompanyPageExecutor {
     if (decision.status !== 'run') return report(decision.status);
 
     if (!account) return report('account_not_ready');
-    if (account.state === 'user_action_required' && account.lastFailureCode === 'needs_reauth') {
-      return this.blockForReauth('login_required');
+    if (account.state === 'user_action_required') {
+      return { ...report('needs_reauth'), reason: account.lastFailureCode ?? 'login_required' };
     }
     if (account.state !== 'ready') return report('account_not_ready');
 
@@ -439,6 +439,10 @@ export class LinkedinPoolCompanyPageExecutor {
     try {
       const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25_000 });
       if (this.stopped) return { status: 'stopped' };
+      if (!response) {
+        await page.close().catch(() => undefined);
+        return { status: 'needs_reauth', reason: 'unexpected_page' };
+      }
       this.pauseController = new AbortController();
       try {
         return await readLinkedinPage(page, {
@@ -470,22 +474,29 @@ export class LinkedinPoolCompanyPageExecutor {
   }
 
   private async blockForReauth(
-    reason: 'challenge_required' | 'expired' | 'login_required',
+    reason: 'challenge_required' | 'expired' | 'login_required' | 'platform_restricted' | 'unexpected_page',
   ): Promise<LinkedinPoolExecutorReport> {
     this.reauthRequired = true;
     const config = this.config;
     if (!config.enabled) return report('needs_reauth');
-    const changed = markLinkedinPoolAccountNeedsReauth(
+    const changed = pauseLinkedinPoolAccountForManualReview(
       this.database,
       config.accountId,
       reason,
       this.now(),
     );
-    if (!changed) return report('needs_reauth');
+    if (!changed) return { ...report('needs_reauth'), reason };
+    const reasonCopy: Record<typeof reason, string> = {
+      challenge_required: 'LinkedIn запросил проверку',
+      expired: 'сессия LinkedIn истекла',
+      login_required: 'нужен ручной вход в LinkedIn',
+      platform_restricted: 'LinkedIn ограничил запрос',
+      unexpected_page: 'получена неожиданная страница LinkedIn',
+    };
     const outcome = await this.notifyOwner(
-      'Сбор данных LinkedIn остановлен. Аккаунту выделенного пула требуется повторный вход; исполнитель не переключался на другой аккаунт.',
+      `Сбор остановлен: ${reasonCopy[reason]}. Аккаунт пула ждёт ручной проверки; автоматического переключения нет.`,
     );
-    return { ...report('needs_reauth'), notification: outcome.status };
+    return { ...report('needs_reauth'), reason, notification: outcome.status };
   }
 
   private async waitBetweenPages(kind: CadencePageKind): Promise<void> {
