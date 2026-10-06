@@ -53,6 +53,11 @@ function registrationValidationError(
   );
 }
 
+function clientDeviceIdFrom(request: FastifyRequest): string | undefined {
+  const deviceId = request.headers['x-openqareer-device-id'];
+  return typeof deviceId === 'string' ? deviceId : undefined;
+}
+
 async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const parsed = registrationSchema.safeParse(request.body);
@@ -62,17 +67,20 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
   if (await rejectRegistrationIfLimited(deps, request, reply)) return reply;
 
   try {
-    const authenticated = await deps.authService.register(
-      deriveUsernameFromEmail(body.email, (candidate) =>
-        deps.authService.isUsernameTaken(candidate),
-      ),
-      body.password,
-      deps.candidateStore,
-      {
-        email: body.email,
-        displayName: body.displayName,
-      },
+    const username = deriveUsernameFromEmail(body.email, (candidate) =>
+      deps.authService.isUsernameTaken(candidate),
     );
+    const profile = { email: body.email, displayName: body.displayName };
+    const deviceId = clientDeviceIdFrom(request);
+    const authenticated = deviceId
+      ? await deps.authService.register(
+          username,
+          body.password,
+          deps.candidateStore,
+          profile,
+          deviceId,
+        )
+      : await deps.authService.register(username, body.password, deps.candidateStore, profile);
     // The proof is written with the account, so no user can exist without a
     // record of the documents they accepted (B173).
     deps.authService.recordLegalConsent?.({
@@ -133,7 +141,10 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
     return csrfError(request, reply);
   }
   const body = loginSchema.parse(request.body);
-  const authenticated = await deps.authService.login(body.username, body.password);
+  const deviceId = clientDeviceIdFrom(request);
+  const authenticated = deviceId
+    ? await deps.authService.login(body.username, body.password, deviceId)
+    : await deps.authService.login(body.username, body.password);
   if (!authenticated) {
     return sendError(reply, request, 401, 'invalid_credentials', 'Неверный логин или пароль.', false);
   }

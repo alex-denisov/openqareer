@@ -121,12 +121,14 @@ async function login(
   app: Awaited<ReturnType<typeof buildApp>>,
   username: string,
   password: string,
+  deviceId?: string,
 ) {
   const response = await app.inject({
     method: 'POST',
     url: '/api/v1/auth/login',
     headers: {
       origin: 'http://localhost:3000',
+      ...(deviceId ? { 'x-openqareer-device-id': deviceId } : {}),
     },
     payload: { username, password },
   });
@@ -181,6 +183,22 @@ describe('cookie auth routes', () => {
       ],
     });
     expect(JSON.stringify(account.json())).not.toContain('oqs_');
+  });
+
+  it('returns one active session after repeated logins from one device', async () => {
+    const app = await createApp();
+    const sameDevice = '00000000-0000-4000-8000-000000000001';
+    let latest: Awaited<ReturnType<typeof login>> | undefined;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      latest = await login(app, 'candidate.test', 'candidate-password-for-tests', sameDevice);
+    }
+    const oneDevice = await app.inject({
+      method: 'GET',
+      url: '/api/v1/account',
+      headers: { cookie: latest!.cookie },
+    });
+    expect(oneDevice.json().data.sessions).toHaveLength(1);
   });
 
   it('updates candidate-owned account fields through an origin-protected route', async () => {

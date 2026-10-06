@@ -25,6 +25,7 @@ import {
   API_MUTATION_TIMEOUT_MS,
   apiRequestSignal,
   apiFetch,
+  getClientDeviceId,
   readData,
   readDataArray,
   readDataObject,
@@ -404,7 +405,7 @@ export async function getSession(signal?: AbortSignal): Promise<AuthUser | null>
 export async function login(username: string, password: string): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/login', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...clientDeviceHeader() },
     body: JSON.stringify({ username, password }),
     signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
@@ -420,11 +421,16 @@ export async function register(input: {
 }): Promise<AuthUser> {
   const response = await apiFetch('/api/v1/auth/register', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...clientDeviceHeader() },
     body: JSON.stringify(input),
     signal: AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
   });
   return readDataObject<AuthUser>(response);
+}
+
+function clientDeviceHeader(): Record<string, string> {
+  const deviceId = getClientDeviceId();
+  return deviceId ? { 'X-OpenQareer-Device-Id': deviceId } : {};
 }
 
 export async function logout(): Promise<void> {

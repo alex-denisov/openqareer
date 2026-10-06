@@ -105,5 +105,17 @@ describe('CareerAccountPanel timezone selection (B332)', () => {
     expect(html).toContain('name="timezone"');
     expect(html).toContain('Сохранить часовой пояс');
   });
-});
 
+  it('labels the active session count as a device count', () => {
+    const html = renderToStaticMarkup(
+      <CareerAccountPanel
+        initialUser={user as never}
+        initialSection="security"
+        onClose={() => undefined}
+        onIdentityChange={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Устройства: 1');
+  });
+});

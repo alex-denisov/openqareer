@@ -40,6 +40,8 @@ export class CoachApiError extends Error {
 }
 
 export const SESSION_TOKEN_STORAGE_KEY = 'openqareer_session_token';
+export const CLIENT_DEVICE_ID_STORAGE_KEY = 'openqareer_client_device_id';
+const CLIENT_DEVICE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 /**
  * Истёкшая сессия — событие для всего приложения, не для экрана, который
  * первым получил `401` (PRB-038). App слушает его и уводит на вход один раз.
@@ -60,6 +62,20 @@ export function getStoredSessionToken(): string | null {
     return window.localStorage.getItem(SESSION_TOKEN_STORAGE_KEY);
   } catch {
     return null;
+  }
+}
+
+export function getClientDeviceId(): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  try {
+    const stored = window.localStorage.getItem(CLIENT_DEVICE_ID_STORAGE_KEY);
+    if (stored && CLIENT_DEVICE_ID_PATTERN.test(stored)) return stored;
+    const deviceId = globalThis.crypto?.randomUUID?.();
+    if (!deviceId) return undefined;
+    window.localStorage.setItem(CLIENT_DEVICE_ID_STORAGE_KEY, deviceId);
+    return deviceId;
+  } catch {
+    return undefined;
   }
 }
 

@@ -145,10 +145,12 @@ export interface SessionAuth {
     password: string,
     candidateStore: CandidateStore,
     profile?: RegistrationProfile,
+    clientDeviceId?: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
   login(
     identifierInput: string,
     password: string,
+    clientDeviceId?: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   isUsernameTaken(username: string): boolean;
   authenticate(sessionToken: string): AuthPrincipal | null;
