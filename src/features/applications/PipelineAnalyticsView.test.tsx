@@ -93,4 +93,62 @@ describe('PipelineAnalyticsView', () => {
     expect(html).toContain('Зарплатные ожидания');
     expect(html).toContain('Причины закрытия');
   });
+
+  it('Критерий 4: На экране воронки в тесте нет текста вида src-… / ats-…', () => {
+    const apps: readonly ApplicationView[] = [
+      makeApp({
+        id: '1',
+        vacancy: {
+          title: 'Role 1',
+          company: 'Company 1',
+          source: 'src-hh-search',
+          url: 'https://hh.ru/1',
+        },
+      }),
+      makeApp({
+        id: '2',
+        vacancy: {
+          title: 'Role 2',
+          company: 'Company 2',
+          source: 'ats-ashby-snowflake',
+          url: 'https://ashbyhq.com/2',
+        },
+      }),
+      makeApp({
+        id: '3',
+        vacancy: {
+          title: 'Role 3',
+          company: 'Company 3',
+          source: 'src-custom-board',
+          url: 'https://example.com/3',
+        },
+      }),
+    ];
+
+    const html = renderToStaticMarkup(
+      <PipelineAnalyticsView applications={apps} onOpenVacancies={() => {}} />,
+    );
+
+    // Человеческие названия присутствуют
+    expect(html).toContain('hh.ru (поиск)');
+    expect(html).toContain('ATS: Ashby · Snowflake');
+    expect(html).toContain('Custom board');
+
+    // Проверяем видимый текст элементов th: в них не должно быть сырых префиксов
+    // Извлекаем текст внутри <th ... className="career-pipeline-source-name"...>ТЕКСТ</th>
+    const thMatches = Array.from(
+      html.matchAll(/<th[^>]*class="career-pipeline-source-name"[^>]*>(.*?)<\/th>/g),
+    ).map((m) => m[1]);
+
+    expect(thMatches.length).toBe(3);
+    for (const text of thMatches) {
+      expect(text).not.toMatch(/\bsrc-/i);
+      expect(text).not.toMatch(/\bats-/i);
+    }
+
+    // Сырой id сохранён в data-source-id
+    expect(html).toContain('data-source-id="src-hh-search"');
+    expect(html).toContain('data-source-id="ats-ashby-snowflake"');
+    expect(html).toContain('data-source-id="src-custom-board"');
+  });
 });

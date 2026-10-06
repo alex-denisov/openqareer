@@ -17,6 +17,7 @@ import {
   type PipelineBottleneck,
 } from './pipelineAnalytics';
 import { archiveReasonLabel } from './archiveReasonLabel';
+import { humanSourceLabel } from './sourceLabels';
 import type { ApplicationArchiveReason } from '../../../shared/applicationArchive';
 
 export interface PipelineAnalyticsViewProps {
@@ -277,8 +278,12 @@ function SourcesTable({ sources }: { readonly sources: readonly SourceBreakdownI
           <tbody>
             {sources.map((src) => (
               <tr key={src.source}>
-                <th scope="row" className="career-pipeline-source-name">
-                  {src.sourceLabel}
+                <th
+                  scope="row"
+                  className="career-pipeline-source-name"
+                  data-source-id={src.source}
+                >
+                  {humanSourceLabel(src.source)}
                 </th>
                 <td className="is-num is-mono">{src.total}</td>
                 <td className="is-num is-mono">{src.responded}</td>
