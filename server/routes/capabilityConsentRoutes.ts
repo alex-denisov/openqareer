@@ -11,6 +11,7 @@ import {
   authenticateSession,
   csrfError,
   hasSafeMutationOrigin,
+  requireVerifiedEmail,
   sendError,
   withDeps,
 } from './helpers';
@@ -60,8 +61,14 @@ function validateConsentSubmission(
 }
 
 /** Согласие даёт только вошедший пользователь: токен кандидата без строки в users не годится. */
-function resolveUserId(deps: RouteDeps, request: FastifyRequest): string | null {
-  return authenticateSession(request, deps.authService, deps.config)?.userId ?? null;
+function resolveUserId(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): string | null | false {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (principal && !requireVerifiedEmail(request, reply, principal)) return false;
+  return principal?.userId ?? null;
 }
 
 function resolveCapability(request: FastifyRequest, reply: FastifyReply): CandidateCapability | null {
@@ -78,7 +85,9 @@ async function handleGetConsent(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const userId = resolveUserId(deps, request);
+  const resolvedUserId = resolveUserId(deps, request, reply);
+  if (resolvedUserId === false) return undefined;
+  const userId = resolvedUserId;
   if (!userId) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
@@ -102,7 +111,9 @@ async function handleListConsents(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<unknown> {
-  const userId = resolveUserId(deps, request);
+  const resolvedUserId = resolveUserId(deps, request, reply);
+  if (resolvedUserId === false) return undefined;
+  const userId = resolvedUserId;
   if (!userId) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
@@ -122,7 +133,9 @@ async function handlePostConsent(
   if (!hasSafeMutationOrigin(request, deps.config)) {
     return csrfError(request, reply);
   }
-  const userId = resolveUserId(deps, request);
+  const resolvedUserId = resolveUserId(deps, request, reply);
+  if (resolvedUserId === false) return undefined;
+  const userId = resolvedUserId;
   if (!userId) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }
@@ -169,7 +182,9 @@ async function handleDeleteConsent(
   if (!hasSafeMutationOrigin(request, deps.config)) {
     return csrfError(request, reply);
   }
-  const userId = resolveUserId(deps, request);
+  const resolvedUserId = resolveUserId(deps, request, reply);
+  if (resolvedUserId === false) return undefined;
+  const userId = resolvedUserId;
   if (!userId) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
   }

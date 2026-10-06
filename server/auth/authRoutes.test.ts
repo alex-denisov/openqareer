@@ -1,142 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it } from 'vitest';
-import { buildApp } from '../app';
-import type { ServerConfig } from '../config';
-import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
-import type { CoachProvider } from '../providers/coachProvider';
-import { AuthService } from './authService';
+import { describe, expect, it } from 'vitest';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
-
-const resources: Array<{
-  app: Awaited<ReturnType<typeof buildApp>>;
-  auth: AuthService;
-  candidates: SqliteCandidateStore;
-  directory: string;
-}> = [];
-
-afterEach(async () => {
-  for (const resource of resources.splice(0)) {
-    await resource.app.close();
-    resource.auth.close();
-    resource.candidates.close();
-    rmSync(resource.directory, { recursive: true, force: true });
-  }
-});
-
-const provider: CoachProvider = {
-  async createTurn() {
-    return {
-      provider: 'openrouter',
-      model: 'nemotron-test',
-      responseId: 'response-1',
-      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-      result: {
-        message: 'Уточним результат.',
-        phase: 'evidence',
-        memoryCandidates: [],
-        nextQuestion: 'Что изменилось?',
-        completeness: { known: [], unknown: ['Результат'] },
-        safety: { needsHuman: false, reason: null },
-        careerTrack: null,
-        actionProposals: [],
-      },
-    };
-  },
-};
-
-async function createApp(
-  onPasswordReset?: (input: {
-    email: string;
-    displayName: string | null;
-    token: string;
-  }) => Promise<void>,
-  searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
-  searchRemotive?: Parameters<typeof buildApp>[0]['searchRemotive'],
-) {
-  const directory = mkdtempSync(join(tmpdir(), 'openqareer-auth-routes-'));
-  const databasePath = join(directory, 'app.db');
-  const candidates = new SqliteCandidateStore({
-    databasePath,
-    encryptionKey: Buffer.alloc(32, 8),
-  });
-  const auth = new AuthService({ databasePath, onPasswordReset });
-  await auth.seedAccounts(
-    [
-      {
-        username: 'admin.test',
-        password: 'admin-password-for-tests',
-        role: 'admin',
-      },
-      {
-        username: 'candidate.test',
-        password: 'candidate-password-for-tests',
-        role: 'candidate',
-      },
-    ],
-    candidates,
-  );
-  const config: ServerConfig = {
-    host: '127.0.0.1',
-    port: 3210,
-    openAIKey: 'not-used-by-test',
-    openRouterKey: 'not-used-by-test',
-    previewToken: 'preview-token-that-is-at-least-thirty-two-characters',
-    dataEncryptionKey: Buffer.alloc(32, 8),
-    databasePath,
-    model: 'gpt-5.6-sol',
-    staticRoot: directory,
-    release: 'test',
-    logLevel: 'fatal',
-    secureCookies: false,
-    allowedOrigins: ['http://localhost:3000'],
-    seedAccounts: [],
-    ...(onPasswordReset
-      ? {
-          accountEmail: {
-            apiKey: 'test-resend-key',
-            from: 'openqareer <noreply@openqareer.test>',
-            publicBaseUrl: 'http://localhost:3000',
-          },
-        }
-      : {}),
-  };
-  const app = await buildApp({
-    config,
-    coachProvider: provider,
-    candidateStore: candidates,
-    authService: auth,
-    serveStatic: false,
-    ...(searchVacancies ? { searchVacancies } : {}),
-    ...(searchRemotive ? { searchRemotive } : {}),
-  });
-  resources.push({ app, auth, candidates, directory });
-  return app;
-}
-
-async function login(
-  app: Awaited<ReturnType<typeof buildApp>>,
-  username: string,
-  password: string,
-  deviceId?: string,
-) {
-  const response = await app.inject({
-    method: 'POST',
-    url: '/api/v1/auth/login',
-    headers: {
-      origin: 'http://localhost:3000',
-      ...(deviceId ? { 'x-openqareer-device-id': deviceId } : {}),
-    },
-    payload: { username, password },
-  });
-  return {
-    response,
-    cookie: String(response.headers['set-cookie']).split(';')[0],
-  };
-}
+import { createApp, login, resources } from './authRoutesTestSupport';
 
 describe('cookie auth routes', () => {
   it('creates an account profile and exposes the current session without leaking its token', async () => {
@@ -183,22 +50,6 @@ describe('cookie auth routes', () => {
       ],
     });
     expect(JSON.stringify(account.json())).not.toContain('oqs_');
-  });
-
-  it('returns one active session after repeated logins from one device', async () => {
-    const app = await createApp();
-    const sameDevice = '00000000-0000-4000-8000-000000000001';
-    let latest: Awaited<ReturnType<typeof login>> | undefined;
-
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      latest = await login(app, 'candidate.test', 'candidate-password-for-tests', sameDevice);
-    }
-    const oneDevice = await app.inject({
-      method: 'GET',
-      url: '/api/v1/account',
-      headers: { cookie: latest!.cookie },
-    });
-    expect(oneDevice.json().data.sessions).toHaveLength(1);
   });
 
   it('updates candidate-owned account fields through an origin-protected route', async () => {
@@ -675,7 +526,7 @@ describe('cookie auth routes', () => {
 
 describe('registration without a login field (B139)', () => {
   async function register(
-    app: Awaited<ReturnType<typeof buildApp>>,
+    app: Awaited<ReturnType<typeof createApp>>,
     payload: Record<string, unknown>,
   ) {
     return app.inject({

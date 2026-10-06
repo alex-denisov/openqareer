@@ -1,12 +1,5 @@
 import { strict as assert } from 'node:assert';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'vitest';
@@ -56,8 +49,10 @@ afterEach(() => {
 
 describe('split browser entry delivery', () => {
   it('publishes bounded parts and a small integrity-checking bootstrap', () => {
-    const source = `const release="release-test";${'x'.repeat(10_000)};import("./pdf-test.js");new Worker(new URL("./pdfInspector.worker-test.js",import.meta.url))`;
+    const source = `const release="release-test";const preloadMap=["assets/pdf-test.js","assets/small-test.js","assets/site-test.css"];${'x'.repeat(10_000)};import("./pdf-test.js");new Worker(new URL("./pdfInspector.worker-test.js",import.meta.url))`;
     const directory = makeFixture(source);
+    writeFileSync(join(directory, 'assets/small-test.js'), 'export const small = true;');
+    writeFileSync(join(directory, 'assets/site-test.css'), '.site{color:red}');
     const result = buildSplitDelivery({
       distDirectory: directory,
       release: 'release-test',
@@ -84,6 +79,18 @@ describe('split browser entry delivery', () => {
     assert.ok(bootstrap.includes(entry.sourceHash));
     assert.ok(bootstrap.includes('["./pdf-test.js","/assets/pdf-test.js.split.js"]'));
     assert.ok(
+      bootstrap.includes(JSON.stringify(['"assets/pdf-test.js"', '"assets/pdf-test.js.split.js"'])),
+    );
+    assert.ok(bootstrap.includes('const replacement=quoted?to:location.origin+to'));
+    assert.equal(
+      bootstrap.includes(JSON.stringify(['"assets/small-test.js"', '"assets/small-test.js"'])),
+      false,
+    );
+    assert.equal(
+      bootstrap.includes(JSON.stringify(['"assets/site-test.css"', '"assets/site-test.css"'])),
+      false,
+    );
+    assert.ok(
       bootstrap.includes(
         '["./pdfInspector.worker-test.js","/assets/pdfInspector.worker-test.js.split.js"]',
       ),
@@ -100,16 +107,10 @@ describe('split browser entry delivery', () => {
     );
     assert.equal(existsSync(join(directory, 'assets/index-test.js')), false);
     assert.equal(existsSync(join(directory, 'assets/pdf-test.js')), false);
-    assert.equal(
-      existsSync(join(directory, 'assets/pdfInspector.worker-test.js')),
-      false,
-    );
+    assert.equal(existsSync(join(directory, 'assets/pdfInspector.worker-test.js')), false);
     const worker = result.modules.find((module) => module.kind === 'worker');
     assert.ok(worker);
-    const workerBootstrap = readFileSync(
-      join(directory, worker.proxyPath),
-      'utf8',
-    );
+    const workerBootstrap = readFileSync(join(directory, worker.proxyPath), 'utf8');
     assert.ok(workerBootstrap.includes('pendingMessages'));
     assert.ok(workerBootstrap.includes('event.stopImmediatePropagation()'));
     assert.ok(workerBootstrap.includes('new MessageEvent("message",pending)'));
@@ -137,7 +138,8 @@ describe('split browser entry delivery', () => {
 
     const smallModule = readFileSync(join(directory, 'assets/pdfResume-test.js'), 'utf8');
     assert.ok(
-      smallModule.includes('/assets/pdf-test.js.split.js') || smallModule.includes('./pdf-test.js.split.js'),
+      smallModule.includes('/assets/pdf-test.js.split.js') ||
+        smallModule.includes('./pdf-test.js.split.js'),
       'small module on disk must have reference to split module rewritten to .split.js proxy',
     );
   });

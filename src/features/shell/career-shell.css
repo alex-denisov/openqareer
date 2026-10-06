@@ -1478,71 +1478,6 @@
   padding: 0;
 }
 
-.career-session-gate {
-  max-width: 44rem;
-  padding-top: clamp(42px, 9vh, 112px);
-}
-
-.career-session-gate h1 {
-  margin: 10px 0 14px;
-}
-
-.career-session-gate > p:not(.career-eyebrow) {
-  max-width: 58ch;
-  color: var(--career-text-soft);
-  line-height: 1.6;
-}
-
-.career-session-gate-note {
-  margin: 0;
-  color: var(--career-text-soft);
-}
-
-/* Тихая заглушка первого чтения: три полосы на месте карточки личности,
-   без слов. Дышит мягко; при reduced-motion стоит. */
-.career-cabinet-skeleton {
-  display: grid;
-  gap: 12px;
-  max-width: 40rem;
-  padding-top: 8px;
-}
-
-.career-skeleton-line {
-  display: block;
-  height: 14px;
-  width: 60%;
-  border-radius: 7px;
-  background: var(--career-surface-raised);
-  animation: career-skeleton-breathe 1.6s ease-in-out infinite;
-}
-
-.career-skeleton-line.is-wide {
-  width: 100%;
-  height: 28px;
-}
-
-.career-skeleton-line.is-short {
-  width: 35%;
-}
-
-@keyframes career-skeleton-breathe {
-  50% {
-    opacity: 0.45;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .career-skeleton-line {
-    animation: none;
-  }
-}
-
-.career-session-gate-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
 
 .career-connection-panel {
   grid-column: 1 / -1;
@@ -16421,6 +16356,13 @@ button.chip {
   border-radius: var(--career-radius-sm);
   font-size: var(--career-text-aux);
 }
+.career-account-legal label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
 
 /* B413: Чекбокс с явным внешним видом вместо нативного маркера Tauri/WebKit */
 .career-checkbox {
@@ -16495,3 +16437,20 @@ button.chip {
   color: var(--career-signal-green);
 }
 
+
+.career-account-legal input[type='checkbox'] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+}
+
+.career-account-legal a {
+  color: var(--career-accent, #6fb1fb);
+}
+
+.career-account-legal-error {
+  margin: 6px 0 0;
+  color: var(--career-danger, oklch(72% 0.15 28));
+  font-size: 0.78rem;
+}

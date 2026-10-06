@@ -70,6 +70,9 @@ export interface AuthUser {
   isTest: boolean;
   candidateId: string | null;
   sessionToken?: string;
+  emailVerified?: boolean;
+  emailVerificationEmailSent?: boolean;
+  emailVerificationResendAfterSeconds?: number;
 }
 
 export type CandidateConnection = {

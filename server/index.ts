@@ -17,6 +17,7 @@ import {
 } from './providers/providerQueue';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { AuthService } from './auth/authService';
+import { buildEmailVerificationSender } from './auth/emailVerificationEmail';
 import { buildPasswordResetNotifier } from './auth/passwordResetEmail';
 import { searchHhVacancies } from './connectors/hhVacancySearch';
 import { searchRemotiveVacancies } from './connectors/remotiveVacancySearch';
@@ -46,6 +47,16 @@ const candidateStore = new SqliteCandidateStore({
 });
 const authService = new AuthService({
   databasePath: config.databasePath,
+  emailMxCheckBypassDomains: config.emailMxCheckBypassDomains,
+  emailVerificationRequired: config.emailVerificationRequired,
+  emailVerificationHashKey: config.dataEncryptionKey,
+  emailVerificationFixedCode: config.emailVerificationFixedCode,
+  onEmailVerification: buildEmailVerificationSender({
+    apiKey: config.accountEmail?.apiKey,
+    from: config.accountEmail?.from,
+    environment: process.env.NODE_ENV,
+    writeDevelopmentCode: (line) => process.stderr.write(line),
+  }),
   ...(config.accountEmail
     ? {
         onPasswordReset: buildPasswordResetNotifier({

@@ -16,6 +16,7 @@ import {
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { SiteLink } from './SiteLink';
+import { preloadAuthPages } from './authPagesLoader';
 import { DesktopDownload } from './DesktopDownload';
 import { LANDING_TITLE } from './siteTitles';
 import { LEGAL_DOCS, legalPath } from '../../../shared/legalRegistry';
@@ -286,7 +287,12 @@ function LandingHeader({ session, onNavigate }: LandingPageProps) {
           />
         ) : (
           <>
-            <SiteLink to="/login" className="site-btn is-ghost is-small" onNavigate={onNavigate}>
+            <SiteLink
+              to="/login"
+              className="site-btn is-ghost is-small"
+              onNavigate={onNavigate}
+              onWarm={preloadAuthPages}
+            >
               <SignIn size={16} weight="bold" aria-hidden="true" /> Войти
             </SiteLink>
             <SiteLink to="/signup" className="site-btn is-primary is-small" onNavigate={onNavigate}>
@@ -331,7 +337,12 @@ function HeroActionButtons({
       <SiteLink to="/signup" className="site-btn is-primary is-large" onNavigate={onNavigate}>
         Собрать профиль бесплатно <ArrowRight size={18} weight="bold" aria-hidden="true" />
       </SiteLink>
-      <SiteLink to="/login" className="site-btn is-secondary is-large" onNavigate={onNavigate}>
+      <SiteLink
+        to="/login"
+        className="site-btn is-secondary is-large"
+        onNavigate={onNavigate}
+        onWarm={preloadAuthPages}
+      >
         <SignIn size={18} weight="bold" aria-hidden="true" /> Войти в кабинет
       </SiteLink>
     </>
@@ -629,7 +640,14 @@ function LandingFooter({
           <LegalLinkGroup onNavigate={onNavigate} />
           <div className="link-group">
             <strong>Доступ</strong>
-            <SiteLink to="/login" className="link-btn" onNavigate={onNavigate}>Войти</SiteLink>
+            <SiteLink
+              to="/login"
+              className="link-btn"
+              onNavigate={onNavigate}
+              onWarm={preloadAuthPages}
+            >
+              Войти
+            </SiteLink>
             <SiteLink to="/signup" className="link-btn" onNavigate={onNavigate}>Создать аккаунт</SiteLink>
             {session?.role === 'admin' ? (
               <SiteLink to="/admin" className="link-btn" onNavigate={onNavigate}>Администрирование</SiteLink>

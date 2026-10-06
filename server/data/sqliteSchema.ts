@@ -1058,3 +1058,5 @@ export { MIGRATION_35 } from './titleParseSchema';
 // B340 срез 1 — раздельные ленты консультанта и отклонение правок.
 export { MIGRATION_36 } from './stageCoachSchema';
 export { MIGRATION_38 } from './applicationArchiveSchema';
+
+export { EMAIL_VERIFICATION_CUTOVER_AT, MIGRATION_39 } from './emailVerificationSchema';

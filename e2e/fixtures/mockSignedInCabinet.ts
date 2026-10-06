@@ -18,7 +18,7 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (path.endsWith('/auth/me')) {
-      return route.fulfill({ json: { data: candidate } });
+      return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
     }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });

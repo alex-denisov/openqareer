@@ -1,0 +1,64 @@
+.career-session-gate {
+  max-width: 44rem;
+  padding-top: clamp(42px, 9vh, 112px);
+}
+
+.career-session-gate h1 {
+  margin: 10px 0 14px;
+}
+
+.career-session-gate > p:not(.career-eyebrow) {
+  max-width: 58ch;
+  color: var(--career-text-soft);
+  line-height: 1.6;
+}
+
+.career-session-gate-note {
+  margin: 0;
+  color: var(--career-text-soft);
+}
+
+/* Тихая заглушка первого чтения: три полосы на месте карточки личности. */
+.career-cabinet-skeleton {
+  display: grid;
+  gap: 12px;
+  max-width: 40rem;
+  padding-top: 8px;
+}
+
+.career-skeleton-line {
+  display: block;
+  height: 14px;
+  width: 60%;
+  border-radius: 7px;
+  background: var(--career-surface-raised);
+  animation: career-skeleton-breathe 1.6s ease-in-out infinite;
+}
+
+.career-skeleton-line.is-wide {
+  width: 100%;
+  height: 28px;
+}
+
+.career-skeleton-line.is-short {
+  width: 35%;
+}
+
+@keyframes career-skeleton-breathe {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-skeleton-line {
+    animation: none;
+  }
+}
+
+.career-session-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
