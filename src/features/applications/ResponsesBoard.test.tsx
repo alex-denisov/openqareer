@@ -468,3 +468,56 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     );
   });
 });
+
+describe('ResponsesBoard analytics tab switch (B355)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('позволяет переключаться между доской и аналитикой воронки', () => {
+    const apps = [
+      application({ id: 'a1', stage: 'applied' }),
+      application({ id: 'a2', stage: 'interview' }),
+    ];
+
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(apps)} onOpenVacancies={() => {}} />);
+    });
+
+    const analyticsTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Аналитика воронки'),
+    );
+    expect(analyticsTabBtn).toBeDefined();
+
+    act(() => {
+      analyticsTabBtn?.click();
+    });
+
+    expect(container.textContent).toContain('Аналитика воронки');
+    expect(container.textContent).toContain('Сквозная конверсия');
+
+    const boardTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Доска'),
+    );
+    expect(boardTabBtn).toBeDefined();
+
+    act(() => {
+      boardTabBtn?.click();
+    });
+
+    expect(container.textContent).toContain('Откликнулся');
+    expect(container.textContent).toContain('Интервью');
+  });
+});

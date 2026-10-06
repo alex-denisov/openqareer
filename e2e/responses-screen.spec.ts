@@ -675,4 +675,56 @@ test.describe('B251 responses screen', () => {
       page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
     ).toBeVisible();
   });
+
+  test('B355: переключение во вкладку аналитики показывает воронку конверсий, KPI и диагностику узких мест', async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    // Доска активна по умолчанию
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+
+    // Переключаемся во вкладку «Аналитика воронки»
+    const analyticsTabBtn = page.getByRole('tab', { name: 'Аналитика воронки' });
+    await expect(analyticsTabBtn).toBeVisible();
+    await analyticsTabBtn.click();
+
+    // Панель аналитики видна
+    const analyticsView = page.locator('.career-pipeline-analytics');
+    await expect(analyticsView).toBeVisible();
+    await expect(page.locator('.career-pipeline-kpis')).toBeVisible();
+    await expect(page.locator('.career-pipeline-funnel')).toBeVisible();
+    await expect(page.locator('.career-pipeline-sources-table')).toBeVisible();
+
+    // Скриншоты для B355 на 1440, 1176 и 390
+    await mkdir('output/playwright/B355', { recursive: true });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.screenshot({
+      path: 'output/playwright/B355/b355-pipeline-analytics-1440.png',
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 1176, height: 900 });
+    await page.screenshot({
+      path: 'output/playwright/B355/b355-pipeline-analytics-1176.png',
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: 'output/playwright/B355/b355-pipeline-analytics-390.png',
+      fullPage: true,
+    });
+
+    // Возвращаемся на десктоп и переключаемся обратно на «Доска»
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const boardTabBtn = page.getByRole('tab', { name: 'Доска' });
+    await boardTabBtn.click();
+    await expect(page.locator('.career-responses-board')).toBeVisible();
+    await expect(analyticsView).toHaveCount(0);
+  });
 });
