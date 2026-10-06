@@ -167,7 +167,7 @@ const MATCHED_ITEMS = [
 interface VacancyStubScenario {
   readonly matchedItems?: typeof MATCHED_ITEMS;
   readonly total?: number;
-  readonly facets?: typeof FACETS;
+  readonly facets?: typeof FACETS | null;
   readonly campaign?: typeof CAMPAIGN;
   readonly failMatched?: boolean;
   readonly delayMatchedMs?: number;
@@ -236,10 +236,11 @@ async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Prom
             campaign: currentCampaign,
             candidateLevel: 'VP / C-level',
             facets:
-              scenario.facets ??
-              (scenario.matchedItems?.length === 0
-                ? { total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [] }
-                : FACETS),
+              scenario.facets !== undefined
+                ? scenario.facets
+                : scenario.matchedItems?.length === 0
+                  ? { total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [] }
+                  : FACETS,
           },
         },
       });
@@ -1545,5 +1546,79 @@ test.describe('B250 vacancies screen', () => {
       path: `output/playwright/B344/d28-vacancies-level-${label}.png`,
       fullPage: true,
     });
+  });
+
+  test('B371: тап по ⓘ на 390 оставляет подсказку открытой, Escape и клик вне закрывают, hover на 1440 работает без клика', async ({
+    page,
+  }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile-390';
+    await stubSession(page, { facets: null });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    await page.mouse.move(0, 0);
+
+    const infoBtn = page.locator('.fit-legend .info-btn');
+    await expect(infoBtn).toBeVisible();
+    await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+
+    const tooltipId = await infoBtn.getAttribute('aria-describedby');
+    expect(tooltipId).toBeTruthy();
+    const tooltipBubble = page.locator(`[id="${tooltipId}"]`);
+    await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
+
+    if (isMobile) {
+      // 1. Mobile 390: тап оставляет открытой, повторный клик или тап вне закрывают
+      await infoBtn.click();
+      await expect(infoBtn).toHaveAttribute('aria-expanded', 'true');
+      await expect(tooltipBubble).toBeVisible();
+      await expect(tooltipBubble).toContainText('Порядок задаёт сервер');
+
+      // Подсказка остаётся открытой
+      await page.waitForTimeout(300);
+      await expect(tooltipBubble).toBeVisible();
+      await page.screenshot({
+        path: 'output/playwright/B371/tooltip-tap-390.png',
+        fullPage: false,
+      });
+
+      // Тап вне подсказки закрывает её
+      await page.mouse.click(20, 100);
+      await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
+      await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+
+      // Повторный тап открывает, а затем Escape закрывает
+      await infoBtn.click();
+      await expect(tooltipBubble).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
+      await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+    } else {
+      // 2. Desktop 1440: наведение показывает без клика
+      await infoBtn.hover();
+      await expect(tooltipBubble).toBeVisible();
+      await expect(tooltipBubble).toContainText('Порядок задаёт сервер');
+      await page.screenshot({
+        path: 'output/playwright/B371/tooltip-hover-1440.png',
+        fullPage: false,
+      });
+
+      // Уход мыши закрывает подсказку на десктопе
+      await page.mouse.move(0, 0);
+      await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
+
+      // Проверка клика на десктопе и снимок 1176
+      await infoBtn.click();
+      await expect(tooltipBubble).toBeVisible();
+      await page.mouse.move(0, 0);
+      await expect(tooltipBubble).toBeVisible();
+      await page.setViewportSize({ width: 1176, height: 800 });
+      await page.screenshot({
+        path: 'output/playwright/B371/tooltip-tap-1176.png',
+        fullPage: false,
+      });
+      await page.keyboard.press('Escape');
+      await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
+    }
   });
 });

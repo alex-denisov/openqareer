@@ -14257,7 +14257,19 @@ button.chip {
   justify-content: center;
   cursor: pointer;
   border-radius: 50%;
+  transition: color 180ms ease;
 }
+
+.info-btn:hover {
+  color: var(--career-text);
+}
+
+.info-btn:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+  color: var(--career-text);
+}
+
 
 .vac-list {
   list-style: none;
@@ -15545,12 +15557,13 @@ button.chip {
   display: none;
 }
 
-/* CareerTooltip (B343): custom tooltip replacing native title in desktop and web */
+/* CareerTooltip (B343, B371): custom tooltip replacing native title in desktop and web */
 .career-tooltip-bubble {
   display: none;
   position: fixed;
   z-index: 1000;
-  max-width: 280px;
+  max-width: min(280px, calc(100vw - var(--career-space-4, 16px)));
+  box-sizing: border-box;
   padding: var(--career-space-2) var(--career-space-3);
   border: var(--career-border-width, 1px) solid var(--career-line-strong);
   border-radius: var(--career-radius-md, 10px);
@@ -15567,6 +15580,7 @@ button.chip {
   visibility: hidden;
   transition: opacity 180ms ease, transform 180ms ease;
 }
+
 
 .career-tooltip-bubble[data-open='true'] {
   display: block;

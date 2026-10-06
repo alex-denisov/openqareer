@@ -21,6 +21,7 @@ export interface TooltipTriggerProps {
   readonly onBlur?: (e: React.FocusEvent) => void;
   readonly onClick?: (e: React.MouseEvent) => void;
   readonly 'aria-describedby'?: string;
+  readonly 'aria-expanded'?: boolean | 'true' | 'false';
   readonly title?: string;
 }
 
@@ -62,7 +63,8 @@ function calculateCoords(
     : rect.bottom + TOOLTIP_MARGIN;
 
   const centerLeft = rect.left + rect.width / 2 - width / 2;
-  const left = Math.max(SCREEN_PADDING, Math.min(screenWidth - width - SCREEN_PADDING, centerLeft));
+  const maxLeft = Math.max(SCREEN_PADDING, screenWidth - width - SCREEN_PADDING);
+  const left = Math.max(SCREEN_PADDING, Math.min(maxLeft, centerLeft));
 
   return { top: Math.round(top), left: Math.round(left) };
 }
@@ -73,9 +75,10 @@ function useTooltipPosition(
   tooltipRef: RefObject<HTMLElement | null>,
   side: 'top' | 'bottom',
   isVisible: boolean,
-  hide: () => void,
+  forceHide: () => void,
+  tooltipId: string,
 ) {
-  useEscapeLayer(hide, isVisible);
+  useEscapeLayer(forceHide, isVisible);
   const applyCoords = useCallback(() => {
     if (!tooltipRef.current) return;
     const coords = calculateCoords(triggerRef.current, tooltipRef.current, side);
@@ -94,14 +97,53 @@ function useTooltipPosition(
       window.removeEventListener('scroll', applyCoords, true);
       window.removeEventListener('resize', applyCoords);
     };
-  }, [isVisible, hide, applyCoords]);
+  }, [isVisible, applyCoords]);
+
+  // Закрытие по клику/тапу вне триггера и подсказки
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const handlePointerDownOutside = (e: Event) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (triggerRef.current?.contains(target)) return;
+      if (tooltipRef.current?.contains(target)) return;
+      forceHide();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDownOutside, true);
+    document.addEventListener('touchstart', handlePointerDownOutside, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside, true);
+      document.removeEventListener('touchstart', handlePointerDownOutside, true);
+    };
+  }, [isVisible, forceHide, triggerRef, tooltipRef]);
+
+  // Закрытие при открытии любой другой подсказки
+  useEffect(() => {
+    if (!isVisible) return;
+
+    window.dispatchEvent(
+      new CustomEvent('career-tooltip-open', { detail: tooltipId }),
+    );
+
+    const handleOtherTooltipOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail && customEvent.detail !== tooltipId) {
+        forceHide();
+      }
+    };
+
+    window.addEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    return () => {
+      window.removeEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    };
+  }, [isVisible, forceHide, tooltipId]);
 }
 
-/** Управляет задержкой показа (300 мс для hover, 0 для фокуса) и скрытием. */
-function useTooltipVisibility(disabled: boolean, hasContent: boolean) {
-  const [isVisible, setIsVisible] = useState(false);
+function useTooltipTimer() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const clearTimer = useCallback(() => {
     if (timerRef.current) {
       clearTimeout(timerRef.current);
@@ -109,28 +151,63 @@ function useTooltipVisibility(disabled: boolean, hasContent: boolean) {
     }
   }, []);
 
+  const startTimer = useCallback(
+    (fn: () => void, delayMs: number) => {
+      clearTimer();
+      timerRef.current = setTimeout(fn, delayMs);
+    },
+    [clearTimer],
+  );
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+  return { clearTimer, startTimer };
+}
+
+/** Управляет задержкой показа, фиксацией по клику и скрытием. */
+function useTooltipVisibility(disabled: boolean, hasContent: boolean) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const { clearTimer, startTimer } = useTooltipTimer();
+
   const show = useCallback(
     (delayMs = 0) => {
       if (disabled || !hasContent) return;
-      clearTimer();
       if (delayMs === 0) {
+        clearTimer();
         setIsVisible(true);
       } else {
-        timerRef.current = setTimeout(() => setIsVisible(true), delayMs);
+        startTimer(() => setIsVisible(true), delayMs);
       }
     },
-    [disabled, hasContent, clearTimer],
+    [disabled, hasContent, clearTimer, startTimer],
   );
 
   const hide = useCallback(() => {
     clearTimer();
+    setIsPinned((prev) => {
+      if (!prev) setIsVisible(false);
+      return prev;
+    });
+  }, [clearTimer]);
+
+  const toggle = useCallback(() => {
+    if (disabled || !hasContent) return;
+    clearTimer();
+    setIsPinned((prev) => {
+      setIsVisible(!prev);
+      return !prev;
+    });
+  }, [disabled, hasContent, clearTimer]);
+
+  const forceHide = useCallback(() => {
+    clearTimer();
+    setIsPinned(false);
     setIsVisible(false);
   }, [clearTimer]);
 
-  useEffect(() => () => clearTimer(), [clearTimer]);
-
-  return { isVisible, show, hide };
+  return { isVisible, isPinned, show, hide, toggle, forceHide };
 }
+
 
 function bindTriggerRef(child: ReactElement, triggerRef: { current: HTMLElement | null }) {
   return (node: HTMLElement | null) => {
@@ -150,6 +227,8 @@ function cloneTriggerChild(
   triggerRef: { current: HTMLElement | null },
   show: (delay: number) => void,
   hide: () => void,
+  toggle: () => void,
+  isExpanded: boolean,
   tooltipId: string,
 ): ReactElement {
   const childProps = child.props as TooltipTriggerProps;
@@ -184,8 +263,9 @@ function cloneTriggerChild(
     },
     onClick: (e: React.MouseEvent) => {
       childProps.onClick?.(e);
-      hide();
+      toggle();
     },
+    'aria-expanded': isExpanded ? 'true' : 'false',
     'aria-describedby': describedBy,
     title: undefined,
   });
@@ -203,14 +283,25 @@ export function CareerTooltip({
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
   const tooltipId = useId();
 
-  const { isVisible, show, hide } = useTooltipVisibility(disabled, Boolean(content));
-  useTooltipPosition(triggerRef, tooltipRef, side, isVisible, hide);
+  const { isVisible, show, hide, toggle, forceHide } = useTooltipVisibility(
+    disabled,
+    Boolean(content),
+  );
+  useTooltipPosition(triggerRef, tooltipRef, side, isVisible, forceHide, tooltipId);
 
   if (!isValidElement(children)) {
     return children;
   }
 
-  const clonedChild = cloneTriggerChild(children, triggerRef, show, hide, tooltipId);
+  const clonedChild = cloneTriggerChild(
+    children,
+    triggerRef,
+    show,
+    hide,
+    toggle,
+    isVisible,
+    tooltipId,
+  );
 
   if (!content) return clonedChild;
 
@@ -230,3 +321,4 @@ export function CareerTooltip({
     </>
   );
 }
+

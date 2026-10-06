@@ -155,4 +155,167 @@ describe('CareerTooltip', () => {
     expect(button.getAttribute('title')).toBeNull();
     expect(button.getAttribute('aria-describedby')).toBe(tooltip.id);
   });
+
+  it('клик или тап по значку открывает подсказку, выставляет aria-expanded="true" и оставляет её открытой при уходе курсора', () => {
+    act(() => {
+      root.render(
+        <CareerTooltip content="Текст подсказки">
+          <button type="button" aria-label="Справка">
+            ⓘ
+          </button>
+        </CareerTooltip>,
+      );
+    });
+
+    const button = container.querySelector('button') as HTMLButtonElement;
+    const tooltip = container.querySelector('[role="tooltip"]') as HTMLElement;
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    expect(tooltip.getAttribute('data-open')).toBeNull();
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(tooltip.getAttribute('data-open')).toBe('true');
+    expect(tooltip.getAttribute('aria-hidden')).toBe('false');
+
+    // Уход мыши не должен закрывать подсказку, открытую кликом
+    act(() => {
+      button.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }));
+      button.dispatchEvent(new MouseEvent('mouseleave', { bubbles: true }));
+    });
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(tooltip.getAttribute('data-open')).toBe('true');
+  });
+
+  it('повторный клик по значку закрывает подсказку', () => {
+    act(() => {
+      root.render(
+        <CareerTooltip content="Текст подсказки">
+          <button type="button" aria-label="Справка">
+            ⓘ
+          </button>
+        </CareerTooltip>,
+      );
+    });
+
+    const button = container.querySelector('button') as HTMLButtonElement;
+    const tooltip = container.querySelector('[role="tooltip"]') as HTMLElement;
+
+    // Первый клик — открывает
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBe('true');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    // Второй клик — закрывает
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('клик или тап вне открытой подсказки закрывает её', () => {
+    act(() => {
+      root.render(
+        <div>
+          <CareerTooltip content="Текст подсказки">
+            <button type="button" aria-label="Справка">
+              ⓘ
+            </button>
+          </CareerTooltip>
+          <div id="outside-area">Внешняя область</div>
+        </div>,
+      );
+    });
+
+    const button = container.querySelector('button') as HTMLButtonElement;
+    const tooltip = container.querySelector('[role="tooltip"]') as HTMLElement;
+    const outside = container.querySelector('#outside-area') as HTMLElement;
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBe('true');
+
+    act(() => {
+      outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('нажатие Escape закрывает подсказку, открытую кликом', () => {
+    act(() => {
+      root.render(
+        <CareerTooltip content="Текст подсказки">
+          <button type="button" aria-label="Справка">
+            ⓘ
+          </button>
+        </CareerTooltip>,
+      );
+    });
+
+    const button = container.querySelector('button') as HTMLButtonElement;
+    const tooltip = container.querySelector('[role="tooltip"]') as HTMLElement;
+
+    act(() => {
+      button.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBe('true');
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(tooltip.getAttribute('data-open')).toBeNull();
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('открытие второй подсказки закрывает первую подсказку', () => {
+    act(() => {
+      root.render(
+        <div>
+          <CareerTooltip content="Первая подсказка">
+            <button type="button" id="btn-1" aria-label="Кнопка 1">
+              1
+            </button>
+          </CareerTooltip>
+          <CareerTooltip content="Вторая подсказка">
+            <button type="button" id="btn-2" aria-label="Кнопка 2">
+              2
+            </button>
+          </CareerTooltip>
+        </div>,
+      );
+    });
+
+    const btn1 = container.querySelector('#btn-1') as HTMLButtonElement;
+    const btn2 = container.querySelector('#btn-2') as HTMLButtonElement;
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    const tooltip1 = tooltips[0] as HTMLElement;
+    const tooltip2 = tooltips[1] as HTMLElement;
+
+    // Открываем первую кликом
+    act(() => {
+      btn1.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip1.getAttribute('data-open')).toBe('true');
+    expect(btn1.getAttribute('aria-expanded')).toBe('true');
+    expect(tooltip2.getAttribute('data-open')).toBeNull();
+
+    // Открываем вторую кликом
+    act(() => {
+      btn2.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip1.getAttribute('data-open')).toBeNull();
+    expect(btn1.getAttribute('aria-expanded')).toBe('false');
+    expect(tooltip2.getAttribute('data-open')).toBe('true');
+    expect(btn2.getAttribute('aria-expanded')).toBe('true');
+  });
 });
+
+
