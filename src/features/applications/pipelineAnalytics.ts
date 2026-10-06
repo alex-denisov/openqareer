@@ -64,12 +64,7 @@ const STAGE_LABELS: Record<ApplicationStage, string> = {
   archived: 'В архиве',
 };
 
-const SOURCE_LABELS: Record<string, string> = {
-  hh: 'hh.ru',
-  linkedin: 'LinkedIn',
-  recruiter: 'Рекрутер',
-  other: 'Другой источник',
-};
+import { humanSourceLabel } from './sourceLabels';
 
 /**
  * Проверяет, проходила ли карточка через указанный этап воронки.
@@ -255,7 +250,7 @@ function buildSourceBreakdown(
 
   return Array.from(groups.entries()).map(([source, items]) => ({
     source,
-    sourceLabel: SOURCE_LABELS[source] ?? source,
+    sourceLabel: humanSourceLabel(source),
     total: items.length,
     responded: items.filter((a) => applicationReachedStage(a, 'responded')).length,
     interview: items.filter((a) => applicationReachedStage(a, 'interview')).length,
