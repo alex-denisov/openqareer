@@ -2,8 +2,10 @@ import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from
 import { createPortal } from 'react-dom';
 import { Check, Copy, DownloadSimple, Printer } from '@phosphor-icons/react';
 import { buildTargetedResumeSlice } from '../../../server/domain/resumeStudio';
+import { pluralRu } from '../../../shared/pluralRu';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
-import type { ResumeDocument, ResumeDraft, TargetedResumeSlice } from './resumeTypes';
+import { estimateResumePages, type TargetedResumeVolume } from './targetedResumeVolume';
+import type { ResumeDocument, ResumeDraft } from './resumeTypes';
 import {
   formatResumeAsAtsText,
   formatTargetedResumeAsAtsText,
@@ -23,7 +25,7 @@ export interface ResumeAtsViewProps {
 
 interface GeneratedTarget {
   readonly source: ResumeDocument;
-  readonly slice: TargetedResumeSlice;
+  readonly slice: TargetedResumeVolume;
 }
 
 function parseRequirementLines(value: string): string[] {
@@ -58,7 +60,7 @@ function useTargetedResume(master: ResumeDocument) {
     }
     setGenerated({
       source: master,
-      slice: buildTargetedResumeSlice(master, { title, requirements }),
+      slice: estimateResumePages(buildTargetedResumeSlice(master, { title, requirements })),
     });
     setError('');
   }
@@ -82,13 +84,13 @@ function useTargetedResume(master: ResumeDocument) {
   };
 }
 
-function useTargetedPdf(slice: TargetedResumeSlice | null) {
+function useTargetedPdf(slice: TargetedResumeVolume | null) {
   const [message, setMessage] = useState('');
   useEffect(() => setMessage(''), [slice]);
   const print = useCallback(async () => {
     if (!slice) return;
-    if (slice.estimatedPages > 2) {
-      setMessage('PDF не подготовлен: сократите срез до двух страниц.');
+    if (slice.pages > 2) {
+      setMessage(slice.warning ?? `PDF не подготовлен: осталось ${slice.pages} стр.`);
       return;
     }
     document.body.dataset.resumePrintTarget = 'targeted';
@@ -322,7 +324,7 @@ function TargetedResumeForm(props: {
   );
 }
 
-function TargetedResumeSummary({ slice }: { readonly slice: TargetedResumeSlice }) {
+function TargetedResumeSummary({ slice }: { readonly slice: TargetedResumeVolume }) {
   const id = useId();
   const detailedIds = new Set(slice.detailedExperienceIds);
   return (
@@ -330,7 +332,7 @@ function TargetedResumeSummary({ slice }: { readonly slice: TargetedResumeSlice 
       <h3 id={`${id}-summary`}>Что выделено в срезе</h3>
       <p>
         Текстовые совпадения: {slice.matchedRequirements.length} из {slice.requirements.length}.
-        {' '}Ориентировочный объём: {slice.estimatedPages} стр.
+        {' '}Ориентировочный объём: {slice.pages} стр.
       </p>
       <ul>
         {slice.document.experience.map((role) => {
@@ -348,6 +350,9 @@ function TargetedResumeSummary({ slice }: { readonly slice: TargetedResumeSlice 
           </li>
         ))}
       </ul>
+      {slice.trimmed.length > 0 ? (
+        <TrimmedItems items={slice.trimmed} />
+      ) : null}
       {slice.missingRequirements.length > 0 ? (
         <div>
           <h4>Требования без совпадения в тексте Мастер-резюме</h4>
@@ -358,13 +363,29 @@ function TargetedResumeSummary({ slice }: { readonly slice: TargetedResumeSlice 
           </ul>
         </div>
       ) : null}
-      {slice.estimatedPages > 2 ? (
-        <p className="career-resume-error" role="alert">
-          Срез длиннее двух страниц по оценке. Сократите Мастер-резюме перед экспортом PDF.
-        </p>
-      ) : null}
+      {slice.warning ? <p className="career-resume-error" role="alert">{slice.warning}</p> : null}
     </section>
   );
+}
+
+function TrimmedItems({ items }: { readonly items: TargetedResumeVolume['trimmed'] }) {
+  return (
+    <>
+      <p>{trimmedSummary(items.length)}</p>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>
+            <strong>{item.label}</strong> — {item.reason}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function trimmedSummary(count: number): string {
+  if (count === 1) return 'Убран 1 пункт, который не относится к вакансии.';
+  return `Убрано ${pluralRu(count, ['пункт', 'пункта', 'пунктов'])}, не относящихся к вакансии.`;
 }
 
 type TargetingState = ReturnType<typeof useTargetedResume>;
@@ -372,7 +393,7 @@ type TargetingState = ReturnType<typeof useTargetedResume>;
 function useAtsText(
   document: ResumeDocument,
   draft: ResumeDraft,
-  slice: TargetedResumeSlice | null,
+  slice: TargetedResumeVolume | null,
 ): string {
   return useMemo(
     () => (slice ? formatTargetedResumeAsAtsText(slice) : formatResumeAsAtsText(document, draft)),
@@ -382,7 +403,7 @@ function useAtsText(
 
 function useAtsActions(
   document: ResumeDocument,
-  slice: TargetedResumeSlice | null,
+  slice: TargetedResumeVolume | null,
   text: string,
 ) {
   const [copied, setCopied] = useState(false);
@@ -412,7 +433,7 @@ function TargetedResumePrintDocument({
   slice,
   text,
 }: {
-  readonly slice: TargetedResumeSlice | null;
+  readonly slice: TargetedResumeVolume | null;
   readonly text: string;
 }) {
   if (!slice || typeof window === 'undefined') return null;
@@ -450,7 +471,7 @@ function ResumeAtsContent({
         <ResumeAtsActionBar
           copied={copied}
           targeted={Boolean(targeting.slice)}
-          printDisabled={!targeting.slice || targeting.slice.estimatedPages > 2}
+          printDisabled={!targeting.slice || targeting.slice.pages > 2}
           printMessage={printMessage}
           onCopy={copy}
           onDownload={download}
