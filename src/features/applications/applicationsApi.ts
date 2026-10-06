@@ -1,5 +1,10 @@
 import type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
 import type { ApplicationStage } from '../../../shared/applicationStage';
+import type {
+  CandidateActionKind,
+  CandidateActionUsageSummary,
+  CandidateDailyLimits,
+} from '../../../shared/candidateActionPolicy';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
@@ -143,4 +148,92 @@ export type ApplicationFunnel = Record<ApplicationStage, number> & { opened: num
 export async function getApplicationFunnel(signal?: AbortSignal): Promise<ApplicationFunnel> {
   const response = await apiFetch('/api/v1/candidate/applications/funnel', { signal });
   return readDataObject<ApplicationFunnel>(response);
+}
+
+export interface CandidateActionInput {
+  readonly id: string;
+  readonly platform: 'hh' | 'linkedin';
+  readonly actionKind: CandidateActionKind;
+  readonly applicationId?: string;
+  readonly targetUrl: string;
+  readonly letterText?: string;
+  readonly resumeId?: string;
+}
+
+export interface CandidateActionReceiptView {
+  readonly id: string;
+  readonly batchId: string;
+  readonly platform: 'hh' | 'linkedin';
+  readonly actionKind: CandidateActionKind;
+  readonly status: 'pending' | 'delivered' | 'attempted' | 'failed';
+  readonly applicationId?: string | null;
+  readonly failureCode?: string | null;
+  readonly executedAt: string;
+}
+
+export interface CandidateActionBatchView {
+  readonly batchId: string;
+  readonly status: 'completed' | 'partial_failure' | 'aborted';
+  readonly receipts: readonly CandidateActionReceiptView[];
+}
+
+export interface CandidateActionUsageView {
+  readonly usage: CandidateActionUsageSummary;
+  readonly timezone: string;
+  readonly resetAt: string;
+  readonly killSwitchActive: boolean;
+  readonly limits: CandidateDailyLimits;
+}
+
+export async function getCandidateActionUsage(signal?: AbortSignal): Promise<CandidateActionUsageView> {
+  const response = await apiFetch('/api/v1/candidate/actions/usage', signal ? { signal } : {});
+  return readDataObject<CandidateActionUsageView>(response);
+}
+
+export async function listCandidateActionReceipts(
+  options: { readonly batchId?: string; readonly limit?: number; readonly signal?: AbortSignal } = {},
+): Promise<CandidateActionReceiptView[]> {
+  const query = new URLSearchParams({ limit: String(options.limit ?? 100) });
+  if (options.batchId) query.set('batchId', options.batchId);
+  const response = await apiFetch(`/api/v1/candidate/actions/receipts?${query.toString()}`, {
+    ...(options.signal ? { signal: options.signal } : {}),
+  });
+  return readDataObject<{ receipts: CandidateActionReceiptView[] }>(response).then((value) => value.receipts);
+}
+
+export async function executeCandidateActionBatch(input: {
+  readonly batchId: string;
+  readonly confirmedByCandidate: boolean;
+  readonly actions: readonly CandidateActionInput[];
+}): Promise<CandidateActionBatchView> {
+  const response = await apiFetch('/api/v1/candidate/actions/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  return readDataObject<CandidateActionBatchView>(response);
+}
+
+export async function setCandidateActionKillSwitch(active: boolean): Promise<void> {
+  await apiFetch('/api/v1/candidate/actions/kill-switch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ active, reason: active ? 'candidate_requested_stop' : undefined }),
+  });
+}
+
+export async function getActionsOnBehalfConsent(signal?: AbortSignal): Promise<{
+  readonly granted: boolean;
+  readonly consent: { readonly versionId: string } | null;
+}> {
+  const response = await apiFetch('/api/v1/me/consents/actions_on_behalf', signal ? { signal } : {});
+  return readDataObject<{ granted: boolean; consent: { versionId: string } | null }>(response);
+}
+
+export async function grantActionsOnBehalfConsent(versionId: string): Promise<void> {
+  await apiFetch('/api/v1/me/consents/actions_on_behalf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ versionId }),
+  });
 }

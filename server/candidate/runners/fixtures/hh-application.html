@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+  <head><meta charset="utf-8"><title>Инженер — компания</title></head>
+  <body>
+    <a data-qa="mainmenu_applicantProfile" href="/applicant/resumes">Мои резюме</a>
+    <main>
+      <h1 data-qa="vacancy-title">Инженер</h1>
+      <button data-qa="vacancy-response-link-top" id="open">Откликнуться</button>
+      <div data-qa="vacancy-response-popup" id="popup" hidden>
+        <label data-qa="vacancy-response-popup__resume-item" data-resume-id="resume-1">
+          <input type="radio" name="resume" value="resume-1">
+          <span>Резюме кандидата</span>
+        </label>
+        <button data-qa="vacancy-response-popup__letter-toggle" id="toggle">Добавить письмо</button>
+        <textarea data-qa="vacancy-response-popup__letter-textarea" id="letter" hidden></textarea>
+        <button data-qa="vacancy-response-submit-popup" id="submit">Отправить</button>
+      </div>
+      <div data-qa="vacancy-response-success" id="success" data-response-id="response-123" hidden>Отклик отправлен</div>
+    </main>
+    <script>
+      document.querySelector('#open').addEventListener('click', () => document.querySelector('#popup').hidden = false);
+      document.querySelector('#toggle').addEventListener('click', () => document.querySelector('#letter').hidden = false);
+      document.querySelector('#submit').addEventListener('click', () => {
+        window.syntheticSubmitted = true;
+        document.querySelector('#success').hidden = false;
+      });
+    </script>
+  </body>
+</html>

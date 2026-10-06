@@ -2,6 +2,45 @@ import { formatLocalDate } from './timezoneUtils';
 
 export const QUIET_HOURS_START = 23; // 23:00 local time
 export const QUIET_HOURS_END = 8; // 08:00 local time
+export const CANDIDATE_ACTION_PAUSE_MIN_MS = 3_000;
+export const CANDIDATE_ACTION_PAUSE_MAX_MS = 30_000;
+
+const PLATFORM_ACTION_DOMAINS = {
+  hh: ['hh.ru', 'www.hh.ru'],
+  linkedin: ['linkedin.com', 'www.linkedin.com'],
+} as const;
+
+/** Allow HTTPS targets only on the platform the candidate explicitly chose. */
+export function isAllowedCandidateActionTarget(
+  platform: 'hh' | 'linkedin',
+  targetUrl: string,
+): boolean {
+  try {
+    const url = new URL(targetUrl);
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      url.port ||
+      url.hostname.endsWith('.')
+    ) {
+      return false;
+    }
+    const host = url.hostname.toLowerCase();
+    const allowedHosts: readonly string[] = PLATFORM_ACTION_DOMAINS[platform];
+    return allowedHosts.includes(host);
+  } catch {
+    return false;
+  }
+}
+
+/** Uniform bounded jitter between separate candidate-approved actions. */
+export function getCandidateActionPauseMs(random: () => number = Math.random): number {
+  const sample = random();
+  const boundedSample = Number.isFinite(sample) ? Math.min(0.999999, Math.max(0, sample)) : 0.5;
+  const span = CANDIDATE_ACTION_PAUSE_MAX_MS - CANDIDATE_ACTION_PAUSE_MIN_MS + 1;
+  return CANDIDATE_ACTION_PAUSE_MIN_MS + Math.floor(boundedSample * span);
+}
 
 export interface CandidateDailyLimits {
   readonly maxHhAppliesPerDay: number;
@@ -16,6 +55,48 @@ export const DEFAULT_CANDIDATE_ACTION_LIMITS: CandidateDailyLimits = {
   maxHhBoostsPerDay: 3,
   minHhBoostIntervalMinutes: 240,
 };
+
+export const MAX_CANDIDATE_ACTIONS_PER_BATCH =
+  DEFAULT_CANDIDATE_ACTION_LIMITS.maxHhAppliesPerDay +
+  DEFAULT_CANDIDATE_ACTION_LIMITS.maxLinkedinEasyAppliesPerDay +
+  DEFAULT_CANDIDATE_ACTION_LIMITS.maxHhBoostsPerDay;
+
+/** Next local midnight as UTC, for an honest daily-limit reset time. */
+export function getCandidateActionResetAt(now: Date, timezone: string): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === 'year')?.value);
+  const month = Number(parts.find((part) => part.type === 'month')?.value);
+  const day = Number(parts.find((part) => part.type === 'day')?.value);
+  if (![year, month, day].every(Number.isFinite)) return new Date(now.getTime() + 86_400_000).toISOString();
+
+  const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+  const localMidnightUtc = Date.UTC(
+    nextDay.getUTCFullYear(),
+    nextDay.getUTCMonth(),
+    nextDay.getUTCDate(),
+  );
+  let guess = localMidnightUtc;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    guess = localMidnightUtc - timezoneOffsetMinutes(new Date(guess), timezone) * 60_000;
+  }
+  return new Date(guess).toISOString();
+}
+
+function timezoneOffsetMinutes(date: Date, timezone: string): number {
+  const value = new Intl.DateTimeFormat('en', {
+    timeZone: timezone,
+    timeZoneName: 'longOffset',
+  }).formatToParts(date).find((part) => part.type === 'timeZoneName')?.value;
+  const match = value?.match(/^GMT([+-])(\d{1,2})(?::(\d{2}))?$/u);
+  if (!match) return 0;
+  const sign = match[1] === '+' ? 1 : -1;
+  return sign * (Number(match[2]) * 60 + Number(match[3] ?? 0));
+}
 
 export function isWithinQuietHours(date: Date, timezone: string): boolean {
   const parts = new Intl.DateTimeFormat('en-US', {

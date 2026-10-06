@@ -7,6 +7,7 @@ import type { UseApplications } from './useApplications';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
+import { CandidateActionPanel } from './CandidateActionPanel';
 
 interface Column {
   readonly key: string;
@@ -64,7 +65,12 @@ export function ResponsesBoard({
   }
 
   if (state.applications.length === 0) {
-    return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
+    return (
+      <>
+        <CandidateActionPanel applications={state.applications} onRefreshApplications={state.refreshApplications} />
+        <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
+      </>
+    );
   }
 
   return (
@@ -246,6 +252,7 @@ function ReadyBoard({
 
   return (
     <div className="career-responses-board-wrap">
+      <CandidateActionPanel applications={state.applications} onRefreshApplications={state.refreshApplications} />
       {stageFilter === 'interview' && onClearFilter ? (
         <FilterNotice onClear={onClearFilter} />
       ) : null}

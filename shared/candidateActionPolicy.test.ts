@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   checkActionCapacity,
   DEFAULT_CANDIDATE_ACTION_LIMITS,
+  getCandidateActionPauseMs,
+  isAllowedCandidateActionTarget,
   isWithinQuietHours,
 } from './candidateActionPolicy';
 
@@ -92,5 +94,22 @@ describe('candidateActionPolicy', () => {
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.maxHhAppliesPerDay).toBe(15);
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.maxLinkedinEasyAppliesPerDay).toBe(10);
     expect(DEFAULT_CANDIDATE_ACTION_LIMITS.minHhBoostIntervalMinutes).toBe(240);
+  });
+
+  it('allows only HTTPS targets on the platform domains', () => {
+    expect(isAllowedCandidateActionTarget('hh', 'https://hh.ru/vacancy/123')).toBe(true);
+    expect(isAllowedCandidateActionTarget('hh', 'https://www.hh.ru/vacancy/123')).toBe(true);
+    expect(isAllowedCandidateActionTarget('hh', 'https://jobs.hh.ru/vacancy/123')).toBe(false);
+    expect(isAllowedCandidateActionTarget('linkedin', 'https://www.linkedin.com/jobs/view/123')).toBe(true);
+    expect(isAllowedCandidateActionTarget('hh', 'http://hh.ru/vacancy/123')).toBe(false);
+    expect(isAllowedCandidateActionTarget('hh', 'https://not-hh.ru/vacancy/123')).toBe(false);
+    expect(isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com.evil.test/jobs/view/123')).toBe(false);
+    expect(isAllowedCandidateActionTarget('linkedin', 'https://user:pass@linkedin.com/jobs/view/123')).toBe(false);
+    expect(isAllowedCandidateActionTarget('linkedin', 'https://linkedin.com:8443/jobs/view/123')).toBe(false);
+  });
+
+  it('chooses randomized inter-action pauses within the policy window', () => {
+    expect(getCandidateActionPauseMs(() => 0)).toBe(3_000);
+    expect(getCandidateActionPauseMs(() => 0.999999)).toBe(30_000);
   });
 });
