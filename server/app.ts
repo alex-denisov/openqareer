@@ -187,7 +187,7 @@ async function createFastifyBase(
       reply.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
       reply.header(
         'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Accept, X-Requested-With',
+        'Content-Type, Authorization, Accept, X-Requested-With, X-OpenQareer-Device-Id',
       );
     }
     if (request.method === 'OPTIONS') {
