@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MultiSourceVacancyEngine } from './multiSourceVacancyEngine';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import type { VacancyPoolStore } from './vacancyPoolStore';
@@ -62,6 +62,16 @@ function recordingPool(): { pool: VacancyPoolStore; buried: Array<[readonly stri
 }
 
 describe('B200 · обход ссылок площадки в движке', () => {
+  // Фикстуры датированы NOW, а движок местами читает Date.now(): без фиксации
+  // времени они выпадают из окна свежести через MAX_VACANCY_AGE_DAYS.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('перестаёт отдавать объявление, чей адрес ответил 404, и хоронит его в пуле', async () => {
     const { pool, buried } = recordingPool();
     const engine = new MultiSourceVacancyEngine({
