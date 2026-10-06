@@ -1,4 +1,4 @@
-interface QuizQuestion {
+export interface QuizQuestion {
   id: string;
   question: string;
   options: string[];
@@ -6,11 +6,14 @@ interface QuizQuestion {
   explanation: string;
 }
 
+export type QuizPlatform = 'hh.ru' | 'linkedin';
+
 export interface SkillQuiz {
   id: string;
   title: string;
   badgeTitle: string;
   category: string;
+  platform: QuizPlatform;
   durationMinutes: number;
   passingScorePercent: number;
   questions: QuizQuestion[];
@@ -22,12 +25,16 @@ export interface QuizEvaluationResult {
   correctAnswersCount: number;
   totalQuestions: number;
   passed: boolean;
+  status: 'подтверждён' | 'не подтверждён';
+  statusLabel: 'подтверждён' | 'не подтверждено';
+  source: string;
+  verifiedAt: string;
   verifiedBadgeAwarded: boolean;
   badge?: {
     id: string;
     title: string;
     awardedAt: string;
-    platform: 'hh.ru';
+    platform: QuizPlatform;
   };
   review: Array<{
     questionId: string;
@@ -45,6 +52,7 @@ const QUIZ_CATALOG: SkillQuiz[] = [
     title: 'TypeScript: Верификация уровня Senior',
     badgeTitle: 'Подтвержденный навык TypeScript (hh.ru)',
     category: 'Engineering / Frontend & Backend',
+    platform: 'hh.ru',
     durationMinutes: 15,
     passingScorePercent: 75,
     questions: [
@@ -58,7 +66,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Создает неизменяемый кортеж',
         ],
         correctOptionIndex: 1,
-        explanation: '`infer` используется в правой части `extends` в условных типах для вывода переменной типа из целевого типа.',
+        explanation:
+          '`infer` используется в правой части `extends` в условных типах для вывода переменной типа из целевого типа.',
       },
       {
         id: 'ts-2',
@@ -70,7 +79,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           '`unknown` отключает проверку типов компилятором',
         ],
         correctOptionIndex: 1,
-        explanation: '`unknown` не позволяет вызывать методы или обращаться к свойствам без предварительной проверки и сужения типа (typeof, instanceof, type guards).',
+        explanation:
+          '`unknown` не позволяет вызывать методы или обращаться к свойствам без предварительной проверки и сужения типа (typeof, instanceof, type guards).',
       },
       {
         id: 'ts-3',
@@ -82,7 +92,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Принудительно делает все поля обязательными',
         ],
         correctOptionIndex: 1,
-        explanation: 'Флаг разграничивает отсутствие свойства и явную передачу { prop: undefined }.',
+        explanation:
+          'Флаг разграничивает отсутствие свойства и явную передачу { prop: undefined }.',
       },
       {
         id: 'ts-4',
@@ -103,6 +114,7 @@ const QUIZ_CATALOG: SkillQuiz[] = [
     title: 'React 18 & Архитектура компонентов',
     badgeTitle: 'Подтвержденный навык React (hh.ru)',
     category: 'Engineering / Frontend',
+    platform: 'hh.ru',
     durationMinutes: 15,
     passingScorePercent: 75,
     questions: [
@@ -116,43 +128,47 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Для подписки на внешние хранилища',
         ],
         correctOptionIndex: 1,
-        explanation: '`useDeferredValue` откладывает обновление значения, позволяя более срочным обновлениям (например, пользовательскому вводу) рендериться первыми.',
+        explanation:
+          '`useDeferredValue` откладывает обновление значения, позволяя более срочным обновлениям (например, пользовательскому вводу) рендериться первыми.',
       },
       {
         id: 'react-2',
-        question: 'Что происходит при вызове `startTransition`?',
+        question: 'В чем разница между `useEffect` и `useLayoutEffect`?',
         options: [
-          'Запускается CSS-анимация перехода',
-          'Обновления состояния внутри колбэка помечаются как non-urgent (неблокирующие)',
-          'Компонент полностью перемонтируется',
-          'Очищается кэш виртуального DOM',
+          'useLayoutEffect работает только на сервере',
+          'useLayoutEffect выполняется синхронно сразу после мутаций DOM, до отрисовки браузером (paint), а useEffect — асинхронно после paint',
+          'useEffect выполняется раньше, чем компонент смонтирован',
+          'Разницы нет, useLayoutEffect устарел',
         ],
         correctOptionIndex: 1,
-        explanation: '`startTransition` помечает переданные обновления состояния как фоновые, которые могут быть прерваны пользовательскими действиями.',
+        explanation:
+          'useLayoutEffect блокирует визуальную отрисовку браузером и используется для синхронных измерений DOM, предотвращая мерцание.',
       },
       {
         id: 'react-3',
-        question: 'Какое ключевое правило действует для хука `useSyncExternalStore`?',
+        question: 'Что гарантирует `startTransition` в React 18?',
         options: [
-          'Он может использоваться только в классовых компонентах',
-          'Он решает проблему tearing (рассинхронизации) в конкурентном режиме при подписке на внешние сторы',
-          'Он заменяет хук useEffect во всех сценариях',
-          'Он предназначен для синхронизации локального хранилища браузера',
+          'Запуск CSS анимаций',
+          'Помечает обновление состояния как неблокирующий переход, который может быть прерван более срочными событиями',
+          'Удаляет компонент из виртуального DOM',
+          'Синхронизирует рендер с бэкендом',
         ],
         correctOptionIndex: 1,
-        explanation: '`useSyncExternalStore` обеспечивает консистентное чтение внешних мутабельных источников данных в Concurrent React.',
+        explanation:
+          '`startTransition` позволяет браузеру оставаться отзывчивым даже во время тяжелых ререндеров больших списков.',
       },
       {
         id: 'react-4',
-        question: 'Почему мутация объекта `ref.current` не вызывает повторный рендер компонента?',
+        question: 'Какой хук рекомендован для чтения внешних мутируемых сторов в React 18+?',
         options: [
-          'Потому что `ref` хранится в замыкании Redux',
-          'Потому что `useRef` возвращает обычный JS-объект, мутация которого не инициирует цикл reconciliation',
-          'Потому что React автоматически откладывает изменения ref',
-          'Потому что refs предназначены только для доступа к DOM-узлам',
+          'useExternalStore',
+          'useSyncExternalStore',
+          'useStoreSubscriber',
+          'useMutableSource',
         ],
         correctOptionIndex: 1,
-        explanation: 'Изменение `current` — это обычная мутация свойства объекта, не связанная с механизмом dispatch состояния.',
+        explanation:
+          '`useSyncExternalStore` предотвращает разрывы данных (tearing) при concurrent-рендеринге из внешних источников данных.',
       },
     ],
   },
@@ -161,6 +177,7 @@ const QUIZ_CATALOG: SkillQuiz[] = [
     title: 'Node.js: Backend Architecture & Performance',
     badgeTitle: 'Подтвержденный навык Node.js (hh.ru)',
     category: 'Engineering / Backend',
+    platform: 'hh.ru',
     durationMinutes: 15,
     passingScorePercent: 75,
     questions: [
@@ -181,39 +198,43 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Сработает garbage collection',
         ],
         correctOptionIndex: 1,
-        explanation: 'Так как основной поток выполнения JavaScript в Node.js однопоточный, блокировка Event Loop парализует обработку всех I/O событий.',
+        explanation:
+          'Так как основной поток выполнения JavaScript в Node.js однопоточный, блокировка Event Loop парализует обработку всех I/O событий.',
       },
       {
         id: 'node-3',
         question: 'Для чего используется механизм `Backpressure` в Node.js Streams?',
         options: [
           'Для шифрования потока данных',
-          'Для предотвращения переполнения памяти, когда скорость записи (Writable) ниже скорости чтения (Readable)',
-          'Для автоматического сжатия gzip',
-          'Для разделения потока на несколько процессов',
+          'Для предотвращения переполнения буфера памяти, когда источник (Readable) производит данные быстрее, чем приемник (Writable) успевает их обработать',
+          'Для сжатия трафика gzip',
+          'Для балансировки нагрузки между процессами кластера',
         ],
         correctOptionIndex: 1,
-        explanation: 'Backpressure сигнализирует Readable-потоку приостановить чтение, пока буфер Writable-потока не освободится.',
+        explanation:
+          'Backpressure приостанавливает чтение при возврате `false` из метода `writable.write()` до события `drain`.',
       },
       {
         id: 'node-4',
-        question: 'Какое утверждение о `process.nextTick()` является верным?',
+        question: 'Чем `worker_threads` отличаются от модуля `cluster` в Node.js?',
         options: [
-          'Он выполняется в следующей итерации Event Loop',
-          'Микротаски `nextTick` выполняются сразу после текущей операции до перехода к следующей фазе Event Loop',
-          'Он эквивалентен setTimeout(fn, 0)',
-          'Он предназначен только для обработки ошибок',
+          'Ничем, это дубликаты',
+          'worker_threads разделяют память через SharedArrayBuffer и работают в одном процессе, а cluster запускает независимые дочерние процессы OS',
+          'cluster работает только на Windows',
+          'worker_threads не поддерживают передачу сообщений',
         ],
         correctOptionIndex: 1,
-        explanation: 'Очередь `process.nextTick` обрабатывается сразу после завершения текущего тика JavaScript до перехода к фазам libuv.',
+        explanation:
+          '`worker_threads` — это треды внутри одного процесса с возможностью разделения памяти, тогда как `cluster` порождает отдельные форки Node.js с собственным адресным пространством.',
       },
     ],
   },
   {
     id: 'qa-automation',
-    title: 'QA Automation & E2E Testing (Playwright / Vitest)',
+    title: 'QA Automation: Playwright & e2e Reliability',
     badgeTitle: 'Подтвержденный навык QA Automation (hh.ru)',
-    category: 'Quality Assurance',
+    category: 'Engineering / Quality Assurance',
+    platform: 'hh.ru',
     durationMinutes: 15,
     passingScorePercent: 75,
     questions: [
@@ -227,7 +248,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Автоматическое написание тест-кейсов с помощью AI',
         ],
         correctOptionIndex: 1,
-        explanation: 'Auto-waiting выполняет серию проверок actionability (visible, stable, enabled, editable) до совершения действия.',
+        explanation:
+          'Auto-waiting выполняет серию проверок actionability (visible, stable, enabled, editable) до совершения действия.',
       },
       {
         id: 'qa-2',
@@ -239,11 +261,13 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Библиотека генерации фейковых данных',
         ],
         correctOptionIndex: 1,
-        explanation: 'POM разделяет логику тестирования и селекторы страницы, упрощая поддержку тестов при изменениях верстки.',
+        explanation:
+          'POM разделяет логику тестирования и селекторы страницы, упрощая поддержку тестов при изменениях верстки.',
       },
       {
         id: 'qa-3',
-        question: 'Что проверяет критерий доступности WCAG 2.2 по контрастности текста (AA standard)?',
+        question:
+          'Что проверяет критерий доступности WCAG 2.2 по контрастности текста (AA standard)?',
         options: [
           'Размер шрифта не менее 24px',
           'Минимальный коэффициент контрастности обычного текста к фону не менее 4.5:1 (для крупного текста 3:1)',
@@ -251,19 +275,21 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Отсутствие анимаций на странице',
         ],
         correctOptionIndex: 1,
-        explanation: 'Уровень AA стандарта WCAG требует коэффициент контрастности не менее 4.5:1 для стандартного текста.',
+        explanation:
+          'WCAG AA требует соотношение контраста не менее 4.5:1 для основного текста и 3:1 для текста от 18pt (или 14pt bold).',
       },
       {
         id: 'qa-4',
-        question: 'Чем `test:coverage` полезен в CI/CD пайплайне?',
+        question: 'Как Playwright изолирует состояние между тестами?',
         options: [
-          'Он измеряет долю выполненных строк и веток кода тестами и фейлит сборку при падении ниже заданного порога',
-          'Он автоматически исправляет упавшие тесты',
-          'Он ускоряет компиляцию TypeScript',
-          'Он тестирует сетевую безопасность сервера',
+          'Перезагружает операционную систему',
+          'Каждый тест запускается в новом изолированном BrowserContext с собственными куками, localStorage и кэшем',
+          'Удаляет файлы тестов после выполнения',
+          'Использует один общий профиль Chrome',
         ],
-        correctOptionIndex: 0,
-        explanation: 'Coverage gates гарантируют, что новый и существующий код покрыт тестами на заявленный процент.',
+        correctOptionIndex: 1,
+        explanation:
+          '`BrowserContext` обеспечивает полную изоляцию как режим инкогнито без оверхеда на перезапуск браузера.',
       },
     ],
   },
@@ -272,6 +298,7 @@ const QUIZ_CATALOG: SkillQuiz[] = [
     title: 'SQL & Database Design (PostgreSQL / Relational Data)',
     badgeTitle: 'Подтвержденный навык SQL (hh.ru)',
     category: 'Engineering / Databases',
+    platform: 'hh.ru',
     durationMinutes: 15,
     passingScorePercent: 75,
     questions: [
@@ -285,7 +312,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Автоматически преобразует все запросы в SERIALIZABLE',
         ],
         correctOptionIndex: 1,
-        explanation: 'Repeatable Read создает снимок данных на момент первого запроса в транзакции, исключая неповторяющееся чтение.',
+        explanation:
+          'Repeatable Read создает снимок данных на момент первого запроса в транзакции, исключая неповторяющееся чтение.',
       },
       {
         id: 'sql-2',
@@ -297,7 +325,8 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           'Для шифрования данных',
         ],
         correctOptionIndex: 1,
-        explanation: 'Covering index позволяет СУБД извлекать запрошенные поля напрямую из индекса (Index Only Scan).',
+        explanation:
+          'Covering index позволяет СУБД извлекать запрошенные поля напрямую из индекса (Index Only Scan).',
       },
       {
         id: 'sql-3',
@@ -321,7 +350,134 @@ const QUIZ_CATALOG: SkillQuiz[] = [
           '`EXISTS` работает только с первичными ключами',
         ],
         correctOptionIndex: 1,
-        explanation: '`EXISTS` оптимизируется планировщиком как semi-join и останавливается на первом совпадении.',
+        explanation:
+          '`EXISTS` оптимизируется планировщиком как semi-join и останавливается на первом совпадении.',
+      },
+    ],
+  },
+  {
+    id: 'python',
+    title: 'Python: Core Architecture & Data Structures',
+    badgeTitle: 'Подтвержденный навык Python (LinkedIn)',
+    category: 'Engineering / Backend',
+    platform: 'linkedin',
+    durationMinutes: 15,
+    passingScorePercent: 70,
+    questions: [
+      {
+        id: 'py-1',
+        question: 'Что такое GIL (Global Interpreter Lock) в CPython?',
+        options: [
+          'Инструмент для статического анализа кода',
+          'Мьютекс, защищающий доступ к объектам Python и предотвращающий одновременное выполнение байткода несколькими потоками',
+          'Встроенная база данных',
+          'Компилятор JIT',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'GIL обеспечивает потокобезопасность управления памятью CPython, ограничивая параллельное выполнение байткода одним потоком на процесс.',
+      },
+      {
+        id: 'py-2',
+        question: 'В чем ключевое отличие генератора (generator) от спискового включения (list comprehension)?',
+        options: [
+          'Генераторы не могут использовать условия',
+          'Генераторы вычисляют элементы лениво (по требованию) и не хранят всю коллекцию в оперативной памяти',
+          'Списковые включения работают только со строками',
+          'Генераторы нельзя передавать в функции',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'Генераторы возвращают итератор и отдают значения по одному через протокол итерации, экономя память на больших объемах данных.',
+      },
+      {
+        id: 'py-3',
+        question: 'Как в Python работают декораторы функций?',
+        options: [
+          'Изменяют байткод функции при запуске системы',
+          'Являются синтаксическим сахаром для передачи функции в качестве аргумента другой функции и возврата модифицированного вызова',
+          'Служат для создания графического интерфейса',
+          'Автоматически запускают функцию в отдельном процессе',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          '@decorator над функцией fn эквивалентен вызову fn = decorator(fn).',
+      },
+      {
+        id: 'py-4',
+        question: 'Что произойдет при использовании изменяемого объекта (например, list=[]) в качестве аргумента по умолчанию?',
+        options: [
+          'Python выдаст синтаксическую ошибку',
+          'Список будет создан один раз при определении функции и будет общим для всех ее последующих вызовов',
+          'Список будет заново создаваться при каждом вызове',
+          'Значение аргумента автоматически очистится после выполнения',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'Значения аргументов по умолчанию вычисляются однажды при загрузке модуля, поэтому изменяемые объекты сохраняют состояние между вызовами.',
+      },
+    ],
+  },
+  {
+    id: 'docker',
+    title: 'Docker & Контейнеризация сервисов',
+    badgeTitle: 'Подтвержденный навык Docker (LinkedIn)',
+    category: 'Engineering / DevOps',
+    platform: 'linkedin',
+    durationMinutes: 15,
+    passingScorePercent: 75,
+    questions: [
+      {
+        id: 'dk-1',
+        question: 'Как Docker кэширует слои при сборке образа через `docker build`?',
+        options: [
+          'Кэширует только финальный результат',
+          'Проверяет каждую инструкцию: если инструкция и предшествующие слои не изменились, слой переиспользуется из кэша',
+          'Случайно сбрасывает кэш раз в час',
+          'Кэширует только инструкции RUN',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'При изменении любой инструкции Docker инвалидирует кэш для неё и всех последующих слоев.',
+      },
+      {
+        id: 'dk-2',
+        question: 'В чем разница между `CMD` и `ENTRYPOINT` в Dockerfile?',
+        options: [
+          'Разницы нет',
+          '`ENTRYPOINT` задает базовую команду запуска контейнера, а `CMD` предоставляет аргументы по умолчанию, которые легко переопределить при запуске',
+          '`CMD` выполняется при сборке образа, а `ENTRYPOINT` — при запуске',
+          '`ENTRYPOINT` работает только на Linux',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          '`ENTRYPOINT` фиксирует исполняемый файл, а параметры из `CMD` передаются ему как дефолтные аргументы.',
+      },
+      {
+        id: 'dk-3',
+        question: 'Какое назначение у multi-stage сборок в Docker?',
+        options: [
+          'Запуск нескольких контейнеров в одной сети',
+          'Минимизация итогового размера образа путем разделения этапов сборки зависимостей и копирования только готовых артефактов в чистый runtime-образ',
+          'Автоматическое масштабирование в Kubernetes',
+          'Синхронизация файлов хоста',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'Multi-stage сборка изолирует тяжелые компиляторы и сборочные зависимости от итогового легковесного контейнера.',
+      },
+      {
+        id: 'dk-4',
+        question: 'Чем том (`named volume`) отличается от `bind mount`?',
+        options: [
+          'Bind mount быстрее во всех случаях',
+          'Named volume управляется Docker и изолирован в защищенной директории хоста, а bind mount монтирует произвольный путь файловой системы хоста',
+          'Named volume удаляется при остановке контейнера',
+          'Named volume не поддерживает персистентность данных',
+        ],
+        correctOptionIndex: 1,
+        explanation:
+          'Тома Docker полностью управляются движком, безопасны и переносимы между разными хостами.',
       },
     ],
   },
@@ -361,6 +517,8 @@ export function evaluateSkillQuiz(
 
   const scorePercent = Math.round((correctCount / quiz.questions.length) * 100);
   const passed = scorePercent >= quiz.passingScorePercent;
+  const source = quiz.platform === 'linkedin' ? 'Банк квизов LinkedIn' : 'Банк квизов hh.ru';
+  const verifiedAt = new Date().toISOString().slice(0, 10);
 
   return {
     quizId,
@@ -368,15 +526,80 @@ export function evaluateSkillQuiz(
     correctAnswersCount: correctCount,
     totalQuestions: quiz.questions.length,
     passed,
+    status: passed ? 'подтверждён' : 'не подтверждён',
+    statusLabel: passed ? 'подтверждён' : 'не подтверждено',
+    source,
+    verifiedAt,
     verifiedBadgeAwarded: passed,
     badge: passed
       ? {
           id: `badge-${quiz.id}`,
           title: quiz.badgeTitle,
           awardedAt: new Date().toISOString(),
-          platform: 'hh.ru',
+          platform: quiz.platform,
         }
       : undefined,
     review,
+  };
+}
+
+export interface SkillVerificationFact {
+  skillName: string;
+  status: 'подтверждён' | 'не подтверждён' | 'заявлен';
+  source: string;
+  date: string;
+  scorePercent: number;
+  statement: string;
+}
+
+export function buildSkillVerificationFact(
+  skillName: string,
+  result: QuizEvaluationResult,
+): SkillVerificationFact {
+  const statement = result.passed
+    ? `${skillName}: подтверждён (${result.source}, ${result.verifiedAt}, ${result.scorePercent}%)`
+    : `${skillName}: не подтверждено (${result.source}, ${result.verifiedAt}, ${result.scorePercent}%)`;
+
+  return {
+    skillName,
+    status: result.status,
+    source: result.source,
+    date: result.verifiedAt,
+    scorePercent: result.scorePercent,
+    statement,
+  };
+}
+
+export function createSkillVerificationProposal(
+  skillName: string,
+  result: QuizEvaluationResult,
+  memoryId?: string,
+) {
+  const fact = buildSkillVerificationFact(skillName, result);
+  const safeMemoryRef = memoryId
+    ? memoryId.startsWith('memory:')
+      ? memoryId
+      : `memory:${memoryId.replace(/^memory-/, '')}`
+    : 'memory:skill-fact-1';
+
+  return {
+    kind: 'resume.revise' as const,
+    objective: `Обновить статус навыка ${skillName}: ${fact.status} (${fact.source})`,
+    evidenceRefs: [safeMemoryRef],
+    acceptanceCriteria: [
+      `У навыка ${skillName} зафиксирован статус ${fact.status}`,
+      `Источник: ${fact.source}, дата проверки: ${fact.date}`,
+    ],
+    expectedSignal: result.passed
+      ? `Подтверждённый навык ${skillName} укрепляет профиль`
+      : `Навык ${skillName} отмечен как требующий практики`,
+    measureAfter: new Date().toISOString().slice(0, 10),
+    risk: 'candidate_data_write' as const,
+    resumeRevision: {
+      section: 'skills' as const,
+      experienceId: null,
+      memoryId: memoryId ?? null,
+      proposedText: `${skillName} [${fact.status}] (${fact.source}, ${fact.date})`,
+    },
   };
 }

@@ -12086,6 +12086,60 @@
   color: var(--career-warning);
 }
 
+.career-profile-screen-tag.is-verified {
+  border-color: color-mix(in oklch, var(--career-success) 45%, var(--career-line));
+  background: var(--career-success-soft);
+  color: var(--career-success);
+}
+
+.career-profile-screen-tag.is-unverified {
+  border-color: color-mix(in oklch, var(--career-warning) 45%, var(--career-line));
+  background: var(--career-warning-soft);
+  color: var(--career-warning);
+}
+
+.career-profile-screen-skill-meta {
+  font-size: var(--career-text-aux);
+  color: inherit;
+  opacity: 0.9;
+}
+
+.career-expert-skill-quiz-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3);
+  background: var(--career-bg-elevated);
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  margin-top: var(--career-space-2);
+}
+
+.career-expert-skill-quiz-prompt span {
+  font-size: var(--career-text-aux);
+  color: var(--career-accent);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.career-expert-skill-quiz-prompt strong {
+  font-size: var(--career-text-sm);
+  color: var(--career-text-strong);
+}
+
+.career-expert-skill-quiz-prompt p {
+  margin: 0;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+  line-height: var(--career-line-snug);
+}
+
+.career-expert-skill-quiz-prompt button {
+  align-self: flex-start;
+  margin-top: var(--career-space-1);
+}
+
 .career-profile-screen-panel {
   border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);

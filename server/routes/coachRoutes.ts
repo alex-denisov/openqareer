@@ -16,6 +16,11 @@ import {
 import { registerCoachResultRoute } from './coachResultRoute';
 import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
 import { buildCoachSubjectContext } from './coachSubjectContext';
+import {
+  evaluateSkillQuiz,
+  buildSkillVerificationFact,
+  createSkillVerificationProposal,
+} from '../../src/services/hhSkillQuizzes';
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
@@ -201,6 +206,31 @@ const handleRejectProposal: Handler = async (deps, request, reply) => {
   return reply.code(200).send({ data: { ok: true, proposalKey: body.proposalKey } });
 };
 
+const handleVerifySkillQuiz: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+
+  const schema = z.object({
+    quizId: z.string().min(1).max(80),
+    skillName: z.string().min(1).max(120),
+    answers: z.record(z.string(), z.number()),
+  });
+  const body = schema.parse(request.body);
+  const result = evaluateSkillQuiz(body.quizId, body.answers);
+  const fact = buildSkillVerificationFact(body.skillName, result);
+  const proposal = createSkillVerificationProposal(body.skillName, result);
+
+  return reply.code(200).send({
+    data: {
+      result,
+      fact,
+      proposal,
+    },
+  });
+};
+
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCoachResultRoute(app, deps);
   app.post(
@@ -217,5 +247,12 @@ export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps)
       config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
     },
     withDeps(deps, handleRejectProposal),
+  );
+  app.post(
+    '/api/v1/coach/skill-quiz/verify',
+    {
+      config: { rateLimit: { max: 30, timeWindow: '1 minute' } },
+    },
+    withDeps(deps, handleVerifySkillQuiz),
   );
 }

@@ -155,6 +155,20 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('Консультант · Вакансии');
     expect(html).toContain('О вакансии: Senior Backend — BigTech');
   });
+
+  it('renders skill quiz verification prompt when stage is profile (B376)', () => {
+    const html = renderToStaticMarkup(
+      <CareerExpertPanel
+        stage="profile"
+        initialUser={null}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('Консультант · Профиль');
+    expect(html).toContain('Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn');
+    expect(html).toContain('Пройти квиз по навыку');
+  });
 });
 
 /**

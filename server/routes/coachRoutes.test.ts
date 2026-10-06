@@ -290,4 +290,33 @@ describe('Coach Stage Routes (B340)', () => {
     const resultProposals = nextTurn.json().data.actionProposals;
     expect(resultProposals).toHaveLength(0);
   });
+
+  it('верифицирует квиз и возвращает статус и предложение для профиля (B376)', async () => {
+    const { app, headers } = await createTestServer();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/skill-quiz/verify',
+      headers,
+      payload: {
+        quizId: 'typescript',
+        skillName: 'TypeScript',
+        answers: {
+          'ts-1': 1,
+          'ts-2': 1,
+          'ts-3': 1,
+          'ts-4': 1,
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json().data;
+    expect(body.result.passed).toBe(true);
+    expect(body.result.status).toBe('подтверждён');
+    expect(body.fact.status).toBe('подтверждён');
+    expect(body.fact.source).toContain('hh.ru');
+    expect(body.proposal.kind).toBe('resume.revise');
+    expect(body.proposal.resumeRevision.section).toBe('skills');
+  });
 });

@@ -113,6 +113,9 @@ export interface ResumeSkillInput {
   readonly evidenceMemoryId?: string;
   readonly name: string;
   readonly level?: string;
+  readonly status?: string;
+  readonly source?: string;
+  readonly verifiedAt?: string;
 }
 
 export interface ResumeEducationInput {
@@ -318,6 +321,9 @@ export const resumeDraftSchema = z
             evidenceMemoryId: memoryIdSchema.optional(),
             name: labelSchema,
             level: labelSchema.optional(),
+            status: labelSchema.optional(),
+            source: labelSchema.optional(),
+            verifiedAt: chronologyDateSchema.optional(),
           })
           .strict(),
       )
