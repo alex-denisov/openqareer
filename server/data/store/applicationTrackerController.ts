@@ -196,6 +196,16 @@ export class ApplicationTrackerController {
     return this.offers.put(applicationId, terms, respondBy);
   }
 
+  getOffer(candidateId: string, applicationId: string): StoredApplicationOffer | null {
+    this.mustGetOwn(candidateId, applicationId);
+    return this.offers.get(applicationId);
+  }
+
+  listOffers(candidateId: string): StoredApplicationOffer[] {
+    const apps = this.applications.list(candidateId);
+    return this.offers.list(apps.map((a) => a.id));
+  }
+
   listSkips(candidateId: string): StoredVacancySkip[] {
     return this.skips.list(candidateId);
   }
@@ -266,6 +276,7 @@ export class ApplicationTrackerController {
       .list(application.id)
       .filter((material) => this.documents.belongsToCandidate(application.candidateId, material.documentId));
     const interviews = this.interviews.list(application.id);
+    const offer = this.offers.get(application.id);
     const derived = deriveApplicationFields({
       application,
       events,
@@ -277,6 +288,7 @@ export class ApplicationTrackerController {
     return {
       ...application,
       ...derived,
+      offer: offer ?? null,
       archiveStaleDays: options.archiveStaleDays ?? DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS,
     };
   }

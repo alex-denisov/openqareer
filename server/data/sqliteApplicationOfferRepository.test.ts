@@ -39,4 +39,36 @@ describe('SqliteApplicationOfferRepository', () => {
     const repo = createRepo();
     expect(repo.get('app-1')).toBeNull();
   });
+
+  it('stores and reads extended offer terms including format, benefits, risks, and sourceNote', () => {
+    const repo = createRepo();
+    repo.put(
+      'app-1',
+      {
+        baseSalary: 350_000,
+        salaryPeriod: 'month',
+        bonus: 500_000,
+        currency: 'RUB',
+        format: 'remote',
+        probationPeriodMonths: 3,
+        probationSalary: 300_000,
+        benefits: ['ДМС', 'Обучение'],
+        risks: ['Серая премия'],
+        sourceNote: 'со слов кандидата',
+      },
+      '2026-03-01',
+    );
+    const offer = repo.get('app-1');
+    expect(offer?.terms.format).toBe('remote');
+    expect(offer?.terms.benefits).toEqual(['ДМС', 'Обучение']);
+    expect(offer?.terms.risks).toEqual(['Серая премия']);
+    expect(offer?.terms.sourceNote).toBe('со слов кандидата');
+  });
+
+  it('lists existing offers for given application IDs', () => {
+    const repo = createRepo();
+    repo.put('app-1', { baseSalary: 250_000 }, null);
+    expect(repo.list(['app-1', 'non-existent']).length).toBe(1);
+    expect(repo.list([]).length).toBe(0);
+  });
 });

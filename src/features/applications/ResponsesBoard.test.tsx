@@ -58,6 +58,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
     addManualCard: async (input) =>
       application({ clusterId: input.clusterId ?? null, stage: input.stage }),
     skip: async () => {},
+    saveOffer: async () => {},
   };
 }
 
@@ -517,7 +518,7 @@ describe('ResponsesBoard analytics tab switch (B355)', () => {
       boardTabBtn?.click();
     });
 
-    expect(container.textContent).toContain('Откликнулся');
+    expect(container.textContent).toContain('Пробовали отправить');
     expect(container.textContent).toContain('Интервью');
   });
 });

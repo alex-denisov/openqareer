@@ -82,6 +82,13 @@ export interface ApplicationTrackerMethods {
     terms: ApplicationOfferTerms,
     respondBy: string | null,
   ): StoredApplicationOffer;
+  getApplicationOffer(
+    candidateId: string,
+    applicationId: string,
+  ): StoredApplicationOffer | null;
+  listApplicationOffers(
+    candidateId: string,
+  ): StoredApplicationOffer[];
   listVacancySkips(candidateId: string): StoredVacancySkip[];
   createVacancySkip(
     candidateId: string,
@@ -215,6 +222,8 @@ function createInterviewApplicationMethods(
   | 'createApplicationInterview'
   | 'patchApplicationInterview'
   | 'putApplicationOffer'
+  | 'getApplicationOffer'
+  | 'listApplicationOffers'
   | 'getInterviewSubject'
 > {
   return {
@@ -237,6 +246,14 @@ function createInterviewApplicationMethods(
     putApplicationOffer(candidateId, applicationId, terms, respondBy) {
       requireCandidate(candidateId);
       return tracker.putOffer(candidateId, applicationId, terms, respondBy);
+    },
+    getApplicationOffer(candidateId, applicationId) {
+      requireCandidate(candidateId);
+      return tracker.getOffer(candidateId, applicationId);
+    },
+    listApplicationOffers(candidateId) {
+      requireCandidate(candidateId);
+      return tracker.listOffers(candidateId);
     },
   };
 }

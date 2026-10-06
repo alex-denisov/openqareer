@@ -7,6 +7,7 @@ import type {
 import type { DeliveryReceipt } from '../../shared/applicationStage';
 import type { StoredApplicationMaterial } from '../data/sqliteApplicationMaterialsRepository';
 import type { StoredApplicationInterview } from '../data/sqliteApplicationInterviewRepository';
+import type { StoredApplicationOffer } from '../data/sqliteApplicationOfferRepository';
 
 /** Stages the follow-up clock runs for; `saved` has no follow-up yet, closed stages have none either. */
 const FOLLOW_UP_ACTIVE_STAGES = new Set(['applied', 'responded']);
@@ -21,6 +22,7 @@ export interface ApplicationInterviewSummary {
 
 export interface ApplicationView extends StoredApplication, ApplicationDerivedFields {
   readonly archiveStaleDays?: number;
+  readonly offer?: StoredApplicationOffer | null;
 }
 
 export interface ApplicationDerivedFields {

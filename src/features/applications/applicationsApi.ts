@@ -2,7 +2,7 @@ import type { ApplicationView } from '../../../server/domain/applicationDerivedF
 import type { ApplicationStage, DeliveryReceipt } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
-import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
+import { apiFetch, readData, readDataArray, readDataObject } from '../coach/apiClient';
 
 export type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
 
@@ -145,3 +145,41 @@ export async function getApplicationFunnel(signal?: AbortSignal): Promise<Applic
   const response = await apiFetch('/api/v1/candidate/applications/funnel', { signal });
   return readDataObject<ApplicationFunnel>(response);
 }
+
+export type {
+  ApplicationOfferTerms,
+  StoredApplicationOffer,
+} from '../../../server/data/sqliteApplicationOfferRepository';
+
+export async function getApplicationOffer(
+  applicationId: string,
+): Promise<import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer | null> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/offer`,
+  );
+  return readData<import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer | null>(response);
+}
+
+export async function listApplicationOffers(): Promise<
+  import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer[]
+> {
+  const response = await apiFetch('/api/v1/candidate/applications/offers');
+  return readDataArray<import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer>(response);
+}
+
+export async function saveApplicationOffer(
+  applicationId: string,
+  terms: import('../../../server/data/sqliteApplicationOfferRepository').ApplicationOfferTerms,
+  respondBy?: string | null,
+): Promise<import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/offer`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ terms, respondBy }),
+    },
+  );
+  return readDataObject<import('../../../server/data/sqliteApplicationOfferRepository').StoredApplicationOffer>(response);
+}
+

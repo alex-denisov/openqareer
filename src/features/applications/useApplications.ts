@@ -10,6 +10,8 @@ import {
   patchApplication,
   restoreApplicationFromArchive,
   recordFollowUpSent,
+  saveApplicationOffer,
+  type ApplicationOfferTerms,
   type ApplicationView,
   type CreateApplicationInput,
 } from './applicationsApi';
@@ -56,6 +58,11 @@ export interface UseApplications {
   readonly restoreFromArchive: (application: ApplicationView) => Promise<void>;
   readonly markFollowUpSent: (id: string) => Promise<void>;
   readonly saveNote: (id: string, notes: string) => void;
+  readonly saveOffer: (
+    id: string,
+    terms: ApplicationOfferTerms,
+    respondBy?: string | null,
+  ) => Promise<void>;
   readonly addManualCard: (input: CreateApplicationInput) => Promise<ApplicationView>;
   readonly skip: (application: ApplicationView, reasonId: SkipReasonId) => Promise<void>;
 }
@@ -242,6 +249,16 @@ export function useApplications(): UseApplications {
     );
   }, []);
 
+  const saveOffer = useCallback(
+    async (id: string, terms: ApplicationOfferTerms, respondBy?: string | null) => {
+      const stored = await saveApplicationOffer(id, terms, respondBy);
+      setApplications((list) =>
+        list.map((item) => (item.id === id ? { ...item, offer: stored } : item)),
+      );
+    },
+    [],
+  );
+
   return {
     status,
     applications,
@@ -257,6 +274,7 @@ export function useApplications(): UseApplications {
     restoreFromArchive,
     markFollowUpSent,
     saveNote,
+    saveOffer,
     addManualCard,
     skip,
   };
