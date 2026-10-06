@@ -79,7 +79,11 @@ export function selectInvitationTargets(
   limit: number,
 ): readonly InvitationCandidate[] {
   const ordered = [...candidates]
-    .filter((c) => PROFILE_URL.test(c.profileUrl.replace('://www.', '://')) && !alreadyInvited.has(c.profileUrl))
+    .filter(
+      (c) =>
+        PROFILE_URL.test(c.profileUrl.replace('://www.', '://')) &&
+        !alreadyInvited.has(c.profileUrl),
+    )
     .sort((a, b) => Number(b.kind === 'recruiter') - Number(a.kind === 'recruiter'));
   const perCompany = new Map<string, number>();
   const picked: InvitationCandidate[] = [];

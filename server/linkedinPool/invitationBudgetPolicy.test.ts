@@ -49,7 +49,9 @@ describe('planInvitations', () => {
   });
 
   it('низкое принятие не блокирует, пока выборка мала', () => {
-    expect(planInvitations({ ...base, sentLast30d: 5, acceptedLast30d: 0 }).allowed).toBeGreaterThan(0);
+    expect(
+      planInvitations({ ...base, sentLast30d: 5, acceptedLast30d: 0 }).allowed,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -81,7 +83,10 @@ describe('selectInvitationTargets', () => {
 
   it('отбрасывает чужие домены и адреса не профилей', () => {
     const picked = selectInvitationTargets(
-      [person('x', { profileUrl: 'https://evil.example/in/x' }), person('y', { profileUrl: 'https://www.linkedin.com/jobs/1' })],
+      [
+        person('x', { profileUrl: 'https://evil.example/in/x' }),
+        person('y', { profileUrl: 'https://www.linkedin.com/jobs/1' }),
+      ],
       new Set(),
       5,
     );
