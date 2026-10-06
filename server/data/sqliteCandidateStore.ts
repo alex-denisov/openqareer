@@ -39,6 +39,7 @@ import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
@@ -100,6 +101,7 @@ export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentR
 
 export class SqliteCandidateStore implements CandidateStore {
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  readonly starPrepRepo: SqliteStarPrepRepository;
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -158,10 +160,8 @@ export class SqliteCandidateStore implements CandidateStore {
       sealedText: this.sealedText,
     });
     this.configureDatabase();
-    this.profileRevisionRepo = new SqliteProfileRevisionRepository(
-      this.database,
-      this.sealedText,
-    );
+    this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
+    this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.careerCommandRepository.recoverInterruptedProcessing(
       new Date().toISOString(),
     );

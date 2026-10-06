@@ -42,6 +42,7 @@ import type { ResumeDraft } from '../domain/resumeDraft';
 import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -323,6 +324,8 @@ export interface CommittedResumeImport {
 export interface CandidateStore {
   /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
+  /** Подготовка STAR на отклик (B392), запечатанный текст кандидата. */
+  readonly starPrepRepo: SqliteStarPrepRepository;
   /** Joins nested store writes into one SQLite transaction. */
   transaction<T>(operation: () => T): T;
   createCandidate(input: {
