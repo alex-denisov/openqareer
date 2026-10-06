@@ -186,3 +186,28 @@ describe('sliding session expiry (PRB-038)', () => {
     expect(auth.authenticate(sessionToken)).toBeNull();
   });
 });
+
+describe('canonical email anti-abuse and duplicate detection (B347 / US-11.5)', () => {
+  it('detects duplicate registration across email aliases (plus-tags, dots, domain synonyms)', async () => {
+    const { auth, candidates } = createServices();
+    await auth.register('first.user', 'valid-password-1', candidates, {
+      email: 'fixture@gmail.com',
+    });
+
+    // Trying to register with plus tag on googlemail.com with dots
+    await expect(
+      auth.register('second.user', 'valid-password-2', candidates, {
+        email: 'f.i.x.t.u.r.e+alias@googlemail.com',
+      }),
+    ).rejects.toThrow('email is already registered');
+  });
+
+  it('rejects registration with disposable email domain', async () => {
+    const { auth, candidates } = createServices();
+    await expect(
+      auth.register('burner.user', 'valid-password-3', candidates, {
+        email: 'bot@tempmail.com',
+      }),
+    ).rejects.toThrow(/Временные и одноразовые/);
+  });
+});
