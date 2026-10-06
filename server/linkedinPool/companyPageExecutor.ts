@@ -189,6 +189,13 @@ export class LinkedinPoolCompanyPageExecutor {
     await this.closeBrowser();
   }
 
+  /** B374: приглашения не отправляются, пока исполнитель остановлен или ждёт ручной проверки. */
+  isHaltedForSafety(): boolean {
+    if (this.stopped || this.reauthRequired) return true;
+    if (!this.config.enabled) return true;
+    return this.repository.findAccount(this.config.accountId)?.state !== 'ready';
+  }
+
   private isBackingOff(): boolean {
     return this.now().getTime() < this.backoffUntilMs;
   }
