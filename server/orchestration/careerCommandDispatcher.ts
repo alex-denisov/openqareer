@@ -14,6 +14,8 @@ import {
 } from '../connectors/connectorHarness';
 import type { ProfileRevisionRecord } from '../data/sqliteProfileRevisionRepository';
 import type { CareerActionProposal } from '../domain/coach';
+import { CareerCommandNotFoundError } from '../data/sqliteCareerCommandRepository';
+import { currentSkillText, writeSkillState } from './skillRevision';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { CareerCommandRecord, ResumeReviseExecutionTarget } from './careerCommandPlanner';
 
@@ -26,6 +28,20 @@ interface CareerCommandDispatcherOptions {
 export type CareerCommandView = CareerCommandRecord & {
   readonly profileRevisionReverted?: true;
 };
+
+export class ProfileRevisionNotFoundError extends Error {
+  constructor() {
+    super('Для этой команды нет правки профиля.');
+    this.name = 'ProfileRevisionNotFoundError';
+  }
+}
+
+export class ProfileRevisionAlreadyRevertedError extends Error {
+  constructor() {
+    super('Правка уже откатана.');
+    this.name = 'ProfileRevisionAlreadyRevertedError';
+  }
+}
 
 export class ResumeRevisionConflictError extends Error {
   constructor() {
@@ -249,14 +265,14 @@ export class CareerCommandDispatcher {
 
   async revert(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
     const command = this.store.getCareerCommand(candidateId, commandId);
-    if (!command) throw new Error('career_command_not_found');
+    if (!command) throw new CareerCommandNotFoundError();
     return this.store.transaction(() => {
       const revision = this.store.profileRevisionRepo.getRevisionByCommandId(
         candidateId,
         commandId,
       );
-      if (!revision) throw new Error('profile_revision_not_found');
-      if (revision.revertedAt) return command;
+      if (!revision) throw new ProfileRevisionNotFoundError();
+      if (revision.revertedAt) throw new ProfileRevisionAlreadyRevertedError();
 
       const snapshot = this.store.getSnapshot(candidateId);
       const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
@@ -314,6 +330,9 @@ export function currentTextForResumeRevision(
   if (target.section === 'about') {
     return draft.candidate.about ?? '';
   }
+  if (target.section === 'skills') {
+    return target.experienceId ? currentSkillText(draft, target.experienceId) : null;
+  }
   if (!target.experienceId) return null;
   const experience = draft.experience.find((entry) => entry.id === target.experienceId);
   if (!experience) return null;
@@ -333,6 +352,10 @@ function applyRevisionToDraft(
   if (target.section === 'about') {
     return { ...draft, candidate: { ...draft.candidate, about: target.proposedText } };
   }
+  if (target.section === 'skills') {
+    if (!target.experienceId) throw new ResumeRevisionConflictError();
+    return writeSkillState(draft, target.experienceId, target.proposedText);
+  }
   const experiences = [...draft.experience];
   const idx = experiences.findIndex((entry) => entry.id === target.experienceId);
   if (idx < 0) throw new ResumeRevisionConflictError();
@@ -346,6 +369,10 @@ function revertDraftRevision(draft: ResumeDraft, revision: ProfileRevisionRecord
   }
   if (revision.section === 'about') {
     return { ...draft, candidate: { ...draft.candidate, about: revision.previousText } };
+  }
+  if (revision.section === 'skills') {
+    if (!revision.experienceId) throw new ResumeRevisionConflictError();
+    return writeSkillState(draft, revision.experienceId, revision.previousText);
   }
   const experiences = [...draft.experience];
   const idx = experiences.findIndex((entry) => entry.id === revision.experienceId);

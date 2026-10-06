@@ -48,20 +48,21 @@ const CAREER_ACTION_KINDS = [
 
 export const resumeRevisionProposalSchema = z
   .object({
-    section: z.enum(['headline', 'about', 'experience']),
+    section: z.enum(['headline', 'about', 'experience', 'skills']),
     experienceId: z.string().min(1).max(80).nullable(),
     memoryId: z.string().min(1).max(80).nullable(),
     proposedText: z.string().trim().min(1).max(10_000),
   })
   .strict()
   .superRefine((target, context) => {
-    if (target.section === 'experience' && !target.experienceId) {
+    const keyed = target.section === 'experience' || target.section === 'skills';
+    if (keyed && !target.experienceId) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'experience revision needs an existing entry id',
+        message: 'experience and skill revisions need an entry key',
       });
     }
-    if (target.section !== 'experience' && target.experienceId) {
+    if (!keyed && target.experienceId) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'only experience revisions have an entry id',

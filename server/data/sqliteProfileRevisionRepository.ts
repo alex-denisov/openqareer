@@ -2,11 +2,20 @@ import { DatabaseSync } from 'node:sqlite';
 import { MIGRATION_37 } from './profileRevisionSchema';
 import type { SealedText } from './sealedText';
 
+export type ProfileRevisionSection = 'headline' | 'about' | 'experience' | 'skills';
+
+/**
+ * The 37th-migration CHECK only allows three sections and the production table
+ * cannot be altered inside the deploy window, so a skill revision is stored as
+ * an 'experience' row whose entry id carries this prefix.
+ */
+const SKILL_KEY_PREFIX = 'skill:';
+
 export interface ProfileRevisionRecord {
   readonly id: string;
   readonly candidateId: string;
   readonly commandId: string;
-  readonly section: 'headline' | 'about' | 'experience';
+  readonly section: ProfileRevisionSection;
   readonly experienceId?: string | null;
   readonly previousText: string;
   readonly appliedText: string;
@@ -38,7 +47,7 @@ export class SqliteProfileRevisionRepository {
     readonly id: string;
     readonly candidateId: string;
     readonly commandId: string;
-    readonly section: 'headline' | 'about' | 'experience';
+    readonly section: ProfileRevisionSection;
     readonly experienceId?: string | null;
     readonly previousText: string;
     readonly appliedText: string;
@@ -53,8 +62,10 @@ export class SqliteProfileRevisionRepository {
         input.id,
         input.candidateId,
         input.commandId,
-        input.section,
-        input.experienceId ?? null,
+        input.section === 'skills' ? 'experience' : input.section,
+        input.section === 'skills'
+          ? `${SKILL_KEY_PREFIX}${input.experienceId ?? ''}`
+          : (input.experienceId ?? null),
         this.seal(input.candidateId, input.id, 'previous', input.previousText),
         this.seal(input.candidateId, input.id, 'applied', input.appliedText),
         input.createdAt,
@@ -104,8 +115,10 @@ export class SqliteProfileRevisionRepository {
       id: row.id,
       candidateId: row.candidate_id,
       commandId: row.command_id,
-      section: row.section,
-      experienceId: row.experience_id,
+      section: isSkillRow(row) ? 'skills' : row.section,
+      experienceId: isSkillRow(row)
+        ? row.experience_id!.slice(SKILL_KEY_PREFIX.length)
+        : row.experience_id,
       previousText: this.sealedText.open(
         row.previous_text_cipher,
         profileRevisionAssociatedData(row.candidate_id, row.id, 'previous'),
@@ -130,4 +143,8 @@ function profileRevisionAssociatedData(
   field: 'previous' | 'applied',
 ): string {
   return `candidate:${candidateId}:profile-revision:${revisionId}:${field}`;
+}
+
+function isSkillRow(row: RevisionRow): boolean {
+  return row.section === 'experience' && Boolean(row.experience_id?.startsWith(SKILL_KEY_PREFIX));
 }

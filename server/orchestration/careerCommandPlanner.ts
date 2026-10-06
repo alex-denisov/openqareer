@@ -25,7 +25,7 @@ export type HhApplicationExecutionTarget = z.infer<typeof hhApplicationExecution
 export const resumeReviseExecutionTargetSchema = z
   .object({
     targetType: z.literal('resume_block').optional(),
-    section: z.enum(['headline', 'about', 'experience']),
+    section: z.enum(['headline', 'about', 'experience', 'skills']),
     experienceId: z.string().optional(),
     memoryId: z.string().optional(),
     currentText: z.string().max(10_000),
@@ -34,13 +34,14 @@ export const resumeReviseExecutionTargetSchema = z
   })
   .strict()
   .superRefine((target, context) => {
-    if (target.section === 'experience' && !target.experienceId) {
+    const keyed = target.section === 'experience' || target.section === 'skills';
+    if (keyed && !target.experienceId) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'experience revision needs an existing entry id',
+        message: 'experience and skill revisions need an entry key',
       });
     }
-    if (target.section !== 'experience' && target.experienceId) {
+    if (!keyed && target.experienceId) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'only experience revisions have an entry id',

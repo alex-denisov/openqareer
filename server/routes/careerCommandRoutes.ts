@@ -9,6 +9,8 @@ import type { CandidateSnapshot } from '../data/candidateStore';
 import { CareerCommandNotFoundError } from '../data/sqliteCareerCommandRepository';
 import {
   currentTextForResumeRevision,
+  ProfileRevisionAlreadyRevertedError,
+  ProfileRevisionNotFoundError,
   ResumeRevisionConflictError,
 } from '../orchestration/careerCommandDispatcher';
 import { EMPTY_RESUME_DRAFT } from '../domain/resumeDraft';
@@ -21,6 +23,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { registerSkillQuizApplyRoute } from './skillQuizApplyRoute';
 import { careerCommandParamsSchema, careerCommandRequestSchema } from './schemas';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -33,8 +36,7 @@ const handleListCommands: Handler = async (
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const rawCommands =
-    careerCommandDispatcher?.list(candidate.id) ??
-    candidateStore.listCareerCommands(candidate.id);
+    careerCommandDispatcher?.list(candidate.id) ?? candidateStore.listCareerCommands(candidate.id);
   const rejections = candidateStore.getConsultantRejections(candidate.id);
   const rejectedKeys = new Set(rejections.map((r) => r.proposalKey));
   const data = rawCommands.filter((cmd) => {
@@ -306,6 +308,29 @@ const handleRevertCommand: Handler = async (deps, request, reply) => {
     const reverted = await careerCommandDispatcher.revert(candidate.id, commandId);
     return { data: reverted, meta: { requestId: request.id } };
   } catch (error) {
+    if (error instanceof CareerCommandNotFoundError) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'career_command_not_found',
+        'Команда не найдена.',
+        false,
+      );
+    }
+    if (error instanceof ProfileRevisionNotFoundError) {
+      return sendError(reply, request, 404, 'profile_revision_not_found', error.message, false);
+    }
+    if (error instanceof ProfileRevisionAlreadyRevertedError) {
+      return sendError(
+        reply,
+        request,
+        409,
+        'profile_revision_already_reverted',
+        error.message,
+        false,
+      );
+    }
     if (error instanceof ResumeRevisionConflictError) {
       return sendError(reply, request, 409, 'resume_revision_stale', error.message, false);
     }
@@ -317,6 +342,7 @@ export async function registerCareerCommandRoutes(
   app: FastifyInstance,
   deps: RouteDeps,
 ): Promise<void> {
+  registerSkillQuizApplyRoute(app, deps);
   app.get('/api/v1/candidate/career-commands', withDeps(deps, handleListCommands));
   app.post(
     '/api/v1/candidate/career-commands',
