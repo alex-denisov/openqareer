@@ -12,6 +12,8 @@ import {
 export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   const unmatched: string[] = [];
   let decisionProfile: Record<string, unknown> | null = null;
+  let skillQuizCommandId: string | null = null;
+  let skillQuizReverted = false;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -76,6 +78,54 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
         };
       }
       return route.fulfill({ json: { data: decisionProfile } });
+    }
+    if (path.endsWith('/candidate/skill-quiz/apply') && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      skillQuizCommandId = route.request().headers()['idempotency-key'] ?? 'skill-quiz-command';
+      skillQuizReverted = false;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const skillName = String(body.skillName ?? 'TypeScript');
+      return route.fulfill({
+        status: 201,
+        json: {
+          data: {
+            commandId: skillQuizCommandId,
+            command: { commandId: skillQuizCommandId },
+            result: { quizId: body.quizId, statusLabel: 'подтверждён' },
+            fact: {
+              skillName,
+              status: 'подтверждён',
+              source: 'hh.ru',
+              date: '2026-10-06',
+              scorePercent: 100,
+              statement: `${skillName}: подтверждён (hh.ru, 2026-10-06, 100%)`,
+            },
+          },
+        },
+      });
+    }
+    const skillQuizRevert = path.match(/\/candidate\/career-commands\/([^/]+)\/revert$/u);
+    if (skillQuizRevert && route.request().method() === 'POST') {
+      const commandId = decodeURIComponent(skillQuizRevert[1]!);
+      if (commandId !== skillQuizCommandId) {
+        return route.fulfill({
+          status: 404,
+          json: { error: { code: 'career_command_not_found', message: 'Команда не найдена.' } },
+        });
+      }
+      if (skillQuizReverted) {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: 'profile_revision_already_reverted',
+              message: 'Это изменение уже отменено',
+            },
+          },
+        });
+      }
+      skillQuizReverted = true;
+      return route.fulfill({ json: { data: { commandId, profileRevisionReverted: true } } });
     }
     if (path.endsWith('/candidate/footprint/plan')) {
       return route.fulfill({

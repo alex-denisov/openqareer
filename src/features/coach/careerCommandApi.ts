@@ -1,5 +1,37 @@
 import { apiFetch, readDataArray, readDataObject } from './apiClient';
 import type { CareerCommand } from './coachApi';
+import type {
+  QuizEvaluationResult,
+  SkillVerificationFact,
+} from '../../services/hhSkillQuizzes';
+
+export interface SkillQuizApplyResponse {
+  readonly commandId: string;
+  readonly command: CareerCommand;
+  readonly result: QuizEvaluationResult;
+  readonly fact: SkillVerificationFact;
+}
+
+export async function applySkillQuizResult(input: {
+  readonly quizId: string;
+  readonly skillName: string;
+  readonly answers: Readonly<Record<string, number>>;
+  readonly idempotencyKey: string;
+}): Promise<SkillQuizApplyResponse> {
+  const response = await apiFetch('/api/v1/candidate/skill-quiz/apply', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': input.idempotencyKey,
+    },
+    body: JSON.stringify({
+      quizId: input.quizId,
+      skillName: input.skillName,
+      answers: input.answers,
+    }),
+  });
+  return readDataObject<SkillQuizApplyResponse>(response);
+}
 
 export async function prepareCareerCommand(input: {
   turnIdempotencyKey: string;
