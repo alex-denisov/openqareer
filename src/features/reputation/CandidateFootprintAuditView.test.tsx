@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CandidateFootprintAuditSurfaceProps } from './CandidateFootprintAuditSurface';
-import { CandidateFootprintAuditSurface } from './CandidateFootprintAuditSurface';
+import { CandidateFootprintAuditSurface, SourceCapability } from './CandidateFootprintAuditSurface';
 
 function baseProps(
   overrides: Partial<CandidateFootprintAuditSurfaceProps> = {},
@@ -55,7 +55,7 @@ describe('CandidateFootprintAuditSurface', () => {
 
     expect(html).toContain('<h2>Как вас видят</h2>');
     expect(html).toContain('Скоро: ждёт утверждения текста согласия');
-    expect(html).toContain('источник не подключён');
+    expect(html).toContain('подготовлено, не подключено');
     expect(html).toContain('не запускалось');
     expect(html).not.toContain('Безопасно');
     expect(html).not.toContain('100 / 100');
@@ -76,21 +76,23 @@ describe('CandidateFootprintAuditSurface', () => {
           checkedAt: '2026-10-04T12:00:00.000Z',
         },
       ],
-      findings: [{
-        id: 'finding-1',
-        adapter: 'sherlock',
-        kind: 'profile',
-        url: 'https://github.com/ada',
-        title: 'GitHub',
-        detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
-        match: 'likely_self',
-        observedAt: '2026-10-04T12:00:00.000Z',
-        receipt: { method: 'GET', source: 'GitHub', query: 'username=ada' },
-        receipts: [{ method: 'GET', source: 'GitHub', query: 'username=ada' }],
-        sources: ['sherlock'],
-        automatedMatch: 'likely_self',
-        review: 'unreviewed',
-      }],
+      findings: [
+        {
+          id: 'finding-1',
+          adapter: 'sherlock',
+          kind: 'profile',
+          url: 'https://github.com/ada',
+          title: 'GitHub',
+          detail: 'Открытая страница найдена по нику; владение нужно подтвердить.',
+          match: 'likely_self',
+          observedAt: '2026-10-04T12:00:00.000Z',
+          receipt: { method: 'GET', source: 'GitHub', query: 'username=ada' },
+          receipts: [{ method: 'GET', source: 'GitHub', query: 'username=ada' }],
+          sources: ['sherlock'],
+          automatedMatch: 'likely_self',
+          review: 'unreviewed',
+        },
+      ],
       ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
       startedAt: '2026-10-04T12:00:00.000Z',
       completedAt: '2026-10-04T12:00:02.000Z',
@@ -139,7 +141,7 @@ describe('CandidateFootprintAuditSurface', () => {
       />,
     );
 
-    expect(html.match(/источник не подключён/gu)).toHaveLength(2);
+    expect(html.match(/подготовлено, не подключено/gu)).toHaveLength(3);
   });
 
   it('discloses that the profile photo URL is matched locally and never sent for image search', () => {
@@ -163,21 +165,33 @@ describe('CandidateFootprintAuditSurface', () => {
         state: 'completed',
         selectedQueryIds: [],
         adapterStatuses: [],
-        findings: [{
-          id: 'finding-hidden',
-          adapter: 'wayback',
-          kind: 'archive',
-          url: 'https://web.archive.org/web/20240101000000/https://portfolio.example',
-          title: 'Архивная копия профиля',
-          detail: 'В архиве найден снимок.',
-          match: 'likely_self',
-          observedAt: '2026-10-04T12:00:00.000Z',
-          receipt: { method: 'GET', source: 'Internet Archive CDX', query: 'url=https://portfolio.example' },
-          receipts: [{ method: 'GET', source: 'Internet Archive CDX', query: 'url=https://portfolio.example' }],
-          sources: ['wayback'],
-          automatedMatch: 'likely_self',
-          review: 'hidden',
-        }],
+        findings: [
+          {
+            id: 'finding-hidden',
+            adapter: 'wayback',
+            kind: 'archive',
+            url: 'https://web.archive.org/web/20240101000000/https://portfolio.example',
+            title: 'Архивная копия профиля',
+            detail: 'В архиве найден снимок.',
+            match: 'likely_self',
+            observedAt: '2026-10-04T12:00:00.000Z',
+            receipt: {
+              method: 'GET',
+              source: 'Internet Archive CDX',
+              query: 'url=https://portfolio.example',
+            },
+            receipts: [
+              {
+                method: 'GET',
+                source: 'Internet Archive CDX',
+                query: 'url=https://portfolio.example',
+              },
+            ],
+            sources: ['wayback'],
+            automatedMatch: 'likely_self',
+            review: 'hidden',
+          },
+        ],
         ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
         startedAt: '2026-10-04T12:00:00.000Z',
         completedAt: '2026-10-04T12:00:02.000Z',
@@ -187,5 +201,48 @@ describe('CandidateFootprintAuditSurface', () => {
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
     expect(html).toContain('Скрытые находки (1)');
     expect(html).toContain('Показать');
+  });
+
+  it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', () => {
+    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...baseProps()} />);
+    expect(html).toContain('Метаданные файлов');
+    expect(html).toContain('Секреты в коде');
+    expect(html).toContain('подготовлено');
+  });
+
+  it('B375: SourceCapability корректно отображает статусы available, prepared, future', () => {
+    const availHtml = renderToStaticMarkup(
+      <SourceCapability title="Доступный источник" status="available" />,
+    );
+    expect(availHtml).toContain('is-available');
+    expect(availHtml).toContain('доступно');
+
+    const prepHtml = renderToStaticMarkup(
+      <SourceCapability title="Подготовленный источник" status="prepared" />,
+    );
+    expect(prepHtml).toContain('is-prepared');
+    expect(prepHtml).toContain('подготовлено');
+
+    const futureHtml = renderToStaticMarkup(
+      <SourceCapability title="Планируемый источник" status="future" />,
+    );
+    expect(futureHtml).toContain('is-future');
+    expect(futureHtml).toContain('в планах');
+  });
+
+  it('B375: отображает блок «Не удалось определить компанию» с кнопкой «Ввести вручную» при наличии неопределённых работодателей', () => {
+    const props = baseProps({
+      unidentifiedEmployers: [
+        'Enterprise Public Cloud Platform (IaaS / PaaS)',
+        'Corporate University of a Top-Tier Financial Institution',
+      ],
+      onAddManualEmployer: vi.fn(),
+    });
+
+    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
+    expect(html).toContain('Не удалось определить компанию');
+    expect(html).toContain('Enterprise Public Cloud Platform (IaaS / PaaS)');
+    expect(html).toContain('Corporate University of a Top-Tier Financial Institution');
+    expect(html).toContain('Ввести вручную');
   });
 });

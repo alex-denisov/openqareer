@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
+import { isNamedEmployer, partitionEmployers } from '../../shared/employerLabel';
 import type { FootprintAdapterId } from '../../shared/candidateFootprint';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import { MAIGRET_SITES } from './adapters/maigretSiteCatalogue';
@@ -56,17 +57,37 @@ function profileUrl(value: string | undefined): string | null {
     const candidateUrl = /^https?:\/\//iu.test(value) ? value : `https://${value}`;
     const url = new URL(candidateUrl);
     if (
-      !['http:', 'https:'].includes(url.protocol) || isIP(url.hostname) !== 0 ||
-      !url.hostname.includes('.') || url.username || url.password ||
-      url.hostname.endsWith('.local') || url.hostname.endsWith('.localhost') ||
+      !['http:', 'https:'].includes(url.protocol) ||
+      isIP(url.hostname) !== 0 ||
+      !url.hostname.includes('.') ||
+      url.username ||
+      url.password ||
+      url.hostname.endsWith('.local') ||
+      url.hostname.endsWith('.localhost') ||
       url.hostname.endsWith('.internal') ||
       (url.port && !['80', '443'].includes(url.port))
-    ) return null;
+    )
+      return null;
     url.hash = '';
     return url.href;
   } catch {
     return null;
   }
+}
+
+function normalizeLinkedin(value: string | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^https?:\/\//iu.test(trimmed)) return trimmed;
+  if (
+    /^(?:www\.)?[a-z0-9-]+\.linkedin\.com\//iu.test(trimmed) ||
+    /^(?:www\.)?linkedin\.com\//iu.test(trimmed)
+  ) {
+    return `https://${trimmed}`;
+  }
+  if (/^in\/[A-Za-z0-9._-]+$/iu.test(trimmed)) return `https://www.linkedin.com/${trimmed}`;
+  if (/^[A-Za-z0-9._-]{2,64}$/u.test(trimmed)) return `https://www.linkedin.com/in/${trimmed}`;
+  return null;
 }
 
 function usernameFromProfileUrl(raw: string): string | null {
@@ -77,22 +98,42 @@ function usernameFromProfileUrl(raw: string): string | null {
     return null;
   }
   const host = url.hostname.toLowerCase().replace(/^www\./u, '');
-  const parts = url.pathname.split('/').filter(Boolean).map((part) => {
-    try { return decodeURIComponent(part); } catch { return ''; }
-  });
+  const parts = url.pathname
+    .split('/')
+    .filter(Boolean)
+    .map((part) => {
+      try {
+        return decodeURIComponent(part);
+      } catch {
+        return '';
+      }
+    });
   let value: string | undefined;
-  if (['linkedin.com'].includes(host) && parts[0]?.toLowerCase() === 'in') value = parts[1];
-  else if (['t.me', 'telegram.me'].includes(host)) value = parts[0];
-  else if (['github.com', 'gitlab.com', 'dev.to'].includes(host)) value = parts[0];
-  else if (host === 'medium.com') value = parts[0]?.replace(/^@/u, '');
-  else value = usernameFromMaigretTemplate(raw, host) ?? undefined;
+  if (
+    (host === 'linkedin.com' || host.endsWith('.linkedin.com')) &&
+    (parts[0]?.toLowerCase() === 'in' || parts[0]?.toLowerCase() === 'pub')
+  ) {
+    value = parts[1];
+  } else if (['t.me', 'telegram.me'].includes(host)) {
+    value = parts[0];
+  } else if (['github.com', 'gitlab.com', 'dev.to', 'x.com', 'twitter.com'].includes(host)) {
+    value = parts[0];
+  } else if (host === 'medium.com') {
+    value = parts[0]?.replace(/^@/u, '');
+  } else {
+    value = usernameFromMaigretTemplate(raw, host) ?? undefined;
+  }
   return value && /^[A-Za-z0-9._-]{1,64}$/u.test(value) ? value : null;
 }
 
 function usernameFromMaigretTemplate(raw: string, host: string): string | null {
   for (const site of MAIGRET_SITES) {
     let template: URL;
-    try { template = new URL(site.url.replace('{username}', '__oq_username__')); } catch { continue; }
+    try {
+      template = new URL(site.url.replace('{username}', '__oq_username__'));
+    } catch {
+      continue;
+    }
     if (template.hostname.toLowerCase() !== host) continue;
     const marker = '__oq_username__';
     const markerIndex = template.pathname.indexOf(marker);
@@ -100,7 +141,11 @@ function usernameFromMaigretTemplate(raw: string, host: string): string | null {
     const prefix = template.pathname.slice(0, markerIndex);
     const suffix = template.pathname.slice(markerIndex + marker.length);
     let pathname: string;
-    try { pathname = new URL(raw).pathname; } catch { continue; }
+    try {
+      pathname = new URL(raw).pathname;
+    } catch {
+      continue;
+    }
     if (!pathname.startsWith(prefix) || !pathname.endsWith(suffix)) continue;
     const end = pathname.length - suffix.length;
     const value = pathname.slice(prefix.length, end);
@@ -131,55 +176,144 @@ function addUsernameItems(list: FootprintQueryPlanItem[], usernames: readonly st
   }
 }
 
-function addIdentityItems(list: FootprintQueryPlanItem[], draft: ResumeDraft): void {
-  const fullName = draft.candidate.fullName?.trim().replace(/\s+/gu, ' ').slice(0, 160) ?? '';
-  const photoUrl = profileUrl(draft.candidate.photoUrl) ?? undefined;
-  const email = draft.candidate.contact?.email?.trim().toLowerCase() ?? '';
-  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
-    addItem(list, 'hibp', 'email', `Проверить почту ${maskedEmail(email)} через безопасный поиск HIBP`, email, { email });
-  }
-  if (!fullName) return;
-  addItem(list, 'exa', 'name', `Искать открытые профили по имени «${fullName}»`,
-    JSON.stringify([fullName, photoUrl]), {
-    mode: 'people', fullName, ...(photoUrl ? { photoUrl } : {}),
-  });
-  const employers = [...new Set(draft.experience
+function addWorkContextItems(
+  list: FootprintQueryPlanItem[],
+  draft: ResumeDraft,
+  fullName: string,
+  photoUrl?: string,
+  manualEmployers?: readonly string[],
+): void {
+  const rawEmployers = draft.experience
     .map((item) => item.employer?.trim())
-    .filter((item): item is string => Boolean(item)))]
-    .slice(0, 10);
+    .filter((item): item is string => Boolean(item));
+  const { validEmployers } = partitionEmployers(rawEmployers);
+  const extra = (manualEmployers ?? []).map((m) => m.trim()).filter(isNamedEmployer);
+  const employers = [...new Set([...validEmployers, ...extra])].slice(0, 10);
   const city = draft.candidate.contact?.location?.trim().slice(0, 120);
   for (const employer of employers) {
     addItem(
-      list, 'exa', 'work_context', `Искать имя и работодателя «${employer}»`,
+      list,
+      'exa',
+      'work_context',
+      `Искать имя и работодателя «${employer}»`,
       JSON.stringify([fullName, photoUrl, 'employer', employer]),
       { mode: 'context', fullName, employers: [employer], ...(photoUrl ? { photoUrl } : {}) },
     );
   }
   if (city) {
     addItem(
-      list, 'exa', 'work_context', `Искать имя и город «${city}»`,
+      list,
+      'exa',
+      'work_context',
+      `Искать имя и город «${city}»`,
       JSON.stringify([fullName, photoUrl, 'city', city]),
       { mode: 'context', fullName, employers: [], city, ...(photoUrl ? { photoUrl } : {}) },
     );
   }
 }
 
-export function buildCandidateFootprintQueryPlan(draft: ResumeDraft): readonly FootprintQueryPlanItem[] {
-  const links = [
-    ...(draft.candidate.contact?.links ?? []),
-    draft.candidate.contact?.linkedinUrl,
-  ].map(profileUrl).filter((value): value is string => value !== null);
-  const usernames = [...new Set([
-    ...links.map(usernameFromProfileUrl).filter((value): value is string => value !== null),
-    usernameFromTelegram(draft.candidate.contact?.telegram),
-  ].filter((value): value is string => Boolean(value)))];
+function addIdentityItems(
+  list: FootprintQueryPlanItem[],
+  draft: ResumeDraft,
+  hasUsernames: boolean,
+  manualEmployers?: readonly string[],
+): void {
+  const fullName = draft.candidate.fullName?.trim().replace(/\s+/gu, ' ').slice(0, 160) ?? '';
+  const photoUrl = profileUrl(draft.candidate.photoUrl) ?? undefined;
+  const email = draft.candidate.contact?.email?.trim().toLowerCase() ?? '';
+  if (email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email)) {
+    addItem(
+      list,
+      'hibp',
+      'email',
+      `Проверить утечки по почте ${maskedEmail(email)} (нужно согласие)`,
+      email,
+      { email },
+    );
+  } else if (fullName || hasUsernames || draft.experience.length > 0) {
+    addItem(list, 'hibp', 'email', 'Проверить утечки по почте (нужно согласие)', 'email:none', {
+      email: '',
+    });
+  }
+  if (!fullName) return;
+  addItem(
+    list,
+    'exa',
+    'name',
+    `Искать открытые профили по имени «${fullName}»`,
+    JSON.stringify([fullName, photoUrl]),
+    {
+      mode: 'people',
+      fullName,
+      ...(photoUrl ? { photoUrl } : {}),
+    },
+  );
+  addWorkContextItems(list, draft, fullName, photoUrl, manualEmployers);
+}
+
+function extractUsernamesAndLinks(draft: ResumeDraft): {
+  readonly usernames: readonly string[];
+  readonly links: readonly string[];
+} {
+  const contact = draft.candidate.contact;
+  const rawCandidateLinks = [
+    ...(contact?.links ?? []),
+    normalizeLinkedin(contact?.linkedinUrl) ?? contact?.linkedinUrl,
+  ];
+  const links = rawCandidateLinks.map(profileUrl).filter((v): v is string => v !== null);
+  const usernames = new Set<string>();
+  const tgUser = usernameFromTelegram(contact?.telegram);
+  if (tgUser) usernames.add(tgUser);
+
+  for (const raw of rawCandidateLinks) {
+    if (!raw) continue;
+    const url = profileUrl(raw);
+    if (url) {
+      const u = usernameFromProfileUrl(url);
+      if (u) usernames.add(u);
+    } else {
+      const match = raw.trim().match(/^@?([A-Za-z0-9._-]{2,64})$/u);
+      if (match) usernames.add(match[1]);
+    }
+  }
+
+  const allLinks = [...new Set(links)];
+  const hasLinkedinLink = allLinks.some((l) => l.includes('linkedin.com'));
+  if (!hasLinkedinLink) {
+    for (const u of usernames) {
+      const li = `https://www.linkedin.com/in/${u}`;
+      if (profileUrl(li)) allLinks.push(li);
+    }
+  }
+  return { usernames: [...usernames], links: allLinks };
+}
+
+export interface BuildFootprintQueryPlanOptions {
+  readonly manualEmployers?: readonly string[];
+}
+
+export function buildCandidateFootprintQueryPlan(
+  draft: ResumeDraft,
+  options?: BuildFootprintQueryPlanOptions,
+): readonly FootprintQueryPlanItem[] {
+  const { usernames, links } = extractUsernamesAndLinks(draft);
   const plan: FootprintQueryPlanItem[] = [];
   addUsernameItems(plan, usernames);
-  addIdentityItems(plan, draft);
-  for (const link of [...new Set(links)]) {
-    addItem(plan, 'wayback', 'profile_url', `Проверить архив публичной страницы ${link}`, link, { profileUrl: link });
+  addIdentityItems(plan, draft, usernames.length > 0, options?.manualEmployers);
+  for (const link of links) {
+    addItem(plan, 'wayback', 'profile_url', `Проверить архив публичной страницы ${link}`, link, {
+      profileUrl: link,
+    });
   }
   return plan;
+}
+
+export function extractUnidentifiedEmployers(draft: ResumeDraft): readonly string[] {
+  const rawEmployers = draft.experience
+    .map((item) => item.employer?.trim())
+    .filter((item): item is string => Boolean(item));
+  const { unidentifiedEmployers } = partitionEmployers(rawEmployers);
+  return unidentifiedEmployers;
 }
 
 function usernameFromTelegram(value: string | undefined): string | null {
@@ -193,8 +327,18 @@ export function toPublicFootprintQueryPlan(
   plan: readonly FootprintQueryPlanItem[],
   availability: Partial<Record<FootprintAdapterId, boolean>> = {},
 ): readonly PublicFootprintQueryPlanItem[] {
-  return plan.map(({ id, adapterId, kind, preview, selectedByDefault }) => {
-    const available = availability[adapterId] ?? true;
-    return { id, adapterId, kind, preview, selectedByDefault: selectedByDefault && available, available };
+  return plan.map(({ id, adapterId, kind, preview, selectedByDefault, input }) => {
+    let available = availability[adapterId] ?? true;
+    if (adapterId === 'hibp' && 'email' in input && !input.email) {
+      available = false;
+    }
+    return {
+      id,
+      adapterId,
+      kind,
+      preview,
+      selectedByDefault: selectedByDefault && available,
+      available,
+    };
   });
 }

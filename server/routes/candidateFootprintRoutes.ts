@@ -15,6 +15,7 @@ import {
 } from '../osint/candidateFootprintWorker';
 import {
   buildCandidateFootprintQueryPlan,
+  extractUnidentifiedEmployers,
   toPublicFootprintQueryPlan,
 } from '../osint/candidateFootprintQueryPlan';
 import type { RouteDeps } from './deps';
@@ -30,6 +31,7 @@ import {
 const startFootprintSchema = z.object({
   selectedQueryIds: z.array(z.string().regex(/^[a-f0-9]{20}$/u)).min(1).max(100),
   confirmedOwnership: z.literal(true),
+  manualEmployers: z.array(z.string().trim().min(1).max(60)).max(10).optional(),
 }).strict();
 const reviewSchema = z.object({
   review: z.enum(['confirmed_self', 'not_self', 'hidden', 'unreviewed']),
@@ -45,11 +47,15 @@ function sourceAvailability(config: RouteDeps['config']) {
   } as const;
 }
 
-function getPlan(deps: RouteDeps, candidateId: string) {
+function getPlan(deps: RouteDeps, candidateId: string, manualEmployers?: readonly string[]) {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
   const availability = sourceAvailability(deps.config);
   return {
-    plan: toPublicFootprintQueryPlan(buildCandidateFootprintQueryPlan(draft), availability),
+    plan: toPublicFootprintQueryPlan(
+      buildCandidateFootprintQueryPlan(draft, { manualEmployers }),
+      availability,
+    ),
+    unidentifiedEmployers: extractUnidentifiedEmployers(draft),
     sourceAvailability: availability,
   };
 }
@@ -94,11 +100,20 @@ async function handleGetFootprintPlan(
     request, reply, deps.candidateStore, deps.authService, deps.config,
   );
   if (!candidate) return undefined;
+  const rawManual = (request.query as { manualEmployers?: string | string[] })?.manualEmployers;
+  const manualEmployers = Array.isArray(rawManual)
+    ? rawManual
+    : typeof rawManual === 'string'
+      ? rawManual.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
   const consent = consentForCandidate(deps, request, candidate.id);
-  const { plan, sourceAvailability } = getPlan(deps, candidate.id);
+  const { plan, unidentifiedEmployers, sourceAvailability } = getPlan(
+    deps, candidate.id, manualEmployers,
+  );
   return {
     data: {
       plan,
+      unidentifiedEmployers,
       sourceAvailability,
       consent: {
         approved: CAPABILITY_CONSENTS_APPROVED,
@@ -153,8 +168,9 @@ function validateSelectedQueryIds(
   deps: RouteDeps,
   candidateId: string,
   selectedQueryIds: readonly string[],
+  manualEmployers?: readonly string[],
 ): { valid: boolean; unavailable: boolean } {
-  const { plan } = getPlan(deps, candidateId);
+  const { plan } = getPlan(deps, candidateId, manualEmployers);
   const selected = new Set(selectedQueryIds);
   const matches = plan.filter((item) => selected.has(item.id));
   return {
@@ -194,7 +210,9 @@ async function handleStartFootprintAudit(
   if (!parsed.success) {
     return sendError(reply, request, 400, 'invalid_request', 'Подтвердите, что выбранные данные ваши, и выберите запросы.', false);
   }
-  const selected = validateSelectedQueryIds(deps, candidate.id, parsed.data.selectedQueryIds);
+  const selected = validateSelectedQueryIds(
+    deps, candidate.id, parsed.data.selectedQueryIds, parsed.data.manualEmployers,
+  );
   if (!selected.valid) {
     return sendError(reply, request, 409, 'query_plan_changed', 'План проверки изменился. Обновите страницу.', false);
   }
@@ -202,7 +220,8 @@ async function handleStartFootprintAudit(
     return sendError(reply, request, 409, 'source_not_connected', 'Один из выбранных источников не подключён.', false);
   }
   return launchFootprintRun(
-    deps, request, reply, candidate.id, userId, parsed.data.selectedQueryIds, new Date().toISOString(),
+    deps, request, reply, candidate.id, userId, parsed.data.selectedQueryIds,
+    new Date().toISOString(), parsed.data.manualEmployers,
   );
 }
 
@@ -214,9 +233,10 @@ async function launchFootprintRun(
   userId: string,
   selectedQueryIds: readonly string[],
   ownershipConfirmedAt: string,
+  manualEmployers?: readonly string[],
 ): Promise<unknown> {
   const draft = deps.candidateStore.getSnapshot(candidateId).resume?.draft ?? EMPTY_RESUME_DRAFT;
-  const plan = buildCandidateFootprintQueryPlan(draft);
+  const plan = buildCandidateFootprintQueryPlan(draft, { manualEmployers });
   try {
     const audit = startCandidateFootprintAudit({
       candidateId,

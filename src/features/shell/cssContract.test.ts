@@ -236,3 +236,20 @@ describe('mobile bottom nav has no stray active tick', () => {
     );
   });
 });
+
+/**
+ * B375 — моноширинный шрифт ограничен только числами. Русские слова («не указана»,
+ * «Требования: 3 из 3») системным шрифтом во избежание разрядки.
+ */
+describe('B375 monospace font discipline', () => {
+  const shellCss = fs.readFileSync(path.join(SRC_DIR, 'features/shell/career-shell.css'), 'utf8');
+
+  it('defines .career-mono with monospace font family', () => {
+    expect(shellCss).toMatch(/\.career-mono\s*\{[^}]*font-family:\s*var\(--font-mono\)/u);
+  });
+
+  it('does not apply monospace font family directly to labels containing Russian words', () => {
+    expect(shellCss).not.toMatch(/\.vac-comp\s*\{[^}]*font-family:\s*var\(--font-mono/u);
+    expect(shellCss).not.toMatch(/\.career-resume-unknown-mark\s*\{[^}]*font-family:\s*var\(--font-mono/u);
+  });
+});

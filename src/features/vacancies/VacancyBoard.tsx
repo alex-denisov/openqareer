@@ -494,7 +494,7 @@ function VacancyRow({
           <VacancyConditionBadges features={cluster.companyFeatures} />
         </span>
       </div>
-      <span className="career-vacancy-salary">{salaryLabel(cluster.salary)}</span>
+      <span className="career-vacancy-salary">{renderSalary(cluster.salary)}</span>
       <span className="career-vacancy-location">
         {cluster.canonicalLocation || (cluster.isRemote ? 'Удалённо' : 'город не указан')}
         {explanation.outsideGeography ? (
@@ -518,7 +518,8 @@ function VacancyRow({
               />
             </span>
             <strong>
-              {coverage.covered} из {coverage.total}
+              <span className="career-mono">{coverage.covered}</span> из{' '}
+              <span className="career-mono">{coverage.total}</span>
             </strong>
           </>
         ) : (
@@ -654,13 +655,27 @@ function pitchCacheKey(
   return `${candidateId ?? 'current-session'}:${evidenceVersion || 'no-evidence'}:${vacancyId}:${tone}`;
 }
 
-function salaryLabel(salary: MatchedVacancyItem['cluster']['salary']): string {
+function renderSalary(salary: MatchedVacancyItem['cluster']['salary']): React.ReactNode {
   if (!salary || (salary.from === undefined && salary.to === undefined)) {
     return 'не указана';
   }
   const currency = salary.currency ?? '';
-  const from = salary.from ? `от ${salary.from.toLocaleString('ru-RU')}` : '';
-  const to = salary.to ? `до ${salary.to.toLocaleString('ru-RU')}` : '';
-  // Неразрывный пробел: в узкой колонке «₽» отрывался на свою строку (B232).
-  return `${[from, to].filter(Boolean).join(' ')}\u00a0${currency}`.trim();
+  const from = salary.from ? (
+    <>
+      от <span className="career-mono">{salary.from.toLocaleString('ru-RU')}</span>
+    </>
+  ) : null;
+  const to = salary.to ? (
+    <>
+      до <span className="career-mono">{salary.to.toLocaleString('ru-RU')}</span>
+    </>
+  ) : null;
+  return (
+    <>
+      {from}
+      {from && to ? ' ' : null}
+      {to}
+      {currency ? `\u00a0${currency}` : null}
+    </>
+  );
 }

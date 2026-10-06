@@ -61,7 +61,7 @@ const PLAN = [
     id: 'dddddddddddddddddddd',
     adapterId: 'hibp' as const,
     kind: 'email' as const,
-    preview: 'Проверить почту m***@example.test через безопасный поиск HIBP',
+    preview: 'Проверить утечки по почте m***@example.test (нужно согласие)',
     selectedByDefault: false,
     available: false,
   },
@@ -172,7 +172,7 @@ test('B367 keeps launch disabled until the consent text is approved', async ({ p
 
   const launch = page.getByRole('button', { name: 'Скоро: ждёт утверждения текста согласия' });
   await expect(launch).toBeDisabled();
-  await expect(page.getByText('источник не подключён').first()).toBeVisible();
+  await expect(page.getByText('подготовлено, не подключено').first()).toBeVisible();
   await expect(
     page.getByLabel('Подтверждаю, что выбранные ссылки, никнеймы и почта принадлежат мне.'),
   ).toHaveCount(0);
@@ -399,4 +399,144 @@ test('B367 ignores a late poll response after consent revocation deletes finding
   releasePoll();
   await pollDelivered;
   await expect(page.getByText('GitHub', { exact: true })).toHaveCount(0);
+});
+
+test('B375: план цифрового следа включает nick, Wayback, HIBP утечки по почте и честные статусы источников', async ({
+  page,
+}, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') {
+    test.skip(true, 'B375 captures target widths in one browser session');
+  }
+
+  await openFootprint(page, async (route) => {
+    const request = route.request();
+    if (request.url().endsWith('/plan')) {
+      return route.fulfill({
+        json: {
+          data: {
+            plan: PLAN,
+            sourceAvailability: SOURCE_AVAILABILITY,
+            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            audit: null,
+          },
+        },
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+
+  // Проверка пункта утечек по почте с пометкой о согласии
+  await expect(page.getByText('Проверить утечки по почте')).toBeVisible();
+  await expect(page.getByText('(нужно согласие)')).toBeVisible();
+
+  // Проверка честного статуса
+  await expect(page.getByText('подготовлено, не подключено').first()).toBeVisible();
+
+  // Скриншоты 1440, 1176, 390
+  const dir = join(process.cwd(), 'output', 'playwright', 'B375');
+  await mkdir(dir, { recursive: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: join(dir, 'footprint-plan-1440.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await page.screenshot({ path: join(dir, 'footprint-plan-1176.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(dir, 'footprint-plan-390.png'), fullPage: true });
+});
+
+test('B375: нормализация работодателей: блок «Не удалось определить компанию» и ручной ввод', async ({
+  page,
+}, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') {
+    test.skip(true, 'B375 captures target widths in one browser session');
+  }
+
+  await openFootprint(page, async (route) => {
+    const request = route.request();
+    if (request.url().includes('/plan')) {
+      return route.fulfill({
+        json: {
+          data: {
+            plan: PLAN,
+            unidentifiedEmployers: [
+              'Enterprise Public Cloud Platform (IaaS / PaaS)',
+              'Corporate University of a Top-Tier Financial Institution',
+            ],
+            sourceAvailability: SOURCE_AVAILABILITY,
+            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            audit: null,
+          },
+        },
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+
+  // Проверка заголовка и списка неопределённых работодателей
+  await expect(page.getByText('Не удалось определить компанию')).toBeVisible();
+  await expect(page.getByText('Enterprise Public Cloud Platform (IaaS / PaaS)')).toBeVisible();
+  await expect(
+    page.getByText('Corporate University of a Top-Tier Financial Institution'),
+  ).toBeVisible();
+
+  // Проверка поля ручного ввода и кнопки
+  await expect(page.getByPlaceholder('Название компании')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Ввести вручную' })).toBeVisible();
+
+  // Скриншоты 1440, 1176, 390
+  const dir = join(process.cwd(), 'output', 'playwright', 'B375');
+  await mkdir(dir, { recursive: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: join(dir, 'employer-norm-1440.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await page.screenshot({ path: join(dir, 'employer-norm-1176.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(dir, 'employer-norm-390.png'), fullPage: true });
+});
+
+test('B375: состояние источников отображает адаптеры метаданных и секретов (B368)', async ({
+  page,
+}, testInfo) => {
+  if (testInfo.project.name !== 'desktop-1440') {
+    test.skip(true, 'B375 captures target widths in one browser session');
+  }
+
+  await openFootprint(page, async (route) => {
+    const request = route.request();
+    if (request.url().includes('/plan')) {
+      return route.fulfill({
+        json: {
+          data: {
+            plan: PLAN,
+            sourceAvailability: SOURCE_AVAILABILITY,
+            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            audit: null,
+          },
+        },
+      });
+    }
+    return route.fulfill({ status: 404 });
+  });
+
+  const statusSection = page.locator('.career-footprint-status-section');
+  await expect(statusSection).toBeVisible();
+  await expect(statusSection.getByText('Метаданные файлов')).toBeVisible();
+  await expect(statusSection.getByText('Секреты в коде')).toBeVisible();
+
+  const dir = join(process.cwd(), 'output', 'playwright', 'B375');
+  await mkdir(dir, { recursive: true });
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.screenshot({ path: join(dir, 'source-status-1440.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await page.screenshot({ path: join(dir, 'source-status-1176.png'), fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: join(dir, 'source-status-390.png'), fullPage: true });
 });

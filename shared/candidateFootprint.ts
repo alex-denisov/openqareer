@@ -38,3 +38,27 @@ export interface CandidateFootprintConsentState {
   readonly granted: boolean;
   readonly versionId: string;
 }
+
+export type SourceCapabilityStatus = 'available' | 'prepared' | 'future';
+
+export interface FootprintAdapterRegistryItem {
+  readonly id: string;
+  readonly title: string;
+  readonly status: SourceCapabilityStatus;
+  readonly description?: string;
+}
+
+export const FOOTPRINT_ADAPTER_REGISTRY: readonly FootprintAdapterRegistryItem[] = [
+  {
+    id: 'documentMetadata',
+    title: 'Метаданные файлов',
+    status: 'prepared',
+    description: 'Извлечение автора, компании и путей из PDF, DOCX и JPEG',
+  },
+  {
+    id: 'githubSecrets',
+    title: 'Секреты в коде',
+    status: 'prepared',
+    description: 'Поиск открытых ключей API, AWS, GitHub и Slack в репозиториях',
+  },
+] as const;

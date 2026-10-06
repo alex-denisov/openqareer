@@ -5,20 +5,18 @@ import { calculateVacancyFacets, hasMapCityCoordinates, type CityFacet } from ".
 import { employerLabel } from "../../../shared/employerLabel";
 import { VacancyConditionBadges } from "./vacancyConditions";
 import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
+import {
+  clusterCitiesByGrid,
+  formatCityDisplay,
+  formatLocationDisplay,
+  projectCoords,
+  type MapClusterNode as ClusterNodeType,
+} from "./vacancyMapCluster";
 
 interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
   readonly selectedCity?: string;
   readonly onSelectCity: (city?: string) => void;
-}
-
-function projectCoords(lat: number, lng: number): { x: number; y: number } {
-  const minLat = -60;
-  const maxLat = 85;
-  const clampedLat = Math.max(minLat, Math.min(maxLat, lat));
-  const x = Math.round(((lng + 180) / 360) * 900);
-  const y = Math.round(((maxLat - clampedLat) / (maxLat - minLat)) * 480);
-  return { x, y };
 }
 
 function coordinateKey(point: { readonly lat: number; readonly lng: number }): string {
@@ -56,6 +54,8 @@ export function VacancyMapView({
   selectedCity,
   onSelectCity,
 }: VacancyMapViewProps): React.JSX.Element {
+  const [zoom, setZoom] = React.useState<number>(1);
+  const [center, setCenter] = React.useState<{ x: number; y: number }>({ x: 450, y: 240 });
   const facets = calculateVacancyFacets(items);
   const { displayedMapped, unmappedItems } = getMapVacancies(items, facets.cities, selectedCity);
 
@@ -65,8 +65,24 @@ export function VacancyMapView({
         <MapSvg
           cities={facets.cities}
           selectedCity={selectedCity}
+          onSelectCity={onSelectCity}
+          zoom={zoom}
+          center={center}
+          onZoomChange={(newZoom, newCenter) => {
+            setZoom(newZoom);
+            if (newCenter) setCenter(newCenter);
+          }}
         />
       </div>
+
+      <MapZoomControls
+        zoom={zoom}
+        onZoomChange={(newZoom) => setZoom(newZoom)}
+        onResetZoom={() => {
+          setZoom(1);
+          setCenter({ x: 450, y: 240 });
+        }}
+      />
 
       <MapHeader
         onMapCount={facets.onMap.count}
@@ -75,25 +91,71 @@ export function VacancyMapView({
         unresolvedCityCount={facets.onMap.unresolvedCityCount}
       />
 
-      <CityChips
-        cities={facets.cities}
-        selectedCity={selectedCity}
-        onSelectCity={onSelectCity}
-      />
+      <CityChips cities={facets.cities} selectedCity={selectedCity} onSelectCity={onSelectCity} />
+      <SelectedCityBar selectedCity={selectedCity} onClear={() => onSelectCity(undefined)} />
+      <MapCardsSection displayedMapped={displayedMapped} unmappedItems={unmappedItems} />
+    </div>
+  );
+}
 
-      <SelectedCityBar
-        selectedCity={selectedCity}
-        onClear={() => onSelectCity(undefined)}
-      />
-
+function MapCardsSection({
+  displayedMapped,
+  unmappedItems,
+}: {
+  displayedMapped: readonly MatchedVacancyItem[];
+  unmappedItems: readonly MatchedVacancyItem[];
+}) {
+  return (
+    <>
       <div className="career-map-cards-grid">
         {displayedMapped.map((item) => (
           <MapVacancyCard key={item.cluster.id} item={item} />
         ))}
       </div>
-
       {unmappedItems.length > 0 ? (
         <UnmappedVacanciesSection items={unmappedItems} />
+      ) : null}
+    </>
+  );
+}
+
+function MapZoomControls({
+  zoom,
+  onZoomChange,
+  onResetZoom,
+}: {
+  zoom: number;
+  onZoomChange: (newZoom: number) => void;
+  onResetZoom: () => void;
+}) {
+  return (
+    <div className="career-map-zoom-controls" role="group" aria-label="Управление масштабом карты">
+      <button
+        type="button"
+        className="career-chip career-map-zoom-btn"
+        aria-label="Приблизить карту"
+        disabled={zoom >= 3}
+        onClick={() => onZoomChange(Math.min(3, zoom + 1))}
+      >
+        +
+      </button>
+      <button
+        type="button"
+        className="career-chip career-map-zoom-btn"
+        aria-label="Отдалить карту"
+        disabled={zoom <= 1}
+        onClick={() => onZoomChange(Math.max(1, zoom - 1))}
+      >
+        −
+      </button>
+      {zoom > 1 ? (
+        <button
+          type="button"
+          className="career-chip career-map-zoom-reset"
+          onClick={onResetZoom}
+        >
+          Сбросить масштаб
+        </button>
       ) : null}
     </div>
   );
@@ -143,32 +205,82 @@ function MapHeader({
   );
 }
 
-/**
- * Ширина и высота места, которое занимает подпись хаба. Подписи соседних
- * городов на проде 2026-09-06 легли друг на друга и перестали читаться, поэтому
- * подпись достаётся более крупному хабу, а сосед остаётся точкой (B203).
- */
-const LABEL_HALF_WIDTH = 46;
-const LABEL_HEIGHT = 16;
+function MapClusterNode({
+  cluster,
+  onClick,
+}: {
+  cluster: ClusterNodeType;
+  onClick: () => void;
+}) {
+  const citiesNames = cluster.cities
+    .map((c) => `${formatCityDisplay(c.city, c.country).city} (${c.count})`)
+    .join(", ");
+  const tooltip = `Кластер: ${cluster.totalCount} вакансий (${citiesNames}). Нажмите для приближения`;
+
+  return (
+    <g
+      className="career-map-cluster-group career-map-cluster-node"
+      role="button"
+      tabIndex={0}
+      aria-label={tooltip}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
+      <title>{tooltip}</title>
+      <circle cx={cluster.x} cy={cluster.y} r={18} className="career-map-cluster-pulse" />
+      <circle cx={cluster.x} cy={cluster.y} r={12} className="career-map-cluster-circle" />
+      <text
+        x={cluster.x}
+        y={cluster.y + 4}
+        textAnchor="middle"
+        className="career-map-cluster-count"
+      >
+        {cluster.totalCount}
+      </text>
+    </g>
+  );
+}
 
 function MapPinNode({
   city,
   isSelected,
   showLabel,
+  onSelect,
 }: {
   city: CityFacet;
   isSelected: boolean;
   showLabel: boolean;
+  onSelect: () => void;
 }) {
   if (!city.coordinates) return null;
   const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
+  const display = formatCityDisplay(city.city, city.country);
+
   return (
-    <g className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}>
+    <g
+      className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}
+      role="button"
+      tabIndex={0}
+      aria-label={`Город ${display.city}: ${city.count} вакансий`}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+    >
+      <title>{display.tooltip}</title>
       <circle cx={x} cy={y} r={isSelected ? 16 : 10} className="career-map-pulse" />
       <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
       {showLabel ? (
         <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
-          <tspan>{city.city}</tspan>
+          <tspan>{display.city}</tspan>
           <tspan className="career-map-label-count"> · {city.count}</tspan>
         </text>
       ) : null}
@@ -176,40 +288,32 @@ function MapPinNode({
   );
 }
 
-/**
- * Кто из хабов получает подпись. Идём от самого крупного: подпись рисуется,
- * если её место ещё свободно. Выбранный город подписывается всегда — кандидат
- * должен видеть, что именно он открыл.
- */
-function withReadableLabels(
-  cities: readonly CityFacet[],
-  selectedCity?: string,
-): { city: CityFacet; showLabel: boolean }[] {
-  const taken: { x: number; y: number }[] = [];
-  return [...cities]
-    .sort((left, right) => right.count - left.count)
-    .map((city) => {
-      if (!city.coordinates) return { city, showLabel: false };
-      const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
-      const collides = taken.some(
-        (spot) => Math.abs(spot.x - x) < LABEL_HALF_WIDTH && Math.abs(spot.y - y) < LABEL_HEIGHT,
-      );
-      const showLabel = city.city === selectedCity || !collides;
-      if (showLabel) taken.push({ x, y });
-      return { city, showLabel };
-    });
-}
-
 function MapSvg({
   cities,
   selectedCity,
+  onSelectCity,
+  zoom,
+  center,
+  onZoomChange,
 }: {
   cities: readonly CityFacet[];
   selectedCity?: string;
+  onSelectCity: (city?: string) => void;
+  zoom: number;
+  center: { x: number; y: number };
+  onZoomChange: (newZoom: number, center?: { x: number; y: number }) => void;
 }) {
+  const width = Math.round(900 / zoom);
+  const height = Math.round(480 / zoom);
+  const x = Math.max(0, Math.min(900 - width, Math.round(center.x - width / 2)));
+  const y = Math.max(0, Math.min(480 - height, Math.round(center.y - height / 2)));
+  const viewBox = `${x} ${y} ${width} ${height}`;
+
+  const nodes = clusterCitiesByGrid(cities, zoom, selectedCity);
+
   return (
     <svg
-      viewBox="0 0 900 480"
+      viewBox={viewBox}
       className="career-map-svg"
       role="img"
       aria-label="Контуры стран и расположение городов"
@@ -220,15 +324,35 @@ function MapSvg({
           <path key={index} d={contour} fillRule="evenodd" className="career-map-country" />
         ))}
       </g>
-      {withReadableLabels(cities, selectedCity).map(({ city: c, showLabel }) => (
-        <MapPinNode
-          key={c.city}
-          city={c}
-          isSelected={selectedCity === c.city}
-          showLabel={showLabel}
-        />
-      ))}
+      {nodes.map((node) => renderMapNode(node, selectedCity, onSelectCity, zoom, onZoomChange))}
     </svg>
+  );
+}
+
+function renderMapNode(
+  node: ReturnType<typeof clusterCitiesByGrid>[number],
+  selectedCity: string | undefined,
+  onSelectCity: (city?: string) => void,
+  zoom: number,
+  onZoomChange: (newZoom: number, center?: { x: number; y: number }) => void,
+) {
+  if (node.isCluster) {
+    return (
+      <MapClusterNode
+        key={node.id}
+        cluster={node}
+        onClick={() => onZoomChange(Math.min(3, zoom + 1), { x: node.x, y: node.y })}
+      />
+    );
+  }
+  return (
+    <MapPinNode
+      key={node.id}
+      city={node.city}
+      isSelected={selectedCity === node.city.city}
+      showLabel={node.showLabel}
+      onSelect={() => onSelectCity(selectedCity === node.city.city ? undefined : node.city.city)}
+    />
   );
 }
 
@@ -246,17 +370,19 @@ function CityChips({
     <div className="career-map-city-chips vacancy-map-cities" aria-label="Города на карте">
       {cities.map((c) => {
         const isSelected = selectedCity === c.city;
+        const display = formatCityDisplay(c.city, c.country);
         return (
           <button
             key={c.city}
             type="button"
             className={`career-chip ${isSelected ? "is-active" : ""}`}
             aria-pressed={isSelected}
-            aria-label={`Город ${c.city}: ${c.count} вакансий`}
+            aria-label={`Город ${display.city}: ${c.count} вакансий`}
+            title={display.tooltip}
             onClick={() => onSelectCity(isSelected ? undefined : c.city)}
           >
             <MapPin size={13} aria-hidden="true" />
-            <span>{c.city}</span>
+            <span>{display.city}</span>
             <span className="career-map-city-count">
               <span aria-hidden="true">·</span>
               <span className="career-map-city-count-value">{c.count}</span>
@@ -282,7 +408,7 @@ function MapVacancyCard({ item }: { item: MatchedVacancyItem }) {
       <div className="career-map-card-meta">
         {cluster.canonicalLocation ? (
           <span className="career-cabinet-tag">
-            <MapPin size={12} aria-hidden="true" /> {cluster.canonicalLocation}
+            <MapPin size={12} aria-hidden="true" /> {formatLocationDisplay(cluster.canonicalLocation)}
           </span>
         ) : null}
         {feat?.industry ? (

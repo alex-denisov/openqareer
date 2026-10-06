@@ -5268,7 +5268,6 @@
 }
 
 .career-resume-unknown-mark {
-  font-family: var(--font-mono, ui-monospace, monospace);
   font-size: var(--career-text-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -8347,14 +8346,12 @@
   font-size: var(--career-text-xs);
 }
 
-/* Числа — моноширинным (design-system §4): зарплата, возраст, покрытие. */
-.career-vacancy-salary,
-.career-vacancy-age,
-.career-vacancy-coverage strong,
+/* Числа — моноширинным (design-system §4). Русские слова — системным. */
 .career-vacancy-more-count,
 .career-profile-update-state small,
 .career-funnel-value,
-.career-job-period {
+.career-job-period,
+.career-mono {
   font-family: var(--font-mono);
 }
 
@@ -9166,7 +9163,51 @@
 }
 
 .career-map-pin-group {
+  cursor: pointer;
+}
+
+.career-map-cluster-group {
+  cursor: pointer;
+}
+
+.career-map-cluster-pulse {
+  fill: var(--career-accent-soft);
+  stroke: var(--career-accent);
+  stroke-width: var(--career-border-width);
+}
+
+.career-map-cluster-group:hover .career-map-cluster-pulse,
+.career-map-cluster-group:focus-visible .career-map-cluster-pulse {
+  stroke-width: calc(var(--career-border-width) * 2);
+}
+
+.career-map-cluster-circle {
+  fill: var(--career-accent);
+}
+
+.career-map-cluster-count {
+  font-size: var(--career-text-xs);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  fill: var(--career-accent-ink);
   pointer-events: none;
+}
+
+.career-map-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-top: var(--career-space-2);
+}
+
+.career-map-zoom-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--career-text-md);
+  font-weight: 700;
 }
 
 .career-map-pulse {
@@ -10377,10 +10418,14 @@
   font-weight: 700;
 }
 
-.career-footprint-count,
 .career-footprint-finding-date {
   color: var(--career-text-dim);
   font-family: var(--font-mono);
+  font-size: var(--career-text-xs);
+}
+
+.career-footprint-count {
+  color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
 
@@ -10703,6 +10748,18 @@
   color: var(--career-warning);
 }
 
+.career-footprint-status-row.is-available {
+  color: var(--career-success);
+}
+
+.career-footprint-status-row.is-prepared {
+  color: var(--career-warning);
+}
+
+.career-footprint-status-row.is-future {
+  color: var(--career-text-dim);
+}
+
 .career-footprint-findings {
   display: flex;
   flex-direction: column;
@@ -10821,6 +10878,68 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
   cursor: pointer;
+}
+
+.career-footprint-unidentified {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-4);
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface-card);
+}
+
+.career-footprint-unidentified-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-warning);
+}
+
+.career-footprint-unidentified-header h4 {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  color: var(--career-text);
+}
+
+.career-footprint-unidentified p {
+  margin: 0;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-soft);
+}
+
+.career-footprint-unidentified ul {
+  margin: 0;
+  padding-inline-start: var(--career-space-4);
+  font-size: var(--career-text-xs);
+  color: var(--career-text);
+}
+
+.career-footprint-manual-form {
+  display: flex;
+  gap: var(--career-space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-block-start: var(--career-space-2);
+}
+
+.career-footprint-manual-input {
+  flex: 1 1 200px;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-footprint-manual-input:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: var(--career-space-1);
 }
 
 .career-sr-only {
@@ -12548,7 +12667,6 @@
 
 .career-profile-screen-section-count {
   color: var(--career-text-dim);
-  font-family: var(--font-mono, monospace);
   font-size: var(--career-text-sm);
 }
 
@@ -12609,7 +12727,6 @@
 .career-profile-screen-company-span {
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
-  font-family: var(--font-mono, monospace);
 }
 
 .career-profile-screen-position {
@@ -12643,7 +12760,6 @@
 .career-profile-screen-position-dates {
   color: var(--career-text-dim);
   font-size: var(--career-text-sm);
-  font-family: var(--font-mono, monospace);
 }
 
 .career-profile-screen-position-bullets {
@@ -12676,7 +12792,6 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--career-text-dim);
-  font-family: var(--font-mono, monospace);
 }
 
 .career-profile-screen-group-chips {
@@ -12776,7 +12891,6 @@
 .career-profile-screen-achv-group h3 {
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
-  font-family: var(--font-mono, monospace);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin: 0 0 var(--career-space-2);
@@ -12820,7 +12934,6 @@
 
 .career-profile-screen-coverage li span:last-child {
   color: var(--career-text-dim);
-  font-family: var(--font-mono, monospace);
 }
 
 .career-profile-screen-coverage li.is-missing span:last-child {
@@ -14164,7 +14277,6 @@ button.chip {
 }
 
 .vac-comp {
-  font-family: var(--font-mono);
   font-size: var(--career-text-sm);
   font-weight: 600;
 }

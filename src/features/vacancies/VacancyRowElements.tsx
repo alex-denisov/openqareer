@@ -12,9 +12,23 @@ export function VacancyRowMeta({
   readonly applicationArchived: boolean;
 }) {
   const ageText = age.days === 0 ? 'сегодня' : age.label;
+  const compContent =
+    comp === 'не указана' ? (
+      comp
+    ) : comp.startsWith('от ') ? (
+      <>
+        от <span className="career-mono">{comp.slice(3)}</span>
+      </>
+    ) : comp.startsWith('до ') ? (
+      <>
+        до <span className="career-mono">{comp.slice(3)}</span>
+      </>
+    ) : (
+      <span className="career-mono">{comp}</span>
+    );
   return (
     <span>
-      <span className="vac-comp">{comp}</span>
+      <span className="vac-comp">{compContent}</span>
       <span className="vac-age">
         {applicationArchived
           ? 'Отклик в архиве'
