@@ -215,4 +215,49 @@ describe('CandidateActionPanel', () => {
       targetUrl: 'https://hh.ru/applicant/resumes',
     });
   });
+
+  describe('B413: чекбокс согласия', () => {
+    it('Критерий 1: Чекбокс имеет класс career-checkbox (не нативный маркер)', async () => {
+      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({ granted: false, consent: null });
+      await mount();
+
+      const checkbox = container.querySelector<HTMLInputElement>('input.career-checkbox');
+      expect(checkbox).not.toBeNull();
+      expect(checkbox?.type).toBe('checkbox');
+    });
+
+    it('Критерий 2: Зона нажатия и обёртка чекбокса имеют класс career-checkbox-label', async () => {
+      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({ granted: false, consent: null });
+      await mount();
+
+      const label = container.querySelector<HTMLLabelElement>('label.career-candidate-actions__check');
+      expect(label).not.toBeNull();
+      expect(label?.classList.contains('career-checkbox-label')).toBe(true);
+    });
+
+    it('Критерий 3: Текстовая подпись состояния меняется вместе с состоянием («Согласия нет» / «Согласие дано»)', async () => {
+      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
+        granted: false,
+        consent: { versionId: 'actions_on_behalf-v1.0' },
+      });
+      await mount();
+
+      const statusEl = container.querySelector('.career-checkbox-status');
+      expect(statusEl).not.toBeNull();
+      expect(statusEl?.textContent).toBe('Согласия нет');
+
+      const checkbox = container.querySelector<HTMLInputElement>('input.career-checkbox');
+      await act(async () => {
+        setCheckbox(checkbox ?? undefined, true);
+      });
+
+      expect(statusEl?.textContent).toBe('Согласие дано');
+
+      await act(async () => {
+        setCheckbox(checkbox ?? undefined, false);
+      });
+
+      expect(statusEl?.textContent).toBe('Согласия нет');
+    });
+  });
 });
