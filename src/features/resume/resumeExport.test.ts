@@ -288,6 +288,26 @@ describe('resumeExport', () => {
       path: '/Users/test/Downloads/resume-targeted-anna-primer.pdf',
     });
   });
+
+  it('keeps decision profile constraints (salary floor, cushion, citizenship) out of public resume exports', () => {
+    const doc = minimalDocument({
+      about: 'Senior Developer with strong architecture skills',
+      skills: [{ id: 's-1', name: 'TypeScript' }],
+    });
+    const json = exportResumeAsJson(doc);
+    const text = exportResumeAsPlainText(doc);
+
+    // Third-party public resume exports must not include confidential decision parameters
+    expect(json).not.toContain('salaryFloor');
+    expect(json).not.toContain('cushionMonths');
+    expect(json).not.toContain('taxStatus');
+    expect(json).not.toContain('familyNotes');
+
+    expect(text).not.toContain('Зарплатный пол');
+    expect(text).not.toContain('Финансовая подушка');
+    expect(text).not.toContain('Гражданство');
+    expect(text).not.toContain('Налоговый статус');
+  });
 });
 
 // .app 05.10: «Отмена» в окне печати показывала «Печать недоступна — сохраните PDF».

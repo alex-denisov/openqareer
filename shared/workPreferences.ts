@@ -380,3 +380,191 @@ export function scoreWorkPreferences(input: {
     ranked: discriminates ? rankable.slice(0, RANKED_LIMIT) : [],
   };
 }
+
+/**
+ * Профиль ограничений кандидата (Decision Profile & Hard Constraints, US-03.3 / B384).
+ *
+ * Жёсткие условия поиска работы:
+ * - Гражданство и налоговый/миграционный статус
+ * - Подтверждённые языки (с контекстом, без абстрактных самооценок)
+ * - Допустимые форматы работы (домашний рынок, удалёнка из РФ, удалёнка из-за рубежа, офис, релокация)
+ * - Зарплатный пол (compensation floor)
+ * - Финансовая подушка (в месяцах)
+ *
+ * Конфиденциальность:
+ * Данные строго конфиденциальны и служат ТОЛЬКО личным фильтром подборки.
+ * Никогда не передаются в публичные профили, работодателям и во внешние выгрузки.
+ */
+
+export const DECISION_WORK_FORMATS = [
+  { id: 'home_market', label: 'Домашний рынок (РФ)' },
+  { id: 'remote_home', label: 'Удалёнка из РФ' },
+  { id: 'remote_abroad', label: 'Удалёнка из-за рубежа' },
+  { id: 'office', label: 'Офис' },
+  { id: 'relocation', label: 'Релокация' },
+] as const;
+
+export type DecisionWorkFormatId = (typeof DECISION_WORK_FORMATS)[number]['id'];
+
+export interface CandidateDecisionLanguage {
+  readonly language: string;
+  readonly level: string;
+  readonly certified?: boolean;
+  readonly context?: string;
+}
+
+export interface CandidateDecisionProfile {
+  readonly citizenship: readonly string[];
+  readonly taxStatus?: string;
+  readonly languages: readonly CandidateDecisionLanguage[];
+  readonly workFormats: readonly DecisionWorkFormatId[];
+  readonly salaryFloor?: number;
+  readonly salaryCurrency?: string;
+  readonly cushionMonths?: number;
+  readonly hasFamily?: boolean;
+  readonly updatedAt?: string;
+}
+
+export const DEFAULT_DECISION_PROFILE: CandidateDecisionProfile = {
+  citizenship: [],
+  taxStatus: '',
+  languages: [],
+  workFormats: [],
+  salaryFloor: undefined,
+  salaryCurrency: 'RUB',
+  cushionMonths: undefined,
+  hasFamily: false,
+};
+
+export const DECISION_PROFILE_STORAGE_KEY = 'openqareer.decision-profile.v1';
+
+export const CONFIDENTIAL_DECISION_KEYS = [
+  'salaryFloor',
+  'salaryCurrency',
+  'cushionMonths',
+  'citizenship',
+  'taxStatus',
+  'hasFamily',
+] as const;
+
+export function isDecisionProfileConfidential(key: string): boolean {
+  return CONFIDENTIAL_DECISION_KEYS.includes(key as (typeof CONFIDENTIAL_DECISION_KEYS)[number]);
+}
+
+/**
+ * Очищает данные для экспорта третьим лицам: ни одно конфиденциальное поле
+ * профиля ограничений не должно попасть во внешний JSON или выгрузку.
+ */
+export function sanitizeForThirdPartyExport<T extends Record<string, unknown>>(payload: T): T {
+  const result = { ...payload };
+  for (const key of CONFIDENTIAL_DECISION_KEYS) {
+    delete (result as Record<string, unknown>)[key];
+  }
+  delete (result as Record<string, unknown>).decisionProfile;
+  if ('workPreferences' in result && typeof result.workPreferences === 'object' && result.workPreferences !== null) {
+    const wp = { ...(result.workPreferences as Record<string, unknown>) };
+    for (const key of CONFIDENTIAL_DECISION_KEYS) {
+      delete wp[key];
+    }
+    delete wp.decisionProfile;
+    (result as Record<string, unknown>).workPreferences = wp;
+  }
+  return result;
+}
+
+function matchesSalaryFloor(
+  salary: { readonly from?: number; readonly to?: number; readonly currency?: string } | undefined,
+  salaryFloor: number | undefined,
+  _currency?: string,
+): boolean {
+  if (!salaryFloor || salaryFloor <= 0) return true;
+  // Пустые поля не режут подборку: вакансия без указанной зарплаты не исключается вслепую.
+  if (!salary || (salary.from === undefined && salary.to === undefined)) {
+    return true;
+  }
+  const maxCompensation = salary.to ?? salary.from;
+  if (maxCompensation !== undefined && maxCompensation < salaryFloor) {
+    return false;
+  }
+  return true;
+}
+
+function matchesWorkFormat(
+  isRemote: boolean | undefined,
+  formats: readonly DecisionWorkFormatId[],
+): boolean {
+  if (!formats || formats.length === 0) return true;
+  const allowsRemote = formats.includes('remote_home') || formats.includes('remote_abroad');
+  const allowsOffice = formats.includes('office') || formats.includes('home_market');
+  if (allowsRemote && !allowsOffice && !isRemote) return false;
+  if (allowsOffice && !allowsRemote && isRemote) return false;
+  return true;
+}
+
+export function matchesDecisionProfile(
+  cluster: {
+    readonly isRemote?: boolean;
+    readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
+    readonly companyFeatures?: { readonly country?: string };
+    readonly canonicalLocation?: string;
+  },
+  profile?: CandidateDecisionProfile | null,
+): boolean {
+  if (!profile) return true;
+  if (!matchesSalaryFloor(cluster.salary, profile.salaryFloor, profile.salaryCurrency)) {
+    return false;
+  }
+  if (!matchesWorkFormat(cluster.isRemote, profile.workFormats)) {
+    return false;
+  }
+  return true;
+}
+
+export function filterVacanciesByDecisionProfile<
+  T extends {
+    readonly cluster: {
+      readonly isRemote?: boolean;
+      readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
+      readonly companyFeatures?: { readonly country?: string };
+      readonly canonicalLocation?: string;
+    };
+  },
+>(items: readonly T[], profile?: CandidateDecisionProfile | null): T[] {
+  if (!profile) return [...items];
+  return items.filter((item) => matchesDecisionProfile(item.cluster, profile));
+}
+
+export function loadDecisionProfile(storage?: { getItem(key: string): string | null }): CandidateDecisionProfile {
+  try {
+    const s = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    const raw = s?.getItem(DECISION_PROFILE_STORAGE_KEY);
+    if (!raw) return DEFAULT_DECISION_PROFILE;
+    const parsed = JSON.parse(raw);
+    return {
+      citizenship: Array.isArray(parsed.citizenship) ? parsed.citizenship : [],
+      taxStatus: typeof parsed.taxStatus === 'string' ? parsed.taxStatus : '',
+      languages: Array.isArray(parsed.languages) ? parsed.languages : [],
+      workFormats: Array.isArray(parsed.workFormats) ? parsed.workFormats : [],
+      salaryFloor: typeof parsed.salaryFloor === 'number' ? parsed.salaryFloor : undefined,
+      salaryCurrency: typeof parsed.salaryCurrency === 'string' ? parsed.salaryCurrency : 'RUB',
+      cushionMonths: typeof parsed.cushionMonths === 'number' ? parsed.cushionMonths : undefined,
+      hasFamily: Boolean(parsed.hasFamily),
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : undefined,
+    };
+  } catch {
+    return DEFAULT_DECISION_PROFILE;
+  }
+}
+
+export function saveDecisionProfile(
+  profile: CandidateDecisionProfile,
+  storage?: { setItem(key: string, value: string): void },
+): void {
+  try {
+    const s = storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
+    s?.setItem(DECISION_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    // Ignore storage write failure
+  }
+}
+

@@ -25,6 +25,10 @@ import { CareerTooltip } from '../shell/CareerTooltip';
 import { matchesVacancyCity } from './vacancyFacets';
 
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
+import {
+  filterVacanciesByDecisionProfile,
+  loadDecisionProfile,
+} from '../../../shared/workPreferences';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -766,7 +770,9 @@ function filterByScreenState(
   now: string,
 ): MatchedVacancyItem[] {
   void now;
-  return items.filter((item) => {
+  const decisionProfile = loadDecisionProfile();
+  const profileFiltered = filterVacanciesByDecisionProfile(items, decisionProfile);
+  return profileFiltered.filter((item) => {
     const { cluster } = item;
     if (
       state.roles.length > 0 &&

@@ -7,6 +7,8 @@ import {
   WORK_FAMILIES,
   WORK_PREFERENCE_KEY_VERSION,
   WORK_PREFERENCE_TASKS,
+  DEFAULT_DECISION_PROFILE,
+  type CandidateDecisionProfile,
 } from '../../../shared/workPreferences';
 
 const separating = [
@@ -37,7 +39,12 @@ function state(overrides: Partial<WorkPreferencesState> = {}): WorkPreferencesSt
     failed: false,
     saving: false,
     error: null,
+    decisionProfile: DEFAULT_DECISION_PROFILE,
+    decisionProfileSaved: false,
     submit: async () => true,
+    saveDecisionProfile: async () => true,
+    updateDecisionProfile: async () => true,
+    resetDecisionProfile: async () => true,
     ...overrides,
   };
 }
@@ -113,5 +120,72 @@ describe('WorkPreferencesPanel', () => {
     );
     expect(markup).toContain('не удалось прочитать');
     expect(markup).not.toContain('Пройти задания');
+  });
+
+  describe('Профиль ограничений кандидата (US-03.3 / B384)', () => {
+    it('отображает блок профиля ограничений с пометкой конфиденциальности и полями', () => {
+      const markup = renderToStaticMarkup(<WorkPreferencesPanel state={state()} />);
+
+      // Заголовок и пометка конфиденциальности
+      expect(markup).toContain('Профиль ограничений');
+      expect(markup).toContain('Конфиденциально');
+      expect(markup).toContain('личный фильтр');
+
+      // Поля ограничений
+      expect(markup).toContain('Зарплатный пол');
+      expect(markup).toContain('Гражданство');
+      expect(markup).toContain('Формат работы');
+      expect(markup).toContain('Подтверждённые языки');
+      expect(markup).toContain('Финансовая подушка');
+
+      // Форматы работы
+      expect(markup).toContain('Домашний рынок');
+      expect(markup).toContain('Удалёнка из РФ');
+      expect(markup).toContain('Удалёнка из-за рубежа');
+      expect(markup).toContain('Офис');
+      expect(markup).toContain('Релокация');
+
+      // Разъяснение о влиянии зарплатного пола
+      expect(markup).toContain('ниже этого порога');
+      expect(markup).toContain('Пустые поля не ограничивают');
+
+      // Кнопка сохранения
+      expect(markup).toContain('Сохранить ограничения');
+    });
+
+    it('отражает заполненные значения зарплатного пола и форматов работы', () => {
+      const profile: CandidateDecisionProfile = {
+        ...DEFAULT_DECISION_PROFILE,
+        salaryFloor: 220_000,
+        salaryCurrency: 'RUB',
+        citizenship: ['РФ'],
+        workFormats: ['remote_home', 'relocation'],
+        cushionMonths: 6,
+        hasFamily: true,
+      };
+
+      const markup = renderToStaticMarkup(
+        <WorkPreferencesPanel state={state({ decisionProfile: profile })} />,
+      );
+
+      expect(markup).toContain('220000');
+      expect(markup).toContain('РФ');
+      expect(markup).toContain('6');
+    });
+
+    it('показывает статус «Ограничения сохранены» при флаге decisionProfileSaved', () => {
+      const markup = renderToStaticMarkup(
+        <WorkPreferencesPanel state={state({ decisionProfileSaved: true })} />,
+      );
+      expect(markup).toContain('Ограничения сохранены');
+    });
+
+    it('пустые поля не вызывают ошибок и позволяют сохранить профиль', () => {
+      const markup = renderToStaticMarkup(
+        <WorkPreferencesPanel state={state({ decisionProfile: DEFAULT_DECISION_PROFILE })} />,
+      );
+      expect(markup).not.toContain('Ошибка');
+      expect(markup).toContain('Сохранить ограничения');
+    });
   });
 });

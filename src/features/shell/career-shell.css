@@ -7502,6 +7502,122 @@
   display: block;
 }
 
+/* Профиль ограничений кандидата (US-03.3 / B384) */
+.career-decision-profile {
+  display: grid;
+  gap: var(--career-space-sm);
+}
+
+.career-decision-confidential-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-xs);
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  background: var(--career-surface-subtle);
+  padding: var(--career-space-xs) var(--career-space-sm);
+  border-radius: var(--career-radius-md);
+  line-height: 1.4;
+}
+
+.career-decision-field-group {
+  display: grid;
+  gap: var(--career-space-sm);
+}
+
+.career-decision-field {
+  display: grid;
+  gap: var(--career-space-2xs);
+}
+
+.career-decision-field label {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  font-weight: 500;
+}
+
+.career-decision-input-row {
+  display: flex;
+  gap: var(--career-space-xs);
+}
+
+.career-decision-input {
+  flex: 1;
+  min-height: 44px;
+  padding: var(--career-space-xs) var(--career-space-sm);
+  font-size: var(--career-text-xs);
+  color: var(--career-text);
+  background: var(--career-surface);
+  border: 1px solid var(--career-border);
+  border-radius: var(--career-radius-md);
+  box-sizing: border-box;
+}
+
+.career-decision-select {
+  min-height: 44px;
+  padding: var(--career-space-xs) var(--career-space-sm);
+  font-size: var(--career-text-xs);
+  color: var(--career-text);
+  background: var(--career-surface);
+  border: 1px solid var(--career-border);
+  border-radius: var(--career-radius-md);
+}
+
+.career-decision-hint {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  line-height: 1.4;
+}
+
+.career-decision-fieldset {
+  border: 1px solid var(--career-border-subtle);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-xs) var(--career-space-sm);
+  margin: 0;
+}
+
+.career-decision-fieldset legend {
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+  padding: 0 var(--career-space-2xs);
+}
+
+.career-decision-formats {
+  display: grid;
+  gap: var(--career-space-2xs);
+}
+
+.career-decision-format-label,
+.career-decision-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-xs);
+  min-height: 44px;
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.career-decision-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-sm);
+  margin-top: var(--career-space-xs);
+}
+
+.career-decision-saved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2xs);
+  font-size: var(--career-text-xs);
+  color: var(--career-signal-green);
+}
+
+.career-decision-divider {
+  border: none;
+  border-top: 1px solid var(--career-border-subtle);
+  margin: var(--career-space-sm) 0;
+}
+
 /* «Стратегия»: выбранная роль, её версия и то, на чём она стоит. */
 .career-strategy {
   display: grid;
