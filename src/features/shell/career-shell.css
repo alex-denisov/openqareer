@@ -15410,11 +15410,13 @@ button.chip {
   width: 100%;
 }
 
-.career-responses-select-wrap select {
+.career-responses-select-wrap select,
+.career-responses-select {
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
   width: 100%;
+  min-height: 44px;
   background: var(--career-bg);
   border: 1px solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
@@ -15424,7 +15426,8 @@ button.chip {
   cursor: pointer;
 }
 
-.career-responses-select-wrap select:focus-visible {
+.career-responses-select-wrap select:focus-visible,
+.career-responses-select:focus-visible {
   outline: 2px solid var(--career-accent);
   outline-offset: 1px;
 }

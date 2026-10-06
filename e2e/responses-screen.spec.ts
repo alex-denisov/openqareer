@@ -727,4 +727,53 @@ test.describe('B251 responses screen', () => {
     await expect(page.locator('.career-responses-board')).toBeVisible();
     await expect(analyticsView).toHaveCount(0);
   });
+
+  test('B414: единое оформление select доказательства доставки и этапа', async ({ page }) => {
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+
+    const peratonCard = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
+    await expect(peratonCard).toBeVisible();
+
+    const menuBtn = peratonCard.getByRole('button', { name: 'Действия с карточкой' });
+    await menuBtn.click();
+
+    const stageSelect = peratonCard.locator('select.career-responses-select').first();
+    const deliveryLabel = peratonCard.locator('.career-responses-select-field').filter({
+      hasText: 'Доказательство доставки',
+    });
+    const deliverySelect = deliveryLabel.locator('select.career-responses-select');
+
+    await expect(stageSelect).toBeVisible();
+    await expect(deliverySelect).toBeVisible();
+
+    await expect(stageSelect).toHaveClass(/career-responses-select/);
+    await expect(deliverySelect).toHaveClass(/career-responses-select/);
+
+    const stageBox = await stageSelect.boundingBox();
+    expect(stageBox).not.toBeNull();
+    expect(stageBox!.height).toBeGreaterThanOrEqual(44);
+
+    const deliveryBox = await deliverySelect.boundingBox();
+    expect(deliveryBox).not.toBeNull();
+    expect(deliveryBox!.height).toBeGreaterThanOrEqual(44);
+
+    await mkdir('output/playwright/B414', { recursive: true });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await peratonCard.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: 'output/playwright/B414/responses-card-1440.png',
+      fullPage: true,
+    });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await peratonCard.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: 'output/playwright/B414/responses-card-390.png',
+      fullPage: true,
+    });
+  });
 });
