@@ -9,8 +9,8 @@ import {
 
 const base: InvitationAccountState = {
   accountAgeDays: 400,
-  sentLast7d: 0,
-  sentToday: 0,
+  attemptedLast7d: 0,
+  attemptedToday: 0,
   sentLast30d: 0,
   acceptedLast30d: 0,
   pending: 0,
@@ -31,15 +31,15 @@ describe('planInvitations', () => {
   });
 
   it('недельный остаток ограничивает дневной бюджет', () => {
-    const plan = planInvitations({ ...base, sentLast7d: INVITATION_LIMITS.matureWeekly - 2 });
+    const plan = planInvitations({ ...base, attemptedLast7d: INVITATION_LIMITS.matureWeekly - 2 });
     expect(plan.allowed).toBe(2);
   });
 
   it.each([
     ['restricted', { restricted: true }, 'account_restricted'],
     ['вне окна', { windowOpen: false }, 'outside_window'],
-    ['недельный потолок', { sentLast7d: INVITATION_LIMITS.matureWeekly }, 'weekly_cap'],
-    ['дневной потолок', { sentToday: INVITATION_LIMITS.matureDaily }, 'daily_cap'],
+    ['недельный потолок', { attemptedLast7d: INVITATION_LIMITS.matureWeekly }, 'weekly_cap'],
+    ['дневной потолок', { attemptedToday: INVITATION_LIMITS.matureDaily }, 'daily_cap'],
     ['много ожидающих', { pending: INVITATION_LIMITS.pendingMax }, 'too_many_pending'],
     ['низкое принятие', { sentLast30d: 40, acceptedLast30d: 4 }, 'low_acceptance'],
   ] as const)('останавливается: %s', (_name, patch, reason) => {
