@@ -69,6 +69,57 @@ function calculateCoords(
   return { top: Math.round(top), left: Math.round(left) };
 }
 
+/** Закрывает подсказку по клику или тапу вне значка и самой подсказки. */
+function useDismissOnOutsidePointer(
+  isVisible: boolean,
+  forceHide: () => void,
+  triggerRef: RefObject<HTMLElement | null>,
+  tooltipRef: RefObject<HTMLElement | null>,
+) {
+  // Закрытие по клику/тапу вне триггера и подсказки
+  useEffect(() => {
+    if (!isVisible) return;
+
+    const handlePointerDownOutside = (e: Event) => {
+      const target = e.target as Node | null;
+      if (!target) return;
+      if (triggerRef.current?.contains(target)) return;
+      if (tooltipRef.current?.contains(target)) return;
+      forceHide();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDownOutside, true);
+    document.addEventListener('touchstart', handlePointerDownOutside, true);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDownOutside, true);
+      document.removeEventListener('touchstart', handlePointerDownOutside, true);
+    };
+  }, [isVisible, forceHide, triggerRef, tooltipRef]);
+}
+
+/** Одновременно открыта одна подсказка: показ другой закрывает эту. */
+function useCloseOnOtherTooltip(isVisible: boolean, tooltipId: string, forceHide: () => void) {
+  // Закрытие при открытии любой другой подсказки
+  useEffect(() => {
+    if (!isVisible) return;
+
+    window.dispatchEvent(new CustomEvent('career-tooltip-open', { detail: tooltipId }));
+
+    const handleOtherTooltipOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail && customEvent.detail !== tooltipId) {
+        forceHide();
+      }
+    };
+
+    window.addEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    return () => {
+      window.removeEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    };
+  }, [isVisible, forceHide, tooltipId]);
+}
+
 /** Позиционирует подсказку через свойства DOM без inline-стилей в JSX. */
 function useTooltipPosition(
   triggerRef: RefObject<HTMLElement | null>,
@@ -99,47 +150,8 @@ function useTooltipPosition(
     };
   }, [isVisible, applyCoords]);
 
-  // Закрытие по клику/тапу вне триггера и подсказки
-  useEffect(() => {
-    if (!isVisible) return;
-
-    const handlePointerDownOutside = (e: Event) => {
-      const target = e.target as Node | null;
-      if (!target) return;
-      if (triggerRef.current?.contains(target)) return;
-      if (tooltipRef.current?.contains(target)) return;
-      forceHide();
-    };
-
-    document.addEventListener('pointerdown', handlePointerDownOutside, true);
-    document.addEventListener('touchstart', handlePointerDownOutside, true);
-
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDownOutside, true);
-      document.removeEventListener('touchstart', handlePointerDownOutside, true);
-    };
-  }, [isVisible, forceHide, triggerRef, tooltipRef]);
-
-  // Закрытие при открытии любой другой подсказки
-  useEffect(() => {
-    if (!isVisible) return;
-
-    window.dispatchEvent(
-      new CustomEvent('career-tooltip-open', { detail: tooltipId }),
-    );
-
-    const handleOtherTooltipOpen = (e: Event) => {
-      const customEvent = e as CustomEvent<string>;
-      if (customEvent.detail && customEvent.detail !== tooltipId) {
-        forceHide();
-      }
-    };
-
-    window.addEventListener('career-tooltip-open', handleOtherTooltipOpen);
-    return () => {
-      window.removeEventListener('career-tooltip-open', handleOtherTooltipOpen);
-    };
-  }, [isVisible, forceHide, tooltipId]);
+  useDismissOnOutsidePointer(isVisible, forceHide, triggerRef, tooltipRef);
+  useCloseOnOtherTooltip(isVisible, tooltipId, forceHide);
 }
 
 function useTooltipTimer() {
@@ -207,7 +219,6 @@ function useTooltipVisibility(disabled: boolean, hasContent: boolean) {
 
   return { isVisible, isPinned, show, hide, toggle, forceHide };
 }
-
 
 function bindTriggerRef(child: ReactElement, triggerRef: { current: HTMLElement | null }) {
   return (node: HTMLElement | null) => {
@@ -321,4 +332,3 @@ export function CareerTooltip({
     </>
   );
 }
-

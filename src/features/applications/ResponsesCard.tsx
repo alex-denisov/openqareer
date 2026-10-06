@@ -9,22 +9,17 @@ import {
 } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
 import type { DeliveryReceipt } from '../../../shared/applicationStage';
-import { deliveryState } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
-import { InterviewPrepModal } from '../interview/InterviewPrepModal';
-import {
-  patchApplication,
-  patchApplicationInterview,
-  type ApplicationView,
-} from './applicationsApi';
-import {
-  InterviewDebriefModal,
-  type InterviewDebriefSubmitData,
-} from './InterviewDebriefModal';
+import type { ApplicationView } from './applicationsApi';
+import type { InterviewDebriefSubmitData } from './InterviewDebriefModal';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
-import { calculateOfferCompensation } from './offerCompensation';
+import {
+  buildSubjectTitle,
+  CardStageBlocks,
+  FollowUpSentControl,
+} from './ResponsesCardStageControls';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
   saved: 'Хочу',
@@ -35,12 +30,6 @@ const STAGE_LABEL: Record<ApplicationStage, string> = {
   rejected: 'Отказ',
   archived: 'Архив',
 };
-
-function buildSubjectTitle(vacancy?: ApplicationView['vacancy']): string {
-  const title = vacancy?.title ?? 'Без названия';
-  const company = vacancy?.companyHidden ? '' : (vacancy?.company ?? '');
-  return `О вакансии: ${title}${company ? ` — ${company}` : ''}`;
-}
 
 interface ResponsesCardProps {
   readonly application: ApplicationView;
@@ -206,25 +195,13 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onRetry={props.onRetry}
         onRefresh={props.onRefresh}
       />
-      {application.stage === 'applied' ? (
-        <DeliveryStatus receipt={application.deliveryReceipt ?? null} />
-      ) : null}
-      {application.stage === 'interview' ? (
-        <div className="career-responses-interview-actions">
-          <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
-          <InterviewDebriefControl
-            application={application}
-            onSaveDebrief={props.onSaveDebrief}
-            onRefresh={props.onRefresh}
-          />
-        </div>
-      ) : null}
-      {application.stage === 'offer' ? (
-        <OfferCardControl
-          application={application}
-          onOpenOfferEdit={props.onOpenOfferEdit}
-        />
-      ) : null}
+      <CardStageBlocks
+        application={application}
+        onOpenExpert={props.onOpenExpert}
+        onSaveDebrief={props.onSaveDebrief}
+        onRefresh={props.onRefresh}
+        onOpenOfferEdit={props.onOpenOfferEdit}
+      />
       <CardFooter
         application={application}
         labelText={label.text}
@@ -240,203 +217,6 @@ export function ResponsesCard(props: ResponsesCardProps) {
       />
       <FollowUpSentControl application={application} onMark={props.onMarkFollowUpSent} />
     </article>
-  );
-}
-
-function DeliveryStatus({ receipt }: { receipt: DeliveryReceipt | null }) {
-  const state = deliveryState('applied', receipt);
-  const label =
-    state === 'failed'
-      ? 'Попытка не удалась. Доставка не подтверждена.'
-      : state === 'attempted'
-        ? 'Пробовали отправить. Не хватает квитанции доставки.'
-        : `Доставка подтверждена: ${receipt?.value ?? ''}`;
-  return (
-    <p className="career-responses-card-failed" role="status">
-      {label}
-    </p>
-  );
-}
-
-/** «Подготовиться» from a card already in the interview stage (B251 F5) opens
- * the same prep material «Сегодня» offers — no separate prep screen exists
- * yet (`docs/v1-release/tasks/codex/C47-b251-interview-path-from-card.md`). */
-function PrepareInterviewControl({
-  application,
-  onOpenExpert,
-}: {
-  application: ApplicationView;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const handleAskConsultant = onOpenExpert
-    ? () => {
-        onOpenExpert(
-          'interviews',
-          { kind: 'application', id: application.id },
-          buildSubjectTitle(application.vacancy),
-        );
-      }
-    : undefined;
-
-  return (
-    <div className="career-responses-prep-action">
-      <button
-        type="button"
-        className="career-btn career-btn-primary career-btn-sm"
-        onClick={() => setOpen(true)}
-      >
-        Подготовиться
-      </button>
-      <InterviewPrepModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        vacancy={{
-          id: application.id,
-          title: application.vacancy?.title ?? 'Без названия',
-          company: application.vacancy?.companyHidden
-            ? undefined
-            : (application.vacancy?.company ?? undefined),
-        }}
-        onAskConsultant={handleAskConsultant}
-      />
-    </div>
-  );
-}
-
-async function saveDebriefForApplication(
-  application: ApplicationView,
-  data: InterviewDebriefSubmitData,
-  onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>,
-) {
-  if (onSaveDebrief) {
-    await onSaveDebrief(data);
-    return;
-  }
-  if (application.nearestInterview?.id) {
-    await patchApplicationInterview(application.id, application.nearestInterview.id, {
-      debrief: JSON.stringify(data),
-      followUpDueAt: data.promisedResponseDate,
-    });
-  } else {
-    await patchApplication(application.id, {
-      expectedVersion: application.version,
-      followUpDueAt: data.promisedResponseDate,
-    });
-  }
-}
-
-function InterviewDebriefControl({
-  application,
-  onSaveDebrief,
-  onRefresh,
-}: {
-  application: ApplicationView;
-  onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
-  onRefresh?: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-
-  const handleSave = async (data: InterviewDebriefSubmitData) => {
-    await saveDebriefForApplication(application, data, onSaveDebrief);
-    onRefresh?.();
-  };
-
-  const company = application.vacancy?.companyHidden
-    ? undefined
-    : (application.vacancy?.company ?? undefined);
-
-  return (
-    <div className="career-responses-debrief-action">
-      <button
-        type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
-        onClick={() => setOpen(true)}
-      >
-        Дебрифинг
-      </button>
-      <InterviewDebriefModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        onSave={handleSave}
-        vacancyTitle={application.vacancy?.title ?? 'Без названия'}
-        company={company}
-        initialPromisedDate={application.followUpDueAt}
-      />
-    </div>
-  );
-}
-
-function FollowUpSentControl({
-  application,
-  onMark,
-}: {
-  application: ApplicationView;
-  onMark: () => Promise<void>;
-}) {
-  const [saving, setSaving] = useState(false);
-  const [failed, setFailed] = useState(false);
-  if (
-    application.stage !== 'applied' ||
-    (application.followUp?.urgency !== 'due' &&
-      application.followUp?.urgency !== 'overdue' &&
-      application.followUp?.urgency !== 'stale')
-  ) {
-    return null;
-  }
-
-  return (
-    <div className="career-responses-follow-up-action">
-      {failed ? <span role="alert">Не удалось сохранить отметку.</span> : null}
-      <button
-        type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
-        disabled={saving}
-        onClick={() => {
-          setSaving(true);
-          setFailed(false);
-          void onMark()
-            .catch(() => setFailed(true))
-            .finally(() => setSaving(false));
-        }}
-      >
-        {saving ? 'Сохраняем…' : 'Напоминание отправлено'}
-      </button>
-    </div>
-  );
-}
-
-function OfferCardControl({
-  application,
-  onOpenOfferEdit,
-}: {
-  application: ApplicationView;
-  onOpenOfferEdit?: (applicationId: string) => void;
-}) {
-  const terms = application.offer?.terms;
-  const breakdown = terms ? calculateOfferCompensation(terms) : null;
-  const currencySymbol = breakdown?.currency === 'RUB' ? '₽' : breakdown?.currency === 'USD' ? '$' : breakdown?.currency === 'EUR' ? '€' : (breakdown?.currency ?? '');
-
-  return (
-    <div className="career-responses-offer-action">
-      {breakdown ? (
-        <div className="career-responses-card-offer-preview">
-          <span className="career-mono">
-            {new Intl.NumberFormat('ru-RU').format(breakdown.monthlyAverage)} {currencySymbol}/мес.
-          </span>
-          <span className="career-offer-source-badge">{breakdown.sourceLabel}</span>
-        </div>
-      ) : null}
-      {onOpenOfferEdit ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary career-btn-sm"
-          onClick={() => onOpenOfferEdit(application.id)}
-        >
-          {application.offer ? 'Условия оффера' : 'Заполнить оффер'}
-        </button>
-      ) : null}
-    </div>
   );
 }
 

@@ -37,6 +37,14 @@ const COLUMNS: readonly Column[] = [
   { key: 'closed', label: 'Отказ', stages: ['rejected'] },
 ];
 
+function useStageFilter(initial?: ApplicationStage) {
+  const [stageFilter, setStageFilter] = useState<ApplicationStage | null>(initial ?? null);
+  useEffect(() => {
+    setStageFilter(initial ?? null);
+  }, [initial]);
+  return [stageFilter, setStageFilter] as const;
+}
+
 /**
  * Канбан «Отклики» (B248 §responses, B251 S3): один экран для всего активного
  * поиска. Восемь состояний интерфейса живут здесь одним компонентом —
@@ -59,13 +67,7 @@ export function ResponsesBoard({
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [tab, setTab] = useState<'board' | 'analytics'>(initialTab ?? 'board');
-  const [stageFilter, setStageFilter] = useState<ApplicationStage | null>(
-    initialStageFilter ?? null,
-  );
-
-  useEffect(() => {
-    setStageFilter(initialStageFilter ?? null);
-  }, [initialStageFilter]);
+  const [stageFilter, setStageFilter] = useStageFilter(initialStageFilter);
 
   if (state.status === 'loading') return <LoadingState />;
   if (state.status === 'error') {
@@ -81,15 +83,7 @@ export function ResponsesBoard({
   }
 
   if (state.applications.length === 0 && tab === 'board') {
-    return (
-      <>
-        <CandidateActionPanel
-          applications={state.applications}
-          onRefreshApplications={state.refreshApplications}
-        />
-        <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
-      </>
-    );
+    return <EmptyBoard state={state} onOpenVacancies={onOpenVacancies} />;
   }
 
   return (
@@ -103,6 +97,24 @@ export function ResponsesBoard({
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
+  );
+}
+
+function EmptyBoard({
+  state,
+  onOpenVacancies,
+}: {
+  state: UseApplications;
+  onOpenVacancies: () => void;
+}) {
+  return (
+    <>
+      <CandidateActionPanel
+        applications={state.applications}
+        onRefreshApplications={state.refreshApplications}
+      />
+      <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
+    </>
   );
 }
 
@@ -343,19 +355,7 @@ function ResponsesViewSwitch({
   );
 }
 
-function BoardColumnsAndArchive({
-  state,
-  visibleColumns,
-  initialArchiveOpen,
-  activeMenuCardId,
-  onToggleMenu,
-  onCloseMenu,
-  onOpenVacancies,
-  onAddManual,
-  onOpenExpert,
-  onOpenCompareOffers,
-  onOpenOfferEdit,
-}: {
+interface BoardColumnsAndArchiveProps {
   readonly state: UseApplications;
   readonly visibleColumns: readonly Column[];
   readonly initialArchiveOpen?: boolean;
@@ -371,7 +371,21 @@ function BoardColumnsAndArchive({
   ) => void;
   readonly onOpenCompareOffers: () => void;
   readonly onOpenOfferEdit: (applicationId: string) => void;
-}) {
+}
+
+function BoardColumnsAndArchive({
+  state,
+  visibleColumns,
+  initialArchiveOpen,
+  activeMenuCardId,
+  onToggleMenu,
+  onCloseMenu,
+  onOpenVacancies,
+  onAddManual,
+  onOpenExpert,
+  onOpenCompareOffers,
+  onOpenOfferEdit,
+}: BoardColumnsAndArchiveProps) {
   return (
     <>
       <BoardColumnsList

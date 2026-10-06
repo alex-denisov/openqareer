@@ -53,6 +53,8 @@ async function createApp() {
     databasePath,
     staticRoot: '/tmp/not-used',
     encryptionKey: Buffer.alloc(32, 8),
+    dataEncryptionKey: Buffer.alloc(32, 8),
+    release: 'test',
     allowedOrigins: ['http://localhost:3000'],
     secureCookies: false,
     sessionCookieName: 'openqareer_session',
