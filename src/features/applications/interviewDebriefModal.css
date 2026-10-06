@@ -1,0 +1,159 @@
+.career-debrief-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: var(--career-overlay-bg, rgba(0, 0, 0, 0.45));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--career-space-4, 16px);
+  backdrop-filter: blur(2px);
+}
+
+.career-debrief-modal-card {
+  background: var(--career-surface-base, #ffffff);
+  border: 1px solid var(--career-border-default, #e2e8f0);
+  border-radius: var(--career-radius-lg, 12px);
+  box-shadow: var(--career-shadow-lg, 0 10px 25px -5px rgba(0, 0, 0, 0.1));
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.career-debrief-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: var(--career-space-5, 20px) var(--career-space-5, 20px) var(--career-space-3, 12px);
+  border-bottom: 1px solid var(--career-border-subtle, #f1f5f9);
+}
+
+.career-debrief-modal-title {
+  margin: 0;
+  font-size: var(--career-text-lg, 18px);
+  font-weight: 600;
+  color: var(--career-text-primary, #0f172a);
+}
+
+.career-debrief-modal-subtitle {
+  margin: var(--career-space-1, 4px) 0 0;
+  font-size: var(--career-text-sm, 14px);
+  color: var(--career-text-muted, #64748b);
+}
+
+.career-debrief-form {
+  padding: var(--career-space-5, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4, 16px);
+}
+
+.career-debrief-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2, 8px);
+}
+
+.career-debrief-label {
+  font-size: var(--career-text-sm, 14px);
+  font-weight: 500;
+  color: var(--career-text-primary, #0f172a);
+}
+
+.career-debrief-feeling-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--career-space-2, 8px);
+}
+
+.career-debrief-feeling-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--career-space-2, 8px) var(--career-space-3, 12px);
+  border: 1px solid var(--career-border-default, #cbd5e1);
+  border-radius: var(--career-radius-md, 8px);
+  font-size: var(--career-text-sm, 14px);
+  color: var(--career-text-secondary, #334155);
+  background: var(--career-surface-raised, #f8fafc);
+  cursor: pointer;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
+  min-height: 40px;
+}
+
+.career-debrief-feeling-pill.is-selected {
+  border-color: var(--career-color-primary, #0284c7);
+  background: var(--career-primary-surface, #e0f2fe);
+  color: var(--career-color-primary-text, #0369a1);
+  font-weight: 600;
+}
+
+.career-debrief-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--career-space-2, 8px) var(--career-space-3, 12px);
+  border: 1px solid var(--career-border-default, #cbd5e1);
+  border-radius: var(--career-radius-md, 8px);
+  font-size: var(--career-text-sm, 14px);
+  font-family: inherit;
+  color: var(--career-text-primary, #0f172a);
+  background: var(--career-surface-base, #ffffff);
+  resize: vertical;
+}
+
+.career-debrief-preset-row {
+  display: flex;
+  gap: var(--career-space-2, 8px);
+  margin-bottom: var(--career-space-1, 4px);
+}
+
+.career-debrief-date-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--career-space-2, 8px) var(--career-space-3, 12px);
+  border: 1px solid var(--career-border-default, #cbd5e1);
+  border-radius: var(--career-radius-md, 8px);
+  font-size: var(--career-text-sm, 14px);
+  font-family: inherit;
+  color: var(--career-text-primary, #0f172a);
+  background: var(--career-surface-base, #ffffff);
+  min-height: 40px;
+}
+
+.career-debrief-hint {
+  font-size: var(--career-text-xs, 12px);
+  color: var(--career-text-muted, #64748b);
+  line-height: 1.4;
+}
+
+.career-debrief-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--career-space-3, 12px);
+  padding-top: var(--career-space-2, 8px);
+}
+
+@media (max-width: 480px) {
+  .career-debrief-modal-card {
+    border-radius: var(--career-radius-md, 8px);
+  }
+
+  .career-debrief-feeling-options {
+    grid-template-columns: 1fr;
+  }
+
+  .career-debrief-preset-row {
+    flex-direction: column;
+  }
+
+  .career-debrief-modal-actions {
+    flex-direction: column-reverse;
+  }
+
+  .career-debrief-modal-actions button {
+    width: 100%;
+  }
+}

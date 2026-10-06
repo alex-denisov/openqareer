@@ -113,6 +113,7 @@ describe('TodayScreen (B251 S5)', () => {
 
     expect(html).toContain('роль');
     expect(html).toContain('Отметить отправленным');
+    expect(html).toContain('Черновик напоминания');
     expect(html).toContain('Открыть');
   });
 
