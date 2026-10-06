@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
-import { AuthService } from './authService';
+import { AuthService, type AuthServiceOptions } from './authService';
+import type { EmailDomainResolver } from './emailDomainCheck';
 
 const cleanup: Array<{
   auth: AuthService;
@@ -19,14 +20,24 @@ afterEach(() => {
   }
 });
 
-function createServices() {
+const testEmailDomainResolver: EmailDomainResolver = {
+  resolveMx: async () => [{ exchange: 'mx.example.test', priority: 10 }],
+  resolve4: async () => [],
+  resolve6: async () => [],
+};
+
+function createServices(authOptions: Partial<Omit<AuthServiceOptions, 'databasePath'>> = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-auth-'));
   const databasePath = join(directory, 'auth.db');
   const candidates = new SqliteCandidateStore({
     databasePath,
     encryptionKey: Buffer.alloc(32, 5),
   });
-  const auth = new AuthService({ databasePath });
+  const auth = new AuthService({
+    databasePath,
+    emailDomainResolver: testEmailDomainResolver,
+    ...authOptions,
+  });
   cleanup.push({ auth, candidates, directory });
   return { auth, candidates };
 }

@@ -41,3 +41,10 @@ export class AuthDisposableEmailError extends Error {
     this.name = 'AuthDisposableEmailError';
   }
 }
+
+export class AuthEmailDomainUnreachableError extends Error {
+  constructor() {
+    super('У этого адреса почта не принимается. Проверьте домен после @.');
+    this.name = 'AuthEmailDomainUnreachableError';
+  }
+}

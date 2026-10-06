@@ -3,6 +3,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { DEFAULT_APPLICATION_ARCHIVE_STALE_DAYS } from '../shared/applicationArchive';
+import { DEFAULT_MX_CHECK_BYPASS_DOMAINS } from './auth/emailDomainCheck';
 import {
   allowedModels,
   getProviderCatalogStatus,
@@ -87,6 +88,13 @@ const configSchema = z.object({
   OPENQAREER_TEST_CANDIDATE_PASSWORD: z.string().min(16).max(256).optional(),
   OPENQAREER_RESEND_API_KEY: blankAsUnset(z.string().min(10).max(2_048)),
   OPENQAREER_ACCOUNT_EMAIL_FROM: blankAsUnset(z.string().min(3).max(320)),
+  OPENQAREER_MX_CHECK_BYPASS_DOMAINS: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z
+      .string()
+      .default(DEFAULT_MX_CHECK_BYPASS_DOMAINS.join(','))
+      .transform(parseEmailMxBypassDomains),
+  ),
   OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
   OPENQAREER_DESKTOP_TUNNEL_SERVER: blankAsUnset(
     z
@@ -130,6 +138,13 @@ function blankAsUnset(schema: z.ZodString) {
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
     schema.optional(),
   );
+}
+
+function parseEmailMxBypassDomains(value: string): string[] {
+  return value
+    .split(',')
+    .map((domain) => domain.trim().toLowerCase().replace(/\.+$/u, ''))
+    .filter(Boolean);
 }
 
 export interface ServerConfig {
@@ -179,6 +194,7 @@ export interface ServerConfig {
     from: string;
     publicBaseUrl: string;
   };
+  emailMxCheckBypassDomains?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
 }
 
@@ -305,6 +321,7 @@ export function readServerConfig(
     staticRoot: parsed.OPENQAREER_STATIC_ROOT ?? dirname(fileURLToPath(moduleUrl)),
     release: builtRelease,
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
+    emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
     secureCookies,
     allowedOrigins: secureCookies
       ? [

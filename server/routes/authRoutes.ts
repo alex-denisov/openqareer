@@ -29,6 +29,7 @@ import {
   AuthInvalidResetTokenError,
   AuthUsernameTakenError,
   AuthDisposableEmailError,
+  AuthEmailDomainUnreachableError,
 } from '../auth/authService';
 import {
   defaultRegistrationLimiter,
@@ -89,23 +90,28 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
       meta: { requestId: request.id },
     });
   } catch (error) {
-    if (error instanceof AuthDisposableEmailError) {
-      return sendError(reply, request, 422, 'disposable_email_rejected', error.message, false, {
-        email: error.message,
-      });
-    }
-    if (error instanceof AuthUsernameTakenError || error instanceof AuthEmailTakenError) {
-      // Both collisions now trace back to the address: the handle is
-      // derived from it, so the address is the field the candidate can act
-      // on. Wording stays identical either way, so a probe cannot tell a
-      // taken handle from a taken address.
-      const message = 'Этот email уже связан с другим аккаунтом.';
-      return sendError(reply, request, 409, 'email_taken', message, false, {
-        email: message,
-      });
-    }
-    throw error;
+    return registrationFailure(error, request, reply);
   }
+}
+
+function registrationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof AuthEmailDomainUnreachableError) {
+    return sendError(reply, request, 422, 'email_domain_unreachable', error.message, false, {
+      email: error.message,
+    });
+  }
+  if (error instanceof AuthDisposableEmailError) {
+    return sendError(reply, request, 422, 'disposable_email_rejected', error.message, false, {
+      email: error.message,
+    });
+  }
+  if (error instanceof AuthUsernameTakenError || error instanceof AuthEmailTakenError) {
+    // Both collisions now trace back to the address: the handle is derived
+    // from it, so wording stays identical for either collision.
+    const message = 'Этот email уже связан с другим аккаунтом.';
+    return sendError(reply, request, 409, 'email_taken', message, false, { email: message });
+  }
+  throw error;
 }
 
 async function rejectRegistrationIfLimited(

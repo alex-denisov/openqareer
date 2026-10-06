@@ -54,6 +54,24 @@ describe('server configuration', () => {
     ).toThrow();
   });
 
+  it('uses the MX-check bypass domains from configuration', () => {
+    expect(readServerConfig(validEnvironment, import.meta.url).emailMxCheckBypassDomains).toEqual([
+      'example.com',
+      'example.org',
+      'example.net',
+      'test',
+    ]);
+    expect(
+      readServerConfig(
+        {
+          ...validEnvironment,
+          OPENQAREER_MX_CHECK_BYPASS_DOMAINS: 'Acme.test, example.com.',
+        },
+        import.meta.url,
+      ).emailMxCheckBypassDomains,
+    ).toEqual(['acme.test', 'example.com']);
+  });
+
   it('подбор по умолчанию остаётся legacy, флаг включает semantic (B267 S3)', () => {
     expect(readServerConfig(validEnvironment, import.meta.url)).toMatchObject({
       matchMode: 'legacy',

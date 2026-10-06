@@ -45,6 +45,7 @@ import {
   AuthInvalidResetTokenError,
   AuthUserBlockedError,
   AuthDisposableEmailError,
+  AuthEmailDomainUnreachableError,
 } from './authErrors';
 import {
   canonicalizeEmail,
@@ -63,6 +64,12 @@ import {
   recordAdminAudit,
 } from './adminUserManager';
 import { isValidTimezone } from '../../shared/timezoneUtils';
+import {
+  createEmailDomainChecker,
+  DEFAULT_MX_CHECK_BYPASS_DOMAINS,
+  type EmailDomainDnsFailure,
+  type EmailDomainResolver,
+} from './emailDomainCheck';
 
 const scrypt = promisify(scryptCallback);
 /**
@@ -98,13 +105,17 @@ export {
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
   AuthDisposableEmailError,
+  AuthEmailDomainUnreachableError,
 } from './authErrors';
 import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
-interface AuthServiceOptions {
+export interface AuthServiceOptions {
   databasePath: string;
   onPasswordReset?: (input: PasswordResetDelivery) => Promise<void>;
   candidateStore?: CandidateStore;
+  emailDomainResolver?: EmailDomainResolver;
+  emailMxCheckBypassDomains?: readonly string[];
+  onEmailDomainDnsFailure?: (failure: EmailDomainDnsFailure) => void;
 }
 
 interface UserRow {
@@ -143,11 +154,17 @@ interface PasswordResetRow extends UserRow {
 export class AuthService implements SessionAuth {
   private readonly database: DatabaseSync;
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
+  private readonly checkEmailDomain: ReturnType<typeof createEmailDomainChecker>;
   private candidateStore?: CandidateStore;
 
   constructor(options: AuthServiceOptions) {
     this.onPasswordReset = options.onPasswordReset;
     this.candidateStore = options.candidateStore;
+    this.checkEmailDomain = createEmailDomainChecker({
+      resolver: options.emailDomainResolver,
+      bypassDomains: options.emailMxCheckBypassDomains ?? DEFAULT_MX_CHECK_BYPASS_DOMAINS,
+      onDnsFailure: options.onEmailDomainDnsFailure,
+    });
     this.database = new DatabaseSync(options.databasePath, {
       timeout: 5_000,
       enableForeignKeyConstraints: true,
@@ -176,6 +193,9 @@ export class AuthService implements SessionAuth {
     }
     if (email && this.findUserByEmail(email)) {
       throw new AuthEmailTakenError();
+    }
+    if (email && (await this.checkEmailDomain(email)) === 'unreachable') {
+      throw new AuthEmailDomainUnreachableError();
     }
     const salt = randomBytes(16);
     const passwordHash = await derivePassword(password, salt);

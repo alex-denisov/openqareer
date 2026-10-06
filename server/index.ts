@@ -46,6 +46,7 @@ const candidateStore = new SqliteCandidateStore({
 });
 const authService = new AuthService({
   databasePath: config.databasePath,
+  emailMxCheckBypassDomains: config.emailMxCheckBypassDomains,
   ...(config.accountEmail
     ? {
         onPasswordReset: buildPasswordResetNotifier({
