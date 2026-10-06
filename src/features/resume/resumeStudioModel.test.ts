@@ -22,7 +22,7 @@ import {
   updateExperience,
   updateLanguage,
 } from './resumeStudioModel';
-import type { ResumeDocument, ResumeStudioView, ResumeUnknown } from './resumeTypes';
+import type { ResumeDocument, ResumeDraft, ResumeStudioView, ResumeUnknown } from './resumeTypes';
 
 function memory(overrides: Partial<CandidateMemory> = {}): CandidateMemory {
   return {
@@ -364,6 +364,35 @@ describe('resume studio model', () => {
   });
 
   describe('save payload', () => {
+    it('keeps v2 fields after adding and removing an empty work entry', () => {
+      const base: ResumeDraft = {
+        ...draftOf(viewOf()),
+        schemaVersion: 2,
+        candidate: { headline: 'Product lead' },
+        experience: [
+          {
+            id: 'e-existing',
+            chronologyMemoryId: 'memory-2',
+            current: false,
+            bulletMemoryIds: [],
+            workplaceType: 'remote',
+            skills: ['SQL'],
+          },
+        ],
+        certifications: [{ id: 'cert-1', name: 'Cloud Architect' }],
+      };
+      const withEmptyEntry = addExperience(base, 'memory-1');
+      const withoutEmptyEntry = removeExperience(withEmptyEntry, withEmptyEntry.experience[1]!.id);
+
+      const payload = toSavePayload(withoutEmptyEntry);
+
+      expect(payload.schemaVersion).toBe(2);
+      expect(payload.candidate.headline).toBe('Product lead');
+      expect(payload.experience[0]?.workplaceType).toBe('remote');
+      expect(payload.experience[0]?.skills).toEqual(['SQL']);
+      expect(payload.certifications).toEqual([{ id: 'cert-1', name: 'Cloud Architect' }]);
+    });
+
     it('drops empty strings so a cleared field is absent rather than invalid', () => {
       const draft = updateCandidate(
         updateCandidate(draftOf(viewOf()), { fullName: 'Елена' }),
