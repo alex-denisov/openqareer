@@ -40,6 +40,7 @@ import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
+import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
@@ -106,6 +107,7 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -168,9 +170,8 @@ export class SqliteCandidateStore implements CandidateStore {
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
-    this.careerCommandRepository.recoverInterruptedProcessing(
-      new Date().toISOString(),
-    );
+    this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
+    this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
   private configureDatabase(): void {

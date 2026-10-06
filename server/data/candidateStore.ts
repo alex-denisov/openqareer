@@ -43,6 +43,7 @@ import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
+import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
@@ -332,6 +333,8 @@ export interface CandidateStore {
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  /** Профиль ограничений кандидата (B384), запечатан. */
+  readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   /** Joins nested store writes into one SQLite transaction. */
   transaction<T>(operation: () => T): T;
   createCandidate(input: {

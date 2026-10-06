@@ -1,4 +1,5 @@
 import type { ResumeDocument, ResumeDraft, ResumeExperience, ResumeEducation } from './resumeTypes';
+import { sanitizeForThirdPartyExport } from '../../../shared/workPreferences';
 import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
 import type { ResumeProject, TargetedResumeSlice } from './resumeTypes';
 
@@ -164,7 +165,8 @@ function buildRecommendationsSection(doc: ResumeDocument): string {
  * Serializes the ResumeDocument to formatted JSON with 2-space indentation.
  */
 export function exportResumeAsJson(doc: ResumeDocument): string {
-  return JSON.stringify(doc, null, 2);
+  // B384: граница внешней выгрузки — поля профиля ограничений не покидают приложение.
+  return JSON.stringify(sanitizeForThirdPartyExport(doc as unknown as Record<string, unknown>), null, 2);
 }
 
 /**

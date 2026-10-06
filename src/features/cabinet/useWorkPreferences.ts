@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   getWorkPreferences,
+  putDecisionProfile,
   submitWorkPreferences,
   type WorkPreferencesRead,
 } from '../coach/coachApi';
@@ -74,6 +75,9 @@ function useDecisionProfileManager(
       try {
         const next = { ...profile, updatedAt: new Date().toISOString() };
         saveDecisionProfile(next);
+        // Сервер применяет те же ограничения к подборке; при сбое остаётся локальная копия
+        // и клиентский фильтр, поэтому сохранение не считается ошибкой.
+        await putDecisionProfile(next).catch(() => undefined);
         setDecisionProfile(next);
         setDecisionProfileSaved(true);
         return true;

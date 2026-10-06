@@ -303,6 +303,11 @@ describe('resumeExport', () => {
     expect(json).not.toContain('taxStatus');
     expect(json).not.toContain('familyNotes');
 
+    const leaky = { ...minimalDocument({}), salaryFloor: 500000, decisionProfile: { hasFamily: true } };
+    const leakyJson = exportResumeAsJson(leaky as never);
+    expect(leakyJson).not.toContain('salaryFloor');
+    expect(leakyJson).not.toContain('decisionProfile');
+
     expect(text).not.toContain('Зарплатный пол');
     expect(text).not.toContain('Финансовая подушка');
     expect(text).not.toContain('Гражданство');

@@ -4,6 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
+import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { buildMatchedVacancyFacets } from '../vacancies/matchedVacancyFacets';
@@ -51,7 +52,12 @@ function finishMatchedVacancies(
       ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
     ],
   );
-  return applyVacancyDecisions(roleFiltered, candidateStore.listVacancyDecisions(candidateId));
+  // B384: жёсткие ограничения профиля — теми же функциями, что на клиенте; O(размер подборки).
+  const withinProfile = filterVacanciesByDecisionProfile(
+    roleFiltered,
+    candidateStore.decisionProfileRepo.get(candidateId),
+  );
+  return applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId));
 }
 
 function buildMatchedResponse(

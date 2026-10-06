@@ -9,6 +9,7 @@ import type {
   WorkPreferenceAnswer,
   WorkPreferenceResult,
   WorkPreferenceTask,
+  CandidateDecisionProfile,
 } from '../../../shared/workPreferences';
 import type {
   VacancyApplication,
@@ -856,6 +857,17 @@ export async function submitWorkPreferences(input: {
     body: JSON.stringify(input),
   });
   return readDataObject<NonNullable<WorkPreferencesRead['run']>>(response);
+}
+
+/** Профиль ограничений на сервере (B384): жёсткие фильтры подборки считает сервер. */
+export async function putDecisionProfile(profile: CandidateDecisionProfile): Promise<void> {
+  const { updatedAt: _updatedAt, ...body } = profile;
+  const response = await apiFetch('/api/v1/candidate/decision-profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) throw new Error('decision profile was not saved');
 }
 
 /**
