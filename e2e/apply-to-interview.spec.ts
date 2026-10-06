@@ -462,7 +462,7 @@ async function walkChain(page: Page): Promise<void> {
   await expect(card).toBeVisible();
 
   await card.getByLabel('Действия с карточкой').click();
-  await card.locator('.career-responses-stage-control select').selectOption('interview');
+  await card.locator('.career-responses-stage-control select').first().selectOption('interview');
   await card.locator('input[type="date"]').fill('2026-09-30');
   await card.getByRole('button', { name: 'Сохранить этап' }).click();
 
