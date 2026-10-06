@@ -1,6 +1,9 @@
+import '../site/landing.css';
+import './auth.css';
 import React, { useEffect, useRef, useState } from 'react';
 import { Eye, EyeSlash } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
+import { preloadCareerWorkspaceShell } from '../shell/careerWorkspaceLoader';
 import {
   login,
   register,
@@ -247,7 +250,13 @@ function LoginForm({
           {form.error}
         </div>
       ) : null}
-      <form className="auth-form" method="post" action="#" onSubmit={form.handleSubmit}>
+      <form
+        className="auth-form"
+        method="post"
+        action="#"
+        onSubmit={form.handleSubmit}
+        onFocusCapture={preloadCareerWorkspaceShell}
+      >
         <LoginFormFields form={form} forgotBtn={forgotBtn} />
         <button type="submit" className="site-btn is-primary auth-submit-btn" disabled={form.busy}>
           {form.busy ? 'Входим...' : 'Войти в кабинет'}

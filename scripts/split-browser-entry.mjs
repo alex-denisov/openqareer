@@ -131,7 +131,11 @@ async function loadSplitModule(){
   const digest=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",joined)),byte=>byte.toString(16).padStart(2,"0")).join("");
   if(digest!==EXPECTED_HASH)throw new Error("Проверка целостности приложения не прошла");
   let source=new TextDecoder().decode(joined);
-  for(const [from,to] of REWRITES)source=source.replaceAll(from,location.origin+to);
+  for(const [from,to] of REWRITES){
+    const quoted=(from[0]==='"'||from[0]==="'")&&to[0]===from[0];
+    const replacement=quoted?to:location.origin+to;
+    source=source.replaceAll(from,replacement)
+  }
   try{sessionStorage.removeItem(RELOAD_KEY)}catch(error){void error}
   const objectUrl=URL.createObjectURL(new Blob([source],{type:"text/javascript"}));
   try{return await import(objectUrl)}finally{URL.revokeObjectURL(objectUrl)}
@@ -153,10 +157,7 @@ function exportedNames(source) {
 function exportBridge(names) {
   const declarations = names
     .filter((name) => name !== 'default')
-    .map(
-      (name, index) =>
-        `const __oqExport${index}=loadedModule[${JSON.stringify(name)}];`,
-    )
+    .map((name, index) => `const __oqExport${index}=loadedModule[${JSON.stringify(name)}];`)
     .join('');
   const exports = names
     .filter((name) => name !== 'default')
@@ -306,8 +307,7 @@ export function packRules(rules, partBytes) {
   return chunks;
 }
 
-const STYLESHEET_LINK =
-  /<link\s+rel="stylesheet"(?=[^>]*\bhref="(\/assets\/[^"]+\.css)")[^>]*>/;
+const STYLESHEET_LINK = /<link\s+rel="stylesheet"(?=[^>]*\bhref="(\/assets\/[^"]+\.css)")[^>]*>/;
 
 function stylesheetPartPath(sourcePath, index) {
   return `${sourcePath}.oqpart-${String(index).padStart(3, '0')}.css`;
@@ -374,9 +374,7 @@ export function buildSplitDelivery({
   const entryPath = scriptMatch[1];
   const entryName = basename(entryPath);
   const assetsDirectory = join(distDirectory, 'assets');
-  const allAssetNames = readdirSync(assetsDirectory).filter((name) =>
-    /\.(?:js|mjs)$/.test(name),
-  );
+  const allAssetNames = readdirSync(assetsDirectory).filter((name) => /\.(?:js|mjs)$/.test(name));
 
   const largeModules = allAssetNames
     .filter((name) => statSync(join(assetsDirectory, name)).size > partBytes)
@@ -408,6 +406,10 @@ export function buildSplitDelivery({
       };
     });
 
+  const stylesheetModules = readdirSync(assetsDirectory)
+    .filter((name) => name.endsWith('.css'))
+    .map((name) => ({ name, sourcePath: `/assets/${name}` }));
+
   const entryPlan = largeModules.find((plan) => plan.name === entryName);
   if (!entryPlan) {
     throw new Error('Production entry is unexpectedly smaller than one delivery part');
@@ -421,23 +423,23 @@ export function buildSplitDelivery({
         const candidates = [
           [`./${target.name}`, target.proxyPath],
           [`/assets/${target.name}`, target.proxyPath],
+          [`"assets/${target.name}"`, `"assets/${target.name}.split.js"`],
         ];
         return candidates.filter(([from]) => sourceText.includes(from));
       }),
       ...smallModules.flatMap((target) => {
-        const candidates = [
-          [`./${target.name}`, target.sourcePath],
-        ];
+        const candidates = [[`./${target.name}`, target.sourcePath]];
+        return candidates.filter(([from]) => sourceText.includes(from));
+      }),
+      ...stylesheetModules.flatMap((target) => {
+        const candidates = [[`./${target.name}`, target.sourcePath]];
         return candidates.filter(([from]) => sourceText.includes(from));
       }),
     ];
     const partCount = Math.ceil(plan.source.length / partBytes);
     for (let index = 0; index < partCount; index += 1) {
       const start = index * partBytes;
-      const part = plan.source.subarray(
-        start,
-        Math.min(start + partBytes, plan.source.length),
-      );
+      const part = plan.source.subarray(start, Math.min(start + partBytes, plan.source.length));
       writeFileSync(join(distDirectory, partPath(plan.proxyPath, index)), part);
     }
     const names = exportedNames(sourceText);
@@ -547,9 +549,7 @@ export function buildSplitDelivery({
   };
 }
 
-const isDirectRun =
-  process.argv[1] &&
-  import.meta.url === pathToFileURL(process.argv[1]).href;
+const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isDirectRun) {
   const result = buildSplitDelivery();

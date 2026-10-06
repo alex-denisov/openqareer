@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AdminConsole } from './features/admin/AdminConsole';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   getCandidateWorkspace,
   getSession,
@@ -18,20 +17,15 @@ import {
   readSavedDesktopSessionToken,
   restoreDesktopSessionToken,
 } from './services/desktop/desktopSessionToken';
-import { resolveCandidateWorkspace } from './features/workspace/workspaceHydration';
-import { prepareCareerWorkspace } from './features/journey/careerJourneyEngine';
-import { CareerWorkspaceShell } from './features/shell/CareerWorkspaceShell';
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
-import { LandingPage } from './features/site/LandingPage';
-import { LegalDocumentPage } from './features/legal/LegalDocumentPage';
+import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
 import { legalSlugFromPath } from '../shared/legalRegistry';
-import { LoginPage, SignupPage, ResetPasswordPage } from './features/site/AuthPages';
+import { loadAuthPages } from './features/site/authPagesLoader';
 import {
   desktopSessionFailureRequiresSignOut,
   resolvedDesktopSessionPath,
 } from './features/site/desktopSessionRouting';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
-import { bindConnectorAccount } from './features/connections/connectorSession';
 import {
   clearWorkspace,
   loadWorkspace,
@@ -41,7 +35,24 @@ import {
   type CandidateWorkspace,
   type WorkspaceInput,
 } from './features/workspace/workspaceStorage';
-import { importCandidateResume, type ResumeImportSource } from './features/resume/resumeApi';
+import type { ResumeImportSource } from './features/resume/resumeApi';
+import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
+
+const AdminConsole = lazy(() =>
+  loadAdminConsole(),
+);
+const CareerWorkspaceShell = lazy(async () => {
+  const module = await loadCareerWorkspaceShell();
+  markAppReady();
+  return { default: module.CareerWorkspaceShell };
+});
+const LandingPage = lazy(loadLandingPage);
+const LegalDocumentPage = lazy(loadLegalDocumentPage);
+const LoginPage = lazy(() => loadAuthPages().then((module) => ({ default: module.LoginPage })));
+const SignupPage = lazy(() => loadAuthPages().then((module) => ({ default: module.SignupPage })));
+const ResetPasswordPage = lazy(() =>
+  loadAuthPages().then((module) => ({ default: module.ResetPasswordPage })),
+);
 
 function importSourceOf(source: WorkspaceInput['resumeSource']): ResumeImportSource {
   if (source === 'linkedin-pdf') return 'linkedin';
@@ -50,10 +61,42 @@ function importSourceOf(source: WorkspaceInput['resumeSource']): ResumeImportSou
   return 'text';
 }
 
+async function loadAdminConsole() {
+  if (typeof document !== 'undefined') {
+    await import('./features/admin/admin-console.css');
+    await import('./features/admin/admin-linkedin-remote-login.css');
+  }
+  const module = await import('./features/admin/AdminConsole');
+  markAppReady();
+  return { default: module.AdminConsole };
+}
+
+async function loadLandingPage() {
+  if (typeof document !== 'undefined') await import('./features/site/landing.css');
+  const module = await import('./features/site/LandingPage');
+  markAppReady();
+  return { default: module.LandingPage };
+}
+
+async function loadLegalDocumentPage() {
+  if (typeof document !== 'undefined') await import('./features/site/landing.css');
+  const module = await import('./features/legal/LegalDocumentPage');
+  markAppReady();
+  return { default: module.LegalDocumentPage };
+}
+
+function markAppReady(): void {
+  if (typeof document !== 'undefined') {
+    document.getElementById('root')?.removeAttribute('aria-busy');
+  }
+}
+
 interface AppState {
   workspace?: CandidateWorkspace;
   invalidStorage: boolean;
   session?: AuthUser | null;
+  onboardingStatusKnown: boolean;
+  onboardingComplete: boolean;
 }
 
 export default function App() {
@@ -69,7 +112,11 @@ export default function App() {
     }
     return '/';
   });
-  const [state, setState] = useState<AppState>({ invalidStorage: false });
+  const [state, setState] = useState<AppState>({
+    invalidStorage: false,
+    onboardingStatusKnown: false,
+    onboardingComplete: false,
+  });
   const [storageError, setStorageError] = useState<string>();
   const [sessionError, setSessionError] = useState<string>();
   // Почему кандидат снова видит форму входа — одной фразой на самой форме
@@ -87,6 +134,7 @@ export default function App() {
 
   const resolveSession = useCallback(async () => {
     const revision = ++sessionRevision.current;
+    setIsResolvingSession(true);
     if (isDesktop) {
       await restoreDesktopSessionToken({
         readSaved: readSavedDesktopSessionToken,
@@ -107,32 +155,44 @@ export default function App() {
     // wait on a network request when that credential is absent; route straight
     // to the account form so a fresh install is usable immediately.
     if (isDesktop && !getStoredSessionToken()) {
-      setState({ session: null, invalidStorage: false });
+      setState({
+        session: null,
+        invalidStorage: false,
+        onboardingStatusKnown: true,
+        onboardingComplete: false,
+      });
       setIsResolvingSession(false);
-      if (currentPath !== '/login' && currentPath !== '/signup') navigate('/login');
+      const path = window.location.pathname;
+      if (path !== '/login' && path !== '/signup') navigate('/login');
       return;
     }
+    let session: AuthUser | null | undefined;
     try {
-      const session = await getSession();
+      session = await getSession();
       if (!isCurrent()) return;
       const result = loadWorkspace(window.localStorage, session?.candidateId ?? null);
-      // Browser storage is a cache. Sign-out clears it and a different browser
-      // never had it, so a signed-in candidate whose cache is empty is read
-      // back from the server instead of being treated as brand new with every
-      // section locked (INC-024).
-      const remote =
-        session?.candidateId && result.status !== 'ready'
-          ? await getCandidateWorkspace().catch(() => null)
-          : null;
+      // The server is authoritative for the onboarding gate. A local copy may
+      // be stale, so keep the shell skeleton visible until this read succeeds.
+      const remote = session?.candidateId ? await getCandidateWorkspace() : null;
       if (!isCurrent()) return;
-      const workspace = resolveCandidateWorkspace({ local: result, remote });
+      let workspace: CandidateWorkspace | undefined;
+      if (session?.candidateId) {
+        if (remote) {
+          const { resolveCandidateWorkspace } = await import('./features/workspace/workspaceHydration');
+          workspace = resolveCandidateWorkspace({ local: result, remote });
+        }
+      } else if (result.status === 'ready') {
+        workspace = result.workspace;
+      }
       setState({
         session,
         workspace,
         invalidStorage: result.status === 'invalid' && !workspace,
+        onboardingStatusKnown: true,
+        onboardingComplete: Boolean(remote),
       });
       if (isDesktop) {
-        const resolvedPath = resolvedDesktopSessionPath(currentPath, session);
+        const resolvedPath = resolvedDesktopSessionPath(window.location.pathname, session);
         if (resolvedPath) navigate(resolvedPath);
       }
     } catch (error) {
@@ -140,19 +200,32 @@ export default function App() {
       const sessionErrorCode = error instanceof CoachApiError ? error.code : undefined;
       if (desktopSessionFailureRequiresSignOut(isDesktop, sessionErrorCode)) {
         setStoredSessionToken(null);
-        setState({ session: null, invalidStorage: false });
+        clearCareerCabinetCache();
+        setState({
+          session: null,
+          invalidStorage: false,
+          onboardingStatusKnown: true,
+          onboardingComplete: false,
+        });
         setIsResolvingSession(false);
         navigate('/login');
         return;
       }
       setSessionError(
-        'Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи.',
+        session?.candidateId
+          ? 'Не удалось подтвердить профиль. Повторите проверку, чтобы продолжить.'
+          : 'Не удалось проверить аккаунт. Локальные карьерные данные скрыты до восстановления связи.',
       );
-      setState({ invalidStorage: false });
+      setState({
+        session,
+        invalidStorage: false,
+        onboardingStatusKnown: !session?.candidateId,
+        onboardingComplete: false,
+      });
     } finally {
       if (isCurrent()) setIsResolvingSession(false);
     }
-  }, [currentPath, isDesktop, navigate]);
+  }, [isDesktop, navigate]);
 
   // Окна входа LinkedIn и hh.ru живут в хранилище своего аккаунта: общее
   // хранилище показывало второму аккаунту сессию первого (INC-039).
@@ -160,11 +233,12 @@ export default function App() {
     state.session === undefined ? undefined : (state.session?.username ?? null);
   useEffect(() => {
     if (!isDesktop || connectorAccount === undefined) return;
-    void bindConnectorAccount(connectorAccount).catch(() => false);
+    void import('./features/connections/connectorSession')
+      .then(({ bindConnectorAccount }) => bindConnectorAccount(connectorAccount))
+      .catch(() => false);
   }, [isDesktop, connectorAccount]);
 
   useEffect(() => {
-    document.getElementById('root')?.removeAttribute('aria-busy');
     void resolveSession();
     return () => {
       sessionRevision.current += 1;
@@ -183,8 +257,14 @@ export default function App() {
       if (sessionRef.current === null) return;
       sessionRevision.current += 1;
       setStoredSessionToken(null);
+      clearCareerCabinetCache();
       setIsResolvingSession(false);
-      setState({ session: null, invalidStorage: false });
+      setState({
+        session: null,
+        invalidStorage: false,
+        onboardingStatusKnown: true,
+        onboardingComplete: false,
+      });
       setSessionError(undefined);
       setSignInNotice('Сессия закончилась. Войдите снова, чтобы продолжить.');
       navigate('/login');
@@ -253,7 +333,8 @@ export default function App() {
    * it the cabinet's single reading raced the import and always lost
    * (INC-024).
    */
-  function handleSave(input: WorkspaceInput): void | Promise<void> {
+  async function handleSave(input: WorkspaceInput): Promise<void> {
+    const { prepareCareerWorkspace } = await import('./features/journey/careerJourneyEngine');
     const workspace = prepareCareerWorkspace(input, undefined, state.workspace);
     persist(workspace);
     // The wizard imports as soon as it reads a document; this is the retry for
@@ -265,21 +346,22 @@ export default function App() {
       input.resumeImported === true ||
       !state.session?.candidateId
     ) {
-      return undefined;
+      return;
     }
-    return importCandidateResume({
-      text: input.resumeText,
-      source: importSourceOf(input.resumeSource),
-      fileName: input.resumeFileName,
-    })
-      .then(() => undefined)
-      .catch((reason: unknown) => {
-        setStorageError(
-          reason instanceof Error
-            ? `Резюме не удалось сохранить в профиль: ${reason.message}`
-            : 'Резюме не удалось сохранить в профиль. Откройте «Резюме» и повторите импорт.',
-        );
+    const { importCandidateResume } = await import('./features/resume/resumeApi');
+    try {
+      await importCandidateResume({
+        text: input.resumeText,
+        source: importSourceOf(input.resumeSource),
+        fileName: input.resumeFileName,
       });
+    } catch (reason) {
+      setStorageError(
+        reason instanceof Error
+          ? `Резюме не удалось сохранить в профиль: ${reason.message}`
+          : 'Резюме не удалось сохранить в профиль. Откройте «Резюме» и повторите импорт.',
+      );
+    }
   }
 
   function handleClear() {
@@ -291,6 +373,10 @@ export default function App() {
         workspace: undefined,
         invalidStorage: false,
       }));
+      if (state.session?.candidateId) {
+        setState((current) => ({ ...current, onboardingStatusKnown: false }));
+        void resolveSession();
+      }
     } catch {
       setStorageError('Браузер не разрешил удалить запись. Очистите данные сайта в настройках.');
     }
@@ -298,8 +384,7 @@ export default function App() {
 
   function handleSessionChange(session: AuthUser | null) {
     // A delayed restore must never replace a login/logout completed after it.
-    sessionRevision.current += 1;
-    setIsResolvingSession(false);
+    const revision = ++sessionRevision.current;
     const result = session?.candidateId
       ? loadWorkspace(window.localStorage, session.candidateId)
       : { status: 'empty' as const };
@@ -307,12 +392,49 @@ export default function App() {
       session,
       workspace: result.status === 'ready' ? result.workspace : undefined,
       invalidStorage: result.status === 'invalid',
+      onboardingStatusKnown: !session?.candidateId,
+      onboardingComplete: false,
     });
     setSessionError(undefined);
     setSignInNotice(undefined);
     if (session === null) {
+      clearCareerCabinetCache();
+      setIsResolvingSession(false);
       navigate(isDesktop ? '/login' : '/');
+      return;
     }
+    if (!session?.candidateId) {
+      setIsResolvingSession(false);
+      return;
+    }
+    setIsResolvingSession(true);
+    const token = getStoredSessionToken();
+    const isCurrent = () =>
+      revision === sessionRevision.current && token === getStoredSessionToken();
+    void getCandidateWorkspace()
+      .then(async (remote) => {
+        if (!isCurrent()) return;
+        let workspace: CandidateWorkspace | undefined;
+        if (remote) {
+          const { resolveCandidateWorkspace } = await import('./features/workspace/workspaceHydration');
+          workspace = resolveCandidateWorkspace({ local: result, remote });
+        }
+        if (!isCurrent()) return;
+        setState({
+          session,
+          workspace,
+          invalidStorage: result.status === 'invalid' && !workspace,
+          onboardingStatusKnown: true,
+          onboardingComplete: Boolean(remote),
+        });
+      })
+      .catch(() => {
+        if (!isCurrent()) return;
+        setSessionError('Не удалось подтвердить профиль. Повторите проверку, чтобы продолжить.');
+      })
+      .finally(() => {
+        if (isCurrent()) setIsResolvingSession(false);
+      });
   }
 
   const renderAuthContent = () => {
@@ -337,32 +459,43 @@ export default function App() {
     return null;
   };
 
-  const renderWorkspace = (sessionPending = state.session === undefined) => (
-    <CareerWorkspaceShell
-      workspace={state.workspace}
-      invalidStorage={state.invalidStorage}
-      storageError={storageError}
-      onSaveWorkspace={handleSave}
-      onUpdateWorkspace={persist}
-      onClearWorkspace={handleClear}
-      session={state.session}
-      sessionPending={sessionPending}
-      sessionError={sessionError}
-      onRetrySession={() => void resolveSession()}
-      onOpenLogin={() => navigate('/login')}
-      onSessionChange={handleSessionChange}
-    />
+  const sessionPending =
+    isResolvingSession ||
+    state.session === undefined ||
+    Boolean(
+      state.session?.candidateId &&
+        (!state.onboardingStatusKnown || (state.onboardingComplete && !state.workspace)),
+    );
+  const renderWorkspace = (pending = sessionPending) => (
+    <Suspense fallback={<WorkspaceLoadingFallback />}>
+      <CareerWorkspaceShell
+        workspace={state.workspace}
+        invalidStorage={state.invalidStorage}
+        storageError={storageError}
+        onSaveWorkspace={handleSave}
+        onUpdateWorkspace={persist}
+        onClearWorkspace={handleClear}
+        session={state.session}
+        sessionPending={pending}
+        sessionError={sessionError}
+        onRetrySession={() => void resolveSession()}
+        onOpenLogin={() => navigate('/login')}
+        onSessionChange={handleSessionChange}
+      />
+    </Suspense>
   );
 
   // Routing checks
   if (isAdminPath(currentPath)) {
     return (
       <AppErrorBoundary>
-        <AdminConsole
-          session={state.session}
-          sessionPending={state.session === undefined}
-          onUnauthorized={() => navigate(state.session ? '/app' : '/login')}
-        />
+        <Suspense fallback={null}>
+          <AdminConsole
+            session={state.session}
+            sessionPending={state.session === undefined}
+            onUnauthorized={() => navigate(state.session ? '/app' : '/login')}
+          />
+        </Suspense>
       </AppErrorBoundary>
     );
   }
@@ -376,20 +509,28 @@ export default function App() {
         <AppErrorBoundary>
           <div className="desktop-app-container">
             {renderWorkspace(true)}
-            <div className="desktop-auth-overlay">{renderAuthContent()}</div>
+            <div className="desktop-auth-overlay">
+              <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+            </div>
           </div>
         </AppErrorBoundary>
       );
     }
 
-    return <AppErrorBoundary>{renderAuthContent()}</AppErrorBoundary>;
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+      </AppErrorBoundary>
+    );
   }
 
   const legalSlug = legalSlugFromPath(currentPath);
   if (legalSlug && !isDesktop) {
     return (
       <AppErrorBoundary>
-        <LegalDocumentPage slug={legalSlug} onNavigate={navigate} />
+        <Suspense fallback={null}>
+          <LegalDocumentPage slug={legalSlug} onNavigate={navigate} />
+        </Suspense>
       </AppErrorBoundary>
     );
   }
@@ -397,7 +538,7 @@ export default function App() {
   if (isAppPath(currentPath)) {
     return (
       <AppErrorBoundary>
-        {renderWorkspace(isResolvingSession || state.session === undefined)}
+        {renderWorkspace()}
       </AppErrorBoundary>
     );
   }
@@ -407,7 +548,7 @@ export default function App() {
     if (isResolvingSession || state.session?.candidateId) {
       return (
         <AppErrorBoundary>
-          {renderWorkspace(isResolvingSession || state.session === undefined)}
+          {renderWorkspace()}
         </AppErrorBoundary>
       );
     }
@@ -416,12 +557,14 @@ export default function App() {
         <div className="desktop-app-container">
           {renderWorkspace(true)}
           <div className="desktop-auth-overlay">
-            <LoginPage
-              onNavigate={navigate}
-              onSessionChange={handleSessionChange}
-              nextPath="/app"
-              notice={signInNotice}
-            />
+            <Suspense fallback={<AuthLoadingFallback />}>
+              <LoginPage
+                onNavigate={navigate}
+                onSessionChange={handleSessionChange}
+                nextPath="/app"
+                notice={signInNotice}
+              />
+            </Suspense>
           </div>
         </div>
       </AppErrorBoundary>
@@ -431,9 +574,27 @@ export default function App() {
   // Default: Public landing page at `/`
   return (
     <AppErrorBoundary>
-      <LandingPage session={state.session} onNavigate={navigate} />
+      <Suspense fallback={null}>
+        <LandingPage session={state.session} onNavigate={navigate} />
+      </Suspense>
     </AppErrorBoundary>
   );
+}
+
+function WorkspaceLoadingFallback() {
+  return (
+    <section className="career-session-gate" aria-label="Профиль загружается" aria-busy="true">
+      <div className="career-cabinet-skeleton" aria-hidden="true">
+        <span className="career-skeleton-line is-wide" />
+        <span className="career-skeleton-line" />
+        <span className="career-skeleton-line is-short" />
+      </div>
+    </section>
+  );
+}
+
+function AuthLoadingFallback() {
+  return <div className="auth-page-container" aria-busy="true" />;
 }
 
 export function isAuthPath(path: string): boolean {

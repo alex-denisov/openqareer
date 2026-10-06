@@ -6,6 +6,7 @@ export interface SiteLinkProps {
   className?: string;
   children: React.ReactNode;
   onNavigate: (path: string) => void;
+  onWarm?: () => void;
   'aria-label'?: string;
 }
 
@@ -14,6 +15,7 @@ export function SiteLink({
   className,
   children,
   onNavigate,
+  onWarm,
   'aria-label': ariaLabel,
 }: SiteLinkProps): React.JSX.Element {
   const handleClick = (event: React.MouseEvent<HTMLAnchorElement>) => {
@@ -24,7 +26,14 @@ export function SiteLink({
   };
 
   return (
-    <a href={to} className={className} onClick={handleClick} aria-label={ariaLabel}>
+    <a
+      href={to}
+      className={className}
+      onClick={handleClick}
+      onFocus={onWarm}
+      onMouseEnter={onWarm}
+      aria-label={ariaLabel}
+    >
       {children}
     </a>
   );
