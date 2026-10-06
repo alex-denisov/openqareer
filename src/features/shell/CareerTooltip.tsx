@@ -76,6 +76,7 @@ function useTooltipPosition(
   side: 'top' | 'bottom',
   isVisible: boolean,
   forceHide: () => void,
+  tooltipId: string,
 ) {
   useEscapeLayer(forceHide, isVisible);
   const applyCoords = useCallback(() => {
@@ -118,6 +119,27 @@ function useTooltipPosition(
       document.removeEventListener('touchstart', handlePointerDownOutside, true);
     };
   }, [isVisible, forceHide, triggerRef, tooltipRef]);
+
+  // Закрытие при открытии любой другой подсказки
+  useEffect(() => {
+    if (!isVisible) return;
+
+    window.dispatchEvent(
+      new CustomEvent('career-tooltip-open', { detail: tooltipId }),
+    );
+
+    const handleOtherTooltipOpen = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail && customEvent.detail !== tooltipId) {
+        forceHide();
+      }
+    };
+
+    window.addEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    return () => {
+      window.removeEventListener('career-tooltip-open', handleOtherTooltipOpen);
+    };
+  }, [isVisible, forceHide, tooltipId]);
 }
 
 function useTooltipTimer() {
@@ -265,7 +287,7 @@ export function CareerTooltip({
     disabled,
     Boolean(content),
   );
-  useTooltipPosition(triggerRef, tooltipRef, side, isVisible, forceHide);
+  useTooltipPosition(triggerRef, tooltipRef, side, isVisible, forceHide, tooltipId);
 
   if (!isValidElement(children)) {
     return children;

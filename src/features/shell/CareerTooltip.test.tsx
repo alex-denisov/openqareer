@@ -274,6 +274,48 @@ describe('CareerTooltip', () => {
     expect(tooltip.getAttribute('data-open')).toBeNull();
     expect(button.getAttribute('aria-expanded')).toBe('false');
   });
+
+  it('открытие второй подсказки закрывает первую подсказку', () => {
+    act(() => {
+      root.render(
+        <div>
+          <CareerTooltip content="Первая подсказка">
+            <button type="button" id="btn-1" aria-label="Кнопка 1">
+              1
+            </button>
+          </CareerTooltip>
+          <CareerTooltip content="Вторая подсказка">
+            <button type="button" id="btn-2" aria-label="Кнопка 2">
+              2
+            </button>
+          </CareerTooltip>
+        </div>,
+      );
+    });
+
+    const btn1 = container.querySelector('#btn-1') as HTMLButtonElement;
+    const btn2 = container.querySelector('#btn-2') as HTMLButtonElement;
+    const tooltips = container.querySelectorAll('[role="tooltip"]');
+    const tooltip1 = tooltips[0] as HTMLElement;
+    const tooltip2 = tooltips[1] as HTMLElement;
+
+    // Открываем первую кликом
+    act(() => {
+      btn1.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip1.getAttribute('data-open')).toBe('true');
+    expect(btn1.getAttribute('aria-expanded')).toBe('true');
+    expect(tooltip2.getAttribute('data-open')).toBeNull();
+
+    // Открываем вторую кликом
+    act(() => {
+      btn2.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(tooltip1.getAttribute('data-open')).toBeNull();
+    expect(btn1.getAttribute('aria-expanded')).toBe('false');
+    expect(tooltip2.getAttribute('data-open')).toBe('true');
+    expect(btn2.getAttribute('aria-expanded')).toBe('true');
+  });
 });
 
 
