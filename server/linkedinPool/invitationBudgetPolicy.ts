@@ -29,8 +29,8 @@ export type InvitationStopReason =
 
 export interface InvitationAccountState {
   readonly accountAgeDays: number;
-  readonly sentLast7d: number;
-  readonly sentToday: number;
+  readonly attemptedLast7d: number;
+  readonly attemptedToday: number;
   readonly sentLast30d: number;
   readonly acceptedLast30d: number;
   readonly pending: number;
@@ -46,7 +46,8 @@ export interface InvitationPlan {
 const stop = (reason: InvitationStopReason): InvitationPlan => ({ allowed: 0, reason });
 
 export function planInvitations(state: InvitationAccountState): InvitationPlan {
-  const fresh = state.accountAgeDays < INVITATION_LIMITS.freshAgeDays;
+  const ageDays = Number.isFinite(state.accountAgeDays) ? state.accountAgeDays : -1;
+  const fresh = ageDays < 0 || ageDays < INVITATION_LIMITS.freshAgeDays;
   const weekly = fresh ? INVITATION_LIMITS.freshWeekly : INVITATION_LIMITS.matureWeekly;
   const daily = fresh ? INVITATION_LIMITS.freshDaily : INVITATION_LIMITS.matureDaily;
 
@@ -59,9 +60,12 @@ export function planInvitations(state: InvitationAccountState): InvitationPlan {
   ) {
     return stop('low_acceptance');
   }
-  if (state.sentLast7d >= weekly) return stop('weekly_cap');
-  if (state.sentToday >= daily) return stop('daily_cap');
-  return { allowed: Math.min(daily - state.sentToday, weekly - state.sentLast7d), reason: null };
+  if (state.attemptedLast7d >= weekly) return stop('weekly_cap');
+  if (state.attemptedToday >= daily) return stop('daily_cap');
+  return {
+    allowed: Math.min(daily - state.attemptedToday, weekly - state.attemptedLast7d),
+    reason: null,
+  };
 }
 
 export interface InvitationCandidate {
@@ -71,18 +75,18 @@ export interface InvitationCandidate {
   readonly kind: 'recruiter' | 'hub';
 }
 
-const PROFILE_URL = /^https:\/\/(?:[a-z]{2,3}\.)?linkedin\.com\/in\/[^/?#]+\/?$/u;
-
 export function selectInvitationTargets(
   candidates: readonly InvitationCandidate[],
   alreadyInvited: ReadonlySet<string>,
   limit: number,
 ): readonly InvitationCandidate[] {
   const ordered = [...candidates]
-    .filter(
-      (c) =>
-        PROFILE_URL.test(c.profileUrl.replace('://www.', '://')) &&
-        !alreadyInvited.has(c.profileUrl),
+    .map((candidate) => {
+      const profileUrl = canonicalizeInvitationProfileUrl(candidate.profileUrl);
+      return profileUrl ? { ...candidate, profileUrl } : null;
+    })
+    .filter((candidate): candidate is InvitationCandidate =>
+      Boolean(candidate && !alreadyInvited.has(candidate.profileUrl)),
     )
     .sort((a, b) => Number(b.kind === 'recruiter') - Number(a.kind === 'recruiter'));
   const perCompany = new Map<string, number>();
@@ -95,4 +99,26 @@ export function selectInvitationTargets(
     picked.push(c);
   }
   return picked;
+}
+
+export function canonicalizeInvitationProfileUrl(profileUrl: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(profileUrl.trim());
+  } catch {
+    return null;
+  }
+  if (
+    url.protocol !== 'https:' ||
+    url.username ||
+    url.password ||
+    (url.port && url.port !== '443')
+  ) {
+    return null;
+  }
+  const host = url.hostname.toLowerCase();
+  if (!/^(?:[a-z]{2,3}\.)?linkedin\.com$/u.test(host)) return null;
+  const match = /^\/in\/([^/]+)\/?$/u.exec(url.pathname);
+  const slug = match?.[1]?.toLowerCase();
+  return slug ? 'https://' + host + '/in/' + slug : null;
 }
