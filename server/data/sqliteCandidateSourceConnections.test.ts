@@ -135,12 +135,12 @@ describe('SQLite native candidate source connections', () => {
     expect(exported.sourceConnections[0]).not.toHaveProperty('receiptCipher');
   });
 
-  it('replaces unreviewed facts from the previous snapshot when profile data changes', () => {
+  it('retains an unchanged fact and merges provenance on source reimport', () => {
     const store = createStore();
     const candidate = createCandidate(store);
     store.commitResumeImport(candidate.id, commitInput());
 
-    store.commitResumeImport(
+    const second = store.commitResumeImport(
       candidate.id,
       commitInput({
         memoryId: 'native-hh-result-reimported',
@@ -149,7 +149,12 @@ describe('SQLite native candidate source connections', () => {
     );
 
     expect(store.getSnapshot(candidate.id).memory).toMatchObject([
-      { id: 'native-hh-result-reimported', status: 'proposed' },
+      {
+        id: 'native-hh-result-1',
+        status: 'proposed',
+        sourceMessageIds: [second.evidence.messageId],
+      },
     ]);
+    expect(second.evidence.memoryIds).toEqual(['native-hh-result-1']);
   });
 });

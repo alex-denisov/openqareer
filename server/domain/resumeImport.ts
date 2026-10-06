@@ -44,6 +44,76 @@ export interface ResumeImportPlan {
   readonly draft: ResumeDraft;
 }
 
+export function resumeImportFactKey(
+  domain: ResumeImportEvidence['domain'],
+  statement: string,
+): string {
+  return `${domain}\u0000${normalizeResumeImportValue(statement)}`;
+}
+
+/** Stable profile slots can conflict across source snapshots. */
+export function resumeImportConflictKey(
+  memoryId: string,
+  domain: ResumeImportEvidence['domain'],
+  statement: string,
+): string | null {
+  const match = /^imp[0-9a-f]{10}-(headline|about|location)$/u.exec(memoryId);
+  if (match) return `${domain}:${match[1]}`;
+  if (domain === 'role-evidence') return roleConflictKey(memoryId);
+  if (domain === 'other') return languageConflictKey(memoryId, statement);
+  return null;
+}
+
+export function remapResumeImportDraftEvidence(
+  draft: ResumeDraft,
+  memoryIds: ReadonlyMap<string, string>,
+): ResumeDraft {
+  const remap = (memoryId: string) => memoryIds.get(memoryId) ?? memoryId;
+  return {
+    ...draft,
+    experience: draft.experience.map((role) => ({
+      ...role,
+      chronologyMemoryId: remap(role.chronologyMemoryId),
+      bulletMemoryIds: role.bulletMemoryIds.map(remap),
+    })),
+    skills: draft.skills?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    education: draft.education.map((entry) => remapEvidenceId(entry, memoryIds)),
+    courses: draft.courses?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    tests: draft.tests?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    recommendations: draft.recommendations?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    languages: draft.languages.map((entry) => remapEvidenceId(entry, memoryIds)),
+    certifications: draft.certifications?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    projects: draft.projects?.map((entry) => remapEvidenceId(entry, memoryIds)),
+    achievements: draft.achievements?.map((entry) => remapEvidenceId(entry, memoryIds)),
+  };
+}
+
+function remapEvidenceId<Entry extends { readonly evidenceMemoryId?: string }>(
+  entry: Entry,
+  memoryIds: ReadonlyMap<string, string>,
+): Entry {
+  const memoryId = entry.evidenceMemoryId;
+  if (!memoryId) return entry;
+  const canonicalId = memoryIds.get(memoryId);
+  return canonicalId ? { ...entry, evidenceMemoryId: canonicalId } : entry;
+}
+
+function roleConflictKey(memoryId: string): string | null {
+  const match = /^imp[0-9a-f]{10}-(exp-\d+)$/u.exec(memoryId);
+  return match ? `role:${match[1]}` : null;
+}
+
+function languageConflictKey(memoryId: string, statement: string): string | null {
+  if (!/^imp[0-9a-f]{10}-lang-\d+$/u.test(memoryId)) return null;
+  const separator = statement.indexOf(' — ');
+  const name = separator < 0 ? statement : statement.slice(0, separator);
+  return name.trim() ? `language:${normalizeResumeImportValue(name)}` : null;
+}
+
+function normalizeResumeImportValue(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLowerCase();
+}
+
 export interface ResumeImportOptions {
   /** Namespaces every generated id so two imports never collide. */
   readonly idPrefix: string;

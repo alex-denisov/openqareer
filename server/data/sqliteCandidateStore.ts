@@ -7,10 +7,7 @@ import type {
   AssessmentResult,
   AssessmentSubmission,
 } from '../domain/assessment';
-import {
-  buildResumeStudioProjection,
-  type ResumeEvidenceSnapshot,
-} from '../domain/resumeStudio';
+import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
 import type {
@@ -85,6 +82,7 @@ import type { CoachProviderResult } from '../providers/coachProvider';
 import { applyMigrations } from './store/applyMigrations';
 import { ConversationController } from './store/conversationController';
 import { SourceConnectionController } from './store/sourceConnectionController';
+import { commitNewResumeImport as commitResumeImportWithDedupe } from './sqliteCandidateStoreResumeImport';
 import {
   CandidateDocumentRetentionError,
   CandidateNotFoundError,
@@ -565,45 +563,17 @@ export class SqliteCandidateStore implements CandidateStore {
     candidateId: string,
     input: ResumeImportCommit,
   ): CommittedResumeImport {
-    const replaced = input.sourceReceipt
-      ? this.sourceConnections
-          .list(candidateId)
-          .find((connection) => connection.platform === input.sourceReceipt?.platform)
-      : undefined;
-    const evidence = this.conversations.importResumeEvidenceInTransaction(
+    return commitResumeImportWithDedupe(
+      {
+        database: this.database,
+        conversations: this.conversations,
+        sourceConnections: this.sourceConnections,
+        resumeRepository: this.resumeRepository,
+        candidateMediaRepository: this.candidateMediaRepository,
+      },
       candidateId,
-      input.evidence,
+      input,
     );
-    if (replaced) {
-      this.conversations.purgeReplacedImportedFacts(
-        candidateId,
-        replaced.receipt.sourceMessageId,
-        replaced.receipt.memoryIds,
-      );
-    } else if (!input.sourceReceipt) {
-      // A file upload carries no receipt to displace its predecessor, so the
-      // dossier used to keep both readings of the same career (B162).
-      this.conversations.purgeSupersededFileImportFacts(
-        candidateId,
-        evidence.messageId,
-        this.sourceConnections
-          .list(candidateId)
-          .map((connection) => connection.receipt.sourceMessageId),
-      );
-    }
-    const projection = buildResumeStudioProjection({
-      ...input.draft,
-      evidence: this.conversations.snapshotParts(candidateId).memory,
-    });
-    if (input.media?.length) {
-      this.candidateMediaRepository.saveMany(candidateId, input.media);
-    }
-    const resume = this.resumeRepository.save(candidateId, input.draft, projection.evidenceSnapshot, input.reader);
-    this.candidateMediaRepository.pruneUnreferenced(candidateId, referencedMediaIds(input.draft));
-    const sourceConnection = input.sourceReceipt
-      ? this.sourceConnections.upsert(candidateId, input.sourceReceipt, evidence)
-      : undefined;
-    return { evidence, resume, sourceConnection, idempotentReplay: false };
   }
 
   listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[] {
