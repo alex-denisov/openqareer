@@ -66,6 +66,11 @@ describe('ResponsesBoard columns', () => {
     const applications = [
       application({ id: 'a1', stage: 'saved' }),
       application({ id: 'a2', stage: 'applied' }),
+      application({
+        id: 'a2-delivered',
+        stage: 'applied',
+        deliveryReceipt: { kind: 'confirmation_url', value: 'https://jobs.test/receipt' },
+      }),
       application({ id: 'a3', stage: 'responded' }),
       application({ id: 'a4', stage: 'interview' }),
       application({ id: 'a5', stage: 'rejected' }),
@@ -75,9 +80,11 @@ describe('ResponsesBoard columns', () => {
       <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
     );
 
-    ['Хочу', 'Откликнулся', 'Ответ', 'Интервью', 'Оффер', 'Отказ'].forEach((label) => {
-      expect(html).toContain(label);
-    });
+    ['Хочу', 'Пробовали отправить', 'Отправлено', 'Ответ', 'Интервью', 'Оффер', 'Отказ'].forEach(
+      (label) => {
+        expect(html).toContain(label);
+      },
+    );
     // The offer column has no cards and shows a zero count.
     const offerHead = html.indexOf('<h2>Оффер</h2>');
     expect(html.slice(offerHead, offerHead + 100)).toMatch(/>0</);
@@ -85,6 +92,8 @@ describe('ResponsesBoard columns', () => {
     const closedHead = html.indexOf('<h2>Отказ</h2>');
     expect(html.slice(closedHead, closedHead + 100)).toMatch(/>1</);
     expect(html).toContain('Архив');
+    expect(html).toContain('Доставка подтверждена: https://jobs.test/receipt');
+    expect(html).toContain('Пробовали отправить. Не хватает квитанции доставки.');
     expect(html).toContain('1');
   });
 
@@ -344,7 +353,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       const allHeaders = Array.from(
         container.querySelectorAll('.career-responses-column-head h2'),
       ).map((el) => el.textContent);
-      expect(allHeaders.length).toBe(6);
+      expect(allHeaders.length).toBe(7);
     });
 
     it('показывает пустое состояние «Интервью пока не назначены», если откликов на этапе интервью нет', () => {

@@ -8,6 +8,8 @@ import {
   Warning,
 } from '@phosphor-icons/react';
 import { APPLICATION_STAGES, type ApplicationStage } from '../../../shared/applicationStage';
+import type { DeliveryReceipt } from '../../../shared/applicationStage';
+import { deliveryState } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
@@ -17,7 +19,7 @@ import { waitingLabel } from './waitingLabel';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
   saved: 'Хочу',
-  applied: 'Откликнулся',
+  applied: 'Пробовали отправить',
   responded: 'Ответ',
   interview: 'Интервью',
   offer: 'Оффер',
@@ -43,7 +45,11 @@ interface ResponsesCardProps {
     subject?: CoachTurnSubject,
     subjectTitle?: string,
   ) => void;
-  readonly onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  readonly onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
   readonly onRetry: () => void;
   readonly onRefresh: () => void;
@@ -189,6 +195,9 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onRetry={props.onRetry}
         onRefresh={props.onRefresh}
       />
+      {application.stage === 'applied' ? (
+        <DeliveryStatus receipt={application.deliveryReceipt ?? null} />
+      ) : null}
       {application.stage === 'interview' ? (
         <PrepareInterviewControl application={application} onOpenExpert={props.onOpenExpert} />
       ) : null}
@@ -207,6 +216,21 @@ export function ResponsesCard(props: ResponsesCardProps) {
       />
       <FollowUpSentControl application={application} onMark={props.onMarkFollowUpSent} />
     </article>
+  );
+}
+
+function DeliveryStatus({ receipt }: { receipt: DeliveryReceipt | null }) {
+  const state = deliveryState('applied', receipt);
+  const label =
+    state === 'failed'
+      ? 'Попытка не удалась. Доставка не подтверждена.'
+      : state === 'attempted'
+        ? 'Пробовали отправить. Не хватает квитанции доставки.'
+        : `Доставка подтверждена: ${receipt?.value ?? ''}`;
+  return (
+    <p className="career-responses-card-failed" role="status">
+      {label}
+    </p>
   );
 }
 
@@ -303,7 +327,11 @@ interface CardFooterProps {
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
@@ -315,7 +343,11 @@ interface CardMenuWrapProps {
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
@@ -350,8 +382,8 @@ function CardMenuWrap(props: CardMenuWrapProps) {
                 }
               : undefined
           }
-          onChangeStage={(stage, occurredAt) => {
-            props.onChangeStage(stage, occurredAt);
+          onChangeStage={(stage, occurredAt, receipt) => {
+            props.onChangeStage(stage, occurredAt, receipt);
             onCloseMenu();
           }}
           onScheduleInterview={(scheduledAt) => {
@@ -448,47 +480,176 @@ function CardAlerts({
 }
 
 function StageChangeControl({
+  application,
   stage,
   onChangeStage,
   onScheduleInterview,
 }: {
+  application: ApplicationView;
   stage: ApplicationStage;
-  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
 }) {
   const [nextStage, setNextStage] = useState<ApplicationStage>(stage);
   const [occurredAt, setOccurredAt] = useState(() => localIsoDate());
-  const dirty = nextStage !== stage;
-  const movingToInterview = nextStage === 'interview';
+  const [receiptKind, setReceiptKind] = useState<DeliveryReceipt['kind']>(
+    application.deliveryReceipt?.kind ?? 'confirmation_url',
+  );
+  const [receiptValue, setReceiptValue] = useState(application.deliveryReceipt?.value ?? '');
+  const dirty = stageChangeIsDirty(nextStage, stage, receiptValue, application.deliveryReceipt);
   return (
     <div className="career-responses-stage-control">
       <StageSelect value={nextStage} onChange={setNextStage} />
+      <StageDateField
+        isInterview={nextStage === 'interview'}
+        value={occurredAt}
+        onChange={setOccurredAt}
+      />
+      <StageDeliveryEvidence
+        visible={nextStage === 'applied'}
+        kind={receiptKind}
+        value={receiptValue}
+        onKindChange={setReceiptKind}
+        onValueChange={setReceiptValue}
+      />
+      <SaveStageButton
+        dirty={dirty}
+        nextStage={nextStage}
+        hasReceipt={Boolean(receiptValue.trim())}
+        occurredAt={occurredAt}
+        receiptKind={receiptKind}
+        receiptValue={receiptValue}
+        onChangeStage={onChangeStage}
+        onScheduleInterview={onScheduleInterview}
+      />
+    </div>
+  );
+}
+
+function StageDeliveryEvidence({
+  visible,
+  ...fields
+}: { visible: boolean } & Parameters<typeof DeliveryReceiptFields>[0]) {
+  return visible ? <DeliveryReceiptFields {...fields} /> : null;
+}
+
+function stageChangeIsDirty(
+  nextStage: ApplicationStage,
+  stage: ApplicationStage,
+  receiptValue: string,
+  receipt?: DeliveryReceipt | null,
+): boolean {
+  return (
+    nextStage !== stage ||
+    (nextStage === 'applied' && receiptValue.trim() !== (receipt?.value ?? ''))
+  );
+}
+
+function StageDateField({
+  isInterview,
+  value,
+  onChange,
+}: {
+  isInterview: boolean;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label>
+      {isInterview ? 'Дата интервью' : 'Дата'}
+      <input type="date" value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function SaveStageButton({
+  dirty,
+  nextStage,
+  hasReceipt,
+  occurredAt,
+  receiptKind,
+  receiptValue,
+  onChangeStage,
+  onScheduleInterview,
+}: {
+  dirty: boolean;
+  nextStage: ApplicationStage;
+  hasReceipt: boolean;
+  occurredAt: string;
+  receiptKind: DeliveryReceipt['kind'];
+  receiptValue: string;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
+  onScheduleInterview: (scheduledAt: string) => Promise<void>;
+}) {
+  if (!dirty) return null;
+  const label = nextStage === 'applied' && hasReceipt ? 'Сохранить квитанцию' : 'Сохранить этап';
+  const receipt: DeliveryReceipt | null | undefined = receiptValue.trim()
+    ? { kind: receiptKind, value: receiptValue.trim() }
+    : nextStage === 'applied'
+      ? null
+      : undefined;
+  return (
+    <button
+      type="button"
+      className="career-btn career-btn-primary career-btn-sm"
+      onClick={() =>
+        saveStageChange({
+          nextStage,
+          occurredAt,
+          movingToInterview: nextStage === 'interview',
+          receipt,
+          onChangeStage,
+          onScheduleInterview,
+        })
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+function DeliveryReceiptFields({
+  kind,
+  value,
+  onKindChange,
+  onValueChange,
+}: {
+  kind: DeliveryReceipt['kind'];
+  value: string;
+  onKindChange: (kind: DeliveryReceipt['kind']) => void;
+  onValueChange: (value: string) => void;
+}) {
+  return (
+    <>
       <label>
-        {movingToInterview ? 'Дата интервью' : 'Дата'}
+        Доказательство доставки
+        <select
+          value={kind}
+          onChange={(event) => onKindChange(event.target.value as DeliveryReceipt['kind'])}
+        >
+          <option value="confirmation_url">Ссылка на подтверждение</option>
+          <option value="auto_reply">Письмо автоответа</option>
+          <option value="screenshot">Скриншот</option>
+          <option value="failure_note">Попытка не удалась</option>
+        </select>
+      </label>
+      <label>
+        Ссылка или описание доказательства
         <input
-          type="date"
-          value={occurredAt}
-          onChange={(event) => setOccurredAt(event.target.value)}
+          value={value}
+          onChange={(event) => onValueChange(event.target.value)}
+          maxLength={2000}
         />
       </label>
-      {dirty ? (
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-sm"
-          onClick={() =>
-            saveStageChange({
-              nextStage,
-              occurredAt,
-              movingToInterview,
-              onChangeStage,
-              onScheduleInterview,
-            })
-          }
-        >
-          Сохранить этап
-        </button>
-      ) : null}
-    </div>
+    </>
   );
 }
 
@@ -523,20 +684,26 @@ function saveStageChange({
   nextStage,
   occurredAt,
   movingToInterview,
+  receipt,
   onChangeStage,
   onScheduleInterview,
 }: {
   nextStage: ApplicationStage;
   occurredAt: string;
   movingToInterview: boolean;
-  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  receipt?: DeliveryReceipt | null;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
 }) {
   const occurredAtIso = `${occurredAt}T00:00:00.000Z`;
   if (movingToInterview) {
     void onScheduleInterview(occurredAtIso);
   } else {
-    onChangeStage(nextStage, occurredAtIso);
+    onChangeStage(nextStage, occurredAtIso, receipt);
   }
 }
 
@@ -550,17 +717,21 @@ function CardMenu({
 }: {
   application: ApplicationView;
   onDiscussWithConsultant?: () => void;
-  onChangeStage: (stage: ApplicationStage, occurredAt: string) => void;
+  onChangeStage: (
+    stage: ApplicationStage,
+    occurredAt: string,
+    receipt?: DeliveryReceipt | null,
+  ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }) {
-  const [noteDraft, setNoteDraft] = useState(application.notes ?? '');
   const canSkip = application.stage === 'saved' && Boolean(application.clusterId);
 
   return (
     <div className="career-responses-card-menu">
       <StageChangeControl
+        application={application}
         stage={application.stage}
         onChangeStage={onChangeStage}
         onScheduleInterview={onScheduleInterview}
@@ -575,16 +746,29 @@ function CardMenu({
           Открыть карточку вакансии
         </a>
       ) : null}
-      <label className="career-responses-note-field">
-        Заметка
-        <textarea
-          value={noteDraft}
-          onChange={(event) => setNoteDraft(event.target.value)}
-          onBlur={() => onSaveNote(noteDraft)}
-        />
-      </label>
+      <CardNoteField initialValue={application.notes ?? ''} onSave={onSaveNote} />
       {canSkip ? <SkipControl onSkip={onSkip} /> : null}
     </div>
+  );
+}
+
+function CardNoteField({
+  initialValue,
+  onSave,
+}: {
+  initialValue: string;
+  onSave: (value: string) => void;
+}) {
+  const [noteDraft, setNoteDraft] = useState(initialValue);
+  return (
+    <label className="career-responses-note-field">
+      Заметка
+      <textarea
+        value={noteDraft}
+        onChange={(event) => setNoteDraft(event.target.value)}
+        onBlur={() => onSave(noteDraft)}
+      />
+    </label>
   );
 }
 

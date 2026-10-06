@@ -81,6 +81,20 @@ function normalizeVacancySnapshot(
   };
 }
 
+const deliveryReceiptSchema = z
+  .object({
+    kind: z.enum(['confirmation_url', 'auto_reply', 'screenshot', 'failure_note']),
+    value: z.string().trim().min(1).max(2000),
+  })
+  .superRefine((receipt, context) => {
+    if (receipt.kind !== 'confirmation_url') return;
+    try {
+      if (new URL(receipt.value).protocol !== 'https:') throw new Error('unsafe_scheme');
+    } catch {
+      context.addIssue({ code: 'custom', message: 'receipt_url_must_be_https', path: ['value'] });
+    }
+  });
+
 const patchApplicationSchema = z.object({
   expectedVersion: z.number().int().nonnegative(),
   stage: stageSchema.optional(),
@@ -88,6 +102,7 @@ const patchApplicationSchema = z.object({
   notes: z.string().max(20_000).nullable().optional(),
   processProfile: z.enum(['standard', 'executive']).optional(),
   followUpDueAt: isoDateField.nullable().optional(),
+  deliveryReceipt: deliveryReceiptSchema.nullable().optional(),
 });
 
 const restoreApplicationSchema = z.object({ expectedVersion: z.number().int().nonnegative() });

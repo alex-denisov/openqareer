@@ -753,7 +753,7 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-responses-card')).toHaveCount(4);
 
     const colSaved = page.locator('.career-responses-column[aria-label="Хочу"]');
-    const colApplied = page.locator('.career-responses-column[aria-label="Откликнулся"]');
+    const colApplied = page.locator('.career-responses-column[aria-label="Пробовали отправить"]');
     const colResponded = page.locator('.career-responses-column[aria-label="Ответ"]');
     const colInterview = page.locator('.career-responses-column[aria-label="Интервью"]');
     await expect(colSaved).toBeVisible();

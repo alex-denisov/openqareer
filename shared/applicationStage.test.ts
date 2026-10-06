@@ -4,6 +4,7 @@ import {
   canLegacyClientAdvanceToApplied,
   isClosedApplicationStage,
   isKnownApplicationStage,
+  deliveryState,
 } from './applicationStage';
 
 describe('applicationStage', () => {
@@ -44,5 +45,16 @@ describe('applicationStage', () => {
 
   it('treats archived and rejected as closed, everything else as live (B293)', () => {
     expect(APPLICATION_STAGES.filter(isClosedApplicationStage)).toEqual(['rejected', 'archived']);
+  });
+
+  it('counts an application as delivered only when it has a receipt', () => {
+    expect(deliveryState('saved', null)).toBe('prepared');
+    expect(deliveryState('applied', null)).toBe('attempted');
+    expect(
+      deliveryState('applied', { kind: 'confirmation_url', value: 'https://jobs.test/ok' }),
+    ).toBe('delivered');
+    expect(
+      deliveryState('applied', { kind: 'failure_note', value: 'Форма отклонила отклик' }),
+    ).toBe('failed');
   });
 });

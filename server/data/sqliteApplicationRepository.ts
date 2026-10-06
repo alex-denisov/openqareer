@@ -4,6 +4,7 @@ import type { SealedText } from './sealedText';
 import {
   canLegacyClientAdvanceToApplied,
   type ApplicationStage,
+  type DeliveryReceipt,
 } from '../../shared/applicationStage';
 import {
   ApplicationNotFoundError,
@@ -30,6 +31,7 @@ export interface StoredApplicationEvent {
   readonly occurredAt: string;
   readonly recordedAt: string;
   readonly provenance: ApplicationEventProvenance;
+  readonly deliveryReceipt?: DeliveryReceipt | null;
 }
 
 export interface ConfirmedVacancyClosureEvidence {
@@ -73,6 +75,7 @@ export interface PatchApplicationInput {
   readonly notes?: string | null;
   readonly processProfile?: ApplicationProcessProfile;
   readonly followUpDueAt?: string | null;
+  readonly deliveryReceipt?: DeliveryReceipt | null;
 }
 
 interface ApplicationRow {
@@ -572,7 +575,7 @@ export class SqliteApplicationRepository {
   listEvents(candidateId: string, applicationId: string): StoredApplicationEvent[] {
     const rows = this.database
       .prepare(
-        `SELECT id, kind, from_stage, to_stage, occurred_at, recorded_at, provenance
+        `SELECT id, kind, from_stage, to_stage, occurred_at, recorded_at, provenance, payload_cipher
            FROM application_events
           WHERE candidate_id = ? AND application_id = ?
           ORDER BY occurred_at ASC`,
@@ -585,6 +588,7 @@ export class SqliteApplicationRepository {
         occurred_at: string;
         recorded_at: string;
         provenance: string;
+        payload_cipher: string | null;
       }>;
     return rows.map((row) => ({
       id: row.id,
@@ -594,6 +598,9 @@ export class SqliteApplicationRepository {
       occurredAt: row.occurred_at,
       recordedAt: row.recorded_at,
       provenance: row.provenance as ApplicationEventProvenance,
+      ...(row.kind === 'stage' && row.to_stage === 'applied'
+        ? readDeliveryReceipt(row.payload_cipher, this.sealedText, candidateId, applicationId)
+        : {}),
     }));
   }
 
@@ -672,7 +679,9 @@ export class SqliteApplicationRepository {
       if (!latest) throw new ApplicationNotFoundError();
       throw new ApplicationVersionConflictError(latest.version);
     }
-    if (stageChanged) this.recordCandidateStageEvent(candidateId, id, current.stage, nextStage, occurredAt, now);
+    if (stageChanged || input.deliveryReceipt !== undefined) {
+      this.recordCandidateStageEvent(candidateId, id, current.stage, nextStage, occurredAt, now, input.deliveryReceipt);
+    }
     return this.get(candidateId, id) as StoredApplication;
   }
 
@@ -683,12 +692,16 @@ export class SqliteApplicationRepository {
     toStage: ApplicationStage,
     occurredAt: string,
     recordedAt: string,
+    deliveryReceipt?: DeliveryReceipt | null,
   ): void {
     this.insertEvent(
       candidateId,
       applicationId,
       { kind: 'stage', fromStage, toStage, occurredAt, provenance: 'candidate' },
       recordedAt,
+      deliveryReceipt
+        ? this.sealedText.seal(JSON.stringify({ deliveryReceipt }), eventAssociatedData(candidateId, applicationId))
+        : null,
     );
   }
 
@@ -776,4 +789,22 @@ function notesAssociatedData(candidateId: string, applicationId: string): string
 
 function eventAssociatedData(candidateId: string, applicationId: string): string {
   return `candidate:${candidateId}:application:${applicationId}:event`;
+}
+
+function readDeliveryReceipt(
+  payloadCipher: string | null,
+  sealedText: SealedText,
+  candidateId: string,
+  applicationId: string,
+): { deliveryReceipt: DeliveryReceipt | null } {
+  if (!payloadCipher) return { deliveryReceipt: null };
+  try {
+    const payload = JSON.parse(
+      sealedText.open(payloadCipher, eventAssociatedData(candidateId, applicationId)),
+    ) as { deliveryReceipt?: DeliveryReceipt };
+    const receipt = payload.deliveryReceipt;
+    return receipt && typeof receipt.value === 'string' ? { deliveryReceipt: receipt } : { deliveryReceipt: null };
+  } catch {
+    return { deliveryReceipt: null };
+  }
 }

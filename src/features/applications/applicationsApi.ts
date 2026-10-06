@@ -1,5 +1,5 @@
 import type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
-import type { ApplicationStage } from '../../../shared/applicationStage';
+import type { ApplicationStage, DeliveryReceipt } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
@@ -30,6 +30,7 @@ export interface PatchApplicationInput {
   readonly occurredAt?: string;
   readonly notes?: string | null;
   readonly followUpDueAt?: string | null;
+  readonly deliveryReceipt?: DeliveryReceipt | null;
 }
 
 /** Minutes east of UTC, the shape `?tz=` and `shared/followUpPolicy` expect. */
