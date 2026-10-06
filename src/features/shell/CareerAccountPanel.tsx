@@ -36,7 +36,6 @@ import {
   sanitizeEmail,
   sanitizeName,
 } from '../../../shared/accountValidation';
-import { pluralRu } from '../../../shared/pluralRu';
 import { initialsFor } from './accountIdentity';
 import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { appVersionLine } from './appVersion';
@@ -757,13 +756,7 @@ function AuthenticatedAccount({
             </button>
           </form>
           <div className="career-account-session-card">
-            <strong>
-              {pluralRu(account?.sessions.length ?? 1, [
-                'активная сессия',
-                'активные сессии',
-                'активных сессий',
-              ])}
-            </strong>
+            <strong>Устройства: {account?.sessions.length ?? 1}</strong>
             <p>Завершите входы на других устройствах, если не узнаёте активность.</p>
             <button type="button" disabled={busy} onClick={() => void onCloseOtherSessions()}>
               Завершить остальные сессии

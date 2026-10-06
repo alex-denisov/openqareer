@@ -63,6 +63,7 @@ import {
   recordAdminAudit,
 } from './adminUserManager';
 import { isValidTimezone } from '../../shared/timezoneUtils';
+import { ensureSessionDeviceHashSchema, storeAuthSession } from './sessionRepository';
 
 const scrypt = promisify(scryptCallback);
 /**
@@ -167,6 +168,7 @@ export class AuthService implements SessionAuth {
     password: string,
     candidateStore: CandidateStore,
     profile: RegistrationProfile = {},
+    clientDeviceId?: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }> {
     const username = normalizeUsername(usernameInput);
     const email = profile.email ? canonicalEmailOrThrow(profile.email) : null;
@@ -203,7 +205,9 @@ export class AuthService implements SessionAuth {
       }
       throw error;
     }
-    const authenticated = await this.login(username, password);
+    const authenticated = clientDeviceId
+      ? await this.login(username, password, clientDeviceId)
+      : await this.login(username, password);
     if (!authenticated) throw new Error('registered account cannot authenticate');
     return authenticated;
   }
@@ -295,6 +299,7 @@ export class AuthService implements SessionAuth {
   async login(
     identifierInput: string,
     password: string,
+    clientDeviceId?: string,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null> {
     const identifier = normalizeUsername(identifierInput);
     const user = identifier.includes('@')
@@ -314,19 +319,13 @@ export class AuthService implements SessionAuth {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
-    this.database.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now.toISOString());
-    this.database
-      .prepare(
-        `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        hashToken(sessionToken),
-        user.id,
-        expiresAt.toISOString(),
-        now.toISOString(),
-        now.toISOString(),
-      );
+    storeAuthSession(this.database, {
+      userId: user.id,
+      tokenHash: hashToken(sessionToken),
+      expiresAt,
+      now,
+      clientDeviceId,
+    });
     return {
       principal: principalFromRow(user),
       sessionToken,
@@ -420,18 +419,12 @@ export class AuthService implements SessionAuth {
     const sessionToken = `oqs_${randomBytes(32).toString('base64url')}`;
     const now = new Date();
     const expiresAt = new Date(now.getTime() + SESSION_IDLE_MS);
-    this.database
-      .prepare(
-        `INSERT INTO sessions (token_hash, user_id, expires_at, created_at, last_seen_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-      .run(
-        hashToken(sessionToken),
-        user.id,
-        expiresAt.toISOString(),
-        now.toISOString(),
-        now.toISOString(),
-      );
+    storeAuthSession(this.database, {
+      userId: user.id,
+      tokenHash: hashToken(sessionToken),
+      expiresAt,
+      now,
+    });
 
     if (actorPrincipal) {
       recordAdminAudit(this.database, {
@@ -764,6 +757,7 @@ export class AuthService implements SessionAuth {
     } catch {
       // timezone column already exists
     }
+    ensureSessionDeviceHashSchema(this.database);
     // Administrators are provisioned only from configured seed accounts
     // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to
     // change an existing user's role. A previous hardcoded handle list granted

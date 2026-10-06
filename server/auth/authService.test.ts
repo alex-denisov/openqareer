@@ -143,6 +143,22 @@ describe('role and session authentication', () => {
       first?.principal.candidate?.id,
     );
   });
+
+  it('keeps one active session per device and one more for a different device', async () => {
+    const { auth, candidates } = createServices();
+    const password = 'candidate-password-for-tests';
+    const sameDevice = '00000000-0000-4000-8000-000000000001';
+    const otherDevice = '00000000-0000-4000-8000-000000000002';
+    let current = await auth.register('device.sessions', password, candidates, {}, sameDevice);
+
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      current = (await auth.login('device.sessions', password, sameDevice))!;
+    }
+
+    expect(auth.getAccount(current.sessionToken)?.sessions).toHaveLength(1);
+    const other = await auth.login('device.sessions', password, otherDevice);
+    expect(auth.getAccount(other!.sessionToken)?.sessions).toHaveLength(2);
+  });
 });
 
 /**
@@ -184,6 +200,50 @@ describe('sliding session expiry (PRB-038)', () => {
 
     vi.setSystemTime(new Date(Date.now() + 31 * DAY));
     expect(auth.authenticate(sessionToken)).toBeNull();
+  });
+
+  it('does not include an expired device session beside a current device session', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-20T10:00:00.000Z'));
+    const { auth, candidates } = createServices();
+    const oldDevice = await auth.register(
+      'expired.device',
+      'candidate-password-for-tests',
+      candidates,
+      {},
+      '00000000-0000-4000-8000-000000000011',
+    );
+
+    vi.setSystemTime(new Date(Date.now() + 29 * DAY));
+    const currentDevice = await auth.login(
+      'expired.device',
+      'candidate-password-for-tests',
+      '00000000-0000-4000-8000-000000000012',
+    );
+    vi.setSystemTime(new Date(Date.now() + 2 * DAY));
+
+    expect(auth.getAccount(currentDevice!.sessionToken)?.sessions).toHaveLength(1);
+    expect(auth.authenticate(oldDevice.sessionToken)).toBeNull();
+  });
+
+  it('removes a logged-out device from the active device count', async () => {
+    const { auth, candidates } = createServices();
+    const firstDevice = await auth.register(
+      'logout.device',
+      'candidate-password-for-tests',
+      candidates,
+      {},
+      '00000000-0000-4000-8000-000000000021',
+    );
+    const currentDevice = await auth.login(
+      'logout.device',
+      'candidate-password-for-tests',
+      '00000000-0000-4000-8000-000000000022',
+    );
+
+    auth.logout(firstDevice.sessionToken);
+
+    expect(auth.getAccount(currentDevice!.sessionToken)?.sessions).toHaveLength(1);
   });
 });
 

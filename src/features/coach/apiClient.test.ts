@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   apiFetch,
   CoachApiError,
+  CLIENT_DEVICE_ID_STORAGE_KEY,
+  getClientDeviceId,
   getApiBaseUrl,
   getStoredSessionToken,
   readData,
@@ -50,6 +52,14 @@ describe('apiClient', () => {
     setStoredSessionToken(null);
     expect(getStoredSessionToken()).toBeNull();
     expect(mockStorage[SESSION_TOKEN_STORAGE_KEY]).toBeUndefined();
+  });
+
+  it('keeps one random client device id in local storage', () => {
+    const deviceId = getClientDeviceId();
+
+    expect(deviceId).toMatch(/^[0-9a-f-]{36}$/iu);
+    expect(getClientDeviceId()).toBe(deviceId);
+    expect(mockStorage[CLIENT_DEVICE_ID_STORAGE_KEY]).toBe(deviceId);
   });
 
   it('resolves relative base URL in normal web environment and remote backend for tauri', () => {
