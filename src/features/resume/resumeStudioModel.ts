@@ -376,11 +376,15 @@ export function removeLanguage(draft: ResumeDraft, id: string): ResumeDraft {
 // eslint-disable-next-line max-lines-per-function
 export function toSavePayload(draft: ResumeDraft): ResumeDraft {
   return {
+    ...draft,
+    schemaVersion: 2,
     candidate: {
+      ...draft.candidate,
       fullName: trimmed(draft.candidate.fullName),
       photoUrl: trimmed(draft.candidate.photoUrl),
       about: trimmed(draft.candidate.about),
       contact: {
+        ...draft.candidate.contact,
         email: trimmed(draft.candidate.contact?.email),
         phone: trimmed(draft.candidate.contact?.phone),
         telegram: trimmed(draft.candidate.contact?.telegram),
@@ -392,6 +396,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
     },
     targetRole: trimmed(draft.targetRole),
     experience: draft.experience.map((entry) => ({
+      ...entry,
       id: entry.id,
       chronologyMemoryId: entry.chronologyMemoryId,
       title: trimmed(entry.title),
@@ -403,6 +408,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       bulletMemoryIds: [...entry.bulletMemoryIds],
     })),
     skills: (draft.skills ?? []).map((s) => ({
+      ...s,
       id: s.id,
       evidenceMemoryId: s.evidenceMemoryId,
       name: s.name.trim(),
@@ -412,6 +418,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       verifiedAt: trimmed(s.verifiedAt),
     })),
     education: draft.education.map((entry) => ({
+      ...entry,
       id: entry.id,
       evidenceMemoryId: entry.evidenceMemoryId,
       institution: trimmed(entry.institution),
@@ -420,6 +427,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       endDate: trimmed(entry.endDate),
     })),
     courses: (draft.courses ?? []).map((c) => ({
+      ...c,
       id: c.id,
       evidenceMemoryId: c.evidenceMemoryId,
       name: c.name.trim(),
@@ -428,6 +436,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       certificateUrl: trimmed(c.certificateUrl),
     })),
     tests: (draft.tests ?? []).map((t) => ({
+      ...t,
       id: t.id,
       evidenceMemoryId: t.evidenceMemoryId,
       name: t.name.trim(),
@@ -436,6 +445,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       year: trimmed(t.year),
     })),
     recommendations: (draft.recommendations ?? []).map((r) => ({
+      ...r,
       id: r.id,
       evidenceMemoryId: r.evidenceMemoryId,
       recommender: trimmed(r.recommender),
@@ -445,6 +455,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
       contact: trimmed(r.contact),
     })),
     languages: draft.languages.map((entry) => ({
+      ...entry,
       id: entry.id,
       evidenceMemoryId: entry.evidenceMemoryId,
       name: trimmed(entry.name),
@@ -452,6 +463,7 @@ export function toSavePayload(draft: ResumeDraft): ResumeDraft {
     })),
     additional: draft.additional
       ? {
+          ...draft.additional,
           citizenship: trimmed(draft.additional.citizenship),
           workSchedule: trimmed(draft.additional.workSchedule),
           relocation: trimmed(draft.additional.relocation),
