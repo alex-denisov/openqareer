@@ -11,6 +11,7 @@ import {
 
 export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   const unmatched: string[] = [];
+  let decisionProfile: Record<string, unknown> | null = null;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -66,6 +67,15 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       return route.fulfill({
         json: { data: { consent: { granted: false, policyVersion: '', updatedAt: '' } } },
       });
+    }
+    if (path.endsWith('/candidate/decision-profile')) {
+      if (route.request().method() === 'PUT') {
+        decisionProfile = {
+          ...route.request().postDataJSON(),
+          updatedAt: '2026-10-06T12:00:00.000Z',
+        };
+      }
+      return route.fulfill({ json: { data: decisionProfile } });
     }
     if (path.endsWith('/candidate/footprint/plan')) {
       return route.fulfill({

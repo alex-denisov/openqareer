@@ -1,18 +1,24 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  getDecisionProfile,
   getWorkPreferences,
   putDecisionProfile,
   submitWorkPreferences,
   type WorkPreferencesRead,
 } from '../coach/coachApi';
 import {
+  DECISION_PROFILE_STORAGE_KEY,
+  DECISION_PROFILE_SYNCED_KEY,
   DEFAULT_DECISION_PROFILE,
+  isCandidateDecisionProfile,
   loadDecisionProfile,
+  parseStoredDecisionProfile,
   saveDecisionProfile,
   type CandidateDecisionProfile,
   type WorkFamilyCode,
   type WorkPreferenceAnswer,
 } from '../../../shared/workPreferences';
+import { getStoredSessionToken } from '../coach/apiClient';
 
 export interface WorkPreferencesState {
   readonly read: WorkPreferencesRead | null;
@@ -62,11 +68,19 @@ function usePreferencesTasks(skip: boolean) {
 function useDecisionProfileManager(
   setSaving: (saving: boolean) => void,
   setError: (error: string | null) => void,
+  sessionToken: string | null,
 ) {
   const [decisionProfile, setDecisionProfile] = useState<CandidateDecisionProfile>(() =>
     loadDecisionProfile(),
   );
   const [decisionProfileSaved, setDecisionProfileSaved] = useState(false);
+  const attemptedSessionToken = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!sessionToken || attemptedSessionToken.current === sessionToken) return;
+    attemptedSessionToken.current = sessionToken;
+    void syncDecisionProfile(setDecisionProfile, setDecisionProfileSaved);
+  }, [sessionToken]);
 
   const saveProfile = useCallback<WorkPreferencesState['saveDecisionProfile']>(
     async (profile) => {
@@ -77,7 +91,7 @@ function useDecisionProfileManager(
         saveDecisionProfile(next);
         // Сервер применяет те же ограничения к подборке; при сбое остаётся локальная копия
         // и клиентский фильтр, поэтому сохранение не считается ошибкой.
-        await putDecisionProfile(next).catch(() => undefined);
+        await persistDecisionProfile(next);
         setDecisionProfile(next);
         setDecisionProfileSaved(true);
         return true;
@@ -106,6 +120,66 @@ function useDecisionProfileManager(
   return { decisionProfile, decisionProfileSaved, saveProfile, updateProfile, resetProfile };
 }
 
+async function persistDecisionProfile(profile: CandidateDecisionProfile): Promise<void> {
+  try {
+    await putDecisionProfile(profile);
+    markDecisionProfileSynced();
+  } catch {
+    // Без серверного подтверждения профиль останется только в localStorage.
+  }
+}
+
+async function syncDecisionProfile(
+  setDecisionProfile: (profile: CandidateDecisionProfile) => void,
+  setDecisionProfileSaved: (saved: boolean) => void,
+): Promise<void> {
+  try {
+    const serverProfile = await getDecisionProfile();
+    if (serverProfile !== null) {
+      if (!isCandidateDecisionProfile(serverProfile)) return;
+      saveDecisionProfile(serverProfile);
+      markDecisionProfileSynced();
+      setDecisionProfile(serverProfile);
+      setDecisionProfileSaved(true);
+      return;
+    }
+
+    if (hasSyncedDecisionProfile()) return;
+    const localProfile = readValidStoredDecisionProfile();
+    if (!localProfile) return;
+    await putDecisionProfile(localProfile);
+    markDecisionProfileSynced();
+    setDecisionProfile(localProfile);
+    setDecisionProfileSaved(true);
+  } catch {
+    // Вход не блокируется: без метки профиль повторно синхронизируется при следующем входе.
+  }
+}
+
+function readValidStoredDecisionProfile(): CandidateDecisionProfile | null {
+  try {
+    return parseStoredDecisionProfile(window.localStorage.getItem(DECISION_PROFILE_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function hasSyncedDecisionProfile(): boolean {
+  try {
+    return window.localStorage.getItem(DECISION_PROFILE_SYNCED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function markDecisionProfileSynced(): void {
+  try {
+    window.localStorage.setItem(DECISION_PROFILE_SYNCED_KEY, '1');
+  } catch {
+    // Без локального маркера повторная отправка останется безопасной: ручка делает upsert.
+  }
+}
+
 /**
  * Читает задания «Какие роли мне подходят», сохраняет ответы
  * и управляет конфиденциальным профилем ограничений кандидата (US-03.3 / B384).
@@ -113,9 +187,10 @@ function useDecisionProfileManager(
 export function useWorkPreferences(provided?: WorkPreferencesState): WorkPreferencesState {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sessionToken = getStoredSessionToken();
   const { read, setRead, loading, failed } = usePreferencesTasks(Boolean(provided));
   const { decisionProfile, decisionProfileSaved, saveProfile, updateProfile, resetProfile } =
-    useDecisionProfileManager(setSaving, setError);
+    useDecisionProfileManager(setSaving, setError, sessionToken);
 
   const submit = useCallback<WorkPreferencesState['submit']>(
     async (input) => {
@@ -153,4 +228,3 @@ export function useWorkPreferences(provided?: WorkPreferencesState): WorkPrefere
     }
   );
 }
-
