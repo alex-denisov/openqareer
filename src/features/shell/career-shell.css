@@ -16360,7 +16360,7 @@ button.chip {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  font-size: 0.82rem;
+  font-size: var(--career-text-xs);
   line-height: 1.5;
 }
 
@@ -16452,5 +16452,5 @@ button.chip {
 .career-account-legal-error {
   margin: 6px 0 0;
   color: var(--career-danger, oklch(72% 0.15 28));
-  font-size: 0.78rem;
+  font-size: var(--career-text-xs);
 }
