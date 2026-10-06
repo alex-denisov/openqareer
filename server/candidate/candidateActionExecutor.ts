@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Page } from 'playwright';
+import type { DeliveryReceipt } from '../../shared/applicationStage';
 import {
   classifyLinkedinSafetyStopReason,
   type CandidateActionKind,
@@ -13,23 +14,38 @@ import {
   formatLocalDate,
   isValidTimezone,
 } from '../../shared/timezoneUtils';
-import type { SqliteCandidateActionRepository, StoredActionReceipt } from './sqliteCandidateActionRepository';
+import type {
+  SqliteCandidateActionRepository,
+  StoredActionReceipt,
+} from './sqliteCandidateActionRepository';
 import type { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
 
 /** Process-local guard matches the single service process; use a shared lock before scaling. */
 const LINKEDIN_CANDIDATES_IN_FLIGHT = new Set<string>();
 
 export interface CandidateApplicationTracker {
-  getApplication(candidateId: string, applicationId: string): { version: number; stage: string } | null;
+  getApplication(
+    candidateId: string,
+    applicationId: string,
+  ): { version: number; stage: string } | null;
   patchApplication(
     candidateId: string,
     applicationId: string,
-    input: { expectedVersion: number; stage?: string; occurredAt?: string },
+    input: {
+      expectedVersion: number;
+      stage?: string;
+      occurredAt?: string;
+      deliveryReceipt?: DeliveryReceipt | null;
+    },
   ): unknown;
   recordApplicationEvent(
     candidateId: string,
     applicationId: string,
-    input: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; occurredAt: string; note?: string | null },
+    input: {
+      kind: 'follow_up_sent' | 'thank_you_sent' | 'promise';
+      occurredAt: string;
+      note?: string | null;
+    },
   ): unknown;
 }
 
@@ -50,7 +66,9 @@ export class CandidateConsentRequiredError extends Error {
 export class CandidateRunnerNotConnectedError extends Error {
   readonly code = 'runner_not_connected';
 
-  constructor(message = 'Исполнитель действий не подключён к сессии на этом устройстве. Действия не запускались.') {
+  constructor(
+    message = 'Исполнитель действий не подключён к сессии на этом устройстве. Действия не запускались.',
+  ) {
     super(message);
     this.name = 'CandidateRunnerNotConnectedError';
   }
@@ -89,9 +107,7 @@ export interface CandidateActionItem {
 type PreparedCandidateAction = CandidateActionItem & { readonly id: string };
 
 export type CandidateProviderStatus =
-  | 'hh_response_submitted'
-  | 'hh_resume_updated'
-  | 'linkedin_application_submitted';
+  'hh_response_submitted' | 'hh_resume_updated' | 'linkedin_application_submitted';
 
 export interface RunnerOutcome {
   readonly status: 'delivered' | 'attempted' | 'failed';
@@ -129,7 +145,8 @@ export class SimulatedCandidatePlatformRunner implements PlatformActionRunner {
 
   async run(action: CandidateActionItem, _session: CandidateActionSession): Promise<RunnerOutcome> {
     const outcome = this.outcomeOverrides?.get(action.id ?? '') ?? this.defaultOutcome;
-    if (outcome.status !== 'delivered' || outcome.confirmationUrl || outcome.providerStatus) return outcome;
+    if (outcome.status !== 'delivered' || outcome.confirmationUrl || outcome.providerStatus)
+      return outcome;
     return { ...outcome, providerStatus: confirmationStatusFor(action.actionKind) };
   }
 }
@@ -155,7 +172,9 @@ export interface CandidateActionExecutorOptions {
   readonly sessionResolver?: CandidateActionSessionResolver;
   readonly consentStore?: SqliteCapabilityConsentStore;
   readonly applicationTracker?: CandidateApplicationTracker;
-  readonly userTimezoneLookup?: (candidateId: string) => Promise<string | undefined> | string | undefined;
+  readonly userTimezoneLookup?: (
+    candidateId: string,
+  ) => Promise<string | undefined> | string | undefined;
   readonly random?: () => number;
   readonly pause?: (milliseconds: number) => Promise<void>;
   readonly now?: () => Date;
@@ -205,7 +224,11 @@ export class CandidateActionExecutor {
 
   async executeBatch(input: ExecuteBatchInput): Promise<ExecuteBatchResult> {
     const prepared = await this.prepareBatch(input);
-    this.repository.createBatch(prepared.batchId, input.candidateId, prepared.initialNow.toISOString());
+    this.repository.createBatch(
+      prepared.batchId,
+      input.candidateId,
+      prepared.initialNow.toISOString(),
+    );
     this.repository.createPendingReceipts(
       prepared.batchId,
       input.candidateId,
@@ -272,10 +295,14 @@ export class CandidateActionExecutor {
     for (const platform of new Set(actions.map((action) => action.platform))) {
       const session = await resolver.resolve(candidateId, platform);
       if (!session) {
-        throw new CandidateRunnerNotConnectedError(`Подключите свою сессию ${platform} в приложении для компьютера.`);
+        throw new CandidateRunnerNotConnectedError(
+          `Подключите свою сессию ${platform} в приложении для компьютера.`,
+        );
       }
       if (session.candidateId !== candidateId || session.platform !== platform) {
-        throw new CandidateRunnerNotConnectedError('Сессия площадки не совпадает с аккаунтом кандидата.');
+        throw new CandidateRunnerNotConnectedError(
+          'Сессия площадки не совпадает с аккаунтом кандидата.',
+        );
       }
       sessions.set(platform, session);
     }
@@ -317,10 +344,16 @@ export class CandidateActionExecutor {
       prepared.timezone,
       this.repository.getDailyUsage(input.candidateId, localDate),
     );
-    if (!capacity.allowed) return this.recordFailed(action, input, prepared, capacity.code ?? 'capacity_blocked', now);
+    if (!capacity.allowed)
+      return this.recordFailed(action, input, prepared, capacity.code ?? 'capacity_blocked', now);
 
     // Reserve the daily slot synchronously before the first provider-side effect.
-    this.repository.recordActionUsage(input.candidateId, localDate, action.actionKind, now.toISOString());
+    this.repository.recordActionUsage(
+      input.candidateId,
+      localDate,
+      action.actionKind,
+      now.toISOString(),
+    );
     const session = prepared.sessions.get(action.platform)!;
     const linkedin = action.platform === 'linkedin';
     if (linkedin && LINKEDIN_CANDIDATES_IN_FLIGHT.has(input.candidateId)) {
@@ -366,7 +399,12 @@ export class CandidateActionExecutor {
         failureCode: null,
         executedAt: now.toISOString(),
       });
-      this.advanceApplicationToApplied(input.candidateId, action.applicationId, now.toISOString());
+      this.advanceApplicationToApplied(
+        input.candidateId,
+        action.applicationId,
+        now.toISOString(),
+        outcome,
+      );
       return receipt;
     }
     if (outcome.status === 'attempted' && !STOP_FAILURE_CODES.has(failureCode)) {
@@ -390,7 +428,13 @@ export class CandidateActionExecutor {
       failureCode,
       executedAt: now.toISOString(),
     });
-    this.recordApplicationAttemptNote(input.candidateId, action.applicationId, action.actionKind, failureCode, now.toISOString());
+    this.recordApplicationAttemptNote(
+      input.candidateId,
+      action.applicationId,
+      action.actionKind,
+      failureCode,
+      now.toISOString(),
+    );
     return receipt;
   }
 
@@ -410,7 +454,13 @@ export class CandidateActionExecutor {
       failureCode: safeCode,
       executedAt: now.toISOString(),
     });
-    this.recordApplicationAttemptNote(input.candidateId, action.applicationId, action.actionKind, safeCode, now.toISOString());
+    this.recordApplicationAttemptNote(
+      input.candidateId,
+      action.applicationId,
+      action.actionKind,
+      safeCode,
+      now.toISOString(),
+    );
     return receipt;
   }
 
@@ -427,7 +477,12 @@ export class CandidateActionExecutor {
     }
   }
 
-  private advanceApplicationToApplied(candidateId: string, applicationId: string | null | undefined, nowIso: string): void {
+  private advanceApplicationToApplied(
+    candidateId: string,
+    applicationId: string | null | undefined,
+    nowIso: string,
+    outcome: RunnerOutcome,
+  ): void {
     if (!this.applicationTracker || !applicationId) return;
     try {
       const application = this.applicationTracker.getApplication(candidateId, applicationId);
@@ -436,6 +491,7 @@ export class CandidateActionExecutor {
         expectedVersion: application.version,
         stage: 'applied',
         occurredAt: nowIso,
+        deliveryReceipt: providerDeliveryReceipt(outcome),
       });
     } catch {
       // The provider receipt remains truthful; never roll a newer card version back.
@@ -485,8 +541,10 @@ function validateBatch(actions: readonly CandidateActionItem[]): void {
     throw new CandidateActionLimitError('batch_size_invalid');
   }
   for (const action of actions) {
-    if (!isActionKindForPlatform(action.actionKind, action.platform)) throw new CandidateActionTargetError();
-    if (!isAllowedCandidateActionTarget(action.platform, action.targetUrl)) throw new CandidateActionTargetError();
+    if (!isActionKindForPlatform(action.actionKind, action.platform))
+      throw new CandidateActionTargetError();
+    if (!isAllowedCandidateActionTarget(action.platform, action.targetUrl))
+      throw new CandidateActionTargetError();
   }
 }
 
@@ -504,6 +562,18 @@ function usageAfterAction(
     return { ...usage, linkedinEasyAppliesCount: usage.linkedinEasyAppliesCount + 1 };
   }
   return { ...usage, hhBoostsCount: usage.hhBoostsCount + 1, lastHhBoostAt: at };
+}
+
+/** Квитанция доставки для карточки: площадка подтвердила отправку, а не «пробовали». */
+function providerDeliveryReceipt(outcome: RunnerOutcome): DeliveryReceipt {
+  if (outcome.confirmationUrl) return { kind: 'confirmation_url', value: outcome.confirmationUrl };
+  const status = outcome.providerStatus ?? '';
+  const value = status.startsWith('linkedin')
+    ? 'LinkedIn подтвердил отправку заявки'
+    : status.startsWith('hh')
+      ? 'hh.ru подтвердил отправку отклика'
+      : 'Площадка подтвердила отправку';
+  return { kind: 'auto_reply', value };
 }
 
 function hasProviderConfirmation(action: CandidateActionItem, outcome: RunnerOutcome): boolean {
@@ -537,7 +607,9 @@ function safeFailureCode(value?: string | null): string {
   return value && /^[a-z][a-z0-9_]{0,63}$/u.test(value) ? value : 'runner_failure';
 }
 
-function calculateBatchStatus(receipts: readonly StoredActionReceipt[]): ExecuteBatchResult['status'] {
+function calculateBatchStatus(
+  receipts: readonly StoredActionReceipt[],
+): ExecuteBatchResult['status'] {
   const delivered = receipts.filter((receipt) => receipt.status === 'delivered').length;
   if (delivered === receipts.length) return 'completed';
   return delivered > 0 ? 'partial_failure' : 'aborted';
@@ -546,7 +618,7 @@ function calculateBatchStatus(receipts: readonly StoredActionReceipt[]): Execute
 function isUuid(value?: string): value is string {
   return Boolean(
     value &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value),
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value),
   );
 }
 

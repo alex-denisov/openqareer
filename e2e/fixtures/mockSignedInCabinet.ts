@@ -28,6 +28,39 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     if (path.endsWith('/candidate/applications') || path.endsWith('/candidate/drafts')) {
       return route.fulfill({ json: { data: [] } });
     }
+    // B370: панель отправки откликов читает лимиты и квитанции; в фикстуре действий нет.
+    if (path.endsWith('/candidate/actions/usage')) {
+      return route.fulfill({
+        json: {
+          data: {
+            usage: {
+              localDate: '2026-10-01',
+              hhAppliesCount: 0,
+              linkedinEasyAppliesCount: 0,
+              hhBoostsCount: 0,
+              lastHhBoostAt: null,
+            },
+            timezone: 'Europe/Moscow',
+            resetAt: '2026-10-01T21:00:00.000Z',
+            killSwitchActive: false,
+            limits: {
+              maxHhAppliesPerDay: 15,
+              maxLinkedinEasyAppliesPerDay: 10,
+              maxHhBoostsPerDay: 3,
+              minHhBoostIntervalMinutes: 240,
+            },
+          },
+        },
+      });
+    }
+    if (path.endsWith('/me/consents/actions_on_behalf')) {
+      return route.fulfill({
+        json: { data: { capability: 'actions_on_behalf', granted: false, consent: null } },
+      });
+    }
+    if (path.endsWith('/candidate/actions/receipts')) {
+      return route.fulfill({ json: { data: { receipts: [] } } });
+    }
     // C64: шапка Профиля читает согласие «Вы в поиске»; в фикстуре оно не дано.
     if (path.endsWith('/candidate/search-consent')) {
       return route.fulfill({

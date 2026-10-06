@@ -115,7 +115,12 @@ async function mockCandidateActionApi(page: Page): Promise<() => unknown> {
     );
     actionApplications = actionApplications.map((application) =>
       deliveredApplicationIds.has(application.id)
-        ? { ...application, stage: 'applied', version: application.version + 1 }
+        ? {
+            ...application,
+            stage: 'applied',
+            version: application.version + 1,
+            deliveryReceipt: { kind: 'auto_reply', value: 'hh.ru подтвердил отправку отклика' },
+          }
         : application,
     );
     actionUsage = {
@@ -201,7 +206,7 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
   ).toHaveCount(0);
   await expect(
     page
-      .locator('.career-responses-column[aria-label="Откликнулся"] .career-responses-card')
+      .locator('.career-responses-column[aria-label="Отправлено"] .career-responses-card')
       .filter({ hasText: 'Инженер платформы' }),
   ).toHaveCount(1);
   await expect(panel.getByRole('button', { name: 'Отправить 0 действий' })).toBeDisabled();

@@ -451,6 +451,7 @@ describe('CandidateActionExecutor', () => {
         expectedVersion: 7,
         stage: 'applied',
         occurredAt: '2026-10-01T12:00:00.000Z',
+        deliveryReceipt: { kind: 'auto_reply', value: 'hh.ru подтвердил отправку отклика' },
       },
     ]);
   });
