@@ -5,6 +5,7 @@ import type {
   ResumeEducationInput,
   ResumeExperienceInput,
   ResumeLanguageInput,
+  ResumeProjectInput,
   ResumeRecommendationInput,
   ResumeSkillInput,
   ResumeTestInput,
@@ -18,6 +19,7 @@ import type {
   ResumeEducation,
   ResumeExperience,
   ResumeLanguage,
+  ResumeProject,
   ResumeLengthEstimate,
   ResumeStudioProjection,
   ResumeUnknown,
@@ -49,15 +51,19 @@ export type {
   ResumeEducation,
   ResumeExperience,
   ResumeLanguage,
+  ResumeProject,
   ResumeReviewFlag,
   ResumeStudioInput,
   ResumeStudioProjection,
   ResumeConventions,
   ResumeUnknown,
+  TargetedResumeInput,
+  TargetedResumeSlice,
   StaleEvidenceReason,
 } from './resumeStudioTypes';
 export type { CefrLevel, ResumeDraft } from './resumeDraft';
 export { validateResumeEvidenceFreshness } from './resumeStudioInternals';
+export { buildTargetedResumeSlice } from './resumeStudioTargeted';
 
 const MASTER_CONVENTIONS: ResumeConventions = {
   country: null,
@@ -93,6 +99,7 @@ export function buildResumeStudioProjection(
   const experience = projectExperience(input.experience, context);
   const education = projectEducation(input.education, context);
   const languages = projectLanguages(input.languages, context);
+  const projects = projectProjects(input.projects, context);
   const skills = input.skills ?? [];
   const courses = input.courses ?? [];
   const tests = input.tests ?? [];
@@ -111,6 +118,7 @@ export function buildResumeStudioProjection(
       photoUrl,
       experience,
       skills,
+      projects,
       education,
       courses,
       tests,
@@ -125,6 +133,7 @@ export function buildResumeStudioProjection(
       photoUrl,
       experience,
       skills,
+      projects,
       education,
       courses,
       tests,
@@ -182,6 +191,7 @@ interface GermanySections {
   readonly photoUrl?: string | null;
   readonly experience: readonly ResumeExperience[];
   readonly skills?: readonly ResumeSkillInput[];
+  readonly projects?: readonly ResumeProject[];
   readonly education: readonly ResumeEducation[];
   readonly courses?: readonly ResumeCourseInput[];
   readonly tests?: readonly ResumeTestInput[];
@@ -213,6 +223,7 @@ function germanyDocument(
     sections.photoUrl,
     experience,
     sections.skills,
+    sections.projects,
     sections.education,
     sections.courses,
     sections.tests,
@@ -410,6 +421,30 @@ function projectLanguages(
   });
 }
 
+function projectProjects(
+  input: readonly ResumeProjectInput[] | undefined,
+  context: ProjectionContext,
+): ResumeProject[] {
+  return (input ?? []).flatMap((project) => {
+    const evidence = resolveEvidence(project.evidenceMemoryId ?? '', context, project.id);
+    if (!evidence) return [];
+    return [
+      {
+        id: project.id,
+        name: assertion(project.name, evidence),
+        description: optionalAssertion(project.description, evidence),
+        employer: optionalAssertion(project.employer, evidence),
+        startDate: optionalAssertion(project.startDate, evidence),
+        endDate: optionalAssertion(project.endDate, evidence),
+        current:
+          project.current === undefined ? null : assertion(project.current, evidence),
+        url: optionalAssertion(project.url, evidence),
+        skills: (project.skills ?? []).map((skill) => assertion(skill, evidence)),
+      },
+    ];
+  });
+}
+
 function addSectionUnknowns(
   experience: readonly ResumeExperience[],
   education: readonly ResumeEducation[],
@@ -447,6 +482,7 @@ function document(
   photoUrl: string | null | undefined,
   experience: readonly ResumeExperience[],
   skills: readonly ResumeSkillInput[] | undefined,
+  projects: readonly ResumeProject[] | undefined,
   education: readonly ResumeEducation[],
   courses: readonly ResumeCourseInput[] | undefined,
   tests: readonly ResumeTestInput[] | undefined,
@@ -464,6 +500,7 @@ function document(
     photoUrl: photoUrl ?? null,
     experience,
     skills: skills ?? [],
+    projects: projects ?? [],
     education,
     courses: courses ?? [],
     tests: tests ?? [],

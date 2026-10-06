@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildTargetedResumeSlice } from '../../../server/domain/resumeStudio';
 import type { ResumeDocument } from './resumeTypes';
 import {
   exportResumeAsJson,
   exportResumeAsPlainText,
+  formatTargetedResumeAsAtsText,
   resumeExportFileName,
+  resumeTargetedExportFileName,
+  saveResumeAsPdf,
   triggerFileDownload,
   triggerResumePrint,
 } from './resumeExport';
@@ -195,6 +199,60 @@ describe('resumeExport', () => {
     expect(jsonName).toBe('resume-germany-ivan-ivanov.json');
   });
 
+  it('exports the targeted slice and reports gaps without presenting them as candidate facts', () => {
+    const doc = minimalDocument({
+      contact: {
+        fullName: 'Анна Пример',
+        email: 'anna@example.test',
+        phone: null,
+        telegram: null,
+        location: 'Москва',
+        links: [],
+      },
+      targetRole: 'Инженер платформы',
+      experience: [
+        {
+          id: 'platform',
+          title: { value: 'Инженер платформы', memoryId: 'role', sourceMessageIds: [], reviewFlags: [] },
+          employer: { value: 'Example Cloud', memoryId: 'role', sourceMessageIds: [], reviewFlags: [] },
+          location: null,
+          startDate: { value: '2022', memoryId: 'role', sourceMessageIds: [], reviewFlags: [] },
+          endDate: null,
+          current: { value: true, memoryId: 'role', sourceMessageIds: [], reviewFlags: [] },
+          bullets: [
+            { value: 'Автоматизировала развёртывание Kubernetes-сервисов.', memoryId: 'k8s', sourceMessageIds: [], reviewFlags: [] },
+          ],
+        },
+        {
+          id: 'sales',
+          title: { value: 'Менеджер продаж', memoryId: 'sales-role', sourceMessageIds: [], reviewFlags: [] },
+          employer: { value: 'Example Retail', memoryId: 'sales-role', sourceMessageIds: [], reviewFlags: [] },
+          location: null,
+          startDate: { value: '2019', memoryId: 'sales-role', sourceMessageIds: [], reviewFlags: [] },
+          endDate: { value: '2021', memoryId: 'sales-role', sourceMessageIds: [], reviewFlags: [] },
+          current: { value: false, memoryId: 'sales-role', sourceMessageIds: [], reviewFlags: [] },
+          bullets: [
+            { value: 'Вела переговоры с партнёрами.', memoryId: 'sales-work', sourceMessageIds: [], reviewFlags: [] },
+          ],
+        },
+      ],
+      skills: [{ id: 'k8s', name: 'Kubernetes' }],
+    });
+    const slice = buildTargetedResumeSlice(doc, {
+      title: 'Инженер платформы',
+      requirements: ['Kubernetes', 'GraphQL'],
+    });
+
+    const text = formatTargetedResumeAsAtsText(slice);
+
+    expect(text).toContain('Автоматизировала развёртывание Kubernetes-сервисов.');
+    expect(text).toContain('Менеджер продаж | Example Retail');
+    expect(text).not.toContain('Вела переговоры с партнёрами.');
+    expect(text).toContain('GraphQL');
+    expect(text).toContain('GraphQL - не найдено в мастер-резюме');
+    expect(resumeTargetedExportFileName(doc, 'pdf')).toBe('resume-targeted-anna-primer.pdf');
+  });
+
   it('writes a Tauri export to the path chosen in the save dialog', async () => {
     desktop.active = true;
     saveDialog.mockResolvedValue('/Users/test/Downloads/profile.json');
@@ -212,6 +270,23 @@ describe('resumeExport', () => {
 
     await expect(triggerFileDownload('profile.json', '{}', 'application/json')).resolves.toBeNull();
     expect(writeTextFile).not.toHaveBeenCalled();
+  });
+
+  it('opens the native PDF dialog with the targeted resume filename', async () => {
+    desktop.active = true;
+    saveDialog.mockResolvedValue('/Users/test/Downloads/resume-targeted-anna-primer.pdf');
+    invokeDesktop.mockResolvedValue(true);
+
+    await expect(saveResumeAsPdf('resume-targeted-anna-primer.pdf')).resolves.toBe(
+      '/Users/test/Downloads/resume-targeted-anna-primer.pdf',
+    );
+    expect(saveDialog).toHaveBeenCalledWith({
+      defaultPath: 'resume-targeted-anna-primer.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    expect(invokeDesktop).toHaveBeenCalledWith('save_resume_pdf', {
+      path: '/Users/test/Downloads/resume-targeted-anna-primer.pdf',
+    });
   });
 });
 
