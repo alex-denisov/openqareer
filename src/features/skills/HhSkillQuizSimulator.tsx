@@ -22,7 +22,9 @@ interface HhSkillQuizSimulatorProps {
   initialResult?: QuizEvaluationResult | null;
   onClose: () => void;
   onBadgeEarned?: (badgeTitle: string) => void;
-  onAcceptResult?: (result: QuizEvaluationResult) => void;
+  onAcceptResult?: (result: QuizEvaluationResult, answers: Record<string, number>) => Promise<boolean>;
+  isApplying?: boolean;
+  acceptError?: string;
 }
 
 // eslint-disable-next-line max-lines-per-function
@@ -32,6 +34,8 @@ export function HhSkillQuizSimulator({
   onClose,
   onBadgeEarned,
   onAcceptResult,
+  isApplying = false,
+  acceptError,
 }: HhSkillQuizSimulatorProps) {
   useEscapeLayer(onClose);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -42,6 +46,8 @@ export function HhSkillQuizSimulator({
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<QuizEvaluationResult | null>(initialResult);
+  const [accepting, setAccepting] = useState(false);
+  const acceptInFlight = useRef(false);
 
   function startQuiz(quiz: SkillQuiz) {
     setSelectedQuiz(quiz);
@@ -63,12 +69,25 @@ export function HhSkillQuizSimulator({
     }
   }
 
-  function handleAccept() {
-    if (result && onAcceptResult) {
-      onAcceptResult(result);
+  async function handleAccept(): Promise<void> {
+    if (acceptInFlight.current || accepting || isApplying) return;
+    if (!result || !onAcceptResult) {
+      onClose();
+      return;
     }
-    onClose();
+    acceptInFlight.current = true;
+    setAccepting(true);
+    try {
+      if (await onAcceptResult(result, { ...answers })) onClose();
+    } catch {
+      // Ошибка остаётся в модальном окне, а ответы не сбрасываются.
+    } finally {
+      acceptInFlight.current = false;
+      setAccepting(false);
+    }
   }
+
+  const applyPending = accepting || isApplying;
 
   return (
     <div
@@ -87,6 +106,7 @@ export function HhSkillQuizSimulator({
       >
         <button
           type="button"
+          disabled={applyPending}
           onClick={onClose}
           aria-label="Закрыть симулятор тестов"
           className="career-quiz-modal-close"
@@ -260,6 +280,7 @@ export function HhSkillQuizSimulator({
               <button
                 type="button"
                 className="career-quiet-button"
+                disabled={applyPending}
                 onClick={() => {
                   setResult(null);
                   setSelectedQuiz(null);
@@ -270,6 +291,7 @@ export function HhSkillQuizSimulator({
               <button
                 type="button"
                 className="career-quiet-button"
+                disabled={applyPending}
                 onClick={onClose}
               >
                 Закрыть
@@ -277,11 +299,17 @@ export function HhSkillQuizSimulator({
               <button
                 type="button"
                 className="career-primary-button"
-                onClick={handleAccept}
+                disabled={applyPending}
+                onClick={() => void handleAccept()}
               >
-                Принять результат
+                {applyPending ? 'Сохраняем…' : 'Принять результат'}
               </button>
             </div>
+            {acceptError ? (
+              <p className="career-expert-error" role="alert">
+                {acceptError}
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>

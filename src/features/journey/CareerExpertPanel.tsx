@@ -19,13 +19,14 @@ import {
   type CoachTurnStage,
   type CoachTurnSubject,
 } from '../coach/coachApi';
+import { applySkillQuizResult } from '../coach/careerCommandApi';
+import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
 import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
 import {
-  createSkillVerificationProposal,
   getSkillQuizById,
   type QuizEvaluationResult,
 } from '../../services/hhSkillQuizzes';
@@ -86,28 +87,42 @@ export function CareerExpertPanel({
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
+  const [skillQuizApplying, setSkillQuizApplying] = useState(false);
+  const [skillQuizApplyError, setSkillQuizApplyError] = useState<string>();
+  const [appliedSkillQuiz, setAppliedSkillQuiz] = useState<Awaited<ReturnType<typeof applySkillQuizResult>>>();
+  const skillQuizApplyInFlight = useRef(false);
+  const skillQuizApplyIdempotencyKey = useRef<{ quizId: string; key: string }>();
 
-  function handleAcceptQuizResult(res: QuizEvaluationResult) {
+  async function handleAcceptQuizResult(
+    res: QuizEvaluationResult,
+    answers: Record<string, number>,
+  ): Promise<boolean> {
+    if (skillQuizApplyInFlight.current) return false;
     const quiz = getSkillQuizById(res.quizId);
     const skillName = quiz?.title.split(':')[0] ?? res.quizId;
-    const proposal = createSkillVerificationProposal(skillName, res);
-    const turnKey = liveTurnIdempotencyKey ?? crypto.randomUUID();
-    setLiveTurnIdempotencyKey(turnKey);
-    setLiveResult((prev) => ({
-      message:
-        prev?.message ??
-        `Результат квиза: статус навыка ${skillName} — ${res.statusLabel} (${res.source}, дата: ${res.verifiedAt}). Подготовлено предложение правок для профиля с возможностью отката.`,
-      phase: 'discovery',
-      nextQuestion: null,
-      completeness: prev?.completeness ?? { known: [], unknown: [] },
-      safety: { needsHuman: false, reason: null },
-      careerTrack: prev?.careerTrack ?? null,
-      actionProposals: [
-        proposal as unknown as CoachResult['actionProposals'][number],
-        ...(prev?.actionProposals ?? []),
-      ],
-    }));
-    setSkillQuizOpen(false);
+    if (skillQuizApplyIdempotencyKey.current?.quizId !== res.quizId) {
+      skillQuizApplyIdempotencyKey.current = { quizId: res.quizId, key: crypto.randomUUID() };
+    }
+    skillQuizApplyInFlight.current = true;
+    setSkillQuizApplying(true);
+    setSkillQuizApplyError(undefined);
+    try {
+      const applied = await applySkillQuizResult({
+        quizId: res.quizId,
+        skillName,
+        answers,
+        idempotencyKey: skillQuizApplyIdempotencyKey.current.key,
+      });
+      skillQuizApplyIdempotencyKey.current = undefined;
+      setAppliedSkillQuiz(applied);
+      return true;
+    } catch (reason) {
+      setSkillQuizApplyError(skillQuizApplyMessage(reason));
+      return false;
+    } finally {
+      skillQuizApplyInFlight.current = false;
+      setSkillQuizApplying(false);
+    }
   }
   const pendingOperation = useRef<{
     user: AuthUser;
@@ -352,7 +367,10 @@ export function CareerExpertPanel({
             <button
               type="button"
               className="career-quiet-button"
-              onClick={() => setSkillQuizOpen(true)}
+              onClick={() => {
+                setSkillQuizApplyError(undefined);
+                setSkillQuizOpen(true);
+              }}
             >
               <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
             </button>
@@ -368,6 +386,8 @@ export function CareerExpertPanel({
             onCommandPrepared={onCommandPrepared}
           />
         ) : null}
+
+        {appliedSkillQuiz ? <SkillQuizApplyResultCard {...appliedSkillQuiz} /> : null}
 
         {loadingSnapshot ? (
           <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
@@ -445,8 +465,14 @@ export function CareerExpertPanel({
 
       {skillQuizOpen ? (
         <HhSkillQuizSimulator
-          onClose={() => setSkillQuizOpen(false)}
+          onClose={() => {
+            setSkillQuizOpen(false);
+            setSkillQuizApplyError(undefined);
+            if (!skillQuizApplyInFlight.current) skillQuizApplyIdempotencyKey.current = undefined;
+          }}
           onAcceptResult={handleAcceptQuizResult}
+          isApplying={skillQuizApplying}
+          acceptError={skillQuizApplyError}
         />
       ) : null}
     </aside>
@@ -528,4 +554,9 @@ function messageFrom(reason: unknown): string {
   if (reason instanceof CoachApiError) return reason.message;
   if (reason instanceof Error) return reason.message;
   return 'Не удалось открыть защищённый диалог. Попробуйте ещё раз.';
+}
+
+function skillQuizApplyMessage(reason: unknown): string {
+  if (reason instanceof CoachApiError && reason.code !== 'network_error') return reason.message;
+  return 'Не удалось сохранить результат. Проверьте соединение и попробуйте ещё раз.';
 }

@@ -9,6 +9,15 @@ test.describe('B376 skill quiz dialogue & verification', () => {
     test.skip(info.project.name !== 'desktop-1440', 'single runner drives viewports');
     await mkdir('output/playwright/B376', { recursive: true });
     await mockSignedInCabinet(page);
+    const applyRequests: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.url().endsWith('/api/v1/candidate/skill-quiz/apply') &&
+        request.method() === 'POST'
+      ) {
+        applyRequests.push(request.postData() ?? '');
+      }
+    });
 
     const viewports = [
       {
@@ -97,9 +106,46 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       // Take screenshot with result modal visible
       await page.screenshot({ path: vp.shot, fullPage: false });
 
-      // Accept result
+      // Accept applies the result through the server exactly once, even when the disabled
+      // control receives a second synthetic click while the request is pending.
+      const requestCountBeforeApply = applyRequests.length;
+      const applyResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/v1/candidate/skill-quiz/apply') &&
+          response.request().method() === 'POST',
+      );
       await modal.getByRole('button', { name: 'Принять результат' }).click();
+      const applyingButton = modal.getByRole('button', { name: 'Сохраняем…' });
+      await expect(applyingButton).toBeDisabled();
+      await applyingButton.evaluate((button) =>
+        button.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+      );
+      const appliedResponse = await applyResponsePromise;
+      const applied = await appliedResponse.json();
+      expect(appliedResponse.status()).toBe(201);
+      expect(applyRequests).toHaveLength(requestCountBeforeApply + 1);
+      expect(JSON.parse(applyRequests.at(-1) ?? '{}')).toMatchObject({
+        quizId: 'typescript',
+        skillName: 'TypeScript',
+      });
+      expect(applied.data.commandId).toBeTruthy();
       await expect(modal).not.toBeVisible();
+
+      const appliedCard = expertPanel.locator('.career-expert-skill-quiz-result');
+      await expect(appliedCard).toContainText('Навык обновлён: TypeScript');
+      await appliedCard.getByRole('button', { name: 'Откатить' }).click();
+      await expect(appliedCard).toContainText('Изменение отменено.');
+      await expect(appliedCard.getByRole('button', { name: 'Откатить' })).toHaveCount(0);
+
+      const repeatedRevert = await page.evaluate(async (commandId: string) => {
+        const response = await fetch(
+          `/api/v1/candidate/career-commands/${encodeURIComponent(commandId)}/revert`,
+          { method: 'POST' },
+        );
+        return { status: response.status, body: await response.json() };
+      }, applied.data.commandId);
+      expect(repeatedRevert.status).toBe(409);
+      expect(repeatedRevert.body.error.code).toBe('profile_revision_already_reverted');
 
       // Close consultant panel for next iteration
       await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
