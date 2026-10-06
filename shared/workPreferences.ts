@@ -27,6 +27,7 @@
  */
 
 import { pluralRu } from './pluralRu';
+import { z } from 'zod';
 
 export const WORK_PREFERENCE_KEY_VERSION = 'work-preferences-pairs-v1';
 
@@ -437,6 +438,48 @@ export const DEFAULT_DECISION_PROFILE: CandidateDecisionProfile = {
 };
 
 export const DECISION_PROFILE_STORAGE_KEY = 'openqareer.decision-profile.v1';
+export const DECISION_PROFILE_SYNCED_KEY = `${DECISION_PROFILE_STORAGE_KEY}:synced`;
+
+const decisionProfileFormatIds = DECISION_WORK_FORMATS.map((format) => format.id) as [
+  DecisionWorkFormatId,
+  ...DecisionWorkFormatId[],
+];
+const storedDecisionProfileSchema = z
+  .object({
+    citizenship: z.array(z.string().max(80)).max(10),
+    taxStatus: z.string().max(120).optional(),
+    languages: z
+      .array(
+        z.object({
+          language: z.string().max(60),
+          level: z.string().max(30),
+          certified: z.boolean().optional(),
+          context: z.string().max(200).optional(),
+        }),
+      )
+      .max(20),
+    workFormats: z.array(z.enum(decisionProfileFormatIds)).max(10),
+    salaryFloor: z.number().finite().min(0).max(1_000_000_000).optional(),
+    salaryCurrency: z.string().max(8).optional(),
+    cushionMonths: z.number().finite().min(0).max(240).optional(),
+    hasFamily: z.boolean().optional(),
+    updatedAt: z.string().optional(),
+  })
+  .strict();
+
+export function isCandidateDecisionProfile(value: unknown): value is CandidateDecisionProfile {
+  return storedDecisionProfileSchema.safeParse(value).success;
+}
+
+export function parseStoredDecisionProfile(raw: string | null): CandidateDecisionProfile | null {
+  if (raw === null) return null;
+  try {
+    const result = storedDecisionProfileSchema.safeParse(JSON.parse(raw));
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
+}
 
 export const CONFIDENTIAL_DECISION_KEYS = [
   'salaryFloor',
@@ -567,4 +610,3 @@ export function saveDecisionProfile(
     // Ignore storage write failure
   }
 }
-
