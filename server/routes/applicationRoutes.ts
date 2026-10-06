@@ -8,6 +8,7 @@ import { isoDateField } from './isoDateField';
 import { registerApplicationMaterialsRoutes } from './applicationMaterialsRoutes';
 import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes';
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
+import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { readCampaign } from './campaignContext';
@@ -358,5 +359,6 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationInterviewRoutes(app, deps);
   registerApplicationOfferRoutes(app, deps);
   registerStarPrepRoutes(app, deps);
+  registerReferralTrackRoutes(app, deps);
   registerVacancySkipRoutes(app, deps);
 }
