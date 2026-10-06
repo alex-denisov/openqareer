@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="ru">
+  <head><meta charset="utf-8"><title>Мои резюме</title></head>
+  <body>
+    <a data-qa="mainmenu_applicantProfile" href="/applicant/resumes">Мои резюме</a>
+    <article data-qa="resume" data-resume-id="resume-1">
+      <a data-qa="resume-card-link-resume-1" href="/resume/resume-1">Профиль</a>
+      <h2 data-qa="resume-title">Инженер</h2>
+      <span data-qa="resume-next-publish-time" id="next">Можно поднять сейчас</span>
+      <button data-qa="resume-update-button" id="update">Обновить дату</button>
+    </article>
+    <script>
+      document.querySelector('#update').addEventListener('click', () => {
+        document.querySelector('#next').textContent = 'Действует до завтра';
+      });
+    </script>
+  </body>
+</html>

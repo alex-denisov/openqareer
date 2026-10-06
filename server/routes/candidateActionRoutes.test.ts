@@ -50,6 +50,14 @@ describe('Candidate Action Routes (B261)', () => {
       consentStore: capabilityConsentStore,
       applicationTracker: candidateStore,
       runner: new SimulatedCandidatePlatformRunner(),
+      sessionResolver: {
+        resolve: async (requestedCandidateId, platform) => ({
+          candidateId: requestedCandidateId,
+          platform,
+          page: {} as never,
+        }),
+      },
+      pause: async () => undefined,
     });
 
     const app = await buildApp({
@@ -180,6 +188,7 @@ describe('Candidate Action Routes (B261)', () => {
 
     expect(res.statusCode).toBe(503);
     expect(res.json().error.code).toBe('runner_not_connected');
+    expect(res.json().error.message).toContain('не подключён');
     expect(candidateActionRepository.listReceipts(candidateId, 10)).toHaveLength(0);
   });
 
@@ -208,9 +217,8 @@ describe('Candidate Action Routes (B261)', () => {
         cookie: candidateToken,
       },
       payload: {
+        batchId: '00000000-0000-4000-8000-000000000011',
         confirmedByCandidate: true,
-        clientTimezone: 'Europe/Moscow',
-        nowIso: '2026-10-01T12:00:00Z',
         actions: [
           {
             platform: 'hh',
@@ -227,20 +235,23 @@ describe('Candidate Action Routes (B261)', () => {
     expect(body.data.status).toBe('completed');
     expect(body.data.receipts).toHaveLength(1);
     expect(body.data.receipts[0].status).toBe('delivered');
-    // Время и пояс задаёт сервер: клиентский nowIso не сдвигает дневной лимит.
-    expect(body.data.receipts[0].executedAt).not.toBe('2026-10-01T12:00:00Z');
+    expect(body.data.receipts[0]).not.toHaveProperty('targetUrl');
+    expect(body.data.receipts[0]).not.toHaveProperty('letterText');
+    // Время и пояс задаёт сервер; клиентское время не входит в контракт.
     expect(Math.abs(Date.parse(body.data.receipts[0].executedAt) - Date.now())).toBeLessThan(60_000);
 
     // Check receipts endpoint
     const receiptsRes = await app.inject({
       method: 'GET',
-      url: '/api/v1/candidate/actions/receipts',
+      url: '/api/v1/candidate/actions/receipts?batchId=00000000-0000-4000-8000-000000000011',
       headers: {
         cookie: candidateToken,
       },
     });
     expect(receiptsRes.statusCode).toBe(200);
     expect(receiptsRes.json().data.receipts).toHaveLength(1);
+    expect(receiptsRes.json().data.receipts[0]).not.toHaveProperty('letterText');
+    expect(receiptsRes.json().data.receipts[0]).not.toHaveProperty('targetUrl');
 
     // Check usage endpoint
     const usageRes = await app.inject({
@@ -255,6 +266,11 @@ describe('Candidate Action Routes (B261)', () => {
   });
 
   it('stops execution when kill switch is toggled', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const { app, candidateToken, candidateId, capabilityConsentStore } = await createTestEnv();
 
     capabilityConsentStore.recordConsent({
@@ -302,7 +318,7 @@ describe('Candidate Action Routes (B261)', () => {
     expect(batchRes.statusCode).toBe(200);
     const body = batchRes.json();
     expect(body.data.status).toBe('aborted');
-    expect(body.data.receipts[0].status).toBe('attempted');
+    expect(body.data.receipts[0].status).toBe('failed');
     expect(body.data.receipts[0].failureCode).toBe('kill_switch_active');
   });
 });

@@ -1,286 +1,404 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import {
   CandidateActionExecutor,
+  CandidateActionLimitError,
+  CandidateActionTargetError,
+  type CandidateActionSessionResolver,
   type CandidateApplicationTracker,
   CandidateConfirmationRequiredError,
   CandidateConsentRequiredError,
   CandidateRunnerNotConnectedError,
   SimulatedCandidatePlatformRunner,
-  type CandidateActionResult,
+  type RunnerOutcome,
 } from './candidateActionExecutor';
 import { SqliteCandidateActionRepository } from './sqliteCandidateActionRepository';
 import { SqliteCapabilityConsentStore } from '../auth/capabilityConsentStore';
+
+function sessionResolver(): CandidateActionSessionResolver {
+  return {
+    resolve: async (candidateId, platform) => ({ candidateId, platform, page: {} as never }),
+  };
+}
+
+function grantActionConsent(db: DatabaseSync, candidateId = 'cand-1'): SqliteCapabilityConsentStore {
+  const store = new SqliteCapabilityConsentStore(db);
+  store.recordConsent({
+    userId: candidateId,
+    capability: 'actions_on_behalf',
+    versionId: 'actions_on_behalf-v1.0',
+  });
+  return store;
+}
+
+const daytime = '2026-10-01T12:00:00Z';
 
 describe('CandidateActionExecutor', () => {
   it('refuses a batch and records nothing when no real platform runner is connected', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-    const executor = new CandidateActionExecutor({ repository: repo });
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      consentStore: grantActionConsent(db),
+    });
 
-    await expect(
-      executor.executeBatch({
-        candidateId: 'cand-1',
-        confirmedByCandidate: true,
-        actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
-      }),
-    ).rejects.toThrow(CandidateRunnerNotConnectedError);
+    await expect(executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
+    })).rejects.toThrow(CandidateRunnerNotConnectedError);
     expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
+  });
+
+  it('rejects non-allowlisted action targets before resolving or running a session', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const consentStore = grantActionConsent(db);
+    const resolve = vi.fn(sessionResolver().resolve);
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({
+      status: 'delivered',
+      confirmationUrl: 'https://hh.ru/applicant/responses/1',
+    }));
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: { run },
+      sessionResolver: { resolve },
+      consentStore,
+    });
+
+    await expect(executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://evil.example/vacancy/123' }],
+    })).rejects.toThrow(CandidateActionTargetError);
+    expect(resolve).not.toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+    expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
+  });
+
+  it('never records delivered without provider confirmation evidence', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({ status: 'delivered' }));
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: { run },
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
+    });
+
+    expect(result.receipts[0]?.status).toBe('failed');
+    expect(result.receipts[0]?.failureCode).toBe('provider_confirmation_missing');
+    expect(repo.getDailyUsage('cand-1', '2026-10-01').hhAppliesCount).toBe(1);
+  });
+
+  it('stops after a platform challenge and records no later attempt', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const attemptedTargets: string[] = [];
+    const runner = {
+      async run(action: { targetUrl: string }): Promise<RunnerOutcome> {
+        attemptedTargets.push(action.targetUrl);
+        return { status: 'failed', failureCode: 'challenge_required' };
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
+
+    const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' },
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/2' },
+      ],
+    });
+
+    expect(attemptedTargets).toEqual(['https://hh.ru/vacancy/1']);
+    expect(result.receipts.map((receipt) => receipt.status)).toEqual(['failed', 'failed']);
+    expect(result.receipts[0]?.failureCode).toBe('challenge_required');
+    expect(result.receipts[1]?.failureCode).toBe('batch_stopped');
   });
 
   it('rejects execution when confirmedByCandidate is false', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-    const executor = new CandidateActionExecutor({ repository: repo, runner: new SimulatedCandidatePlatformRunner() });
-
-    await expect(
-      executor.executeBatch({
-        candidateId: 'cand-1',
-        confirmedByCandidate: false,
-        actions: [
-          {
-            platform: 'hh',
-            actionKind: 'hh_apply',
-            targetUrl: 'https://hh.ru/vacancy/123',
-          },
-        ],
-      }),
-    ).rejects.toThrow(CandidateConfirmationRequiredError);
-  });
-
-  it('rejects execution when consentStore is present but actions_on_behalf consent is missing', async () => {
-    const db = new DatabaseSync(':memory:');
-    const repo = new SqliteCandidateActionRepository(db);
-    const consentStore = new SqliteCapabilityConsentStore(db);
     const executor = new CandidateActionExecutor({
       repository: repo,
       runner: new SimulatedCandidatePlatformRunner(),
-      consentStore,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
     });
 
-    await expect(
-      executor.executeBatch({
-        candidateId: 'cand-1',
-        confirmedByCandidate: true,
-        actions: [
-          {
-            platform: 'hh',
-            actionKind: 'hh_apply',
-            targetUrl: 'https://hh.ru/vacancy/123',
-          },
-        ],
-      }),
-    ).rejects.toThrow(CandidateConsentRequiredError);
+    await expect(executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: false,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
+    })).rejects.toThrow(CandidateConfirmationRequiredError);
   });
 
-  it('executes batch when confirmed and consent is granted', async () => {
+  it('rejects execution when actions_on_behalf consent is missing', async () => {
     const db = new DatabaseSync(':memory:');
-    const repo = new SqliteCandidateActionRepository(db);
-    const consentStore = new SqliteCapabilityConsentStore(db);
-    consentStore.recordConsent({
-      userId: 'cand-1',
-      capability: 'actions_on_behalf',
-      versionId: 'actions_on_behalf-v1.0',
+    const executor = new CandidateActionExecutor({
+      repository: new SqliteCandidateActionRepository(db),
+      runner: new SimulatedCandidatePlatformRunner(),
+      sessionResolver: sessionResolver(),
+      consentStore: new SqliteCapabilityConsentStore(db),
     });
 
+    await expect(executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
+    })).rejects.toThrow(CandidateConsentRequiredError);
+  });
+
+  it('executes a confirmed and consented batch and retains only status metadata', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
     const executor = new CandidateActionExecutor({
       repository: repo,
       runner: new SimulatedCandidatePlatformRunner(),
-      consentStore,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
     });
 
-    // 12:00 UTC = 15:00 Europe/Moscow (working daytime)
     const result = await executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: '2026-10-01T12:00:00Z',
-      actions: [
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          targetUrl: 'https://hh.ru/vacancy/123',
-          letterText: 'Сопроводительное письмо',
-        },
-      ],
+      nowIso: daytime,
+      actions: [{
+        platform: 'hh',
+        actionKind: 'hh_apply',
+        applicationId: 'app-1',
+        targetUrl: 'https://hh.ru/vacancy/123',
+        letterText: 'Сопроводительное письмо',
+      }],
     });
 
     expect(result.status).toBe('completed');
-    expect(result.receipts).toHaveLength(1);
-    expect(result.receipts[0].status).toBe('delivered');
-    expect(result.receipts[0].platform).toBe('hh');
-    expect(result.receipts[0].letterText).toBe('Сопроводительное письмо');
-
-    // Daily usage updated
-    const usage = repo.getDailyUsage('cand-1', '2026-10-01');
-    expect(usage.hhAppliesCount).toBe(1);
+    expect(result.receipts[0]?.status).toBe('delivered');
+    expect(result.receipts[0]).not.toHaveProperty('targetUrl');
+    expect(result.receipts[0]).not.toHaveProperty('letterText');
+    const stored = db.prepare('SELECT target_url, letter_cipher, confirmation_url FROM candidate_action_receipts').get();
+    expect(stored).toEqual({ target_url: '', letter_cipher: null, confirmation_url: null });
+    expect(repo.getDailyUsage('cand-1', '2026-10-01').hhAppliesCount).toBe(1);
   });
 
-  it('marks action as attempted when kill switch is active', async () => {
+  it('stops before a platform action when the kill switch is already active', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-    repo.setKillSwitch('platform:hh', true, 'Maintenance incident');
-
-    const executor = new CandidateActionExecutor({ repository: repo, runner: new SimulatedCandidatePlatformRunner() });
+    repo.setKillSwitch('platform:hh', true, 'maintenance');
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({
+      status: 'delivered',
+      providerStatus: 'hh_response_submitted',
+    }));
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: { run },
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+    });
 
     const result = await executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: '2026-10-01T12:00:00Z',
-      actions: [
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          targetUrl: 'https://hh.ru/vacancy/123',
-        },
-      ],
+      nowIso: daytime,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
     });
 
     expect(result.status).toBe('aborted');
-    expect(result.receipts[0].status).toBe('attempted');
-    expect(result.receipts[0].failureCode).toBe('kill_switch_active');
-
-    // Usage must not increment
-    const usage = repo.getDailyUsage('cand-1', '2026-10-01');
-    expect(usage.hhAppliesCount).toBe(0);
+    expect(result.receipts[0]?.status).toBe('failed');
+    expect(result.receipts[0]?.failureCode).toBe('kill_switch_active');
+    expect(run).not.toHaveBeenCalled();
+    expect(repo.getDailyUsage('cand-1', '2026-10-01').hhAppliesCount).toBe(0);
   });
 
-  it('marks action as attempted during quiet hours (23:00 - 08:00)', async () => {
+  it('checks the kill switch again after every action before continuing', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-    const executor = new CandidateActionExecutor({ repository: repo, runner: new SimulatedCandidatePlatformRunner() });
+    let calls = 0;
+    const runner = {
+      async run(): Promise<RunnerOutcome> {
+        calls += 1;
+        repo.setKillSwitch('candidate:cand-1', true, 'candidate requested stop');
+        return { status: 'delivered', providerStatus: 'hh_response_submitted' };
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      pause: async () => undefined,
+    });
 
-    // 01:00 UTC = 04:00 Europe/Moscow (quiet hours)
     const result = await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' },
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/2' },
+      ],
+    });
+
+    expect(calls).toBe(1);
+    expect(result.receipts.map((receipt) => receipt.status)).toEqual(['delivered', 'failed']);
+    expect(result.receipts[1]?.failureCode).toBe('kill_switch_active');
+  });
+
+  it('writes pending receipts before the runner starts so the panel can show progress', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    let release!: () => void;
+    const runner = {
+      async run(): Promise<RunnerOutcome> {
+        await new Promise<void>((resolve) => { release = resolve; });
+        return { status: 'delivered', providerStatus: 'hh_response_submitted' };
+      },
+    };
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+    });
+
+    const running = executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      batchId: '00000000-0000-4000-8000-000000000010',
+      nowIso: daytime,
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
+    });
+    await vi.waitFor(() => expect(repo.listReceipts('cand-1', 10, '00000000-0000-4000-8000-000000000010')[0]?.status).toBe('pending'));
+    release();
+    await expect(running).resolves.toMatchObject({ status: 'completed' });
+  });
+
+  it('uses a randomized 3 to 30 second pause between actions', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const waits: number[] = [];
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: new SimulatedCandidatePlatformRunner(),
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      random: () => 0.5,
+      pause: async (milliseconds) => { waits.push(milliseconds); },
+    });
+
+    await executor.executeBatch({
+      candidateId: 'cand-1',
+      confirmedByCandidate: true,
+      nowIso: daytime,
+      actions: [
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' },
+        { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/2' },
+      ],
+    });
+
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toBeGreaterThanOrEqual(3_000);
+    expect(waits[0]).toBeLessThanOrEqual(30_000);
+  });
+
+  it('blocks quiet hours and packages that exceed the remaining daily allowance before execution', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({ status: 'delivered', providerStatus: 'hh_response_submitted' }));
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: { run },
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+    });
+
+    await expect(executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
       nowIso: '2026-10-01T01:00:00Z',
       clientTimezone: 'Europe/Moscow',
-      actions: [
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          targetUrl: 'https://hh.ru/vacancy/123',
-        },
-      ],
-    });
-
-    expect(result.status).toBe('aborted');
-    expect(result.receipts[0].status).toBe('attempted');
-    expect(result.receipts[0].failureCode).toBe('quiet_hours');
-  });
-
-  it('handles partial failure and correctly aggregates batch status', async () => {
-    const db = new DatabaseSync(':memory:');
-    const repo = new SqliteCandidateActionRepository(db);
-
-    const runner = {
-      async executeAction(
-        _candidateId: string,
-        action: { targetUrl: string },
-      ): Promise<CandidateActionResult> {
-        if (action.targetUrl.includes('fail')) {
-          return { status: 'attempted', failureCode: 'captcha_required' };
-        }
-        return { status: 'delivered', confirmationUrl: 'https://hh.ru/applied' };
-      },
-    };
-
-    const executor = new CandidateActionExecutor({ repository: repo, runner });
-
-    const result = await executor.executeBatch({
+      actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/1' }],
+    })).rejects.toThrow(CandidateActionLimitError);
+    repo.recordActionUsage('cand-1', '2026-10-01', 'hh_apply', daytime);
+    await expect(executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: '2026-10-01T12:00:00Z',
-      actions: [
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          targetUrl: 'https://hh.ru/vacancy/success',
-        },
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          targetUrl: 'https://hh.ru/vacancy/fail',
-        },
-      ],
-    });
-
-    expect(result.status).toBe('partial_failure');
-    expect(result.receipts[0].status).toBe('delivered');
-    expect(result.receipts[1].status).toBe('attempted');
-    expect(result.receipts[1].failureCode).toBe('captcha_required');
+      nowIso: daytime,
+      actions: Array.from({ length: 15 }, (_, index) => ({
+        platform: 'hh' as const,
+        actionKind: 'hh_apply' as const,
+        targetUrl: `https://hh.ru/vacancy/${index + 1}`,
+      })),
+    })).rejects.toThrow(CandidateActionLimitError);
+    expect(run).not.toHaveBeenCalled();
   });
 
-  it('updates application to applied on delivered and never on attempted (B251 DoD)', async () => {
+  it('moves a card with the current expectedVersion only after a confirmed delivery', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
-
-    const patchedApps: Record<string, string> = { 'app-1': 'saved', 'app-2': 'saved' };
-    const recordedEvents: Array<{ appId: string; kind: string; note?: string }> = [];
-
-    const mockTracker: CandidateApplicationTracker = {
-      getApplication: (_candId: string, appId: string) => ({
-        version: 1,
-        stage: patchedApps[appId] || 'saved',
-      }),
-      patchApplication: (_candId: string, appId: string, patch: { stage?: string }) => {
-        if (patch.stage) patchedApps[appId] = patch.stage;
-        return { id: appId, stage: patchedApps[appId] };
+    const stages: Record<string, string> = { 'app-1': 'saved', 'app-2': 'saved' };
+    const patches: Array<{ applicationId: string; expectedVersion: number; stage?: string }> = [];
+    const tracker: CandidateApplicationTracker = {
+      getApplication: (_candidateId, applicationId) => ({ version: 7, stage: stages[applicationId] ?? 'saved' }),
+      patchApplication: (_candidateId, applicationId, patch) => {
+        patches.push({ applicationId, ...patch });
+        if (patch.stage) stages[applicationId] = patch.stage;
       },
-      recordApplicationEvent: (_candId: string, appId: string, evt: { kind: 'follow_up_sent' | 'thank_you_sent' | 'promise'; note?: string | null }) => {
-        recordedEvents.push({ appId, kind: evt.kind, note: evt.note ?? undefined });
-        return { id: appId };
-      },
+      recordApplicationEvent: () => undefined,
     };
-
     const runner = {
-      async executeAction(
-        _candidateId: string,
-        action: { targetUrl: string },
-      ): Promise<CandidateActionResult> {
-        if (action.targetUrl.includes('fail')) {
-          return { status: 'attempted', failureCode: 'session_expired' };
-        }
-        return { status: 'delivered', confirmationUrl: 'https://hh.ru/applied/123' };
+      async run(action: { applicationId?: string | null }): Promise<RunnerOutcome> {
+        return action.applicationId === 'app-1'
+          ? { status: 'delivered', providerStatus: 'hh_response_submitted' }
+          : { status: 'failed', failureCode: 'session_expired' };
       },
     };
-
     const executor = new CandidateActionExecutor({
       repository: repo,
       runner,
-      applicationTracker: mockTracker,
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+      applicationTracker: tracker,
+      pause: async () => undefined,
     });
 
     const result = await executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: '2026-10-01T12:00:00Z',
+      nowIso: daytime,
       actions: [
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          applicationId: 'app-1',
-          targetUrl: 'https://hh.ru/vacancy/success',
-        },
-        {
-          platform: 'hh',
-          actionKind: 'hh_apply',
-          applicationId: 'app-2',
-          targetUrl: 'https://hh.ru/vacancy/fail',
-        },
+        { platform: 'hh', actionKind: 'hh_apply', applicationId: 'app-1', targetUrl: 'https://hh.ru/vacancy/1' },
+        { platform: 'hh', actionKind: 'hh_apply', applicationId: 'app-2', targetUrl: 'https://hh.ru/vacancy/2' },
       ],
     });
 
     expect(result.status).toBe('partial_failure');
-    // app-1 was delivered -> stage moved to 'applied'
-    expect(patchedApps['app-1']).toBe('applied');
-    // app-2 was attempted (failed) -> stage stayed 'saved' (NEVER applied)
-    expect(patchedApps['app-2']).toBe('saved');
-    // app-2 received note event
-    expect(recordedEvents).toHaveLength(1);
-    expect(recordedEvents[0].appId).toBe('app-2');
-    expect(recordedEvents[0].kind).toBe('promise');
-    expect(recordedEvents[0].note).toContain('session_expired');
+    expect(stages['app-1']).toBe('applied');
+    expect(stages['app-2']).toBe('saved');
+    expect(patches).toEqual([{
+      applicationId: 'app-1',
+      expectedVersion: 7,
+      stage: 'applied',
+      occurredAt: '2026-10-01T12:00:00.000Z',
+    }]);
   });
 });
-

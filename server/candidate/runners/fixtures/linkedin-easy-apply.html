@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="utf-8"><title>Engineer | Company</title></head>
+  <body>
+    <header class="global-nav"><span>Candidate</span></header>
+    <main>
+      <h1>Engineer</h1>
+      <button id="open">Easy Apply</button>
+      <section role="dialog" aria-label="Apply to Engineer" id="dialog" hidden>
+        <label><input type="radio" name="resume" value="resume-1"> Candidate resume</label>
+        <label for="letter">Cover letter</label>
+        <textarea id="letter"></textarea>
+        <label for="phone">Phone</label>
+        <input id="phone" required value="+10000000000">
+        <button id="next">Next</button>
+        <button id="submit" hidden>Submit application</button>
+        <p id="confirmation" hidden>Application sent</p>
+      </section>
+    </main>
+    <script>
+      document.querySelector('#open').addEventListener('click', () => document.querySelector('#dialog').hidden = false);
+      document.querySelector('#next').addEventListener('click', () => {
+        document.querySelector('#next').hidden = true;
+        document.querySelector('#submit').hidden = false;
+      });
+      document.querySelector('#submit').addEventListener('click', () => {
+        window.syntheticSubmitted = true;
+        document.querySelector('#confirmation').hidden = false;
+      });
+    </script>
+  </body>
+</html>

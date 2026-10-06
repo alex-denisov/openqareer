@@ -113,7 +113,7 @@ async function rejectRegistrationIfLimited(
   request: FastifyRequest,
   reply: FastifyReply,
 ): Promise<boolean> {
-  if (deps.config.release === 'test') return false;
+  if (deps.config.release.startsWith('test')) return false;
   const fingerprint = parseClientFingerprint(request.headers, request.ip || '127.0.0.1');
   request.log.info(
     toRegistrationFingerprintLog(fingerprint, deps.config.dataEncryptionKey),

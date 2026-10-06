@@ -19,6 +19,7 @@ import { ArchivedResponsesSection } from './ArchivedResponsesSection';
 import { PipelineAnalyticsView } from './PipelineAnalyticsView';
 import { OfferComparisonMatrix } from './OfferComparisonMatrix';
 import { OfferEditModal } from './OfferEditModal';
+import { CandidateActionPanel } from './CandidateActionPanel';
 
 interface Column {
   readonly key: string;
@@ -80,7 +81,15 @@ export function ResponsesBoard({
   }
 
   if (state.applications.length === 0 && tab === 'board') {
-    return <EmptyState state={state} onOpenVacancies={onOpenVacancies} />;
+    return (
+      <>
+        <CandidateActionPanel
+          applications={state.applications}
+          onRefreshApplications={state.refreshApplications}
+        />
+        <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
+      </>
+    );
   }
 
   return (
@@ -412,6 +421,10 @@ function BoardTabContent({
 
   return (
     <>
+      <CandidateActionPanel
+        applications={state.applications}
+        onRefreshApplications={state.refreshApplications}
+      />
       {stageFilter === 'interview' && onClearFilter ? (
         <FilterNotice onClear={onClearFilter} />
       ) : null}
