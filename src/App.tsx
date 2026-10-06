@@ -38,9 +38,7 @@ import {
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
 
-const AdminConsole = lazy(() =>
-  loadAdminConsole(),
-);
+const AdminConsole = lazy(() => loadAdminConsole());
 const CareerWorkspaceShell = lazy(async () => {
   const module = await loadCareerWorkspaceShell();
   markAppReady();
@@ -193,8 +191,9 @@ export default function App() {
       if (!isCurrent()) return;
       let workspace: CandidateWorkspace | undefined;
       if (session?.candidateId) {
-        if (remote) {
-          const { resolveCandidateWorkspace } = await import('./features/workspace/workspaceHydration');
+        if (remote || result.status === 'ready') {
+          const { resolveCandidateWorkspace } =
+            await import('./features/workspace/workspaceHydration');
           workspace = resolveCandidateWorkspace({ local: result, remote });
         }
       } else if (result.status === 'ready') {
@@ -205,7 +204,7 @@ export default function App() {
         workspace,
         invalidStorage: result.status === 'invalid' && !workspace,
         onboardingStatusKnown: true,
-        onboardingComplete: Boolean(remote),
+        onboardingComplete: Boolean(remote || workspace),
       });
       if (isDesktop) {
         const resolvedPath = resolvedDesktopSessionPath(window.location.pathname, session);
@@ -440,8 +439,9 @@ export default function App() {
       .then(async (remote) => {
         if (!isCurrent()) return;
         let workspace: CandidateWorkspace | undefined;
-        if (remote) {
-          const { resolveCandidateWorkspace } = await import('./features/workspace/workspaceHydration');
+        if (remote || result.status === 'ready') {
+          const { resolveCandidateWorkspace } =
+            await import('./features/workspace/workspaceHydration');
           workspace = resolveCandidateWorkspace({ local: result, remote });
         }
         if (!isCurrent()) return;
@@ -450,7 +450,7 @@ export default function App() {
           workspace,
           invalidStorage: result.status === 'invalid' && !workspace,
           onboardingStatusKnown: true,
-          onboardingComplete: Boolean(remote),
+          onboardingComplete: Boolean(remote || workspace),
         });
       })
       .catch(() => {
@@ -499,9 +499,9 @@ export default function App() {
     state.session === undefined ||
     Boolean(
       state.session?.candidateId &&
-        (state.session.emailVerified === false ||
-          !state.onboardingStatusKnown ||
-          (state.onboardingComplete && !state.workspace)),
+      (state.session.emailVerified === false ||
+        !state.onboardingStatusKnown ||
+        (state.onboardingComplete && !state.workspace)),
     );
   const renderWorkspace = (pending = sessionPending) => (
     <Suspense fallback={<WorkspaceLoadingFallback />}>
@@ -573,21 +573,13 @@ export default function App() {
   }
 
   if (isAppPath(currentPath)) {
-    return (
-      <AppErrorBoundary>
-        {renderWorkspace()}
-      </AppErrorBoundary>
-    );
+    return <AppErrorBoundary>{renderWorkspace()}</AppErrorBoundary>;
   }
 
   // In desktop companion mode, landing page is never shown: show workspace if logged in or workspace with login gate
   if (isDesktop) {
     if (isResolvingSession || state.session?.candidateId) {
-      return (
-        <AppErrorBoundary>
-          {renderWorkspace()}
-        </AppErrorBoundary>
-      );
+      return <AppErrorBoundary>{renderWorkspace()}</AppErrorBoundary>;
     }
     return (
       <AppErrorBoundary>

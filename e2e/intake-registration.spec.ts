@@ -33,6 +33,12 @@ async function stubAuth(page: Page): Promise<void> {
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: registered ? REGISTERED_CANDIDATE : null } });
   });
+  // B426: the onboarding gate waits for the server workspace read; a failed read
+  // now shows a retry notice instead of the wizard, so a signed-in candidate
+  // without a workspace must receive the legitimate empty answer.
+  await page.route('**/api/v1/candidate/workspace', async (route) => {
+    await route.fulfill({ json: { data: null } });
+  });
   // Candidate and coach endpoints are deliberately left unstubbed: they fail
   // against the static preview exactly as the other specs let them, and the
   // cabinet's own empty state is what these assertions read. Answering them
@@ -264,9 +270,10 @@ test.describe('B229 desktop session recovery', () => {
         json: { data: { ...nextCandidate, sessionToken: 'desktop-next-session' } },
       });
     });
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+    // B426: navigating to /login no longer starts a second session read, so the
+    // old restore is the first one — hold it from the start of the page load.
     holdOldRead = true;
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     // Simulate navigation while a restore still carries the old bearer token.
     await page.evaluate(() => {
       history.pushState(null, '', '/login');
