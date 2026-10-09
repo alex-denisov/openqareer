@@ -135,9 +135,7 @@ test('free открывает окно тарифов и выбор Pro ведё
   await capture(page, 'free', info.project.name === 'desktop-1440' ? 1440 : 390);
   await dialog.getByRole('button', { name: 'Выбрать Pro', exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(
-    page.getByRole('heading', { name: 'Тарифы', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
 });
 
 for (const [state, code, message] of [

@@ -440,9 +440,7 @@ test.describe('B232 readability gate', () => {
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(
-      page.getByRole('heading', { name: 'Тарифы', exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
   });
 
   /**
@@ -617,9 +615,7 @@ test.describe('B232 readability gate', () => {
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(
-      page.getByRole('heading', { name: 'Тарифы', exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
     // Tariffs at 390
@@ -630,9 +626,7 @@ test.describe('B232 readability gate', () => {
       .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
       .first();
     await mobileTariffsTrigger.click();
-    await expect(
-      page.getByRole('heading', { name: 'Тарифы', exact: true }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-390.png' });
   });
 
