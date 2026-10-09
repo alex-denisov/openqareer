@@ -36,9 +36,9 @@ test.describe('B397: Search Momentum Widget', () => {
     expect(overflow).toBeLessThanOrEqual(0);
 
     const isMobile = (page.viewportSize()?.width ?? 1440) < 600;
-    const shotPath = isMobile
-      ? '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B397/search-momentum-390.png'
-      : '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B397/search-momentum-1440.png';
+    const shotPath = test
+      .info()
+      .outputPath(isMobile ? 'search-momentum-390.png' : 'search-momentum-1440.png');
     await page.screenshot({ path: shotPath, fullPage: true });
   });
 

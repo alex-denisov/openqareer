@@ -16,7 +16,7 @@ const SECTIONS = ['Сегодня', 'Роль', 'Вакансии'] as const;
 const DESKTOP_WIDTHS = [1176, 1280, 1440] as const;
 const MAX_DISTINCT_SIZES = 6;
 const MIN_FONT_PX = 13;
-const CAPTION_SLACK_PX = 4;
+const CAPTION_SLACK_PX = 2;
 
 interface ReadabilityFacts {
   readonly textNodes: number;
@@ -315,7 +315,7 @@ test.describe('B232 readability gate', () => {
           const caption = button.querySelector('span')?.getBoundingClientRect();
           const box = button.getBoundingClientRect();
           if (!caption) return null;
-          // 4 px of headroom on each side absorbs font-metric drift between
+          // 2 px of headroom on each side absorbs font-metric drift between
           // macOS and the Linux CI runner.
           const slack = Math.min(
             box.right - caption.right,

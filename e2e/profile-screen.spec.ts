@@ -549,6 +549,8 @@ test.describe('B441 Profile screen from mockup 2', () => {
       'true',
     );
     if (testInfo.project.name === 'mobile-390') {
+      // Высота шапки зависит от шрифтов (macOS / Linux CI): сначала прокрутка к вкладкам.
+      await tabs.evaluate((element) => element.scrollIntoView({ block: 'center' }));
       const tabsBox = await tabs.boundingBox();
       const bottomNavBox = await page.locator('.career-mobile-nav').boundingBox();
       expect(tabsBox).not.toBeNull();
