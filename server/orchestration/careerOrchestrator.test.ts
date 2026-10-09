@@ -8,6 +8,29 @@ import {
 } from './careerOrchestrator';
 
 describe('CareerOrchestrator', () => {
+  it('uses one consultant role for the internal closed-conversation summary', async () => {
+    const calls: CareerRole[] = [];
+    const orchestrator = new CareerOrchestrator({
+      roleAgent: {
+        async run(input) {
+          calls.push(input.role);
+          return roleResult(input.role);
+        },
+      },
+    });
+
+    await orchestrator.createTurn({
+      candidateReference: 'candidate-test-001',
+      dataClass: 'synthetic',
+      locale: 'ru-RU',
+      phase: 'evidence',
+      internalPurpose: 'consultant-summary',
+      messages: [{ id: 'message-1', role: 'user', content: 'Я внедрил очередь платежей.' }],
+    }, '11111111-1111-4111-8111-111111111112');
+
+    expect(calls).toEqual(['career_consultant']);
+  });
+
   it('routes a material market turn through expert, strategist and consultant', async () => {
     const calls: CareerRole[] = [];
     const agent: CareerRoleAgent = {

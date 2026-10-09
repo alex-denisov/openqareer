@@ -104,6 +104,7 @@ export interface CandidateSnapshot {
 export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
+  consultantConversations: ConsultantConversationExport[];
   /** Выбранная роль с историей решений (B180, срез 2). */
   careerStrategy: CareerStrategy | null;
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
@@ -218,6 +219,51 @@ export interface TurnRequest {
   isService?: boolean;
 }
 
+export interface ConsultantSummaryTask {
+  readonly conversationId: string;
+  readonly stage: CoachTurnStage;
+  readonly messageCount: number;
+}
+
+export interface ConsultantConversationMessage extends CoachMessage {
+  readonly createdAt: string;
+}
+
+export interface ConsultantConversationSummary {
+  readonly id: string;
+  readonly stage: CoachTurnStage;
+  readonly openedAt: string;
+  readonly lastMessageAt: string;
+  readonly closedAt: string | null;
+  readonly messageCount: number;
+  readonly firstPhrase: string;
+  readonly summary: string | null;
+}
+
+export interface ConsultantConversationDetail extends ConsultantConversationSummary {
+  readonly messages: ConsultantConversationMessage[];
+}
+
+export interface ConsultantConversationExport extends ConsultantConversationDetail {
+  readonly summaries: Array<{
+    readonly version: number;
+    readonly messageCount: number;
+    readonly summary: string;
+    readonly createdAt: string;
+  }>;
+}
+
+export interface ConsultantConversationPage {
+  readonly items: ConsultantConversationSummary[];
+  readonly nextCursor: string | null;
+}
+
+export interface ConsultantSummaryInputRequest {
+  readonly conversationId: string;
+  readonly stage: CoachTurnStage;
+  readonly messageCount: number;
+}
+
 export interface ConsultantRejection {
   proposalKey: string;
   reason: string | null;
@@ -227,6 +273,7 @@ export interface ConsultantRejection {
 export type StartedTurn =
   | {
       state: 'ready';
+      readonly closedConversations?: ConsultantSummaryTask[];
       input: {
         candidateReference: string;
         dataClass: CandidateIdentity['dataClass'];
@@ -360,6 +407,28 @@ export interface CandidateStore {
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
   getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[];
+  listConsultantConversations(
+    candidateId: string,
+    options?: { readonly cursor?: string; readonly limit?: number },
+  ): ConsultantConversationPage;
+  getConsultantConversation(
+    candidateId: string,
+    conversationId: string,
+  ): ConsultantConversationDetail | null;
+  deleteConsultantConversation(candidateId: string, conversationId: string): boolean;
+  exportConsultantConversations(candidateId: string): ConsultantConversationExport[];
+  listPendingConsultantSummaries(candidateId: string): ConsultantSummaryTask[];
+  getConsultantSummaryInput(
+    candidateId: string,
+    task: ConsultantSummaryTask,
+  ): CoachTurnInput | null;
+  saveConsultantSummary(
+    candidateId: string,
+    task: ConsultantSummaryTask,
+    result: CoachProviderResult,
+  ): boolean;
+  claimConsultantSummary(candidateId: string, task: ConsultantSummaryTask): boolean;
+  releaseConsultantSummaryClaim(candidateId: string, task: ConsultantSummaryTask): void;
   rejectConsultantProposal(
     candidateId: string,
     proposalKey: string,

@@ -17,4 +17,13 @@ describe('sealed candidate text', () => {
       sealedText.open(sealed, 'candidate:b:message:1'),
     ).toThrow();
   });
+
+  it('derives deterministic candidate-scoped search tokens without storing source words', () => {
+    const sealedText = new SealedText(Buffer.alloc(32, 9));
+    const first = sealedText.indexToken('candidate:a', 'kafka');
+    expect(first).toMatch(/^[a-f0-9]{64}$/u);
+    expect(first).toBe(sealedText.indexToken('candidate:a', 'kafka'));
+    expect(first).not.toBe(sealedText.indexToken('candidate:b', 'kafka'));
+    expect(first).not.toContain('kafka');
+  });
 });

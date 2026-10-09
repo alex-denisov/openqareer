@@ -163,6 +163,41 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
         },
       });
     }
+    if (path.endsWith('/candidate/consultant-history')) {
+      return route.fulfill({ json: { data: [], meta: { nextCursor: null } } });
+    }
+    const historyConversation = path.match(
+      /\/candidate\/consultant-history\/([^/]+)(?:\/messages)?$/u,
+    );
+    if (historyConversation) {
+      if (route.request().method() === 'DELETE') return route.fulfill({ status: 204 });
+      if (route.request().method() === 'POST') {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: 'conversation_read_only',
+              message: 'Продолжить беседу из истории нельзя.',
+            },
+          },
+        });
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            id: decodeURIComponent(historyConversation[1]!),
+            stage: 'profile',
+            openedAt: '2026-10-01T10:00:00.000Z',
+            lastMessageAt: '2026-10-01T10:05:00.000Z',
+            closedAt: '2026-10-01T10:06:00.000Z',
+            messageCount: 2,
+            firstPhrase: 'Расскажите о вашем опыте.',
+            summary: null,
+            messages: [],
+          },
+        },
+      });
+    }
     if (path.endsWith('/account')) {
       return route.fulfill({ json: { data: account } });
     }

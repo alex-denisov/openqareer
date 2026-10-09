@@ -64,7 +64,7 @@ export class OpenAICoachProvider implements CoachProvider {
         {
           model: this.model,
           store: false,
-          instructions: careerInstructionsForRole(input.activeRole),
+          instructions: careerInstructionsForRole(input.activeRole, input.internalPurpose),
           input: serializeCoachInput(input),
           reasoning: {
             effort: COACH_REASONING_EFFORT,

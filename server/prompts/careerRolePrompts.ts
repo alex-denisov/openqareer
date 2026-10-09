@@ -58,6 +58,20 @@ const EXECUTION_BOUNDARY = `
   сервером после policy, consent, idempotency и receipt gates.
 `.trim();
 
-export function careerInstructionsForRole(role: CareerRole = 'career_consultant'): string {
+const CONSULTANT_SUMMARY_PROMPT = `
+ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ
+- Сожми только факты, решения и открытые вопросы, которые прямо есть в сообщениях.
+- Не отвечай кандидату, не задавай вопрос, не предлагай действие и не создавай факт памяти.
+- Верни три коротких раздела с заголовками: «Что выяснили», «Что решили», «Что осталось открытым».
+- Если раздел пуст, напиши «не указано». Не добавляй выводы, которых нет в беседе.
+`.trim();
+
+export function careerInstructionsForRole(
+  role: CareerRole = 'career_consultant',
+  internalPurpose?: 'consultant-summary',
+): string {
+  if (internalPurpose === 'consultant-summary') {
+    return [CAREER_SUPER_PROMPT, CONSULTANT_SUMMARY_PROMPT, EXECUTION_BOUNDARY].join('\n\n');
+  }
   return [CAREER_SUPER_PROMPT, CAREER_ROLE_PROMPTS[role], EXECUTION_BOUNDARY].join('\n\n');
 }

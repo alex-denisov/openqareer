@@ -131,7 +131,7 @@ export class NativeCoachProvider implements CoachProvider {
       {
         model: this.options.model,
         max_tokens: 2_400,
-        system: careerInstructionsForRole(input.activeRole),
+        system: careerInstructionsForRole(input.activeRole, input.internalPurpose),
         messages: [{ role: 'user', content: serializeCoachInput(input) }],
       },
     );
@@ -169,7 +169,7 @@ export class NativeCoachProvider implements CoachProvider {
       `${trimSlash(this.options.baseUrl)}/models/${encodeURIComponent(this.options.model)}:generateContent`,
       this.geminiHeaders(idempotencyKey),
       {
-        systemInstruction: { parts: [{ text: careerInstructionsForRole(input.activeRole) }] },
+        systemInstruction: { parts: [{ text: careerInstructionsForRole(input.activeRole, input.internalPurpose) }] },
         contents: [
           { role: 'user', parts: [{ text: serializeCoachInput(input) }] },
         ],
@@ -227,7 +227,7 @@ export class NativeCoachProvider implements CoachProvider {
       {
         model: this.options.model,
         messages: [
-          { role: 'system', content: careerInstructionsForRole(input.activeRole) },
+          { role: 'system', content: careerInstructionsForRole(input.activeRole, input.internalPurpose) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
         max_tokens: 2_400,
@@ -276,7 +276,7 @@ export class NativeCoachProvider implements CoachProvider {
           maxTokens: '2400',
         },
         messages: [
-          { role: 'system', text: careerInstructionsForRole(input.activeRole) },
+          { role: 'system', text: careerInstructionsForRole(input.activeRole, input.internalPurpose) },
           { role: 'user', text: serializeCoachInput(input) },
         ],
       },

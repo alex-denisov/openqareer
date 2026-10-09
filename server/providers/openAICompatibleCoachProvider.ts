@@ -77,7 +77,7 @@ export class OpenAICompatibleCoachProvider implements CoachProvider {
       const request: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming = {
         model: this.model,
         messages: [
-          { role: 'system', content: careerInstructionsForRole(input.activeRole) },
+          { role: 'system', content: careerInstructionsForRole(input.activeRole, input.internalPurpose) },
           { role: 'user', content: serializeCoachInput(input) },
         ],
         max_completion_tokens: 2_400,

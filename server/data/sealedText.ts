@@ -1,4 +1,5 @@
 import {
+  createHmac,
   createCipheriv,
   createDecipheriv,
   randomBytes,
@@ -31,6 +32,15 @@ export class SealedText {
       cipher.getAuthTag().toString('base64url'),
       encrypted.toString('base64url'),
     ].join('.');
+  }
+
+  indexToken(scope: string, token: string): string {
+    return createHmac('sha256', this.key)
+      .update('openqareer-consultant-fts:v1\0', 'utf8')
+      .update(scope, 'utf8')
+      .update('\0', 'utf8')
+      .update(token, 'utf8')
+      .digest('hex');
   }
 
   open(sealed: string, associatedData: string): string {

@@ -6,6 +6,7 @@ describe('career role prompts', () => {
     const consultant = careerInstructionsForRole('career_consultant');
     const strategist = careerInstructionsForRole('career_strategist');
     const expert = careerInstructionsForRole('career_expert');
+    const summary = careerInstructionsForRole('career_consultant', 'consultant-summary');
 
     expect(consultant).toContain('один главный вопрос');
     expect(strategist).toContain('сравни 1–3 маршрута');
@@ -17,5 +18,7 @@ describe('career role prompts', () => {
       expect(prompt).toContain('не выполняй внешнее действие');
     }
     expect(new Set([consultant, strategist, expert])).toHaveLength(3);
+    expect(summary).toContain('ЗАДАЧА: ВЫЖИМКА ЗАКРЫТОЙ БЕСЕДЫ');
+    expect(summary).toContain('Что осталось открытым');
   });
 });

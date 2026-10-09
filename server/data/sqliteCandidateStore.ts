@@ -82,9 +82,13 @@ import type {
   CareerCommandRecord,
   VerifiedCareerApproval,
 } from '../orchestration/careerCommandPlanner';
-import type { CoachProviderResult } from '../providers/coachProvider';
 import { applyMigrations } from './store/applyMigrations';
 import { ConversationController } from './store/conversationController';
+import { ConsultantHistoryStore } from './store/consultantHistoryStore';
+import {
+  createSqliteCandidateStoreConsultantMethods,
+  type ConsultantStoreMethods,
+} from './sqliteCandidateStoreConsultantMethods';
 import { SourceConnectionController } from './store/sourceConnectionController';
 import { commitNewResumeImport as commitResumeImportWithDedupe } from './sqliteCandidateStoreResumeImport';
 import {
@@ -120,8 +124,10 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly careerStrategyRepository: SqliteCareerStrategyRepository;
   private readonly workPreferenceRepository: SqliteWorkPreferenceRepository;
   private readonly candidateMediaRepository: SqliteCandidateMediaRepository;
-  private readonly conversations: ConversationController;
-  private readonly sourceConnections: SourceConnectionController;
+  private conversations!: ConversationController;
+  private consultantHistory!: ConsultantHistoryStore;
+  private consultantMethods!: ConsultantStoreMethods;
+  private sourceConnections!: SourceConnectionController;
   private readonly applicationTracker: ApplicationTrackerController;
 
   constructor(options: SqliteStoreOptions) {
@@ -154,24 +160,29 @@ export class SqliteCandidateStore implements CandidateStore {
       this.sealedText,
       (operation) => this.transaction(operation),
     ));
-    this.wireApplicationTrackerMethods();
-    this.wireDocumentMethods();
-    this.conversations = new ConversationController({
-      database: this.database,
-      sealedText: this.sealedText,
-      documentRepository: this.documentRepository,
-    });
-    this.sourceConnections = new SourceConnectionController({
-      database: this.database,
-      sealedText: this.sealedText,
-    });
-    this.configureDatabase();
+    this.initializeConversationStores();
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
     this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
+  }
+
+  private initializeConversationStores(): void {
+    this.wireApplicationTrackerMethods();
+    this.wireDocumentMethods();
+    this.conversations = new ConversationController({ database: this.database, sealedText: this.sealedText, documentRepository: this.documentRepository });
+    this.sourceConnections = new SourceConnectionController({ database: this.database, sealedText: this.sealedText });
+    this.configureDatabase();
+    this.consultantHistory = new ConsultantHistoryStore(this.database, this.sealedText);
+    this.consultantMethods = createSqliteCandidateStoreConsultantMethods({
+      history: this.consultantHistory,
+      conversations: this.conversations,
+      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+      transaction: (operation) => this.transaction(operation),
+    });
+    Object.assign(this, this.consultantMethods);
   }
 
   private configureDatabase(): void {
@@ -260,12 +271,13 @@ export class SqliteCandidateStore implements CandidateStore {
     idempotencyKey: string,
     request: TurnRequest,
   ): StartedTurn {
-    const started = this.conversations.startTurn(
-      this.requireCandidate(candidateId),
+    const candidate = this.requireCandidate(candidateId);
+    const started = this.transaction(() => this.consultantMethods.decorateTurn(
+      this.conversations.startTurn(candidate, candidateId, idempotencyKey, request),
       candidateId,
       idempotencyKey,
       request,
-    );
+    ));
     if (started.state !== 'ready' || request.phase !== 'resume') return started;
     return {
       ...started,
@@ -276,14 +288,7 @@ export class SqliteCandidateStore implements CandidateStore {
     };
   }
 
-  completeTurn(
-    candidateId: string,
-    idempotencyKey: string,
-    output: CoachProviderResult,
-  ): void {
-    this.requireCandidate(candidateId);
-    this.conversations.completeTurn(candidateId, idempotencyKey, output);
-  }
+  declare completeTurn: CandidateStore['completeTurn'];
 
   failTurn(
     candidateId: string,
@@ -316,6 +321,16 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.conversations.getMessages(candidateId, stage);
   }
+
+  declare listConsultantConversations: CandidateStore['listConsultantConversations'];
+  declare getConsultantConversation: CandidateStore['getConsultantConversation'];
+  declare deleteConsultantConversation: CandidateStore['deleteConsultantConversation'];
+  declare exportConsultantConversations: CandidateStore['exportConsultantConversations'];
+  declare listPendingConsultantSummaries: CandidateStore['listPendingConsultantSummaries'];
+  declare getConsultantSummaryInput: CandidateStore['getConsultantSummaryInput'];
+  declare saveConsultantSummary: CandidateStore['saveConsultantSummary'];
+  declare claimConsultantSummary: CandidateStore['claimConsultantSummary'];
+  declare releaseConsultantSummaryClaim: CandidateStore['releaseConsultantSummaryClaim'];
 
   rejectConsultantProposal(candidateId: string, proposalKey: string, reason?: string): void {
     this.requireCandidate(candidateId);
@@ -694,6 +709,7 @@ export class SqliteCandidateStore implements CandidateStore {
       // Решение о собственной роли — данные кандидата, а не служебная запись.
       careerStrategy: this.careerStrategyRepository.get(candidateId),
       workPreferences: this.workPreferenceRepository.get(candidateId),
+      consultantConversations: this.exportConsultantConversations(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);
         return stored ? [stored] : [];
@@ -702,9 +718,10 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   deleteCandidate(candidateId: string): boolean {
-    const result = this.database
-      .prepare('DELETE FROM candidates WHERE id = ?')
-      .run(candidateId);
+    const result = this.transaction(() => {
+      this.consultantHistory.deleteAllIndexes(candidateId);
+      return this.database.prepare('DELETE FROM candidates WHERE id = ?').run(candidateId);
+    });
     if (result.changes === 1) {
       this.database.exec('PRAGMA wal_checkpoint(TRUNCATE)');
     }
