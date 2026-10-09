@@ -2,13 +2,16 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { createHmac } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { AuthService, type AuthServiceOptions } from './authService';
 import {
   EMAIL_VERIFICATION_CUTOVER_AT,
+  emailVerificationCodeHash,
   type EmailVerificationDelivery,
 } from './emailVerification';
+import { deriveKey } from './derivedHmacKey';
 import {
   AuthEmailVerificationExpiredError,
   AuthEmailChangeRequiresVerificationError,
@@ -73,6 +76,19 @@ afterEach(() => {
 });
 
 describe('B398 email verification', () => {
+  it('uses the purpose-derived key for verification code hashes', () => {
+    const secret = Buffer.alloc(32, 17);
+    const message = 'openqareer-email-verification-v1\u0000candidate-b433\u0000123456';
+    const expected = createHmac('sha256', deriveKey(secret, 'email-verification-code'))
+      .update(message)
+      .digest('hex');
+
+    expect(emailVerificationCodeHash('candidate-b433', '123456', secret)).toBe(expected);
+    expect(emailVerificationCodeHash('candidate-b433', '123456', secret)).not.toBe(
+      createHmac('sha256', secret).update(message).digest('hex'),
+    );
+  });
+
   it('limits sends independently by email, IP and account', () => {
     const byIp = new EmailVerificationRateLimiter();
     for (let index = 0; index < 5; index += 1) {
@@ -259,7 +275,7 @@ describe('B398 email verification', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(new Date(EMAIL_VERIFICATION_CUTOVER_AT).getTime() - 1));
     const deliveries: EmailVerificationDelivery[] = [];
-    const { auth, candidates } = createVerificationServices({
+    const { auth, candidates, databasePath } = createVerificationServices({
       onEmailVerification: async (delivery) => {
         deliveries.push(delivery);
       },
@@ -286,5 +302,15 @@ describe('B398 email verification', () => {
     expect(row.count).toBe(0);
     disabledDatabase.close();
     expect(deliveries).toHaveLength(0);
+
+    vi.setSystemTime(new Date(EMAIL_VERIFICATION_CUTOVER_AT));
+    const afterCutover = await register(auth, candidates, 'after-cutover@example.com');
+    expect(afterCutover.principal.emailVerified).toBe(false);
+    expect(deliveries).toHaveLength(1);
+    const pending = new DatabaseSync(databasePath, { readOnly: true });
+    expect(
+      pending.prepare('SELECT COUNT(*) AS count FROM email_verifications WHERE verified_at IS NULL').get(),
+    ).toMatchObject({ count: 1 });
+    pending.close();
   });
 });

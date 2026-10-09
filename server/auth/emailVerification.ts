@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomInt } from 'node:crypto';
+import { deriveKey } from './derivedHmacKey';
 
 export { EMAIL_VERIFICATION_CUTOVER_AT } from '../data/emailVerificationSchema';
 export const EMAIL_VERIFICATION_TTL_MS = 15 * 60 * 1_000;
@@ -15,6 +16,12 @@ export interface EmailVerificationDelivery {
   readonly expiresAt: string;
 }
 
+export interface EmailVerificationDeliveryFailure {
+  readonly errorCategory: 'provider-response' | 'provider-unavailable' | 'delivery-failed';
+  readonly responseCode: number | null;
+  readonly recipientHash: string;
+}
+
 export function newEmailVerificationCode(fixedCode?: string): string {
   return fixedCode ?? String(randomInt(0, 1_000_000)).padStart(6, '0');
 }
@@ -24,9 +31,38 @@ export function emailVerificationCodeHash(
   code: string,
   secret: Buffer,
 ): string {
-  return createHmac('sha256', secret)
+  return createHmac('sha256', deriveKey(secret, 'email-verification-code'))
     .update(`openqareer-email-verification-v1\u0000${candidateId}\u0000${code}`)
     .digest('hex');
+}
+
+export function emailVerificationDeliveryFailure(
+  email: string,
+  error: unknown,
+  secret: Buffer,
+): EmailVerificationDeliveryFailure {
+  const responseCode = responseCodeFrom(error);
+  return {
+    errorCategory:
+      responseCode !== null
+        ? 'provider-response'
+        : error instanceof TypeError
+          ? 'provider-unavailable'
+          : 'delivery-failed',
+    responseCode,
+    recipientHash: createHmac('sha256', deriveKey(secret, 'email-delivery-recipient'))
+      .update(email.trim().toLowerCase())
+      .digest('hex'),
+  };
+}
+
+function responseCodeFrom(error: unknown): number | null {
+  if (typeof error !== 'object' || error === null) return null;
+  const record = error as { status?: unknown; statusCode?: unknown };
+  const code = typeof record.statusCode === 'number' ? record.statusCode : record.status;
+  return typeof code === 'number' && Number.isInteger(code) && code >= 100 && code <= 599
+    ? code
+    : null;
 }
 
 export function isVerificationTestAddress(

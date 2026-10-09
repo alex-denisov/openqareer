@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { createApp, login, resources } from './authRoutesTestSupport';
+import { defaultRegistrationLimiter } from './registrationAntiAbuse';
 
 describe('cookie auth routes', () => {
   it('creates an account profile and exposes the current session without leaking its token', async () => {
@@ -538,6 +539,33 @@ describe('registration without a login field (B139)', () => {
       payload: { legalConsent: { versionId: LEGAL_PACK_VERSION_ID }, ...payload },
     });
   }
+
+  it('returns a retryable 429 with Retry-After when registration is limited with email verification off', async () => {
+    defaultRegistrationLimiter.reset();
+    const app = await createApp(undefined, undefined, undefined, {}, { release: 'staging' });
+    try {
+      for (let index = 0; index < 3; index += 1) {
+        const response = await register(app, {
+          displayName: 'Кандидат',
+          email: `limited-${index}@example.com`,
+          password: 'candidate-password-for-tests',
+        });
+        expect(response.statusCode).toBe(201);
+      }
+
+      const limited = await register(app, {
+        displayName: 'Кандидат',
+        email: 'limited-fourth@example.com',
+        password: 'candidate-password-for-tests',
+      });
+
+      expect(limited.statusCode).toBe(429);
+      expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+      expect(limited.json().error).toMatchObject({ code: 'rate_limit_exceeded', retryable: true });
+    } finally {
+      defaultRegistrationLimiter.reset();
+    }
+  });
 
   it('creates the account the owner tried to create and could not', async () => {
     const app = await createApp();
