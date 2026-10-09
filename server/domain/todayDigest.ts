@@ -1,5 +1,5 @@
 import type { ApplicationView } from './applicationDerivedFields';
-import { isClosedApplicationStage } from '../../shared/applicationStage';
+import { deliveryState, isClosedApplicationStage } from '../../shared/applicationStage';
 import { pluralRu } from '../../shared/pluralRu';
 import type { VacancyLevelMatch, VacancyRoleMatch } from '../../shared/vacancyMatchOrder';
 
@@ -91,18 +91,38 @@ export interface TodaySinceLastVisit {
   readonly nearestInterview: TodayNextInterview | null;
 }
 
+export type MomentumMetricValue = number | 'unknown';
+
+export interface MomentumMetrics {
+  readonly applied: MomentumMetricValue;
+  readonly views: MomentumMetricValue;
+  readonly screenings: MomentumMetricValue;
+  readonly interviews: MomentumMetricValue;
+}
+
+export interface SearchMomentum {
+  readonly calculatedAt: string;
+  readonly windows: {
+    readonly '7d': MomentumMetrics;
+    readonly '30d': MomentumMetrics;
+  };
+  readonly burnoutNotice: boolean;
+}
+
 export interface TodaySnapshot {
   readonly digest: TodayDigest;
   readonly queue: TodayQueueItem[];
   readonly followUps: TodayFollowUp[];
   readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
+  readonly momentum: SearchMomentum;
 }
 
 export interface BuildTodaySnapshotInput {
   readonly applications: readonly ApplicationView[];
   /** `undefined` — холодный кэш подбора: подбор синхронно не считаем (B230, architecture.md §97). */
   readonly newVacancies: readonly TodayNewVacancy[] | undefined;
+  readonly now?: string;
   readonly since: string | null;
   readonly closedVacanciesSinceVisit: number;
   /** Первая целевая роль кампании — подпись «новых вакансий», честно `null` без роли. */
@@ -211,16 +231,98 @@ export function countApplicationsWaitingOver7Days(
   }).length;
 }
 
+function calculateWindowMetrics(
+  applications: readonly ApplicationView[],
+  days: number,
+  nowMs: number,
+): MomentumMetrics {
+  const windowStartMs = nowMs - days * 86_400_000;
+  let appliedCount = 0;
+  let interviewsCount = 0;
+
+  for (const app of applications) {
+    const eventTimeStr = app.stageChangedAt || app.createdAt;
+    const eventTimeMs = Date.parse(eventTimeStr);
+    const inWindow =
+      !Number.isNaN(eventTimeMs) && eventTimeMs >= windowStartMs && eventTimeMs <= nowMs;
+
+    if (inWindow && deliveryState(app.stage, app.deliveryReceipt ?? null) === 'delivered') {
+      appliedCount += 1;
+    }
+
+    if (!isClosedApplicationStage(app.stage)) {
+      if (app.nearestInterview?.scheduledAt) {
+        const intMs = Date.parse(app.nearestInterview.scheduledAt);
+        if (!Number.isNaN(intMs) && intMs >= windowStartMs && intMs <= nowMs) {
+          interviewsCount += 1;
+        }
+      } else if (app.stage === 'interview' && inWindow) {
+        interviewsCount += 1;
+      }
+    }
+  }
+
+  return {
+    applied: appliedCount,
+    views: 'unknown',
+    screenings: 'unknown',
+    interviews: interviewsCount,
+  };
+}
+
+/**
+ * Импульс поиска (B397): честные метрики за окна 7 и 30 дней и мягкая защита от выгорания.
+ */
+export function computeSearchMomentum(
+  candidateIdOrApplications: string | readonly ApplicationView[],
+  nowOrCandidateId?: string,
+  maybeApplications?: readonly ApplicationView[],
+): SearchMomentum {
+  let applications: readonly ApplicationView[] = [];
+  let now = new Date().toISOString();
+
+  if (Array.isArray(candidateIdOrApplications)) {
+    applications = candidateIdOrApplications;
+    if (typeof nowOrCandidateId === 'string') now = nowOrCandidateId;
+  } else if (typeof candidateIdOrApplications === 'string') {
+    if (typeof nowOrCandidateId === 'string' && !Array.isArray(maybeApplications)) {
+      now = nowOrCandidateId;
+    }
+    if (Array.isArray(maybeApplications)) {
+      applications = maybeApplications;
+    }
+  }
+
+  const nowMs = Date.parse(now);
+  const metrics7d = calculateWindowMetrics(applications, 7, nowMs);
+  const metrics30d = calculateWindowMetrics(applications, 30, nowMs);
+
+  const burnoutNotice =
+    typeof metrics30d.applied === 'number' &&
+    metrics30d.applied >= 30 &&
+    metrics30d.interviews === 0;
+
+  return {
+    calculatedAt: now,
+    windows: {
+      '7d': metrics7d,
+      '30d': metrics30d,
+    },
+    burnoutNotice,
+  };
+}
+
 /**
  * Сборщик «Сегодня» (B251, S4/S4b, architecture.md §57): чистая функция, весь
  * ввод-вывод — на вызывающей стороне маршрута.
  */
 export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapshot {
+  const now = input.now ?? new Date().toISOString();
   const waitingApplications = input.applications.filter(
     (application) => application.whoseTurn === 'candidate',
   );
   const upcomingInterviews = upcomingInterviewsOf(input.applications);
-  const applicationsWaitingOver7Days = countApplicationsWaitingOver7Days(input.applications);
+  const applicationsWaitingOver7Days = countApplicationsWaitingOver7Days(input.applications, now);
   const nearestInterview = nextInterviewOf(upcomingInterviews[0]);
   return {
     digest: {
@@ -250,6 +352,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       nearestInterview,
     },
     vacanciesPending: input.newVacancies === undefined,
+    momentum: computeSearchMomentum(input.applications, now),
   };
 }
 

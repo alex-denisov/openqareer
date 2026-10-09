@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTodaySnapshot, countApplicationsWaitingOver7Days, type TodayNewVacancy } from './todayDigest';
+import { buildTodaySnapshot, computeSearchMomentum, countApplicationsWaitingOver7Days, type TodayNewVacancy } from './todayDigest';
 import type { ApplicationView } from './applicationDerivedFields';
 
 function application(overrides: Partial<ApplicationView> = {}): ApplicationView {
@@ -373,6 +373,135 @@ describe('today queue from the shortlist (B266)', () => {
     expect(queueItem).toBeDefined();
     expect(queueItem?.kind).toBe('follow_up');
     expect(queueItem?.company).toBe('Инновации');
+  });
+});
+
+describe('computeSearchMomentum (B397)', () => {
+  const NOW = '2026-10-09T12:00:00.000Z';
+
+  it('calculates 7-day and 30-day windows inclusively on receipt fixtures (Criterion 1)', () => {
+    // 7 days window: [2026-10-02T12:00:00.000Z, 2026-10-09T12:00:00.000Z]
+    // 30 days window: [2026-09-09T12:00:00.000Z, 2026-10-09T12:00:00.000Z]
+    const appDelivered3d = application({
+      id: 'app-3d',
+      stage: 'applied',
+      stageChangedAt: '2026-10-06T12:00:00.000Z',
+      deliveryReceipt: { kind: 'auto_reply', value: 'confirmed' },
+    });
+    const appDeliveredExact7d = application({
+      id: 'app-7d',
+      stage: 'applied',
+      stageChangedAt: '2026-10-02T12:00:00.000Z', // exactly 7 days ago -> inclusive
+      deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/1' },
+    });
+    const appDelivered15d = application({
+      id: 'app-15d',
+      stage: 'applied',
+      stageChangedAt: '2026-09-24T12:00:00.000Z',
+      deliveryReceipt: { kind: 'screenshot', value: 's3://proof' },
+    });
+    const appDeliveredExact30d = application({
+      id: 'app-30d',
+      stage: 'applied',
+      stageChangedAt: '2026-09-09T12:00:00.000Z', // exactly 30 days ago -> inclusive
+      deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/2' },
+    });
+    const appDelivered31d = application({
+      id: 'app-31d',
+      stage: 'applied',
+      stageChangedAt: '2026-09-08T11:59:59.000Z', // 31 days ago -> outside 30d
+      deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/3' },
+    });
+    // Not delivered (attempted without receipt, or failed)
+    const appAttempted = application({
+      id: 'app-attempted',
+      stage: 'applied',
+      stageChangedAt: '2026-10-07T12:00:00.000Z',
+      deliveryReceipt: null,
+    });
+    const appFailed = application({
+      id: 'app-failed',
+      stage: 'applied',
+      stageChangedAt: '2026-10-07T12:00:00.000Z',
+      deliveryReceipt: { kind: 'failure_note', value: 'rejected' },
+    });
+
+    const momentum = computeSearchMomentum(
+      [
+        appDelivered3d,
+        appDeliveredExact7d,
+        appDelivered15d,
+        appDeliveredExact30d,
+        appDelivered31d,
+        appAttempted,
+        appFailed,
+      ],
+      NOW,
+    );
+
+    // In 7d window: appDelivered3d, appDeliveredExact7d -> 2
+    expect(momentum.windows['7d'].applied).toBe(2);
+    // In 30d window: appDelivered3d, appDeliveredExact7d, appDelivered15d, appDeliveredExact30d -> 4
+    expect(momentum.windows['30d'].applied).toBe(4);
+  });
+
+  it('returns unknown for metrics without platform data source (Criterion 2)', () => {
+    const momentum = computeSearchMomentum([], NOW);
+    expect(momentum.windows['7d'].views).toBe('unknown');
+    expect(momentum.windows['7d'].screenings).toBe('unknown');
+    expect(momentum.windows['30d'].views).toBe('unknown');
+    expect(momentum.windows['30d'].screenings).toBe('unknown');
+  });
+
+  it('triggers burnout warning at >= 30 applications and 0 interviews for 30d, but not at 29 (Criterion 4)', () => {
+    const apps29: ApplicationView[] = Array.from({ length: 29 }, (_, i) =>
+      application({
+        id: `app-burnout-${i}`,
+        stage: 'applied',
+        stageChangedAt: '2026-10-01T12:00:00.000Z',
+        deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
+      }),
+    );
+
+    const momentum29 = computeSearchMomentum(apps29, NOW);
+    expect(momentum29.windows['30d'].applied).toBe(29);
+    expect(momentum29.windows['30d'].interviews).toBe(0);
+    expect(momentum29.burnoutNotice).toBe(false);
+
+    const apps30: ApplicationView[] = [
+      ...apps29,
+      application({
+        id: 'app-burnout-30',
+        stage: 'applied',
+        stageChangedAt: '2026-10-01T12:00:00.000Z',
+        deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
+      }),
+    ];
+
+    const momentum30 = computeSearchMomentum(apps30, NOW);
+    expect(momentum30.windows['30d'].applied).toBe(30);
+    expect(momentum30.windows['30d'].interviews).toBe(0);
+    expect(momentum30.burnoutNotice).toBe(true);
+
+    // If there is at least 1 interview, burnout notice must be false even with >= 30 applications
+    const apps30WithInterview: ApplicationView[] = [
+      ...apps30,
+      application({
+        id: 'app-interview',
+        stage: 'interview',
+        stageChangedAt: '2026-10-05T12:00:00.000Z',
+        nearestInterview: {
+          id: 'int-1',
+          scheduledAt: '2026-10-08T10:00:00.000Z',
+          prepStatus: 'none',
+          round: 1,
+        },
+      }),
+    ];
+
+    const momentum30WithInterview = computeSearchMomentum(apps30WithInterview, NOW);
+    expect(momentum30WithInterview.windows['30d'].interviews).toBe(1);
+    expect(momentum30WithInterview.burnoutNotice).toBe(false);
   });
 });
 
