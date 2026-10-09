@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { LinkedinDraftCard } from './LinkedinDraftCard';
+import { SearchMomentum } from './SearchMomentum';
 import { ExecutiveOnboardingCard } from '../onboarding/ExecutiveOnboardingCard';
 import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
 import { pluralRu, pluralWordRu } from '../../../shared/pluralRu';
@@ -157,6 +158,7 @@ function TodayContent({
       </p>
       {vacanciesPending ? <TodayPendingNotice /> : null}
       <TodayDigestRow digest={digest} />
+      <SearchMomentum momentum={snapshot.momentum} onNavigate={onNavigate} />
       <div className="career-today-panels">
         <TodayQueue
           queue={queue}

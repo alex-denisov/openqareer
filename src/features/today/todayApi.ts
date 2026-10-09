@@ -93,12 +93,31 @@ export interface TodaySinceLastVisit {
   readonly nearestInterview?: TodayNextInterview | null;
 }
 
+export type MomentumMetricValue = number | 'unknown';
+
+export interface MomentumMetrics {
+  readonly applied: MomentumMetricValue;
+  readonly views: MomentumMetricValue;
+  readonly screenings: MomentumMetricValue;
+  readonly interviews: MomentumMetricValue;
+}
+
+export interface SearchMomentum {
+  readonly calculatedAt: string;
+  readonly windows: {
+    readonly '7d': MomentumMetrics;
+    readonly '30d': MomentumMetrics;
+  };
+  readonly burnoutNotice: boolean;
+}
+
 export interface TodaySnapshot {
   readonly digest: TodayDigest;
   readonly queue: readonly TodayQueueItem[];
   readonly followUps: readonly TodayFollowUp[];
   readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
+  readonly momentum?: SearchMomentum;
 }
 
 export async function recordCandidateVisit(signal?: AbortSignal): Promise<{ since: string | null }> {

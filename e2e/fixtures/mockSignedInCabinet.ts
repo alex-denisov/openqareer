@@ -24,7 +24,22 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       return route.fulfill({ json: { data: workspace } });
     }
     if (path.endsWith('/candidate/today')) {
-      return route.fulfill({ json: { data: todaySnapshot } });
+      const existingMomentum =
+        'momentum' in todaySnapshot
+          ? (todaySnapshot as { momentum?: unknown }).momentum
+          : undefined;
+      const snapshotWithMomentum = {
+        ...todaySnapshot,
+        momentum: existingMomentum ?? {
+          calculatedAt: '2026-10-09T12:00:00.000Z',
+          windows: {
+            '7d': { applied: 4, views: 'unknown', screenings: 'unknown', interviews: 1 },
+            '30d': { applied: 14, views: 'unknown', screenings: 'unknown', interviews: 2 },
+          },
+          burnoutNotice: false,
+        },
+      };
+      return route.fulfill({ json: { data: snapshotWithMomentum } });
     }
     // The readability fixture has no tracked applications yet; an empty
     // list is the honest state, not an unknown route.
