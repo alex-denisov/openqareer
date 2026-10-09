@@ -2,11 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ArrowRight,
   CaretRight,
-  DownloadSimple,
   Key,
   ShieldCheck,
-  SignOut,
-  Trash,
   UserPlus,
   X,
 } from '@phosphor-icons/react';
@@ -26,7 +23,10 @@ import {
   type AccountSnapshot,
   type AuthUser,
 } from '../coach/coachApi';
-import { AccountConnectionsManager } from '../connections/AccountConnections';
+import {
+  AuthenticatedAccount,
+  type AccountSection,
+} from '../account/AuthenticatedAccount';
 import { CareerTooltip } from './CareerTooltip';
 import {
   MIN_PASSWORD_LENGTH,
@@ -36,13 +36,11 @@ import {
   sanitizeEmail,
   sanitizeName,
 } from '../../../shared/accountValidation';
-import { initialsFor } from './accountIdentity';
 import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { appVersionLine } from './appVersion';
 import { buildFreshnessLine } from './buildFreshness';
 import { clearOutreachStore } from '../outreach/outreachTrackingStore';
 import { useBuildFreshness } from './useBuildFreshness';
-import { TimezoneSelect } from './TimezoneSelect';
 import { registerEscapeLayer } from './escapeLayers';
 import { triggerFileDownload } from '../resume/resumeExport';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
@@ -63,24 +61,7 @@ interface CareerAccountPanelProps {
 }
 
 type AuthMode = 'choose' | 'login' | 'register' | 'forgot' | 'reset';
-export type AccountSection = 'connections' | 'security' | 'data';
-
-/**
- * The drawer holds account settings only. It used to also carry shortcuts into
- * «Resume Studio» and «Карьерный радар» — sections the left rail already owns —
- * which made it look like a second, competing navigation (B148 §10).
- */
-const ACCOUNT_SECTION_LABELS: Record<AccountSection, string> = {
-  connections: 'Подключения',
-  security: 'Безопасность',
-  data: 'Мои данные',
-};
-
-const ACCOUNT_SECTION_LEADS: Record<AccountSection, string> = {
-  connections: 'Площадки, из которых OpenQareer читает ваш профиль и резюме.',
-  security: 'Пароль и активные входы на других устройствах.',
-  data: 'Выгрузка всего, что мы храним, и удаление аккаунта.',
-};
+export { type AccountSection } from '../account/AuthenticatedAccount';
 
 export function CareerAccountPanel({
   initialUser,
@@ -655,159 +636,7 @@ function BuildFreshnessNote() {
   );
 }
 
-function AuthenticatedAccount({
-  user,
-  account,
-  section,
-  busy,
-  onSectionChange,
-  onSavePassword,
-  onSaveTimezone,
-  onCloseOtherSessions,
-  onDownloadExport,
-  onDeleteAccount,
-  onSignOut,
-  onDataChanged,
-}: {
-  user: AuthUser;
-  account?: AccountSnapshot;
-  section: AccountSection;
-  busy: boolean;
-  onSectionChange: (section: AccountSection) => void;
-  onSavePassword: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
-  onSaveTimezone: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
-  onCloseOtherSessions: () => Promise<void>;
-  onDownloadExport: () => Promise<void>;
-  onDeleteAccount: (event: React.FormEvent<HTMLFormElement>) => Promise<void>;
-  onSignOut: () => Promise<void>;
-  onDataChanged?: () => void;
-}) {
-  return (
-    <>
-      <div className="career-account-current">
-        {/* Тот же аватар, что в рельсе: человек в интерфейсе один. */}
-        <span className="career-account-avatar career-rail-avatar" aria-hidden="true">
-          {initialsFor(account?.displayName ?? user.displayName ?? user.username)}
-        </span>
-        <div>
-          <span>Вы вошли как</span>
-          <strong>{account?.displayName ?? user.displayName ?? user.username}</strong>
-          <small>{account?.email ?? user.email ?? user.username}</small>
-        </div>
-      </div>
 
-      <nav className="career-account-tabs" aria-label="Настройки аккаунта">
-        {(['connections', 'security', 'data'] as const).map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={section === item ? 'is-active' : ''}
-            aria-current={section === item ? 'page' : undefined}
-            onClick={() => onSectionChange(item)}
-          >
-            {ACCOUNT_SECTION_LABELS[item]}
-          </button>
-        ))}
-      </nav>
-      <p className="career-account-section-lead">{ACCOUNT_SECTION_LEADS[section]}</p>
-
-      {section === 'connections' ? (
-        <AccountConnectionsManager onDataChanged={onDataChanged} />
-      ) : null}
-
-      {section === 'security' ? (
-        <div className="career-account-section-stack">
-          <form className="career-account-form" onSubmit={onSaveTimezone}>
-            <h2>Часовой пояс</h2>
-            <TimezoneSelect
-              key={account?.profile?.timezone ?? 'device'}
-              name="timezone"
-              defaultValue={account?.profile?.timezone || undefined}
-              disabled={busy}
-            />
-            <button className="career-primary-button" disabled={busy}>
-              Сохранить часовой пояс
-            </button>
-          </form>
-          <form className="career-account-form" onSubmit={onSavePassword}>
-            <h2>Сменить пароль</h2>
-            <label>
-              <span>Текущий пароль</span>
-              <input
-                name="currentPassword"
-                type="password"
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <label>
-              <span>Новый пароль</span>
-              <input
-                name="newPassword"
-                type="password"
-                autoComplete="new-password"
-                minLength={MIN_PASSWORD_LENGTH}
-                maxLength={256}
-                required
-              />
-            </label>
-            <button className="career-primary-button" disabled={busy}>
-              Изменить пароль
-            </button>
-          </form>
-          <div className="career-account-session-card">
-            <strong>Устройства: {account?.sessions.length ?? 1}</strong>
-            <p>Завершите входы на других устройствах, если не узнаёте активность.</p>
-            <button type="button" disabled={busy} onClick={() => void onCloseOtherSessions()}>
-              Завершить остальные сессии
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      {section === 'data' ? (
-        <div className="career-account-section-stack">
-          <section className="career-account-data-card">
-            <DownloadSimple size={21} />
-            <div>
-              <strong>Экспорт данных</strong>
-              <p>Скачайте профиль, память, документы и рыночные направления в JSON.</p>
-            </div>
-            <button type="button" disabled={busy} onClick={() => void onDownloadExport()}>
-              Скачать
-            </button>
-          </section>
-          <form className="career-account-delete-form" onSubmit={onDeleteAccount}>
-            <Trash size={21} />
-            <div>
-              <strong>Удалить аккаунт и данные</strong>
-              <p>
-                Это удалит профиль, историю диалога, документы и сохранённые поиски без возможности
-                восстановления.
-              </p>
-            </div>
-            <label>
-              <span>Введите УДАЛИТЬ</span>
-              <input name="confirmation" autoComplete="off" />
-            </label>
-            <button className="career-danger-button" disabled={busy}>
-              Удалить навсегда
-            </button>
-          </form>
-        </div>
-      ) : null}
-
-      <button
-        className="career-account-signout"
-        type="button"
-        disabled={busy}
-        onClick={() => void onSignOut()}
-      >
-        <SignOut size={18} /> Выйти
-      </button>
-    </>
-  );
-}
 
 function resetTokenFromLocation() {
   if (typeof window === 'undefined' || window.location.pathname !== '/auth/reset-password') {
