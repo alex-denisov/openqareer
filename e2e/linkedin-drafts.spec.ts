@@ -136,7 +136,7 @@ test('free открывает окно тарифов и выбор Pro ведё
   await dialog.getByRole('button', { name: 'Выбрать Pro', exact: true }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
+    page.getByRole('heading', { name: 'Тарифы', exact: true }),
   ).toBeVisible();
 });
 

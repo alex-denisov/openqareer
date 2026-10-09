@@ -1172,7 +1172,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // under the home profile card (that fold lived on the now-dead
   // `CareerHome`).
   await page.locator('button:has-text("Спросить консультанта"):visible').click();
-  const expert = page.getByRole('dialog', { name: /^Консультант · / });
+  const expert = page.getByRole('complementary', { name: /^Консультант · / });
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {
@@ -1280,17 +1280,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   await page.locator('button[aria-label="Профиль"]:visible').click();
   await page.locator('.career-profile-screen-view').first().waitFor();
-  await page
-    .getByRole('group', { name: 'Что показать' })
-    .getByRole('button', { name: 'Документ и форматы' })
-    .click();
-  // The tab switch renders the document menu's own (still closed) toggle
-  // button with the same accessible name — it is the one outside the tab
-  // group, and the only «Документ и форматы» button left once the tab bar
-  // shows «Документ и форматы» as already active.
-  await page.getByRole('button', { name: 'Документ и форматы', exact: true }).last().click();
-  await page.getByRole('group', { name: 'Формат позиционирования' }).waitFor();
-  await page.getByRole('group', { name: 'Экспорт резюме' }).waitFor();
+  // B441 — вкладки профиля: «Резюме», «Навыки», «Цифровой след»; блок
+  // «Документ и форматы» ушёл из экрана вместе с меню документа.
+  const profileTabs = page.getByRole('tablist', { name: 'Профиль' });
+  await profileTabs.getByRole('tab', { name: 'Резюме' }).waitFor();
+  await profileTabs.getByRole('tab', { name: 'Цифровой след' }).waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
   await page.locator('button[aria-label="Сегодня"]:visible').click();
@@ -1316,7 +1310,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
     await page.locator('.career-account-tariffs-button').click();
   }
-  await page.getByRole('heading', { name: 'Сколько делать за вас' }).waitFor();
+  await page.getByRole('heading', { name: 'Тарифы', exact: true }).waitFor();
   assert(
     (await page.locator('button[aria-label="Сегодня"]:visible').count()) === 1,
     `${viewport.name}: «Сегодня» disappeared after navigation`,

@@ -441,7 +441,7 @@ test.describe('B232 readability gate', () => {
       .first();
     await tariffsTrigger.click();
     await expect(
-      page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
+      page.getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
   });
 
@@ -618,7 +618,7 @@ test.describe('B232 readability gate', () => {
       .first();
     await tariffsTrigger.click();
     await expect(
-      page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
+      page.getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
@@ -631,7 +631,7 @@ test.describe('B232 readability gate', () => {
       .first();
     await mobileTariffsTrigger.click();
     await expect(
-      page.getByRole('heading', { name: 'Сколько делать за вас', exact: true }),
+      page.getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-390.png' });
   });
