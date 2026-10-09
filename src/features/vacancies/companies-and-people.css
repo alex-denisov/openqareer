@@ -1,0 +1,482 @@
+.companies-and-people {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.companies-people-tabs {
+  display: flex;
+  gap: var(--career-space-4);
+  overflow-x: auto;
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+
+.companies-people-tab {
+  flex: none;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-2);
+  border: 0;
+  border-block-end: calc(var(--career-border-width) * 2) solid transparent;
+  color: var(--career-text-soft);
+  background: transparent;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.companies-people-tab[aria-selected='true'] {
+  border-block-end-color: var(--career-accent);
+  color: var(--career-text);
+}
+
+.companies-people-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.companies-people-search {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+}
+
+.companies-people-search input {
+  min-inline-size: 0;
+  inline-size: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-select,
+.companies-people-filter-button {
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-filter-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+}
+
+.companies-people-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.companies-people-filter-chip {
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  color: var(--career-text-soft);
+  background: transparent;
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-filter-chip[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-text);
+  background: var(--career-accent-soft);
+}
+
+.companies-people-filter-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.companies-people-count {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.companies-people-list,
+.companies-people-detail {
+  min-inline-size: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.companies-people-list {
+  max-block-size: 72dvh;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.companies-people-company-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--career-space-2);
+  align-items: center;
+  padding: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+
+.companies-people-company-row:last-child {
+  border-block-end: 0;
+}
+
+.companies-people-company-row.is-selected {
+  background: var(--career-accent-soft);
+}
+
+.companies-people-company-select {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+}
+
+.companies-people-company-select strong,
+.companies-people-detail h2 {
+  overflow-wrap: anywhere;
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  font-weight: 650;
+}
+
+.companies-people-company-select span {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-company-metrics {
+  display: grid;
+  justify-items: end;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  text-align: end;
+}
+
+.companies-people-want-toggle {
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: transparent;
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-action {
+  min-block-size: var(--career-target-min);
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.companies-people-action:hover {
+  background: var(--career-bg-elevated);
+}
+
+.companies-people-action.is-primary {
+  border-color: var(--career-accent);
+  color: var(--career-accent-ink);
+  background: var(--career-accent);
+}
+
+.companies-people-action.is-primary:hover {
+  color: var(--career-text);
+  background: var(--career-accent-soft);
+}
+
+.companies-people-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.companies-people-want-toggle[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.companies-people-detail {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-4);
+  padding: var(--career-space-4);
+}
+
+.companies-people-detail-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.companies-people-detail-heading p,
+.companies-people-detail p {
+  margin: var(--career-space-1) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-detail h2 {
+  margin: 0;
+  font-size: var(--career-text-xl);
+}
+
+.companies-people-section {
+  display: grid;
+  gap: var(--career-space-3);
+  padding-block-start: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.companies-people-section h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-vacancy-list,
+.companies-people-recruiter-list {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.companies-people-vacancy,
+.companies-people-recruiter {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  text-decoration: none;
+}
+
+.companies-people-vacancy strong,
+.companies-people-recruiter strong {
+  overflow-wrap: anywhere;
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-vacancy span,
+.companies-people-recruiter span,
+.companies-people-recruiter small {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-data-note,
+.companies-people-empty,
+.companies-people-error,
+.companies-people-status,
+.companies-people-next-step {
+  display: flex;
+  gap: var(--career-space-2);
+  align-items: start;
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: var(--career-bg-elevated);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-error {
+  border-color: var(--career-danger);
+  color: var(--career-text);
+}
+
+.companies-people-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  align-items: center;
+}
+
+.companies-people-actions > button {
+  min-block-size: var(--career-target-min);
+}
+
+.companies-people-next-step-editor {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.companies-people-next-step-editor label {
+  display: grid;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.companies-people-next-step-editor input {
+  min-block-size: var(--career-target-min);
+  inline-size: 100%;
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-bg);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-load-more {
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.companies-people-mobile-back {
+  display: none;
+}
+
+.companies-people-filter-sheet {
+  inline-size: 100%;
+  max-inline-size: none;
+  max-block-size: 80dvh;
+  margin: auto 0 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+}
+
+.companies-people-filter-sheet::backdrop {
+  background: color-mix(in oklab, var(--career-bg) 76%, transparent);
+}
+
+.companies-people-filter-sheet form {
+  display: grid;
+  gap: var(--career-space-4);
+}
+
+.companies-people-filter-sheet fieldset {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.companies-people-filter-sheet legend {
+  margin-block-end: var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  font-weight: 650;
+}
+
+.companies-people-filter-option {
+  display: flex;
+  gap: var(--career-space-2);
+  align-items: center;
+  min-block-size: var(--career-target-min);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-filter-option input {
+  accent-color: var(--career-accent);
+}
+
+.companies-people-message {
+  inline-size: 100%;
+}
+
+@media (max-width: 760px) {
+  .companies-people-toolbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .companies-people-select,
+  .companies-people-select-wrap,
+  .companies-people-filter-chips {
+    display: none;
+  }
+
+  .companies-people-filter-button {
+    display: inline-flex;
+  }
+
+  .companies-people-layout {
+    display: block;
+  }
+
+  .companies-people-layout.is-detail > div:first-child {
+    display: none;
+  }
+
+  .companies-people-layout:not(.is-detail) .companies-people-detail {
+    display: none;
+  }
+
+  .companies-people-list {
+    max-block-size: none;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+  }
+
+  .companies-people-company-row {
+    margin-block-end: var(--career-space-2);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface);
+  }
+
+  .companies-people-detail {
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .companies-people-mobile-back {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-2);
+    min-block-size: var(--career-target-min);
+    padding-inline: var(--career-space-3);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-lg);
+    color: var(--career-text);
+    background: var(--career-surface);
+  }
+}

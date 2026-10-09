@@ -143,6 +143,21 @@ describe('SqliteRecruiterContactsRepository', () => {
     expect(repo.getContactsByVacancyId('candidate-b', 'vac-101')).toHaveLength(1);
   });
 
+  it('lists candidate-scoped contacts and jobs for the company screen', () => {
+    const { repo } = createRepo();
+    repo.saveContacts('candidate-a', 'vac-101', [sampleContact1]);
+    repo.saveContacts('candidate-b', 'vac-101', [{ ...sampleContact2, id: 'rc-b' }]);
+    repo.enqueueJob('candidate-a', 'vac-202', '2026-09-22T10:00:00.000Z');
+    repo.enqueueJob('candidate-b', 'vac-303', '2026-09-22T10:00:00.000Z');
+
+    expect(repo.listContactsByCandidateId('candidate-a')).toMatchObject([
+      { id: 'rc-1', vacancyId: 'vac-101', fullName: 'Елена Смирнова' },
+    ]);
+    expect(repo.listJobsByCandidateId('candidate-a').map((job) => job.vacancyId)).toEqual([
+      'vac-202',
+    ]);
+  });
+
   it('cascades contacts when the shared candidates row is deleted', () => {
     const db = new DatabaseSync(':memory:');
     db.exec(`CREATE TABLE candidates (id TEXT PRIMARY KEY); INSERT INTO candidates VALUES ('candidate-a');`);

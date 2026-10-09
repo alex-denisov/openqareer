@@ -504,6 +504,7 @@ function CabinetSection({
       onScheduleInterview={onScheduleInterview}
       onOpenResponses={() => onNavigate('responses')}
       onOpenArchive={() => onNavigate('responses', { openArchive: true })}
+      onOpenConnections={onOpenConnections}
       onOpenProfile={onOpenProfileRequirement}
       onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
@@ -514,7 +515,10 @@ function CabinetSection({
       })}
       premisesLoading={data.loading}
       onSavePremises={onSavePremises}
-      focusRoleFilter={view === 'career' || Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')}
+      focusRoleFilter={
+        view === 'career' ||
+        Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')
+      }
     />
   );
 }

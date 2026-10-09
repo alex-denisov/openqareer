@@ -47,10 +47,18 @@ import { registerCapabilityConsentRoutes } from './routes/capabilityConsentRoute
 import { SqliteCandidateActionRepository } from './candidate/sqliteCandidateActionRepository';
 import { CandidateActionExecutor } from './candidate/candidateActionExecutor';
 import { registerCandidateActionRoutes } from './routes/candidateActionRoutes';
-import { registerCandidateDraftRoutes, type CandidateDraftRouteDeps } from './routes/candidateDraftRoutes';
+import {
+  registerCandidateDraftRoutes,
+  type CandidateDraftRouteDeps,
+} from './routes/candidateDraftRoutes';
 import { SqliteCandidateDraftRepository } from './candidate/sqliteCandidateDraftRepository';
-import { buildLinkedinDraftWriter, type LinkedinDraftWriter } from './providers/linkedinDraftWriter';
+import {
+  buildLinkedinDraftWriter,
+  type LinkedinDraftWriter,
+} from './providers/linkedinDraftWriter';
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
+import { SqliteCandidateCompanyWantsRepository } from './data/sqliteCandidateCompanyWantsRepository';
+import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes';
 
 interface BuildAppOptions {
   config: ServerConfig;
@@ -80,6 +88,7 @@ interface BuildAppOptions {
   candidateReputationRepo?: SqliteCandidateReputationRepository;
   searchConsentRepo?: SqliteSearchConsentRepository;
   capabilityConsentStore?: SqliteCapabilityConsentStore;
+  candidateCompanyWantsRepo?: SqliteCandidateCompanyWantsRepository;
   candidateActionRepository?: SqliteCandidateActionRepository;
   candidateActionExecutor?: CandidateActionExecutor;
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
@@ -220,7 +229,10 @@ async function createFastifyBase(
   return app;
 }
 
-async function registerApiRoutes(app: FastifyInstance, deps: CandidateDraftRouteDeps): Promise<void> {
+async function registerApiRoutes(
+  app: FastifyInstance,
+  deps: CandidateDraftRouteDeps,
+): Promise<void> {
   await registerAdminRoutes(app, deps);
   await registerAuthRoutes(app, deps);
   await registerConnectorRoutes(app, deps);
@@ -235,6 +247,7 @@ async function registerApiRoutes(app: FastifyInstance, deps: CandidateDraftRoute
   registerReputationAuditRoutes(app, deps);
   registerCandidateFootprintRoutes(app, deps);
   registerSearchConsentRoutes(app, deps);
+  registerCandidateCompanyRoutes(app, deps);
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
@@ -279,13 +292,22 @@ function createCandidateRepositories(options: BuildAppOptions) {
     capabilityConsentStore:
       options.capabilityConsentStore ??
       new SqliteCapabilityConsentStore({ databasePath: config.databasePath }),
+    candidateCompanyWantsRepo:
+      options.candidateCompanyWantsRepo ??
+      new SqliteCandidateCompanyWantsRepository({
+        databasePath: config.databasePath,
+        encryptionKey: config.dataEncryptionKey,
+      }),
     candidateActionRepository:
       options.candidateActionRepository ??
       new SqliteCandidateActionRepository({ databasePath: config.databasePath }),
   };
 }
 
-function assembleRouteDeps(options: BuildAppOptions, services: AppServices): CandidateDraftRouteDeps {
+function assembleRouteDeps(
+  options: BuildAppOptions,
+  services: AppServices,
+): CandidateDraftRouteDeps {
   const {
     config,
     authService,
@@ -315,16 +337,10 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Can
     campaignRoleModel,
     coverLetterWriter,
     ...createCandidateRepositories(options),
-    candidateDraftRepository: options.candidateDraftRepository ?? new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),
-    linkedinDraftWriter: options.linkedinDraftWriter ?? buildLinkedinDraftWriter({
-      personalProvider: config.personalProvider,
-      model: config.model,
-      fallbacks: config.personalFallbacks,
-      providerCredentials: config.providerCredentials,
-      cloudflareGateway: config.cloudflareGateway,
-      vertex: config.vertex,
-    }),
-    ...(options.candidateActionExecutor ? { candidateActionExecutor: options.candidateActionExecutor } : {}),
+    ...createCandidateDraftDeps(options),
+    ...(options.candidateActionExecutor
+      ? { candidateActionExecutor: options.candidateActionExecutor }
+      : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
     ...(options.linkedinRemoteLogin ? { linkedinRemoteLogin: options.linkedinRemoteLogin } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
@@ -334,6 +350,27 @@ function assembleRouteDeps(options: BuildAppOptions, services: AppServices): Can
     ...(runtimeMemory ? { runtimeMemory } : {}),
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
     ...services,
+  };
+}
+
+function createCandidateDraftDeps(
+  options: BuildAppOptions,
+): Pick<CandidateDraftRouteDeps, 'candidateDraftRepository' | 'linkedinDraftWriter'> {
+  const { config } = options;
+  return {
+    candidateDraftRepository:
+      options.candidateDraftRepository ??
+      new SqliteCandidateDraftRepository({ databasePath: config.databasePath }),
+    linkedinDraftWriter:
+      options.linkedinDraftWriter ??
+      buildLinkedinDraftWriter({
+        personalProvider: config.personalProvider,
+        model: config.model,
+        fallbacks: config.personalFallbacks,
+        providerCredentials: config.providerCredentials,
+        cloudflareGateway: config.cloudflareGateway,
+        vertex: config.vertex,
+      }),
   };
 }
 
@@ -366,6 +403,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   app.addHook('onClose', () => {
     services.titleParseStore.close();
     deps.capabilityConsentStore?.close();
+    if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
     if (!options.candidateDraftRepository) deps.candidateDraftRepository.close();
   });
   await registerApiRoutes(app, deps);

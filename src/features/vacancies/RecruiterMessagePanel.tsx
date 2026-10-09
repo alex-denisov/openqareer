@@ -1,10 +1,19 @@
 import { useEffect, useState } from 'react';
 import { ArrowSquareOut, Check, CircleNotch, Copy, X } from '@phosphor-icons/react';
-import type { RecruiterContact } from '../../../shared/recruiterContact';
 import { requestVacancyPitch } from './vacancyPitchApi';
 
+export interface RecruiterMessageContact {
+  readonly vacancyId: string;
+  readonly fullName: string;
+  readonly roleTitle: string;
+  readonly email: string | null;
+  readonly telegram: string | null;
+  readonly whatsapp: string | null;
+  readonly linkedinUrl: string | null;
+}
+
 export interface RecruiterMessagePanelProps {
-  readonly contact: RecruiterContact;
+  readonly contact: RecruiterMessageContact;
   readonly defaultSubject?: string;
   readonly onClose?: () => void;
 }
@@ -16,7 +25,7 @@ export interface ContactChannel {
 }
 
 export function resolveContactChannels(
-  contact: RecruiterContact,
+  contact: RecruiterMessageContact,
   subject: string,
   body: string,
 ): readonly ContactChannel[] {
@@ -97,7 +106,7 @@ function CopyButton({ message }: { readonly message: string }) {
   );
 }
 
-function useRecruiterMessage(contact: RecruiterContact) {
+function useRecruiterMessage(contact: RecruiterMessageContact) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');

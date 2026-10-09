@@ -180,6 +180,12 @@ export class SqliteRecruiterContactsRepository {
       );
     }
     this.ensureCandidateForeignKey();
+    this.database.exec(`
+      CREATE INDEX IF NOT EXISTS idx_recruiter_contacts_candidate
+        ON recruiter_contacts(candidate_id, vacancy_id);
+      CREATE INDEX IF NOT EXISTS idx_recruiter_contact_jobs_candidate
+        ON recruiter_contact_jobs(candidate_id, vacancy_id);
+    `);
   }
 
   private ensureCandidateForeignKey(): void {
@@ -269,6 +275,17 @@ export class SqliteRecruiterContactsRepository {
     return rows.map(toContact);
   }
 
+  listContactsByCandidateId(candidateId: string): RecruiterContact[] {
+    const rows = this.database.prepare(`
+      SELECT id, candidate_id, vacancy_id, company_name, full_name, role_title,
+        email, email_status, phone, telegram, whatsapp, linkedin_url, github_url,
+        twitter_url, source_type, confidence, source_receipt, created_at, updated_at
+      FROM recruiter_contacts WHERE candidate_id = ?
+      ORDER BY created_at DESC, id
+    `).all(candidateId) as unknown as RecruiterContactRow[];
+    return rows.map(toContact);
+  }
+
   enqueueJob(candidateId: string, vacancyId: string, requestedAt = new Date().toISOString()): RecruiterContactJob {
     const existing = this.getJob(candidateId, vacancyId);
     if (existing?.status === 'running') return existing;
@@ -296,6 +313,16 @@ export class SqliteRecruiterContactsRepository {
       )
       .get(candidateId, vacancyId) as RecruiterContactJobRow | undefined;
     return row ? toJob(row) : null;
+  }
+
+  listJobsByCandidateId(candidateId: string): RecruiterContactJob[] {
+    const rows = this.database.prepare(`
+      SELECT id, candidate_id, vacancy_id, status, error_code,
+        requested_at, started_at, finished_at
+      FROM recruiter_contact_jobs WHERE candidate_id = ?
+      ORDER BY requested_at DESC, id
+    `).all(candidateId) as unknown as RecruiterContactJobRow[];
+    return rows.map(toJob);
   }
 
   claimJobs(limit = 1, now = new Date().toISOString()): RecruiterContactJob[] {
