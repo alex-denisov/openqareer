@@ -3,6 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 
 const CLIENT_DEVICE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
+const LEGACY_SESSION_IDLE_MS = 24 * 60 * 60 * 1000;
+
 export function ensureSessionDeviceHashSchema(database: DatabaseSync): void {
   const columns = database.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
   if (!columns.some((column) => column.name === 'device_id_hash')) {
@@ -33,6 +35,13 @@ export function storeAuthSession(
       database
         .prepare('DELETE FROM sessions WHERE user_id = ? AND device_id_hash = ?')
         .run(input.userId, deviceIdHash);
+      // Старые токены без устройства, которыми давно не пользовались, заменяет эта сессия.
+      const staleBefore = new Date(input.now.getTime() - LEGACY_SESSION_IDLE_MS).toISOString();
+      database
+        .prepare(
+          'DELETE FROM sessions WHERE user_id = ? AND device_id_hash IS NULL AND last_seen_at < ?',
+        )
+        .run(input.userId, staleBefore);
     }
     database
       .prepare(

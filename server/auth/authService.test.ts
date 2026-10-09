@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { AuthService, type AuthServiceOptions } from './authService';
@@ -39,7 +40,7 @@ function createServices(authOptions: Partial<Omit<AuthServiceOptions, 'databaseP
     ...authOptions,
   });
   cleanup.push({ auth, candidates, directory });
-  return { auth, candidates };
+  return { auth, candidates, databasePath };
 }
 
 describe('role and session authentication', () => {
@@ -83,13 +84,8 @@ describe('role and session authentication', () => {
       candidates,
     );
 
-    expect(
-      await auth.login('candidate.test', 'wrong-password'),
-    ).toBeNull();
-    const candidate = await auth.login(
-      'CANDIDATE.TEST',
-      'candidate-password-for-tests',
-    );
+    expect(await auth.login('candidate.test', 'wrong-password')).toBeNull();
+    const candidate = await auth.login('CANDIDATE.TEST', 'candidate-password-for-tests');
     expect(candidate?.principal).toMatchObject({
       username: 'candidate.test',
       role: 'candidate',
@@ -98,10 +94,7 @@ describe('role and session authentication', () => {
         dataClass: 'synthetic',
       },
     });
-    const admin = await auth.login(
-      'owner.admin',
-      'admin-password-for-tests',
-    );
+    const admin = await auth.login('owner.admin', 'admin-password-for-tests');
     expect(admin?.principal).toMatchObject({
       username: 'owner.admin',
       role: 'admin',
@@ -127,10 +120,7 @@ describe('role and session authentication', () => {
       ],
       candidates,
     );
-    const first = await auth.login(
-      'candidate.test',
-      'candidate-password-one',
-    );
+    const first = await auth.login('candidate.test', 'candidate-password-one');
 
     await auth.seedAccounts(
       [
@@ -142,17 +132,10 @@ describe('role and session authentication', () => {
       ],
       candidates,
     );
-    const second = await auth.login(
-      'candidate.test',
-      'candidate-password-two',
-    );
+    const second = await auth.login('candidate.test', 'candidate-password-two');
 
-    expect(
-      await auth.login('candidate.test', 'candidate-password-one'),
-    ).toBeNull();
-    expect(second?.principal.candidate?.id).toBe(
-      first?.principal.candidate?.id,
-    );
+    expect(await auth.login('candidate.test', 'candidate-password-one')).toBeNull();
+    expect(second?.principal.candidate?.id).toBe(first?.principal.candidate?.id);
   });
 
   it('keeps one active session per device and one more for a different device', async () => {
@@ -169,6 +152,39 @@ describe('role and session authentication', () => {
     expect(auth.getAccount(current.sessionToken)?.sessions).toHaveLength(1);
     const other = await auth.login('device.sessions', password, otherDevice);
     expect(auth.getAccount(other!.sessionToken)?.sessions).toHaveLength(2);
+  });
+
+  it('shows old sessions without a device id as one device (B427-2)', async () => {
+    const { auth, candidates } = createServices();
+    const password = 'candidate-password-for-tests';
+    let current = await auth.register('legacy.sessions', password, candidates);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      current = (await auth.login('legacy.sessions', password))!;
+    }
+    const withDevice = await auth.login(
+      'legacy.sessions',
+      password,
+      '00000000-0000-4000-8000-000000000003',
+    );
+
+    const sessions = auth.getAccount(withDevice!.sessionToken)?.sessions ?? [];
+    expect(sessions).toHaveLength(2);
+    expect(current.sessionToken).not.toBe(withDevice!.sessionToken);
+  });
+
+  it('replaces idle legacy sessions when the same user signs in with a device id (B427-2)', async () => {
+    const { auth, candidates, databasePath } = createServices();
+    const password = 'candidate-password-for-tests';
+    await auth.register('idle.legacy', password, candidates);
+    await auth.login('idle.legacy', password);
+    const database = new DatabaseSync(databasePath);
+    database.prepare("UPDATE sessions SET last_seen_at = '2020-01-01T00:00:00.000Z'").run();
+    const fresh = await auth.login('idle.legacy', password, '00000000-0000-4000-8000-000000000004');
+
+    const rows = database.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number };
+    database.close();
+    expect(rows.n).toBe(1);
+    expect(auth.getAccount(fresh!.sessionToken)?.sessions).toHaveLength(1);
   });
 });
 
@@ -189,7 +205,11 @@ describe('sliding session expiry (PRB-038)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-20T10:00:00.000Z'));
     const { auth, candidates } = createServices();
-    const { sessionToken } = await auth.register('sliding', 'candidate-password-for-tests', candidates);
+    const { sessionToken } = await auth.register(
+      'sliding',
+      'candidate-password-for-tests',
+      candidates,
+    );
 
     const issued = auth.getAccount(sessionToken)?.sessions.find((session) => session.current);
     expect(issued?.expiresAt).toBe('2026-10-20T10:00:00.000Z');
@@ -204,7 +224,11 @@ describe('sliding session expiry (PRB-038)', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-20T10:00:00.000Z'));
     const { auth, candidates } = createServices();
-    const { sessionToken } = await auth.register('idle', 'candidate-password-for-tests', candidates);
+    const { sessionToken } = await auth.register(
+      'idle',
+      'candidate-password-for-tests',
+      candidates,
+    );
 
     vi.setSystemTime(new Date(Date.now() + 29 * DAY));
     expect(auth.authenticate(sessionToken)).not.toBeNull();
