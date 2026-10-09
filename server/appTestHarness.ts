@@ -82,7 +82,16 @@ export async function createApp(
   provider: CoachProvider = successProvider,
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
   importProfile?: Parameters<typeof buildApp>[0]['importProfile'],
-  extra: Partial<Pick<Parameters<typeof buildApp>[0], 'runtimeMemory'>> = {},
+  extra: Partial<
+    Pick<
+      Parameters<typeof buildApp>[0],
+      | 'runtimeMemory'
+      | 'multiSourceVacancyEngine'
+      | 'candidateCompanyWantsRepo'
+      | 'recruiterContactsRepo'
+      | 'searchConsentRepo'
+    >
+  > = {},
 ) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',

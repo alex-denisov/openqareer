@@ -1,6 +1,6 @@
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Info, List, MagnifyingGlass, MapTrifold, Warning } from '@phosphor-icons/react';
+import { Check, List, MapTrifold } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
@@ -8,7 +8,6 @@ import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplicat
 import type { VacancySubscription, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import { titleMatchesRole } from '../../../shared/vacancyRoleTitleMatch';
-import { VacancyRow } from './VacancyRow';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
@@ -17,12 +16,15 @@ import { PageHeader } from '../shell/PageHeader';
 import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
-import { pluralRu } from '../../../shared/pluralRu';
-import { VacancyMapView } from './VacancyMapView';
-import { SavedSearchesPanel } from './SavedSearchesPanel';
 import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
-import { CareerTooltip } from '../shell/CareerTooltip';
+import { VacanciesMainBody } from './VacanciesScreenResults';
 import { matchesVacancyCity } from './vacancyFacets';
+import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
+import {
+  OpportunityTabs,
+  SavedSearchesSection,
+  type OpportunityTab,
+} from './VacanciesScreenSections';
 
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 import {
@@ -63,9 +65,14 @@ export interface VacanciesScreenProps {
   ) => Promise<ApplicationView>;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
+  readonly onOpenConnections?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
-  readonly onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
   readonly premises?: RoutePremisesDraft;
@@ -185,101 +192,7 @@ function ViewSwitch({
   );
 }
 
-function VacanciesSkeletonStack() {
-  return (
-    <div className="skeleton-stack" aria-live="polite" aria-busy="true">
-      <p className="list-hint">Загружаем подборку по кампании…</p>
-      <div className="skeleton-row" />
-      <div className="skeleton-row" />
-      <div className="skeleton-row" />
-      <div className="skeleton-row" />
-    </div>
-  );
-}
-
-function VacanciesErrorState({
-  failureSourceLabel,
-  onRetry,
-}: {
-  readonly failureSourceLabel?: string;
-  readonly onRetry?: () => void;
-}) {
-  return (
-    <div className="state-panel is-error vacancies-state" role="alert">
-      <span className="state-icon" aria-hidden="true">
-        <Warning size={20} />
-      </span>
-      <h3>Не удалось загрузить подборку</h3>
-      <p>
-        Не удалось загрузить общий пул вакансий.{' '}
-        {failureSourceLabel ?? 'Площадка hh.ru не ответила.'} Роль и география сохранены.
-      </p>
-      {onRetry ? (
-        <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
-          Повторить
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function VacanciesEmptyPoolState({
-  primaryRole,
-  onRetry,
-}: {
-  readonly primaryRole?: string;
-  readonly onRetry?: () => void;
-}) {
-  return (
-    <div className="state-panel vacancies-state">
-      <span className="state-icon" aria-hidden="true">
-        <MagnifyingGlass size={20} />
-      </span>
-      <h3>
-        {primaryRole ? `По роли ${primaryRole} пока нет вакансий` : 'Для подбора не выбрана роль'}
-      </h3>
-      <p>
-        Пустая выдача сама по себе ничего не говорит о рынке. Можно добавить смежную роль, расширить
-        регионы или включить удалённый поиск.
-      </p>
-      {onRetry ? (
-        <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>
-          Обновить подбор
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function VacanciesEmptyFilterState({
-  totalCount,
-  onReset,
-}: {
-  readonly totalCount: number;
-  readonly onReset: () => void;
-}) {
-  return (
-    <div className="state-panel vacancies-filter-empty">
-      <span className="state-icon" aria-hidden="true">
-        <MagnifyingGlass size={20} />
-      </span>
-      <h3>По этим фильтрам ничего нет</h3>
-      <p>
-        В пуле {totalCount} вакансий — под текущие фильтры не подошла ни одна. Ослабьте фильтры или
-        сохраните запрос, чтобы получать новые совпадения по расписанию.
-      </p>
-      <button
-        type="button"
-        className="btn btn-secondary vacancies-btn vacancies-reset"
-        onClick={onReset}
-      >
-        Сбросить фильтры
-      </button>
-    </div>
-  );
-}
-
-interface ListContentProps {
+export interface ListContentProps {
   readonly items: readonly MatchedVacancyItem[];
   readonly total: number;
   readonly now: string;
@@ -295,163 +208,6 @@ interface ListContentProps {
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly countShownAbove: boolean;
-}
-
-function VacanciesListHeader({
-  totalCount,
-  countShownAbove,
-}: {
-  readonly totalCount: number;
-  readonly countShownAbove: boolean;
-}) {
-  // B338-2: при сводке число уже стоит строкой «Показано N из M» над списком.
-  return (
-    <div className={`list-head vacancies-list-head${countShownAbove ? ' has-count-above' : ''}`}>
-      {countShownAbove ? null : (
-        <span className="list-hint vacancies-list-hint">
-          {`${pluralRu(totalCount, [
-            'вакансия',
-            'вакансии',
-            'вакансий',
-          ])} · показаны совпадающие по роли и уровню`}
-        </span>
-      )}
-      <span className="fit-legend">
-        Совпадение: роль · уровень · география
-        <CareerTooltip content="Порядок задаёт сервер: сначала роль, уровень и география, затем совпавшие требования; фантомные и сомнительные вакансии ниже, с причиной. «В базе» — дни с первого сбора записи, а не дата публикации.">
-          <button
-            type="button"
-            className="info-btn"
-            aria-label="Как устроен порядок и что значит «в базе»"
-          >
-            <Info size={16} aria-hidden="true" />
-          </button>
-        </CareerTooltip>
-      </span>
-    </div>
-  );
-}
-
-function VacanciesListContent(props: ListContentProps) {
-  const {
-    items,
-    total,
-    now,
-    selectedId,
-    onToggleSelect,
-    applications,
-    archivedApplicationClusterIds,
-    onMarkAlreadyApplied,
-    onScheduleInterview,
-    onOpenNetworking,
-    onOpenResponses,
-    onOpenArchive,
-    onAddToProfile,
-    onDiscussWithConsultant,
-    countShownAbove,
-  } = props;
-
-  return (
-    <div className="vacancies-list-container">
-      <VacanciesListHeader totalCount={total || items.length} countShownAbove={countShownAbove} />
-
-      <ul className="vac-list">
-        {items.map((item) => (
-          <VacancyRow
-            key={item.cluster.id}
-            item={item}
-            now={now}
-            isSelected={selectedId === item.cluster.id}
-            onSelect={() => onToggleSelect(item.cluster.id)}
-            applications={applications}
-            archivedApplicationClusterIds={archivedApplicationClusterIds}
-            onMarkAlreadyApplied={onMarkAlreadyApplied}
-            onScheduleInterview={onScheduleInterview}
-            onOpenNetworking={onOpenNetworking}
-            onOpenResponses={onOpenResponses}
-            onOpenArchive={onOpenArchive}
-            onAddToProfile={onAddToProfile}
-            onDiscussWithConsultant={onDiscussWithConsultant}
-          />
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function SavedSearchesSection({
-  open,
-  subscriptions,
-  onClose,
-  onRefresh,
-  defaultQuery,
-}: {
-  readonly defaultQuery?: string;
-  readonly open: boolean;
-  readonly subscriptions?: readonly VacancySubscription[];
-  readonly onClose: () => void;
-  readonly onRefresh?: () => Promise<void>;
-}) {
-  if (!open) return null;
-  return (
-    <div className="filters-panel is-expanded" aria-label="Сохранённые поиски">
-      <div className="filters-panel-head">
-        <h3>Сохранённые поиски</h3>
-        <button type="button" className="filters-reset" onClick={onClose}>
-          Свернуть
-        </button>
-      </div>
-      <SavedSearchesPanel
-        subscriptions={subscriptions ?? []}
-        defaultQuery={defaultQuery}
-        onRefresh={onRefresh ?? (async () => {})}
-      />
-    </div>
-  );
-}
-
-function VacanciesMainBody(props: {
-  readonly loading: boolean;
-  readonly failed: boolean;
-  readonly failureSourceLabel?: string;
-  readonly onRetry?: () => void;
-  readonly matchedLength: number;
-  readonly primaryRole?: string;
-  readonly total: number;
-  readonly filtered: readonly MatchedVacancyItem[];
-  readonly viewMode: 'list' | 'map';
-  readonly onResetFilters: () => void;
-  readonly listProps: ListContentProps;
-  readonly selectedCity?: string;
-  readonly onSelectCity: (city?: string) => void;
-}) {
-  if (props.loading) return <VacanciesSkeletonStack />;
-  if (props.failed) {
-    return (
-      <VacanciesErrorState failureSourceLabel={props.failureSourceLabel} onRetry={props.onRetry} />
-    );
-  }
-  if (props.matchedLength === 0) {
-    return <VacanciesEmptyPoolState primaryRole={props.primaryRole} onRetry={props.onRetry} />;
-  }
-  if (props.filtered.length === 0) {
-    return (
-      <VacanciesEmptyFilterState
-        totalCount={props.total || props.matchedLength}
-        onReset={props.onResetFilters}
-      />
-    );
-  }
-  if (props.viewMode === 'map') {
-    return (
-      <VacancyMapView
-        items={props.filtered}
-        selectedCity={props.selectedCity}
-        onSelectCity={props.onSelectCity}
-      />
-    );
-  }
-  return <VacanciesListContent {...props.listProps} />;
 }
 
 function VacanciesFiltersSection({
@@ -554,7 +310,12 @@ function buildListProps(
     onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: input.onOpenExpert
-      ? (cluster) => input.onOpenExpert?.('vacancies', { kind: 'vacancy', id: cluster.id }, `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`)
+      ? (cluster) =>
+          input.onOpenExpert?.(
+            'vacancies',
+            { kind: 'vacancy', id: cluster.id },
+            `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`,
+          )
       : undefined,
     countShownAbove: Boolean(input.facets),
   };
@@ -643,21 +404,36 @@ function VacanciesScreenContent({
   );
 }
 
-export function VacanciesScreen(input: VacanciesScreenProps) {
-  const screenState = useVacanciesScreenState(input);
-  const { board, viewMode, setViewMode, outreachVacancy, setOutreachVacancy } = screenState;
-
+function VacanciesScreenHeader({
+  input,
+  screenState,
+  activeTab,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+  readonly activeTab: OpportunityTab;
+}) {
+  const { board, viewMode, setViewMode } = screenState;
   return (
-    <div className="vacancies-screen">
+    <>
       <PageHeader
         kicker={board.primaryRole ? `Кампания · ${board.primaryRole}` : 'Кампания'}
         title="Вакансии"
-        description="Отклик оформляется здесь, без перехода на площадку."
-        right={<ViewSwitch viewMode={viewMode} onChange={setViewMode} />}
+        description={
+          activeTab === 'companies'
+            ? 'Работодатели и люди по вакансиям текущей подборки.'
+            : activeTab === 'saved'
+              ? 'Сохранённые источники и запросы вакансий.'
+              : 'Отклик оформляется здесь, без перехода на площадку.'
+        }
+        right={
+          activeTab === 'selection' ? (
+            <ViewSwitch viewMode={viewMode} onChange={setViewMode} />
+          ) : undefined
+        }
         onAskConsultant={input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined}
       />
-
-      {input.pathIndicator ? (
+      {activeTab === 'selection' && input.pathIndicator ? (
         <nav className="path-strip" aria-label="Путь кампании">
           <CareerPathIndicator
             steps={input.pathIndicator.steps}
@@ -665,24 +441,106 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
           />
         </nav>
       ) : null}
+    </>
+  );
+}
 
-      <VacanciesScreenContent input={input} screenState={screenState} />
+function OpportunityContent({
+  input,
+  screenState,
+  activeTab,
+  onSelectTab,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+  readonly activeTab: OpportunityTab;
+  readonly onSelectTab: (tab: OpportunityTab) => void;
+}) {
+  if (activeTab === 'selection')
+    return <VacanciesScreenContent input={input} screenState={screenState} />;
+  if (activeTab === 'saved') {
+    const { board } = screenState;
+    return (
+      <SavedSearchesSection
+        defaultQuery={board.state.roles[0] ?? board.primaryRole}
+        open
+        subscriptions={input.subscriptions}
+        onClose={() => onSelectTab('selection')}
+        onRefresh={input.onRefreshSubscriptions}
+      />
+    );
+  }
+  return <CompaniesAndPeopleScreen onOpenConnections={input.onOpenConnections} />;
+}
 
-      {outreachVacancy ? (
-        <DesktopOutreachModal
-          isOpen
-          onClose={() => setOutreachVacancy(undefined)}
-          vacancy={{
-            id: outreachVacancy.id,
-            title: outreachVacancy.canonicalTitle,
-            company: outreachVacancy.canonicalCompany,
-            location: outreachVacancy.canonicalLocation,
-            isRemote: outreachVacancy.isRemote,
-            skills: outreachVacancy.skills,
-          }}
-        />
-      ) : null}
+function VacancyOutreachDialog({
+  screenState,
+}: {
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+}) {
+  const { outreachVacancy, setOutreachVacancy } = screenState;
+  if (!outreachVacancy) return null;
+  return (
+    <DesktopOutreachModal
+      isOpen
+      onClose={() => setOutreachVacancy(undefined)}
+      vacancy={{
+        id: outreachVacancy.id,
+        title: outreachVacancy.canonicalTitle,
+        company: outreachVacancy.canonicalCompany,
+        location: outreachVacancy.canonicalLocation,
+        isRemote: outreachVacancy.isRemote,
+        skills: outreachVacancy.skills,
+      }}
+    />
+  );
+}
+
+function VacanciesScreenFrame({
+  input,
+  screenState,
+  activeTab,
+  onSelectTab,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+  readonly activeTab: OpportunityTab;
+  readonly onSelectTab: (tab: OpportunityTab) => void;
+}) {
+  return (
+    <div className="vacancies-screen">
+      <VacanciesScreenHeader input={input} screenState={screenState} activeTab={activeTab} />
+      <OpportunityTabs
+        active={activeTab}
+        totalVacancies={input.total}
+        savedCount={input.subscriptions?.length ?? 0}
+        onSelect={onSelectTab}
+      />
+      <OpportunityContent
+        input={input}
+        screenState={screenState}
+        activeTab={activeTab}
+        onSelectTab={onSelectTab}
+      />
+      <VacancyOutreachDialog screenState={screenState} />
     </div>
+  );
+}
+
+export function VacanciesScreen(input: VacanciesScreenProps) {
+  const screenState = useVacanciesScreenState(input);
+  const [activeTab, setActiveTab] = useState<OpportunityTab>('selection');
+  const chooseTab = (tab: OpportunityTab) => {
+    setActiveTab(tab);
+    if (tab !== 'selection') screenState.setSavedSearchesOpen(false);
+  };
+  return (
+    <VacanciesScreenFrame
+      input={input}
+      screenState={screenState}
+      activeTab={activeTab}
+      onSelectTab={chooseTab}
+    />
   );
 }
 

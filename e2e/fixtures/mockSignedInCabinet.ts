@@ -1,4 +1,5 @@
 import type { Page } from '@playwright/test';
+import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
   candidate,
@@ -263,5 +264,6 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     unmatched.push(path);
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
+  await mockCandidateCompanies(page);
   return unmatched;
 }

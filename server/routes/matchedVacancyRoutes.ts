@@ -8,7 +8,11 @@ import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { buildMatchedVacancyFacets } from '../vacancies/matchedVacancyFacets';
-import { filterMatchedVacancies, matchedVacanciesQuerySchema, type MatchedVacancyFilters } from '../vacancies/matchedVacancyFilters';
+import {
+  filterMatchedVacancies,
+  matchedVacanciesQuerySchema,
+  type MatchedVacancyFilters,
+} from '../vacancies/matchedVacancyFilters';
 import { markGeography } from '../vacancies/vacancyGeography';
 import {
   invalidateAllMatchedVacancies,
@@ -33,7 +37,7 @@ function elapsedMs(startedAt: number): number {
   return Number((performance.now() - startedAt).toFixed(2));
 }
 
-function finishMatchedVacancies(
+export function finishMatchedVacancies(
   snapshot: readonly MatchedVacancyItem[],
   targetRoles: string[],
   campaign: CampaignResolution,
@@ -72,14 +76,22 @@ function buildMatchedResponse(
 ) {
   const { offset } = filters;
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId);
+  const matched = finishMatchedVacancies(
+    snapshot,
+    targetRoles,
+    campaign,
+    candidateStore,
+    candidateId,
+  );
   const hypothesisSnapshot = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
     : snapshot;
   const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
   const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
-  const readLevel = (item: MatchedVacancyItem) => titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const facets = offset === 0 ? buildMatchedVacancyFacets(matched, targetRoles, readLevel) : undefined;
+  const readLevel = (item: MatchedVacancyItem) =>
+    titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
+  const facets =
+    offset === 0 ? buildMatchedVacancyFacets(matched, targetRoles, readLevel) : undefined;
   const filtered = filterMatchedVacancies(matched, filters, targetRoles, readLevel);
   const page = buildMatchedVacancyPage(filtered, offset);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
@@ -232,28 +244,53 @@ const handleMatchedVacancies: Handler = async (
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
   const { response, semanticQueryAndSqlMs } = await readMatchedPage(
-    multiSourceEngine, candidateStore, candidate.id, confirmedSkills,
-    targetRoles, targetLevel, campaign, titleParseStore, filters,
+    multiSourceEngine,
+    candidateStore,
+    candidate.id,
+    confirmedSkills,
+    targetRoles,
+    targetLevel,
+    campaign,
+    titleParseStore,
+    filters,
   );
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
   preloadTopMatchedDescriptions(multiSourceEngine, response.preloadIds, offset, request);
 
-  logMatchedTiming(request, config.matchMode ?? 'legacy', cold,
-    candidateCampaignMs, semanticQueryAndSqlMs, response, requestStartedAt);
+  logMatchedTiming(
+    request,
+    config.matchMode ?? 'legacy',
+    cold,
+    candidateCampaignMs,
+    semanticQueryAndSqlMs,
+    response,
+    requestStartedAt,
+  );
 
   return matchedVacancyResponse(response, request.id, targetLevel);
 };
 
 export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get('/api/v1/candidate/matched-vacancies', withDeps(deps, async (routeDeps, request, reply) => {
-    try {
-      return await handleMatchedVacancies(routeDeps, request, reply);
-    } catch (error) {
-      if (!(error instanceof ZodError)) throw error;
-      return reply.code(400).send({ error: { code: 'invalid_query',
-        message: 'Неизвестное значение фильтра вакансий', requestId: request.id, retryable: false } });
-    }
-  }));
+  app.get(
+    '/api/v1/candidate/matched-vacancies',
+    withDeps(deps, async (routeDeps, request, reply) => {
+      try {
+        return await handleMatchedVacancies(routeDeps, request, reply);
+      } catch (error) {
+        if (!(error instanceof ZodError)) throw error;
+        return reply
+          .code(400)
+          .send({
+            error: {
+              code: 'invalid_query',
+              message: 'Неизвестное значение фильтра вакансий',
+              requestId: request.id,
+              retryable: false,
+            },
+          });
+      }
+    }),
+  );
 }
