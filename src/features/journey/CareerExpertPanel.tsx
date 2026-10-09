@@ -205,6 +205,8 @@ export function CareerExpertPanel({
     event.preventDefault();
     const clean = content.trim();
     if (!clean || !user) return;
+    // На телефоне шторка свёрнута и прячет ленту: отправка раскрывает её, чтобы ответ был виден.
+    if (!mobileExpanded) onToggleMobileExpanded?.();
     setSending(true);
     setPendingQuestion(clean);
     setError(undefined);

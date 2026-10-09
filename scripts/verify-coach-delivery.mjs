@@ -120,9 +120,6 @@ export async function verifyCoachDelivery(page, expert, viewport) {
   const coach = interceptCoach(page, app, candidate, state, retryManually);
   await coach.start();
   try {
-    // S09: на телефоне шторка консультанта открывается свёрнутой и прячет ленту.
-    const expand = expert.getByRole('button', { name: 'Развернуть консультанта', exact: true });
-    if (await expand.isVisible()) await expand.click();
     await expert.locator('textarea').fill('Синтетическая проверка доставки B198.');
     await expert.getByRole('button', { name: 'Отправить вопрос', exact: true }).click();
     if (retryManually) {
