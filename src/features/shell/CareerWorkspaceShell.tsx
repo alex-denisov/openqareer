@@ -12,7 +12,7 @@ import {
 } from '../journey/CareerJourneyViews';
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
-import { CareerTariffsView } from './CareerTariffsView';
+import { TariffsScreen } from './TariffsScreen';
 import { CURRENT_PLAN } from './tariffPackages';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
@@ -438,7 +438,7 @@ export function CareerWorkspaceShell({
               </button>
             </div>
           ) : null}
-          {activeView === 'tariffs' ? <CareerTariffsView onOpenCoach={openExpert} /> : null}
+          {activeView === 'tariffs' ? <TariffsScreen /> : null}
         </AppErrorBoundary>
       </main>
 
