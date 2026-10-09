@@ -146,6 +146,7 @@ interface SessionRow {
   expires_at: string;
   created_at: string;
   last_seen_at: string;
+  device_id_hash: string | null;
 }
 
 interface PasswordResetRow extends UserRow {
@@ -456,7 +457,7 @@ export class AuthServiceCore implements SessionAuth {
     const currentTokenHash = hashToken(sessionToken);
     const sessions = this.database
       .prepare(
-        `SELECT token_hash, expires_at, created_at, last_seen_at
+        `SELECT token_hash, expires_at, created_at, last_seen_at, device_id_hash
          FROM sessions
          WHERE user_id = ? AND expires_at > ?
          ORDER BY last_seen_at DESC, created_at DESC`,
@@ -473,7 +474,7 @@ export class AuthServiceCore implements SessionAuth {
         timezone: user.timezone,
         updatedAt: user.profile_updated_at,
       },
-      sessions: sessions.map((session) => ({
+      sessions: collapseLegacySessions(sessions, currentTokenHash).map((session) => ({
         id: session.token_hash.slice(0, 16),
         current: session.token_hash === currentTokenHash,
         createdAt: session.created_at,
@@ -845,4 +846,20 @@ function principalFromRow(row: UserRow): AuthPrincipal {
           }
         : null,
   };
+}
+
+/**
+ * Сессии без идентификатора устройства появились до учёта по устройству и не
+ * различимы между собой: показываем их одной записью (текущая, иначе самая
+ * свежая), чтобы счётчик «Устройства» не раздувался старыми токенами.
+ */
+function collapseLegacySessions(
+  sessions: readonly SessionRow[],
+  currentTokenHash: string,
+): SessionRow[] {
+  const known = sessions.filter((session) => session.device_id_hash);
+  const legacy = sessions.filter((session) => !session.device_id_hash);
+  if (legacy.length <= 1) return [...sessions];
+  const kept = legacy.find((session) => session.token_hash === currentTokenHash) ?? legacy[0]!;
+  return [...known, kept].sort((a, b) => (a.last_seen_at < b.last_seen_at ? 1 : -1));
 }
