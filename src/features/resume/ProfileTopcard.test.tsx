@@ -104,7 +104,7 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
       />,
     );
     expect(html).toContain('hh.ru');
-    expect(html).toContain('Подключено');
+    expect(html).toContain('3 факта · 01.01');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Не подключено');
   });
@@ -132,31 +132,12 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
     expect(html).not.toContain('career-profile-screen-connection-chip');
   });
 
-  it('отображает строку «Вы в поиске» со статусом «выключено», константным текстом и кнопкой «Включить» по умолчанию (C64)', () => {
-    const html = renderToStaticMarkup(<ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />);
-    expect(html).toContain('Вы в поиске');
-    expect(html).toContain('выключено');
-    expect(html).toContain('Включить');
-    expect(html).toContain('Чтобы найти, кто ведёт вакансию, включите режим «Вы в поиске»');
-  });
-
-  it('отображает статус «включено», дату обновления и кнопку «Выключить», когда согласие дано (C64)', () => {
+  it('keeps the search-consent banner out of the profile topcard per mockup 2', () => {
     const html = renderToStaticMarkup(
-      <ProfileTopcard
-        draft={draft}
-        onDraftChange={() => {}}
-        reader={null}
-        searchConsent={{
-          granted: true,
-          policyVersion: 'search-consent-2026-09-27',
-          updatedAt: '2026-09-27T10:00:00.000Z',
-        }}
-      />,
+      <ProfileTopcard draft={draft} onDraftChange={() => {}} reader={null} />,
     );
-    expect(html).toContain('Вы в поиске');
-    expect(html).toContain('включено');
-    expect(html).toContain('обновлено 27 сентября 2026');
-    expect(html).toContain('Выключить');
+    expect(html).not.toContain('career-profile-screen-search-consent');
+    expect(html).not.toContain('Вы в поиске');
   });
 
   describe('ProfileTopcard mobile details collapse (C74)', () => {

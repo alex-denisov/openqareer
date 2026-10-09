@@ -46,9 +46,13 @@ function AboutEditForm({
 
 /** Renders paragraphs and bullet lists separately (B265 owner remark #6). */
 function AboutContent({ about }: { readonly about: string }) {
-  const blocks = parseAboutContent(about);
+  const [expanded, setExpanded] = useState(false);
+  const lines = about.split(/\r?\n/u);
+  const truncated = lines.length > 3;
+  const shownAbout = truncated && !expanded ? lines.slice(0, 3).join('\n') : about;
+  const blocks = parseAboutContent(shownAbout);
   return (
-    <>
+    <div className="career-profile-screen-about-content">
       {blocks.map((block, index) =>
         block.type === 'paragraph' ? (
           <p key={index}>{block.text}</p>
@@ -60,7 +64,17 @@ function AboutContent({ about }: { readonly about: string }) {
           </ul>
         ),
       )}
-    </>
+      {truncated ? (
+        <button
+          type="button"
+          className="career-quiet-button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? 'Свернуть' : 'Показать полностью'}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
@@ -88,8 +102,7 @@ function AboutSuggestionsList({
           key={suggestion.id}
           suggestion={suggestion}
           onAccept={
-            onAcceptSuggestion ??
-            ((s) => onSectionSave(updateAbout(draft, s.proposedText)))
+            onAcceptSuggestion ?? ((s) => onSectionSave(updateAbout(draft, s.proposedText)))
           }
           onDismiss={onDismissSuggestion ?? (() => {})}
           onRevert={
@@ -157,9 +170,7 @@ export function ProfileAboutSection({
         id="sec-about-title"
         title="Обо мне"
         imported={Boolean(about)}
-        action={
-          <SectionPencilButton label="Изменить «Обо мне»" onClick={() => setEditing(true)} />
-        }
+        action={<SectionPencilButton label="Изменить «Обо мне»" onClick={() => setEditing(true)} />}
       />
       <AboutViewBody
         editing={editing}
@@ -183,4 +194,3 @@ export function ProfileAboutSection({
     </section>
   );
 }
-

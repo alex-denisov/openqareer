@@ -98,7 +98,12 @@ function CourseTile({
  * «пусто в источнике»") — the section still renders, saying so plainly, and
  * still offers a working add action instead of vanishing.
  */
-export function ProfileCoursesSection({ draft, saving, onSectionSave, importedLabel }: SectionProps) {
+export function ProfileCoursesSection({
+  draft,
+  saving,
+  onSectionSave,
+  importedLabel,
+}: SectionProps) {
   const courses = draft.courses ?? [];
   const addItem = () => onSectionSave(addCourse(draft, ''));
   return (
@@ -118,7 +123,7 @@ export function ProfileCoursesSection({ draft, saving, onSectionSave, importedLa
         <div className="career-profile-screen-state-block">
           <BookOpen size={22} />
           <h3>
-            {importedLabel ? `Импорт из ${importedLabel} курсов не нашёл` : 'Курсы не заполнены'}
+            {importedLabel ? 'В импортированных данных курсы не найдены' : 'Курсы не заполнены'}
           </h3>
           <p>Если курсы у вас есть, добавьте их вручную.</p>
         </div>

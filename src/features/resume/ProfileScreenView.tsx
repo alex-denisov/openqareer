@@ -1,48 +1,43 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, ListChecks, WarningCircle } from '@phosphor-icons/react';
 import {
   getConnections,
-  updateAccountProfile,
   type CandidateConnection,
   type CandidateMemory,
   type ImportedSourceSummary,
 } from '../coach/coachApi';
-import { applyRoutePremises } from '../cabinet/routePremises';
 import { CandidateFootprintAuditView } from '../reputation/CandidateFootprintAuditView';
-import { normalizeCandidateRegions } from '../workspace/candidateRegions';
-import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { ProfileAboutSection } from './ProfileAboutSection';
 import { ProfileAchievementsSection } from './ProfileAchievementsSection';
 import { ProfileCoursesSection } from './ProfileCoursesSection';
-import { ProfileDocumentMenu } from './ProfileDocumentMenu';
 import { ProfileEducationSection } from './ProfileEducationSection';
 import { ProfileExperienceSection } from './ProfileExperienceSection';
 import { ProfileLanguagesSection } from './ProfileLanguagesSection';
-import { ProfileOpenToWork, type OpenToWorkConfirmation } from './ProfileOpenToWork';
 import { ProfileRecommendationsSection } from './ProfileRecommendationsSection';
 import { ProfileSideRail } from './ProfileSideRail';
 import { ProfileSkillsSection } from './ProfileSkillsSection';
 import { ProfileCertificatesSection, ProfileProjectsSection } from './ProfileTileSections';
 import { ProfileTopcard } from './ProfileTopcard';
-import type { ProfileTab } from './profileTabs';
+import { ProfileTabs, type ProfileTab } from './profileTabs';
 import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
 import { useConsultantSuggestions } from './useConsultantSuggestions';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
+import { ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import './profileScreen.css';
 
 const ANCHORS: readonly { id: string; label: string }[] = [
+  { id: 'sec-check', label: 'Проверка' },
+  { id: 'sec-ats', label: 'ATS' },
   { id: 'sec-about', label: 'Обо мне' },
   { id: 'sec-experience', label: 'Опыт' },
   { id: 'sec-education', label: 'Образование' },
-  { id: 'sec-skills', label: 'Навыки' },
-  { id: 'sec-certificates', label: 'Сертификаты' },
   { id: 'sec-projects', label: 'Проекты' },
-  { id: 'sec-courses', label: 'Курсы' },
   { id: 'sec-languages', label: 'Языки' },
-  { id: 'sec-recommendations', label: 'Рекомендации' },
-  { id: 'sec-achievements', label: 'Достижения' },
+  { id: 'sec-relocation', label: 'Релокация' },
+  { id: 'sec-documents', label: 'Резюме и версии' },
 ];
 
 function ProfileAnchorNav() {
@@ -92,31 +87,9 @@ function ProfileErrorState({
 function ProfileEmptyState() {
   return (
     <div className="career-profile-screen-state">
-      <p>Профиль пока пуст. Импортируйте резюме из LinkedIn или заполните разделы вручную.</p>
+      <p>Профиль пока пуст. Подключите источник резюме или заполните разделы вручную.</p>
     </div>
   );
-}
-
-/**
- * "Open to work" regions save through the same workspace write the wizard's
- * region step uses (`routePremises.ts`) — `candidate_workspaces`, not a
- * PATCH-only account column (B265 review round 3, PRB-forbidden ALTER TABLE
- * on the prod DB) — merged into whatever regions the candidate already chose,
- * never overwriting them.
- */
-function workspaceWithOpenToWorkRegions(
-  workspace: CandidateWorkspace,
-  confirmation: OpenToWorkConfirmation,
-): CandidateWorkspace {
-  const regions = normalizeCandidateRegions([
-    ...(workspace.regions ?? []),
-    ...confirmation.regions,
-  ]);
-  return applyRoutePremises(workspace, {
-    targetRole: workspace.targetDirection,
-    regions,
-    workMode: confirmation.workMode,
-  });
 }
 
 function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): boolean {
@@ -134,6 +107,7 @@ export interface ProfileScreenSurfaceProps {
   readonly view?: ResumeStudioView;
   readonly draft?: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
+  readonly importedSources?: readonly ImportedSourceSummary[];
   readonly importedSource?: ImportedSource;
   readonly loading?: boolean;
   readonly saving?: boolean;
@@ -141,14 +115,14 @@ export interface ProfileScreenSurfaceProps {
   readonly saveError?: string;
   readonly onRetry: () => void;
   readonly onDraftChange: (draft: ResumeDraft) => void;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onSectionSave: (next: ResumeDraft) => Promise<boolean | void> | boolean | void;
   /** Opens «Аккаунт → Подключения», where a real re-import starts (B266). */
   readonly onOpenConnections?: () => void;
   /** hh.ru/LinkedIn status chips in the topcard (C54 п.11); undefined while
    *  the read has not landed. */
   readonly connections?: readonly CandidateConnection[];
-  readonly onConfirmOpenToWork: (confirmation: OpenToWorkConfirmation) => void;
-  readonly confirmingOpenToWork?: boolean;
+  readonly onOpenExpert?: () => void;
+  readonly onTabChange?: (tab: ProfileTab) => void;
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
@@ -158,9 +132,7 @@ export interface ProfileScreenSurfaceProps {
   readonly onVacancySuggestionPrepared?: (commandId: string) => Promise<void> | void;
   readonly onManualExperienceFactAdded?: () => Promise<void> | void;
   /**
-   * "Профиль / Документ и форматы" now lives in the page header, beside the
-   * «Профиль» title, not next to the topcard (owner review round 3) — the
-   * cabinet shell owns the tab state and hands the current one down.
+   * The profile screen owns its Resume / Skills / Trace tabs.
    */
   readonly tab?: ProfileTab;
 }
@@ -187,9 +159,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     onSectionSave,
     onOpenConnections,
     connections,
-    onConfirmOpenToWork,
-    confirmingOpenToWork,
-    tab = 'profile',
+    tab = 'resume',
   } = props;
 
   if (loading) {
@@ -228,14 +198,17 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
   }
 
   return (
-    <div className="career-profile-screen-view">
+    <div className="career-profile-screen-view" data-profile-tab={tab}>
       <div className="career-profile-screen-header-row">
         <ProfileTopcard
           draft={draft}
+          importedSources={props.importedSources}
           importedSource={importedSource}
           updatedAt={props.view?.savedAt?.updatedAt}
           reader={props.view?.reader ?? null}
           onDraftChange={onDraftChange}
+          onSectionSave={onSectionSave}
+          saving={saving}
           connections={connections}
           onOpenConnections={onOpenConnections}
         />
@@ -245,19 +218,54 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           {saveError}
         </p>
       ) : null}
-      <ProfileOpenToWork
-        candidateId={candidateId}
-        draft={draft}
-        onConfirm={onConfirmOpenToWork}
-        confirming={confirmingOpenToWork}
+      <ProfileTabs
+        tab={tab}
+        onTab={props.onTabChange ?? (() => undefined)}
+        skillsCount={draft.skills?.length ?? 0}
       />
-      {tab === 'documents' ? (
-        <ProfileDocumentMenu draft={draft} memory={memory} />
-      ) : tab === 'audit' ? (
-        <CandidateFootprintAuditView key={candidateId} candidateId={candidateId} />
+      {tab === 'skills' ? (
+        <div
+          id="profile-panel-skills"
+          className="career-profile-screen-tab-panel"
+          role="tabpanel"
+          aria-labelledby="profile-tab-skills"
+          tabIndex={0}
+        >
+          <div className="career-profile-screen-panel career-profile-screen-skill-tab">
+            <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+            {props.onOpenExpert ? (
+              <button type="button" className="career-quiet-button" onClick={props.onOpenExpert}>
+                <ListChecks size={16} aria-hidden="true" />
+                Пройти квиз по навыкам
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : tab === 'trace' ? (
+        <div
+          id="profile-panel-trace"
+          className="career-profile-screen-tab-panel"
+          role="tabpanel"
+          aria-labelledby="profile-tab-trace"
+          tabIndex={0}
+        >
+          <CandidateFootprintAuditView key={candidateId} candidateId={candidateId} />
+        </div>
       ) : (
-        <>
+        <div
+          id="profile-panel-resume"
+          className="career-profile-screen-tab-panel"
+          role="tabpanel"
+          aria-labelledby="profile-tab-resume"
+          tabIndex={0}
+        >
           <ProfileAnchorNav />
+          <ProfileReviewAndVersions
+            draft={draft}
+            memory={memory}
+            view={props.view}
+            onOpenExpert={props.onOpenExpert}
+          />
           <div className="career-profile-screen-layout">
             <div className="career-profile-screen-main-col">
               <ProfileAboutSection
@@ -289,18 +297,17 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 saving={saving}
                 onSectionSave={onSectionSave}
               />
-              <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileCertificatesSection
-                draft={draft}
-                saving={saving}
-                onSectionSave={onSectionSave}
-              />
               <ProfileProjectsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
               <ProfileCoursesSection
                 draft={draft}
                 saving={saving}
                 onSectionSave={onSectionSave}
                 importedLabel={importedSource?.label}
+              />
+              <ProfileCertificatesSection
+                draft={draft}
+                saving={saving}
+                onSectionSave={onSectionSave}
               />
               <ProfileLanguagesSection
                 draft={draft}
@@ -320,7 +327,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
             </div>
             <ProfileSideRail draft={draft} />
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -330,47 +337,13 @@ interface ProfileScreenViewProps {
   readonly candidateId: string;
   readonly memory: readonly CandidateMemory[];
   readonly importedSources?: readonly ImportedSourceSummary[];
-  readonly onRefreshFacts?: () => void;
+  readonly onRefreshFacts?: () => Promise<void> | void;
   readonly onOpenConnections?: () => void;
-  /** Tab state lives in the cabinet shell now — it renders next to the H1. */
+  readonly onOpenExpert?: () => void;
+  readonly onTabChange?: (tab: ProfileTab) => void;
   readonly tab?: ProfileTab;
-  /**
-   * "Open to work" regions save through the same workspace write the wizard's
-   * region step uses (`routePremises.ts`) — `candidate_workspaces`, not a
-   * PATCH-only account column (B265 review round 3, PRB-forbidden ALTER
-   * TABLE on the prod DB).
-   */
-  readonly workspace?: CandidateWorkspace;
-  readonly onUpdateWorkspace?: (workspace: CandidateWorkspace) => void;
   readonly vacancyRequirement?: VacancyProfileRequirementRequest;
   readonly onVacancyRequirementHandled?: () => void;
-}
-
-/**
- * The confirm handler alone (workMode PATCH plus the workspace-region write)
- * pulled `ProfileScreenView` past the function-length gate, so it lives in
- * its own hook rather than shrinking the comments that explain either write.
- */
-function useConfirmOpenToWork(
-  workspace: CandidateWorkspace | undefined,
-  onUpdateWorkspace: ((workspace: CandidateWorkspace) => void) | undefined,
-) {
-  const [confirming, setConfirming] = useState(false);
-  const confirm = useCallback(
-    async (confirmation: OpenToWorkConfirmation) => {
-      setConfirming(true);
-      try {
-        await updateAccountProfile({ workMode: confirmation.workMode });
-        if (workspace && confirmation.regions.length > 0) {
-          onUpdateWorkspace?.(workspaceWithOpenToWorkRegions(workspace, confirmation));
-        }
-      } finally {
-        setConfirming(false);
-      }
-    },
-    [workspace, onUpdateWorkspace],
-  );
-  return { confirming, confirm };
 }
 
 /**
@@ -399,34 +372,28 @@ function useConnectionStatuses(): readonly CandidateConnection[] | undefined {
 
 function useSectionSaveHandler(state: ReturnType<typeof useResumeStudio>) {
   return useCallback(
-    (next: ResumeDraft) => {
+    async (next: ResumeDraft) => {
       state.setDraft(next);
-      state.save(next);
+      return state.save(next);
     },
     [state],
   );
 }
 
 function useProfileScreenController(props: ProfileScreenViewProps) {
-  const { candidateId, onRefreshFacts, workspace, onUpdateWorkspace } = props;
+  const { candidateId, onRefreshFacts } = props;
   const state = useResumeStudio(onRefreshFacts);
   const connections = useConnectionStatuses();
-  const { confirming: confirmingOtw, confirm: confirmOpenToWork } = useConfirmOpenToWork(
-    workspace,
-    onUpdateWorkspace,
-  );
   const onSectionSave = useSectionSaveHandler(state);
   const reloadResume = state.reload;
   const refreshProfile = useCallback(async () => {
     await reloadResume();
-    onRefreshFacts?.();
+    await onRefreshFacts?.();
   }, [onRefreshFacts, reloadResume]);
   const consultant = useConsultantSuggestions(candidateId, refreshProfile);
   return {
     state,
     connections,
-    confirmingOtw,
-    confirmOpenToWork,
     onSectionSave,
     refreshProfile,
     consultant,
@@ -472,15 +439,7 @@ function ProfileScreenSurfaceWithController({
   readonly controller: ReturnType<typeof useProfileScreenController>;
   readonly onVacancySuggestionPrepared: (commandId: string) => Promise<void>;
 }) {
-  const {
-    state,
-    connections,
-    confirmingOtw,
-    confirmOpenToWork,
-    onSectionSave,
-    refreshProfile,
-    consultant,
-  } = controller;
+  const { state, connections, onSectionSave, refreshProfile, consultant } = controller;
   return (
     <ProfileScreenSurface
       candidateId={props.candidateId}
@@ -497,8 +456,9 @@ function ProfileScreenSurfaceWithController({
       onSectionSave={onSectionSave}
       onOpenConnections={props.onOpenConnections}
       connections={connections}
-      onConfirmOpenToWork={(confirmation) => void confirmOpenToWork(confirmation)}
-      confirmingOpenToWork={confirmingOtw}
+      importedSources={props.importedSources}
+      onOpenExpert={props.onOpenExpert}
+      onTabChange={props.onTabChange}
       tab={props.tab}
       vacancyRequirement={props.vacancyRequirement}
       onVacancyRequirementHandled={props.onVacancyRequirementHandled}

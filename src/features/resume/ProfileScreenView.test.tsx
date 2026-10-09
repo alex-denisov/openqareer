@@ -9,7 +9,7 @@ const baseProps: ProfileScreenSurfaceProps = {
   onRetry: () => undefined,
   onDraftChange: () => undefined,
   onSectionSave: () => undefined,
-  onConfirmOpenToWork: () => undefined,
+  onOpenExpert: () => undefined,
 };
 
 const populatedDraft: ResumeDraft = {
@@ -124,7 +124,7 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('career-profile-screen-topcard');
   });
 
-  it('renders long "about" text across paragraphs without truncating it', () => {
+  it('shows a short "about" excerpt and an expansion action for longer text', () => {
     const longAbout = Array.from({ length: 6 }, (_, i) => `Абзац номер ${i + 1}. `.repeat(20)).join(
       '\n\n',
     );
@@ -134,7 +134,9 @@ describe('ProfileScreenSurface — states', () => {
         draft={{ ...populatedDraft, candidate: { ...populatedDraft.candidate, about: longAbout } }}
       />,
     );
-    expect(html).toContain('Абзац номер 6');
+    expect(html).toContain('Показать полностью');
+    const about = html.match(/<section[^>]*id="sec-about"[\s\S]*?<\/section>/u)?.[0] ?? '';
+    expect(about).not.toContain('Абзац номер 6');
   });
 
   // Owner remark #6: a heading paragraph followed by "- bullet" lines must
@@ -193,66 +195,58 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('career-profile-screen-position-bullets');
     expect(html).toContain('Отвечал за платёжную стратегию для 6 продуктовых команд.');
     expect(html).toContain('career-profile-screen-lang-source');
-    expect(html).toContain('Full professional proficiency');
+    expect(html).toContain('Источник: импортированный профиль');
+    expect(html).not.toContain('Full professional proficiency');
   });
 
-  it('gives every section a working pencil (owner remark #7)', () => {
+  it('keeps section editing actions available on their profile tabs', () => {
     const html = renderToStaticMarkup(
       <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
     );
     expect(html).toContain('Изменить «Обо мне»');
-    expect(html).toContain('Изменить должность');
     expect(html).toContain('Изменить образование');
-    expect(html).toContain('Изменить навыки');
+    expect(html).toContain('Редактировать место целиком: FinNova Bank');
+    const skillsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="skills" />,
+    );
+    expect(skillsHtml).toContain('Изменить навыки');
   });
 
-  // The "Профиль / Документ и форматы" tabs now live in the cabinet shell's
-  // page header, beside the «Профиль» title, not in this surface (B265
-  // review round 3) — the surface only reads the controlled `tab` prop.
-  it('never renders a permanent Save button, and switches to the document menu on the "documents" tab', () => {
+  it('renders three controlled tabs with matching panels and no permanent Save button', () => {
     const profileHtml = renderToStaticMarkup(
-      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="profile" />,
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
     );
     expect(profileHtml).not.toContain('>Сохранить<');
-    expect(profileHtml).not.toContain('career-profile-screen-tabs');
+    expect(profileHtml).toContain('role="tablist"');
+    expect(profileHtml).toContain('id="profile-panel-resume"');
     expect(profileHtml).toContain('sec-experience');
 
-    const documentsHtml = renderToStaticMarkup(
-      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="documents" />,
+    const skillsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="skills" />,
     );
-    expect(documentsHtml).not.toContain('sec-experience');
+    expect(skillsHtml).toContain('id="profile-panel-skills"');
+    expect(skillsHtml).not.toContain('sec-experience');
+    expect(skillsHtml).toContain('Пройти квиз по навыкам');
+    expect(profileHtml).toContain('career-profile-screen-ats-card');
+    expect(profileHtml).toContain('Не рассчитано');
+    expect(profileHtml).not.toContain('>JSON<');
   });
 
-  it('D24: после выбора вкладки "documents" содержимое документа раскрыто сразу без дублирующей кнопки', () => {
-    const documentsHtml = renderToStaticMarkup(
-      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="documents" />,
-    );
-    // Содержимое документа видно сразу
-    expect(documentsHtml).toContain('career-profile-screen-document-menu');
-    expect(documentsHtml).toContain('Формат позиционирования');
-    expect(documentsHtml).toContain('Экспорт резюме');
-    // Нет дублирующей кнопки со свертыванием
-    expect(documentsHtml).not.toContain('>Документ и форматы</button>');
-  });
-
-  // Owner acceptance 2026-09-25: the self-audit view was orphaned behind a
-  // dead host after B248 — it must reach the candidate through the profile
-  // screen's own tab row, not a screen nobody renders.
-  it('switches to the self-audit view on the "audit" tab', () => {
+  it('switches to the digital footprint audit on the trace tab', () => {
     const auditHtml = renderToStaticMarkup(
       <ProfileScreenSurface
         {...baseProps}
         draft={populatedDraft}
-        tab="audit"
+        tab="trace"
         candidateId="cand-1"
       />,
     );
     expect(auditHtml).not.toContain('sec-experience');
-    expect(auditHtml).toContain('career-footprint-surface');
-    expect(auditHtml).toContain('Скоро: ждёт утверждения текста согласия');
+    expect(auditHtml).toContain('id="profile-panel-trace"');
+    expect(auditHtml).toContain('career-footprint');
   });
 
-  it('renders languages with CEFR badge and certifications in their own section separate from courses (B265)', () => {
+  it('renders localized language levels and certifications separate from courses (B265)', () => {
     const draftWithCertsAndLangs: ResumeDraft = {
       ...populatedDraft,
       languages: [
@@ -293,11 +287,10 @@ describe('ProfileScreenSurface — states', () => {
     );
 
     // Languages: check name and CEFR badge
-    expect(html).toContain('English');
-    expect(html).toContain('Spanish');
-    expect(html).toContain('career-profile-screen-cefr');
-    expect(html).toContain('C1');
-    expect(html).toContain('B2');
+    expect(html).toContain('Английский');
+    expect(html).toContain('Испанский');
+    expect(html).toContain('свободный (C1)');
+    expect(html).toContain('выше среднего (B2)');
 
     // Certifications: separate section with id="sec-certificates"
     expect(html).toContain('id="sec-certificates"');

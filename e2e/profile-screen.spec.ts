@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 import type { MatchedVacancyItem } from '../src/features/coach/cabinetTypes';
+import type { ImportedSourceSummary } from '../src/features/coach/coachApi';
 
 /**
  * B265 — the rail's «Профиль» replaces Resume Studio with its own screen.
@@ -360,12 +361,18 @@ const C66_VACANCY: MatchedVacancyItem = {
   },
 };
 
-async function stubSession(page: Page): Promise<void> {
+async function stubSession(
+  page: Page,
+  importedSources?: readonly ImportedSourceSummary[],
+): Promise<void> {
+  const snapshot = importedSources
+    ? { ...SNAPSHOT, importedSources: [...importedSources] }
+    : SNAPSHOT;
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
-    if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
+    if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: snapshot } });
     if (pathname === '/api/v1/candidate/me/messages') {
       return route.fulfill({ json: { data: [], meta: { nextOffset: null } } });
     }
@@ -473,6 +480,12 @@ async function openProfile(page: Page): Promise<void> {
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 }
 
+function b441Screenshot(name: string): string {
+  const directory = 'output/playwright/B441';
+  mkdirSync(directory, { recursive: true });
+  return join(directory, `${name}.png`);
+}
+
 /**
  * `.career-main` scrolls internally (`overflow: auto`), so neither
  * `page.screenshot({ fullPage: true })` nor `locator.screenshot()` captures
@@ -489,11 +502,18 @@ async function screenshotFullProfilePage(page: Page, path: string): Promise<void
   await page.screenshot({ path, fullPage: true });
 }
 
+async function captureB441View(page: Page, path: string): Promise<void> {
+  if (page.viewportSize()?.width === 390) {
+    await page.screenshot({ path, fullPage: false });
+    return;
+  }
+  await screenshotFullProfilePage(page, path);
+}
+
 const SECTION_IDS = [
   'sec-about',
   'sec-experience',
   'sec-education',
-  'sec-skills',
   'sec-certificates',
   'sec-projects',
   'sec-courses',
@@ -501,6 +521,227 @@ const SECTION_IDS = [
   'sec-recommendations',
   'sec-achievements',
 ] as const;
+
+test.describe('B441 Profile screen from mockup 2', () => {
+  test('resume tab shows source counts, block completeness and an honest ATS state', async ({
+    page,
+  }, testInfo) => {
+    const importedSources: ImportedSourceSummary[] = [
+      {
+        platform: 'linkedin',
+        connectedAt: '2026-09-12T09:00:00.000Z',
+        lastImportedAt: '2026-09-12T09:00:00.000Z',
+        factCount: 9,
+      },
+      {
+        platform: 'hh',
+        connectedAt: '2026-10-07T09:00:00.000Z',
+        lastImportedAt: '2026-10-07T09:00:00.000Z',
+        factCount: 8,
+      },
+    ];
+    await stubSession(page, importedSources);
+    await openProfile(page);
+
+    const tabs = page.getByRole('tablist', { name: 'Профиль' });
+    await expect(tabs.getByRole('tab', { name: 'Резюме' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    if (testInfo.project.name === 'mobile-390') {
+      const tabsBox = await tabs.boundingBox();
+      const bottomNavBox = await page.locator('.career-mobile-nav').boundingBox();
+      expect(tabsBox).not.toBeNull();
+      expect(bottomNavBox).not.toBeNull();
+      expect(tabsBox!.y + tabsBox!.height).toBeLessThan(bottomNavBox!.y);
+      await page.setViewportSize({ width: 320, height: 844 });
+      const narrowTabsBox = await tabs.boundingBox();
+      const narrowNavBox = await page.locator('.career-mobile-nav').boundingBox();
+      expect(narrowTabsBox).not.toBeNull();
+      expect(narrowNavBox).not.toBeNull();
+      expect(narrowTabsBox!.y + narrowTabsBox!.height).toBeLessThan(narrowNavBox!.y);
+      await page.setViewportSize({ width: 390, height: 844 });
+    }
+    await expect(tabs.getByRole('tab', { name: /Навыки.*24/u })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'Цифровой след' })).toBeVisible();
+    await expect(
+      page.getByRole('progressbar', { name: 'Резюме собрано 10 из 11 блоков' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /LinkedIn.*9 фактов.*12\.09/u })).toBeVisible();
+    await expect(page.getByRole('button', { name: /hh\.ru.*8 фактов.*07\.10/u })).toBeVisible();
+    await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Проверка резюме', exact: true })).toBeVisible();
+    const ats = page.locator('.career-profile-screen-ats-card');
+    await expect(ats).toContainText('Не рассчитано');
+    await expect(ats).not.toContainText(/\b\d+ из 100\b/u);
+    await expect(page.getByRole('button', { name: /JSON/u })).toHaveCount(0);
+    await expect(page.getByText('Full professional proficiency')).toHaveCount(0);
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-resume`));
+
+    await page.locator('.career-profile-screen-ats-details summary').click();
+    await expect(page.locator('.career-resume-ats-view')).toBeVisible();
+    await expect(page.getByLabel('Требования вакансии')).toBeVisible();
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-ats-editor`));
+
+    const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 фактов/u });
+    await sourceButton.click();
+    const account = page.getByRole('dialog', { name: 'Аккаунт' });
+    await expect(account).toBeVisible();
+    await expect(account.getByRole('heading', { name: 'Профили на площадках' })).toBeVisible();
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-source-management`));
+  });
+
+  test('skills and digital footprint are real tabs, not sections mixed into the résumé', async ({
+    page,
+  }, testInfo) => {
+    await stubSession(page);
+    await page.setViewportSize(
+      testInfo.project.name === 'mobile-390'
+        ? { width: 390, height: 844 }
+        : { width: 1440, height: 900 },
+    );
+    await openProfile(page);
+
+    const tabs = page.getByRole('tablist', { name: 'Профиль' });
+    const skillsTab = tabs.getByRole('tab', { name: /Навыки.*24/u });
+    await skillsTab.click();
+    await expect(skillsTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('#sec-skills')).toBeVisible();
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(page.locator('.career-profile-screen-topcard')).toBeHidden();
+    }
+    await expect(page.getByRole('button', { name: 'Пройти квиз по навыкам' })).toBeVisible();
+    await expect(page.locator('#sec-about')).toHaveCount(0);
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-skills-tab`));
+
+    await page.getByRole('button', { name: 'Пройти квиз по навыкам' }).click();
+    const expert = page.getByRole('complementary', { name: /^Консультант · / });
+    await expect(expert).toBeVisible();
+    await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+
+    await tabs.getByRole('tab', { name: 'Цифровой след' }).click();
+    await expect(tabs.getByRole('tab', { name: 'Цифровой след' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(page.locator('.career-footprint-surface')).toBeVisible();
+    if (testInfo.project.name === 'mobile-390') {
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    }
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-trace-tab`));
+  });
+
+  test('one experience form edits role, company, dates, location, format and achievements', async ({
+    page,
+  }, testInfo) => {
+    let savedDraft: Record<string, unknown> | undefined;
+    const createdFacts: string[] = [];
+    await stubSession(page);
+    await page.route('**/api/v1/candidate/resume', async (route) => {
+      if (route.request().method() === 'PUT') {
+        savedDraft = route.request().postDataJSON() as Record<string, unknown>;
+      }
+      return route.fulfill({
+        json: {
+          data: {
+            draft: savedDraft ?? DRAFT,
+            savedAt: {
+              createdAt: '2026-10-09T00:00:00.000Z',
+              updatedAt: '2026-10-09T00:00:00.000Z',
+            },
+            projection: { evidenceSnapshot: [], master: null, germany: null },
+            evidenceFreshness: { stale: [] },
+          },
+        },
+      });
+    });
+    await page.route('**/api/v1/candidate/experience-facts', async (route) => {
+      const body = route.request().postDataJSON() as { statement: string };
+      const id = String(route.request().headers()['idempotency-key']);
+      createdFacts.push(body.statement);
+      return route.fulfill({
+        json: {
+          data: {
+            memory: {
+              id,
+              kind: 'fact',
+              domain: 'responsibility',
+              statement: body.statement,
+              confidence: 'candidate-confirmed',
+              sourceMessageIds: [],
+              sensitive: false,
+              status: 'confirmed',
+            },
+          },
+        },
+      });
+    });
+    await openProfile(page);
+
+    const experience = page.locator('#sec-experience');
+    await experience
+      .getByRole('button', { name: 'Редактировать место целиком: FinNova Bank' })
+      .first()
+      .click();
+    const form = experience.locator('.career-profile-screen-place-editor');
+    await expect(form.getByLabel('Должность')).toBeVisible();
+    await expect(form.getByLabel('Компания')).toBeVisible();
+    await expect(form.getByLabel('Начало')).toHaveAttribute('type', 'month');
+    await expect(form.getByLabel('Окончание')).toHaveAttribute('type', 'month');
+    await expect(form.getByLabel('Локация')).toHaveValue('Берлин, Германия');
+    const workplace = form.getByLabel('Формат работы');
+    await expect(workplace).toBeVisible();
+    await expect(workplace).toHaveValue('hybrid');
+    await expect(form.getByRole('group', { name: 'Достижения' })).toBeVisible();
+    await form.getByLabel('Должность').fill('VP of Payments');
+    await form.getByLabel('Компания').fill('FinNova Payments');
+    await form.getByLabel('Локация').fill('Берлин');
+    await form.getByLabel('Тип занятости').fill('Полная занятость');
+    await form.getByLabel('Начало').fill('2023-02');
+    await form.getByLabel('Работаю здесь').uncheck();
+    await form.getByLabel('Окончание').fill('2024-02');
+    await workplace.selectOption('remote');
+    await form.getByLabel('Описание').fill('Построила платформу обработки платежей.');
+    await form
+      .getByLabel('Добавить достижения списком')
+      .fill('Сократила время выпуска релиза с трёх недель до двух дней.');
+    await form.getByRole('button', { name: 'Сохранить место' }).click();
+    await expect.poll(() => savedDraft).toBeDefined();
+    await expect.poll(() => createdFacts).toHaveLength(2);
+    const savedExperience = (
+      savedDraft?.experience as Array<Record<string, unknown>> | undefined
+    )?.find((entry) => entry.id === 'exp-1');
+    expect(savedExperience).toMatchObject({
+      title: 'VP of Payments',
+      employer: 'FinNova Payments',
+      location: 'Берлин',
+      employmentType: 'Полная занятость',
+      startDate: '2023-02',
+      endDate: '2024-02',
+      current: false,
+      workplaceType: 'remote',
+    });
+    expect(createdFacts).toEqual([
+      'Построила платформу обработки платежей.',
+      'Сократила время выпуска релиза с трёх недель до двух дней.',
+    ]);
+    await expect(experience).toContainText('FinNova Payments');
+    await expect(
+      experience.getByRole('button', { name: /Редактировать место целиком/u }),
+    ).toHaveCount(3);
+    await experience.scrollIntoViewIfNeeded();
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-experience-saved`));
+    await experience.getByRole('button', { name: 'Добавить место работы' }).click();
+    const addForm = experience.locator('.career-profile-screen-place-editor');
+    await expect(addForm).toBeVisible();
+    await addForm.scrollIntoViewIfNeeded();
+    await captureB441View(page, b441Screenshot(`${testInfo.project.name}-experience-add`));
+    await experience.getByRole('button', { name: 'Отменить' }).click();
+  });
+});
 
 test.describe('B265 Profile screen', () => {
   test('shows the saved reader method beside the source chip', async ({ page }) => {
@@ -531,7 +772,7 @@ test.describe('B265 Profile screen', () => {
     const row = page.locator('.career-profile-screen-status-row');
     const readerStatus = row.locator('.career-profile-screen-reader-status');
     await expect(readerStatus).toHaveText('Прочитано моделью');
-    await expect(row.locator('.career-profile-screen-source-chip')).toBeVisible();
+    await expect(row.locator('.career-profile-screen-source-chip').first()).toBeVisible();
     await expect(page.getByText('Резюме прочитано: неизвестно', { exact: true })).toHaveCount(0);
     const accessibility = await new AxeBuilder({ page })
       .include('.career-profile-screen-view')
@@ -575,14 +816,17 @@ test.describe('B265 Profile screen', () => {
     await openProfile(page);
 
     await expect(page.locator('.career-profile-screen-topcard')).toContainText('Марина Соколова');
-    await expect(page.locator('.career-profile-screen-otw')).toContainText('Open to work');
+    await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
 
     for (const id of SECTION_IDS) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
-    await expect(page.locator('#sec-courses')).toContainText('Импорт из LinkedIn курсов не нашёл');
-    // C54: полнота импорта живёт в раскрывающемся чипе источника на шапке профиля.
-    await page.locator('.career-profile-screen-source-chip summary').click();
+    await expect(page.locator('#sec-courses')).toContainText(
+      'В импортированных данных курсы не найдены',
+    );
+    await expect(page.locator('.career-work-preferences')).toBeVisible();
+    // The source list keeps contact and course coverage available on demand.
+    await page.locator('.career-profile-screen-coverage-details summary').click();
     await expect(page.locator('.career-profile-screen-coverage')).toBeVisible();
     await expect(page.locator('.career-profile-screen-position-bullets li').first()).toBeVisible();
     await expect(page.locator('.career-profile-screen-lang-source').first()).toBeVisible();
@@ -623,6 +867,8 @@ test.describe('B265 Profile screen', () => {
     for (const id of SECTION_IDS) {
       await expect(page.locator(`#${id}`)).toBeAttached();
     }
+    await expect(page.locator('.career-profile-screen-anchor-nav')).toBeHidden();
+    await expect(page.getByRole('tablist', { name: 'Профиль' })).toBeVisible();
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -640,20 +886,13 @@ test.describe('B265 Profile screen', () => {
     await screenshotFullProfilePage(page, testInfo.outputPath('profile-390.png'));
   });
 
-  test('confirms the Open to work proposal without a page redirect', async ({ page }) => {
-    let patched: Record<string, unknown> | undefined;
+  test('keeps profile preferences available and removes the old open-to-work banner', async ({
+    page,
+  }) => {
     await stubSession(page);
-    // Registered after the catch-all so it wins for this one path (Playwright
-    // matches the most recently added route first).
-    await page.route('**/api/v1/account/profile', async (route) => {
-      patched = route.request().postDataJSON() as Record<string, unknown>;
-      await route.fulfill({ json: { data: ACCOUNT } });
-    });
     await openProfile(page);
-
-    await page.getByRole('button', { name: 'Подтвердить и применить к целям поиска' }).click();
-    await expect(page).toHaveURL(/\/app/);
-    await expect.poll(() => patched).toMatchObject({ workMode: expect.any(String) });
+    await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
+    await expect(page.locator('.career-work-preferences')).toBeVisible();
   });
 
   test('C58: inline consultant suggestion on About section: accept and revert', async ({
@@ -804,7 +1043,7 @@ test.describe('B265 Profile screen', () => {
 
   test('C58: a grounded consultant proposal is prepared before it appears in the Profile', async ({
     page,
-  }) => {
+  }, testInfo) => {
     const turnResult = {
       message: 'Предлагаю обновить раздел «Обо мне» по подтверждённым фактам.',
       phase: 'resume',
@@ -892,8 +1131,16 @@ test.describe('B265 Profile screen', () => {
     });
 
     await openProfile(page);
-    await page.locator('button:has-text("Спросить консультанта"):visible').click();
-    const expert = page.getByRole('dialog', { name: /^Консультант · / });
+    const headerAsk = page.locator('button:has-text("Спросить консультанта"):visible').first();
+    if (await headerAsk.isVisible()) {
+      await headerAsk.click();
+    } else {
+      await page.getByRole('button', { name: 'Собрать факты с консультантом' }).click();
+    }
+    const expert = page.getByRole('complementary', { name: /^Консультант · / });
+    if (testInfo.project.name === 'mobile-390') {
+      await expert.getByRole('button', { name: 'Развернуть консультанта' }).click();
+    }
     await expert
       .getByLabel('Сообщение карьерному консультанту')
       .fill('Обнови раздел «Обо мне» по фактам профиля.');
@@ -1101,143 +1348,33 @@ test.describe('B265 Profile screen', () => {
     ).toHaveCount(0);
   });
 
-  test('переключает статус «Вы в поиске» (включить -> выключить) на desktop 1440 (C64)', async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width: 1440, height: 900 });
-    let consentState = {
-      granted: false,
-      policyVersion: 'search-consent-2026-09-27',
-      updatedAt: '2026-09-21T09:00:00.000Z',
-    };
+  test('does not show the old search-consent badge in Profile', async ({ page }) => {
     await stubSession(page);
-    await page.route('**/api/v1/candidate/search-consent', async (route) => {
-      const request = route.request();
-      if (request.method() === 'PUT') {
-        const body = request.postDataJSON() as { granted?: boolean } | null;
-        consentState = {
-          granted: Boolean(body?.granted),
-          policyVersion: 'search-consent-2026-09-27',
-          updatedAt: new Date().toISOString(),
-        };
-        return route.fulfill({ json: { data: { consent: consentState } } });
-      }
-      return route.fulfill({ json: { data: { consent: consentState } } });
-    });
-
     await openProfile(page);
-
-    const consentRow = page.locator('.career-profile-screen-search-consent');
-    await expect(consentRow).toBeVisible();
-    await expect(consentRow).toContainText('Вы в поиске');
-    await expect(consentRow).toContainText('выключено');
-
-    const toggleBtn = consentRow.getByRole('button', { name: /Включить|Выключить/ });
-    await expect(toggleBtn).toHaveText('Включить');
-    await toggleBtn.click();
-
-    await expect(consentRow).toContainText('включено');
-    await expect(toggleBtn).toHaveText('Выключить');
-
-    await toggleBtn.click();
-    await expect(consentRow).toContainText('выключено');
-    await expect(toggleBtn).toHaveText('Включить');
-
-    await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-1440.png' });
-    await page.screenshot({
-      path: testInfo.outputPath('profile-search-consent-1440.png'),
-    });
+    await expect(page.locator('.career-profile-screen-search-consent')).toHaveCount(0);
+    await expect(page.getByText('Вы в поиске', { exact: true })).toHaveCount(0);
   });
 
-  test('переключает статус «Вы в поиске» (включить -> выключить) на mobile 390 (C64)', async ({
-    page,
-  }, testInfo) => {
-    await page.setViewportSize({ width: 390, height: 844 });
-    let consentState = {
-      granted: false,
-      policyVersion: 'search-consent-2026-09-27',
-      updatedAt: '2026-09-21T09:00:00.000Z',
-    };
+  test('B441: master resume and saved targeted snapshots are stated honestly', async ({ page }) => {
     await stubSession(page);
-    await page.route('**/api/v1/candidate/search-consent', async (route) => {
-      const request = route.request();
-      if (request.method() === 'PUT') {
-        const body = request.postDataJSON() as { granted?: boolean } | null;
-        consentState = {
-          granted: Boolean(body?.granted),
-          policyVersion: 'search-consent-2026-09-27',
-          updatedAt: new Date().toISOString(),
-        };
-        return route.fulfill({ json: { data: { consent: consentState } } });
-      }
-      return route.fulfill({ json: { data: { consent: consentState } } });
-    });
-
     await openProfile(page);
 
-    const consentRow = page.locator('.career-profile-screen-search-consent');
-    await expect(consentRow).toBeVisible();
-    await expect(consentRow).toContainText('Вы в поиске');
-    await expect(consentRow).toContainText('выключено');
-
-    const toggleBtn = consentRow.getByRole('button', { name: /Включить|Выключить/ });
-    await expect(toggleBtn).toHaveText('Включить');
-    await toggleBtn.click();
-
-    await expect(consentRow).toContainText('включено');
-    await expect(toggleBtn).toHaveText('Выключить');
-
-    await toggleBtn.click();
-    await expect(consentRow).toContainText('выключено');
-    await expect(toggleBtn).toHaveText('Включить');
-
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
-
-    await page.screenshot({ path: 'output/playwright/C64/profile-search-consent-390.png' });
-    await page.screenshot({
-      path: testInfo.outputPath('profile-search-consent-390.png'),
-    });
-  });
-
-  test('D24: вкладка «Документ и форматы» сразу раскрыта без дублирующей кнопки', async ({
-    page,
-  }) => {
-    await stubSession(page);
-    await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await openProfile(page);
-
-    const docTab = page
-      .locator('.career-profile-screen-tabs')
-      .getByRole('button', { name: 'Документ и форматы' });
-    await docTab.click();
-
-    await expect(page.locator('.career-profile-screen-document-menu')).toBeVisible();
-    await expect(page.locator('.career-resume-formats')).toBeVisible();
-    await expect(page.locator('.career-resume-formats')).toContainText('Stanford PDF');
-    await expect(
-      page.locator('.career-profile-screen-view > button.career-quiet-button'),
-    ).toHaveCount(0);
+    const versions = page.locator('#sec-documents');
+    await expect(versions).toBeVisible();
+    await expect(versions).toContainText('Мастер-резюме');
+    await expect(versions).toContainText('Сохранённых снимков резюме под вакансию пока нет');
+    await expect(page.getByRole('button', { name: /JSON/u })).toHaveCount(0);
   });
   test('B333: печатный вид резюме — чистый документ без подсказок редактора', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 });
     await stubSession(page);
-    await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openProfile(page);
-    await page
-      .locator('.career-profile-screen-tabs')
-      .getByRole('button', { name: 'Документ и форматы' })
-      .click();
     await expect(page.locator('.career-resume-print')).toHaveCount(1);
     await page.emulateMedia({ media: 'print' });
 
     const print = page.locator('.career-resume-print');
     await expect(print).toBeVisible();
-    await expect(page.locator('.career-resume-document')).toBeHidden();
+    await expect(page.locator('.career-profile-screen-view')).toBeHidden();
     await expect(print).not.toContainText('Добавьте');
     await expect(print).not.toContainText('Не указано');
     await expect(print.locator('h1')).toBeVisible();

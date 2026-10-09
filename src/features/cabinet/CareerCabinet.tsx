@@ -14,7 +14,7 @@ import { TodayScreen } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
-import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
+import type { ProfileTab } from '../resume/profileTabs';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
@@ -231,10 +231,7 @@ export function CareerCabinet({
     },
     [data, onUpdateWorkspace, pool, targetDirection, workspace],
   );
-  // «Профиль / Документ и форматы» — в шапке страницы, справа от заголовка
-  // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
-  // вкладки решают, что показывает весь экран (B265 review round 3).
-  const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
+  const [profileTab, setProfileTab] = useState<ProfileTab>('resume');
   const [vacancyProfileRequest, setVacancyProfileRequest] =
     useState<VacancyProfileRequirementRequest | null>(null);
   const openProfileRequirement = useCallback(
@@ -289,14 +286,9 @@ export function CareerCabinet({
             onAskConsultant={
               onOpenExpert ? () => onOpenExpert(stageForCabinetView(view)) : undefined
             }
-            tabs={
-              view === 'profile' ? (
-                <ProfileTabs tab={profileTab} onTab={setProfileTab} />
-              ) : undefined
-            }
           />
         ) : null}
-        {pathIndicatorSteps && !showsVacanciesScreen ? (
+        {pathIndicatorSteps && !showsVacanciesScreen && view !== 'profile' ? (
           <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
@@ -319,6 +311,7 @@ export function CareerCabinet({
             onScheduleInterview={scheduleVacancyInterview}
             data={data}
             profileTab={profileTab}
+            onProfileTabChange={setProfileTab}
             vacancyProfileRequest={vacancyProfileRequest}
             consultantAction={journey?.reasonedAction}
             navigationOptions={navigationOptions}
@@ -329,7 +322,6 @@ export function CareerCabinet({
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
             onOpenExpert={onOpenExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
           />
         )}
       </div>
@@ -383,6 +375,7 @@ function CabinetSection({
   onScheduleInterview,
   data,
   profileTab,
+  onProfileTabChange,
   vacancyProfileRequest,
   consultantAction,
   navigationOptions,
@@ -393,7 +386,6 @@ function CabinetSection({
   onOpenTariffs,
   onOpenConnections,
   onOpenExpert,
-  onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
   navigationOptions?: NavigationOptions;
@@ -413,6 +405,7 @@ function CabinetSection({
   ) => Promise<ApplicationView>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
+  onProfileTabChange: (tab: ProfileTab) => void;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   consultantAction?: ReasonedCareerAction;
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
@@ -422,7 +415,6 @@ function CabinetSection({
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   useEffect(() => {
     if (view === 'career') {
@@ -440,8 +432,8 @@ function CabinetSection({
       />
     );
   }
-  // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
-  // every imported section, edit-in-place), not Resume Studio. «Резюме»
+  // B265 — the rail's «Профиль» is its own screen (summary, imported sections,
+  // edit-in-place), not Resume Studio. «Резюме»
   // (`view === 'resume'`) is no longer a reachable rail item but keeps
   // pointing at Resume Studio for anyone with a stored link to it.
   if (view === 'profile') {
@@ -458,8 +450,8 @@ function CabinetSection({
         }}
         onOpenConnections={onOpenConnections}
         tab={profileTab}
-        workspace={workspace}
-        onUpdateWorkspace={onUpdateWorkspace}
+        onTabChange={onProfileTabChange}
+        onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
       />
     );
   }
@@ -506,7 +498,10 @@ function CabinetSection({
       })}
       premisesLoading={data.loading}
       onSavePremises={onSavePremises}
-      focusRoleFilter={view === 'career' || Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')}
+      focusRoleFilter={
+        view === 'career' ||
+        Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')
+      }
     />
   );
 }

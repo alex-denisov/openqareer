@@ -36,7 +36,11 @@ function WorkPreferencesRailPanel() {
 
 export function ProfileSideRail({ draft }: { readonly draft: ResumeDraft }) {
   return (
-    <aside className="career-profile-screen-side-col" aria-label="Контакты и ограничения">
+    <aside
+      id="sec-relocation"
+      className="career-profile-screen-side-col"
+      aria-label="Контакты и ограничения"
+    >
       <ContactsPanel draft={draft} />
       <WorkPreferencesRailPanel />
     </aside>

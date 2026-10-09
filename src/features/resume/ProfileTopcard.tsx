@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import {
+  ArrowClockwise,
   CaretDown,
   CheckCircle,
   EnvelopeSimple,
@@ -13,11 +14,10 @@ import {
 } from '@phosphor-icons/react';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
+import { profileCompleteness } from './profileCompleteness';
 import { patchTopcard } from './profileEditing';
-import { ProfileSearchConsentRow } from './ProfileSearchConsentRow';
 import type { ResumeDraft, ResumeReaderProvenance } from './resumeTypes';
-import type { SearchConsentState } from '../../../shared/searchConsent';
-import type { CandidateConnection } from '../coach/coachApi';
+import type { CandidateConnection, ImportedSourceSummary } from '../coach/coachApi';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 
 interface ProfileTopcardProps {
@@ -26,12 +26,13 @@ interface ProfileTopcardProps {
   readonly updatedAt?: string;
   readonly reader: ResumeReaderProvenance | null;
   readonly onDraftChange: (draft: ResumeDraft) => void;
+  readonly onSectionSave?: (draft: ResumeDraft) => Promise<boolean | void> | boolean | void;
+  readonly saving?: boolean;
   /** Undefined while the status read has not landed yet (B266 pattern). */
   readonly connections?: readonly CandidateConnection[];
+  readonly importedSources?: readonly ImportedSourceSummary[];
   /** Opens «Аккаунт → Подключения» (C54 п.11) — no chip without it. */
   readonly onOpenConnections?: () => void;
-  readonly searchConsent?: SearchConsentState | null;
-  readonly onSearchConsentChange?: (consent: SearchConsentState) => void;
 }
 
 /**
@@ -125,10 +126,14 @@ function TopcardEditForm({
   draft,
   onSave,
   onCancel,
+  saving,
 }: {
   readonly draft: ResumeDraft;
-  readonly onSave: (patch: Parameters<typeof patchTopcard>[1]) => void;
+  readonly onSave: (
+    patch: Parameters<typeof patchTopcard>[1],
+  ) => Promise<boolean | void> | boolean | void;
   readonly onCancel: () => void;
+  readonly saving?: boolean;
 }) {
   const [fullName, setFullName] = useState(draft.candidate.fullName ?? '');
   const [headline, setHeadline] = useState(draft.candidate.headline ?? '');
@@ -166,9 +171,10 @@ function TopcardEditForm({
         <button
           type="button"
           className="career-primary-button"
-          onClick={() => onSave({ fullName, headline, location, email, phone })}
+          disabled={saving}
+          onClick={() => void onSave({ fullName, headline, location, email, phone })}
         >
-          Сохранить
+          {saving ? 'Сохраняем…' : 'Сохранить'}
         </button>
       </div>
     </div>
@@ -183,9 +189,13 @@ function TopcardEditForm({
 function TopcardEdit({
   draft,
   onDraftChange,
+  onSectionSave,
+  saving,
 }: {
   readonly draft: ResumeDraft;
   readonly onDraftChange: (draft: ResumeDraft) => void;
+  readonly onSectionSave?: (draft: ResumeDraft) => Promise<boolean | void> | boolean | void;
+  readonly saving?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   if (!open) {
@@ -199,10 +209,14 @@ function TopcardEdit({
   return (
     <TopcardEditForm
       draft={draft}
+      saving={saving}
       onCancel={() => setOpen(false)}
-      onSave={(patch) => {
-        onDraftChange(patchTopcard(draft, patch));
+      onSave={async (patch) => {
+        const next = patchTopcard(draft, patch);
+        const saved = onSectionSave ? await onSectionSave(next) : (onDraftChange(next), true);
+        if (saved === false) return false;
         setOpen(false);
+        return true;
       }}
     />
   );
@@ -214,34 +228,172 @@ function TopcardEdit({
  * way — folded into one line here, the full filled/empty list opens only on
  * click (C54 п.5, `<details>`, never an always-open card).
  */
-function SourceCoverageChip({
-  draft,
-  importedSource,
+function connectionStatusLabel(status: CandidateConnection['status'] | undefined): string {
+  if (status === 'connected') return 'Подключено';
+  if (status === 'imported') return 'Импортировано';
+  if (status === 'disconnected') return 'Не подключено';
+  return 'Не импортировано';
+}
+
+function factCountLabel(count: number): string {
+  const rest100 = count % 100;
+  const rest10 = count % 10;
+  const noun =
+    rest100 >= 11 && rest100 <= 14
+      ? 'фактов'
+      : rest10 === 1
+        ? 'факт'
+        : rest10 >= 2 && rest10 <= 4
+          ? 'факта'
+          : 'фактов';
+  return `${count} ${noun}`;
+}
+
+function importDateLabel(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  const parts = new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'UTC',
+  }).format(date);
+  return parts.replace(/\.$/u, '');
+}
+
+function SourceChip({
+  platform,
+  imported,
+  connection,
+  onOpenConnections,
 }: {
-  readonly draft: ResumeDraft;
-  readonly importedSource?: ImportedSource;
+  readonly platform: (typeof CONNECTION_PLATFORMS)[number];
+  readonly imported?: ImportedSourceSummary | ImportedSource;
+  readonly connection?: CandidateConnection;
+  readonly onOpenConnections?: () => void;
 }) {
-  const coverage = resumeSourceCoverage(draft);
-  const total = coverage.filled.length + coverage.empty.length;
+  const count =
+    imported?.factCount ?? (connection?.status === 'connected' ? connection.factCount : undefined);
+  const date = importDateLabel(
+    imported && 'lastImportedAt' in imported
+      ? imported.lastImportedAt
+      : (imported?.importedAt ??
+          (connection?.status === 'connected'
+            ? connection.lastImportedAt
+            : connection?.status === 'imported'
+              ? connection.importedAt
+              : undefined)),
+  );
+  const detail =
+    count !== undefined
+      ? [factCountLabel(count), date].filter(Boolean).join(' · ')
+      : connectionStatusLabel(connection?.status);
+  const contents = (
+    <span className="career-profile-screen-source-visual">
+      <span className="career-profile-screen-source-name">{PLATFORM_LABELS[platform]}</span>
+      <span aria-hidden="true">·</span>
+      <span className="career-profile-screen-source-detail">{detail}</span>
+    </span>
+  );
+
+  return onOpenConnections ? (
+    <button
+      type="button"
+      className="career-profile-screen-source-chip career-profile-screen-connection-chip"
+      onClick={onOpenConnections}
+      aria-label={`${PLATFORM_LABELS[platform]} · ${detail} · Управлять подключением`}
+    >
+      {contents}
+    </button>
+  ) : (
+    <span className="career-profile-screen-source-chip">{contents}</span>
+  );
+}
+
+function ProfileSourceActions({
+  hasImports,
+  onOpenConnections,
+}: {
+  readonly hasImports: boolean;
+  readonly onOpenConnections?: () => void;
+}) {
+  if (!onOpenConnections) return null;
   return (
-    <details className="career-profile-screen-source-chip">
-      <summary>
-        <CheckCircle size={13} weight="fill" />
-        {importedSource ? `Импортировано из ${importedSource.label}` : 'Источник профиля'} ·{' '}
-        {coverage.filled.length}/{total}
-        <CaretDown size={12} />
-      </summary>
+    <>
+      <button
+        className="career-profile-screen-source-add"
+        type="button"
+        onClick={onOpenConnections}
+      >
+        <PlugsConnected size={16} aria-hidden="true" />
+        Источник
+      </button>
+      {hasImports ? (
+        <button
+          className="career-quiet-button career-profile-screen-import-again"
+          type="button"
+          onClick={onOpenConnections}
+        >
+          <ArrowClockwise size={15} aria-hidden="true" />
+          Импортировать заново
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/** Source chips show import evidence and lead to the shared connection manager. */
+function ConnectionStatusChips({
+  connections,
+  importedSources,
+  importedSource,
+  onOpenConnections,
+}: {
+  readonly connections?: readonly CandidateConnection[];
+  readonly importedSources?: readonly ImportedSourceSummary[];
+  readonly importedSource?: ImportedSource;
+  readonly onOpenConnections?: () => void;
+}) {
+  const sources = importedSources ?? (importedSource ? [importedSource] : []);
+  const hasImports = sources.length > 0;
+  return (
+    <div className="career-profile-screen-source-list" aria-label="Источники резюме">
+      {CONNECTION_PLATFORMS.map((platform) => {
+        const connection = connections?.find((entry) => entry.platform === platform);
+        const imported = sources.find((entry) => entry.platform === platform);
+        return (
+          <SourceChip
+            key={platform}
+            platform={platform}
+            imported={imported}
+            connection={connection}
+            onOpenConnections={onOpenConnections}
+          />
+        );
+      })}
+      <ProfileSourceActions hasImports={hasImports} onOpenConnections={onOpenConnections} />
+    </div>
+  );
+}
+
+function ProfileCoverageDetails({ draft }: { readonly draft: ResumeDraft }) {
+  const coverage = resumeSourceCoverage(draft);
+  return (
+    <details className="career-profile-screen-coverage-details">
+      <summary>Состав профиля</summary>
       <ul className="career-profile-screen-coverage">
-        {coverage.filled.map((section) => (
-          <li key={section.id}>
+        {[...coverage.filled, ...coverage.empty].map((section) => (
+          <li key={section.id} className={section.count === 0 ? 'is-missing' : ''}>
             <span>{section.label}</span>
-            <span>заполнено</span>
-          </li>
-        ))}
-        {coverage.empty.map((section) => (
-          <li key={section.id} className="is-missing">
-            <span>{section.label}</span>
-            <span>не заполнено</span>
+            <span>
+              {section.id === 'courses' && section.count === 0
+                ? 'Не найдены'
+                : section.count === 0
+                  ? 'Не заполнено'
+                  : section.count === null
+                    ? 'Есть'
+                    : section.count}
+            </span>
           </li>
         ))}
       </ul>
@@ -249,83 +401,85 @@ function SourceCoverageChip({
   );
 }
 
-function connectionStatusLabel(status: CandidateConnection['status'] | undefined): string {
-  return status === 'connected' ? 'Подключено' : 'Не подключено';
+function ProfileCompletenessSummary({ draft }: { readonly draft: ResumeDraft }) {
+  const completeness = profileCompleteness(draft);
+  return (
+    <div className="career-profile-screen-completion">
+      <div>
+        <span>Резюме собрано</span>{' '}
+        <strong>
+          <span className="career-profile-screen-numeric">{completeness.completedCount}</span> из{' '}
+          <span className="career-profile-screen-numeric">{completeness.totalCount}</span> блоков
+        </strong>
+      </div>
+      <progress
+        className="career-profile-screen-completion-progress"
+        value={completeness.completedCount}
+        max={completeness.totalCount}
+        aria-label={`Резюме собрано ${completeness.completedCount} из ${completeness.totalCount} блоков`}
+      />
+      {completeness.missingSections.length ? (
+        <p>Не заполнено: {completeness.missingSections.join(', ').toLowerCase()}.</p>
+      ) : null}
+    </div>
+  );
 }
 
-/**
- * Two chips, hh.ru and LinkedIn, visible on the profile itself without a
- * trip to settings (C54 п.11, owner remark). Both click through to the same
- * `AccountConnectionsManager` the settings drawer already renders — this
- * component never re-implements connect/disconnect.
- */
-function ConnectionStatusChips({
-  connections,
-  onOpenConnections,
+function TopcardProfileCopy({
+  props,
+  detailsOpen,
+  onToggleDetails,
 }: {
-  readonly connections?: readonly CandidateConnection[];
-  readonly onOpenConnections: () => void;
+  readonly props: ProfileTopcardProps;
+  readonly detailsOpen: boolean;
+  readonly onToggleDetails: () => void;
 }) {
+  const { draft, updatedAt } = props;
+  const fullName = draft.candidate.fullName?.trim();
+  const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
+  const location = draft.candidate.contact?.location?.trim();
+  const hasDetails = Boolean(location || updatedAt || draft.candidate.contact);
   return (
     <>
-      {CONNECTION_PLATFORMS.map((platform) => {
-        const found = connections?.find((connection) => connection.platform === platform);
-        const connected = found?.status === 'connected';
-        return (
-          <button
-            key={platform}
-            type="button"
-            className={`career-profile-screen-tag career-profile-screen-connection-chip${
-              connected ? ' is-accent' : ''
-            }`}
-            onClick={onOpenConnections}
-          >
-            <PlugsConnected size={13} />
-            {PLATFORM_LABELS[platform]} — {connectionStatusLabel(found?.status)}
-          </button>
-        );
-      })}
+      <div className="career-profile-screen-id-main">
+        <div className="career-profile-screen-name-row">
+          <h1>{fullName || 'Имя не указано'}</h1>
+        </div>
+        {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
+        <ProfileCompletenessSummary draft={draft} />
+        {hasDetails ? (
+          <ProfileDetailsToggle isOpen={detailsOpen} onToggle={onToggleDetails} />
+        ) : null}
+        <ProfileTopcardDetails
+          isOpen={detailsOpen}
+          location={location}
+          updatedAt={updatedAt}
+          draft={draft}
+        />
+      </div>
     </>
   );
 }
 
 export function ProfileTopcard(props: ProfileTopcardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const { draft, updatedAt, onDraftChange } = props;
-  const fullName = draft.candidate.fullName?.trim();
-  const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
-  const location = draft.candidate.contact?.location?.trim();
-  const hasDetails = Boolean(location || updatedAt || draft.candidate.contact);
-
   return (
     <section className="career-profile-screen-topcard" aria-label="Основные данные профиля">
       <div className="career-profile-screen-id-row">
-        <TopcardAvatar draft={draft} />
-        <div className="career-profile-screen-id-main">
-          <div className="career-profile-screen-name-row">
-            <h1>{fullName || 'Имя не указано'}</h1>
-          </div>
-          {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-          <ProfileStatusRow props={props} />
-          {hasDetails ? (
-            <ProfileDetailsToggle
-              isOpen={detailsOpen}
-              onToggle={() => setDetailsOpen((prev) => !prev)}
-            />
-          ) : null}
-          <ProfileTopcardDetails
-            isOpen={detailsOpen}
-            location={location}
-            updatedAt={updatedAt}
-            draft={draft}
-          />
-          <ProfileSearchConsentRow
-            initialConsent={props.searchConsent}
-            onConsentChange={props.onSearchConsentChange}
-          />
-        </div>
-        <TopcardEdit draft={draft} onDraftChange={onDraftChange} />
+        <TopcardAvatar draft={props.draft} />
+        <TopcardProfileCopy
+          props={props}
+          detailsOpen={detailsOpen}
+          onToggleDetails={() => setDetailsOpen((value) => !value)}
+        />
+        <TopcardEdit
+          draft={props.draft}
+          onDraftChange={props.onDraftChange}
+          onSectionSave={props.onSectionSave}
+          saving={props.saving}
+        />
       </div>
+      <ProfileStatusRow props={props} />
     </section>
   );
 }
@@ -345,11 +499,7 @@ function ProfileDetailsToggle({
       onClick={onToggle}
     >
       <span>{isOpen ? 'Скрыть' : 'Подробнее'}</span>
-      <CaretDown
-        size={14}
-        aria-hidden="true"
-        className="career-profile-screen-details-caret"
-      />
+      <CaretDown size={14} aria-hidden="true" className="career-profile-screen-details-caret" />
     </button>
   );
 }
@@ -389,16 +539,16 @@ function ProfileTopcardDetails({
 function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
   return (
     <div className="career-profile-screen-status-row">
-      <SourceCoverageChip draft={props.draft} importedSource={props.importedSource} />
+      <ConnectionStatusChips
+        connections={props.connections}
+        importedSources={props.importedSources}
+        importedSource={props.importedSource}
+        onOpenConnections={props.onOpenConnections}
+      />
       {props.reader ? (
         <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
       ) : null}
-      {props.onOpenConnections ? (
-        <ConnectionStatusChips
-          connections={props.connections}
-          onOpenConnections={props.onOpenConnections}
-        />
-      ) : null}
+      <ProfileCoverageDetails draft={props.draft} />
     </div>
   );
 }

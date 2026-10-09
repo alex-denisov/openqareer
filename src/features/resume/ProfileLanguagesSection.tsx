@@ -16,6 +16,46 @@ interface SectionProps {
 }
 
 const CEFR_LEVELS: readonly CefrLevel[] = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+const CEFR_LABELS: Record<CefrLevel, string> = {
+  A1: 'начальный',
+  A2: 'базовый',
+  B1: 'средний',
+  B2: 'выше среднего',
+  C1: 'свободный',
+  C2: 'в совершенстве',
+};
+const LANGUAGE_NAMES: Readonly<Record<string, string>> = {
+  english: 'Английский',
+  russian: 'Русский',
+  german: 'Немецкий',
+  french: 'Французский',
+  spanish: 'Испанский',
+  chinese: 'Китайский',
+  italian: 'Итальянский',
+};
+
+function languageName(name: string): string {
+  return LANGUAGE_NAMES[name.trim().toLocaleLowerCase('en')] ?? name;
+}
+
+function LanguageMeter({ name, level }: { readonly name: string; readonly level: CefrLevel }) {
+  const activeCount = Math.min(CEFR_LEVELS.indexOf(level) + 1, 5);
+  return (
+    <span
+      className="career-profile-screen-lang-meter"
+      role="img"
+      aria-label={`Уровень ${level}: ${CEFR_LABELS[level]}`}
+    >
+      {Array.from({ length: 5 }, (_, index) => (
+        <span
+          key={`${name}-${index}`}
+          className={index < activeCount ? 'is-active' : ''}
+          aria-hidden="true"
+        />
+      ))}
+    </span>
+  );
+}
 
 function LanguageEditForm({
   entry,
@@ -86,17 +126,17 @@ function LanguageRow({
   return (
     <div className="career-profile-screen-lang-item">
       <div className="career-profile-screen-lang-row">
-        <div className="career-profile-screen-lang-name">{entry.name || 'Язык не указан'}</div>
-        {entry.cefr ? <span className="career-profile-screen-cefr">{entry.cefr}</span> : null}
+        <div className="career-profile-screen-lang-name">
+          {entry.cefr
+            ? `${languageName(entry.name || 'Язык не указан')} — ${CEFR_LABELS[entry.cefr]} (${entry.cefr})`
+            : languageName(entry.name || 'Язык не указан')}
+        </div>
+        {entry.cefr ? <LanguageMeter name={entry.name ?? ''} level={entry.cefr} /> : null}
         <SectionPencilButton label="Изменить язык" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
       </div>
       <p className="career-profile-screen-lang-source">
-        {entry.sourceLabel?.trim()
-          ? (entry.sourceLabel.startsWith('Из LinkedIn:')
-              ? entry.sourceLabel
-              : `Из LinkedIn: ${entry.sourceLabel}`)
-          : 'Указано вами'}
+        {entry.sourceLabel?.trim() ? 'Источник: импортированный профиль' : 'Указано вами'}
       </p>
     </div>
   );

@@ -26,12 +26,15 @@ describe('ProfileLanguagesSection', () => {
     ],
   };
 
-  it('показывает честную подпись источника из LinkedIn без стрелки и без повторения уровня', () => {
+  it('показывает уровень словом и шкалу из пяти делений без англоязычной приписки', () => {
     const html = renderToStaticMarkup(
       <ProfileLanguagesSection draft={baseDraft} onSectionSave={() => undefined} />,
     );
-    expect(html).toContain('Из LinkedIn: Full professional proficiency');
-    expect(html).not.toContain('LinkedIn: «Full professional proficiency» → C1');
+    expect(html).toContain('Английский — свободный (C1)');
+    expect(html.match(/career-profile-screen-lang-meter/g)).toHaveLength(2);
+    expect(html.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(html).toContain('Источник: импортированный профиль');
+    expect(html).not.toContain('Full professional proficiency');
   });
 
   it('показывает «Указано вами» для языка без источника LinkedIn', () => {
