@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowRight,
+  CaretDown,
+  CaretUp,
+  Microphone,
   PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
@@ -56,9 +59,13 @@ interface CareerExpertPanelProps {
   subject?: CoachTurnSubject;
   subjectTitle?: string;
   initialUser: AuthUser | null;
+  loadingSession?: boolean;
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
   onCommandPrepared?: () => void;
+  mobileExpanded?: boolean;
+  onToggleMobileExpanded?: () => void;
+  onEscape?: () => void;
   onClose: () => void;
 }
 
@@ -69,9 +76,13 @@ export function CareerExpertPanel({
   subject,
   subjectTitle,
   initialUser,
+  loadingSession = false,
   initialSnapshot,
   onIdentityChange = () => undefined,
   onCommandPrepared,
+  mobileExpanded = false,
+  onToggleMobileExpanded,
+  onEscape,
   onClose,
 }: CareerExpertPanelProps) {
   const [user, setUser] = useState<AuthUser | null>(initialUser);
@@ -134,33 +145,14 @@ export function CareerExpertPanel({
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
-  useEscapeLayer(onClose);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEscapeLayer(onEscape ?? onClose);
 
   useEffect(() => {
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     closeButton.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab' || !panel.current) return;
-      const focusable = Array.from(
-        panel.current.querySelectorAll<HTMLElement>(
-          'button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((element) => !element.hidden);
-      if (!focusable.length) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
       returnFocusTo?.focus();
     };
   }, [onClose]);
@@ -286,9 +278,8 @@ export function CareerExpertPanel({
   return (
     <aside
       ref={panel}
-      className="career-expert-panel"
-      role="dialog"
-      aria-modal="true"
+      className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}`}
+      data-mobile-expanded={mobileExpanded}
       aria-label={`Консультант · ${STAGE_TITLE[stage]}`}
     >
       <header>
@@ -299,10 +290,23 @@ export function CareerExpertPanel({
           <div>
             <strong>Консультант · {STAGE_TITLE[stage]}</strong>
             <small>
-              {subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}
+              {loadingSession
+                ? 'Проверяем вход и читаем ваш профиль'
+                : subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}
             </small>
           </div>
         </div>
+        {onToggleMobileExpanded ? (
+          <button
+            className="career-expert-sheet-toggle"
+            type="button"
+            onClick={onToggleMobileExpanded}
+            aria-expanded={mobileExpanded}
+            aria-label={mobileExpanded ? 'Свернуть консультанта' : 'Развернуть консультанта'}
+          >
+            {mobileExpanded ? <CaretDown size={20} /> : <CaretUp size={20} />}
+          </button>
+        ) : null}
         <button
           ref={closeButton}
           className="career-close-button"
@@ -315,16 +319,20 @@ export function CareerExpertPanel({
       </header>
 
       <div className="career-expert-conversation">
-        <div className="career-expert-message">
-          <span>AI-сопровождение</span>
-          <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
-          <p>
-            {journey?.nextAction.reason ??
-              'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
-          </p>
-        </div>
+        {loadingSession ? (
+          <ExpertPanelSkeleton />
+        ) : (
+          <div className="career-expert-message">
+            <span>AI-сопровождение</span>
+            <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
+            <p>
+              {journey?.nextAction.reason ??
+                'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
+            </p>
+          </div>
+        )}
 
-        {turns.length || showLiveMessage ? (
+        {!loadingSession && (turns.length || showLiveMessage) ? (
           <div className="career-dialogue-history" aria-label="История диалога">
             {turns.map((message) => (
               <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
@@ -348,14 +356,14 @@ export function CareerExpertPanel({
             ) : null}
             <div ref={historyEndRef} aria-hidden="true" />
           </div>
-        ) : (
+        ) : !loadingSession ? (
           <div className="career-dialogue-history" aria-label="История диалога">
             <article className="career-dialogue-turn is-assistant">
               <span>Карьерный консультант</span>
               <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
             </article>
           </div>
-        )}
+        ) : null}
 
         {stage === 'profile' ? (
           <div className="career-expert-skill-quiz-prompt" aria-label="Подтверждение навыков">
@@ -393,7 +401,7 @@ export function CareerExpertPanel({
           <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
         ) : null}
 
-        {user === null && !loginOpen ? (
+        {!loadingSession && user === null && !loginOpen ? (
           <div className="career-expert-auth">
             <ShieldCheck size={24} />
             <div>
@@ -407,7 +415,7 @@ export function CareerExpertPanel({
           </div>
         ) : null}
 
-        {user === null && loginOpen ? (
+        {!loadingSession && user === null && loginOpen ? (
           <form className="career-expert-login" onSubmit={handleLogin}>
             <label>
               <span>Логин</span>
@@ -435,24 +443,38 @@ export function CareerExpertPanel({
         ) : null}
       </div>
 
-      {user ? (
+      {loadingSession ? <ExpertComposerSkeleton /> : null}
+      {user && !loadingSession ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          <label htmlFor="career-expert-input">Сообщение карьерному консультанту</label>
-          <div>
+          {!content.trim() ? (
+            <ExpertStarterChips
+              onChoose={(prompt) => {
+                setContent(prompt);
+                inputRef.current?.focus();
+              }}
+            />
+          ) : null}
+          <label className="career-sr-only" htmlFor="career-expert-input">
+            Сообщение карьерному консультанту
+          </label>
+          <div className="career-expert-input-row">
             <textarea
+              ref={inputRef}
               id="career-expert-input"
               value={content}
               onChange={(event) => setContent(event.target.value)}
-              placeholder="Например: как лучше усилить позиционирование для целевой роли?"
-              rows={3}
+              placeholder="Сообщение консультанту"
+              rows={1}
             />
-            <button
-              type="submit"
-              disabled={!content.trim() || sending}
-              aria-label="Отправить вопрос"
-            >
-              {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
-            </button>
+            {content.trim() ? (
+              <button type="submit" disabled={sending} aria-label="Отправить вопрос">
+                {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
+              </button>
+            ) : (
+              <button type="button" className="career-expert-microphone" disabled aria-label="Голосовой ввод скоро" title="Голосовой ввод скоро">
+                <Microphone size={18} aria-hidden="true" />
+              </button>
+            )}
           </div>
         </form>
       ) : null}
@@ -476,6 +498,44 @@ export function CareerExpertPanel({
         />
       ) : null}
     </aside>
+  );
+}
+
+function ExpertPanelSkeleton() {
+  return (
+    <div className="career-expert-panel-skeleton" aria-hidden="true">
+      <span className="career-expert-skeleton-line is-wide" />
+      <span className="career-expert-skeleton-line" />
+      <span className="career-expert-skeleton-line is-wide" />
+    </div>
+  );
+}
+
+function ExpertComposerSkeleton() {
+  return (
+    <div className="career-expert-composer-skeleton" aria-hidden="true">
+      <span />
+      <span />
+    </div>
+  );
+}
+
+const EXPERT_STARTER_PROMPTS = ['С чего начать?', 'Какие источники можно подключить?', 'Можно без подключений?'];
+
+function ExpertStarterChips({ onChoose }: { readonly onChoose: (prompt: string) => void }) {
+  return (
+    <div className="career-expert-starters" role="group" aria-label="Темы для начала">
+      {EXPERT_STARTER_PROMPTS.map((prompt) => (
+        <button
+          className="career-expert-starter-chip"
+          type="button"
+          key={prompt}
+          onClick={() => onChoose(prompt)}
+        >
+          {prompt}
+        </button>
+      ))}
+    </div>
   );
 }
 

@@ -25,6 +25,7 @@ import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
 import { buildPathIndicator } from '../shell/pathIndicator';
+import { CareerTodaySkeleton } from '../shell/CareerTodaySkeleton';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
   applyRoutePremises,
@@ -281,7 +282,8 @@ export function CareerCabinet({
         {!showsVacanciesScreen ? (
           <CabinetHeader
             view={view}
-            loading={data.loading && Boolean(data.snapshot)}
+            loading={data.loading}
+            loadingMessage={data.snapshot ? 'Обновляем…' : 'Проверяем вход и читаем ваш профиль'}
             error={data.error}
             onRetry={() => void data.refresh()}
             onAskConsultant={
@@ -301,7 +303,7 @@ export function CareerCabinet({
             пустых вкладок: профиль появляется целиком и один раз, а не
             «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
         {data.loading && !data.snapshot ? (
-          <CabinetSkeleton />
+          <CareerTodaySkeleton showHeading={false} />
         ) : (
           <CabinetSection
             view={view}
@@ -362,16 +364,6 @@ function TodaySection({
       consultantAction={consultantAction}
       onNavigate={onNavigate}
     />
-  );
-}
-
-function CabinetSkeleton() {
-  return (
-    <div className="career-cabinet-skeleton" aria-busy="true" aria-label="Читаем ваш профиль">
-      <span className="career-skeleton-line is-wide" />
-      <span className="career-skeleton-line" />
-      <span className="career-skeleton-line is-short" />
-    </div>
   );
 }
 
@@ -527,6 +519,7 @@ function CabinetSection({
 function CabinetHeader({
   view,
   loading,
+  loadingMessage,
   error,
   onRetry,
   onAskConsultant,
@@ -534,6 +527,7 @@ function CabinetHeader({
 }: {
   view: CareerCabinetView;
   loading: boolean;
+  loadingMessage?: string;
   error?: string;
   onRetry: () => void;
   onAskConsultant?: () => void;
@@ -547,31 +541,54 @@ function CabinetHeader({
       description={VIEW_DESCRIPTION[view]}
       onAskConsultant={onAskConsultant}
       right={
-        tabs || loading || error ? (
-          <>
-            {tabs}
-            {loading || error ? (
-              <div className="career-cabinet-header-state">
-                {error ? (
-                  <>
-                    <span className="is-error" role="alert">
-                      <WarningCircle size={16} weight="fill" />
-                      {error}
-                    </span>
-                    <button type="button" onClick={onRetry}>
-                      <ArrowClockwise size={15} />
-                      Повторить
-                    </button>
-                  </>
-                ) : (
-                  <span className="is-loading">Обновляем…</span>
-                )}
-              </div>
-            ) : null}
-          </>
-        ) : undefined
+        <CabinetHeaderState
+          tabs={tabs}
+          loading={loading}
+          loadingMessage={loadingMessage}
+          error={error}
+          onRetry={onRetry}
+        />
       }
     />
+  );
+}
+
+function CabinetHeaderState({
+  tabs,
+  loading,
+  loadingMessage,
+  error,
+  onRetry,
+}: {
+  tabs?: ReactNode;
+  loading: boolean;
+  loadingMessage?: string;
+  error?: string;
+  onRetry: () => void;
+}) {
+  if (!tabs && !loading && !error) return undefined;
+  return (
+    <>
+      {tabs}
+      {loading || error ? (
+        <div className="career-cabinet-header-state">
+          {error ? (
+            <>
+              <span className="is-error" role="alert">
+                <WarningCircle size={16} weight="fill" />
+                {error}
+              </span>
+              <button type="button" onClick={onRetry}>
+                <ArrowClockwise size={15} />
+                Повторить
+              </button>
+            </>
+          ) : (
+            <span className="is-loading">{loadingMessage ?? 'Обновляем…'}</span>
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 

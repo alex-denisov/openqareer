@@ -108,9 +108,9 @@ test('shows no onboarding flash for a server-confirmed completed profile', async
         ms: offsetMs + Math.round(performance.now() - started),
         login: isVisible('.auth-page-container'),
         wizard: isVisible('.career-intake'),
-        sessionSkeleton: isVisible('.career-session-gate .career-cabinet-skeleton'),
+        sessionSkeleton: isVisible('.career-session-gate .career-today-skeleton'),
         cabinet: isVisible('.career-cabinet'),
-        profileSkeleton: isVisible('.career-cabinet .career-cabinet-skeleton'),
+        profileSkeleton: isVisible('.career-cabinet .career-today-skeleton'),
       });
       if (offsetMs + performance.now() - started < 2500) requestAnimationFrame(sample);
     };
@@ -179,12 +179,12 @@ test('keeps the session skeleton until the server confirms onboarding is incompl
   await page.getByRole('button', { name: 'Войти в кабинет' }).click();
   await page.waitForURL('**/app');
   await expect.poll(() => workspaceRequested).toBe(true);
-  await expect(page.locator('.career-session-gate .career-cabinet-skeleton')).toBeVisible();
+  await expect(page.locator('.career-session-gate .career-today-skeleton')).toBeVisible();
   await expect(page.locator('.career-intake')).toHaveCount(0);
 
   resolveWorkspace();
   await expect(page.locator('.career-intake')).toBeVisible();
-  await expect(page.locator('.career-session-gate .career-cabinet-skeleton')).toHaveCount(0);
+  await expect(page.locator('.career-session-gate .career-today-skeleton')).toHaveCount(0);
 });
 
 test('preloads the login page chunk when a landing login link receives focus', async ({

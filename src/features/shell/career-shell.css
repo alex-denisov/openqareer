@@ -49,12 +49,16 @@
   /* B248 touch-target floor: every rail item, path-indicator button and mobile
      nav item is at least this tall. */
   --career-target-min: 44px;
-  /* B169 §7 — the rail is the only chrome on desktop, and it opens to show
-     what its icons mean. Width is a token so the grid and the rail cannot
-     disagree about it mid-transition. B248 widens it from 76px to 96px to fit
-     five labelled items instead of three plus a plan card — B248 wins per the
-     owner's decision (2026-09-23 16:39). */
-  --career-rail-width: 96px;
+  --career-rail-width: 76px;
+  --career-expert-panel-width: 360px;
+  --career-mobile-topbar-height: 58px;
+  --career-mobile-nav-height: 72px;
+  --career-expert-sheet-collapsed-height: calc(
+    var(--career-target-min) + var(--career-target-min) + var(--career-target-min) +
+      var(--career-target-min) + var(--career-space-4) + var(--career-space-2)
+  );
+  --career-motion-quick: 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  --career-motion-skeleton: 1.6s ease-in-out;
   min-height: 100dvh;
   display: grid;
   grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
@@ -95,10 +99,6 @@
 
 .career-shell :where(button) {
   color: inherit;
-}
-
-.career-bootstrap-shell {
-  display: contents;
 }
 
 /* The desktop companion never shows the prerendered bootstrap shell: it has no
@@ -159,14 +159,13 @@
   }
 }
 
-.career-shell[data-rail='expanded'] {
-  --career-rail-width: 200px;
+.career-shell.expert-is-open {
+  grid-template-columns: var(--career-rail-width) minmax(0, 1fr) var(--career-expert-panel-width);
 }
 
 .career-rail {
   grid-row: 1 / -1;
   position: sticky;
-  /* Ручка раскрытия сидит на кромке, поэтому рельс — её система координат. */
   top: 0;
   align-self: start;
   z-index: 20;
@@ -177,7 +176,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 10px 18px;
+  padding: var(--career-space-2) var(--career-space-3) var(--career-space-4);
   border-right: 1px solid var(--career-line);
   background: oklch(14% 0.022 255);
 }
@@ -386,23 +385,23 @@
 }
 
 .career-brand-mark {
-  width: 48px;
-  height: 44px;
-  border-radius: 13px;
+  width: var(--career-target-min);
+  height: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
   color: var(--career-accent);
   background: transparent;
 }
 
 .career-rail nav {
   display: grid;
-  gap: 8px;
-  margin-top: 24px;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-4);
 }
 
 .career-rail-bottom {
-  margin-top: auto;
+  margin-block-start: auto;
   display: grid;
-  gap: 12px;
+  gap: var(--career-space-2);
 }
 
 .career-rail nav > .career-tooltip,
@@ -410,41 +409,27 @@
   display: block;
 }
 
-/* C52 — the collapsed rail is a compact icon rail. Names remain available to
-   assistive technology and appear in the existing focus/hover tooltip; the
-   expanded rail is the intentional place for visible labels. */
 .career-nav-button {
   width: 100%;
-  min-height: 52px;
+  min-height: var(--career-target-min);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 6px 2px;
+  gap: var(--career-space-1);
+  padding: var(--career-space-1);
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-text-dim);
   background: transparent;
   transition:
-    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    background 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    color var(--career-motion-quick),
+    background var(--career-motion-quick),
+    border-color var(--career-motion-quick);
 }
 
 .career-nav-button > span {
-  font-size: var(--career-text-aux);
-  font-weight: 600;
-  line-height: 1.15;
-  text-align: center;
-}
-
-.career-shell[data-rail='collapsed'] .career-nav-button > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
+  display: none;
 }
 
 .career-nav-button:not(:disabled):hover {
@@ -464,63 +449,21 @@
 .career-nav-button.is-active::before {
   content: '';
   position: absolute;
-  /* Засечка садится ровно на кромку рельса: отступ рельса в свёрнутом виде
-     10px, в раскрытом 12px, поэтому смещение равно ему. */
-  inset-inline-start: -10px;
-  inset-block: 12px;
-  width: 3px;
-  border-radius: 0 3px 3px 0;
+  inset-inline-start: calc(-1 * var(--career-space-3));
+  inset-block: var(--career-space-2);
+  inline-size: var(--career-space-1);
+  border-radius: 0 var(--career-radius-sm) var(--career-radius-sm) 0;
   background: var(--career-accent);
-}
-
-.career-shell[data-rail='expanded'] .career-nav-button.is-active::before {
-  inset-inline-start: -12px;
-}
-
-/* ---- B169 §7 · the rail opens to name its own sections ---------------- */
-
-/* Fixed, not absolute: the rail scrolls its own overflow, and a handle inside
-   that scroller would be clipped by it and would drift as the list moves. */
-/* The handle is a rail control, not an overlay: it lines up with the account
-   button below the navigation and never covers the workspace. */
-/* Ручка на кромке рельса по центру по вертикали, как разделитель панелей.
-   Прежняя строка «Свернуть» занимала пункт меню и читалась как раздел. */
-.career-rail-toggle {
-  position: absolute;
-  inset-inline-end: -10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 20px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  border: 1px solid var(--career-line);
-  border-radius: 7px;
-  color: var(--career-text-dim);
-  background: oklch(18% 0.024 255);
-  font: inherit;
-  z-index: 2;
-  transition:
-    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
-    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.career-rail-toggle:hover {
-  color: var(--career-accent);
-  border-color: oklch(79% 0.145 255 / 0.4);
-  background: var(--career-surface-raised, oklch(22% 0.026 255));
 }
 
 .career-account-button,
 .career-rail-admin {
-  width: 52px;
-  min-height: 52px;
+  width: var(--career-target-min);
+  min-height: var(--career-target-min);
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-text-dim);
   background: transparent;
   text-decoration: none;
@@ -537,100 +480,31 @@
   color: var(--career-accent);
 }
 
-/* ---- «Пульт» · аккаунт внизу рельса ------------------------------------ */
-
-/* Тариф и профиль слились в один аватар (B248, owner decision 2026-09-23):
-   план читается в accessible name/title, а «Тарифы» открываются из панели
-   аккаунта, не из отдельной карточки в рельсе. */
-.career-rail-bottom > .career-account-button {
-  margin-top: 4px;
-  padding-top: 12px;
-  border-top: 1px solid var(--career-line);
-  border-radius: 0;
-}
-
-/* Owner decision 2026-09-25 (replaces B248 «tariffs only from the account
-   panel») — the plan sells from the rail itself: collapsed it is an icon
-   with the plan in its accessible name, expanded it names the plan and
-   offers «Улучшить». */
-.career-rail-plan {
-  width: 52px;
-  min-height: 52px;
+.career-rail-wallet {
+  width: var(--career-target-min);
+  min-height: var(--career-target-min);
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-text-dim);
   background: transparent;
   font: inherit;
 }
 
-.career-rail-plan:not(:disabled):hover {
+.career-rail-wallet:not(:disabled):hover {
   color: var(--career-accent);
   background: var(--career-surface);
 }
 
-.career-rail-plan.is-active {
+.career-rail-wallet.is-active {
   color: var(--career-accent);
   border-color: oklch(79% 0.145 255 / 0.3);
   background: linear-gradient(90deg, oklch(79% 0.145 255 / 0.2), oklch(79% 0.145 255 / 0.04));
 }
 
-.career-rail-plan > svg {
+.career-rail-wallet > svg {
   flex: none;
-}
-
-.career-rail-plan-text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.career-rail-plan-text > b {
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  color: var(--career-text);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.career-rail-plan-text > span {
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  color: var(--career-accent);
-}
-
-.career-account-details {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-  overflow: hidden;
-  text-align: left;
-}
-
-.career-account-name {
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-  color: var(--career-text);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-.career-account-email {
-  font-size: var(--career-text-xs);
-  color: var(--career-text-dim);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  max-width: 100%;
 }
 
 .career-rail-avatar {
@@ -647,52 +521,6 @@
   letter-spacing: 0.02em;
 }
 
-/* Collapsed, the labels are the accessible name only. */
-.career-shell[data-rail='collapsed'] .career-rail-admin > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-}
-
-.career-shell[data-rail='expanded'] .career-rail {
-  align-items: stretch;
-  padding: 10px 8px 18px;
-}
-
-.career-shell[data-rail='expanded'] .career-brand-mark {
-  width: auto;
-  justify-content: start;
-  padding-inline: 8px;
-}
-
-.career-shell[data-rail='expanded'] .career-nav-button,
-.career-shell[data-rail='expanded'] .career-account-button,
-.career-shell[data-rail='expanded'] .career-rail-admin,
-.career-shell[data-rail='expanded'] .career-rail-plan {
-  width: auto;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  padding-inline: 8px;
-  text-align: left;
-}
-
-.career-shell[data-rail='expanded'] .career-nav-button > span,
-.career-shell[data-rail='expanded'] .career-rail-admin > span {
-  position: static;
-  width: auto;
-  height: auto;
-  overflow: hidden;
-  clip: auto;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-}
 
 .career-topbar-admin {
   min-height: 40px;
@@ -783,6 +611,8 @@
 
 .career-mobile-tariffs {
   display: none;
+  align-items: center;
+  gap: var(--career-space-2);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   font-weight: 700;
@@ -1349,7 +1179,8 @@
   border: var(--career-border-width) solid var(--career-line);
   border-radius: 50%;
   color: var(--career-text-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-xs);
 }
 
@@ -2221,7 +2052,8 @@
 
 .career-role-index {
   color: var(--career-text-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-xs);
 }
 
@@ -2829,6 +2661,252 @@
   color: var(--career-text-soft);
 }
 
+.career-session-gate {
+  display: grid;
+  gap: var(--career-space-4);
+  min-width: 0;
+}
+
+.career-session-error {
+  display: grid;
+  gap: var(--career-space-3);
+  max-width: 100%;
+  border: var(--career-border-width) solid var(--career-danger);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  color: var(--career-text);
+  background: var(--career-danger-soft);
+}
+
+.career-session-error p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-session-gate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-session-gate-note {
+  margin: 0;
+  color: var(--career-warning);
+  font-size: var(--career-text-xs);
+}
+
+.career-session-error strong {
+  color: var(--career-danger);
+  font-size: var(--career-text-sm);
+}
+
+.career-bootstrap-rail-items {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-4);
+}
+
+.career-bootstrap-rail-items > span,
+.career-bootstrap-icon {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  animation: career-skeleton-pulse var(--career-motion-skeleton) infinite;
+}
+
+.career-bootstrap-rail-items > span.is-active {
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-bootstrap-icon.is-avatar {
+  border-radius: var(--career-radius-sm);
+}
+
+.career-bootstrap-topbar > span {
+  min-height: var(--career-target-min);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+}
+
+.career-bootstrap-topbar > i {
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-bootstrap-mobile-nav > span {
+  min-width: 0;
+  min-height: var(--career-target-min);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-bootstrap-mobile-nav > span.is-active {
+  color: var(--career-accent);
+}
+
+.career-bootstrap-mobile-nav > span > i {
+  inline-size: calc(var(--career-space-5) + var(--career-space-1));
+  block-size: calc(var(--career-space-5) + var(--career-space-1));
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  animation: career-skeleton-pulse var(--career-motion-skeleton) infinite;
+}
+
+.career-bootstrap-mobile-nav > span.is-active > i {
+  background: var(--career-accent-soft);
+}
+
+.career-today-skeleton {
+  display: grid;
+  gap: var(--career-space-4);
+  min-width: 0;
+}
+
+.career-today-skeleton-heading {
+  min-height: calc(var(--career-target-min) + var(--career-space-5));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--career-space-4);
+}
+
+.career-today-skeleton-heading h1 {
+  margin: 0;
+  font-size: var(--career-text-xl);
+  line-height: 1.15;
+}
+
+.career-today-skeleton-status {
+  max-width: 34ch;
+  margin: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-2) var(--career-space-3);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+}
+
+.career-today-skeleton-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.8fr);
+  align-items: start;
+  gap: var(--career-space-4);
+  min-width: 0;
+}
+
+.career-today-skeleton-primary {
+  display: grid;
+  gap: var(--career-space-4);
+  min-width: 0;
+}
+
+.career-today-skeleton-card {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-3);
+  min-width: 0;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  background: var(--career-bg-elevated);
+}
+
+.career-today-skeleton-card.is-decision {
+  min-block-size: calc(var(--career-space-8) * 7);
+  border-color: var(--career-accent);
+}
+
+.career-today-skeleton-card.is-queue {
+  min-block-size: calc(var(--career-space-8) * 7);
+}
+
+.career-today-skeleton-card.is-path {
+  min-block-size: calc(var(--career-space-8) * 9);
+}
+
+.career-today-skeleton-lines {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.career-today-skeleton-line,
+.career-today-skeleton-title,
+.career-today-skeleton-actions span,
+.career-today-skeleton-queue-row > span {
+  display: block;
+  min-width: 0;
+  block-size: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  animation: career-skeleton-pulse var(--career-motion-skeleton) infinite;
+}
+
+.career-today-skeleton-line:first-child {
+  inline-size: 58%;
+}
+
+.career-today-skeleton-line.is-short {
+  inline-size: 74%;
+}
+
+.career-today-skeleton-title {
+  block-size: calc(var(--career-text-xl) * 1.4);
+  inline-size: 82%;
+}
+
+.career-today-skeleton-actions {
+  display: flex;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-2);
+}
+
+.career-today-skeleton-actions span:first-child {
+  inline-size: 34%;
+  block-size: var(--career-target-min);
+}
+
+.career-today-skeleton-actions span:last-child {
+  inline-size: 22%;
+  block-size: var(--career-target-min);
+}
+
+.career-today-skeleton-queue-row {
+  display: grid;
+  grid-template-columns: var(--career-target-min) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--career-space-3);
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-today-skeleton-queue-row > span {
+  block-size: var(--career-target-min);
+}
+
+@keyframes career-skeleton-pulse {
+  50% {
+    opacity: 0.52;
+  }
+}
+
 .career-expert-scrim {
   position: fixed;
   inset: 0;
@@ -2838,54 +2916,44 @@
 }
 
 .career-expert-panel {
-  position: fixed;
+  grid-column: 3;
+  grid-row: 1;
+  position: sticky;
   top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 60;
-  width: min(420px, calc(100vw - 76px));
+  align-self: stretch;
+  z-index: 20;
+  width: var(--career-expert-panel-width);
+  min-width: 0;
+  height: 100dvh;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
   border-left: 1px solid var(--career-line-strong);
   color: var(--career-text);
   background: var(--career-bg-elevated);
-  box-shadow: -24px 0 70px oklch(5% 0.01 255 / 0.35);
-  animation: career-panel-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes career-panel-enter {
-  from {
-    transform: translateX(16px);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
 }
 
 .career-expert-panel > header {
-  min-height: 64px;
+  min-height: calc(var(--career-target-min) + var(--career-space-5));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 10px 14px 10px 18px;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
   border-bottom: 1px solid var(--career-line);
 }
 
 .career-expert-identity {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--career-space-3);
 }
 
 .career-expert-identity > span {
-  width: 36px;
-  height: 36px;
+  width: calc(var(--career-space-8) + var(--career-space-1));
+  height: calc(var(--career-space-8) + var(--career-space-1));
   display: grid;
   place-items: center;
-  border-radius: 11px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-accent);
   background: var(--career-accent-soft);
 }
@@ -2901,12 +2969,12 @@
 }
 
 .career-close-button {
-  width: 42px;
-  height: 42px;
+  width: var(--career-target-min);
+  height: var(--career-target-min);
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-text-soft);
   background: transparent;
 }
@@ -2915,10 +2983,66 @@
   background: var(--career-surface);
 }
 
+.career-expert-sheet-toggle {
+  display: none;
+  width: var(--career-target-min);
+  height: var(--career-target-min);
+  place-items: center;
+  border: 1px solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: transparent;
+}
+
 .career-expert-conversation {
   min-height: 0;
   overflow: auto;
-  padding: 20px 18px;
+  padding: var(--career-space-5) var(--career-space-4);
+}
+
+.career-expert-panel-skeleton {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-3);
+  padding-block-start: var(--career-space-3);
+}
+
+.career-expert-skeleton-line {
+  display: block;
+  inline-size: 62%;
+  block-size: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  animation: career-skeleton-pulse var(--career-motion-skeleton) infinite;
+}
+
+.career-expert-skeleton-line.is-wide {
+  inline-size: 100%;
+}
+
+.career-expert-composer-skeleton {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--career-target-min);
+  align-items: end;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-expert-composer-skeleton > span:first-child {
+  display: block;
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.career-expert-composer-skeleton > span:last-child {
+  display: block;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
 }
 
 .career-expert-message,
@@ -3158,37 +3282,72 @@
 
 .career-expert-composer {
   display: grid;
-  gap: 8px;
-  padding: 14px 18px;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4);
   border-top: 1px solid var(--career-line);
+}
+
+.career-expert-starters {
+  display: flex;
+  gap: var(--career-space-2);
+  overflow-x: auto;
+  padding-block-end: var(--career-space-1);
+  scrollbar-width: none;
+}
+
+.career-expert-starters::-webkit-scrollbar {
+  display: none;
+}
+
+.career-expert-starter-chip {
+  flex: none;
+  min-height: var(--career-target-min);
+  border: 1px solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  padding-inline: var(--career-space-3);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+}
+
+.career-expert-starter-chip:hover {
+  color: var(--career-text);
+  border-color: var(--career-accent);
 }
 
 .career-expert-composer > div {
   position: relative;
+  min-width: 0;
 }
 
 .career-expert-composer textarea {
-  min-height: 78px;
-  padding-right: 50px;
+  min-height: calc(var(--career-target-min) * 2);
+  padding-inline-end: calc(var(--career-target-min) + var(--career-space-2));
 }
 
-.career-expert-composer button {
+.career-expert-input-row > button {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 38px;
-  height: 38px;
+  inset-inline-end: var(--career-space-2);
+  inset-block-end: var(--career-space-2);
+  width: var(--career-target-min);
+  height: var(--career-target-min);
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 10px;
+  border-radius: var(--career-radius-sm);
   color: var(--career-accent-ink);
   background: var(--career-accent);
 }
 
+.career-expert-input-row > button.career-expert-microphone:disabled {
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  border: 1px solid var(--career-line-strong);
+}
+
 .career-expert-error {
   margin: 0;
-  padding: 10px 18px 16px;
+  padding: var(--career-space-3) var(--career-space-4) var(--career-space-4);
   color: var(--career-danger);
   font-size: var(--career-text-xs);
 }
@@ -3301,7 +3460,8 @@
   line-height: 1.55;
 }
 
-.career-mobile-nav {
+.career-mobile-nav,
+.career-mobile-more-menu {
   display: none;
 }
 
@@ -3340,13 +3500,27 @@
 }
 
 @media (max-width: 760px) {
-  .career-shell {
+  .career-shell:not(.career-shell--onboarding-fullscreen) {
+    height: 100dvh;
+    min-height: 100dvh;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 58px minmax(0, 1fr) 72px;
+    grid-template-rows: var(--career-mobile-topbar-height) minmax(0, 1fr) auto;
     overflow-x: clip;
+    overflow-y: hidden;
     background:
       radial-gradient(circle at 100% 0%, oklch(33% 0.055 255 / 0.18), transparent 22rem),
       var(--career-bg);
+  }
+
+  .career-shell--onboarding-fullscreen {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .career-shell.expert-is-open {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .career-rail {
@@ -3355,34 +3529,41 @@
 
   .career-topbar {
     grid-column: 1;
+    grid-row: 1;
     display: flex;
     position: sticky;
     top: 0;
-    padding: 0 14px;
-  }
-
-  .career-rail-toggle {
-    display: none;
-  }
-
-  /* The lockup is wider than the plain wordmark it replaced and pushed the
-     topbar actions past the viewport at 390px. Narrow screens keep the sign,
-     which still carries the accessible name from the button. */
-  .career-topbar .brand-lockup-word {
-    display: none;
+    min-height: var(--career-mobile-topbar-height);
+    padding-inline: var(--career-space-4);
+    border-bottom: 0;
   }
 
   .career-mobile-tariffs {
-    display: block;
-    min-height: 44px;
-    padding: 0 6px;
+    display: inline-flex;
+    min-height: var(--career-target-min);
+    padding-inline: var(--career-space-2);
   }
 
   .career-main {
     grid-column: 1;
     grid-row: 2;
-    overflow: visible;
-    padding: 26px 16px 36px;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    padding: var(--career-space-6) var(--career-space-4) var(--career-space-6);
+  }
+
+  .career-today-skeleton-heading {
+    display: grid;
+    align-items: start;
+  }
+
+  .career-today-skeleton-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-today-skeleton-status {
+    max-width: none;
   }
 
   .career-shell--onboarding-fullscreen .career-main:has(.career-intake) {
@@ -3393,38 +3574,80 @@
     grid-column: 1;
     grid-row: 3;
     position: sticky;
-    bottom: 0;
+    bottom: var(--career-space-2);
     z-index: 30;
     display: grid;
-    /* Content-sized columns with the spare width between them: five equal
-       fifths left «Консультант» 1.3 px past a 390 px screen on Linux fonts
-       (CI 2026-09-25), while the other four captions sat in empty space. */
-    grid-template-columns: repeat(5, auto);
-    justify-content: space-around;
-    border-top: 1px solid var(--career-line-strong);
-    background: oklch(14% 0.022 255 / 0.98);
-    padding-bottom: env(safe-area-inset-bottom);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: center;
+    width: calc(100% - var(--career-space-4) - var(--career-space-4));
+    min-height: var(--career-mobile-nav-height);
+    justify-self: center;
+    margin-block-end: max(var(--career-space-2), env(safe-area-inset-bottom));
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-lg);
+    padding: var(--career-space-1);
+    background: var(--career-bg-elevated);
+  }
+
+  .career-mobile-more-menu {
+    position: fixed;
+    inset-inline-end: var(--career-space-4);
+    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
+    z-index: 40;
+    width: min(
+      calc(var(--career-rail-width) + var(--career-rail-width) + var(--career-rail-width)),
+      calc(100vw - var(--career-space-8))
+    );
+    display: grid;
+    gap: var(--career-space-1);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-md);
+    padding: var(--career-space-2);
+    background: var(--career-surface-raised);
+    box-shadow: var(--career-shadow-tooltip);
+  }
+
+  .career-mobile-more-menu[hidden] {
+    display: none;
+  }
+
+  .career-mobile-more-menu [role='menuitem'] {
+    min-height: var(--career-target-min);
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    padding-inline: var(--career-space-3);
+    color: var(--career-text);
+    background: transparent;
+    text-align: start;
+  }
+
+  .career-mobile-more-menu [role='menuitem']:not(:disabled):hover,
+  .career-mobile-more-menu [role='menuitem']:focus-visible {
+    background: var(--career-surface);
+  }
+
+  .career-mobile-more-menu [role='menuitem']:disabled {
+    color: var(--career-text-dim);
+    opacity: 0.7;
   }
 
   .career-mobile-nav .career-nav-button {
     width: auto;
     min-width: 0;
-    min-height: 68px;
+    min-height: var(--career-target-min);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    gap: var(--career-space-1);
     border: 0;
-    border-radius: 0;
-    padding: 7px 6px;
+    border-radius: var(--career-radius-sm);
+    padding: var(--career-space-1);
     font-size: var(--career-text-xs);
   }
 
-  /* `.career-shell` repeated: the expanded-rail label rule below shares this
-     selector's specificity (three classes), and — being declared later in
-     this file — would otherwise win the cascade at 390px even though the
-     rail itself is hidden there (`data-rail` is a shell-wide preference, not
-     a viewport fact). */
   .career-shell .career-mobile-nav .career-nav-button > span {
+    display: block;
     position: static;
     width: auto;
     height: auto;
@@ -3433,21 +3656,34 @@
     white-space: normal;
     text-align: center;
     line-height: 1.15;
-    /* B248 — five captions now share the strip; «Консультант» does not fit
-       `--career-text-xs` in a fifth of 390px, exactly the micro-label case
-       the auxiliary token is reserved for. */
-    font-size: var(--career-text-aux);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-mobile-more-button {
+    min-width: 0;
+    min-height: var(--career-target-min);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--career-space-1);
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    padding: var(--career-space-1);
+    color: var(--career-text-soft);
+    background: transparent;
+    font-size: var(--career-text-xs);
+  }
+
+  .career-mobile-more-button[aria-expanded='true'] {
+    color: var(--career-accent);
+    background: var(--career-accent-soft);
   }
 
   .career-mobile-nav .career-nav-button.is-active {
     background: transparent;
   }
 
-  /* The rail's left-edge active tick is a sidebar affordance; in a row of
-     five bottom-nav icons it floats between two items with nothing to mark,
-     read by the owner as a stray blue bar (2026-09-23 390px review). Colour
-     alone still marks the active item here, same as every other icon state
-     in the shell. */
   .career-mobile-nav .career-nav-button.is-active::before {
     content: none;
   }
@@ -3731,19 +3967,47 @@
   }
 
   .career-expert-panel {
-    top: auto;
-    left: 0;
-    width: 100%;
-    height: min(88dvh, 760px);
-    border-top: 1px solid var(--career-line-strong);
-    border-left: 0;
-    border-radius: 22px 22px 0 0;
-    animation-name: career-sheet-enter;
+    grid-column: 1;
+    grid-row: auto;
+    position: fixed;
+    inset-block-start: auto;
+    inset-inline: var(--career-space-4);
+    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
+    z-index: 35;
+    width: auto;
+    height: calc(100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) - var(--career-space-8));
+    max-height: calc(100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) - var(--career-space-8));
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-lg);
+    animation: career-sheet-enter var(--career-motion-quick);
+  }
+
+  .career-expert-panel[data-mobile-expanded='false'] {
+    height: var(--career-expert-sheet-collapsed-height);
+    max-height: var(--career-expert-sheet-collapsed-height);
+  }
+
+  .career-expert-panel[data-mobile-expanded='false'] .career-expert-conversation {
+    display: none;
+  }
+
+  .career-expert-panel[data-mobile-expanded='false'] .career-expert-composer {
+    padding-block: var(--career-space-2);
+  }
+
+  .career-expert-panel[data-mobile-expanded='false'] .career-expert-composer textarea {
+    min-height: var(--career-target-min);
+    height: var(--career-target-min);
+    padding-block: var(--career-space-2);
+  }
+
+  .career-expert-sheet-toggle {
+    display: grid;
   }
 
   @keyframes career-sheet-enter {
     from {
-      transform: translateY(18px);
+      transform: translateY(var(--career-space-5));
       opacity: 0;
     }
     to {
@@ -3760,7 +4024,14 @@
 @media (prefers-reduced-motion: reduce) {
   .career-view,
   .career-intake,
-  .career-expert-panel {
+  .career-expert-panel,
+  .career-today-skeleton-line,
+  .career-today-skeleton-title,
+  .career-today-skeleton-actions span,
+  .career-today-skeleton-queue-row > span,
+  .career-expert-skeleton-line,
+  .career-bootstrap-rail-items > span,
+  .career-bootstrap-icon {
     animation: none;
   }
 
@@ -4794,7 +5065,8 @@
 
 .career-resume-status dd {
   margin: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-lg);
   font-weight: 700;
 }
@@ -4973,8 +5245,9 @@
   font-weight: 700;
 }
 
-.career-resume-field.is-mono input {
-  font-family: var(--font-mono, ui-monospace, monospace);
+.career-resume-field.is-numeric input {
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
 }
 
 .career-resume-field input:read-only {
@@ -5705,7 +5978,8 @@
   font-size: var(--career-text-sm);
   font-weight: 600;
   color: var(--career-text-soft);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   text-align: right;
 }
 
@@ -5877,7 +6151,8 @@
 }
 
 .career-resume-char-counter {
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-xs);
   padding: 2px 7px;
   border-radius: 999px;
@@ -5953,7 +6228,8 @@
 
 .career-resume-linkedin-period {
   font-size: var(--career-text-xs);
-  font-family: var(--font-mono, ui-monospace, monospace);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   color: var(--career-text-dim);
 }
 
@@ -8397,13 +8673,18 @@
   font-size: var(--career-text-xs);
 }
 
-/* Числа — моноширинным (design-system §4). Русские слова — системным. */
+/* Числа используют системный шрифт и табличные цифры (B440). */
 .career-vacancy-more-count,
 .career-profile-update-state small,
 .career-funnel-value,
-.career-job-period,
-.career-mono {
-  font-family: var(--font-mono);
+.career-job-period {
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-numeric {
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
 }
 
 .career-vacancy-coverage {
@@ -9238,7 +9519,8 @@
 
 .career-map-cluster-count {
   font-size: var(--career-text-xs);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   fill: var(--career-accent-ink);
   pointer-events: none;
@@ -9289,7 +9571,8 @@
 }
 
 .career-map-label-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
 }
 
 .career-map-city-chips {
@@ -9302,7 +9585,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--career-space-1);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
 }
 
 .career-map-city-chips .career-chip {
@@ -10471,7 +10755,8 @@
 
 .career-footprint-finding-date {
   color: var(--career-text-dim);
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-xs);
 }
 
@@ -12951,7 +13236,8 @@
 }
 
 .career-profile-screen-cefr {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   font-size: var(--career-text-sm);
   color: var(--career-accent-ink);
@@ -13335,7 +13621,7 @@
 }
 
 .metric {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
   font-variant-numeric: tabular-nums;
 }
 
@@ -14377,7 +14663,8 @@ button.chip {
 }
 
 .vac-req .num {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   color: var(--career-text);
 }
 
@@ -14508,7 +14795,8 @@ button.chip {
 }
 
 .req-summary .num {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   color: var(--career-text);
   font-weight: 600;
 }
@@ -15018,7 +15306,8 @@ button.chip {
 }
 
 .career-responses-column-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   font-size: var(--career-text-aux);
   color: var(--career-text-dim);
   background: var(--career-surface);
@@ -15220,7 +15509,8 @@ button.chip {
 
 .career-responses-archive-count {
   margin-inline-start: auto;
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
   color: var(--career-text-dim);
 }
 
@@ -15576,7 +15866,8 @@ button.chip {
 }
 
 .vacancy-facet-count {
-  font-family: var(--font-mono);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
 }
 
 .vacancy-facet-chip,

@@ -518,8 +518,8 @@ function VacancyRow({
               />
             </span>
             <strong>
-              <span className="career-mono">{coverage.covered}</span> из{' '}
-              <span className="career-mono">{coverage.total}</span>
+              <span className="career-numeric">{coverage.covered}</span> из{' '}
+              <span className="career-numeric">{coverage.total}</span>
             </strong>
           </>
         ) : (
@@ -662,12 +662,12 @@ function renderSalary(salary: MatchedVacancyItem['cluster']['salary']): React.Re
   const currency = salary.currency ?? '';
   const from = salary.from ? (
     <>
-      от <span className="career-mono">{salary.from.toLocaleString('ru-RU')}</span>
+      от <span className="career-numeric">{salary.from.toLocaleString('ru-RU')}</span>
     </>
   ) : null;
   const to = salary.to ? (
     <>
-      до <span className="career-mono">{salary.to.toLocaleString('ru-RU')}</span>
+      до <span className="career-numeric">{salary.to.toLocaleString('ru-RU')}</span>
     </>
   ) : null;
   return (

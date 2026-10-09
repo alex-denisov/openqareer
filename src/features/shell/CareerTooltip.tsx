@@ -28,7 +28,7 @@ export interface TooltipTriggerProps {
 export interface CareerTooltipProps {
   readonly content: ReactNode;
   readonly children: ReactElement;
-  readonly side?: 'top' | 'bottom';
+  readonly side?: 'top' | 'bottom' | 'right';
   readonly className?: string;
   readonly disabled?: boolean;
 }
@@ -48,16 +48,28 @@ const ESTIMATED_HEIGHT = 36;
 function calculateCoords(
   trigger: HTMLElement | null,
   tooltip: HTMLElement | null,
-  side: 'top' | 'bottom',
+  side: 'top' | 'bottom' | 'right',
 ): Coords {
   if (!trigger) return { top: 0, left: 0 };
   const rect = trigger.getBoundingClientRect();
   const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1024;
+  const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 768;
   const width = tooltip?.offsetWidth ?? ESTIMATED_WIDTH;
   const height = tooltip?.offsetHeight ?? ESTIMATED_HEIGHT;
+  if (side === 'right') {
+    const railRight = trigger.closest('.career-rail')?.getBoundingClientRect().right;
+    const right = (railRight ?? rect.right) + TOOLTIP_MARGIN;
+    const left = right + width <= screenWidth - SCREEN_PADDING
+      ? right
+      : Math.max(SCREEN_PADDING, rect.left - width - TOOLTIP_MARGIN);
+    const top = Math.max(
+      SCREEN_PADDING,
+      Math.min(screenHeight - height - SCREEN_PADDING, rect.top + (rect.height - height) / 2),
+    );
+    return { top: Math.round(top), left: Math.round(left) };
+  }
 
-  const placeAbove =
-    side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
+  const placeAbove = side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
   const top = placeAbove
     ? Math.max(SCREEN_PADDING, rect.top - height - TOOLTIP_MARGIN)
     : rect.bottom + TOOLTIP_MARGIN;
@@ -124,7 +136,7 @@ function useCloseOnOtherTooltip(isVisible: boolean, tooltipId: string, forceHide
 function useTooltipPosition(
   triggerRef: RefObject<HTMLElement | null>,
   tooltipRef: RefObject<HTMLElement | null>,
-  side: 'top' | 'bottom',
+  side: 'top' | 'bottom' | 'right',
   isVisible: boolean,
   forceHide: () => void,
   tooltipId: string,

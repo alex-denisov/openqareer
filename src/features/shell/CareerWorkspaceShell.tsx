@@ -1,13 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactElement } from 'react';
-import { CaretLeft, CaretRight, ShieldCheck, Diamond } from '@phosphor-icons/react';
-import { BrandMark } from '../brand/BrandMark';
-import {
-  VacanciesIcon,
-  ProfileIcon,
-  TodayIcon,
-  ResponsesIcon,
-  type SectionIconProps,
-} from './sectionIcons';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
@@ -22,15 +13,19 @@ import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { CareerTariffsView } from './CareerTariffsView';
 import { CURRENT_PLAN } from './tariffPackages';
-import { initialsFor } from './accountIdentity';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
 import { AppErrorBoundary } from './AppErrorBoundary';
-import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator, type NavigationOptions } from './pathIndicator';
 import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
 import { isSectionNavigable, sectionLockReason, type ShellSection } from './shellNavigation';
+import {
+  CareerMobileNavigation,
+  CareerMobileTopbar,
+  CareerNavigationRail,
+} from './CareerShellNavigation';
+import { CareerTodaySkeleton } from './CareerTodaySkeleton';
 
 type ShellView = ShellSection;
 
@@ -49,76 +44,7 @@ interface CareerWorkspaceShellProps {
   onSessionChange?: (session: AuthUser | null) => void;
   /** Deep-links the shell straight to a section, e.g. a «Тарифы» link. */
   initialView?: ShellView;
-  initialRailExpanded?: boolean;
 }
-
-type SectionIcon = (props: SectionIconProps) => ReactElement;
-
-/**
- * One rail item either opens a section (`kind: 'navigate'`) or opens the
- * «Консультант» drawer over whatever the candidate is looking at
- * (`kind: 'expert'`) — the drawer is not a section of its own.
- */
-type RailNavItem =
-  | {
-      key: string;
-      label: string;
-      icon: SectionIcon;
-      kind: 'navigate';
-      target: Exclude<ShellView, 'tariffs'>;
-      /** Marks this item active even when it shares a screen with another. */
-      tracksActive: boolean;
-    }
-  | { key: string; label: string; icon: SectionIcon; kind: 'expert' };
-
-/**
- * B248 (owner decision 2026-09-23 16:39) — five rail items, exactly the
- * mockup's IA: Сегодня · Профиль · Вакансии · Отклики · Консультант.
- *
- * «Отклики» now opens its own kanban (`ResponsesBoard`, B251 S3) instead of
- * bridging to «Вакансии» — the dedicated screen this comment used to say was
- * still pending.
- * «Консультант» opens the existing «Эксперт» drawer, unchanged, and is not
- * its own section — highlighting «Вакансии» for it would be misleading.
- *
- * «Поиск» (role/market, formerly a rail item) has no slot in the five-item
- * mockup; it stays reachable from the «Роль» step of the path indicator and
- * keeps its own `ShellSection` for that click-through (B248 §4 mapping).
- */
-const primaryNavigation: readonly RailNavItem[] = [
-  {
-    key: 'today',
-    label: 'Сегодня',
-    icon: TodayIcon,
-    kind: 'navigate',
-    target: 'today',
-    tracksActive: true,
-  },
-  {
-    key: 'profile',
-    label: 'Профиль',
-    icon: ProfileIcon,
-    kind: 'navigate',
-    target: 'profile',
-    tracksActive: true,
-  },
-  {
-    key: 'opportunities',
-    label: 'Вакансии',
-    icon: VacanciesIcon,
-    kind: 'navigate',
-    target: 'opportunities',
-    tracksActive: true,
-  },
-  {
-    key: 'responses',
-    label: 'Отклики',
-    icon: ResponsesIcon,
-    kind: 'navigate',
-    target: 'responses',
-    tracksActive: true,
-  },
-];
 
 /**
  * «Резюме» has no rail item in the B248 mockup either; the master resume
@@ -134,30 +60,7 @@ const pageNames: Record<ShellView, string> = {
   tariffs: 'Тарифы',
 };
 
-/**
- * A session check normally finishes in tens of milliseconds. Rendering the
- * explanation immediately turned that into a flash of a full-height heading on
- * every mount, so the screen only explains itself once the wait is real.
- */
-/**
- * Пока сервер отвечает на `/auth/me`, экран молчит: ни заголовка, ни
- * объяснения — только тихая заглушка на месте будущего профиля. Владелец
- * (2026-09-20): «проверяем защищённую сессию» на старте быть не должно, профиль
- * либо открывается, либо кандидат оказывается на входе. Слова появляются
- * только когда ждать стало по-настоящему долго или проверка сорвалась.
- */
-const SESSION_GATE_DELAY_MS = 6_000;
-
-/** Remembers whether the rail is open, so the choice survives a reload. */
-const RAIL_EXPANDED_KEY = 'openqareer.rail.expanded';
-
-function readRailPreference(): boolean {
-  try {
-    return window.localStorage.getItem(RAIL_EXPANDED_KEY) === 'true';
-  } catch {
-    return false;
-  }
-}
+const SESSION_GATE_DELAY_MS = 4_000;
 
 export function CareerWorkspaceShell({
   workspace,
@@ -173,7 +76,6 @@ export function CareerWorkspaceShell({
   onOpenLogin = () => undefined,
   onSessionChange = () => undefined,
   initialView = 'today',
-  initialRailExpanded,
 }: CareerWorkspaceShellProps) {
   const [activeView, setActiveView] = useState<ShellView>(initialView);
   const [expertConfig, setExpertConfig] = useState<{
@@ -182,18 +84,17 @@ export function CareerWorkspaceShell({
     subject?: CoachTurnSubject;
     subjectTitle?: string;
   }>({
-    open: false,
+    open: sessionPending,
     stage: 'today',
   });
+  const [expertSheetExpanded, setExpertSheetExpanded] = useState(false);
+  const autoOpenedExpert = useRef(sessionPending);
   const [cabinetRevision, setCabinetRevision] = useState(0);
   const [accountOpen, setAccountOpen] = useState(
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
-  const [railExpanded, setRailExpanded] = useState(
-    () => initialRailExpanded ?? (typeof window !== 'undefined' && readRailPreference()),
-  );
   // A diagnostic that is under way owns the «Сегодня» screen even after the
   // account its own source step demanded arrives (B141).
   const [intakeStarted, setIntakeStarted] = useState(false);
@@ -231,11 +132,18 @@ export function CareerWorkspaceShell({
     isTodayView: activeView === 'today',
   });
 
+  useEffect(() => {
+    if (autoOpenedExpert.current || intakeVisible || !session?.candidateId || visibleWorkspace) return;
+    autoOpenedExpert.current = true;
+    setExpertConfig((current) => ({ ...current, open: true }));
+  }, [intakeVisible, session?.candidateId, visibleWorkspace]);
+
   // onboarding.html is full-screen from its first step (owner decision
   // 2026-09-24, replacing the B141 exception that kept the rail on step 1 for
   // its account door); an anonymous candidate signs in from the wizard's own
   // top bar instead.
   const onboardingIsFullscreen = intakeVisible;
+  const expertPanelOpen = expertConfig.open && !accountOpen && !onboardingIsFullscreen;
 
   useEffect(() => {
     if (!sessionPending) {
@@ -266,39 +174,6 @@ export function CareerWorkspaceShell({
     return sectionLockReason(view, navigationState);
   }
 
-  function railButtonProps(item: RailNavItem) {
-    if (item.kind === 'expert') {
-      return {
-        label: item.label,
-        icon: item.icon,
-        active: false,
-        disabled: !isNavigable('opportunities'),
-        lockedReason: lockedReason('opportunities'),
-        onClick: () => openExpert(),
-      };
-    }
-    return {
-      label: item.label,
-      icon: item.icon,
-      active: item.tracksActive && activeView === item.target,
-      disabled: !isNavigable(item.target),
-      lockedReason: lockedReason(item.target),
-      onClick: () => navigate(item.target),
-    };
-  }
-
-  function toggleRail() {
-    setRailExpanded((current) => {
-      const next = !current;
-      try {
-        window.localStorage.setItem(RAIL_EXPANDED_KEY, String(next));
-      } catch {
-        // A browser refusing storage still gets the toggle for this session.
-      }
-      return next;
-    });
-  }
-
   const [navigationOptions, setNavigationOptions] = useState<NavigationOptions | undefined>();
 
   function navigate(view: ShellView, options?: NavigationOptions) {
@@ -308,6 +183,7 @@ export function CareerWorkspaceShell({
     setActiveView(target);
     setNavigationOptions(targetOptions);
     setExpertConfig((prev) => ({ ...prev, open: false }));
+    setExpertSheetExpanded(false);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
       document.getElementById('career-main')?.scrollTo({
@@ -326,6 +202,7 @@ export function CareerWorkspaceShell({
 
   const openExpert = useCallback(
     (stage?: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => {
+      setExpertSheetExpanded(false);
       setExpertConfig({
         open: true,
         stage: stage ?? 'today',
@@ -337,17 +214,36 @@ export function CareerWorkspaceShell({
   );
 
   const closeExpert = useCallback(() => {
+    setExpertSheetExpanded(false);
     setExpertConfig((prev) => ({ ...prev, open: false }));
   }, []);
+
+  useEffect(() => {
+    if (onboardingIsFullscreen && expertConfig.open) closeExpert();
+  }, [closeExpert, expertConfig.open, onboardingIsFullscreen]);
+
+  const handleExpertEscape = useCallback(() => {
+    const onPhone = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 760px)').matches);
+    if (onPhone && expertSheetExpanded) {
+      setExpertSheetExpanded(false);
+      return;
+    }
+    closeExpert();
+  }, [closeExpert, expertSheetExpanded]);
 
   const closeAccount = useCallback(() => {
     setAccountOpen(false);
     setAccountSection('security');
   }, []);
-  const openConnections = useCallback(() => {
-    setAccountSection('connections');
+  const openAccount = useCallback(() => {
+    setExpertSheetExpanded(false);
+    setExpertConfig((previous) => ({ ...previous, open: false }));
     setAccountOpen(true);
   }, []);
+  const openConnections = useCallback(() => {
+    setAccountSection('connections');
+    openAccount();
+  }, [openAccount]);
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
@@ -382,168 +278,43 @@ export function CareerWorkspaceShell({
   );
 
   const planName = CURRENT_PLAN.name;
-  const accountDisplayName = session?.displayName ?? session?.username ?? null;
-  const accountEmail = session?.email ?? null;
-  const accountInitials = initialsFor(accountDisplayName);
 
   return (
     <div
-      className={`career-shell ${expertConfig.open ? 'expert-is-open' : ''} ${
+      className={`career-shell ${expertPanelOpen ? 'expert-is-open' : ''} ${
         onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''
       }`}
-      data-rail={railExpanded ? 'expanded' : 'collapsed'}
       data-testid="career-shell"
     >
       <a className="career-skip-link" href="#career-main">
         К содержанию
       </a>
 
-      <aside
-        id="career-rail"
-        className="career-rail"
-        aria-label="Основная навигация"
-        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
-      >
-        <button
-          className="career-brand-mark"
-          type="button"
-          onClick={() => navigate('today')}
-          aria-label="openqareer, главная"
-        >
-          <BrandMark variant={railExpanded ? 'lockup' : 'mark'} size={30} />
-        </button>
-        <nav>
-          {primaryNavigation.map((item) => {
-            const navigationButton = <NavigationButton {...railButtonProps(item)} />;
-            return railExpanded ? (
-              <span key={item.key}>{navigationButton}</span>
-            ) : (
-              <CareerTooltip key={item.key} content={item.label}>
-                {navigationButton}
-              </CareerTooltip>
-            );
-          })}
-        </nav>
-        <div className="career-rail-bottom">
-          {session?.role === 'admin' ? (
-            <a className="career-rail-admin" href="/admin">
-              <ShieldCheck size={22} />
-              <span>Админка</span>
-            </a>
-          ) : null}
-          {/* Owner decision 2026-09-25, replacing B248 «tariffs only from the
-              account panel»: tariffs must be visible and sell, not hide
-              behind the avatar. Expanded rail names the plan and offers
-              «Улучшить»; collapsed rail keeps the icon alone, with the plan
-              in its accessible name. */}
-          <CareerTooltip content={`Тарифы. План «${planName}»`}>
-            <button
-              className={`career-rail-plan ${activeView === 'tariffs' ? 'is-active' : ''}`}
-              type="button"
-              onClick={() => navigate('tariffs')}
-              aria-current={activeView === 'tariffs' ? 'page' : undefined}
-              aria-label={`Тарифы, план ${planName}`}
-            >
-              <Diamond
-                size={22}
-                weight={activeView === 'tariffs' ? 'fill' : 'regular'}
-                aria-hidden="true"
-              />
-              {railExpanded ? (
-                <span className="career-rail-plan-text">
-                  <b>План · {planName}</b>
-                  <span>Улучшить</span>
-                </span>
-              ) : null}
-            </button>
-          </CareerTooltip>
-          <CareerTooltip content={`Аккаунт и тарифы. План «${planName}»`}>
-            <button
-              className="career-account-button"
-              type="button"
-              disabled={sessionPending}
-              onClick={() => setAccountOpen(true)}
-              aria-label="Открыть аккаунт"
-            >
-              <span className="career-rail-avatar" aria-hidden="true">
-                {accountInitials}
-              </span>
-              {railExpanded && accountDisplayName ? (
-                <span className="career-account-details">
-                  <span className="career-account-name">{accountDisplayName}</span>
-                  {accountEmail ? (
-                    <span className="career-account-email">{accountEmail}</span>
-                  ) : null}
-                </span>
-              ) : null}
-            </button>
-          </CareerTooltip>
-        </div>
-        {/* Ручка сидит на кромке рельса, как разделитель панелей: прежняя
-            строка «Свернуть» занимала пункт меню и читалась как раздел. */}
-        <CareerTooltip content={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}>
-          <button
-            className="career-rail-toggle"
-            type="button"
-            onClick={toggleRail}
-            aria-expanded={railExpanded}
-            aria-controls="career-rail"
-            aria-label={railExpanded ? 'Свернуть панель' : 'Развернуть панель'}
-          >
-            {railExpanded ? <CaretLeft size={12} /> : <CaretRight size={12} />}
-          </button>
-        </CareerTooltip>
-      </aside>
-
-      {/* Narrow screens hide the rail, so this bar carries the two controls
-          that live on it and nowhere else. On desktop it is not rendered at
-          all: repeating the logo and offering a second, contextless «Эксперт»
-          door was chrome that did nothing (B169 §6, §8). */}
-      <header
-        className="career-topbar"
-        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
-      >
-        <button
-          className="career-wordmark"
-          type="button"
-          onClick={() => navigate('today')}
-          aria-label="openqareer, главная"
-        >
-          <BrandMark variant="lockup" size={26} />
-        </button>
-        <div className="career-topbar-actions">
-          {isNavigable('tariffs') ? (
-            <button
-              className="career-mobile-tariffs"
-              type="button"
-              onClick={() => navigate('tariffs')}
-            >
-              Тарифы
-            </button>
-          ) : null}
-          {session?.role === 'admin' ? (
-            <a href="/admin" className="career-topbar-admin">
-              Админка
-            </a>
-          ) : null}
-          <button
-            className="career-account-trigger"
-            type="button"
-            disabled={sessionPending}
-            onClick={() => setAccountOpen(true)}
-            aria-label="Открыть аккаунт"
-          >
-            <span className="career-rail-avatar" aria-hidden="true">
-              {accountInitials}
-            </span>
-          </button>
-        </div>
-      </header>
+      <CareerNavigationRail
+        session={session}
+        sessionPending={sessionPending}
+        ariaHidden={accountOpen || onboardingIsFullscreen}
+        activeView={activeView}
+        isNavigable={isNavigable}
+        lockedReason={lockedReason}
+        onNavigate={navigate}
+        onOpenAccount={openAccount}
+      />
+      <CareerMobileTopbar
+        session={session}
+        sessionPending={sessionPending}
+        ariaHidden={accountOpen || onboardingIsFullscreen}
+        tariffsAvailable={isNavigable('tariffs')}
+        tariffsLockedReason={lockedReason('tariffs')}
+        onNavigateHome={() => navigate('today')}
+        onNavigateTariffs={() => navigate('tariffs')}
+        onOpenAccount={openAccount}
+      />
 
       <main
         id="career-main"
         className="career-main"
-        aria-hidden={expertConfig.open || accountOpen ? true : undefined}
+        aria-hidden={accountOpen ? true : undefined}
       >
         <AppErrorBoundary>
           {sessionPending ? (
@@ -579,7 +350,7 @@ export function CareerWorkspaceShell({
               }}
               hasAccount={Boolean(session)}
               onStartedChange={setIntakeStarted}
-              onSignIn={() => setAccountOpen(true)}
+              onSignIn={openAccount}
             />
           ) : null}
           {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
@@ -662,38 +433,31 @@ export function CareerWorkspaceShell({
         </AppErrorBoundary>
       </main>
 
-      <nav
-        className="career-mobile-nav"
-        aria-label="Основная навигация"
-        aria-hidden={expertConfig.open || accountOpen || onboardingIsFullscreen ? true : undefined}
-      >
-        {primaryNavigation.map((item) => (
-          <NavigationButton key={item.key} {...railButtonProps(item)} />
-        ))}
-      </nav>
+      <CareerMobileNavigation
+        activeView={activeView}
+        isNavigable={isNavigable}
+        lockedReason={lockedReason}
+        onNavigate={navigate}
+        onOpenExpert={() => openExpert()}
+        ariaHidden={accountOpen || onboardingIsFullscreen}
+      />
 
-      {expertConfig.open ? (
-        <>
-          <button
-            className="career-expert-scrim"
-            type="button"
-            onClick={closeExpert}
-            aria-label="Закрыть карьерного эксперта"
-            aria-hidden="true"
-            tabIndex={-1}
-          />
-          <CareerExpertPanel
-            journey={journey}
-            marketQuery={visibleWorkspace?.targetDirection}
-            stage={expertConfig.stage}
-            subject={expertConfig.subject}
-            subjectTitle={expertConfig.subjectTitle}
-            initialUser={session ?? null}
-            onIdentityChange={resetForAccount}
-            onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
-            onClose={closeExpert}
-          />
-        </>
+      {expertPanelOpen ? (
+        <CareerExpertPanel
+          journey={journey}
+          marketQuery={visibleWorkspace?.targetDirection}
+          stage={expertConfig.stage}
+          subject={expertConfig.subject}
+          subjectTitle={expertConfig.subjectTitle}
+          initialUser={session ?? null}
+          loadingSession={sessionPending}
+          mobileExpanded={expertSheetExpanded}
+          onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
+          onIdentityChange={resetForAccount}
+          onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
+          onEscape={handleExpertEscape}
+          onClose={closeExpert}
+        />
       ) : null}
       {accountOpen ? (
         <>
@@ -725,38 +489,6 @@ export function CareerWorkspaceShell({
   );
 }
 
-function NavigationButton({
-  label,
-  icon: ItemIcon,
-  active,
-  disabled = false,
-  lockedReason,
-  onClick,
-  ...tooltipProps
-}: {
-  label: string;
-  icon: SectionIcon;
-  active: boolean;
-  disabled?: boolean;
-  lockedReason?: string;
-  onClick: () => void;
-} & TooltipTriggerProps) {
-  return (
-    <button
-      className={`career-nav-button ${active ? 'is-active' : ''}`}
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      aria-current={active ? 'page' : undefined}
-      aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
-      {...tooltipProps}
-    >
-      <ItemIcon size={22} active={active} />
-      <span>{label}</span>
-    </button>
-  );
-}
-
 function SessionGate({
   error,
   waitIsLong,
@@ -768,33 +500,34 @@ function SessionGate({
   onRetry: () => void;
   onOpenLogin: () => void;
 }) {
-  const showActions = Boolean(error) || waitIsLong;
   return (
     <section className="career-session-gate" aria-live="polite" aria-busy={!error}>
-      {!showActions ? (
-        <div className="career-cabinet-skeleton" aria-hidden="true">
-          <span className="career-skeleton-line is-wide" />
-          <span className="career-skeleton-line" />
-          <span className="career-skeleton-line is-short" />
-        </div>
-      ) : null}
       {error ? (
-        <p className="career-expert-error" role="alert">
-          {error}
-        </p>
-      ) : waitIsLong ? (
-        <p className="career-session-gate-note">Сервер отвечает дольше обычного.</p>
-      ) : null}
-      {showActions ? (
-        <div className="career-session-gate-actions">
-          <button className="career-quiet-button" type="button" onClick={onRetry}>
-            Повторить проверку
-          </button>
-          <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
-            Открыть вход
-          </button>
+        <div className="career-session-error" role="alert">
+          <strong>Ошибка: сервер не ответил.</strong>
+          <p>{error}</p>
+          <div className="career-session-gate-actions">
+            <button className="career-primary-button" type="button" onClick={onRetry}>
+              Повторить
+            </button>
+            <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
+              Открыть вход
+            </button>
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <CareerTodaySkeleton />
+          {waitIsLong ? (
+            <div className="career-session-gate-actions">
+              <p className="career-session-gate-note" role="status">Загрузка дольше обычного.</p>
+              <button className="career-primary-button" type="button" onClick={onRetry}>
+                Повторить
+              </button>
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }

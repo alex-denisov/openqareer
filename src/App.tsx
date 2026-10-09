@@ -19,6 +19,7 @@ import {
 } from './services/desktop/desktopSessionToken';
 import { AppErrorBoundary } from './features/shell/AppErrorBoundary';
 import { loadCareerWorkspaceShell } from './features/shell/careerWorkspaceLoader';
+import { CareerShellBootstrap } from './features/shell/CareerShellBootstrap';
 import { legalSlugFromPath } from '../shared/legalRegistry';
 import { loadAuthPages } from './features/site/authPagesLoader';
 import {
@@ -611,15 +612,7 @@ export default function App() {
 }
 
 function WorkspaceLoadingFallback() {
-  return (
-    <section className="career-session-gate" aria-label="Профиль загружается" aria-busy="true">
-      <div className="career-cabinet-skeleton" aria-hidden="true">
-        <span className="career-skeleton-line is-wide" />
-        <span className="career-skeleton-line" />
-        <span className="career-skeleton-line is-short" />
-      </div>
-    </section>
-  );
+  return <CareerShellBootstrap />;
 }
 
 function AuthLoadingFallback() {

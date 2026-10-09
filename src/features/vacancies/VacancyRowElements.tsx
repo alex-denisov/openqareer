@@ -17,14 +17,14 @@ export function VacancyRowMeta({
       comp
     ) : comp.startsWith('от ') ? (
       <>
-        от <span className="career-mono">{comp.slice(3)}</span>
+        от <span className="career-numeric">{comp.slice(3)}</span>
       </>
     ) : comp.startsWith('до ') ? (
       <>
-        до <span className="career-mono">{comp.slice(3)}</span>
+        до <span className="career-numeric">{comp.slice(3)}</span>
       </>
     ) : (
-      <span className="career-mono">{comp}</span>
+      <span className="career-numeric">{comp}</span>
     );
   return (
     <span>

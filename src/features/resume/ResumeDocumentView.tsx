@@ -438,7 +438,7 @@ function EducationFields({
         label="Начало"
         value={entry.startDate ?? ''}
         placeholder="ГГГГ"
-        mono
+        tabularNumbers
         readOnly={!editor}
         onChange={(value) => editor?.onEducation(entry.id, { startDate: value })}
       />
@@ -446,7 +446,7 @@ function EducationFields({
         label="Окончание"
         value={entry.endDate ?? ''}
         placeholder="ГГГГ"
-        mono
+        tabularNumbers
         readOnly={!editor}
         onChange={(value) => editor?.onEducation(entry.id, { endDate: value })}
       />
@@ -496,7 +496,7 @@ function CoursesSection({ draft, editor }: SectionProps) {
               label="Год"
               value={course.year ? String(course.year) : ''}
               placeholder="ГГГГ"
-              mono
+              tabularNumbers
               readOnly={true}
               onChange={() => {}}
             />

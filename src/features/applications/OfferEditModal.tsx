@@ -289,10 +289,10 @@ function OfferPreviewBox({
     <div className="career-offer-preview-box">
       <span className="career-offer-preview-label">Расчёт годового дохода по формуле</span>
       <div className="career-offer-preview-values">
-        <span className="career-offer-preview-total career-mono">
+        <span className="career-offer-preview-total career-numeric">
           {formatMoney(total, currency)}
         </span>
-        <span className="career-offer-preview-monthly career-mono">
+        <span className="career-offer-preview-monthly career-numeric">
           {formatMoney(monthly, currency)}/мес.
         </span>
       </div>

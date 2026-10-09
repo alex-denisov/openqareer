@@ -196,7 +196,7 @@ export function OfferCardControl({
     <div className="career-responses-offer-action">
       {breakdown ? (
         <div className="career-responses-card-offer-preview">
-          <span className="career-mono">
+          <span className="career-numeric">
             {new Intl.NumberFormat('ru-RU').format(breakdown.monthlyAverage)} {currencySymbol}/мес.
           </span>
           <span className="career-offer-source-badge">{breakdown.sourceLabel}</span>

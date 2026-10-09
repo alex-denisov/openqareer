@@ -242,7 +242,7 @@ function TotalCompensationRow({ offers }: { readonly offers: readonly OfferCompa
       </td>
       {offers.map((item) => (
         <td key={item.offer.id} className="career-offer-matrix-val-cell">
-          <div className="career-offer-val-bold career-mono">
+          <div className="career-offer-val-bold career-numeric">
             {formatMoney(item.breakdown.totalAnnualCompensation, item.breakdown.currency)}
           </div>
           <span className="career-offer-source-badge">{item.breakdown.sourceLabel}</span>
@@ -257,7 +257,7 @@ function MonthlyAverageRow({ offers }: { readonly offers: readonly OfferComparis
     <tr>
       <td className="career-offer-matrix-param-cell">В среднем в месяц</td>
       {offers.map((item) => (
-        <td key={item.offer.id} className="career-offer-matrix-val-cell career-mono">
+        <td key={item.offer.id} className="career-offer-matrix-val-cell career-numeric">
           {formatMoney(item.breakdown.monthlyAverage, item.breakdown.currency)}/мес.
         </td>
       ))}
@@ -270,7 +270,7 @@ function BaseSalaryRow({ offers }: { readonly offers: readonly OfferComparisonEn
     <tr>
       <td className="career-offer-matrix-param-cell">Базовый оклад</td>
       {offers.map((item) => (
-        <td key={item.offer.id} className="career-offer-matrix-val-cell career-mono">
+        <td key={item.offer.id} className="career-offer-matrix-val-cell career-numeric">
           {formatMoney(item.offer.baseSalary ?? 0, item.breakdown.currency)}
           {item.offer.salaryPeriod === 'year' ? '/год' : '/мес.'}
         </td>
@@ -284,7 +284,7 @@ function BonusRow({ offers }: { readonly offers: readonly OfferComparisonEntry[]
     <tr>
       <td className="career-offer-matrix-param-cell">Годовой бонус / премия</td>
       {offers.map((item) => (
-        <td key={item.offer.id} className="career-offer-matrix-val-cell career-mono">
+        <td key={item.offer.id} className="career-offer-matrix-val-cell career-numeric">
           {item.breakdown.annualBonus > 0
             ? `+${formatMoney(item.breakdown.annualBonus, item.breakdown.currency)}`
             : '—'}
@@ -320,7 +320,7 @@ function ProbationRow({ offers }: { readonly offers: readonly OfferComparisonEnt
               <div>
                 <span>{months} мес.</span>
                 {probSal !== undefined && (
-                  <div className="career-offer-param-hint career-mono">
+                  <div className="career-offer-param-hint career-numeric">
                     {formatMoney(probSal, item.breakdown.currency)}/мес.
                   </div>
                 )}
@@ -432,20 +432,20 @@ function MobileOfferCardGrid({
     <div className="career-offer-mobile-grid">
       <div>
         <span className="career-offer-mobile-label">В среднем в месяц</span>
-        <div className="career-mono">
+        <div className="career-numeric">
           {formatMoney(entry.breakdown.monthlyAverage, entry.breakdown.currency)}/мес.
         </div>
       </div>
       <div>
         <span className="career-offer-mobile-label">Базовый оклад</span>
-        <div className="career-mono">
+        <div className="career-numeric">
           {formatMoney(entry.offer.baseSalary ?? 0, entry.breakdown.currency)}
           {entry.offer.salaryPeriod === 'year' ? '/год' : '/мес.'}
         </div>
       </div>
       <div>
         <span className="career-offer-mobile-label">Премия / бонус</span>
-        <div className="career-mono">
+        <div className="career-numeric">
           {entry.breakdown.annualBonus > 0
             ? `+${formatMoney(entry.breakdown.annualBonus, entry.breakdown.currency)}`
             : 'Без бонуса'}
@@ -516,7 +516,7 @@ function MobileOfferCard({
       />
       <div className="career-offer-mobile-metric">
         <span className="career-offer-mobile-label">Совокупный доход в год</span>
-        <div className="career-offer-val-bold career-mono">
+        <div className="career-offer-val-bold career-numeric">
           {formatMoney(entry.breakdown.totalAnnualCompensation, entry.breakdown.currency)}
         </div>
         <span className="career-offer-source-badge">{entry.breakdown.sourceLabel}</span>

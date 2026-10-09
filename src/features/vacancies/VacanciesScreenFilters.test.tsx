@@ -104,7 +104,7 @@ describe('VacanciesFilters toggle and role limit', () => {
     container.remove();
   });
 
-  it('renders only result facets with mono counts and hides empty groups', () => {
+  it('renders only result facets with tabular counts and hides empty groups', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     act(() => root.render(<VacanciesFilters {...defaultProps} facets={{

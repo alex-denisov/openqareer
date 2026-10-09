@@ -100,7 +100,7 @@ export function Field({
   readOnly = false,
   disabled = false,
   large = false,
-  mono = false,
+  tabularNumbers = false,
   type = 'text',
 }: {
   label: string;
@@ -110,11 +110,11 @@ export function Field({
   readOnly?: boolean;
   disabled?: boolean;
   large?: boolean;
-  mono?: boolean;
+  tabularNumbers?: boolean;
   type?: string;
 }) {
   return (
-    <label className={`career-resume-field ${large ? 'is-large' : ''} ${mono ? 'is-mono' : ''}`}>
+    <label className={`career-resume-field ${large ? 'is-large' : ''} ${tabularNumbers ? 'is-numeric' : ''}`}>
       <span>{label}</span>
       <input
         type={type}
