@@ -31,7 +31,7 @@ describe('CareerTariffsView (B442)', () => {
     expect(html).toContain('Читает источники и считает совпадение');
     expect(html).toContain('Собирает подборку каждый день');
     expect(html).toContain('Очередь на одобрение и журнал с квитанциями');
-    expect(html).toContain('Готовит досье к каждым воротам');
+    expect(html).toContain('Готовит справку о компании к каждым воротам');
     expect(html).toContain('Заявку рассматривает команда, ответ в течение недели');
   });
 
