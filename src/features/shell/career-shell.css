@@ -3460,6 +3460,10 @@
   line-height: 1.55;
 }
 
+.career-expert-peek {
+  display: none;
+}
+
 .career-mobile-nav,
 .career-mobile-more-menu {
   display: none;
@@ -3587,6 +3591,48 @@
     border-radius: var(--career-radius-lg);
     padding: var(--career-space-1);
     background: var(--career-bg-elevated);
+  }
+
+  .career-expert-peek {
+    position: fixed;
+    inset-inline: var(--career-space-4);
+    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
+    z-index: 29;
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    min-height: var(--career-target-min);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-lg);
+    padding: var(--career-space-2) var(--career-space-4);
+    color: var(--career-text);
+    background: var(--career-bg-elevated);
+    text-align: start;
+  }
+
+  .career-expert-peek-icon {
+    display: grid;
+    place-items: center;
+    flex: none;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    border-radius: var(--career-radius-md);
+    color: var(--career-accent);
+  }
+
+  .career-expert-peek-text {
+    display: grid;
+    flex: 1;
+    min-inline-size: 0;
+  }
+
+  .career-expert-peek-text strong {
+    font-size: var(--career-text-md);
+  }
+
+  .career-expert-peek-text small {
+    font-size: var(--career-text-xs);
+    color: var(--career-text-dim);
   }
 
   .career-mobile-more-menu {

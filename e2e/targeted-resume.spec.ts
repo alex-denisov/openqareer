@@ -40,8 +40,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.getByRole('button', { name: 'Профиль', exact: true }).click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
-  await page.getByRole('button', { name: 'Документ и форматы', exact: true }).click();
-  await page.getByRole('button', { name: 'ATS Plain Text', exact: true }).click();
+  await page.getByText('Открыть ATS Plain Text и подготовить целевой срез').click();
 
   await page.getByLabel('Название вакансии', { exact: true }).fill('Head of Product, Payments');
   await page
@@ -108,7 +107,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
       };
     };
   });
-  await page.getByRole('button', { name: 'Печать / PDF', exact: true }).click();
+  await targetedView.getByRole('button', { name: 'Печать / PDF', exact: true }).click();
   const printState = await page.evaluate(
     () => (window as Window & { __b387PrintState?: unknown }).__b387PrintState,
   );

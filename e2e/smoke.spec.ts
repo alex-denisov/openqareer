@@ -161,7 +161,7 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   // drawer once the career picture exists.
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.locator('button:has-text("Спросить консультанта"):visible').first().click();
-  const dialog = page.getByRole('dialog', { name: /^Консультант · / });
+  const dialog = page.getByRole('complementary', { name: /^Консультант · / });
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 
   const approvalRequest = page.waitForRequest(

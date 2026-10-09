@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
-import { CareerExpertPanel } from '../journey/CareerExpertPanel';
+import { CaretUp, Sparkle } from '@phosphor-icons/react';
+import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
 import { OnboardingWizard } from '../journey/OnboardingWizard';
 import {
   CareerMapView,
@@ -28,6 +29,14 @@ import {
 import { CareerTodaySkeleton } from './CareerTodaySkeleton';
 
 type ShellView = ShellSection;
+
+/** Раздел, в котором консультант открывается без явного этапа. */
+function stageForView(view: ShellView): CoachTurnStage {
+  if (view === 'profile') return 'profile';
+  if (view === 'opportunities') return 'vacancies';
+  if (view === 'responses') return 'responses';
+  return 'today';
+}
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
@@ -205,12 +214,12 @@ export function CareerWorkspaceShell({
       setExpertSheetExpanded(false);
       setExpertConfig({
         open: true,
-        stage: stage ?? 'today',
+        stage: stage ?? stageForView(activeView),
         subject,
         subjectTitle,
       });
     },
-    [],
+    [activeView],
   );
 
   const closeExpert = useCallback(() => {
@@ -442,6 +451,23 @@ export function CareerWorkspaceShell({
         ariaHidden={accountOpen || onboardingIsFullscreen}
       />
 
+      {!expertPanelOpen && !accountOpen && !onboardingIsFullscreen ? (
+        <button
+          className="career-expert-peek"
+          type="button"
+          onClick={() => openExpert()}
+          aria-label="Спросить консультанта"
+        >
+          <span className="career-expert-peek-icon">
+            <Sparkle size={18} weight="fill" />
+          </span>
+          <span className="career-expert-peek-text">
+            <strong>Консультант</strong>
+            <small>{STAGE_TITLE[stageForView(activeView)]}</small>
+          </span>
+          <CaretUp size={20} />
+        </button>
+      ) : null}
       {expertPanelOpen ? (
         <CareerExpertPanel
           journey={journey}

@@ -54,6 +54,7 @@ test.describe('B376 skill quiz dialogue & verification', () => {
           .getByRole('button', { name: 'Профиль' })
           .click();
       }
+      await page.getByRole('tab', { name: /^Навыки/ }).click();
       await expect(page.locator('#sec-skills')).toBeVisible();
 
       // Open consultant
@@ -64,6 +65,10 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       const expertPanel = page.locator('aside.career-expert-panel');
       await expect(expertPanel).toBeVisible();
       await expect(expertPanel.locator('header strong')).toContainText('Профиль');
+
+      // На 390 лист открывается свёрнутым (два положения): разворачиваем.
+      const expand = expertPanel.getByRole('button', { name: 'Развернуть консультанта' });
+      if (await expand.isVisible()) await expand.click();
 
       // Verify quiz prompt is present
       const quizPrompt = expertPanel.locator('.career-expert-skill-quiz-prompt');

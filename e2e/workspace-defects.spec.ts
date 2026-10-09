@@ -91,8 +91,9 @@ test.describe('B140 workspace shell and intake defects', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.career-session-gate')).toBeVisible({ timeout: 4_000 });
-    await expect(page.locator('.career-session-gate h1')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Повторить проверку' })).toBeVisible({
+    await expect(page.locator('.career-session-gate')).not.toContainText('защищённую сессию');
+    await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 9_000 });
+    await expect(page.getByRole('button', { name: 'Повторить', exact: true })).toBeVisible({
       timeout: 9_000,
     });
     expect(await sessionGateWasSeen(page)).toBe(false);

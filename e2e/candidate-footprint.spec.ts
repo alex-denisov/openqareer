@@ -135,7 +135,7 @@ async function openFootprint(
   await page.locator('button[aria-label="Профиль"]:visible').first().click();
   await page
     .locator('.career-profile-screen-tabs')
-    .getByRole('button', { name: 'Как вас видят' })
+    .getByRole('tab', { name: /^Цифровой след/ })
     .click();
   await expect(page.getByRole('heading', { name: 'Как вас видят', exact: true })).toBeVisible();
 }

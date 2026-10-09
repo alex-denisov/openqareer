@@ -460,7 +460,7 @@ test.describe('B232 readability gate', () => {
 
     await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
-    await expect(page.getByText('FinCloud').first()).toBeVisible();
+    await expect(page.getByText('FinCloud').locator('visible=true').first()).toBeVisible();
     await expect(page.getByText('Head of Product').first()).toBeVisible();
   });
 
@@ -603,7 +603,7 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
 
     // B367: self-audit tab remains behind the consent-approval gate.
-    await page.getByRole('button', { name: 'Как вас видят' }).click();
+    await page.getByRole('tab', { name: /^Цифровой след/ }).click();
     const sourcesHeading = page.getByRole('heading', {
       name: 'Как вас видят',
       exact: true,
