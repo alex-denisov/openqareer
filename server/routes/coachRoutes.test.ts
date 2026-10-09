@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { Writable } from 'node:stream';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
@@ -20,10 +21,17 @@ describe('Coach Stage Routes (B340)', () => {
     }
   });
 
-  async function createTestServer() {
+  async function createTestServer(options: { failSummary?: boolean; captureLogs?: boolean } = {}) {
     const store = createStore();
     const candidate = createCandidate(store);
-    const app = Fastify({ logger: false });
+    let logOutput = '';
+    const logStream = new Writable({
+      write(chunk, _encoding, callback) {
+        logOutput += chunk.toString();
+        callback();
+      },
+    });
+    const app = Fastify(options.captureLogs ? { logger: { level: 'warn', stream: logStream } } : { logger: false });
     await app.register(cookie);
     await app.register(rateLimit, { global: false });
 
@@ -31,6 +39,9 @@ describe('Coach Stage Routes (B340)', () => {
     const coachProvider = {
       createTurn: vi.fn(async (input: CoachTurnInput) => {
         lastCreatedTurnInput = input;
+        if (options.failSummary && input.internalPurpose === 'consultant-summary') {
+          throw new Error(`Provider failure for ${input.messages[0]?.content ?? 'empty message'}`);
+        }
         return {
           ...output,
           result: {
@@ -39,15 +50,17 @@ describe('Coach Stage Routes (B340)', () => {
             message: `Ответ для фазы ${input.phase}`,
             actionProposals: [
               {
-                id: 'prop-1',
                 kind: 'resume.revise' as const,
-                title: 'Уточнить навыки',
-                description: 'Добавить React',
-                section: 'skills',
-                evidenceRefs: [],
+                objective: 'Уточнить перечисление навыков в резюме.',
+                evidenceRefs: ['memory:typescript'],
+                acceptanceCriteria: ['Сохранены только указанные навыки.'],
+                expectedSignal: 'Кандидат подтвердил формулировку.',
+                measureAfter: '2026-10-10',
+                risk: 'candidate_data_write' as const,
                 resumeRevision: {
                   section: 'skills' as const,
-                  targetText: 'TypeScript',
+                  experienceId: 'experience-1',
+                  memoryId: null,
                   proposedText: 'TypeScript, React',
                 },
               },
@@ -121,6 +134,7 @@ describe('Coach Stage Routes (B340)', () => {
       headers,
       coachProvider,
       getLastInput: () => lastCreatedTurnInput,
+      getLogOutput: () => logOutput,
     };
   }
 
@@ -318,5 +332,77 @@ describe('Coach Stage Routes (B340)', () => {
     expect(body.fact.source).toContain('hh.ru');
     expect(body.proposal.kind).toBe('resume.revise');
     expect(body.proposal.resumeRevision.section).toBe('skills');
+  });
+
+  it('summarizes a closed session once and exposes candidate-scoped read-only history (B436)', async () => {
+    const { app, headers, candidate, store, coachProvider } = await createTestServer();
+    const firstKey = randomUUID();
+    const secondKey = randomUUID();
+    const thirdKey = randomUUID();
+    const firstMessageId = randomUUID();
+    const secondMessageId = randomUUID();
+    const thirdMessageId = randomUUID();
+    const sendTurn = (key: string, messageId: string, stage: string, content: string) => app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { ...headers, 'idempotency-key': key },
+      payload: { messageId, content, stage },
+    });
+
+    expect((await sendTurn(firstKey, firstMessageId, 'profile', 'Я внедрил Kafka для платежей.')).statusCode).toBe(200);
+    expect((await sendTurn(secondKey, secondMessageId, 'career', 'Какой результат стоит выделить?')).statusCode).toBe(200);
+    const summaryCalls = coachProvider.createTurn.mock.calls.filter(([input]) => input.internalPurpose === 'consultant-summary');
+    expect(summaryCalls).toHaveLength(1);
+    expect(coachProvider.createTurn).toHaveBeenCalledTimes(3);
+
+    const list = await app.inject({ method: 'GET', url: '/api/v1/candidate/consultant-history', headers });
+    expect(list.statusCode).toBe(200);
+    const conversationId = list.json().data[0].id as string;
+    const detail = await app.inject({ method: 'GET', url: `/api/v1/candidate/consultant-history/${conversationId}`, headers });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.json().data.messages).toHaveLength(2);
+    expect(store.exportCandidate(candidate.id).consultantConversations).toHaveLength(1);
+
+    expect((await sendTurn(thirdKey, thirdMessageId, 'career', 'Продолжим с учётом прежней беседы.')).statusCode).toBe(200);
+    const thirdInput = coachProvider.createTurn.mock.calls[3]?.[0];
+    expect(thirdInput?.knowledgeContext?.consultantHistory?.summaries).toEqual(
+      expect.arrayContaining([expect.objectContaining({ summary: 'Ответ для фазы evidence' })]),
+    );
+    expect(coachProvider.createTurn).toHaveBeenCalledTimes(4);
+
+    const append = await app.inject({
+      method: 'POST',
+      url: `/api/v1/candidate/consultant-history/${conversationId}/messages`,
+      headers,
+      payload: { content: 'Нельзя продолжить закрытую беседу.' },
+    });
+    expect(append.statusCode).toBe(409);
+    expect(append.json().error.code).toBe('conversation_read_only');
+
+    expect((await sendTurn(thirdKey, thirdMessageId, 'career', 'Продолжим с учётом прежней беседы.')).statusCode).toBe(200);
+    expect(coachProvider.createTurn).toHaveBeenCalledTimes(4);
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/candidate/consultant-history/${conversationId}`,
+      headers,
+    });
+    expect(removed.statusCode).toBe(204);
+    expect(store.listConsultantConversations(candidate.id).items).toEqual([]);
+  });
+
+  it('does not write message content to logs when summary generation fails (B436)', async () => {
+    const { app, headers, getLogOutput } = await createTestServer({ failSummary: true, captureLogs: true });
+    const privateMessage = 'PRIVATE_B436_MESSAGE_should_never_appear_in_logs';
+    const sendTurn = (stage: string, content: string) => app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { ...headers, 'idempotency-key': randomUUID() },
+      payload: { messageId: randomUUID(), content, stage },
+    });
+
+    expect((await sendTurn('profile', privateMessage)).statusCode).toBe(200);
+    expect((await sendTurn('career', 'Новый вопрос после закрытой беседы.')).statusCode).toBe(200);
+    expect(getLogOutput()).not.toContain(privateMessage);
+    expect(getLogOutput()).not.toContain('Provider failure');
   });
 });

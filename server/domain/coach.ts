@@ -10,6 +10,15 @@ const COACH_PHASES = [
   'interview',
 ] as const;
 
+export const COACH_TURN_STAGES = [
+  'today',
+  'profile',
+  'career',
+  'vacancies',
+  'responses',
+  'interviews',
+] as const;
+
 const MEMORY_KINDS = ['fact', 'preference', 'hypothesis', 'open-question'] as const;
 
 const MEMORY_CONFIDENCE = [
@@ -210,6 +219,31 @@ const knowledgeContextSchema = z.object({
       }),
     )
     .max(12),
+  consultantHistory: z
+    .object({
+      summaries: z
+        .array(
+          z.object({
+            ref: z.string().min(1).max(120),
+            stage: z.enum(COACH_TURN_STAGES),
+            createdAt: z.string().datetime(),
+            summary: z.string().trim().min(1).max(2_000),
+          }),
+        )
+        .max(6),
+      messageSnippets: z
+        .array(
+          z.object({
+            ref: z.string().min(1).max(120),
+            stage: z.enum(COACH_TURN_STAGES),
+            role: z.enum(['user', 'assistant']),
+            createdAt: z.string().datetime(),
+            content: z.string().trim().min(1).max(800),
+          }),
+        )
+        .max(5),
+    })
+    .optional(),
 });
 
 export const coachTurnInputSchema = z.object({
@@ -217,6 +251,7 @@ export const coachTurnInputSchema = z.object({
   dataClass: z.enum(['synthetic', 'personal']).default('personal'),
   locale: z.enum(['ru-RU', 'en-US']).default('ru-RU'),
   phase: z.enum(COACH_PHASES).default('discovery'),
+  internalPurpose: z.enum(['consultant-summary']).optional(),
   resumeContext: resumeContextSchema.optional(),
   stageContext: z.string().trim().max(10_000).optional(),
   rejectedProposals: z.array(z.string().trim().max(500)).max(50).optional(),
@@ -310,15 +345,6 @@ export type CoachPhase = (typeof COACH_PHASES)[number];
 export type CareerRole = (typeof CAREER_ROLES)[number];
 export type CareerActionProposal = z.infer<typeof careerActionProposalSchema>;
 export type MarketObservation = z.infer<typeof marketObservationSchema>;
-
-export const COACH_TURN_STAGES = [
-  'today',
-  'profile',
-  'career',
-  'vacancies',
-  'responses',
-  'interviews',
-] as const;
 
 export const coachTurnStageSchema = z.enum(COACH_TURN_STAGES);
 export type CoachTurnStage = (typeof COACH_TURN_STAGES)[number];
@@ -530,11 +556,15 @@ export const COACH_TURN_JSON_SCHEMA = {
 
 export function serializeCoachInput(input: CoachTurnInput): string {
   return JSON.stringify({
-    task: 'Continue the candidate discovery interview',
+    task:
+      input.internalPurpose === 'consultant-summary'
+        ? 'Summarize the closed candidate conversation'
+        : 'Continue the candidate discovery interview',
     outputContract: COACH_TURN_JSON_SCHEMA,
     dataClass: input.dataClass,
     locale: input.locale,
     phase: input.phase,
+    ...(input.internalPurpose ? { internalPurpose: input.internalPurpose } : {}),
     ...(input.stageContext ? { stageContext: input.stageContext } : {}),
     ...(input.rejectedProposals && input.rejectedProposals.length > 0
       ? { rejectedProposals: input.rejectedProposals }

@@ -77,7 +77,7 @@ export class OpenRouterCoachProvider implements CoachProvider {
         messages: [
           {
             role: 'system',
-            content: careerInstructionsForRole(input.activeRole),
+            content: careerInstructionsForRole(input.activeRole, input.internalPurpose),
           },
           {
             role: 'user',

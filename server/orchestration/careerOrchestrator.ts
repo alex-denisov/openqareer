@@ -218,6 +218,9 @@ function marketEvidenceFrom(
 }
 
 function rolesFor(input: CoachTurnInput): CareerRole[] {
+  if (input.internalPurpose === 'consultant-summary') {
+    return ['career_consultant'];
+  }
   if (input.phase === 'discovery' || input.phase === 'evidence') {
     return ['career_consultant'];
   }
