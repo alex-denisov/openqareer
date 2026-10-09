@@ -39,15 +39,17 @@ navigation; tariffs remain a visible top action.
 - Major radii: 24 px; sections: 16 px; controls: 10–12 px.
 - Phosphor icons only. Icons supplement labels and never replace an unfamiliar
   action label.
-- System font stack; operational labels and numbers may use the mono token.
+- System font stack; code may use the mono token. Numeric values use the main
+  font with tabular figures.
 - Type scale (B232): six tokens and nothing else — `--career-text-xs` 13 px,
   `-sm` 14, `-md` 16, `-lg` 20, `-xl` 28, `-display` 40. No text below 13 px,
   no literal `font-size` in `career-shell.css` (`cssContract.test.ts`), at most
   six computed sizes on any cabinet screen (`e2e/readability.spec.ts`).
 - Type roles on the scale: page title `xl`, card title `sm`/`md`, body `xs`
   (13 px), label/eyebrow `xs` at weight 600 (never heavier than the title
-  below it), metric `lg` in `--font-mono`. Numbers — salary, dates, counters —
-  are always mono.
+  below it), metric `lg` in the main font with `font-variant-numeric:
+  tabular-nums`. Numeric values such as salary, dates and counters use the main
+  font with tabular figures.
 - Spacing rhythm: `--career-space-1…8` = 4…32 px in 4 px steps; new rules use
   the tokens rather than raw pixel values.
 - Hairline edges use `--career-border-width` (1 px); section and control edges

@@ -20,7 +20,7 @@ export interface ResumeStudioState {
    * #5) — `setDraft` and `save` would otherwise race against React's async
    * state update and save the value from before the edit.
    */
-  readonly save: (overrideDraft?: ResumeDraft) => void;
+  readonly save: (overrideDraft?: ResumeDraft) => Promise<boolean>;
 }
 
 /**
@@ -29,15 +29,14 @@ export interface ResumeStudioState {
  * quietly stand behind facts on the candidate's behalf.
  */
 export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
-  const { view, draft, loading, error, setView, setDraft, setLoading, load } =
-    useResumeLoader();
+  const { view, draft, loading, error, setView, setDraft, setLoading, load } = useResumeLoader();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
   const save = useCallback(
-    async (overrideDraft?: ResumeDraft) => {
+    async (overrideDraft?: ResumeDraft): Promise<boolean> => {
       const toSave = overrideDraft ?? draft;
-      if (!toSave) return;
+      if (!toSave) return false;
       setSaving(true);
       setSaveError(undefined);
       try {
@@ -45,8 +44,15 @@ export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
         setView(next);
         setDraft(draftOf(next));
         onSaved?.();
+        return true;
       } catch (reason) {
-        setSaveError(errorMessage(reason));
+        setSaveError(
+          errorMessage(
+            reason,
+            'Не удалось сохранить резюме. Проверьте связь с сервером; введённый текст остался в форме.',
+          ),
+        );
+        return false;
       } finally {
         setSaving(false);
       }
@@ -66,7 +72,7 @@ export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
       setLoading(true);
       void load();
     },
-    save: (overrideDraft?: ResumeDraft) => void save(overrideDraft),
+    save,
   };
 }
 
@@ -83,7 +89,12 @@ function useResumeLoader() {
       setView(next);
       setDraft(draftOf(next));
     } catch (reason) {
-      setError(errorMessage(reason));
+      setError(
+        errorMessage(
+          reason,
+          'Не удалось загрузить профиль. Проверьте соединение и повторите запрос.',
+        ),
+      );
     } finally {
       setLoading(false);
     }
@@ -97,6 +108,6 @@ function useResumeLoader() {
   return { view, draft, loading, error, setView, setDraft, setLoading, load };
 }
 
-function errorMessage(reason: unknown): string {
-  return apiErrorMessage(reason, 'Не удалось загрузить резюме. Повторите запрос.');
+function errorMessage(reason: unknown, fallback: string): string {
+  return apiErrorMessage(reason, fallback);
 }

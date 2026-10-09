@@ -235,8 +235,8 @@ test.describe('B232 readability gate', () => {
     );
     expect(captions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ text: 'Сегодня', width: 1 }),
-        expect.objectContaining({ text: 'Вакансии', width: 1 }),
+        expect.objectContaining({ text: 'Сегодня', width: 0 }),
+        expect.objectContaining({ text: 'Вакансии', width: 0 }),
       ]),
     );
     await rail.getByRole('button', { name: 'Вакансии', exact: true }).hover();
@@ -437,7 +437,7 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
     const tariffsTrigger = page
-      .locator('.career-rail-plan:visible, .career-mobile-tariffs:visible')
+      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
     await expect(
@@ -464,16 +464,25 @@ test.describe('B232 readability gate', () => {
     await expect(page.getByText('Head of Product').first()).toBeVisible();
   });
 
-  test('capture C52 screenshots: rail and path', async ({ page }) => {
+  test('capture C52 screenshots: fixed rail, focus tooltip and path', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
-    await page.screenshot({ path: 'output/playwright/C52/rail-collapsed-1440.png' });
-
-    await page.locator('.career-rail-toggle').click();
-    await page.screenshot({ path: 'output/playwright/C52/rail-expanded-1440.png' });
+    const rail = page.locator('.career-rail');
+    const railBox = await rail.boundingBox();
+    expect(railBox?.width).toBe(76);
+    await expect(page.locator('.career-rail-toggle')).toHaveCount(0);
+    const today = rail.locator('.career-nav-button').first();
+    await today.hover();
+    const tooltip = page.locator('.career-tooltip-bubble[data-open="true"]');
+    await expect(tooltip).toContainText('Сегодня');
+    const tooltipBox = await tooltip.boundingBox();
+    expect(tooltipBox?.x).toBeGreaterThanOrEqual((railBox?.x ?? 0) + (railBox?.width ?? 0));
+    await page.screenshot({ path: 'output/playwright/C52/rail-fixed-1440.png' });
+    await today.focus();
+    await expect(tooltip).toContainText('Сегодня');
 
     await page
       .locator('.career-path')
@@ -560,22 +569,16 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
   });
 
-  test('capture B335 screenshots: rail expanded, collapsed and mobile', async ({ page }) => {
+  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
-    // Collapsed rail at 1176
-    await page.screenshot({ path: 'output/playwright/B335/rail-collapsed-1176.png' });
-
-    // Expanded rail at 1176
-    await page.locator('.career-rail-toggle').click();
-    await expect(page.locator('.career-shell')).toHaveAttribute('data-rail', 'expanded');
     const railBox = await page.locator('.career-rail').boundingBox();
-    expect(railBox?.width).toBe(200);
-
-    await page.screenshot({ path: 'output/playwright/B335/rail-expanded-1176.png' });
+    expect(railBox?.width).toBe(76);
+    await expect(page.locator('.career-rail-toggle')).toHaveCount(0);
+    await page.screenshot({ path: 'output/playwright/B335/rail-fixed-1176.png' });
 
     // 390 mobile
     await page.setViewportSize({ width: 390, height: 844 });
@@ -611,7 +614,7 @@ test.describe('B232 readability gate', () => {
 
     // Tariffs at 1176
     const tariffsTrigger = page
-      .locator('.career-rail-plan:visible, .career-mobile-tariffs:visible')
+      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
     await expect(
@@ -624,7 +627,7 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
     const mobileTariffsTrigger = page
-      .locator('.career-mobile-tariffs:visible, .career-rail-plan:visible')
+      .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
       .first();
     await mobileTariffsTrigger.click();
     await expect(

@@ -12,7 +12,7 @@ import {
 import { recordOutcome } from '../outcome/outcomeEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
 import { CareerTariffsView } from './CareerTariffsView';
-import { CURRENT_PLAN } from './tariffPackages';
+import type { ShellSection } from './shellNavigation';
 
 // Кабинет не рисует профиль до первого ответа сервера; здесь ответ приходит
 // сразу, чтобы проверять состав оболочки, а не сеть.
@@ -141,18 +141,15 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    // Владелец 2026-09-20: «проверяем защищённую сессию» на старте быть не
-    // должно — профиль либо открывается, либо кандидат оказывается на входе.
-    // Пока ответ идёт, экран молчит: тихая заглушка без заголовков и текста.
-    expect(html).not.toContain('Проверяем защищённую сессию');
-    expect(html).not.toContain('Защита данных');
     expect(html).toContain('career-session-gate');
+    expect(html).toContain('career-today-skeleton');
+    expect(html).toContain('Проверяем вход и читаем ваш профиль');
     expect(html).toContain('aria-busy="true"');
     expect(html).not.toContain('Синтетический профиль кандидата');
     expect(html).not.toContain('С чем разобраться?');
   });
 
-  it('explains a session check that failed without the «checking» headline', () => {
+  it('explains a failed session check and offers retry and sign-in', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         sessionPending
@@ -160,10 +157,8 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).not.toContain('Проверяем защищённую сессию');
-    expect(html).not.toContain('Защита данных');
-    expect(html).toContain('Не удалось проверить аккаунт');
-    expect(html).toContain('Повторить проверку');
+    expect(html).toContain('Ошибка: сервер не ответил.');
+    expect(html).toContain('Повторить');
     expect(html).toContain('Открыть вход');
   });
 
@@ -512,176 +507,8 @@ describe('CareerWorkspaceShell brand chrome', () => {
     expect(renderToStaticMarkup(<CareerWorkspaceShell />)).not.toContain('style="');
   });
 
-  /**
-   * B169 §5–§8 — the owner's reading of the built app: a top bar that repeats
-   * the logo and offers a contextless «Эксперт» door, an account symbol in two
-   * places, and «Тарифы» reachable in the middle of an unfinished diagnostic.
-   */
   describe('shell chrome', () => {
-    const firstTime = (
-      <CareerWorkspaceShell
-        onClearWorkspace={() => undefined}
-        onSaveWorkspace={() => undefined}
-        onUpdateWorkspace={() => undefined}
-      />
-    );
-
-    // B248 (owner decision 2026-09-23): «Тарифы» is no longer its own rail
-    // item — it opens from the account panel, and the closed reason travels
-    // there as a prop. See `CareerAccountPanel.test.tsx` for the button
-    // itself; here the rail's account trigger still names the current plan.
-    it('names the current plan on the account trigger while the diagnostic is unfinished', () => {
-      const html = renderToStaticMarkup(firstTime);
-
-      expect(html).toContain(`Аккаунт и тарифы. План «${CURRENT_PLAN.name}»`);
-    });
-
-    it('drops the contextless global expert door', () => {
-      expect(renderToStaticMarkup(firstTime)).not.toContain('career-expert-trigger');
-    });
-
-    it('keeps the account control on the rail and nowhere else on desktop', () => {
-      const html = renderToStaticMarkup(firstTime);
-      const accountControls = html.match(/aria-label="Открыть аккаунт"/gu) ?? [];
-
-      expect(html).toContain('career-account-button');
-      // The second one is the narrow-screen bar, which is display:none on
-      // desktop and is the only place those controls exist on a phone.
-      expect(accountControls.length).toBe(2);
-    });
-
-    it('collapses the rail by default and offers a handle to open it', () => {
-      const html = renderToStaticMarkup(firstTime);
-
-      expect(html).toContain('data-rail="collapsed"');
-      expect(html).toContain('career-rail-toggle');
-      expect(html).toContain('aria-controls="career-rail"');
-      expect(html).toContain('aria-label="Развернуть панель"');
-      // Collapsed the rail shows the sign alone; the wordmark arrives with the
-      // section labels when the handle opens it.
-      const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
-      expect(rail).toContain('career-brand-mark');
-      expect(rail).not.toContain('brand-lockup-qareer');
-      expect(rail).toContain('role="tooltip"');
-    });
-
-    /**
-     * The handle used to float over the workspace on the rail's outer border,
-     * where it covered whatever the candidate was reading (owner report,
-     * 2026-08-26). It belongs in the rail's own bottom group, with the account
-     * control it sits beside.
-     */
-    it('keeps the handle inside the rail rather than floating over the page', () => {
-      const html = renderToStaticMarkup(firstTime);
-      const bottom = html.slice(html.indexOf('career-rail-bottom'), html.indexOf('</aside>'));
-
-      expect(bottom).toContain('career-rail-toggle');
-      expect(bottom).toContain('career-account-button');
-    });
-
-    /**
-     * Production serves `style-src 'self'`, which drops the style attribute
-     * outright, so a link styled that way is unstyled for every real visitor
-     * (PRB-012). The admin entry point used to carry seven such declarations.
-     */
-    it('styles the administrator link with a class, not a blocked attribute', () => {
-      const html = renderToStaticMarkup(
-        <CareerWorkspaceShell
-          session={
-            {
-              username: 'root',
-              role: 'admin',
-              candidateId: 'candidate-1',
-            } as never
-          }
-          onClearWorkspace={() => undefined}
-          onSaveWorkspace={() => undefined}
-          onUpdateWorkspace={() => undefined}
-        />,
-      );
-
-      expect(html).toContain('Админка');
-      expect(html).toContain('career-rail-admin');
-      expect(html).not.toContain('style="');
-    });
-
-    it('names the vacancy section consistently without using Шансы', () => {
-      const html = renderToStaticMarkup(firstTime);
-      expect(html).toContain('Вакансии');
-      expect(html).not.toContain('Шансы');
-    });
-  });
-});
-
-/**
- * «Пульт» (B178). Рельс называл разделы чужими глифами из набора: дом для
- * кандидата, пустой лист для «Резюме». Тариф
- * стоял пунктом меню в одном ряду с «Карьерой», а «Свернуть» занимало ещё
- * один пункт. Иконка теперь рисуется под раздел, тариф — карточка плана,
- * ручка — не пункт меню.
- */
-describe('рельс «Пульт»', () => {
-  function railHtml() {
-    return renderToStaticMarkup(
-      <CareerWorkspaceShell
-        session={{
-          username: 'alexey',
-          email: 'alexey@example.com',
-          displayName: 'Мария Иванова',
-          role: 'candidate',
-          isTest: false,
-          candidateId: 'candidate-1',
-        }}
-        workspace={prepareCareerWorkspace({
-          resumeText:
-            'Синтетический профиль кандидата с достаточно длинным описанием для проверки рельса.',
-          resumeSource: 'text',
-          targetDirection: 'Руководитель продукта',
-          regions: ['ru'],
-          currentSituation: 'Проверяю навигацию.',
-          constraints: '',
-          urgency: 'active',
-        })}
-      />,
-    );
-  }
-
-  it('даёт каждому разделу свою иконку, а не один глиф на всех', () => {
-    const paths = [...railHtml().matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
-      (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
-    );
-
-    // Четыре раздела макета «Сегодня · Профиль · Вакансии · Отклики» (B340),
-    // каждый нарисован дважды: рельс и нижняя панель на узком экране.
-    expect(paths.length).toBe(8);
-    expect(new Set(paths).size).toBe(4);
-  });
-
-  it('называет план, который действительно работает, а не выдуманный', () => {
-    const html = railHtml();
-
-    expect(html).toContain(`План «${CURRENT_PLAN.name}»`);
-    expect(html).toContain('career-account-button');
-  });
-
-  /**
-   * Владелец, 2026-09-25 — заменяет решение B248 «тарифы только из панели
-   * аккаунта»: тарифы должны быть видны и продавать, а не прятаться за
-   * аватаром. Свёрнутый рельс показывает только иконку с именем плана в
-   * доступном имени; клик открывает существующий экран тарифов.
-   */
-  it('показывает иконку плана в свёрнутом рельсе, ведущую на экран тарифов', () => {
-    const html = railHtml();
-    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
-
-    expect(plan).not.toBeNull();
-    expect(plan![0]).toContain(`aria-label="Тарифы, план ${CURRENT_PLAN.name}"`);
-    expect(plan![0]).not.toContain('career-rail-plan-text');
-    expect(plan![0]).toContain('<svg');
-  });
-
-  it('в раскрытой панели показывает имя и email у аватара, в свёрнутой — нет', () => {
-    const session = {
+    const candidateSession = {
       username: 'alexey',
       email: 'alexey@example.com',
       displayName: 'Мария Иванова',
@@ -694,111 +521,145 @@ describe('рельс «Пульт»', () => {
       resumeSource: 'text',
       targetDirection: 'Руководитель продукта',
       regions: ['ru'],
-      currentSituation: 'Проверяю навигацию.',
+      currentSituation: 'Проверяю фиксированную оболочку.',
       constraints: '',
       urgency: 'active',
     });
+    const html = renderToStaticMarkup(<CareerWorkspaceShell session={candidateSession} workspace={workspace} />);
 
-    const collapsedHtml = renderToStaticMarkup(
-      <CareerWorkspaceShell
-        session={session}
-        workspace={workspace}
-        initialRailExpanded={false}
-      />,
-    );
-    const accountButtonCollapsed = collapsedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
-    expect(accountButtonCollapsed).not.toBeNull();
-    expect(accountButtonCollapsed![0]).not.toContain('Мария Иванова');
-    expect(accountButtonCollapsed![0]).not.toContain('alexey@example.com');
-
-    const expandedHtml = renderToStaticMarkup(
-      <CareerWorkspaceShell
-        session={session}
-        workspace={workspace}
-        initialRailExpanded={true}
-      />,
-    );
-    const accountButtonExpanded = expandedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
-    expect(accountButtonExpanded).not.toBeNull();
-    expect(accountButtonExpanded![0]).toContain('Мария Иванова');
-    expect(accountButtonExpanded![0]).toContain('alexey@example.com');
-  });
-
-  it('в раскрытой панели без email показывает только имя без пустой строки', () => {
-    const session = {
-      username: 'alexey',
-      email: null,
-      displayName: 'Мария Иванова',
-      role: 'candidate' as const,
-      isTest: false,
-      candidateId: 'candidate-1',
-    };
-    const workspace = prepareCareerWorkspace({
-      resumeText: 'Синтетический профиль кандидата.',
-      resumeSource: 'text',
-      targetDirection: 'Руководитель продукта',
-      regions: ['ru'],
-      currentSituation: 'Проверяю навигацию.',
-      constraints: '',
-      urgency: 'active',
+    it('keeps the openqareer mark and removes the contextless expert door', () => {
+      expect(html).toContain('career-brand-mark');
+      expect(html).not.toContain('career-expert-trigger');
     });
 
-    const expandedHtml = renderToStaticMarkup(
-      <CareerWorkspaceShell
-        session={session}
-        workspace={workspace}
-        initialRailExpanded={true}
-      />,
+    it('keeps the account control without exposing its name or email in the rail', () => {
+      const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
+      expect(rail).toContain('career-account-button');
+      expect(rail).not.toContain('Мария Иванова');
+      expect(rail).not.toContain('alexey@example.com');
+    });
+
+    it('removes the collapsing control and shows wallet tariffs', () => {
+      const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
+      expect(rail).not.toContain('career-rail-toggle');
+      expect(rail).toContain('career-rail-wallet');
+      expect(rail).toContain('aria-label="Тарифы"');
+      expect(rail).toContain('<svg');
+    });
+
+    it('keeps mobile tariffs visible and uses four sections plus More', () => {
+      expect(html).toContain('career-mobile-tariffs');
+      const navStart = html.indexOf('<nav class="career-mobile-nav"');
+      const mobileNav = html.slice(navStart, html.indexOf('</nav>', navStart));
+      expect(mobileNav.match(/class="career-nav-button/gu)).toHaveLength(4);
+      expect(mobileNav).toContain('career-mobile-more-button');
+      expect(mobileNav).toContain('Ещё');
+    });
+
+    it('styles the administrator link with a class, not a blocked attribute', () => {
+      const adminHtml = renderToStaticMarkup(
+        <CareerWorkspaceShell session={{ ...candidateSession, role: 'admin' }} workspace={workspace} />,
+      );
+      expect(adminHtml).toContain('Админка');
+      expect(adminHtml).toContain('career-rail-admin');
+      expect(adminHtml).not.toContain('style="');
+    });
+
+    it('names the vacancy section consistently without using Шансы', () => {
+      expect(html).toContain('Вакансии');
+      expect(html).not.toContain('Шансы');
+    });
+  });
+});
+
+describe('B440 fixed rail contract', () => {
+  const candidateSession = {
+    username: 'alexey',
+    email: 'alexey@example.com',
+    displayName: 'Мария Иванова',
+    role: 'candidate' as const,
+    isTest: false,
+    candidateId: 'candidate-1',
+  };
+  const workspace = prepareCareerWorkspace({
+    resumeText: 'Синтетический профиль кандидата.',
+    resumeSource: 'text',
+    targetDirection: 'Руководитель продукта',
+    regions: ['ru'],
+    currentSituation: 'Проверяю фиксированную оболочку.',
+    constraints: '',
+    urgency: 'active',
+  });
+
+  function shellHtml(initialView: ShellSection = 'today') {
+    return renderToStaticMarkup(
+      <CareerWorkspaceShell session={candidateSession} workspace={workspace} initialView={initialView} />,
     );
-    const accountButtonExpanded = expandedHtml.match(/<button class="career-account-button[^]*?<\/button>/u);
-    expect(accountButtonExpanded).not.toBeNull();
-    expect(accountButtonExpanded![0]).toContain('Мария Иванова');
-    expect(accountButtonExpanded![0]).not.toContain('career-account-email');
+  }
+
+  it('renders four distinct primary section icons on rail and mobile', () => {
+    const html = shellHtml();
+    const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
+      (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
+    );
+    expect(paths).toHaveLength(8);
+    expect(new Set(paths).size).toBe(4);
   });
 
-  it('кнопка «План» содержит svg значок', () => {
-    const html = railHtml();
-    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
-    expect(plan).not.toBeNull();
-    expect(plan![0]).toContain('<svg');
+  it('has no rail expansion state and keeps tariff access on Wallet', () => {
+    const html = shellHtml('tariffs');
+    const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
+    expect(html).not.toContain('data-rail=');
+    expect(rail).not.toContain('career-rail-toggle');
+    expect(rail).not.toContain('career-rail-plan');
+    expect(rail).toContain('career-rail-wallet is-active');
+  });
+});
+
+describe('B440 — fixed shell and first-read skeleton', () => {
+  const session = {
+    username: 'candidate',
+    email: 'candidate@example.com',
+    displayName: 'Мария Иванова',
+    role: 'candidate' as const,
+    isTest: false,
+    candidateId: 'candidate-b440',
+  };
+
+  it('keeps the 76px rail fixed and puts Wallet and account at its bottom', () => {
+    const html = renderToStaticMarkup(<CareerWorkspaceShell session={session} />);
+    const rail = html.slice(html.indexOf('<aside id="career-rail"'), html.indexOf('</aside>'));
+
+    expect(rail).toContain('career-rail-wallet');
+    expect(rail).toContain('career-account-button');
+    expect(rail).not.toContain('career-rail-toggle');
+    expect(rail).not.toContain('Тарифы. План');
+    expect(rail).not.toContain('candidate@example.com');
   });
 
-  it('подсвечивает пункт плана как активный на экране тарифов', () => {
+  it('uses four mobile sections plus an accessible More control', () => {
+    const html = renderToStaticMarkup(<CareerWorkspaceShell session={session} />);
+    const navStart = html.indexOf('<nav class="career-mobile-nav"');
+    const mobileNav = html.slice(navStart, html.indexOf('</nav>', navStart));
+
+    expect(mobileNav.match(/class="career-nav-button/gu)).toHaveLength(4);
+    expect(mobileNav).toContain('career-mobile-more-button');
+    expect(mobileNav).toContain('Ещё');
+  });
+
+  it('shows the Today skeleton and explains the profile read while session data is pending', () => {
+    const html = renderToStaticMarkup(<CareerWorkspaceShell sessionPending />);
+
+    expect(html).toContain('career-today-skeleton');
+    expect(html).toContain('Проверяем вход и читаем ваш профиль');
+  });
+
+  it('shows a clear server error with a working retry action', () => {
     const html = renderToStaticMarkup(
-      <CareerWorkspaceShell
-        session={{
-          username: 'alexey',
-          email: 'alexey@example.com',
-          displayName: 'Мария Иванова',
-          role: 'candidate',
-          isTest: false,
-          candidateId: 'candidate-1',
-        }}
-        workspace={prepareCareerWorkspace({
-          resumeText:
-            'Синтетический профиль кандидата с достаточно длинным описанием для проверки рельса.',
-          resumeSource: 'text',
-          targetDirection: 'Руководитель продукта',
-          regions: ['ru'],
-          currentSituation: 'Проверяю навигацию.',
-          constraints: '',
-          urgency: 'active',
-        })}
-        initialView="tariffs"
-      />,
+      <CareerWorkspaceShell sessionPending sessionError="network_error" />,
     );
-    const plan = html.match(/<button class="career-rail-plan[^]*?<\/button>/u);
 
-    expect(plan).not.toBeNull();
-    expect(plan![0]).toContain('is-active');
-  });
-
-  it('не тратит пункт меню на ручку раскрытия', () => {
-    const html = railHtml();
-    const railToggle = html.match(/<button class="career-rail-toggle"[^]*?<\/button>/u);
-
-    expect(railToggle).not.toBeNull();
-    expect(railToggle![0]).not.toContain('career-nav-button');
-    expect(railToggle![0]).not.toContain('<span>Свернуть</span>');
+    expect(html).toContain('Ошибка: сервер не ответил');
+    expect(html).toContain('Повторить');
   });
 });

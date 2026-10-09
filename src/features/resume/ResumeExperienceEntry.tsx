@@ -127,7 +127,7 @@ function ExperienceDates({
         label="Начало"
         value={entry.startDate ?? ''}
         placeholder="ГГГГ-ММ"
-        mono
+        tabularNumbers
         readOnly={!editor}
         onChange={(value) => editor?.onExperience(entry.id, { startDate: value })}
       />
@@ -135,7 +135,7 @@ function ExperienceDates({
         label="Окончание"
         value={entry.endDate ?? ''}
         placeholder="ГГГГ-ММ"
-        mono
+        tabularNumbers
         disabled={entry.current}
         readOnly={!editor}
         onChange={(value) => editor?.onExperience(entry.id, { endDate: value })}

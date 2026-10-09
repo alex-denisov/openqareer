@@ -277,7 +277,7 @@ function QueryPlanSection({
           <p>Снимите отметку у тех запросов, которые не хотите запускать.</p>
         </div>
         <span className="career-footprint-count">
-          <span className="career-mono">{selectedQueryIds.size}</span> выбрано
+          <span className="career-numeric">{selectedQueryIds.size}</span> выбрано
         </span>
       </div>
       <QueryPlanList

@@ -1450,7 +1450,7 @@ test.describe('B250 vacancies screen', () => {
     await errorPage.close();
   });
 
-  test('B343: tooltip shows on hover on fit dot and rail toggle switches caption', async ({
+  test('B343: tooltip shows on hover and keyboard focus on fit and rail items', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1176, height: 800 });
@@ -1467,15 +1467,19 @@ test.describe('B250 vacancies screen', () => {
     await expect(tooltipBubble).toContainText('Уровень: рядом');
     await page.screenshot({ path: 'output/playwright/B343/tooltip-fit-dot-1176.png' });
 
-    // 2. Rail toggle button -> test expand/collapse tooltip
-    const railToggle = page.locator('.career-rail-toggle');
-    await railToggle.hover();
-    await expect(tooltipBubble).toContainText('Развернуть панель');
-    await page.screenshot({ path: 'output/playwright/B343/tooltip-rail-toggle-1176.png' });
-
-    await railToggle.click();
-    await railToggle.hover();
-    await expect(tooltipBubble).toContainText('Свернуть панель');
+    // The fixed 76px rail names each icon on hover and keyboard focus.
+    const rail = page.locator('.career-rail');
+    const railItem = rail.locator('.career-nav-button').first();
+    const railBox = await rail.boundingBox();
+    const railItemBox = await railItem.boundingBox();
+    expect(railBox?.width).toBe(76);
+    await railItem.hover();
+    await expect(tooltipBubble).toContainText('Сегодня');
+    const tooltipBox = await tooltipBubble.boundingBox();
+    expect(tooltipBox?.x).toBeGreaterThanOrEqual((railItemBox?.x ?? 0) + (railItemBox?.width ?? 0));
+    await page.screenshot({ path: 'output/playwright/B343/tooltip-rail-today-1176.png' });
+    await railItem.focus();
+    await expect(tooltipBubble).toContainText('Сегодня');
 
     // Also capture at 1440 and 390 per spec §5.4
     await page.setViewportSize({ width: 1440, height: 900 });

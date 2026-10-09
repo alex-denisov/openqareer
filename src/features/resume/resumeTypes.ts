@@ -37,6 +37,7 @@ export type {
   ResumeProjectInput,
   ResumeRecommendationInput,
   ResumeSkillInput,
+  WorkplaceType,
 } from '../../../server/domain/resumeDraft';
 
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';

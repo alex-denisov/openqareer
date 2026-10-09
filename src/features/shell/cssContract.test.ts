@@ -237,19 +237,23 @@ describe('mobile bottom nav has no stray active tick', () => {
   });
 });
 
-/**
- * B375 — моноширинный шрифт ограничен только числами. Русские слова («не указана»,
- * «Требования: 3 из 3») системным шрифтом во избежание разрядки.
- */
-describe('B375 monospace font discipline', () => {
+/** B440: numeric values use the main interface font with tabular figures. */
+describe('B440 numeric font discipline', () => {
   const shellCss = fs.readFileSync(path.join(SRC_DIR, 'features/shell/career-shell.css'), 'utf8');
 
-  it('defines .career-mono with monospace font family', () => {
-    expect(shellCss).toMatch(/\.career-mono\s*\{[^}]*font-family:\s*var\(--font-mono\)/u);
+  it('defines .career-numeric with the main font and tabular numbers', () => {
+    expect(shellCss).toMatch(
+      /\.career-numeric\s*\{[^}]*font-family:\s*var\(--font-main\)[^}]*font-variant-numeric:\s*tabular-nums/u,
+    );
+    expect(shellCss).not.toMatch(/\.career-numeric\s*\{[^}]*font-family:\s*var\(--font-mono\)/u);
   });
 
   it('does not apply monospace font family directly to labels containing Russian words', () => {
     expect(shellCss).not.toMatch(/\.vac-comp\s*\{[^}]*font-family:\s*var\(--font-mono/u);
     expect(shellCss).not.toMatch(/\.career-resume-unknown-mark\s*\{[^}]*font-family:\s*var\(--font-mono/u);
+  });
+
+  it('sets the shell rail to the approved fixed width', () => {
+    expect(shellCss).toMatch(/--career-rail-width:\s*76px/u);
   });
 });

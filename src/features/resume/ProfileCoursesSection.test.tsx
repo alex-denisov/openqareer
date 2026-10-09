@@ -19,7 +19,7 @@ describe('ProfileCoursesSection empty state (B266)', () => {
     );
     expect(html).not.toContain('не ошибка импорта');
     expect(html).not.toContain('не передал');
-    expect(html).toContain('Импорт из LinkedIn курсов не нашёл');
+    expect(html).toContain('В импортированных данных курсы не найдены');
     expect(html).toContain('добавьте их вручную');
   });
 });

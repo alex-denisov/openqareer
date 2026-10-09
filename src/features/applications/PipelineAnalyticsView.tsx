@@ -102,10 +102,10 @@ function AnalyticsHeader({ summary }: { readonly summary: PipelineAnalyticsSumma
       </div>
       <div className="career-pipeline-analytics-meta">
         <span className="career-pipeline-meta-pill">
-          Всего откликов: <strong className="is-mono">{summary.totalCount}</strong>
+          Всего откликов: <strong className="career-numeric">{summary.totalCount}</strong>
         </span>
         <span className="career-pipeline-meta-pill">
-          В процессе: <strong className="is-mono">{summary.activeCount}</strong>
+          В процессе: <strong className="career-numeric">{summary.activeCount}</strong>
         </span>
       </div>
     </header>
@@ -120,26 +120,26 @@ function AnalyticsSummaryCards({ summary }: { readonly summary: PipelineAnalytic
     <div className="career-pipeline-kpis">
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Сквозная конверсия</span>
-        <span className="career-pipeline-kpi-value is-mono">
+        <span className="career-pipeline-kpi-value career-numeric">
           {summary.overallConversionRate}%
         </span>
         <span className="career-pipeline-kpi-hint">отклик → оффер</span>
       </div>
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Получено офферов</span>
-        <span className="career-pipeline-kpi-value is-mono">{offerCount}</span>
+        <span className="career-pipeline-kpi-value career-numeric">{offerCount}</span>
         <span className="career-pipeline-kpi-hint">успешные финишные этапы</span>
       </div>
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Средний цикл</span>
-        <span className="career-pipeline-kpi-value is-mono">
+        <span className="career-pipeline-kpi-value career-numeric">
           {summary.averageCycleDays !== null ? `${summary.averageCycleDays} дн.` : '—'}
         </span>
         <span className="career-pipeline-kpi-hint">от отклика до статуса</span>
       </div>
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Отказы и архив</span>
-        <span className="career-pipeline-kpi-value is-mono">
+        <span className="career-pipeline-kpi-value career-numeric">
           {summary.rejectedCount + summary.archivedCount}
         </span>
         <span className="career-pipeline-kpi-hint">закрытые позиции</span>
@@ -172,7 +172,7 @@ function FunnelDiagram({
             <div key={step.stage} className="career-pipeline-funnel-row" role="listitem">
               <div className="career-pipeline-funnel-info">
                 <span className="career-pipeline-funnel-name">{step.label}</span>
-                <span className="career-pipeline-funnel-count is-mono">{step.count}</span>
+                <span className="career-pipeline-funnel-count career-numeric">{step.count}</span>
               </div>
               <div className="career-pipeline-funnel-track">
                 <div
@@ -184,7 +184,7 @@ function FunnelDiagram({
               <div className="career-pipeline-funnel-rates">
                 {step.conversionFromPrevious !== null ? (
                   <span className="career-pipeline-funnel-badge">
-                    <span className="is-mono">{step.conversionFromPrevious}%</span> от пред.
+                    <span className="career-numeric">{step.conversionFromPrevious}%</span> от пред.
                   </span>
                 ) : (
                   <span className="career-pipeline-funnel-badge is-base">база</span>
@@ -285,10 +285,10 @@ function SourcesTable({ sources }: { readonly sources: readonly SourceBreakdownI
                 >
                   {humanSourceLabel(src.source)}
                 </th>
-                <td className="is-num is-mono">{src.total}</td>
-                <td className="is-num is-mono">{src.responded}</td>
-                <td className="is-num is-mono">{src.interview}</td>
-                <td className="is-num is-mono">{src.offer}</td>
+                <td className="is-num career-numeric">{src.total}</td>
+                <td className="is-num career-numeric">{src.responded}</td>
+                <td className="is-num career-numeric">{src.interview}</td>
+                <td className="is-num career-numeric">{src.offer}</td>
               </tr>
             ))}
           </tbody>
@@ -324,7 +324,7 @@ function ArchiveReasonsList({
         {reasons.map((item) => (
           <li key={item.reason} className="career-pipeline-reason-item">
             <span className="career-pipeline-reason-label">{formatReason(item.reason)}</span>
-            <span className="career-pipeline-reason-count is-mono">{item.count}</span>
+            <span className="career-pipeline-reason-count career-numeric">{item.count}</span>
           </li>
         ))}
       </ul>

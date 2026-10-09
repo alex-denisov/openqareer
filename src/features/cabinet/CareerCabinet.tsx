@@ -14,7 +14,7 @@ import { TodayScreen } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
-import { ProfileTabs, type ProfileTab } from '../resume/profileTabs';
+import type { ProfileTab } from '../resume/profileTabs';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
 import { useVacancyApplications } from '../vacancies/useVacancyApplications';
@@ -25,6 +25,7 @@ import { AppErrorBoundary } from '../shell/AppErrorBoundary';
 import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
 import { buildPathIndicator } from '../shell/pathIndicator';
+import { CareerTodaySkeleton } from '../shell/CareerTodaySkeleton';
 import { useCareerCabinetData } from './useCareerCabinetData';
 import {
   applyRoutePremises,
@@ -230,10 +231,7 @@ export function CareerCabinet({
     },
     [data, onUpdateWorkspace, pool, targetDirection, workspace],
   );
-  // «Профиль / Документ и форматы» — в шапке страницы, справа от заголовка
-  // «Профиль», а не рядом с карточкой кандидата: карточка — факты о человеке,
-  // вкладки решают, что показывает весь экран (B265 review round 3).
-  const [profileTab, setProfileTab] = useState<ProfileTab>('profile');
+  const [profileTab, setProfileTab] = useState<ProfileTab>('resume');
   const [vacancyProfileRequest, setVacancyProfileRequest] =
     useState<VacancyProfileRequirementRequest | null>(null);
   const openProfileRequirement = useCallback(
@@ -281,27 +279,23 @@ export function CareerCabinet({
         {!showsVacanciesScreen ? (
           <CabinetHeader
             view={view}
-            loading={data.loading && Boolean(data.snapshot)}
+            loading={data.loading}
+            loadingMessage={data.snapshot ? 'Обновляем…' : 'Проверяем вход и читаем ваш профиль'}
             error={data.error}
             onRetry={() => void data.refresh()}
             onAskConsultant={
               onOpenExpert ? () => onOpenExpert(stageForCabinetView(view)) : undefined
             }
-            tabs={
-              view === 'profile' ? (
-                <ProfileTabs tab={profileTab} onTab={setProfileTab} />
-              ) : undefined
-            }
           />
         ) : null}
-        {pathIndicatorSteps && !showsVacanciesScreen ? (
+        {pathIndicatorSteps && !showsVacanciesScreen && view !== 'profile' ? (
           <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
             «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
         {data.loading && !data.snapshot ? (
-          <CabinetSkeleton />
+          <CareerTodaySkeleton showHeading={false} />
         ) : (
           <CabinetSection
             view={view}
@@ -317,6 +311,7 @@ export function CareerCabinet({
             onScheduleInterview={scheduleVacancyInterview}
             data={data}
             profileTab={profileTab}
+            onProfileTabChange={setProfileTab}
             vacancyProfileRequest={vacancyProfileRequest}
             consultantAction={journey?.reasonedAction}
             navigationOptions={navigationOptions}
@@ -327,7 +322,6 @@ export function CareerCabinet({
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
             onOpenExpert={onOpenExpert}
-            onUpdateWorkspace={onUpdateWorkspace}
           />
         )}
       </div>
@@ -365,16 +359,6 @@ function TodaySection({
   );
 }
 
-function CabinetSkeleton() {
-  return (
-    <div className="career-cabinet-skeleton" aria-busy="true" aria-label="Читаем ваш профиль">
-      <span className="career-skeleton-line is-wide" />
-      <span className="career-skeleton-line" />
-      <span className="career-skeleton-line is-short" />
-    </div>
-  );
-}
-
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
 function CabinetSection({
@@ -391,6 +375,7 @@ function CabinetSection({
   onScheduleInterview,
   data,
   profileTab,
+  onProfileTabChange,
   vacancyProfileRequest,
   consultantAction,
   navigationOptions,
@@ -401,7 +386,6 @@ function CabinetSection({
   onOpenTariffs,
   onOpenConnections,
   onOpenExpert,
-  onUpdateWorkspace,
 }: {
   view: CareerCabinetView;
   navigationOptions?: NavigationOptions;
@@ -421,6 +405,7 @@ function CabinetSection({
   ) => Promise<ApplicationView>;
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
+  onProfileTabChange: (tab: ProfileTab) => void;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   consultantAction?: ReasonedCareerAction;
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
@@ -430,7 +415,6 @@ function CabinetSection({
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }) {
   useEffect(() => {
     if (view === 'career') {
@@ -448,8 +432,8 @@ function CabinetSection({
       />
     );
   }
-  // B265 — the rail's «Профиль» is its own screen (topcard, Open to work,
-  // every imported section, edit-in-place), not Resume Studio. «Резюме»
+  // B265 — the rail's «Профиль» is its own screen (summary, imported sections,
+  // edit-in-place), not Resume Studio. «Резюме»
   // (`view === 'resume'`) is no longer a reachable rail item but keeps
   // pointing at Resume Studio for anyone with a stored link to it.
   if (view === 'profile') {
@@ -466,8 +450,8 @@ function CabinetSection({
         }}
         onOpenConnections={onOpenConnections}
         tab={profileTab}
-        workspace={workspace}
-        onUpdateWorkspace={onUpdateWorkspace}
+        onTabChange={onProfileTabChange}
+        onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
       />
     );
   }
@@ -531,6 +515,7 @@ function CabinetSection({
 function CabinetHeader({
   view,
   loading,
+  loadingMessage,
   error,
   onRetry,
   onAskConsultant,
@@ -538,6 +523,7 @@ function CabinetHeader({
 }: {
   view: CareerCabinetView;
   loading: boolean;
+  loadingMessage?: string;
   error?: string;
   onRetry: () => void;
   onAskConsultant?: () => void;
@@ -551,31 +537,54 @@ function CabinetHeader({
       description={VIEW_DESCRIPTION[view]}
       onAskConsultant={onAskConsultant}
       right={
-        tabs || loading || error ? (
-          <>
-            {tabs}
-            {loading || error ? (
-              <div className="career-cabinet-header-state">
-                {error ? (
-                  <>
-                    <span className="is-error" role="alert">
-                      <WarningCircle size={16} weight="fill" />
-                      {error}
-                    </span>
-                    <button type="button" onClick={onRetry}>
-                      <ArrowClockwise size={15} />
-                      Повторить
-                    </button>
-                  </>
-                ) : (
-                  <span className="is-loading">Обновляем…</span>
-                )}
-              </div>
-            ) : null}
-          </>
-        ) : undefined
+        <CabinetHeaderState
+          tabs={tabs}
+          loading={loading}
+          loadingMessage={loadingMessage}
+          error={error}
+          onRetry={onRetry}
+        />
       }
     />
+  );
+}
+
+function CabinetHeaderState({
+  tabs,
+  loading,
+  loadingMessage,
+  error,
+  onRetry,
+}: {
+  tabs?: ReactNode;
+  loading: boolean;
+  loadingMessage?: string;
+  error?: string;
+  onRetry: () => void;
+}) {
+  if (!tabs && !loading && !error) return undefined;
+  return (
+    <>
+      {tabs}
+      {loading || error ? (
+        <div className="career-cabinet-header-state">
+          {error ? (
+            <>
+              <span className="is-error" role="alert">
+                <WarningCircle size={16} weight="fill" />
+                {error}
+              </span>
+              <button type="button" onClick={onRetry}>
+                <ArrowClockwise size={15} />
+                Повторить
+              </button>
+            </>
+          ) : (
+            <span className="is-loading">{loadingMessage ?? 'Обновляем…'}</span>
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 

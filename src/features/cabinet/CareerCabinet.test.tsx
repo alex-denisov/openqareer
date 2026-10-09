@@ -133,7 +133,7 @@ describe('CareerCabinet composition', () => {
     cabinetData.current = { ...loadedData(), snapshot: undefined, loading: true };
     const html = renderCabinet('today');
 
-    expect(html).toContain('career-cabinet-skeleton');
+    expect(html).toContain('career-today-skeleton');
     expect(html).toContain('aria-busy="true"');
     expect(html).not.toContain('Разделы профиля');
     expect(html).not.toContain('Оценка профиля');
@@ -144,7 +144,7 @@ describe('CareerCabinet composition', () => {
     cabinetData.current = { ...loadedData(), loading: true };
     const html = renderCabinet('today');
 
-    expect(html).not.toContain('career-cabinet-skeleton');
+    expect(html).not.toContain('career-today-skeleton');
     expect(html).toContain('career-today');
   });
 
@@ -157,7 +157,7 @@ describe('CareerCabinet composition', () => {
     };
     const html = renderCabinet('today');
 
-    expect(html).not.toContain('career-cabinet-skeleton');
+    expect(html).not.toContain('career-today-skeleton');
     expect(html).toContain('Не удалось загрузить профиль кандидата');
     expect(html).toContain('Повторить');
   });
