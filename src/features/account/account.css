@@ -1,0 +1,385 @@
+/* B443: экран «Аккаунт» по макету 8 (десктоп и 390) */
+
+.career-account-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--career-space-6);
+  gap: var(--career-space-6);
+  box-sizing: border-box;
+}
+
+.career-account-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+}
+
+.career-account-title {
+  font-size: var(--career-text-display);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--career-color-text);
+}
+
+.career-account-lead {
+  font-size: var(--career-text-base);
+  color: var(--career-color-text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* Навигация по вкладкам на десктопе */
+.career-account-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  border-bottom: 1px solid var(--career-color-border-subtle);
+  padding-bottom: var(--career-space-2);
+}
+
+.career-account-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-height: 44px;
+  padding: 0 var(--career-space-4);
+  border: none;
+  background: transparent;
+  color: var(--career-color-text-muted);
+  font-size: var(--career-text-base);
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--career-radius-sm);
+  transition: color 180ms ease, background-color 180ms ease;
+}
+
+.career-account-tab-btn:hover {
+  color: var(--career-color-text);
+  background-color: var(--career-color-surface-subtle);
+}
+
+.career-account-tab-btn.is-active {
+  color: var(--career-color-accent);
+  background-color: var(--career-color-accent-subtle);
+  font-weight: 600;
+}
+
+.career-account-tab-badge {
+  font-size: var(--career-text-xs);
+  padding: 2px var(--career-space-2);
+  background: var(--career-color-surface);
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Карточки разделов */
+.career-account-card {
+  background: var(--career-color-surface);
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+}
+
+.career-account-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.career-account-card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-account-card-title {
+  font-size: var(--career-text-lg);
+  font-weight: 600;
+  margin: 0;
+  color: var(--career-color-text);
+}
+
+.career-account-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+}
+
+.career-account-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--career-space-3) var(--career-space-4);
+  background: var(--career-color-surface-subtle);
+  border-radius: var(--career-radius-sm);
+  min-height: 48px;
+  gap: var(--career-space-4);
+}
+
+.career-account-row-left {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+}
+
+.career-account-row-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--career-color-accent);
+  flex-shrink: 0;
+}
+
+.career-account-row-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.career-account-row-label {
+  font-size: var(--career-text-base);
+  font-weight: 600;
+  color: var(--career-color-text);
+}
+
+.career-account-row-desc {
+  font-size: var(--career-text-xs);
+  color: var(--career-color-text-muted);
+  line-height: 1.4;
+}
+
+.career-account-row-right {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  flex-shrink: 0;
+}
+
+/* Бейджи и теги */
+.career-account-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: 3px var(--career-space-2);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-xs);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.career-account-tag.is-ok {
+  background: var(--career-color-accent-subtle);
+  color: var(--career-color-accent);
+}
+
+.career-account-tag.is-warn {
+  background: rgba(234, 179, 8, 0.15);
+  color: #ca8a04;
+}
+
+.career-account-tag.is-dim {
+  background: var(--career-color-surface-subtle);
+  color: var(--career-color-text-muted);
+  border: 1px solid var(--career-color-border-subtle);
+}
+
+/* Таблицы */
+.career-account-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-sm);
+}
+
+.career-account-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--career-text-sm);
+  text-align: left;
+}
+
+.career-account-table th {
+  padding: var(--career-space-3) var(--career-space-4);
+  background: var(--career-color-surface-subtle);
+  border-bottom: 1px solid var(--career-color-border-subtle);
+  font-weight: 600;
+  color: var(--career-color-text-muted);
+}
+
+.career-account-table td {
+  padding: var(--career-space-3) var(--career-space-4);
+  border-bottom: 1px solid var(--career-color-border-subtle);
+  color: var(--career-color-text);
+}
+
+.career-account-table tr:last-child td {
+  border-bottom: none;
+}
+
+.career-account-table-tc {
+  text-align: center;
+}
+
+.career-account-num {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Мобильный push-вид (390) */
+.career-account-mobile-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: var(--career-space-4);
+  gap: var(--career-space-4);
+  box-sizing: border-box;
+}
+
+.career-account-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-account-mobile-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--career-radius-md);
+  border: 1px solid var(--career-color-border-subtle);
+  background: var(--career-color-surface);
+  color: var(--career-color-text);
+  cursor: pointer;
+}
+
+.career-account-mobile-user-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--career-space-4);
+  background: var(--career-color-surface);
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-md);
+  cursor: pointer;
+  min-height: 48px;
+}
+
+.career-account-mobile-user-info {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-account-mobile-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--career-color-accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: var(--career-text-md);
+}
+
+.career-account-mobile-group {
+  display: flex;
+  flex-direction: column;
+  background: var(--career-color-surface);
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-md);
+  overflow: hidden;
+}
+
+.career-account-mobile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--career-space-3) var(--career-space-4);
+  border-bottom: 1px solid var(--career-color-border-subtle);
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  min-height: 48px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.career-account-mobile-row:last-child {
+  border-bottom: none;
+}
+
+.career-account-mobile-danger-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-height: 48px;
+  padding: 0 var(--career-space-4);
+  border-radius: var(--career-radius-md);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+  color: #dc2626;
+  font-size: var(--career-text-base);
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+/* Окна подтверждения / диалоги */
+.career-account-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: var(--career-space-4);
+}
+
+.career-account-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+}
+
+.career-account-dialog {
+  position: relative;
+  z-index: 1;
+  background: var(--career-color-surface);
+  border: 1px solid var(--career-color-border-subtle);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-6);
+  max-width: 480px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.career-account-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--career-space-3);
+  flex-wrap: wrap;
+}

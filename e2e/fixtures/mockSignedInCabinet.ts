@@ -179,6 +179,15 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
         },
       });
     }
+    if (path.endsWith('/account/sessions') && route.request().method() === 'DELETE') {
+      return route.fulfill({ json: { data: { revoked: 2 } } });
+    }
+    if (path.endsWith('/candidate/export')) {
+      return route.fulfill({ json: { data: { profile: account.profile } } });
+    }
+    if (path.endsWith('/candidate/me') && route.request().method() === 'DELETE') {
+      return route.fulfill({ json: { data: { deleted: true } } });
+    }
     if (path.endsWith('/account')) {
       return route.fulfill({ json: { data: account } });
     }
