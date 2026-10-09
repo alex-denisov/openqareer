@@ -83,7 +83,7 @@ export const passwordResetRequestSchema = z.object({
 });
 
 export const passwordResetSchema = z.object({
-  token: z.string().regex(/^oqr_[A-Za-z0-9_-]{40,}$/),
+  token: z.string().trim().min(1).max(512),
   newPassword: passwordField,
 });
 

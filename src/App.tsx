@@ -489,7 +489,7 @@ export default function App() {
       );
     }
     if (currentPath === '/reset-password') {
-      return <ResetPasswordPage onNavigate={navigate} />;
+      return <ResetPasswordPage onNavigate={navigate} onSessionChange={handleSessionChange} />;
     }
     return null;
   };

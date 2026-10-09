@@ -50,6 +50,7 @@ import {
   parseClientFingerprint,
   toRegistrationFingerprintLog,
 } from '../auth/registrationAntiAbuse';
+import { defaultPasswordResetRequestRateLimiter } from '../auth/passwordResetRequestLimiter';
 
 function registrationValidationError(
   request: FastifyRequest,
@@ -439,6 +440,20 @@ async function handleRevokeSessions(deps: RouteDeps, request: FastifyRequest, re
 async function handlePasswordResetRequest(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const body = passwordResetRequestSchema.parse(request.body);
+  const retryAfter = defaultPasswordResetRequestRateLimiter.checkAndRecord(body.identifier, request.ip);
+  if (retryAfter !== null) {
+    reply.header('Retry-After', String(retryAfter));
+    return sendError(
+      reply,
+      request,
+      429,
+      'rate_limit_exceeded',
+      `Слишком много запросов. Повторите действие через ${retryAfter} с.`,
+      true,
+      undefined,
+      { retryAfterSeconds: retryAfter },
+    );
+  }
   try {
     await deps.authService.requestPasswordReset?.(body.identifier);
   } catch (error) {
@@ -458,7 +473,9 @@ async function handlePasswordResetRequest(deps: RouteDeps, request: FastifyReque
 
 async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
-  const body = passwordResetSchema.parse(request.body);
+  const parsed = passwordResetSchema.safeParse(request.body);
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
+  const body = parsed.data;
   try {
     const authenticated = await deps.authService.resetPassword?.(body.token, body.newPassword);
     if (!authenticated) throw new AuthInvalidResetTokenError();
@@ -477,7 +494,7 @@ async function handlePasswordReset(deps: RouteDeps, request: FastifyRequest, rep
         request,
         400,
         'password_reset_invalid',
-        'Ссылка недействительна или уже истекла.',
+        'Ссылка недействительна. Запросите новую.',
         false,
       );
     }
@@ -528,7 +545,6 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
 
   app.post(
     '/api/v1/auth/password-reset-requests',
-    { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } },
     withDeps(deps, handlePasswordResetRequest),
   );
   app.post(

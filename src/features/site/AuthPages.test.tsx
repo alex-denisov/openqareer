@@ -5,7 +5,9 @@ import {
   SignupPage,
   ResetPasswordPage,
   ResetForm,
+  getResetTokenFromSearch,
   requestPublicPasswordReset,
+  validateResetPasswordPair,
 } from './AuthPages';
 
 describe('AuthPages', () => {
@@ -95,6 +97,21 @@ describe('AuthPages', () => {
     expect(html).toContain('name="email"');
     expect(html).toContain('autoComplete="email"');
     expect(html).toContain('Отправить ссылку для сброса');
+  });
+
+  it('reads only the reset token from the email link query', () => {
+    expect(getResetTokenFromSearch('?token=oqr_once-only-token')).toBe('oqr_once-only-token');
+    expect(getResetTokenFromSearch('?next=%2Fapp')).toBeNull();
+  });
+
+  it('reuses the signup password floor and requires matching confirmation', () => {
+    expect(validateResetPasswordPair('short', 'short')).toEqual({
+      newPassword: 'Пароль должен быть не короче 8 символов',
+    });
+    expect(validateResetPasswordPair('candidate-password', 'different-password')).toEqual({
+      confirmPassword: 'Пароли не совпадают.',
+    });
+    expect(validateResetPasswordPair('candidate-password', 'candidate-password')).toBeNull();
   });
 
   it('programmatically associates a reset failure with the email field', () => {

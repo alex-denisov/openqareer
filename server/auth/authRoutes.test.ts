@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 import { createApp, login, resources } from './authRoutesTestSupport';
+import { defaultPasswordResetRequestRateLimiter } from './passwordResetRequestLimiter';
 
 describe('cookie auth routes', () => {
   it('creates an account profile and exposes the current session without leaking its token', async () => {
@@ -169,7 +170,7 @@ describe('cookie auth routes', () => {
     const app = await createApp(async ({ email, token }) => {
       deliveries.push({ email, token });
     });
-    await app.inject({
+    const created = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/register',
       headers: { origin: 'http://localhost:3000' },
@@ -180,6 +181,8 @@ describe('cookie auth routes', () => {
         legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
       },
     });
+    const firstSessionCookie = String(created.headers['set-cookie']).split(';')[0];
+    const secondSession = await login(app, 'recover@example.com', 'candidate-password-before-reset');
 
     const requested = await app.inject({
       method: 'POST',
@@ -197,6 +200,24 @@ describe('cookie auth routes', () => {
     expect(deliveries[0]?.email).toBe('recover@example.com');
     expect(deliveries[0]?.token).toMatch(/^oqr_[A-Za-z0-9_-]{40,}$/);
 
+    const unknownRequest = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/password-reset-requests',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { identifier: 'missing@example.com' },
+    });
+    expect(unknownRequest.statusCode).toBe(requested.statusCode);
+    expect(unknownRequest.json().data).toEqual(requested.json().data);
+
+    const weakPassword = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/password-resets',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { token: deliveries[0]?.token, newPassword: 'short' },
+    });
+    expect(weakPassword.statusCode).toBe(422);
+    expect(weakPassword.json().error.fields.newPassword).toContain('8');
+
     const reset = await app.inject({
       method: 'POST',
       url: '/api/v1/auth/password-resets',
@@ -207,6 +228,33 @@ describe('cookie auth routes', () => {
       },
     });
     expect(reset.statusCode).toBe(200);
+    for (const cookie of [firstSessionCookie, secondSession.cookie]) {
+      const previousSession = await app.inject({
+        method: 'GET',
+        url: '/api/v1/auth/me',
+        headers: { cookie },
+      });
+      expect(previousSession.json().data).toBeNull();
+    }
+
+    const reused = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/password-resets',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { token: deliveries[0]?.token, newPassword: 'candidate-password-reused' },
+    });
+    const forged = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/password-resets',
+      headers: { origin: 'http://localhost:3000' },
+      payload: { token: `oqr_${'z'.repeat(43)}`, newPassword: 'candidate-password-forged' },
+    });
+    expect(forged.statusCode).toBe(reused.statusCode);
+    expect(forged.json().error).toMatchObject({
+      code: reused.json().error.code,
+      message: reused.json().error.message,
+    });
+    expect(reused.json().error.message).toBe('Ссылка недействительна. Запросите новую.');
     expect(
       (await login(app, 'recover@example.com', 'candidate-password-before-reset')).response
         .statusCode,
@@ -215,6 +263,81 @@ describe('cookie auth routes', () => {
       (await login(app, 'recover@example.com', 'candidate-password-after-reset')).response
         .statusCode,
     ).toBe(200);
+  });
+
+  it('returns the same actionable error for an expired reset token', async () => {
+    defaultPasswordResetRequestRateLimiter.reset();
+    const deliveries: Array<{ email: string; token: string }> = [];
+    const app = await createApp(async ({ email, token }) => {
+      deliveries.push({ email, token });
+    });
+    try {
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/register',
+        headers: { origin: 'http://localhost:3000' },
+        payload: {
+          email: 'expired@example.com',
+          displayName: 'Кандидат',
+          password: 'candidate-password-for-expired-reset',
+          legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+        },
+      });
+      await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/password-reset-requests',
+        headers: { origin: 'http://localhost:3000' },
+        payload: { identifier: 'expired@example.com' },
+      });
+      const database = new DatabaseSync(join(resources.at(-1)!.directory, 'app.db'));
+      database
+        .prepare('UPDATE password_reset_tokens SET expires_at = ?')
+        .run('2000-01-01T00:00:00.000Z');
+      database.close();
+
+      const expired = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/password-resets',
+        headers: { origin: 'http://localhost:3000' },
+        payload: { token: deliveries[0]?.token, newPassword: 'candidate-password-expired' },
+      });
+
+      expect(expired.statusCode).toBe(400);
+      expect(expired.json().error).toMatchObject({
+        code: 'password_reset_invalid',
+        message: 'Ссылка недействительна. Запросите новую.',
+      });
+    } finally {
+      defaultPasswordResetRequestRateLimiter.reset();
+    }
+  });
+
+  it('returns 429 with Retry-After after the password reset request limit', async () => {
+    defaultPasswordResetRequestRateLimiter.reset();
+    const app = await createApp();
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const accepted = await app.inject({
+          method: 'POST',
+          url: '/api/v1/auth/password-reset-requests',
+          headers: { origin: 'http://localhost:3000' },
+          payload: { identifier: `reset-${attempt}@example.com` },
+        });
+        expect(accepted.statusCode).toBe(202);
+      }
+      const limited = await app.inject({
+        method: 'POST',
+        url: '/api/v1/auth/password-reset-requests',
+        headers: { origin: 'http://localhost:3000' },
+        payload: { identifier: 'sixth@example.com' },
+      });
+
+      expect(limited.statusCode).toBe(429);
+      expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+      expect(limited.json().error).toMatchObject({ code: 'rate_limit_exceeded', retryable: true });
+    } finally {
+      defaultPasswordResetRequestRateLimiter.reset();
+    }
   });
 
   it('revokes every session except the one making the request', async () => {
