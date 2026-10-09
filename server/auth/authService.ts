@@ -14,7 +14,10 @@ import type {
   EmailVerificationAccount,
   EmailVerificationStatus,
 } from './emailVerificationService';
-import type { EmailVerificationDelivery } from './emailVerification';
+import type {
+  EmailVerificationDelivery,
+  EmailVerificationDeliveryFailure,
+} from './emailVerification';
 import {
   AuthServiceCore,
   type AuthServiceOptions as AuthServiceCoreOptions,
@@ -145,6 +148,7 @@ export class AuthService extends AuthServiceCore {
     candidateStore: CandidateStore,
     profile: RegistrationProfile = {},
     clientDeviceId?: string,
+    onEmailVerificationFailure?: (failure: EmailVerificationDeliveryFailure) => void,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }> {
     const identity = await this.validateRegistration(usernameInput, profile);
     const now = new Date().toISOString();
@@ -158,7 +162,9 @@ export class AuthService extends AuthServiceCore {
     const delivery = await this.persistRegisteredCandidate(
       identity, password, candidateStore, profile, now,
     );
-    if (delivery) await this.emailVerification.sendPrepared(delivery, Date.parse(now));
+    if (delivery) {
+      await this.emailVerification.sendPrepared(delivery, Date.parse(now), onEmailVerificationFailure);
+    }
     const authenticated = clientDeviceId
       ? await this.login(identity.username, password, clientDeviceId)
       : await this.login(identity.username, password);

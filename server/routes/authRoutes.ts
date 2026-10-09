@@ -50,6 +50,7 @@ import {
   parseClientFingerprint,
   toRegistrationFingerprintLog,
 } from '../auth/registrationAntiAbuse';
+import type { EmailVerificationDeliveryFailure } from '../auth/emailVerification';
 
 function registrationValidationError(
   request: FastifyRequest,
@@ -87,9 +88,11 @@ async function handleRegister(deps: RouteDeps, request: FastifyRequest, reply: F
     );
     const profile = { email: body.email, displayName: body.displayName, clientIp: request.ip };
     const deviceId = clientDeviceIdFrom(request);
+    const onEmailVerificationFailure = (failure: EmailVerificationDeliveryFailure) =>
+      request.log.warn(failure, 'email-verification-delivery-failed');
     const authenticated = deviceId
-      ? await deps.authService.register(username, body.password, deps.candidateStore, profile, deviceId)
-      : await deps.authService.register(username, body.password, deps.candidateStore, profile);
+      ? await deps.authService.register(username, body.password, deps.candidateStore, profile, deviceId, onEmailVerificationFailure)
+      : await deps.authService.register(username, body.password, deps.candidateStore, profile, undefined, onEmailVerificationFailure);
     // The proof is written with the account, so no user can exist without a
     // record of the documents they accepted (B173).
     deps.authService.recordLegalConsent?.({
@@ -146,7 +149,17 @@ async function rejectRegistrationIfLimited(
   const message = velocity.retryAfterSeconds
     ? `Слишком много регистраций из вашей сети. Попробуйте через ${velocity.retryAfterSeconds} с.`
     : 'Слишком много регистраций из вашей сети. Пожалуйста, подождите или обратитесь в поддержку.';
-  sendError(reply, request, 429, 'rate_limit_exceeded', message, false);
+  if (velocity.retryAfterSeconds) reply.header('Retry-After', String(velocity.retryAfterSeconds));
+  sendError(
+    reply,
+    request,
+    429,
+    'rate_limit_exceeded',
+    message,
+    true,
+    undefined,
+    velocity.retryAfterSeconds ? { retryAfterSeconds: velocity.retryAfterSeconds } : undefined,
+  );
   return true;
 }
 

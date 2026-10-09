@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../app';
 import type { ServerConfig } from '../config';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
-import { AuthService } from './authService';
+import { AuthService, type AuthServiceOptions } from './authService';
 import type { CoachProvider } from '../providers/coachProvider';
 import { LEGAL_PACK_VERSION_ID } from '../../shared/legalRegistry';
 
@@ -46,7 +46,15 @@ const provider: CoachProvider = {
   },
 };
 
-async function createVerificationApp(deliveries: Array<{ code: string }>) {
+interface VerificationAppOptions {
+  readonly onEmailVerification?: AuthServiceOptions['onEmailVerification'];
+  readonly logDestination?: { write(line: string): void };
+}
+
+async function createVerificationApp(
+  deliveries: Array<{ code: string }>,
+  options: VerificationAppOptions = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-email-verification-'));
   const databasePath = join(directory, 'app.db');
   const candidates = new SqliteCandidateStore({
@@ -59,7 +67,7 @@ async function createVerificationApp(deliveries: Array<{ code: string }>) {
     emailVerificationHashKey: Buffer.alloc(32, 23),
     emailVerificationFixedCode: '123456',
     emailMxCheckBypassDomains: ['example.com'],
-    onEmailVerification: async ({ code }) => { deliveries.push({ code }); },
+    onEmailVerification: options.onEmailVerification ?? (async ({ code }) => { deliveries.push({ code }); }),
   });
   const config: ServerConfig = {
     host: '127.0.0.1',
@@ -72,7 +80,7 @@ async function createVerificationApp(deliveries: Array<{ code: string }>) {
     model: 'gpt-5.6-sol',
     staticRoot: directory,
     release: 'test',
-    logLevel: 'fatal',
+    logLevel: options.logDestination ? 'warn' : 'fatal',
     secureCookies: false,
     emailVerificationRequired: true,
     allowedOrigins: ['http://localhost:3000'],
@@ -89,12 +97,49 @@ async function createVerificationApp(deliveries: Array<{ code: string }>) {
     candidateStore: candidates,
     authService: auth,
     serveStatic: false,
+    ...(options.logDestination ? { logDestination: options.logDestination } : {}),
   });
   resources.push({ app, auth, candidates, directory });
   return app;
 }
 
 describe('email verification routes (B398)', () => {
+  it('logs a sanitized email delivery failure while returning the neutral registration response', async () => {
+    const logs: string[] = [];
+    const app = await createVerificationApp([], {
+      onEmailVerification: async () => {
+        throw Object.assign(new Error('private provider body 123456'), { statusCode: 503 });
+      },
+      logDestination: { write: (line) => logs.push(line) },
+    });
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/api/v1/auth/register',
+      headers: { origin: 'http://localhost:3000' },
+      payload: {
+        email: 'secret-candidate@example.com',
+        displayName: 'Кандидат',
+        password: 'candidate-password-for-tests',
+        legalConsent: { versionId: LEGAL_PACK_VERSION_ID },
+      },
+    });
+    const failureLine = logs.find((line) => line.includes('email-verification-delivery-failed'));
+
+    expect(registered.statusCode).toBe(201);
+    expect(registered.json().data.emailVerificationEmailSent).toBe(false);
+    expect(failureLine).toBeDefined();
+    const failure = JSON.parse(failureLine!);
+    expect(failure).toMatchObject({
+      msg: 'email-verification-delivery-failed',
+      errorCategory: 'provider-response',
+      responseCode: 503,
+      recipientHash: expect.stringMatching(/^[a-f0-9]{64}$/u),
+    });
+    expect(failureLine).not.toContain('secret-candidate@example.com');
+    expect(failureLine).not.toContain('123456');
+    expect(failureLine).not.toContain('private provider body');
+  });
+
   it('blocks candidate access until the registered address is verified', async () => {
     const deliveries: Array<{ code: string }> = [];
     const app = await createVerificationApp(deliveries);
