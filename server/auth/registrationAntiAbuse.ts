@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
+import { deriveKey } from './derivedHmacKey';
 
 export interface ClientFingerprint {
   ip: string;
@@ -121,8 +122,9 @@ export function parseClientFingerprint(
 /** Возвращает корреляционные хеши без записи IP и исходных заголовков в журнал. */
 export function toRegistrationFingerprintLog(
   fingerprint: ClientFingerprint,
-  key: Buffer,
+  secret: Buffer,
 ): RegistrationFingerprintLog {
+  const key = deriveKey(secret, 'registration-fingerprint');
   const hash = (value: string) => createHmac('sha256', key).update(value).digest('hex');
   const clientHints = [
     fingerprint.secChUa,

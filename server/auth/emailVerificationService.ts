@@ -6,10 +6,12 @@ import {
   EMAIL_VERIFICATION_RESEND_MS,
   EMAIL_VERIFICATION_TTL_MS,
   emailVerificationCodeHash,
+  emailVerificationDeliveryFailure,
   EmailVerificationRateLimiter,
   isVerificationTestAddress,
   newEmailVerificationCode,
   type EmailVerificationDelivery,
+  type EmailVerificationDeliveryFailure,
 } from './emailVerification';
 import {
   AuthEmailVerificationDeliveryError,
@@ -112,13 +114,24 @@ export class EmailVerificationService {
     this.reserve(account.email, clientIp, now, registrationAccountId(account));
   }
 
-  async sendPrepared(delivery: EmailVerificationDelivery, now = Date.now()): Promise<boolean> {
+  async sendPrepared(
+    delivery: EmailVerificationDelivery,
+    now = Date.now(),
+    onDeliveryFailure?: (failure: EmailVerificationDeliveryFailure) => void,
+  ): Promise<boolean> {
     this.markSent(delivery.candidateId, new Date(now).toISOString());
     try {
       await this.send(delivery);
       return true;
-    } catch {
+    } catch (error) {
       this.clearPending(delivery.candidateId);
+      if (this.hashKey && onDeliveryFailure) {
+        try {
+          onDeliveryFailure(emailVerificationDeliveryFailure(delivery.email, error, this.hashKey));
+        } catch {
+          // Logging failure must not turn an accepted registration into an API error.
+        }
+      }
       return false;
     }
   }

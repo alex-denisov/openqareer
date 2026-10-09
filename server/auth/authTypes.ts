@@ -153,6 +153,7 @@ export interface SessionAuth {
     candidateStore: CandidateStore,
     profile?: RegistrationProfile,
     clientDeviceId?: string,
+    onEmailVerificationFailure?: (failure: import('./emailVerification').EmailVerificationDeliveryFailure) => void,
   ): Promise<{ principal: AuthPrincipal; sessionToken: string }>;
   login(
     identifierInput: string,

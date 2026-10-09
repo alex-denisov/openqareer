@@ -14,6 +14,13 @@ export interface EmailVerificationSenderOptions {
   readonly writeDevelopmentCode?: (line: string) => void;
 }
 
+export class EmailVerificationProviderResponseError extends Error {
+  constructor(readonly statusCode: number) {
+    super('email verification provider rejected the message');
+    this.name = 'EmailVerificationProviderResponseError';
+  }
+}
+
 export function buildEmailVerificationSender(
   options: EmailVerificationSenderOptions,
 ): ((input: EmailVerificationDelivery) => Promise<void>) | undefined {
@@ -48,7 +55,7 @@ export function buildEmailVerificationNotifier({
       }),
     });
     if (!response.ok) {
-      throw new Error(`email verification email rejected with status ${response.status}`);
+      throw new EmailVerificationProviderResponseError(response.status);
     }
   };
 }

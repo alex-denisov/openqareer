@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { createHmac } from 'node:crypto';
 import {
   RegistrationVelocityLimiter,
   normalizeIpSubnet,
   parseClientFingerprint,
   toRegistrationFingerprintLog,
 } from './registrationAntiAbuse';
+import { deriveKey } from './derivedHmacKey';
 
 describe('registrationAntiAbuse (B347 / US-11.5)', () => {
   describe('normalizeIpSubnet', () => {
@@ -58,6 +60,19 @@ describe('registrationAntiAbuse (B347 / US-11.5)', () => {
       expect(JSON.stringify(logFields)).not.toContain('178.62.204.15');
       expect(JSON.stringify(logFields)).not.toContain('Mozilla/5.0');
       expect(JSON.stringify(logFields)).not.toContain('macOS');
+    });
+
+    it('hashes anti-abuse fingerprint data with a purpose-derived key', () => {
+      const secret = Buffer.alloc(32, 5);
+      const fingerprint = parseClientFingerprint({}, '192.0.2.40');
+      const expected = createHmac('sha256', deriveKey(secret, 'registration-fingerprint'))
+        .update(fingerprint.subnet)
+        .digest('hex');
+
+      expect(toRegistrationFingerprintLog(fingerprint, secret).subnetHash).toBe(expected);
+      expect(toRegistrationFingerprintLog(fingerprint, secret).subnetHash).not.toBe(
+        createHmac('sha256', secret).update(fingerprint.subnet).digest('hex'),
+      );
     });
   });
 

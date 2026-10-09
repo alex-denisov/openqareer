@@ -15,6 +15,11 @@ export const resources: Array<{
   directory: string;
 }> = [];
 
+export interface AuthRouteTestOptions {
+  readonly release?: string;
+  readonly logDestination?: { write(line: string): void };
+}
+
 afterEach(async () => {
   for (const resource of resources.splice(0)) {
     await resource.app.close();
@@ -54,6 +59,7 @@ export async function createApp(
   searchVacancies?: Parameters<typeof buildApp>[0]['searchVacancies'],
   searchRemotive?: Parameters<typeof buildApp>[0]['searchRemotive'],
   authOptions: Partial<Omit<AuthServiceOptions, 'databasePath'>> = {},
+  testOptions: AuthRouteTestOptions = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-auth-routes-'));
   const databasePath = join(directory, 'app.db');
@@ -77,13 +83,14 @@ export async function createApp(
     ],
     candidates,
   );
-  const config = createTestConfig(directory, databasePath, authOptions, onPasswordReset);
+  const config = createTestConfig(directory, databasePath, authOptions, onPasswordReset, testOptions);
   const app = await buildApp({
     config,
     coachProvider: provider,
     candidateStore: candidates,
     authService: auth,
     serveStatic: false,
+    ...(testOptions.logDestination ? { logDestination: testOptions.logDestination } : {}),
     ...(searchVacancies ? { searchVacancies } : {}),
     ...(searchRemotive ? { searchRemotive } : {}),
   });
@@ -96,6 +103,7 @@ function createTestConfig(
   databasePath: string,
   authOptions: Partial<Omit<AuthServiceOptions, 'databasePath'>>,
   onPasswordReset?: (input: { email: string; displayName: string | null; token: string }) => Promise<void>,
+  testOptions: AuthRouteTestOptions = {},
 ): ServerConfig {
   return {
     host: '127.0.0.1',
@@ -107,8 +115,8 @@ function createTestConfig(
     databasePath,
     model: 'gpt-5.6-sol',
     staticRoot: directory,
-    release: 'test',
-    logLevel: 'fatal',
+    release: testOptions.release ?? 'test',
+    logLevel: testOptions.logDestination ? 'warn' : 'fatal',
     secureCookies: false,
     emailVerificationRequired: authOptions.emailVerificationRequired ?? false,
     allowedOrigins: ['http://localhost:3000'],
