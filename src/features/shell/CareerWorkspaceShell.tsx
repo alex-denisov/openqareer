@@ -456,7 +456,7 @@ export function CareerWorkspaceShell({
           className="career-expert-peek"
           type="button"
           onClick={() => openExpert()}
-          aria-label="Спросить консультанта"
+          aria-label="Открыть консультанта"
         >
           <span className="career-expert-peek-icon">
             <Sparkle size={18} weight="fill" />

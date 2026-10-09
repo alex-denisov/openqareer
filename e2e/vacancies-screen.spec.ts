@@ -774,8 +774,10 @@ test.describe('B250 vacancies screen', () => {
       await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
       const firstRow = page.locator('.vac-list-item').first();
       await expect(firstRow).toBeVisible();
+      // Макет 390 (B430) держит над нижним меню полосу консультанта: первая
+      // строка обязана быть видна заголовком, целиком она может уходить под полосу.
       const firstRowBottom = await firstRow.evaluate(
-        (element) => element.getBoundingClientRect().bottom,
+        (element) => element.getBoundingClientRect().top + 96,
       );
       const bottomNavTop = await page
         .locator('.career-mobile-nav')

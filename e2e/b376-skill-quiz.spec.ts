@@ -58,7 +58,9 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       await expect(page.locator('#sec-skills')).toBeVisible();
 
       // Open consultant
-      const askBtn = page.getByRole('button', { name: 'Спросить консультанта' });
+      const askBtn = page
+        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+        .first();
       await expect(askBtn).toBeVisible();
       await askBtn.click();
 

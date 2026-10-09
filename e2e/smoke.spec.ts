@@ -162,6 +162,8 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await page.locator('button:has-text("Спросить консультанта"):visible').first().click();
   const dialog = page.getByRole('complementary', { name: /^Консультант · / });
+  const expand = dialog.getByRole('button', { name: 'Развернуть консультанта' });
+  if (await expand.isVisible()) await expand.click();
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();
 
   const approvalRequest = page.waitForRequest(

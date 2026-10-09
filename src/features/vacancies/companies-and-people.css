@@ -6,15 +6,17 @@
 
 .companies-people-tabs {
   display: flex;
-  gap: var(--career-space-4);
+  gap: var(--career-space-2);
   overflow-x: auto;
   border-block-end: var(--career-border-width) solid var(--career-line);
 }
 
 .companies-people-tab {
-  flex: none;
+  flex: 1 1 auto;
+  min-inline-size: 0;
   min-block-size: var(--career-target-min);
-  padding-inline: var(--career-space-2);
+  padding-inline: var(--career-space-1);
+  white-space: nowrap;
   border: 0;
   border-block-end: calc(var(--career-border-width) * 2) solid transparent;
   color: var(--career-text-soft);
