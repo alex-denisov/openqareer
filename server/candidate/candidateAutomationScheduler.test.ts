@@ -33,23 +33,47 @@ describe('candidate auto-apply schedule', () => {
     expect(next.toISOString()).toBe('2026-10-12T07:00:00.000Z');
   });
 
+  it('skips an explicitly excluded holiday date', () => {
+    const next = nextCandidateAutomationSendAt(
+      new Date('2026-10-12T07:00:00.000Z'),
+      'hh',
+      { ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE, excludedDates: ['2026-10-12'] },
+      () => 0,
+    );
+    expect(next.toISOString()).toBe('2026-10-13T07:00:00.000Z');
+  });
+
   it('keeps the daily limit stable for a candidate and local day within B370 caps', () => {
     const first = dailyCandidateAutomationLimit('candidate-a', '2026-10-12', 'hh');
     expect(dailyCandidateAutomationLimit('candidate-a', '2026-10-12', 'hh')).toBe(first);
     expect(first).toBeGreaterThanOrEqual(12);
     expect(first).toBeLessThanOrEqual(15);
-    expect(dailyCandidateAutomationLimit('candidate-a', '2026-10-12', 'linkedin')).toBeLessThanOrEqual(10);
+    expect(
+      dailyCandidateAutomationLimit('candidate-a', '2026-10-12', 'linkedin'),
+    ).toBeLessThanOrEqual(10);
   });
 
   it('rejects a schedule that would exceed executor limits or widen safety windows', () => {
-    expect(validateCandidateAutomationSchedule(DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE)).toEqual({ valid: true });
-    expect(validateCandidateAutomationSchedule({
-      ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE,
-      dailyLimits: { hh: 16, linkedin: 10 },
-    })).toMatchObject({ valid: false, reason: 'daily_limit_exceeds_executor' });
-    expect(validateCandidateAutomationSchedule({
-      ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE,
-      minPauseMinutes: 1,
-    })).toMatchObject({ valid: false, reason: 'pause_out_of_range' });
+    expect(validateCandidateAutomationSchedule(DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE)).toEqual({
+      valid: true,
+    });
+    expect(
+      validateCandidateAutomationSchedule({
+        ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE,
+        dailyLimits: { hh: 16, linkedin: 10 },
+      }),
+    ).toMatchObject({ valid: false, reason: 'daily_limit_exceeds_executor' });
+    expect(
+      validateCandidateAutomationSchedule({
+        ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE,
+        minPauseMinutes: 1,
+      }),
+    ).toMatchObject({ valid: false, reason: 'pause_out_of_range' });
+    expect(
+      validateCandidateAutomationSchedule({
+        ...DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE,
+        stopAfterErrors: 3,
+      }),
+    ).toMatchObject({ valid: false, reason: 'invalid_safety_threshold' });
   });
 });

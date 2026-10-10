@@ -186,6 +186,63 @@ describe('CandidateActionExecutor', () => {
     ).rejects.toThrow(CandidateConsentRequiredError);
   });
 
+  it('rechecks actions_on_behalf consent after asynchronous session resolution', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const consentStore = grantActionConsent(db);
+    const run = vi.fn(async (): Promise<RunnerOutcome> => ({
+      status: 'delivered',
+      confirmationUrl: 'https://hh.ru/applicant/responses/1',
+    }));
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: { run },
+      sessionResolver: {
+        resolve: async (candidateId, platform) => {
+          consentStore.revokeConsent(candidateId, 'actions_on_behalf');
+          return { candidateId, platform, page: {} as never };
+        },
+      },
+      consentStore,
+    });
+
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+        ],
+        beforeExecute: () => true,
+      }),
+    ).rejects.toThrow(CandidateConsentRequiredError);
+    expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it('does not create a batch or call the provider when a dispatch guard rejects', async () => {
+    const db = new DatabaseSync(':memory:');
+    const repo = new SqliteCandidateActionRepository(db);
+    const executor = new CandidateActionExecutor({
+      repository: repo,
+      runner: new SimulatedCandidatePlatformRunner(),
+      sessionResolver: sessionResolver(),
+      consentStore: grantActionConsent(db),
+    });
+
+    await expect(
+      executor.executeBatch({
+        candidateId: 'cand-1',
+        confirmedByCandidate: true,
+        actions: [
+          { platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' },
+        ],
+        beforeExecute: () => false,
+      }),
+    ).rejects.toThrow(CandidateConsentRequiredError);
+    expect(repo.listReceipts('cand-1', 10)).toHaveLength(0);
+  });
+
   it('executes a confirmed and consented batch and retains only status metadata', async () => {
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);

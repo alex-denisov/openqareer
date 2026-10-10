@@ -22,6 +22,20 @@ interface AutomationFixtureState {
   consents: Array<Record<string, unknown>>;
   stops: Array<{ company: string; origin: string; createdAt: string }>;
   queue: AutomationQueueFixtureItem[];
+  schedule: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  journal: AutomationJournalFixtureEntry[];
+}
+
+interface AutomationJournalFixtureEntry {
+  id: string;
+  queueItemId: string;
+  platform: string;
+  result: 'delivered' | 'error' | 'removed';
+  company: string;
+  occurredAt: string;
+  receiptId: string | null;
+  failureCode: string | null;
 }
 
 interface AutomationQueueFixtureItem {
@@ -68,6 +82,33 @@ function createAutomationFixtureState(): AutomationFixtureState {
     consents: [],
     stops: [],
     queue: [],
+    schedule: {
+      timezone: 'Europe/Moscow',
+      dailyLimits: { hh: 15, linkedin: 10 },
+      minPauseMinutes: 2,
+      maxPauseMinutes: 9,
+      sendWindows: {
+        hh: { start: '10:00', end: '18:00', days: [1, 2, 3, 4, 5] },
+        linkedin: { start: '09:00', end: '17:00', days: [1, 2, 3, 4] },
+      },
+      quietWindows: [
+        { start: '22:00', end: '08:00' },
+        { start: '13:00', end: '14:00' },
+      ],
+      excludedDates: [],
+      breakAfterSent: 8,
+      breakMinutes: 120,
+      stopAfterErrors: 3,
+    },
+    runtime: {
+      status: 'ready',
+      emergencyPaused: false,
+      consecutiveErrors: 0,
+      sentSinceBreak: 0,
+      nextSendAt: null,
+      pauseUntil: null,
+    },
+    journal: [],
   };
 }
 
@@ -89,6 +130,8 @@ function automationState(state: AutomationFixtureState) {
     consents: state.consents,
     stopCompanies: state.stops,
     queueCounts,
+    schedule: state.schedule,
+    schedulerRuntime: state.runtime,
     linkedinPublishing: { enabled: false, reason: 'Публикацию в LinkedIn запускает кандидат.' },
   };
 }
@@ -98,6 +141,9 @@ function applyAutomationAction(
   item: AutomationQueueFixtureItem,
   action: string,
 ): void {
+  if ((action === 'remove' || action === 'stop_company') && item.status !== 'removed') {
+    recordAutomationRemoval(state, item);
+  }
   item.status =
     action === 'approve_and_send' ? 'approved' : action === 'consultant' ? 'consultant' : 'removed';
   if (action === 'stop_company') {
@@ -107,14 +153,34 @@ function applyAutomationAction(
       { company, origin: 'manual', createdAt: new Date().toISOString() },
     ];
     state.queue
-      .filter((queued) => queued.payload.company === company && queued.status !== 'sent')
+      .filter(
+        (queued) =>
+          queued.payload.company === company && !['sent', 'removed'].includes(queued.status),
+      )
       .forEach((queued) => {
+        recordAutomationRemoval(state, queued);
         queued.status = 'removed';
         queued.payload = { ...queued.payload, targetUrl: '', letterText: '', materials: [] };
       });
   }
   if (item.status === 'removed')
     item.payload = { ...item.payload, targetUrl: '', letterText: '', materials: [] };
+}
+
+function recordAutomationRemoval(
+  state: AutomationFixtureState,
+  item: AutomationQueueFixtureItem,
+): void {
+  state.journal.push({
+    id: `journal-${state.journal.length + 1}`,
+    queueItemId: item.id,
+    platform: item.payload.platform,
+    result: 'removed',
+    company: item.payload.company,
+    occurredAt: new Date().toISOString(),
+    receiptId: null,
+    failureCode: null,
+  });
 }
 
 async function mockAutomationConfiguration(
@@ -141,6 +207,8 @@ async function mockAutomationConfiguration(
       rules: body.rules ?? state.settings.rules,
       updatedAt: acceptedAt,
     };
+    if (!state.runtime.emergencyPaused)
+      state.runtime = { ...state.runtime, status: 'ready', nextSendAt: acceptedAt };
     state.consents = body.consentKeys.map((key) => ({
       id: `consent-${key}`,
       key,
@@ -154,6 +222,7 @@ async function mockAutomationConfiguration(
   }
   if (path.endsWith('/candidate/automation/disable') && method === 'POST') {
     state.settings = { ...state.settings, enabled: false };
+    state.runtime = { ...state.runtime, status: 'prepared', nextSendAt: null };
     state.queue
       .filter((item) => item.status === 'approved')
       .forEach((item) => {
@@ -163,6 +232,82 @@ async function mockAutomationConfiguration(
     return true;
   }
   return updateAutomationConfiguration(route, path, state);
+}
+
+async function mockAutomationScheduler(
+  route: Route,
+  path: string,
+  url: URL,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/automation/schedule')) {
+    if (method === 'PUT') {
+      state.schedule = route.request().postDataJSON() as Record<string, unknown>;
+      if (!state.runtime.emergencyPaused)
+        state.runtime = { ...state.runtime, status: 'ready', nextSendAt: new Date().toISOString() };
+    }
+    if (method === 'GET' || method === 'PUT') {
+      await route.fulfill({
+        json: {
+          data: {
+            schedule: state.schedule,
+            runtime: state.runtime,
+            stateLabel: fixtureAutomationStateLabel(String(state.runtime.status)),
+          },
+        },
+      });
+      return true;
+    }
+  }
+  if (path.endsWith('/candidate/automation/emergency-pause') && method === 'POST') {
+    state.runtime = { ...state.runtime, emergencyPaused: true, status: 'paused', nextSendAt: null };
+    await route.fulfill({ json: { data: { runtime: state.runtime, stateLabel: 'Пауза' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/dispatch') && method === 'POST') {
+    await route.fulfill({ status: 503, json: { error: { code: 'runner_not_connected' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/journal/export') && method === 'GET') {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/csv; charset=utf-8',
+      body: '\uFEFFВремя,Компания,Канал,Результат,Квитанция,Код ошибки',
+    });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/journal') && method === 'GET') {
+    const result = url.searchParams.get('result');
+    const platform = url.searchParams.get('platform');
+    const entries = state.journal.filter(
+      (entry) => (!result || entry.result === result) && (!platform || entry.platform === platform),
+    );
+    const counts = state.journal.reduce(
+      (value, entry) => ({
+        total: value.total + 1,
+        delivered: value.delivered + Number(entry.result === 'delivered'),
+        errors: value.errors + Number(entry.result === 'error'),
+        removed: value.removed + Number(entry.result === 'removed'),
+      }),
+      { total: 0, delivered: 0, errors: 0, removed: 0 },
+    );
+    await route.fulfill({
+      json: {
+        data: { entries, periodDays: Number(url.searchParams.get('periodDays') ?? 30), counts },
+      },
+    });
+    return true;
+  }
+  return false;
+}
+
+function fixtureAutomationStateLabel(status: string): string {
+  if (status === 'daily_limit_reached') return 'Лимит дня достигнут';
+  if (status === 'linkedin_not_connected') return 'LinkedIn не подключён';
+  if (status === 'paused') return 'Пауза';
+  if (status === 'error') return 'Ошибка отправки';
+  return status === 'prepared' ? 'Подготовлено' : 'По расписанию';
 }
 
 async function updateAutomationConfiguration(
@@ -182,15 +327,30 @@ async function updateAutomationConfiguration(
   }
   if (path.endsWith('/candidate/automation/pause') && method === 'POST') {
     const { days } = route.request().postDataJSON() as { days: number };
+    const pausedUntil = new Date(Date.now() + days * 86_400_000).toISOString();
     state.settings = {
       ...state.settings,
-      pausedUntil: new Date(Date.now() + days * 86_400_000).toISOString(),
+      pausedUntil,
+    };
+    state.runtime = {
+      ...state.runtime,
+      status: 'paused',
+      pauseUntil: pausedUntil,
+      nextSendAt: pausedUntil,
     };
     await route.fulfill({ json: { data: { settings: state.settings } } });
     return true;
   }
   if (path.endsWith('/candidate/automation/pause') && method === 'DELETE') {
     state.settings = { ...state.settings, pausedUntil: null };
+    state.runtime = {
+      ...state.runtime,
+      status: 'ready',
+      emergencyPaused: false,
+      pauseUntil: null,
+      nextSendAt: new Date().toISOString(),
+      consecutiveErrors: 0,
+    };
     await route.fulfill({ json: { data: { settings: state.settings } } });
     return true;
   }
@@ -355,6 +515,7 @@ async function mockAutomationApi(
   if (!path.includes('/candidate/automation')) return false;
   return (
     (await mockAutomationConfiguration(route, path, state)) ||
+    (await mockAutomationScheduler(route, path, url, state)) ||
     (await mockAutomationQueue(route, path, url, state)) ||
     (await mockAutomationStops(route, path, state))
   );

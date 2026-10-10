@@ -36,6 +36,7 @@ import {
   sendError,
   withDeps,
 } from './helpers';
+import { registerCandidateAutomationScheduleRoutes } from './candidateAutomationScheduleRoutes';
 
 const CONSENT_VERSION = 'B452-2026-10-10-v1';
 const CONSENT_TEXT: Readonly<Record<CandidateAutomationConsentKey, string>> = {
@@ -138,6 +139,8 @@ function stateResponse(deps: AutomationDeps, candidateId: string) {
     consents: deps.automationRepository.listConsents(candidateId),
     stopCompanies: deps.automationRepository.listStopCompanies(candidateId),
     queueCounts: deps.automationRepository.queueCounts(candidateId),
+    schedule: deps.automationRepository.schedulerRepository.getSchedule(candidateId),
+    schedulerRuntime: deps.automationRepository.schedulerRepository.getRuntime(candidateId),
     linkedinPublishing: { enabled: false, reason: 'Публикацию в LinkedIn подтверждает и запускает кандидат (PRB-003).' },
   };
 }
@@ -176,6 +179,12 @@ function enableWithConsents(
     mode: input.mode,
     rules: input.rules ?? current.rules ?? DEFAULT_CANDIDATE_AUTOMATION_RULES,
   }, now);
+  const runtime = deps.automationRepository.schedulerRepository.getRuntime(candidateId);
+  if (!runtime.emergencyPaused) {
+    deps.automationRepository.schedulerRepository.setRuntime(candidateId, {
+      nextSendAt: now, pauseUntil: null, status: 'ready', consecutiveErrors: 0, lastFailureCode: null,
+    }, now);
+  }
   return reply.send({ data: { settings, consents: deps.automationRepository.listConsents(candidateId), linkedinPublishing: stateResponse(deps, candidateId).linkedinPublishing } });
 }
 
@@ -216,14 +225,22 @@ const pauseAutomation: Handler = async (deps, request, reply) => {
   const parsed = pauseSchema.safeParse(request.body);
   if (!parsed.success) return sendError(reply, request, 400, 'invalid_pause_days', 'Пауза должна быть от 1 до 365 дней.', false);
   const until = new Date(Date.now() + parsed.data.days * 86_400_000).toISOString();
-  return reply.send({ data: { settings: deps.automationRepository.setPause(candidate.id, until) } });
+  deps.candidateActionRepository?.setKillSwitch(`candidate:${candidate.id}`, true, 'manual_pause');
+  const settings = deps.automationRepository.setPause(candidate.id, until);
+  const runtime = deps.automationRepository.schedulerRepository.setRuntime(candidate.id, {
+    status: 'paused', pauseUntil: until, nextSendAt: until,
+  });
+  return reply.send({ data: { settings, runtime } });
 };
 
 const resumeAutomation: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticate(deps, request, reply);
   if (!candidate) return;
-  return reply.send({ data: { settings: deps.automationRepository.setPause(candidate.id, null) } });
+  const settings = deps.automationRepository.setPause(candidate.id, null);
+  deps.candidateActionRepository?.setKillSwitch(`candidate:${candidate.id}`, false, 'manual_pause');
+  const runtime = deps.automationRepository.schedulerRepository.setEmergencyPause(candidate.id, false);
+  return reply.send({ data: { settings, runtime } });
 };
 
 function paused(settings: ReturnType<SqliteCandidateAutomationRepository['getSettings']>, now = new Date()): boolean {
@@ -725,6 +742,7 @@ export function registerCandidateAutomationRoutes(app: FastifyInstance, deps: Ro
   app.post('/api/v1/candidate/automation/stop-companies', withDeps(bound, createStopCompany));
   app.delete('/api/v1/candidate/automation/stop-companies', withDeps(bound, removeStopCompany));
   app.post('/api/v1/candidate/automation/stop-companies/import-rejections', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, withDeps(bound, importRejectedCompanies));
+  registerCandidateAutomationScheduleRoutes(app, bound);
 }
 
 const getStopCompanies: Handler = async (deps, request, reply) => {

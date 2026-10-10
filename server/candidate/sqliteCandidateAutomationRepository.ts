@@ -9,6 +9,7 @@ import type {
 } from '../domain/candidateAutomation';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { SealedText } from '../data/sealedText';
+import { SqliteCandidateAutomationScheduleRepository } from './sqliteCandidateAutomationScheduleRepository';
 
 export type CandidateAutomationMode = 'drafts_only' | 'approval_required' | 'automatic';
 export type CandidateAutomationConsentKey =
@@ -73,6 +74,46 @@ export interface CandidateAutomationQueueItem {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly payload: CandidateAutomationQueuePayload;
+}
+
+export type CandidateAutomationJournalResult = 'delivered' | 'error' | 'removed';
+export type CandidateAutomationJournalReceiptStatus = 'delivered' | 'attempted' | 'failed' | 'pending';
+
+export interface CandidateAutomationJournalEntry {
+  readonly id: string;
+  readonly queueItemId: string;
+  readonly platform: CandidateAutomationPlatform;
+  readonly result: CandidateAutomationJournalResult;
+  readonly receiptStatus: CandidateAutomationJournalReceiptStatus | null;
+  readonly attempted: boolean;
+  readonly localDate: string;
+  readonly company: string;
+  readonly occurredAt: string;
+  readonly receiptId: string | null;
+  readonly failureCode: string | null;
+}
+
+export type CandidateAutomationRuntimeStatus =
+  | 'ready'
+  | 'waiting'
+  | 'paused'
+  | 'daily_limit_reached'
+  | 'error'
+  | 'linkedin_not_connected'
+  | 'prepared';
+
+export interface CandidateAutomationRuntime {
+  readonly candidateId: string;
+  readonly nextSendAt: string | null;
+  readonly pauseUntil: string | null;
+  readonly status: CandidateAutomationRuntimeStatus;
+  readonly consecutiveErrors: number;
+  readonly sentSinceBreak: number;
+  readonly emergencyPaused: boolean;
+  readonly lastFailureCode: string | null;
+  readonly leaseToken: string | null;
+  readonly leaseUntil: string | null;
+  readonly updatedAt: string | null;
 }
 
 interface SettingsRow {
@@ -168,6 +209,7 @@ export class SqliteCandidateAutomationRepository {
   private readonly database: DatabaseSync;
   private readonly ownsDatabase: boolean;
   private readonly sealedText: SealedText;
+  readonly schedulerRepository: SqliteCandidateAutomationScheduleRepository;
 
   constructor(options: DatabaseSync | { databasePath: string; encryptionKey: Buffer }, key?: Buffer) {
     this.ownsDatabase = !(options instanceof DatabaseSync);
@@ -178,6 +220,7 @@ export class SqliteCandidateAutomationRepository {
     if (this.ownsDatabase) this.database.exec('PRAGMA journal_mode = WAL;');
     applySqliteBusyTimeout(this.database);
     this.database.exec(CANDIDATE_AUTOMATION_SCHEMA);
+    this.schedulerRepository = new SqliteCandidateAutomationScheduleRepository(this.database, encryptionKey);
     this.installDeletionTrigger();
   }
 
@@ -388,6 +431,13 @@ export class SqliteCandidateAutomationRepository {
     return row ? this.queueFromRow(row) : null;
   }
 
+  getNextApprovedQueueItem(candidateId: string): CandidateAutomationQueueItem | null {
+    const row = this.database.prepare(`SELECT * FROM candidate_auto_apply_queue
+      WHERE candidate_id = ? AND status = 'approved' ORDER BY created_at, rowid LIMIT 1`)
+      .get(candidateId) as QueueRow | undefined;
+    return row ? this.queueFromRow(row) : null;
+  }
+
   listQueue(candidateId: string, options: {
     readonly status?: CandidateAutomationQueueStatus;
     readonly platform?: CandidateAutomationPlatform;
@@ -412,21 +462,78 @@ export class SqliteCandidateAutomationRepository {
     action: CandidateAutomationQueueAction,
     now = new Date().toISOString(),
   ): CandidateAutomationQueueItem | null {
-    const current = this.getQueueItem(candidateId, id);
-    if (!current) return null;
-    const status = transitionCandidateAutomationQueue(current.status, action, current.payload.letterText.trim().length > 0);
-    const payload = status === 'approved'
-      ? { ...current.payload, approvalType: 'candidate' as const, approvedAt: now }
-      : status === 'removed' || status === 'sent' || status === 'attempted' || status === 'failed'
-        ? scrubQueuePayload(current.payload)
-        : current.payload;
-    const result = this.database.prepare(`UPDATE candidate_auto_apply_queue
-      SET status = ?, application_id = ?, payload_cipher = ?, updated_at = ?
-      WHERE candidate_id = ? AND id = ? AND status = ?`).run(
-      status, payload.applicationId, this.encryptQueuePayload(candidateId, id, payload), now,
-      candidateId, id, current.status,
-    );
-    return result.changes === 1 ? this.getQueueItem(candidateId, id) : null;
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const current = this.getQueueItem(candidateId, id);
+      if (!current) {
+        this.database.exec('COMMIT');
+        return null;
+      }
+      const status = transitionCandidateAutomationQueue(current.status, action, current.payload.letterText.trim().length > 0);
+      const payload = status === 'approved'
+        ? { ...current.payload, approvalType: 'candidate' as const, approvedAt: now }
+        : status === 'removed' || status === 'sent' || status === 'attempted' || status === 'failed'
+          ? scrubQueuePayload(current.payload)
+          : current.payload;
+      const result = this.database.prepare(`UPDATE candidate_auto_apply_queue
+        SET status = ?, application_id = ?, payload_cipher = ?, updated_at = ?
+        WHERE candidate_id = ? AND id = ? AND status = ?`).run(
+        status, payload.applicationId, this.encryptQueuePayload(candidateId, id, payload), now,
+        candidateId, id, current.status,
+      );
+      if (result.changes === 1 && status === 'removed') {
+        this.schedulerRepository.appendJournalEntry({
+          candidateId, queueItemId: id, platform: current.payload.platform, result: 'removed',
+          attempted: false, localDate: now.slice(0, 10), company: current.payload.company,
+          occurredAt: now, eventKey: `${id}:removed`,
+        });
+      }
+      this.database.exec('COMMIT');
+      return result.changes === 1 ? this.getQueueItem(candidateId, id) : null;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
+  completeScheduledQueueItem(input: {
+    readonly candidateId: string;
+    readonly queueItemId: string;
+    readonly action: 'sent' | 'attempted' | 'failed';
+    readonly localDate: string;
+    readonly occurredAt: string;
+    readonly receiptId: string | null;
+    readonly failureCode: string | null;
+    readonly receiptStatus: CandidateAutomationJournalReceiptStatus;
+    readonly attempted: boolean;
+  }): CandidateAutomationQueueItem | null {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const current = this.getQueueItem(input.candidateId, input.queueItemId);
+      if (!current) {
+        this.database.exec('COMMIT');
+        return null;
+      }
+      if (current.status === 'approved' || current.status === 'pending_approval') {
+        const payload = scrubQueuePayload(current.payload);
+        this.database.prepare(`UPDATE candidate_auto_apply_queue SET status = ?,
+          payload_cipher = ?, updated_at = ? WHERE candidate_id = ? AND id = ? AND status = ?`)
+          .run(input.action, this.encryptQueuePayload(input.candidateId, current.id, payload), input.occurredAt,
+            input.candidateId, current.id, current.status);
+      }
+      this.schedulerRepository.appendJournalEntry({
+        candidateId: input.candidateId, queueItemId: current.id, platform: current.payload.platform,
+        result: input.action === 'sent' ? 'delivered' : 'error', receiptStatus: input.receiptStatus,
+        attempted: input.attempted, localDate: input.localDate, company: current.payload.company,
+        occurredAt: input.occurredAt, receiptId: input.receiptId, failureCode: input.failureCode,
+        eventKey: `${current.id}:${input.receiptId ?? input.occurredAt}:${input.receiptStatus}`,
+      });
+      this.database.exec('COMMIT');
+      return this.getQueueItem(input.candidateId, current.id);
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
   }
 
   updateQueueLetter(candidateId: string, id: string, letterText: string, now = new Date().toISOString()): CandidateAutomationQueueItem | null {
@@ -496,12 +603,19 @@ export class SqliteCandidateAutomationRepository {
 
   private installDeletionTrigger(): void {
     if (!this.database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidates'").get()) return;
+    const trigger = this.database.prepare(`SELECT sql FROM sqlite_master WHERE type = 'trigger'
+      AND name = 'candidate_auto_apply_delete_candidate'`).get() as { sql?: string } | undefined;
+    if (trigger?.sql?.includes('candidate_auto_apply_journal')) return;
+    this.database.exec('DROP TRIGGER IF EXISTS candidate_auto_apply_delete_candidate;');
     this.database.exec(`CREATE TRIGGER IF NOT EXISTS candidate_auto_apply_delete_candidate
       AFTER DELETE ON candidates BEGIN
         DELETE FROM candidate_auto_apply_settings WHERE candidate_id = OLD.id;
         DELETE FROM candidate_auto_apply_consents WHERE candidate_id = OLD.id;
         DELETE FROM candidate_auto_apply_stops WHERE candidate_id = OLD.id;
         DELETE FROM candidate_auto_apply_queue WHERE candidate_id = OLD.id;
+        DELETE FROM candidate_auto_apply_schedule WHERE candidate_id = OLD.id;
+        DELETE FROM candidate_auto_apply_runtime WHERE candidate_id = OLD.id;
+        DELETE FROM candidate_auto_apply_journal WHERE candidate_id = OLD.id;
       END;`);
   }
 }
