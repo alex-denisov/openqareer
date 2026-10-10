@@ -1,13 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  Buildings,
-  ChatCircleDots,
-  Check,
-  Copy,
-  Target,
-  X,
-} from '@phosphor-icons/react';
+import { Buildings, ChatCircleDots, Check, Copy, Target, X } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
@@ -36,6 +29,7 @@ export interface InterviewPrepModalProps {
   readonly candidateName?: string;
   readonly initialTab?: InterviewPrepTab;
   readonly onAskConsultant?: () => void;
+  readonly onOpenStarStories?: () => void;
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
@@ -47,15 +41,14 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
     candidateName,
     initialTab = 'overview',
     onAskConsultant,
+    onOpenStarStories,
   } = props;
   const [tab, setTab] = useState<InterviewPrepTab>(initialTab);
   const cardRef = useRef<HTMLDivElement>(null);
 
   useModalAccessibility(isOpen, onClose, cardRef);
 
-  const brief = useMemo(() => {
-    return generateInterviewPrepBrief({ vacancy, candidateName, facts });
-  }, [vacancy, candidateName, facts]);
+  const brief = generateInterviewPrepBrief({ vacancy, candidateName, facts });
 
   if (!isOpen) return null;
 
@@ -83,33 +76,33 @@ export function InterviewPrepModal(props: InterviewPrepModalProps) {
         />
         <InterviewTabNav tab={tab} onTabChange={setTab} />
         <main className="career-interview-body">
-          <InterviewTabContent tab={tab} brief={brief} />
+          <InterviewTabContent tab={tab} brief={brief} onOpenStarStories={onOpenStarStories} />
         </main>
       </div>
     </div>
   );
 
-  // Портал в `document.body` — как ImportModalShell (B148 §2): карточка
-  // отклика на мобильной ширине маскируется через `mask-image` для
-  // затухающего края горизонтального скролла колонок, а маска, как и
-  // `filter`/`transform`, создаёт containing block для потомков с
-  // `position: fixed`. Без портала модалка «прилипала» к колонке карточек
-  // вместо вьюпорта, и хедер перекрывал кнопку закрытия.
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
+  // Портал в `.career-shell` получает CSS-токены и остаётся вне карточки отклика,
+  // у которой `mask-image` создаёт containing block для потомков с `position: fixed`.
+  if (typeof document === 'undefined') return dialog;
+  const portalRoot = document.querySelector<HTMLElement>('.career-shell') ?? document.body;
+  return createPortal(dialog, portalRoot);
 }
 
 function InterviewTabContent({
   tab,
   brief,
+  onOpenStarStories,
 }: {
   readonly tab: InterviewPrepTab;
   readonly brief: InterviewPrepBrief;
+  readonly onOpenStarStories?: () => void;
 }) {
   if (tab === 'overview') {
     return <OverviewTab overview={brief.companyOverview} focus={brief.interviewerFocus} />;
   }
   if (tab === 'star') {
-    return <StarTab questions={brief.starQuestions} />;
+    return <StarTab questions={brief.starQuestions} onOpenStarStories={onOpenStarStories} />;
   }
   return <QuestionsTab questions={brief.counterQuestions} />;
 }
@@ -173,7 +166,11 @@ function InterviewTabNav({
   readonly onTabChange: (tab: InterviewPrepTab) => void;
 }) {
   return (
-    <div className="career-interview-tabs" role="tablist" aria-label="Разделы подготовки к интервью">
+    <div
+      className="career-interview-tabs"
+      role="tablist"
+      aria-label="Разделы подготовки к интервью"
+    >
       {TAB_CONFIG.map((item) => {
         const Icon = item.icon;
         const isActive = tab === item.id;
@@ -247,7 +244,13 @@ function OverviewTab({
   );
 }
 
-function StarTab({ questions }: { readonly questions: readonly StarQuestion[] }) {
+function StarTab({
+  questions,
+  onOpenStarStories,
+}: {
+  readonly questions: readonly StarQuestion[];
+  readonly onOpenStarStories?: () => void;
+}) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyAnswer = async (q: StarQuestion) => {
@@ -268,6 +271,15 @@ function StarTab({ questions }: { readonly questions: readonly StarQuestion[] })
 
   return (
     <div className="career-interview-star-list">
+      {onOpenStarStories ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary"
+          onClick={onOpenStarStories}
+        >
+          Открыть STAR-истории
+        </button>
+      ) : null}
       <p className="career-cabinet-tag">
         STAR: ситуация → задача → что сделали вы → результат в цифрах.
       </p>
@@ -349,7 +361,11 @@ function StarQuestionCard({
           onClick={onCopy}
           aria-label="Скопировать ответ по структуре STAR"
         >
-          {isCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+          {isCopied ? (
+            <Check size={14} aria-hidden="true" />
+          ) : (
+            <Copy size={14} aria-hidden="true" />
+          )}
           <span>{isCopied ? 'Скопировано' : 'Скопировать'}</span>
         </button>
       </footer>
@@ -384,7 +400,11 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
               onClick={() => void handleCopy(q, idx)}
               aria-label="Скопировать вопрос"
             >
-              {copiedIdx === idx ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              {copiedIdx === idx ? (
+                <Check size={14} aria-hidden="true" />
+              ) : (
+                <Copy size={14} aria-hidden="true" />
+              )}
               <span>{copiedIdx === idx ? 'Скопировано' : 'Скопировать'}</span>
             </button>
           </li>
@@ -394,7 +414,7 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
   );
 }
 
-function useModalAccessibility(
+export function useModalAccessibility(
   isOpen: boolean,
   onClose: () => void,
   containerRef: React.RefObject<HTMLDivElement | null>,

@@ -12,6 +12,7 @@ import { registerDecisionProfileRoutes } from './decisionProfileRoutes';
 import { registerCareerVectorRoutes } from './careerVectorRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
+import { registerStarStoryRoutes } from './starStoryRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
@@ -253,7 +254,13 @@ async function readTodayMatchedVacancies(
   const matched =
     confirmedSkills.length === 0 && targetRoles.length === 0
       ? []
-      : await readMatchedSnapshot(multiSourceEngine, candidateId, confirmedSkills, targetRoles, targetLevel);
+      : await readMatchedSnapshot(
+          multiSourceEngine,
+          candidateId,
+          confirmedSkills,
+          targetRoles,
+          targetLevel,
+        );
   return {
     matched: matched.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
     targetRoles,
@@ -361,6 +368,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationInterviewRoutes(app, deps);
   registerApplicationOfferRoutes(app, deps);
   registerStarPrepRoutes(app, deps);
+  registerStarStoryRoutes(app, deps);
   registerReferralTrackRoutes(app, deps);
   registerCareerVectorRoutes(app, deps);
   registerDecisionProfileRoutes(app, deps);

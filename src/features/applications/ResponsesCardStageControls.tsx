@@ -3,6 +3,7 @@ import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import { deliveryState } from '../../../shared/applicationStage';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
+import { StarStoriesModal } from '../interview/StarStoriesModal';
 import {
   patchApplication,
   patchApplicationInterview,
@@ -37,38 +38,42 @@ export function PrepareInterviewControl({
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const handleAskConsultant = onOpenExpert
-    ? () => {
-        onOpenExpert(
-          'interviews',
-          { kind: 'application', id: application.id },
-          buildSubjectTitle(application.vacancy),
-        );
-      }
-    : undefined;
+  const [starStoriesOpen, setStarStoriesOpen] = useState(false);
+  const handleAskConsultant = buildInterviewPrepExpertHandler(application, onOpenExpert);
 
   return (
-    <div className="career-responses-prep-action">
-      <button
-        type="button"
-        className="career-btn career-btn-primary career-btn-sm"
-        onClick={() => setOpen(true)}
-      >
-        Подготовиться
-      </button>
-      <InterviewPrepModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        vacancy={{
-          id: application.id,
-          title: application.vacancy?.title ?? 'Без названия',
-          company: application.vacancy?.companyHidden
-            ? undefined
-            : (application.vacancy?.company ?? undefined),
-        }}
+    <>
+      <div className="career-responses-prep-action">
+        <button
+          type="button"
+          className="career-btn career-btn-primary career-btn-sm"
+          onClick={() => setOpen(true)}
+        >
+          Подготовиться
+        </button>
+        <InterviewPrepModal
+          isOpen={open}
+          onClose={() => setOpen(false)}
+          vacancy={{
+            id: application.id,
+            title: application.vacancy?.title ?? 'Без названия',
+            company: application.vacancy?.companyHidden
+              ? undefined
+              : (application.vacancy?.company ?? undefined),
+          }}
+          onAskConsultant={handleAskConsultant}
+          onOpenStarStories={() => {
+            setOpen(false);
+            setStarStoriesOpen(true);
+          }}
+        />
+      </div>
+      <StarStoriesModal
+        isOpen={starStoriesOpen}
+        onClose={() => setStarStoriesOpen(false)}
         onAskConsultant={handleAskConsultant}
       />
-    </div>
+    </>
   );
 }
 
@@ -219,6 +224,25 @@ export function buildSubjectTitle(vacancy?: ApplicationView['vacancy']): string 
   const title = vacancy?.title ?? 'Без названия';
   const company = vacancy?.companyHidden ? '' : (vacancy?.company ?? '');
   return `О вакансии: ${title}${company ? ` — ${company}` : ''}`;
+}
+
+type InterviewExpertHandler = (
+  stage: CoachTurnStage,
+  subject?: CoachTurnSubject,
+  subjectTitle?: string,
+) => void;
+
+function buildInterviewPrepExpertHandler(
+  application: ApplicationView,
+  onOpenExpert?: InterviewExpertHandler,
+): (() => void) | undefined {
+  if (!onOpenExpert) return undefined;
+  return () =>
+    onOpenExpert(
+      'interviews',
+      { kind: 'application', id: application.id },
+      buildSubjectTitle(application.vacancy),
+    );
 }
 
 /** Блоки карточки, зависящие от этапа: доставка, интервью, оффер. */

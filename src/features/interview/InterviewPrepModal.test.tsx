@@ -96,6 +96,7 @@ describe('InterviewPrepModal', () => {
         vacancy={sampleVacancy}
         facts={sampleFacts}
         initialTab="star"
+        onOpenStarStories={vi.fn()}
       />,
     );
 
@@ -104,6 +105,7 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('Действие:');
     expect(html).toContain('Результат:');
     expect(html).toContain('Скопировать');
+    expect(html).toContain('Открыть STAR-истории');
     expect(html).toContain('45%');
   });
 

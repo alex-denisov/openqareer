@@ -43,6 +43,7 @@ import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
@@ -110,6 +111,7 @@ export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentR
 export class SqliteCandidateStore implements CandidateStore {
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
+  readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
@@ -169,6 +171,7 @@ export class SqliteCandidateStore implements CandidateStore {
     );
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
+    this.starStoriesRepo = new SqliteStarStoriesRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
     this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
@@ -716,6 +719,7 @@ export class SqliteCandidateStore implements CandidateStore {
       careerStrategy: this.careerStrategyRepository.get(candidateId),
       workPreferences: this.workPreferenceRepository.get(candidateId),
       roleSkillAssessments: this.roleSkillAssessments.list(candidateId),
+      starStories: this.starStoriesRepo.list(candidateId),
       consultantConversations: this.exportConsultantConversations(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);

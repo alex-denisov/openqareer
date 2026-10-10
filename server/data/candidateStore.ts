@@ -47,6 +47,7 @@ import type { SqliteReferralTrackRepository } from './sqliteReferralTrackReposit
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { SqliteStarStoriesRepository, StoredStarStory } from './sqliteStarStoriesRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -112,6 +113,8 @@ export interface CandidateExport extends CandidateSnapshot {
   workPreferences: StoredWorkPreferenceRun | null;
   /** Encrypted role assessment answers, evidence refs and results (B461). */
   roleSkillAssessments: RoleSkillAssessmentRun[];
+  /** Candidate-owned reusable STAR stories (B466). */
+  starStories: StoredStarStory[];
 }
 
 type CandidateDocumentKind =
@@ -379,6 +382,8 @@ export interface CandidateStore {
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   /** Подготовка STAR на отклик (B392), запечатанный текст кандидата. */
   readonly starPrepRepo: SqliteStarPrepRepository;
+  /** Повторно используемые STAR-истории кандидата (B466), текст запечатан. */
+  readonly starStoriesRepo: SqliteStarStoriesRepository;
   /** Трек внутренней рекомендации на отклик (B389), контакт запечатан. */
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */

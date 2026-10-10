@@ -3,6 +3,7 @@ import {
   createRoleSkillAssessmentFixture,
   type MockSignedInCabinetOptions,
 } from './mockRoleSkillAssessment';
+import { createMockStarStoriesFixture } from './mockStarStories';
 export type { MockSignedInCabinetOptions } from './mockRoleSkillAssessment';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
@@ -24,12 +25,21 @@ export async function mockSignedInCabinet(
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
   const assessmentFixture = createRoleSkillAssessmentFixture(options);
+  const starStoriesFixture = createMockStarStoriesFixture();
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
     const method = route.request().method();
-    const requestBody = method === 'POST' ? route.request().postDataJSON() : {};
+    const hasJsonBody =
+      method === 'POST' ||
+      (method === 'PATCH' && path.startsWith('/api/v1/candidate/star-stories/'));
+    const requestBody = hasJsonBody ? route.request().postDataJSON() : {};
     const assessmentResponse = assessmentFixture.handle(
+      path,
+      method,
+      (requestBody as Record<string, unknown> | undefined) ?? {},
+    );
+    const starStoriesResponse = starStoriesFixture.handle(
       path,
       method,
       (requestBody as Record<string, unknown> | undefined) ?? {},
@@ -47,6 +57,18 @@ export async function mockSignedInCabinet(
       return route.fulfill({
         status: assessmentResponse.status ?? 200,
         json: { data: assessmentResponse.data },
+      });
+    }
+    if (starStoriesResponse) {
+      if (starStoriesResponse.error) {
+        return route.fulfill({
+          status: starStoriesResponse.status ?? 400,
+          json: { error: starStoriesResponse.error },
+        });
+      }
+      return route.fulfill({
+        status: starStoriesResponse.status ?? 200,
+        json: { data: starStoriesResponse.data },
       });
     }
     if (path.endsWith('/auth/me')) {
