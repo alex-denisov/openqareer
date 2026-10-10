@@ -4,7 +4,6 @@ import {
   ArrowRight,
   CaretDown,
   CaretUp,
-  Microphone,
   PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
@@ -29,6 +28,8 @@ import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
 import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
+import { VoiceInput } from '../coach/VoiceInput';
+import type { VoiceInputState } from '../coach/voiceInputMachine';
 import {
   getSkillQuizById,
   type QuizEvaluationResult,
@@ -94,6 +95,8 @@ export function CareerExpertPanel({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [content, setContent] = useState('');
+  const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
+  const [voiceDraft, setVoiceDraft] = useState(false);
   const [sending, setSending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
@@ -203,8 +206,13 @@ export function CareerExpertPanel({
 
   async function handleSend(event: React.FormEvent) {
     event.preventDefault();
-    const clean = content.trim();
-    if (!clean || !user) return;
+    if (voiceState !== 'idle' && voiceState !== 'transcribed') return;
+    await sendContent(content);
+  }
+
+  async function sendContent(message: string): Promise<boolean> {
+    const clean = message.trim();
+    if (!clean || !user) return false;
     // На телефоне шторка свёрнута и прячет ленту: отправка раскрывает её, чтобы ответ был виден.
     if (!mobileExpanded) onToggleMobileExpanded?.();
     setSending(true);
@@ -240,6 +248,7 @@ export function CareerExpertPanel({
       setLiveResult(result);
       setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
+      setVoiceDraft(false);
       delivered = true;
     } catch (reason) {
       setError(messageFrom(reason));
@@ -251,12 +260,13 @@ export function CareerExpertPanel({
     // Обновление истории — отдельная сетевая операция: на проблемном канале она
     // может тянуться или не дойти, и держать на ней композер значит отнимать у
     // кандидата разговор из-за уже полученного ответа (B198).
-    if (!delivered) return;
+    if (!delivered) return false;
     try {
       setSnapshot(await getCandidateWithMessages(stage));
     } catch {
       setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
+    return true;
   }
 
   const turns = consultantTurns(snapshot?.messages);
@@ -276,6 +286,8 @@ export function CareerExpertPanel({
   const latestTurnIdempotencyKey = liveResult
     ? liveTurnIdempotencyKey
     : latestStoredTurn?.idempotencyKey;
+  const voiceActive = voiceState !== 'idle';
+  const voiceTextLocked = voiceActive && voiceState !== 'transcribed';
 
   return (
     <aside
@@ -448,7 +460,7 @@ export function CareerExpertPanel({
       {loadingSession ? <ExpertComposerSkeleton /> : null}
       {user && !loadingSession ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          {!content.trim() ? (
+          {!content.trim() && !voiceActive ? (
             <ExpertStarterChips
               onChoose={(prompt) => {
                 setContent(prompt);
@@ -459,24 +471,40 @@ export function CareerExpertPanel({
           <label className="career-sr-only" htmlFor="career-expert-input">
             Сообщение карьерному консультанту
           </label>
-          <div className="career-expert-input-row">
+          <div className={`career-expert-input-row${voiceActive ? ' is-voice-active' : ''}`}>
             <textarea
               ref={inputRef}
               id="career-expert-input"
               value={content}
-              onChange={(event) => setContent(event.target.value)}
+              onChange={(event) => {
+                setContent(event.target.value);
+                if (!event.target.value.trim()) setVoiceDraft(false);
+              }}
               placeholder="Сообщение консультанту"
               rows={1}
+              disabled={sending || voiceTextLocked}
             />
-            {content.trim() ? (
-              <button type="submit" disabled={sending} aria-label="Отправить вопрос">
+            {content.trim() && !voiceActive ? (
+              <button
+                type="submit"
+                disabled={sending}
+                aria-label={voiceDraft ? 'Отправить голосом' : 'Отправить вопрос'}
+              >
                 {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
               </button>
-            ) : (
-              <button type="button" className="career-expert-microphone" disabled aria-label="Голосовой ввод скоро" title="Голосовой ввод скоро">
-                <Microphone size={18} aria-hidden="true" />
-              </button>
-            )}
+            ) : null}
+            <VoiceInput
+              value={content}
+              disabled={sending}
+              onChange={setContent}
+              onStateChange={(nextState) => {
+                setVoiceState(nextState);
+                if (nextState !== 'idle' && !mobileExpanded) onToggleMobileExpanded?.();
+              }}
+              onVoiceDraftChange={setVoiceDraft}
+              onSubmitVoice={sendContent}
+              onTextMode={() => inputRef.current?.focus()}
+            />
           </div>
         </form>
       ) : null}
