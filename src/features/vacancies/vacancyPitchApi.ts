@@ -1,9 +1,12 @@
 import { apiFetch, readData } from '../coach/apiClient';
+import type { CandidateWorkplaceForLetter } from './vacancyLetterApi';
 
 export interface VacancyPitchPayload {
   readonly tone?: 'executive' | 'confident' | 'technical';
   /** Overrides the letter's auto-detected language. */
   readonly language?: 'en' | 'ru';
+  /** Candidate-selected work evidence omitted from the generated draft. */
+  readonly excludedEvidenceIds?: readonly string[];
   readonly recipient?: {
     readonly name?: string;
     readonly role?: string;
@@ -30,6 +33,7 @@ export interface VacancyPitchResult {
   readonly contactMessage?: string;
   readonly usedEvidenceIds: readonly string[];
   readonly usedFacts?: readonly { id: string; basis: 'confirmed' | 'imported' }[];
+  readonly candidateWorkplaces?: readonly CandidateWorkplaceForLetter[];
   readonly language?: 'en' | 'ru';
   /** UI hints such as "few facts" or "requirements unmatched" — never letter text. */
   readonly notices?: readonly string[];

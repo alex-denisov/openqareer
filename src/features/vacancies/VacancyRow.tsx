@@ -47,6 +47,7 @@ export interface VacancyRowProps {
     vacancy: VacancyApplicationSnapshot,
   ) => Promise<ApplicationView>;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenLetter?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
@@ -599,7 +600,9 @@ function buildActionButtonsProps(
       ? () => rowProps.onDiscussWithConsultant!(cluster)
       : undefined,
     onOpenInfo: () => rowState.setInfoOpen(true),
-    onOpenPitch: () => rowState.setPitchOpen(true),
+    onOpenPitch: rowProps.onOpenLetter
+      ? () => rowProps.onOpenLetter?.(cluster)
+      : () => rowState.setPitchOpen(true),
   };
 }
 

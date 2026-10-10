@@ -13,6 +13,7 @@ import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { PageHeader } from '../shell/PageHeader';
 import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
+import { VacancyLetterScreen } from './VacancyLetterScreen';
 import {
   countActiveFilters,
   VacanciesFilters,
@@ -230,6 +231,7 @@ export interface ListContentProps {
   readonly onMarkAlreadyApplied?: VacanciesScreenProps['onMarkAlreadyApplied'];
   readonly onScheduleInterview?: VacanciesScreenProps['onScheduleInterview'];
   readonly onOpenNetworking?: (cluster: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenLetter?: (cluster: MatchedVacancyItem['cluster']) => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: VacanciesScreenProps['onOpenProfile'];
@@ -392,6 +394,7 @@ function companyRowStates(
 function buildListProps(
   input: VacanciesScreenProps,
   screenState: ReturnType<typeof useVacanciesScreenState>,
+  onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void,
 ): ListContentProps {
   const { board, collections } = screenState;
   const savedClusterIds = new Set(
@@ -411,6 +414,7 @@ function buildListProps(
     onMarkAlreadyApplied: input.onMarkAlreadyApplied,
     onScheduleInterview: input.onScheduleInterview,
     onOpenNetworking: input.onOpenNetworking ?? screenState.setOutreachVacancy,
+    onOpenLetter,
     onOpenResponses: input.onOpenResponses,
     onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
@@ -419,7 +423,8 @@ function buildListProps(
           input.onOpenExpert?.(
             'vacancies',
             { kind: 'vacancy', id: cluster.id },
-            `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`,
+            'О вакансии: ' + cluster.canonicalTitle +
+              (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
           )
       : undefined,
     savedClusterIds,
@@ -477,6 +482,7 @@ function ResultCount({
 function mainBodyProps(
   input: VacanciesScreenProps,
   screenState: ReturnType<typeof useVacanciesScreenState>,
+  onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void,
 ) {
   const { board, viewMode, resetFilters } = screenState;
   return {
@@ -493,7 +499,7 @@ function mainBodyProps(
     selectedCity: board.state.selectedCity,
     onSelectCity: (city?: string) =>
       board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city })),
-    listProps: buildListProps(input, screenState),
+    listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }
 
@@ -536,9 +542,11 @@ function VacanciesFilterContent({
 function VacanciesScreenContent({
   input,
   screenState,
+  onOpenLetter,
 }: {
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+  readonly onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void;
 }) {
   const { board, activeCampaign } = screenState;
   const filteredTotal = screenFilteredCount(input, board.filtered.length, board.state);
@@ -558,7 +566,7 @@ function VacanciesScreenContent({
         }
         viewMode={screenState.viewMode}
       />
-      <VacanciesMainBody {...mainBodyProps(input, screenState)} />
+      <VacanciesMainBody {...mainBodyProps(input, screenState, onOpenLetter)} />
     </div>
   );
 }
@@ -592,13 +600,22 @@ function OpportunityContent({
   input,
   screenState,
   activeTab,
+  onOpenLetter,
 }: {
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
   readonly activeTab: OpportunityTab;
+  readonly onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void;
 }) {
-  if (activeTab === 'selection')
-    return <VacanciesScreenContent input={input} screenState={screenState} />;
+  if (activeTab === 'selection') {
+    return (
+      <VacanciesScreenContent
+        input={input}
+        screenState={screenState}
+        onOpenLetter={onOpenLetter}
+      />
+    );
+  }
   if (activeTab === 'saved') {
     return <SavedVacanciesPanel collections={screenState.collections} />;
   }
@@ -638,11 +655,13 @@ function VacanciesScreenFrame({
   screenState,
   activeTab,
   onSelectTab,
+  onOpenLetter,
 }: {
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
   readonly activeTab: OpportunityTab;
   readonly onSelectTab: (tab: OpportunityTab) => void;
+  readonly onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void;
 }) {
   return (
     <div className="vacancies-screen">
@@ -667,7 +686,12 @@ function VacanciesScreenFrame({
           {screenState.collections.actionError}
         </p>
       ) : null}
-      <OpportunityContent input={input} screenState={screenState} activeTab={activeTab} />
+      <OpportunityContent
+        input={input}
+        screenState={screenState}
+        activeTab={activeTab}
+        onOpenLetter={onOpenLetter}
+      />
       <VacancyOutreachDialog screenState={screenState} />
     </div>
   );
@@ -675,12 +699,28 @@ function VacanciesScreenFrame({
 
 export function VacanciesScreen(input: VacanciesScreenProps) {
   const screenState = useVacanciesScreenState(input);
+  const [letterVacancy, setLetterVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
+  if (letterVacancy) {
+    return (
+      <>
+        <VacancyLetterScreen
+          vacancy={letterVacancy}
+          onBack={() => setLetterVacancy(null)}
+          onOpenResponses={input.onOpenResponses}
+          onOpenNetworking={input.onOpenNetworking ?? screenState.setOutreachVacancy}
+          onOpenExpert={input.onOpenExpert}
+        />
+        <VacancyOutreachDialog screenState={screenState} />
+      </>
+    );
+  }
   return (
     <VacanciesScreenFrame
       input={input}
       screenState={screenState}
       activeTab={screenState.activeTab}
       onSelectTab={screenState.chooseTab}
+      onOpenLetter={setLetterVacancy}
     />
   );
 }

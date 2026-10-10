@@ -252,6 +252,23 @@ async function mockConnectionCircles(
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (await mockConnectionRoutes(route, url, connectionState)) return;
+    if (
+      route.request().method() === 'POST' &&
+      /\/api\/v1\/candidate\/vacancies\/[^/]+\/letter-approvals$/u.test(path)
+    ) {
+      return route.fulfill({
+        status: 200,
+        json: {
+          data: {
+            applicationId: 'application-b449-approved',
+            documentId: 'document-b449-letter',
+            approvedAt: '2026-10-10T12:00:00.000Z',
+            status: 'approved',
+            sent: false,
+          },
+        },
+      });
+    }
     if (path.endsWith('/auth/me')) {
       return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
     }

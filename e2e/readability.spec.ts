@@ -438,7 +438,7 @@ test.describe('B232 readability gate', () => {
    * «20 строк и Показать ещё» (B232) утверждённый макет vacancies.html
    * заменил сплошным списком, поэтому его проверка снята.
    */
-  test('the cover-letter modal opens from the vacancy card and keeps keyboard focus', async ({
+  test('the cover-letter screen opens from the vacancy card and preserves keyboard focus', async ({
     page,
   }, info) => {
     const unmatched = await mockSignedInCabinet(page);
@@ -446,10 +446,13 @@ test.describe('B232 readability gate', () => {
       await route.fulfill({
         json: {
           data: {
+            vacancyId: 'test-vacancy',
             emailPitch: { subject: 'Отклик', body: 'Текст отклика.' },
             linkedInNote: 'Здравствуйте! Рад знакомству.',
             atsCoverLetter: 'Cover letter',
             usedEvidenceIds: ['fact-1'],
+            language: 'ru',
+            generatedAt: '2026-10-10T12:00:00.000Z',
           },
         },
       });
@@ -464,16 +467,18 @@ test.describe('B232 readability gate', () => {
     const pitchAction = page
       .locator('.vacancies-detail-col')
       .getByRole('button', { name: 'Сопроводительное письмо', exact: true });
-    await pitchAction.click();
-    const dialog = page.getByRole('dialog', { name: /Отклик:/u });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('tab', { name: 'LinkedIn-заметка (300 знаков)' }).click();
-    await expect(dialog.getByText('Здравствуйте! Рад знакомству.')).toBeVisible();
-    await page.screenshot({ path: info.outputPath('b236-pitch-modal.png') });
-
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
+    await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
+    await page.keyboard.press('Enter');
+    const heading = page.getByRole('heading', { name: 'Письмо под вакансию', level: 1 });
+    await expect(heading).toBeVisible();
+    const back = page.getByRole('button', { name: 'Назад к вакансиям' });
+    await expect(back).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue('Текст отклика.');
+    await page.screenshot({ path: info.outputPath('b449-letter-screen.png') });
+
+    await back.click();
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
     expect(unmatched).toEqual([]);
   });
 

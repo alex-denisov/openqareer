@@ -58,6 +58,7 @@ function VacanciesListContent(props: ListContentProps) {
             onMarkAlreadyApplied={props.onMarkAlreadyApplied}
             onScheduleInterview={props.onScheduleInterview}
             onOpenNetworking={props.onOpenNetworking}
+            onOpenLetter={props.onOpenLetter}
             onOpenResponses={props.onOpenResponses}
             onOpenArchive={props.onOpenArchive}
             onAddToProfile={props.onAddToProfile}
