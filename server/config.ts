@@ -92,6 +92,7 @@ const configSchema = z.object({
     (value) => (value === '' ? undefined : value),
     z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
   ),
+  OPENQAREER_EXECUTIVE_REQUEST_CAPACITY: z.coerce.number().int().min(0).max(10_000).default(0),
   OPENQAREER_TEST_FIXED_CODE: blankAsUnset(z.string().regex(/^\d{6}$/u)),
   OPENQAREER_MX_CHECK_BYPASS_DOMAINS: z.preprocess(
     (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
@@ -201,6 +202,8 @@ export interface ServerConfig {
   };
   emailVerificationRequired?: boolean;
   emailVerificationFixedCode?: string;
+  /** B471: zero means new Executive requests are placed on the waitlist. */
+  executiveRequestCapacity?: number;
   emailMxCheckBypassDomains?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
 }
@@ -336,6 +339,7 @@ export function readServerConfig(
     logLevel: parsed.OPENQAREER_LOG_LEVEL,
     emailMxCheckBypassDomains: parsed.OPENQAREER_MX_CHECK_BYPASS_DOMAINS,
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
+    executiveRequestCapacity: parsed.OPENQAREER_EXECUTIVE_REQUEST_CAPACITY,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,
     allowedOrigins: secureCookies
