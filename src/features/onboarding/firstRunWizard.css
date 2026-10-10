@@ -453,3 +453,12 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   z-index: 999;
 }
+
+.first-run-mobile-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--career-surface-card, #ffffff);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+}

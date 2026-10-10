@@ -95,4 +95,13 @@ describe('FirstRunWizard component tests', () => {
     expect(toastHtml).toContain('Источник пропущен. Подключить можно в «Аккаунт → Подключения».');
     expect(toastHtml).toContain('Вернуть');
   });
+
+  it('renders FirstRunWizard on mobile with consultant modal when requested', () => {
+    const html = renderToStaticMarkup(
+      <FirstRunWizard initialStep="source" isMobile={true} />,
+    );
+    expect(html).toContain('Шаг 2 из 3');
+    expect(html).toContain('Файл резюме');
+    expect(html).toContain('Рассказать консультанту');
+  });
 });

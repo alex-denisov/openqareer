@@ -2,17 +2,17 @@ import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_FIRST_RUN_DATA,
   filterCities,
-  getConsultantReply,
   restoreSourceStep,
   selectCity,
   setGoal,
   setRelocationReady,
   setWorkFormat,
   skipSourceStep,
+  firstRunDataToWorkspaceInput,
 } from './firstRunStorage';
 
 describe('firstRunStorage logic and rules', () => {
-  it('filters cities by query case-insensitively and by country', () => {
+  it('filters cities by query case-insensitively, by country, and by region', () => {
     const piter = filterCities('петер');
     expect(piter).toHaveLength(1);
     expect(piter[0].name).toBe('Санкт-Петербург');
@@ -21,17 +21,23 @@ describe('firstRunStorage logic and rules', () => {
     expect(serbia).toHaveLength(1);
     expect(serbia[0].name).toBe('Белград');
 
-    const empty = filterCities('токио');
+    const tokyo = filterCities('токио');
+    expect(tokyo).toHaveLength(1);
+    expect(tokyo[0].region).toBe('apac');
+
+    const empty = filterCities('несуществующийгород999');
     expect(empty).toHaveLength(0);
   });
 
-  it('selectCity updates context city and country', () => {
+  it('selectCity updates context city, country, and region', () => {
     const updated = selectCity(DEFAULT_FIRST_RUN_DATA, {
       name: 'Ереван',
       country: 'Армения',
+      region: 'cis',
     });
     expect(updated.context.city).toBe('Ереван');
     expect(updated.context.country).toBe('Армения');
+    expect(updated.context.region).toBe('cis');
   });
 
   it('skipSourceStep marks source as skipped and clears selected source', () => {
@@ -58,10 +64,27 @@ describe('firstRunStorage logic and rules', () => {
     expect(withRelo.context.isRelocationReady).toBe(true);
   });
 
-  it('getConsultantReply responds accurately to starters', () => {
-    expect(getConsultantReply('С чего начать?')).toContain('Начнём с источника');
-    expect(getConsultantReply('Что вы читаете в LinkedIn?')).toContain('Читаем только выбранные разделы');
-    expect(getConsultantReply('Можно без LinkedIn?')).toContain('Да, можно');
-    expect(getConsultantReply('Что-то другое')).toContain('Расскажите подробнее');
+  it('firstRunDataToWorkspaceInput produces valid WorkspaceInput for shell and intake', () => {
+    const sampleResume = {
+      parsed: {
+        rawText: 'Резюме разработчика',
+        confidence: 1,
+        facts: [],
+      },
+      draft: {
+        basics: { fullName: 'Иван' },
+      },
+      text: 'Резюме разработчика',
+      source: 'pdf' as const,
+      file: { name: 'cv.pdf', pages: 2 },
+      imported: true,
+    };
+    const input = firstRunDataToWorkspaceInput(DEFAULT_FIRST_RUN_DATA, sampleResume);
+    expect(input.resumeText).toBe('Резюме разработчика');
+    expect(input.resumeFileName).toBe('cv.pdf');
+    expect(input.resumePageCount).toBe(2);
+    expect(input.regions).toEqual(['ru']);
+    expect(input.constraints).toContain('Москва');
+    expect(input.constraints).toContain('Гибрид');
   });
 });

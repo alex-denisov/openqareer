@@ -22,7 +22,9 @@ export {
   setRelocationReady,
   getConsultantReply,
   POPULAR_CITIES,
+  CITY_DIRECTORY,
   DEFAULT_FIRST_RUN_DATA,
+  firstRunDataToWorkspaceInput,
 } from './firstRunStorage';
 export type {
   FirstRunData,

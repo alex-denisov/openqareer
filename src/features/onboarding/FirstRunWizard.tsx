@@ -23,13 +23,17 @@ import {
 } from './FirstRunSteps';
 import { useFirstRunWizardState } from './useFirstRunWizardState';
 
+import type { IngestedResume, ResumeIngestionState } from '../journey/useResumeIngestion';
+
 export interface FirstRunWizardProps {
   readonly initialStep?: FirstRunStep;
   readonly specialState?: FirstRunSpecialState;
-  readonly onComplete?: (data: FirstRunData) => void;
+  readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
   readonly onRetry?: () => void;
   readonly onSignIn?: () => void;
   readonly isMobile?: boolean;
+  readonly hasAccount?: boolean;
+  readonly ingestion?: ResumeIngestionState;
 }
 
 function StepsBar({ step }: { readonly step: FirstRunStep }): ReactElement {
@@ -53,9 +57,11 @@ function StepsBar({ step }: { readonly step: FirstRunStep }): ReactElement {
 function WizardMainCards({
   state,
   onComplete,
+  ingestionResult,
 }: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
-  readonly onComplete?: (data: FirstRunData) => void;
+  readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
+  readonly ingestionResult?: IngestedResume;
 }): ReactElement {
   return (
     <>
@@ -72,6 +78,9 @@ function WizardMainCards({
       {state.step === 'source' ? (
         <FirstRunSourceCard
           data={state.data}
+          uploadedFileName={state.uploadedFile?.name}
+          isIngesting={state.isIngesting}
+          ingestionError={state.ingestionError}
           onSelectSource={state.handleSelectSource}
           onTriggerFileUpload={() => state.setIsSourceMenuOpen(true)}
           onTriggerConsultant={() => state.setIsMobileChatOpen(true)}
@@ -85,7 +94,7 @@ function WizardMainCards({
           onOpenCitySheet={() => state.setIsCitySheetOpen(true)}
           onFormatChange={state.handleFormatChange}
           onRelocationToggle={state.handleRelocationToggle}
-          onSubmit={() => onComplete?.(state.data)}
+          onSubmit={() => onComplete?.(state.data, ingestionResult)}
         />
       ) : null}
     </>
@@ -94,8 +103,10 @@ function WizardMainCards({
 
 function WizardDialogs({
   state,
+  ingestion,
 }: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
+  readonly ingestion?: ResumeIngestionState;
 }): ReactElement {
   return (
     <>
@@ -103,8 +114,7 @@ function WizardDialogs({
         isOpen={state.isSourceMenuOpen}
         onClose={() => state.setIsSourceMenuOpen(false)}
         onPickFile={(file) => {
-          state.handleSelectSource('file');
-          state.handleSendTurn(`Загружен файл: ${file.name}`, true);
+          void state.handleFileUpload(file, ingestion);
         }}
       />
       <FirstRunCitySheet
@@ -126,6 +136,48 @@ function WizardDialogs({
   );
 }
 
+function getSpecialStateView(
+  specialState: FirstRunSpecialState,
+  onRetry?: () => void,
+  onSignIn?: () => void,
+): ReactElement | null {
+  if (specialState === 'skeleton') return <FirstRunSkeleton />;
+  if (specialState === 'stale-loading') return <FirstRunStaleLoading />;
+  if (specialState === 'error') return <FirstRunErrorState onRetry={onRetry} />;
+  if (specialState === 'session-expired') return <FirstRunSessionExpired onSignIn={onSignIn} />;
+  return null;
+}
+
+function MobileChatModal({
+  isOpen,
+  turns,
+  onSendTurn,
+  onClose,
+}: {
+  readonly isOpen: boolean;
+  readonly turns: readonly FirstRunConsultantTurn[];
+  readonly onSendTurn: (t: string) => void;
+  readonly onClose: () => void;
+}): ReactElement | null {
+  if (!isOpen) return null;
+  return (
+    <div
+      className="first-run-mobile-modal"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Диалог с консультантом"
+      data-testid="first-run-mobile-chat"
+    >
+      <FirstRunConsultant
+        turns={turns}
+        onSendTurn={onSendTurn}
+        isMobileChat={true}
+        onBackFromMobileChat={onClose}
+      />
+    </div>
+  );
+}
+
 export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
   const {
     initialStep = 'source',
@@ -134,14 +186,11 @@ export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
     onRetry,
     onSignIn,
     isMobile = false,
+    ingestion,
   } = props;
-
   const state = useFirstRunWizardState(initialStep);
-
-  if (specialState === 'skeleton') return <FirstRunSkeleton />;
-  if (specialState === 'stale-loading') return <FirstRunStaleLoading />;
-  if (specialState === 'error') return <FirstRunErrorState onRetry={onRetry} />;
-  if (specialState === 'session-expired') return <FirstRunSessionExpired onSignIn={onSignIn} />;
+  const specialView = getSpecialStateView(specialState, onRetry, onSignIn);
+  if (specialView) return specialView;
 
   return (
     <div className="first-run-screen" data-testid="first-run-wizard">
@@ -153,13 +202,23 @@ export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
           {specialState === 'empty-sources' ? (
             <FirstRunEmptySources onConsultant={() => state.setIsMobileChatOpen(true)} />
           ) : null}
-          <WizardMainCards state={state} onComplete={onComplete} />
+          <WizardMainCards
+            state={state}
+            onComplete={onComplete}
+            ingestionResult={ingestion?.result}
+          />
         </main>
         {!isMobile ? (
           <FirstRunConsultant turns={state.turns} onSendTurn={state.handleSendTurn} />
         ) : null}
       </div>
-      <WizardDialogs state={state} />
+      <MobileChatModal
+        isOpen={isMobile && state.isMobileChatOpen}
+        turns={state.turns}
+        onSendTurn={state.handleSendTurn}
+        onClose={() => state.setIsMobileChatOpen(false)}
+      />
+      <WizardDialogs state={state} ingestion={ingestion} />
     </div>
   );
 }

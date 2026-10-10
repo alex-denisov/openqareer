@@ -1,4 +1,5 @@
 import {
+  CITY_DIRECTORY,
   DEFAULT_FIRST_RUN_DATA,
   POPULAR_CITIES,
   type FirstRunCity,
@@ -6,19 +7,22 @@ import {
   type SourceType,
   type WorkFormat,
 } from './firstRunTypes';
+import type { WorkspaceInput } from '../workspace/workspaceStorage';
+import type { IngestedResume } from '../journey/useResumeIngestion';
 
-export { DEFAULT_FIRST_RUN_DATA, POPULAR_CITIES, type FirstRunCity };
+export { CITY_DIRECTORY, DEFAULT_FIRST_RUN_DATA, POPULAR_CITIES, type FirstRunCity };
 
 export function filterCities(
   query: string,
-  cities: readonly FirstRunCity[] = POPULAR_CITIES,
+  cities: readonly FirstRunCity[] = CITY_DIRECTORY,
 ): FirstRunCity[] {
   const clean = query.trim().toLowerCase();
-  if (!clean) return [...cities];
+  if (!clean) return [...POPULAR_CITIES];
   return cities.filter(
     (c) =>
       c.name.toLowerCase().includes(clean) ||
-      c.country.toLowerCase().includes(clean),
+      c.country.toLowerCase().includes(clean) ||
+      (c.region && c.region.toLowerCase() === clean),
   );
 }
 
@@ -29,7 +33,35 @@ export function selectCity(data: FirstRunData, city: FirstRunCity): FirstRunData
       ...data.context,
       city: city.name,
       country: city.country,
+      region: city.region,
     },
+  };
+}
+
+export function firstRunDataToWorkspaceInput(
+  data: FirstRunData,
+  result?: IngestedResume,
+): WorkspaceInput {
+  const resumeSource =
+    data.selectedSource === 'file'
+      ? (result?.source ?? 'pdf')
+      : data.selectedSource === 'hh'
+      ? 'hh-pdf'
+      : data.selectedSource === 'linkedin'
+      ? 'linkedin-pdf'
+      : 'text';
+
+  return {
+    careerGoal: 'choose-role',
+    resumeText: result?.text ?? '',
+    resumeSource,
+    resumeFileName: result?.file?.name,
+    resumePageCount: result?.file?.pages,
+    targetDirection: '',
+    regions: data.context.region ? [data.context.region] : ['ru'],
+    currentSituation: data.goal,
+    constraints: [data.context.format, data.context.city].filter(Boolean).join(', '),
+    urgency: 'active',
   };
 }
 

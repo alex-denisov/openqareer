@@ -4,6 +4,7 @@ import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet'
 import { CaretUp, Sparkle } from '@phosphor-icons/react';
 import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
 import { OnboardingWizard } from '../journey/OnboardingWizard';
+import { FirstRunWizard, firstRunDataToWorkspaceInput } from '../onboarding';
 import {
   CareerMapView,
   OpportunitiesView,
@@ -350,7 +351,19 @@ export function CareerWorkspaceShell({
             </p>
           ) : null}
 
-          {intakeVisible ? (
+          {typeof window !== 'undefined' &&
+          (new URLSearchParams(window.location.search).get('wizard') === '0' ||
+            new URLSearchParams(window.location.search).get('mockup') === '0') ? (
+            <FirstRunWizard
+              onComplete={(data, res) => {
+                setActiveView('opportunities');
+                completeIntake(firstRunDataToWorkspaceInput(data, res));
+              }}
+              hasAccount={Boolean(session)}
+              onSignIn={openAccount}
+              isMobile={typeof window !== 'undefined' ? window.innerWidth < 640 : false}
+            />
+          ) : intakeVisible ? (
             <OnboardingWizard
               key={`intake-${intakeSeed}`}
               onComplete={(input) => {
@@ -362,7 +375,14 @@ export function CareerWorkspaceShell({
               onSignIn={openAccount}
             />
           ) : null}
-          {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
+          {cabinetSession &&
+          !intakeVisible &&
+          !(
+            typeof window !== 'undefined' &&
+            (new URLSearchParams(window.location.search).get('wizard') === '0' ||
+              new URLSearchParams(window.location.search).get('mockup') === '0')
+          ) &&
+          activeView !== 'tariffs' ? (
             <CareerCabinet
               key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
               view={activeView as CareerCabinetView}

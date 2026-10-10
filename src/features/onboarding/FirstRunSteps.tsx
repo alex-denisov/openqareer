@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { CSSProperties, ReactElement } from 'react';
 import {
   Briefcase,
   ChatCircleText,
@@ -222,8 +222,52 @@ function SourceCardActions({
   );
 }
 
+interface FirstRunUploadStatusProps {
+  readonly uploadedFileName?: string;
+  readonly isIngesting?: boolean;
+  readonly ingestionError?: string | null;
+}
+
+const UPLOAD_BADGE_STYLE: CSSProperties = {
+  marginTop: '12px',
+  padding: '8px 12px',
+  background: 'var(--career-color-primary-surface, #f0f9ff)',
+  borderRadius: '8px',
+  fontSize: 'var(--career-text-sm, 13px)',
+};
+
+function FirstRunUploadStatus({
+  uploadedFileName,
+  isIngesting,
+  ingestionError,
+}: FirstRunUploadStatusProps): ReactElement | null {
+  if (!uploadedFileName && !isIngesting && !ingestionError) return null;
+  return (
+    <>
+      {uploadedFileName ? (
+        <div className="first-run-uploaded-file-badge" data-testid="uploaded-file-info" style={UPLOAD_BADGE_STYLE}>
+          <span>Файл резюме: <b>{uploadedFileName}</b></span>
+        </div>
+      ) : null}
+      {isIngesting ? (
+        <p style={{ marginTop: '8px', fontSize: 'var(--career-text-sm, 13px)', color: 'var(--career-color-primary, #0284c7)' }}>
+          Обрабатываем файл резюме...
+        </p>
+      ) : null}
+      {ingestionError ? (
+        <p style={{ marginTop: '8px', fontSize: 'var(--career-text-sm, 13px)', color: 'var(--career-color-error, #ef4444)' }}>
+          {ingestionError}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 export function FirstRunSourceCard({
   data,
+  uploadedFileName,
+  isIngesting,
+  ingestionError,
   onSelectSource,
   onTriggerFileUpload,
   onTriggerConsultant,
@@ -231,6 +275,9 @@ export function FirstRunSourceCard({
   onSkip,
 }: {
   readonly data: FirstRunData;
+  readonly uploadedFileName?: string;
+  readonly isIngesting?: boolean;
+  readonly ingestionError?: string | null;
   readonly onSelectSource: (s: SourceType) => void;
   readonly onTriggerFileUpload: () => void;
   readonly onTriggerConsultant: () => void;
@@ -252,6 +299,11 @@ export function FirstRunSourceCard({
         onSelectSource={onSelectSource}
         onTriggerFileUpload={onTriggerFileUpload}
         onTriggerConsultant={onTriggerConsultant}
+      />
+      <FirstRunUploadStatus
+        uploadedFileName={uploadedFileName}
+        isIngesting={isIngesting}
+        ingestionError={ingestionError}
       />
       <SourceCardActions
         source={data.selectedSource}
