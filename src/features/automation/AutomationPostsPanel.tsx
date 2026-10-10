@@ -13,7 +13,7 @@ export function AutomationPostsPanel({ onOpenConnections, onOpenTariffs }: Autom
       <div className="automation-posts-actions">
         <button className="career-btn career-btn-secondary" type="button" onClick={onOpenConnections}>Проверить подключение LinkedIn</button>
       </div>
-      <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
+      <LinkedinDraftCard onOpenTariffs={onOpenTariffs} variant="pipeline" />
     </section>
   );
 }

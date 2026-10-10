@@ -564,7 +564,8 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
   });
 
-  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }) => {
+  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'resize desktop context to cover both layouts');
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });

@@ -40,6 +40,19 @@ interface AutomationJournalFixtureEntry {
   failureCode: string | null;
 }
 
+interface LinkedinDraftFixtureState {
+  readonly candidateId: string;
+  drafts: Array<Record<string, unknown>>;
+  topics: Array<Record<string, unknown>>;
+  cadence: {
+    timezone: string;
+    lastPublishedAt: string | null;
+    nextAllowedAt: string | null;
+    canPublish: boolean;
+  };
+  nextDraftId: number;
+}
+
 export interface AutomationQueueFixtureItem {
   id: string;
   status: string;
@@ -73,6 +86,9 @@ export interface MockSignedInCabinetOptions {
     readonly settings?: Partial<AutomationFixtureState['settings']>;
     readonly runtime?: Partial<AutomationFixtureState['runtime']>;
   };
+  readonly linkedinDrafts?: readonly Record<string, unknown>[];
+  readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
+  readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
 }
 
 const AUTOMATION_CONSENT_TEXT: Readonly<Record<string, string>> = {
@@ -631,6 +647,110 @@ async function mockAutomationApi(
   );
 }
 
+function createLinkedinDraftFixtureState(
+  options: MockSignedInCabinetOptions,
+): LinkedinDraftFixtureState {
+  return {
+    candidateId: options.candidateId ?? 'readability-candidate',
+    drafts: [...(options.linkedinDrafts ?? [])],
+    topics: [...(options.linkedinDraftTopics ?? [])],
+    cadence: {
+      timezone: 'Europe/Moscow',
+      lastPublishedAt: null,
+      nextAllowedAt: null,
+      canPublish: true,
+      ...options.linkedinDraftCadence,
+    },
+    nextDraftId: 1,
+  };
+}
+
+async function mockLinkedinDraftApi(
+  route: Route,
+  path: string,
+  url: URL,
+  state: LinkedinDraftFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/drafts/topics') && method === 'GET') {
+    const limit = Number(url.searchParams.get('limit') ?? 3);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    return route
+      .fulfill({
+        json: {
+          data: {
+            items: state.topics.slice(offset, offset + limit),
+            total: state.topics.length,
+            cadence: state.cadence,
+          },
+        },
+      })
+      .then(() => true);
+  }
+  const dismissMatch = path.match(/\/candidate\/drafts\/topics\/([^/]+)\/dismiss$/u);
+  if (dismissMatch && method === 'POST') {
+    const id = decodeURIComponent(dismissMatch[1]);
+    state.topics = state.topics.filter((topic) => topic.id !== id);
+    await route.fulfill({ json: { data: { id, decision: 'dismissed' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/drafts') && method === 'GET') {
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    await route.fulfill({ json: { data: state.drafts.slice(0, limit) } });
+    return true;
+  }
+  if (path.endsWith('/candidate/drafts') && method === 'POST') {
+    const input = route.request().postDataJSON() as Record<string, unknown>;
+    const draft = {
+      id: `draft-fixture-${state.nextDraftId++}`,
+      candidateId: state.candidateId,
+      kind: input.kind,
+      topic: input.topic,
+      text: `Черновик по теме «${String(input.topic)}».`,
+      status: 'draft',
+      localDate: '2026-10-10',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    state.drafts = [draft, ...state.drafts];
+    if (typeof input.topicId === 'string')
+      state.topics = state.topics.filter((topic) => topic.id !== input.topicId);
+    await route.fulfill({ json: { data: draft } });
+    return true;
+  }
+  const draftMatch = path.match(/\/candidate\/drafts\/([^/]+)$/u);
+  if (draftMatch && method === 'PATCH') {
+    const id = decodeURIComponent(draftMatch[1]);
+    const index = state.drafts.findIndex((draft) => draft.id === id);
+    if (index < 0) {
+      await route.fulfill({
+        status: 404,
+        json: { error: { code: 'draft_not_found', message: 'Черновик не найден.' } },
+      });
+      return true;
+    }
+    const update = route.request().postDataJSON() as Record<string, unknown>;
+    const existing = state.drafts[index];
+    const changed = { ...existing, ...update, updatedAt: new Date().toISOString() };
+    if (update.text) changed.status = 'draft';
+    if (update.status === 'published') {
+      changed.publishedAt = changed.updatedAt;
+      state.cadence = {
+        ...state.cadence,
+        lastPublishedAt: String(changed.publishedAt),
+        nextAllowedAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+        canPublish: false,
+      };
+    }
+    state.drafts = state.drafts.map((draft, draftIndex) =>
+      draftIndex === index ? changed : draft,
+    );
+    await route.fulfill({ json: { data: changed } });
+    return true;
+  }
+  return false;
+}
+
 export async function mockSignedInCabinet(
   page: Page,
   options: MockSignedInCabinetOptions = {},
@@ -640,6 +760,7 @@ export async function mockSignedInCabinet(
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
   const automation = createAutomationFixtureState(options);
+  const linkedinDrafts = createLinkedinDraftFixtureState(options);
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -667,9 +788,10 @@ export async function mockSignedInCabinet(
       };
       return route.fulfill({ json: { data: snapshotWithMomentum } });
     }
+    if (await mockLinkedinDraftApi(route, path, url, linkedinDrafts)) return;
     // The readability fixture has no tracked applications yet; an empty
     // list is the honest state, not an unknown route.
-    if (path.endsWith('/candidate/applications') || path.endsWith('/candidate/drafts')) {
+    if (path.endsWith('/candidate/applications')) {
       return route.fulfill({ json: { data: [] } });
     }
     if (await mockAutomationApi(route, path, url, automation)) return;
