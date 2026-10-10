@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCandidateCompanyRows,
+  buildConnectionCircles,
   candidateCompanyKey,
   filterCandidateCompanyRows,
   sortCandidateCompanyRows,
@@ -122,3 +123,120 @@ describe('B439 candidate company projection', () => {
     expect(filterCandidateCompanyRows(rows, 'recruiter').map((row) => row.name)).toEqual(['Бета']);
   });
 });
+
+describe('B448 connection circles', () => {
+  it('ranks direct workplaces and mutual-contact paths with evidence, not estimates', () => {
+    const result = buildConnectionCircles(
+      connectionInput({
+        candidateWorkplaces: [
+          { companyName: 'Финтех Лаб', startDate: '2018-01', endDate: '2021-06' },
+        ],
+        recruiters: [
+          {
+            id: 'recruiter-1',
+            fullName: 'Сергей Б.',
+            roleTitle: 'Руководитель платежей',
+            companyName: 'Вектор Банк',
+            linkedinUrl: 'https://www.linkedin.com/in/sergey-b',
+            workplaces: [{ companyName: 'Финтех Лаб', startDate: '2019-01', endDate: '2021-12' }],
+          },
+        ],
+        contacts: [
+          {
+            id: 'contact-1',
+            fullName: 'Анна Т.',
+            roleTitle: 'Продакт-менеджер',
+            companyName: 'Финтех Лаб',
+            linkedinUrl: 'https://www.linkedin.com/in/anna-t',
+            source: 'linkedin_import',
+            relationship: 'Работали вместе',
+            strength: 'strong',
+            workplaces: [],
+            knowsRecruiterIds: ['recruiter-1'],
+          },
+        ],
+        linkedinContactsImported: true,
+      }),
+    );
+
+    const direct = result.circles.find((circle) => circle.circle === 1)!;
+    const mutual = result.circles.find((circle) => circle.circle === 2)!;
+    const cold = result.circles.find((circle) => circle.circle === 3)!;
+    expect(direct.paths[0]).toMatchObject({
+      strength: 'strong',
+      nextStep: 'write_known_contact',
+      evidence: [expect.stringContaining('Финтех Лаб')],
+    });
+    expect(mutual.paths[0]).toMatchObject({
+      strength: 'strong',
+      nextStep: 'ask_for_introduction',
+      path: [{ fullName: 'Андрей Лебедев' }, { fullName: 'Анна Т.' }, { fullName: 'Сергей Б.' }],
+    });
+    expect(cold.paths[0].nextStep).toBe('cold_application');
+    expect(JSON.stringify(result)).not.toMatch(/probability|вероятност|процент/iu);
+  });
+
+  it('distinguishes unknown from an imported empty contact list', () => {
+    const unknown = buildConnectionCircles(connectionInput({ linkedinContactsImported: false }));
+    const emptyImport = buildConnectionCircles(connectionInput({ linkedinContactsImported: true }));
+
+    expect(unknown.circles.find((circle) => circle.circle === 1)?.state).toBe('unknown');
+    expect(unknown.circles.find((circle) => circle.circle === 2)?.state).toBe('unknown');
+    expect(emptyImport.circles.find((circle) => circle.circle === 1)?.state).toBe('none');
+    expect(emptyImport.circles.find((circle) => circle.circle === 2)?.state).toBe('none');
+    expect(emptyImport.circles.find((circle) => circle.circle === 3)?.state).toBe('available');
+    expect(emptyImport.circles.find((circle) => circle.circle === 3)?.paths[0]).toMatchObject({
+      nextStep: 'cold_application',
+      recipient: { id: 'vacancy:vacancy-1', fullName: 'Вектор Банк' },
+    });
+  });
+
+  it('retains a weak path as weak and uses the prepare-only next step', () => {
+    const result = buildConnectionCircles(
+      connectionInput({
+        recruiters: [
+          {
+            id: 'recruiter-2',
+            fullName: 'Елена М.',
+            roleTitle: 'HR-партнёр',
+            companyName: 'Вектор Банк',
+          },
+        ],
+        contacts: [
+          {
+            id: 'contact-weak',
+            fullName: 'Павел Р.',
+            roleTitle: 'Инженер',
+            companyName: 'Другая компания',
+            linkedinUrl: null,
+            source: 'manual',
+            relationship: 'Связь слабая: последний контакт в 2023',
+            strength: 'weak',
+            workplaces: [],
+            knowsRecruiterIds: ['recruiter-2'],
+          },
+        ],
+      }),
+    );
+    const mutual = result.circles.find((circle) => circle.circle === 2)!;
+
+    expect(mutual.state).toBe('available');
+    expect(mutual.paths[0]).toMatchObject({
+      strength: 'weak',
+      nextStep: 'ask_for_introduction',
+    });
+    expect(mutual.paths[0].evidence.join(' ')).toContain('слабая');
+  });
+});
+
+function connectionInput(overrides: Record<string, unknown> = {}) {
+  return {
+    candidate: { id: 'candidate-1', fullName: 'Андрей Лебедев' },
+    vacancy: { id: 'vacancy-1', companyName: 'Вектор Банк', title: 'Head of Platform' },
+    candidateWorkplaces: [],
+    recruiters: [],
+    contacts: [],
+    linkedinContactsImported: false,
+    ...overrides,
+  };
+}

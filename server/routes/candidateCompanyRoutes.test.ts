@@ -109,6 +109,100 @@ async function setup(items: readonly MatchedVacancyItem[] = []) {
   };
 }
 
+type CandidateCompanyTestSetup = Awaited<ReturnType<typeof setup>>;
+type ManualConnectionInput = {
+  fullName: string;
+  companyName: string;
+  roleTitle: string;
+  relationship: string;
+  strength: 'strong' | 'weak' | 'unknown';
+  workplaces: Array<{ companyName: string; startDate: string; endDate: string }>;
+  knowsRecruiterIds: string[];
+};
+
+function manualConnectionInput(
+  overrides: Partial<ManualConnectionInput> = {},
+): ManualConnectionInput {
+  return {
+    fullName: 'Анна Седова',
+    companyName: 'Финтех Лаб',
+    roleTitle: 'Продакт-менеджер',
+    relationship: 'Работали вместе до 2021 года',
+    strength: 'strong',
+    workplaces: [{ companyName: 'Финтех Лаб', startDate: '2018', endDate: '2021' }],
+    knowsRecruiterIds: [],
+    ...overrides,
+  };
+}
+
+async function saveManualConnection(
+  app: CandidateCompanyTestSetup['app'],
+  authorization: string,
+  contactId: string,
+  payload: ManualConnectionInput,
+) {
+  return app.inject({
+    method: 'PUT',
+    url: `/api/v1/candidate/connection-contacts/${contactId}`,
+    headers: { authorization, origin: 'http://localhost:3000' },
+    payload,
+  });
+}
+
+async function importConnectionContacts(
+  app: CandidateCompanyTestSetup['app'],
+  authorization: string,
+  contacts: readonly Record<string, unknown>[],
+) {
+  return app.inject({
+    method: 'PUT',
+    url: '/api/v1/candidate/connection-contacts/linkedin-import',
+    headers: { authorization, origin: 'http://localhost:3000' },
+    payload: { contacts },
+  });
+}
+
+async function listConnectionContacts(
+  app: CandidateCompanyTestSetup['app'],
+  authorization: string,
+) {
+  return app.inject({ url: '/api/v1/candidate/connection-contacts', headers: { authorization } });
+}
+
+function seedTargetRecruiter(
+  contacts: SqliteRecruiterContactsRepository,
+  candidateId: string,
+): void {
+  contacts.saveContacts(candidateId, 'cluster-v1', [
+    {
+      id: 'target-recruiter',
+      vacancyId: 'cluster-v1',
+      companyName: 'Вектор Банк',
+      fullName: 'Сергей Б.',
+      roleTitle: 'Руководитель платежей',
+      email: null,
+      emailStatus: 'unverified',
+      phone: null,
+      telegram: null,
+      whatsapp: null,
+      linkedinUrl: 'https://www.linkedin.com/in/sergey-b',
+      githubUrl: null,
+      twitterUrl: null,
+      sourceType: 'linkedin_pool',
+      confidence: 0.5,
+      sourceReceipt: {
+        receiptId: 'receipt-target',
+        source: 'linkedin_pool',
+        method: 'pool_session',
+        observedAt: '2026-10-08T12:00:00.000Z',
+        confidence: 0.5,
+      },
+      createdAt: '2026-10-08T12:00:00.000Z',
+      updatedAt: '2026-10-08T12:00:00.000Z',
+    },
+  ]);
+}
+
 describe('candidate company routes (B439)', () => {
   it('lists matched companies and retains a wanted company with no vacancies', async () => {
     const { app, authorization, candidate, wants } = await setup([
@@ -251,5 +345,186 @@ describe('candidate company routes (B439)', () => {
       sourceDate: '2026-10-08T12:00:00.000Z',
       isHypothesis: true,
     } satisfies Partial<CandidateCompanyRecruiter>);
+  });
+});
+
+describe('B448 candidate connection circles', () => {
+  it('keeps missing connections unknown and makes an imported empty list distinct', async () => {
+    const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
+    const path = '/api/v1/candidate/vacancies/cluster-v1/connection-circles';
+    const unknown = await app.inject({ url: path, headers: { authorization } });
+    expect(unknown.statusCode).toBe(200);
+    expect(unknown.json().data.circles).toMatchObject([
+      { circle: 1, state: 'unknown' },
+      { circle: 2, state: 'unknown' },
+      { circle: 3, state: 'available' },
+    ]);
+    expect((await importConnectionContacts(app, authorization, [])).statusCode).toBe(200);
+    const knownEmpty = await app.inject({ url: path, headers: { authorization } });
+    expect(knownEmpty.json().data.circles).toMatchObject([
+      { circle: 1, state: 'none' },
+      { circle: 2, state: 'none' },
+      { circle: 3, state: 'available' },
+    ]);
+  });
+
+  it('creates, edits, pages and deletes a manual contact', async () => {
+    const { app, authorization } = await setup([]);
+    const created = await saveManualConnection(
+      app,
+      authorization,
+      'manual-1',
+      manualConnectionInput(),
+    );
+    expect(created.statusCode).toBe(201);
+    expect(created.json().data).toMatchObject({ id: 'manual-1', source: 'manual' });
+    const page = await listConnectionContacts(app, authorization);
+    expect(page.json().data).toMatchObject({ total: 1, limit: 50, offset: 0 });
+    expect(page.json().data.items[0].fullName).toBe('Анна Седова');
+    const edited = await saveManualConnection(
+      app,
+      authorization,
+      'manual-1',
+      manualConnectionInput({ relationship: 'Общая профессиональная группа' }),
+    );
+    expect(edited.json().data.relationship).toBe('Общая профессиональная группа');
+    const url = '/api/v1/candidate/connection-contacts/manual-1';
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      expect(
+        (
+          await app.inject({
+            method: 'DELETE',
+            url,
+            headers: { authorization, origin: 'http://localhost:3000' },
+          })
+        ).statusCode,
+      ).toBe(204);
+    }
+    expect((await listConnectionContacts(app, authorization)).json().data.total).toBe(0);
+  });
+
+  it('scopes equal manual contact IDs to their candidate', async () => {
+    const { app, authorization, candidate, candidateStore, contacts } = await setup([]);
+    const first = await saveManualConnection(
+      app,
+      authorization,
+      'manual-shared',
+      manualConnectionInput(),
+    );
+    const credentials = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const secondCandidate = candidateStore.authenticate(credentials.accessToken)!;
+    const second = await saveManualConnection(
+      app,
+      `Bearer ${credentials.accessToken}`,
+      'manual-shared',
+      manualConnectionInput({ fullName: 'Игорь Н.' }),
+    );
+    expect([first.statusCode, second.statusCode]).toEqual([201, 201]);
+    expect(contacts.listContactsByCandidateId(candidate.id)).toHaveLength(1);
+    expect(contacts.listContactsByCandidateId(secondCandidate.id)).toHaveLength(1);
+  });
+
+  it('deletes candidate-owned connections with the account', async () => {
+    const { app, authorization, candidate, contacts } = await setup([]);
+    await saveManualConnection(app, authorization, 'manual-delete', manualConnectionInput());
+    expect(
+      (
+        await importConnectionContacts(app, authorization, [
+          {
+            externalId: 'linkedin-1',
+            fullName: 'Игорь Н.',
+            companyName: 'Другая компания',
+          },
+        ])
+      ).statusCode,
+    ).toBe(200);
+    const deleted = await app.inject({
+      method: 'DELETE',
+      url: '/api/v1/candidate/me',
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+    expect(deleted.statusCode).toBe(204);
+    expect(contacts.listContactsByCandidateId(candidate.id)).toEqual([]);
+  });
+
+  it('keeps manual entries and handles identical imports idempotently', async () => {
+    const { app, authorization } = await setup([]);
+    await saveManualConnection(app, authorization, 'manual-kept', manualConnectionInput());
+    const payload = [
+      {
+        externalId: 'linkedin-contact-1',
+        fullName: 'Игорь Н.',
+        companyName: 'Другая компания',
+        roleTitle: 'Продакт-менеджер',
+        relationship: 'Вы переписывались 14.08',
+        strength: 'strong',
+        workplaces: [],
+        knowsRecruiterIds: [],
+      },
+    ];
+    const imported = await importConnectionContacts(app, authorization, payload);
+    const repeated = await importConnectionContacts(app, authorization, payload);
+    expect(imported.statusCode).toBe(200);
+    expect(repeated.json().data.importedAt).toBe(imported.json().data.importedAt);
+    const contacts = await listConnectionContacts(app, authorization);
+    expect(contacts.json().data.total).toBe(2);
+    expect(contacts.json().data.items.map((item: { id: string }) => item.id)).toContain(
+      'manual-kept',
+    );
+  });
+
+  it('keeps imported contacts read-only and prevents false deletion success', async () => {
+    const { app, authorization } = await setup([]);
+    await importConnectionContacts(app, authorization, [
+      {
+        externalId: 'linkedin-readonly',
+        fullName: 'Игорь Н.',
+        companyName: 'Другая компания',
+      },
+    ]);
+    const contacts = await listConnectionContacts(app, authorization);
+    const id = contacts.json().data.items[0].id;
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    const url = `/api/v1/candidate/connection-contacts/${id}`;
+    expect(
+      (await app.inject({ method: 'PUT', url, headers, payload: manualConnectionInput() }))
+        .statusCode,
+    ).toBe(409);
+    expect((await app.inject({ method: 'DELETE', url, headers })).statusCode).toBe(409);
+    expect((await listConnectionContacts(app, authorization)).json().data.total).toBe(1);
+  });
+
+  it('returns a second-degree path without exposing recruiter source details', async () => {
+    const { app, authorization, candidate, contacts } = await setup([
+      matchedVacancy('cluster-v1', 'Вектор Банк'),
+    ]);
+    seedTargetRecruiter(contacts, candidate.id);
+    await importConnectionContacts(app, authorization, [
+      {
+        externalId: 'linkedin-connector',
+        fullName: 'Игорь Н.',
+        companyName: 'Другая компания',
+        roleTitle: 'Продакт-менеджер',
+        relationship: 'Вы переписывались 14.08',
+        strength: 'strong',
+        workplaces: [],
+        knowsRecruiterIds: ['target-recruiter'],
+      },
+    ]);
+    const response = await app.inject({
+      url: '/api/v1/candidate/vacancies/cluster-v1/connection-circles',
+      headers: { authorization },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.circles[1].paths[0]).toMatchObject({
+      circle: 2,
+      strength: 'strong',
+      nextStep: 'ask_for_introduction',
+      recipient: { id: 'target-recruiter', fullName: 'Сергей Б.' },
+      path: [{ fullName: 'Кандидат' }, { fullName: 'Игорь Н.' }, { fullName: 'Сергей Б.' }],
+    });
+    expect(JSON.stringify(response.json())).not.toMatch(
+      /linkedin_pool|pool_session|probability|вероятност|процент/iu,
+    );
   });
 });
