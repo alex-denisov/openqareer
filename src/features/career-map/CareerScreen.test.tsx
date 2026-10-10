@@ -1,10 +1,16 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CareerScreen } from './CareerScreen';
+import { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
 
 describe('CareerScreen Component (B445 Criterion 1, 4)', () => {
   it('renders roles with honest wage calculation and status badges', () => {
-    const html = renderToStaticMarkup(<CareerScreen />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Карьера');
     expect(html).toContain('Director of Engineering');
     expect(html).toContain('600–780 тыс. ₽ · 88 вакансий · 05.10');
@@ -20,14 +26,24 @@ describe('CareerScreen Component (B445 Criterion 1, 4)', () => {
   });
 
   it('renders role action buttons to open vacancies and consultant', () => {
-    const html = renderToStaticMarkup(<CareerScreen />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Дозаполнить с консультантом');
     expect(html).toContain('Открыть вакансии роли');
     expect(html).toContain('Отклонить роль');
   });
 
   it('renders search conditions with geography, salary, format, stop-list', () => {
-    const html = renderToStaticMarkup(<CareerScreen />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Условия поиска');
     expect(html).toContain('Москва, Удалённо из РФ');
     expect(html).toContain('450 000 ₽');
@@ -37,7 +53,12 @@ describe('CareerScreen Component (B445 Criterion 1, 4)', () => {
   });
 
   it('renders relocation block with unincluded status and enable action', () => {
-    const html = renderToStaticMarkup(<CareerScreen />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Страны и релокация');
     expect(html).toContain('Не включено');
     expect(html).toContain('Включить релокацию');
@@ -50,32 +71,64 @@ describe('CareerScreen Component (B445 Criterion 1, 4)', () => {
   });
 
   it('renders empty profile state when hasProfile is false', () => {
-    const html = renderToStaticMarkup(<CareerScreen hasProfile={false} />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        hasProfile={false}
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Гипотез нет: профиль пуст');
     expect(html).toContain('Открыть профиль');
     expect(html).toContain('Обсудить цель');
   });
 
   it('renders market error banner when marketError is provided', () => {
-    const html = renderToStaticMarkup(<CareerScreen marketError="Catalog failed" />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        marketError="Catalog failed"
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('Позиция на рынке не загрузилась');
     expect(html).toContain('Повторить');
   });
 
   it('renders stale market note when isMarketStale is true', () => {
-    const html = renderToStaticMarkup(<CareerScreen isMarketStale={true} />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        isMarketStale={true}
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('прошло больше 14 дней');
   });
 
   it('renders mobile 390 push view for role detail', () => {
-    const html = renderToStaticMarkup(<CareerScreen isMobile={true} initialPushView="dir" />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        isMobile={true}
+        initialPushView="dir"
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('data-mv="dir"');
     expect(html).toContain('Director of Engineering');
     expect(html).toContain('Назад');
   });
 
   it('renders mobile 390 push view for salary edit', () => {
-    const html = renderToStaticMarkup(<CareerScreen isMobile={true} initialPushView="sal" />);
+    const html = renderToStaticMarkup(
+      <CareerScreen
+        isMobile={true}
+        initialPushView="sal"
+        initialRoles={DEFAULT_MOCK_ROLES}
+        initialConditions={DEFAULT_SEARCH_CONDITIONS}
+      />,
+    );
     expect(html).toContain('data-mv="sal"');
     expect(html).toContain('Зарплата от');
     expect(html).toContain('Сохранить');

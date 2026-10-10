@@ -1,5 +1,7 @@
 import type { SearchConditionsDraft, StopCompany } from './careerScreenTypes';
 import { DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
+import type { CandidateDecisionProfile, DecisionWorkFormatId } from '../../../shared/workPreferences';
+
 
 export function recalculateMatchingStats(conditions: SearchConditionsDraft): {
   matched: number;
@@ -74,6 +76,71 @@ export function applyConditionsEdit(
     matchingStats: recalculateMatchingStats(updated),
   };
 }
+
+export function decisionProfileToSearchConditions(
+  profile: CandidateDecisionProfile,
+  stopList: readonly StopCompany[] = DEFAULT_SEARCH_CONDITIONS.stopList,
+): SearchConditionsDraft {
+  const formats = profile.workFormats ?? [];
+  const selectedGeo =
+    profile.citizenship && profile.citizenship.length > 0
+      ? profile.citizenship
+      : ['Москва', 'Удалённо из РФ'];
+
+  const draft: SearchConditionsDraft = {
+    geography: {
+      selected: selectedGeo,
+      isRelocationEnabled: formats.includes('relocation'),
+    },
+    salaryFrom: {
+      amountRubles: profile.salaryFloor ?? 450000,
+      showWithoutSalary: true,
+    },
+    format: {
+      office: formats.includes('office'),
+      hybrid: formats.includes('home_market') || formats.length === 0,
+      remote:
+        formats.includes('remote_home') ||
+        formats.includes('remote_abroad') ||
+        formats.length === 0,
+    },
+    stopList,
+    matchingStats: {
+      matched: 148,
+      total: 214,
+      asOf: '07.10 09:12',
+    },
+  };
+
+  return {
+    ...draft,
+    matchingStats: recalculateMatchingStats(draft),
+  };
+}
+
+export function searchConditionsToDecisionProfile(
+  conditions: SearchConditionsDraft,
+  existing?: Partial<CandidateDecisionProfile>,
+): CandidateDecisionProfile {
+  const formats: DecisionWorkFormatId[] = [];
+  if (conditions.format.remote) formats.push('remote_home');
+  if (conditions.format.hybrid) formats.push('home_market');
+  if (conditions.format.office) formats.push('office');
+  if (conditions.geography.isRelocationEnabled) formats.push('relocation');
+
+  return {
+    citizenship: conditions.geography.selected,
+    taxStatus: existing?.taxStatus ?? '',
+    languages: existing?.languages ?? [],
+    workFormats: formats,
+    salaryFloor: conditions.salaryFrom.amountRubles,
+    salaryCurrency: existing?.salaryCurrency ?? 'RUB',
+    cushionMonths: existing?.cushionMonths,
+    hasFamily: existing?.hasFamily ?? false,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 
 export class CareerConditionsStorage {
   private committed: SearchConditionsDraft = DEFAULT_SEARCH_CONDITIONS;

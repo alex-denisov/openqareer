@@ -5,7 +5,6 @@ import { CaretUp, Sparkle } from '@phosphor-icons/react';
 import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
 import { OnboardingWizard } from '../journey/OnboardingWizard';
 import {
-  CareerMapView,
   OpportunitiesView,
   ProfileJourneyView,
   TodayJourneyView,
@@ -13,6 +12,7 @@ import {
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { TariffsScreen } from './TariffsScreen';
+import { CareerScreen } from '../career-map/CareerScreen';
 import { CURRENT_PLAN } from './tariffPackages';
 import { createIntakeCompletion } from './intakeCompletion';
 import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
@@ -86,7 +86,13 @@ export function CareerWorkspaceShell({
   onSessionChange = () => undefined,
   initialView = 'today',
 }: CareerWorkspaceShellProps) {
-  const [activeView, setActiveView] = useState<ShellView>(initialView);
+  const [activeView, setActiveView] = useState<ShellView>(() => {
+    if (typeof window !== 'undefined') {
+      const searchParam = new URLSearchParams(window.location.search).get('view');
+      if (searchParam === 'career') return 'career';
+    }
+    return initialView;
+  });
   const [expertConfig, setExpertConfig] = useState<{
     open: boolean;
     stage: CoachTurnStage;
@@ -186,11 +192,9 @@ export function CareerWorkspaceShell({
   const [navigationOptions, setNavigationOptions] = useState<NavigationOptions | undefined>();
 
   function navigate(view: ShellView, options?: NavigationOptions) {
-    const target = view === 'career' ? 'opportunities' : view;
-    const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
-    if (!isNavigable(target)) return;
-    setActiveView(target);
-    setNavigationOptions(targetOptions);
+    if (!isNavigable(view)) return;
+    setActiveView(view);
+    setNavigationOptions(options);
     setExpertConfig((prev) => ({ ...prev, open: false }));
     setExpertSheetExpanded(false);
     window.requestAnimationFrame(() => {
@@ -201,13 +205,6 @@ export function CareerWorkspaceShell({
       });
     });
   }
-
-  useEffect(() => {
-    if (activeView === 'career') {
-      setActiveView('opportunities');
-      setNavigationOptions({ focusRoleFilter: true });
-    }
-  }, [activeView]);
 
   const openExpert = useCallback(
     (stage?: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => {
@@ -362,7 +359,7 @@ export function CareerWorkspaceShell({
               onSignIn={openAccount}
             />
           ) : null}
-          {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
+          {cabinetSession && !intakeVisible && activeView !== 'tariffs' && activeView !== 'career' ? (
             <CareerCabinet
               key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
               view={activeView as CareerCabinetView}
@@ -374,6 +371,16 @@ export function CareerWorkspaceShell({
               onOpenConnections={openConnections}
               onOpenExpert={openExpert}
               onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {cabinetSession && !intakeVisible && activeView === 'career' ? (
+            <CareerScreen
+              hasProfile={true}
+              onNavigate={(v) => navigate(v as ShellSection)}
+              onOpenExpert={() => openExpert('career')}
+              onOpenVacancies={() => navigate('opportunities', { focusRoleFilter: true })}
+              onCheckSkills={() => navigate('profile')}
+              onOpenProfile={() => navigate('profile')}
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (
@@ -409,12 +416,18 @@ export function CareerWorkspaceShell({
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView === 'career' ? (
-            <CareerMapView
-              workspace={visibleWorkspace}
-              journey={journey}
-              onNavigate={navigate}
-              onOpenExpert={openExpert}
-              onUpdateWorkspace={onUpdateWorkspace}
+            <CareerScreen
+              hasProfile={Boolean(
+                visibleWorkspace.resumeText ||
+                  visibleWorkspace.currentSituation ||
+                  visibleWorkspace.targetDirection,
+              )}
+              isMarketStale={journey.markets[0]?.state !== 'sample-ready'}
+              onNavigate={(v) => navigate(v as ShellSection)}
+              onOpenExpert={() => openExpert('career')}
+              onOpenVacancies={() => navigate('opportunities', { focusRoleFilter: true })}
+              onCheckSkills={() => navigate('profile')}
+              onOpenProfile={() => navigate('profile')}
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView === 'opportunities' ? (

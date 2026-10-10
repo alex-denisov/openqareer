@@ -1,8 +1,9 @@
 import type { ReactElement } from 'react';
-import { DEFAULT_MOCK_ROLES } from './careerMockData';
 import type { CareerPushView, CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
 import {
   CareerConditionsCard,
+  CareerInlineFormatEditor,
+  CareerInlineGeoEditor,
   CareerInlineSalaryEditor,
   CareerInlineStopListEditor,
   type EditableConditionField,
@@ -15,7 +16,7 @@ import {
   CareerStaleMarketNote,
 } from './CareerStateComponents';
 import { MobileConditionSalaryView, MobileRoleDetailView } from './CareerMobileComponents';
-import { addCompanyToStopList, applyConditionsEdit } from './careerConditionsStorage';
+import { applyConditionsEdit } from './careerConditionsStorage';
 import { useCareerScreenState } from './useCareerScreenState';
 
 export interface CareerScreenProps {
@@ -52,11 +53,11 @@ function RolesCardsList({
 }): ReactElement {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {roles.map((role) => (
+      {roles.map((role, index) => (
         <CareerRoleCard
           key={role.id}
           role={role}
-          isOpenDefault={role.id === 'dir'}
+          isOpenDefault={role.id === 'dir' || index === 0}
           onConsultant={onConsultant}
           onOpenVacancies={onOpenVacancies}
           onCheckSkills={onCheckSkills}
@@ -194,11 +195,42 @@ function CareerHeader({
   );
 }
 
+function renderSalaryOrFormatEditor(
+  field: 'sal' | 'fmt',
+  conditions: SearchConditionsDraft,
+  saveError: string | null,
+  onSaveSalary: (sal: number, noWage: boolean) => void,
+  onSaveFormat: (format: SearchConditionsDraft['format']) => void,
+  onCloseField: () => void,
+): ReactElement {
+  if (field === 'sal') {
+    return (
+      <CareerInlineSalaryEditor
+        initialSalary={conditions.salaryFrom.amountRubles}
+        initialShowWithoutSalary={conditions.salaryFrom.showWithoutSalary}
+        onSave={onSaveSalary}
+        onCancel={onCloseField}
+        errorMessage={saveError}
+      />
+    );
+  }
+  return (
+    <CareerInlineFormatEditor
+      initialFormat={conditions.format}
+      onSave={onSaveFormat}
+      onCancel={onCloseField}
+      errorMessage={saveError}
+    />
+  );
+}
+
 function CareerConditionsEditorRow({
   editingField,
   conditions,
   saveError,
   onSaveSalary,
+  onSaveFormat,
+  onSaveGeo,
   onCloseField,
   onAddCompany,
 }: {
@@ -206,15 +238,26 @@ function CareerConditionsEditorRow({
   conditions: SearchConditionsDraft;
   saveError: string | null;
   onSaveSalary: (sal: number, noWage: boolean) => void;
+  onSaveFormat: (format: SearchConditionsDraft['format']) => void;
+  onSaveGeo: (selected: readonly string[]) => void;
   onCloseField: () => void;
   onAddCompany: (name: string) => void;
 }): ReactElement | null {
-  if (editingField === 'sal') {
+  if (editingField === 'sal' || editingField === 'fmt') {
+    return renderSalaryOrFormatEditor(
+      editingField,
+      conditions,
+      saveError,
+      onSaveSalary,
+      onSaveFormat,
+      onCloseField,
+    );
+  }
+  if (editingField === 'geo') {
     return (
-      <CareerInlineSalaryEditor
-        initialSalary={conditions.salaryFrom.amountRubles}
-        initialShowWithoutSalary={conditions.salaryFrom.showWithoutSalary}
-        onSave={onSaveSalary}
+      <CareerInlineGeoEditor
+        initialSelected={conditions.geography.selected}
+        onSave={onSaveGeo}
         onCancel={onCloseField}
         errorMessage={saveError}
       />
@@ -268,14 +311,13 @@ function CareerMainConditionsBlock({
         conditions={state.conditions}
         saveError={state.saveError}
         onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
+        onSaveFormat={(fmt) => void state.handleSaveFormat(fmt)}
+        onSaveGeo={(geo) => void state.handleSaveGeo(geo)}
         onCloseField={() => {
           state.setEditingField(null);
           state.setSaveError(null);
         }}
-        onAddCompany={(name) => {
-          const nextList = addCompanyToStopList(state.conditions.stopList, name);
-          state.setConditions(applyConditionsEdit(state.conditions, { stopList: nextList }));
-        }}
+        onAddCompany={(name) => void state.handleAddStopCompany(name)}
       />
     </>
   );
@@ -314,10 +356,7 @@ function CareerMainContent({
 
 export function CareerScreen(props: CareerScreenProps): ReactElement {
   const {
-    initialRoles = DEFAULT_MOCK_ROLES,
     hasProfile = true,
-    marketError = null,
-    isLoading = false,
     isMarketStale = false,
     onNavigate,
     onOpenExpert,
@@ -328,7 +367,7 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
 
   const state = useCareerScreenState(props);
 
-  if (isLoading) return <CareerLoadingSkeleton />;
+  if (state.isLoading) return <CareerLoadingSkeleton />;
   if (!hasProfile) {
     return (
       <div className="career-screen">
@@ -341,7 +380,7 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
     return (
       <MobilePushRouter
         pushView={state.pushView}
-        roles={initialRoles}
+        roles={state.activeRoles}
         conditions={state.conditions}
         onBack={() => state.setPushView('home')}
         onConsultant={() => onOpenExpert?.()}
@@ -356,7 +395,7 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
   return (
     <CareerMainContent
       state={state}
-      marketError={marketError}
+      marketError={state.marketError}
       isMarketStale={isMarketStale}
       onNavigate={onNavigate}
       onOpenExpert={onOpenExpert}

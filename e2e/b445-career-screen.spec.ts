@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/v1-release/tasks/evidence/B445');
 const CLI_PATH = path.resolve(process.cwd(), 'src/features/career-map/renderCareerCli.ts');
@@ -149,6 +150,100 @@ test.describe('B445: Career Screen Mockup 3 (1440 and 390)', () => {
     ).toBeVisible();
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, 'career-desktop-1440-loading.png'),
+      fullPage: true,
+    });
+  });
+
+  test('live app desktop 1440: renders candidate roles and updates conditions via decision-profile', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    const puts: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.url().includes('/api/v1/candidate/decision-profile') &&
+        request.method() === 'PUT'
+      ) {
+        puts.push(request.postData() ?? '');
+      }
+    });
+
+    await mockSignedInCabinet(page);
+    await page.addInitScript(() => {
+      window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
+    });
+
+    await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
+
+    // Verify Career Screen renders with candidate roles and honest wage rules
+    await expect(page.getByRole('heading', { level: 1, name: 'Карьера' })).toBeVisible();
+    await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
+    await expect(page.getByText('вилка не считается').first()).toBeVisible();
+
+    // Verify search conditions block
+    await expect(page.getByRole('heading', { level: 2, name: 'Условия поиска' })).toBeVisible();
+
+    // Edit salary condition inline
+    const salaryChip = page.getByRole('button', { name: /Зарплата от:/ });
+    await expect(salaryChip).toBeVisible();
+    await salaryChip.click();
+
+    const input = page.locator('#salary-input');
+    await expect(input).toBeVisible();
+    await input.fill('500000');
+
+    await page.getByRole('button', { name: 'Сохранить' }).click();
+
+    // Verify updated salary is rendered in chip
+    await expect(page.getByText('500 000 ₽')).toBeVisible();
+
+    // Verify PUT request was sent to update decision profile
+    expect(puts.length).toBeGreaterThanOrEqual(1);
+    expect(puts[puts.length - 1]).toContain('500000');
+
+    // Reject role
+    const rejectBtn = page.getByRole('button', { name: /Снять роль|Отклонить роль/ }).first();
+    await expect(rejectBtn).toBeVisible();
+    await rejectBtn.click();
+
+    const confirmBtn = page.getByRole('button', { name: 'Подтвердить снятие' });
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
+
+    // Role is removed from active list
+    await expect(page.getByText('Head of Product, Payments')).toHaveCount(0);
+
+    await page.screenshot({
+      path: path.join(EVIDENCE_DIR, 'career-live-desktop-1440.png'),
+      fullPage: true,
+    });
+  });
+
+  test('live app mobile 390: opens career view and renders without overflow', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Mobile 390 only');
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await mockSignedInCabinet(page);
+    await page.addInitScript(() => {
+      window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
+    });
+
+    await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Карьера' })).toBeVisible();
+    await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
+
+    const hasOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    );
+    expect(hasOverflow).toBe(false);
+
+    await page.screenshot({
+      path: path.join(EVIDENCE_DIR, 'career-live-mobile-390.png'),
       fullPage: true,
     });
   });

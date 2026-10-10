@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   addCompanyToStopList,
   CareerConditionsStorage,
+  decisionProfileToSearchConditions,
   rejectRoleHypothesis,
   restoreRejectedRole,
+  searchConditionsToDecisionProfile,
 } from './careerConditionsStorage';
 import { DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
 
@@ -76,4 +78,29 @@ describe('careerConditionsStorage (B445 Criterion 2, 4)', () => {
     expect(list[2].name).toBe('Яндекс');
     expect(list[2].origin).toBe('добавлено вручную');
   });
+
+  it('maps CandidateDecisionProfile to SearchConditionsDraft and vice versa', () => {
+    const profile = {
+      citizenship: ['Санкт-Петербург'],
+      taxStatus: '',
+      languages: [],
+      workFormats: ['remote_home', 'home_market'] as const,
+      salaryFloor: 550000,
+      salaryCurrency: 'RUB',
+    };
+
+    const draft = decisionProfileToSearchConditions(profile);
+    expect(draft.salaryFrom.amountRubles).toBe(550000);
+    expect(draft.geography.selected).toEqual(['Санкт-Петербург']);
+    expect(draft.format.remote).toBe(true);
+    expect(draft.format.hybrid).toBe(true);
+    expect(draft.format.office).toBe(false);
+
+    const backToProfile = searchConditionsToDecisionProfile(draft, profile);
+    expect(backToProfile.salaryFloor).toBe(550000);
+    expect(backToProfile.citizenship).toEqual(['Санкт-Петербург']);
+    expect(backToProfile.workFormats).toContain('remote_home');
+    expect(backToProfile.workFormats).toContain('home_market');
+  });
 });
+

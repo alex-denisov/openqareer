@@ -73,7 +73,7 @@ export function CareerStaleMarketNote({ dateText }: { dateText: string }): React
   return (
     <div className="career-note" role="status">
       <Clock size={18} />
-      <span>Рынок обновлён {dateText}, прошло больше 14 дней. Цифры показаны с датой.</span>
+      <span>Выборка устарела: рынок обновлён {dateText}, прошло больше 14 дней. Цифры показаны с датой.</span>
     </div>
   );
 }

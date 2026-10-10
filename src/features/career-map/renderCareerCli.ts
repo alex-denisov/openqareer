@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderCareerHtml } from './renderCareerHtml';
+import { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
 
 interface CliArgs {
   readonly out: string;
@@ -22,15 +23,20 @@ function parseArgs(): CliArgs {
 function runBatchRender(dir: string) {
   fs.mkdirSync(dir, { recursive: true });
 
+  const baseProps = {
+    initialRoles: DEFAULT_MOCK_ROLES,
+    initialConditions: DEFAULT_SEARCH_CONDITIONS,
+  };
+
   const states: readonly { file: string; props: Record<string, unknown> }[] = [
-    { file: 'desktop-1440.html', props: {} },
-    { file: 'desktop-1440-empty.html', props: { hasProfile: false } },
-    { file: 'desktop-1440-error.html', props: { marketError: 'Каталог не ответил' } },
-    { file: 'desktop-1440-stale.html', props: { isMarketStale: true } },
-    { file: 'desktop-1440-loading.html', props: { isLoading: true } },
-    { file: 'mobile-390.html', props: { isMobile: true, initialPushView: 'home' } },
-    { file: 'mobile-390-dir.html', props: { isMobile: true, initialPushView: 'dir' } },
-    { file: 'mobile-390-sal.html', props: { isMobile: true, initialPushView: 'sal' } },
+    { file: 'desktop-1440.html', props: { ...baseProps } },
+    { file: 'desktop-1440-empty.html', props: { initialRoles: [], hasProfile: false } },
+    { file: 'desktop-1440-error.html', props: { ...baseProps, marketError: 'Каталог не ответил' } },
+    { file: 'desktop-1440-stale.html', props: { ...baseProps, isMarketStale: true } },
+    { file: 'desktop-1440-loading.html', props: { ...baseProps, isLoading: true } },
+    { file: 'mobile-390.html', props: { ...baseProps, isMobile: true, initialPushView: 'home' } },
+    { file: 'mobile-390-dir.html', props: { ...baseProps, isMobile: true, initialPushView: 'dir' } },
+    { file: 'mobile-390-sal.html', props: { ...baseProps, isMobile: true, initialPushView: 'sal' } },
   ];
 
   for (const state of states) {
@@ -45,7 +51,10 @@ function main() {
     runBatchRender(batchDir);
     return;
   }
-  const html = renderCareerHtml({});
+  const html = renderCareerHtml({
+    initialRoles: DEFAULT_MOCK_ROLES,
+    initialConditions: DEFAULT_SEARCH_CONDITIONS,
+  });
   if (out) {
     fs.mkdirSync(path.dirname(out), { recursive: true });
     fs.writeFileSync(out, html, 'utf8');

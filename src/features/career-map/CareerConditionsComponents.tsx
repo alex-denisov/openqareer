@@ -164,6 +164,98 @@ export function CareerInlineStopListEditor({
   );
 }
 
+export function CareerInlineFormatEditor({
+  initialFormat,
+  onSave,
+  onCancel,
+  errorMessage,
+}: {
+  initialFormat: SearchConditionsDraft['format'];
+  onSave: (format: SearchConditionsDraft['format']) => void;
+  onCancel: () => void;
+  errorMessage?: string | null;
+}): ReactElement {
+  const [office, setOffice] = useState(initialFormat.office);
+  const [hybrid, setHybrid] = useState(initialFormat.hybrid);
+  const [remote, setRemote] = useState(initialFormat.remote);
+
+  const handleSave = () => {
+    onSave({ office, hybrid, remote });
+  };
+
+  return (
+    <div className="career-inline-edit" aria-label="Редактирование формата">
+      <h4 className="career-section-subhead">Формат работы</h4>
+      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '8px 0' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={office} onChange={(e) => setOffice(e.target.checked)} />
+          <span style={{ fontSize: 'var(--career-text-xs)' }}>Офис</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={hybrid} onChange={(e) => setHybrid(e.target.checked)} />
+          <span style={{ fontSize: 'var(--career-text-xs)' }}>Гибрид</span>
+        </label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={remote} onChange={(e) => setRemote(e.target.checked)} />
+          <span style={{ fontSize: 'var(--career-text-xs)' }}>Удалённо</span>
+        </label>
+      </div>
+      <div className="career-inline-row">
+        <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
+      </div>
+      {errorMessage ? (
+        <div className="career-note career-note-error" role="alert">
+          <WarningCircle size={16} />
+          <span>{errorMessage}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function CareerInlineGeoEditor({
+  initialSelected,
+  onSave,
+  onCancel,
+  errorMessage,
+}: {
+  initialSelected: readonly string[];
+  onSave: (selected: readonly string[]) => void;
+  onCancel: () => void;
+  errorMessage?: string | null;
+}): ReactElement {
+  const [val, setVal] = useState(initialSelected.join(', '));
+
+  const handleSave = () => {
+    const list = val.split(',').map((s) => s.trim()).filter(Boolean);
+    onSave(list.length ? list : initialSelected);
+  };
+
+  return (
+    <div className="career-inline-edit" aria-label="Редактирование географии">
+      <label className="career-section-subhead" htmlFor="geo-input">
+        Города и регионы поиска
+      </label>
+      <div className="career-inline-row">
+        <input
+          id="geo-input"
+          className="career-inline-input"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="Например: Москва, Удалённо из РФ"
+        />
+        <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
+      </div>
+      {errorMessage ? (
+        <div className="career-note career-note-error" role="alert">
+          <WarningCircle size={16} />
+          <span>{errorMessage}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ConditionsChipList({
   conditions,
   formatStr,
