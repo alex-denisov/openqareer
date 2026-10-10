@@ -47,6 +47,10 @@ export class RoleSkillAssessmentActions {
     this.dispatch({ type: 'focus-case', caseId });
   }
 
+  focusSkill(skillId?: string): void {
+    this.dispatch({ type: 'focus-skill', skillId });
+  }
+
   loadCurrent = async (): Promise<void> => {
     this.patch({ loading: true, error: undefined });
     try {

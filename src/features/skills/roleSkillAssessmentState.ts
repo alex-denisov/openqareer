@@ -23,12 +23,15 @@ export interface RoleSkillAssessmentUiState {
   appealOpen: boolean;
   appealReason: string;
   focusedCaseId?: string;
+  focusedSkillId?: string;
+  skillOverviewOpen: boolean;
 }
 
 export type RoleSkillAssessmentUiAction =
   | { type: 'patch'; values: Partial<RoleSkillAssessmentUiState> }
   | { type: 'current'; current: RoleSkillAssessmentCurrent | RoleSkillAssessmentMutationResult }
-  | { type: 'focus-case'; caseId?: string };
+  | { type: 'focus-case'; caseId?: string }
+  | { type: 'focus-skill'; skillId?: string };
 
 export const initialRoleSkillAssessmentState: RoleSkillAssessmentUiState = {
   current: null,
@@ -45,6 +48,7 @@ export const initialRoleSkillAssessmentState: RoleSkillAssessmentUiState = {
   discussionQuestion: '',
   appealOpen: false,
   appealReason: '',
+  skillOverviewOpen: false,
 };
 
 export function getAssessmentRun(
@@ -72,11 +76,18 @@ export function roleSkillAssessmentReducer(
 ): RoleSkillAssessmentUiState {
   if (action.type === 'patch') return { ...state, ...action.values };
   if (action.type === 'focus-case') return focusCase(state, action.caseId);
+  if (action.type === 'focus-skill')
+    return { ...state, focusedSkillId: action.skillId, skillOverviewOpen: false };
   return reconcileCurrent(state, action.current);
 }
 
 function focusCase(state: RoleSkillAssessmentUiState, caseId?: string): RoleSkillAssessmentUiState {
-  const next = { ...state, focusedCaseId: caseId };
+  const next = {
+    ...state,
+    focusedCaseId: caseId,
+    focusedSkillId: undefined,
+    skillOverviewOpen: false,
+  };
   const record = getActiveAssessmentCase(next.current, caseId);
   return record ? resetCaseInputs(next, record) : next;
 }
@@ -122,7 +133,7 @@ function updateSuggestionInputs(
   const suggestionDrafts = Object.fromEntries(
     next.suggestions.map((suggestion) => [
       suggestion.id,
-      { accepted: suggestion.selected, statement: suggestion.statement },
+      { accepted: true, statement: suggestion.statement },
     ]),
   );
   return { ...state, suggestionDrafts };

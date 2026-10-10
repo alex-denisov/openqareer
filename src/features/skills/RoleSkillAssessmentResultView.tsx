@@ -15,11 +15,16 @@ export function ResultState(props: {
   consent: boolean;
   busy: boolean;
   reviewingCase?: boolean;
+  focusedSkillId?: string;
   onConsent: (value: boolean) => void;
   onRefresh: () => void;
   onOpenOpportunities: () => void;
-  onReviewCase: (caseId: string) => void;
+  onOpenRoles: () => void;
+  onSelectSkill: (skillId?: string) => void;
+  onReviewCase: (caseId: string, mode?: 'view' | 'edit' | 'appeal') => void;
 }) {
+  const selectedSkill = props.run.skills.find((skill) => skill.id === props.focusedSkillId);
+  if (selectedSkill) return <SkillDetailScreen {...props} skill={selectedSkill} />;
   return (
     <section className="career-role-assessment-results">
       {props.stale ? <StaleNotice /> : null}
@@ -30,6 +35,7 @@ export function ResultState(props: {
             key={skill.id}
             run={props.run}
             skill={skill}
+            onSelectSkill={props.onSelectSkill}
             onReviewCase={props.onReviewCase}
           />
         ))}
@@ -93,13 +99,19 @@ function ResultActions(props: Parameters<typeof ResultState>[0] & { openRole: bo
   );
   const roleButton = props.openRole ? (
     <button className="career-primary-button" type="button" onClick={props.onOpenOpportunities}>
-      К вакансиям по роли <ArrowRight size={16} aria-hidden="true" />
+      Открыть вакансии роли <ArrowRight size={16} aria-hidden="true" />
     </button>
   ) : null;
+  const rolesButton = (
+    <button className="career-quiet-button" type="button" onClick={props.onOpenRoles}>
+      Вернуться к ролям
+    </button>
+  );
   return (
     <div className="career-role-assessment-actions">
       {roleButton}
       {refreshButton}
+      {rolesButton}
     </div>
   );
 }
@@ -107,11 +119,13 @@ function ResultActions(props: Parameters<typeof ResultState>[0] & { openRole: bo
 function SkillResultCard({
   run,
   skill,
+  onSelectSkill,
   onReviewCase,
 }: {
   run: AssessmentRun;
   skill: AssessmentRun['skills'][number];
-  onReviewCase: (caseId: string) => void;
+  onSelectSkill: (skillId?: string) => void;
+  onReviewCase: (caseId: string, mode?: 'view' | 'edit' | 'appeal') => void;
 }) {
   const caseRecord = run.cases.find((item) => item.assessmentCase.skillId === skill.id);
   const untested = !caseRecord || caseRecord.status === 'skipped';
@@ -131,6 +145,9 @@ function SkillResultCard({
           onReviewCase={onReviewCase}
         />
       ) : null}
+      <button className="career-quiet-button" type="button" onClick={() => onSelectSkill(skill.id)}>
+        Подробнее
+      </button>
     </article>
   );
 }
@@ -148,7 +165,7 @@ function SkillResultDetails({
 }: {
   run: AssessmentRun;
   caseId: string;
-  onReviewCase: (caseId: string) => void;
+  onReviewCase: (caseId: string, mode?: 'view' | 'edit' | 'appeal') => void;
 }) {
   const record = run.cases.find((item) => item.assessmentCase.id === caseId);
   if (!record?.evaluation) return null;
@@ -162,6 +179,67 @@ function SkillResultDetails({
         Разобрать кейс
       </button>
     </>
+  );
+}
+
+function SkillDetailScreen(
+  props: Parameters<typeof ResultState>[0] & { skill: AssessmentRun['skills'][number] },
+) {
+  const record = props.run.cases.find((item) => item.assessmentCase.skillId === props.skill.id);
+  const untested = !record || record.status === 'skipped';
+  return (
+    <section className="career-role-assessment-card career-role-assessment-skill-detail">
+      <span
+        className={`career-role-assessment-grade is-${untested ? 'untested' : props.skill.grade}`}
+      >
+        <CheckCircle size={17} aria-hidden="true" />
+        <strong>{untested ? 'Не проверено' : GRADE_LABELS[props.skill.grade]}</strong>
+      </span>
+      <h2>{props.skill.name}</h2>
+      {props.skill.isKeySkill ? (
+        <span className="career-role-assessment-tag">Ключевой навык</span>
+      ) : null}
+      <p>{skillExplanation(props.skill.explanation, record?.status)}</p>
+      <p className="career-role-assessment-source">
+        Источники: {record?.assessmentCase.sourceRefs.length ?? props.skill.sourceRefs.length}{' '}
+        датированных упоминаний · выборка {props.run.sampleSize} вакансий.
+      </p>
+      {record?.evaluation ? <EvaluationDetails evaluation={record.evaluation} /> : null}
+      <SkillDetailActions record={record} onReviewCase={props.onReviewCase} />
+    </section>
+  );
+}
+
+function SkillDetailActions({
+  record,
+  onReviewCase,
+}: {
+  record?: AssessmentRun['cases'][number];
+  onReviewCase: (caseId: string, mode?: 'view' | 'edit' | 'appeal') => void;
+}) {
+  return (
+    <div className="career-role-assessment-actions">
+      {record ? (
+        <button
+          className="career-quiet-button"
+          type="button"
+          onClick={() =>
+            onReviewCase(record.assessmentCase.id, record.evaluation ? 'edit' : 'view')
+          }
+        >
+          {record.evaluation ? 'Дополнить ответ' : 'Пройти кейс'}
+        </button>
+      ) : null}
+      {record?.evaluation ? (
+        <button
+          className="career-quiet-button"
+          type="button"
+          onClick={() => onReviewCase(record.assessmentCase.id, 'appeal')}
+        >
+          Оспорить оценку
+        </button>
+      ) : null}
+    </div>
   );
 }
 

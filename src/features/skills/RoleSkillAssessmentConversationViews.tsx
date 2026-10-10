@@ -1,6 +1,7 @@
-import type { FormEvent, RefObject, SetStateAction } from 'react';
+import { useState, type FormEvent, type RefObject, type SetStateAction } from 'react';
 import { ArrowRight } from '@phosphor-icons/react';
 import { VoiceInput } from '../coach/VoiceInput';
+import type { VoiceInputState } from '../coach/voiceInputMachine';
 import type { RoleSkillAssessmentMutationResult } from './roleSkillAssessmentApi';
 
 type SuggestionDecision = { accepted: boolean; statement: string };
@@ -14,14 +15,48 @@ export function DialogueState(props: {
   onChange: (value: string) => void;
   onSubmit: () => void;
   onVoiceSubmit: (value: string) => Promise<boolean>;
+  onShowSkills: () => void;
   inputRef: RefObject<HTMLTextAreaElement>;
 }) {
   return (
     <section className="career-role-assessment-card career-role-assessment-dialogue">
       <DialogueHeader run={props.run} />
+      <DialogueActions run={props.run} onShowSkills={props.onShowSkills} />
       <DialogueTranscript run={props.run} question={props.question} />
       {props.run.currentDialogueIndex < 3 ? <DialogueComposer {...props} /> : <PendingDialogue />}
     </section>
+  );
+}
+
+function DialogueActions({ run, onShowSkills }: { run: AssessmentRun; onShowSkills: () => void }) {
+  return (
+    <div className="career-role-assessment-dialogue-action-area">
+      <div className="career-role-assessment-dialogue-actions">
+        <button className="career-quiet-button" type="button" onClick={onShowSkills}>
+          Навыки {run.readiness.confirmedCount}/5
+        </button>
+        <button
+          className="career-quiet-button"
+          type="button"
+          disabled
+          title="Кейсы доступны после завершения диалога и решения по предложениям."
+        >
+          К кейсам
+        </button>
+        <button
+          className="career-quiet-button"
+          type="button"
+          disabled
+          title="Пропуск вопроса не поддержан проверкой роли."
+        >
+          Пропустить
+        </button>
+      </div>
+      <p className="career-role-assessment-dialogue-action-note">
+        Ответьте на три вопроса, затем решите, какие факты добавить в профиль. Отдельный пропуск
+        вопроса недоступен.
+      </p>
+    </div>
   );
 }
 
@@ -121,21 +156,24 @@ function DialogueComposerActions({
   onVoiceSubmit: (value: string) => Promise<boolean>;
   inputRef: RefObject<HTMLTextAreaElement>;
 }) {
+  const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
   return (
     <div className="career-role-assessment-composer-actions">
       <VoiceInput
         value={answer}
         disabled={busy}
         onChange={onChange}
-        onStateChange={() => undefined}
+        onStateChange={setVoiceState}
         onVoiceDraftChange={() => undefined}
         onSubmitVoice={onVoiceSubmit}
         onTextMode={() => inputRef.current?.focus()}
       />
       <span>{answer.length}/8000</span>
-      <button className="career-primary-button" type="submit" disabled={!answer.trim() || busy}>
-        {busy ? 'Сохраняем…' : 'Ответить'} <ArrowRight size={16} aria-hidden="true" />
-      </button>
+      {answer.trim() && voiceState === 'idle' ? (
+        <button className="career-primary-button" type="submit" disabled={busy}>
+          {busy ? 'Сохраняем…' : 'Ответить'} <ArrowRight size={16} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -160,11 +198,15 @@ export function SuggestionsState(props: {
   const selectedCount = props.run.suggestions.filter(
     (suggestion) => props.drafts[suggestion.id]?.accepted,
   ).length;
+  const totalCount = props.run.suggestions.length;
   return (
     <section className="career-role-assessment-card career-role-assessment-suggestions">
       <SuggestionsHeader />
       <p className="career-role-assessment-lead">
         Предложения основаны на ваших ответах. В профиль попадут только выбранные факты.
+      </p>
+      <p className="career-role-assessment-suggestion-count" aria-live="polite">
+        Предлагается: {totalCount} из 12 · Отмечено: {selectedCount}
       </p>
       <div className="career-role-assessment-suggestion-list">
         {props.run.suggestions.map((suggestion, index) => (
@@ -283,7 +325,7 @@ function SuggestionActions({
         Снять выбор
       </button>
       <button className="career-quiet-button" type="button" disabled={busy} onClick={onSave}>
-        Продолжить без изменений
+        Перейти без добавления
       </button>
       <button
         className="career-primary-button"
@@ -291,7 +333,7 @@ function SuggestionActions({
         disabled={busy || selectedCount === 0}
         onClick={onSave}
       >
-        {busy ? 'Сохраняем…' : `Принять выбранные (${selectedCount})`}
+        {busy ? 'Сохраняем…' : 'Принять выбранное и перейти к кейсам'}
       </button>
     </div>
   );

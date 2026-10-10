@@ -23,6 +23,7 @@ import {
   NoRoleState,
   ProgressTrack,
   RoleChangedState,
+  RunSkillOverview,
   SkillOverview,
   SourceErrorState,
   StartState,
@@ -37,6 +38,7 @@ import {
   type RoleSkillAssessmentUiState,
 } from './roleSkillAssessmentState';
 import './role-skill-assessment.css';
+import './role-skill-assessment-flow.css';
 
 interface RoleSkillAssessmentScreenProps {
   session: AuthUser;
@@ -59,6 +61,7 @@ export function RoleSkillAssessmentScreen({
   actionsRef.current = actions;
   const run = getAssessmentRun(state.current);
   const activeCase = getActiveAssessmentCase(state.current, state.focusedCaseId);
+  const screenKey = getAssessmentScreenKey(state, run);
 
   useAssessmentLifecycle(
     session.candidateId,
@@ -69,21 +72,44 @@ export function RoleSkillAssessmentScreen({
     run,
     activeCase,
   );
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.career-main')?.scrollTo(0, 0);
+  }, [screenKey]);
 
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
-      <AssessmentHeader state={state} run={run} onClose={onClose} />
-      {run ? <ProgressTrack step={getProgressStep(run.status, run.currentDialogueIndex)} /> : null}
-      <AssessmentStateContent
+      <AssessmentHeader state={state} run={run} actions={actions} onClose={onClose} />
+      {run ? (
+        <ProgressTrack step={getProgressStep(run)} />
+      ) : state.current?.state === 'ready' ? (
+        <ProgressTrack step={1} />
+      ) : null}
+      <AssessmentBody
         state={state}
         run={run}
         activeCase={activeCase}
         actions={actions}
         answerRef={answerRef}
+        onClose={onClose}
         onOpenOpportunities={onOpenOpportunities}
       />
     </section>
   );
+}
+
+function getAssessmentScreenKey(
+  state: RoleSkillAssessmentUiState,
+  run: ReturnType<typeof getAssessmentRun>,
+): string {
+  const caseIndex = run?.status === 'cases' ? run.currentCaseIndex : '';
+  return [
+    run?.id ?? 'new',
+    run?.status ?? state.current?.state ?? 'loading',
+    caseIndex,
+    state.focusedCaseId ?? '',
+    state.focusedSkillId ?? '',
+    state.skillOverviewOpen ? 'skills' : '',
+  ].join('|');
 }
 
 function useAssessmentLifecycle(
@@ -135,31 +161,30 @@ function scheduleDraftSave(
 function AssessmentHeader({
   state,
   run,
+  actions,
   onClose,
 }: {
   state: RoleSkillAssessmentUiState;
   run: ReturnType<typeof getAssessmentRun>;
+  actions: RoleSkillAssessmentActions;
   onClose: () => void;
 }) {
-  const roleTitle =
-    run?.roleTitle ?? getCurrentRoleTitle(state.current) ?? 'Связь опыта и требований роли';
+  const details = getAssessmentHeaderDetails(state, run);
+  const back = () => handleAssessmentHeaderBack(actions, onClose, details.backTarget);
   return (
     <header className="career-role-assessment-header">
       <button
         type="button"
         className="career-role-assessment-back"
-        onClick={onClose}
-        aria-label="Назад к профилю"
+        onClick={back}
+        aria-label={details.backLabel}
       >
         <ArrowLeft size={20} aria-hidden="true" />
       </button>
       <div>
         <p className="career-role-assessment-kicker">Профиль · проверка по вакансии</p>
-        <h1>Проверка навыков</h1>
-        <p className="career-role-assessment-subtitle">
-          {roleTitle}
-          {run ? ' · около 20 минут: короткий диалог и три практических кейса.' : ''}
-        </p>
+        <h1>{details.title}</h1>
+        <p className="career-role-assessment-subtitle">{details.subtitle}</p>
       </div>
       {run ? (
         <span className="career-role-assessment-save">
@@ -170,12 +195,91 @@ function AssessmentHeader({
   );
 }
 
+interface AssessmentHeaderDetails {
+  title: string;
+  subtitle: string;
+  backLabel: string;
+  backTarget: 'skill' | 'case' | 'overview' | 'close';
+}
+
+function getAssessmentHeaderDetails(
+  state: RoleSkillAssessmentUiState,
+  run: ReturnType<typeof getAssessmentRun>,
+): AssessmentHeaderDetails {
+  const roleTitle =
+    run?.roleTitle ?? getCurrentRoleTitle(state.current) ?? 'Связь опыта и требований роли';
+  const selectedSkill = run?.skills.find((skill) => skill.id === state.focusedSkillId);
+  const selectedCase =
+    run?.status === 'complete'
+      ? run.cases.find((record) => record.assessmentCase.id === state.focusedCaseId)
+      : undefined;
+  const detailTitle = selectedSkill?.name ?? selectedCase?.assessmentCase.skillName;
+  const title = detailTitle ?? (state.skillOverviewOpen ? 'Что проверяем' : 'Проверка навыков');
+  const backTarget = selectedSkill
+    ? 'skill'
+    : selectedCase
+      ? 'case'
+      : state.skillOverviewOpen
+        ? 'overview'
+        : 'close';
+  return {
+    title,
+    subtitle: buildAssessmentHeaderSubtitle(run, roleTitle, detailTitle, state.skillOverviewOpen),
+    backLabel: detailTitle
+      ? 'Назад к итогу'
+      : state.skillOverviewOpen
+        ? 'Назад к диалогу'
+        : 'Назад к профилю',
+    backTarget,
+  };
+}
+
+function buildAssessmentHeaderSubtitle(
+  run: ReturnType<typeof getAssessmentRun>,
+  roleTitle: string,
+  detailTitle: string | undefined,
+  overviewOpen: boolean,
+): string {
+  if (detailTitle) return 'Оценка по критериям кейса';
+  const context = overviewOpen ? `${roleTitle} · данные из выборки вакансий` : roleTitle;
+  return run && !overviewOpen
+    ? `${context} · около 20 минут: короткий диалог и три практических кейса.`
+    : context;
+}
+
+function handleAssessmentHeaderBack(
+  actions: RoleSkillAssessmentActions,
+  onClose: () => void,
+  target: AssessmentHeaderDetails['backTarget'],
+): void {
+  if (target === 'skill') actions.focusSkill();
+  else if (target === 'case') actions.focusCase();
+  else if (target === 'overview') actions.patch({ skillOverviewOpen: false });
+  else onClose();
+}
+
+function AssessmentBody(props: AssessmentContentProps) {
+  const content = <AssessmentStateContent {...props} />;
+  if (props.run && !props.state.skillOverviewOpen) {
+    return (
+      <div className="career-role-assessment-flow-grid">
+        <div>{content}</div>
+        <aside className="career-role-assessment-flow-side">
+          <RunSkillOverview run={props.run} />
+        </aside>
+      </div>
+    );
+  }
+  return content;
+}
+
 function AssessmentStateContent({
   state,
   run,
   activeCase,
   actions,
   answerRef,
+  onClose,
   onOpenOpportunities,
 }: AssessmentContentProps) {
   if (state.loading) return <LoadingState />;
@@ -187,7 +291,7 @@ function AssessmentStateContent({
   }
   return (
     <LoadedAssessmentContent
-      {...{ state, run, activeCase, actions, answerRef, onOpenOpportunities }}
+      {...{ state, run, activeCase, actions, answerRef, onClose, onOpenOpportunities }}
     />
   );
 }
@@ -198,11 +302,12 @@ interface AssessmentContentProps {
   activeCase: ReturnType<typeof getActiveAssessmentCase>;
   actions: RoleSkillAssessmentActions;
   answerRef: RefObject<HTMLTextAreaElement>;
+  onClose: () => void;
   onOpenOpportunities: () => void;
 }
 
 function LoadedAssessmentContent(props: AssessmentContentProps) {
-  const { state, actions, run, onOpenOpportunities } = props;
+  const { state, actions, run, onOpenOpportunities, onClose } = props;
   const emptyState = renderEmptyContext(state, onOpenOpportunities, actions);
   if (emptyState) return emptyState;
   if (state.current?.state === 'ready') {
@@ -216,10 +321,14 @@ function LoadedAssessmentContent(props: AssessmentContentProps) {
           onToggleHowItWorks={() => actions.patch({ howItWorksOpen: !state.howItWorksOpen })}
           onConsent={(consent) => actions.patch({ consent })}
           onStart={() => void actions.start()}
+          onLater={onClose}
         />
         <SkillOverview current={state.current} />
       </div>
     );
+  }
+  if (run && state.skillOverviewOpen) {
+    return <RunSkillOverview run={run} page />;
   }
   if (!run)
     return (
@@ -265,6 +374,7 @@ function AssessmentRunContent({
   activeCase,
   actions,
   answerRef,
+  onClose,
   onOpenOpportunities,
 }: AssessmentContentProps & { run: NonNullable<AssessmentContentProps['run']> }) {
   if (run.status === 'model_error')
@@ -281,6 +391,7 @@ function AssessmentRunContent({
         onChange={(dialogueAnswer) => actions.patch({ dialogueAnswer })}
         onSubmit={() => void actions.submitDialogue(state.dialogueAnswer)}
         onVoiceSubmit={(answer) => actions.submitDialogue(answer)}
+        onShowSkills={() => actions.patch({ skillOverviewOpen: true })}
         inputRef={answerRef}
       />
     );
@@ -290,21 +401,20 @@ function AssessmentRunContent({
     return <CurrentCaseContent {...{ state, run, activeCase, actions, answerRef }} />;
   return (
     <CompletedAssessmentContent
-      {...{ state, run, activeCase, actions, answerRef, onOpenOpportunities }}
+      {...{ state, run, activeCase, actions, answerRef, onClose, onOpenOpportunities }}
     />
   );
 }
 
-function CurrentCaseContent({
-  state,
-  run,
-  activeCase,
-  actions,
-  answerRef,
-}: Omit<AssessmentContentProps, 'onOpenOpportunities'> & {
+type CaseContentProps = Pick<
+  AssessmentContentProps,
+  'state' | 'run' | 'activeCase' | 'actions' | 'answerRef'
+> & {
   run: NonNullable<AssessmentContentProps['run']>;
   activeCase: NonNullable<AssessmentContentProps['activeCase']>;
-}) {
+};
+
+function CurrentCaseContent({ state, run, activeCase, actions, answerRef }: CaseContentProps) {
   return (
     <>
       <RoleSkillAssessmentProfileChange
@@ -355,16 +465,7 @@ function updateSuggestions(
   });
 }
 
-function CaseAssessmentContent({
-  state,
-  run,
-  activeCase,
-  actions,
-  answerRef,
-}: Omit<AssessmentContentProps, 'onOpenOpportunities'> & {
-  run: NonNullable<AssessmentContentProps['run']>;
-  activeCase: NonNullable<AssessmentContentProps['activeCase']>;
-}) {
+function CaseAssessmentContent({ state, run, activeCase, actions, answerRef }: CaseContentProps) {
   return (
     <CaseState
       run={run}
@@ -418,6 +519,7 @@ function CompletedAssessmentContent({
   activeCase,
   actions,
   answerRef,
+  onClose,
   onOpenOpportunities,
 }: AssessmentContentProps & { run: NonNullable<AssessmentContentProps['run']> }) {
   return (
@@ -433,10 +535,13 @@ function CompletedAssessmentContent({
         consent={state.consent}
         busy={state.busy}
         reviewingCase={Boolean(state.focusedCaseId)}
+        focusedSkillId={state.focusedSkillId}
         onConsent={(consent) => actions.patch({ consent })}
         onRefresh={() => void actions.start()}
         onOpenOpportunities={onOpenOpportunities}
-        onReviewCase={(caseId) => actions.focusCase(caseId)}
+        onOpenRoles={onClose}
+        onSelectSkill={(skillId) => actions.focusSkill(skillId)}
+        onReviewCase={(caseId, mode) => openResultCase(actions, caseId, mode)}
       />
       {state.focusedCaseId && activeCase ? (
         <CaseAssessmentContent
@@ -449,6 +554,15 @@ function CompletedAssessmentContent({
       ) : null}
     </>
   );
+}
+
+function openResultCase(
+  actions: RoleSkillAssessmentActions,
+  caseId: string,
+  mode: 'view' | 'edit' | 'appeal' = 'view',
+): void {
+  actions.focusCase(caseId);
+  actions.patch({ caseEditing: mode === 'edit', appealOpen: mode === 'appeal' });
 }
 
 function getCurrentRoleTitle(current: RoleSkillAssessmentUiState['current']): string | undefined {

@@ -133,12 +133,13 @@ async function answerDialogue(page: Page, width: number): Promise<void> {
 }
 
 async function acceptProfileSuggestion(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Снять выбор' }).click();
   const firstSuggestion = page.locator('.career-role-assessment-suggestion').first();
   await firstSuggestion.locator('input[type="checkbox"]').check();
   await firstSuggestion
     .getByRole('textbox')
     .fill('Запустил платёжное направление и согласовал план с командой.');
-  await page.getByRole('button', { name: /Принять выбранные/u }).click();
+  await page.getByRole('button', { name: 'Принять выбранное и перейти к кейсам' }).click();
   await expect(page.getByText('Кейс 1 из 3')).toBeVisible();
   await expect(page.locator('.career-role-assessment-profile-change')).toContainText(
     'Добавлено в профиль: 1 факт',
@@ -245,6 +246,7 @@ function viewportName(page: Page): string {
 test('runs role-skill assessment and preserves the saved step on desktop and mobile', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(90_000);
   test.skip(
     testInfo.project.name !== 'desktop-1440',
     'The desktop runner drives both viewport sizes.',

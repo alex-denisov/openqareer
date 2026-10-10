@@ -1,4 +1,5 @@
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle,
   Circle,
@@ -7,8 +8,12 @@ import {
   Lightbulb,
   Spinner,
   WarningCircle,
+  WarningCircle as SkillWarning,
 } from '@phosphor-icons/react';
 import type { RoleSkillAssessmentCurrent } from './roleSkillAssessmentApi';
+import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAssessment';
+
+type RoleSkillRunGrade = RoleSkillAssessmentRun['skills'][number]['grade'];
 
 export function formatDate(value: string): string {
   const date = new Date(value);
@@ -19,31 +24,51 @@ export function formatDate(value: string): string {
     : 'дата не указана';
 }
 
-export function getProgressStep(status: string, dialogueIndex: number): number {
-  if (status === 'dialogue') return 1;
-  if (status === 'suggestions') return 2;
-  if (status === 'cases') return 3;
-  return status === 'complete' ? 4 : dialogueIndex > 0 ? 1 : 0;
+export function getProgressStep(run: RoleSkillAssessmentRun): number {
+  if (run.status === 'complete') return 5;
+  if (run.status === 'dialogue' || run.status === 'suggestions') return 1;
+  if (run.status === 'cases') return Math.min(4, run.currentCaseIndex + 2);
+  if (run.modelError?.action === 'suggestions') return 1;
+  const failedIndex = run.cases.findIndex(
+    (record) => record.assessmentCase.id === run.modelError?.caseId,
+  );
+  return failedIndex < 0 ? 1 : Math.min(4, failedIndex + 2);
 }
 
 export function ProgressTrack({ step }: { step: number }) {
-  const steps = ['Диалог', 'Профиль', 'Кейсы', 'Итог'];
+  const steps = ['Диалог', 'Кейс 1', 'Кейс 2', 'Кейс 3', 'Итог'];
   return (
-    <ol className="career-role-assessment-progress" aria-label="Этапы проверки">
-      {steps.map((label, index) => (
-        <li
-          className={index + 1 === step ? 'is-current' : index + 1 < step ? 'is-done' : ''}
-          key={label}
-        >
-          {index + 1 < step ? (
-            <CheckCircle size={16} aria-hidden="true" />
-          ) : (
-            <Circle size={16} aria-hidden="true" />
-          )}
-          <span>{label}</span>
-        </li>
-      ))}
-    </ol>
+    <div className="career-role-assessment-progress-wrap">
+      <ol className="career-role-assessment-progress" aria-label={`Шаг ${step} из 5`}>
+        {steps.map((label, index) => (
+          <li
+            className={index + 1 === step ? 'is-current' : index + 1 < step ? 'is-done' : ''}
+            aria-current={index + 1 === step ? 'step' : undefined}
+            key={label}
+          >
+            {index + 1 < step ? (
+              <CheckCircle size={16} aria-hidden="true" />
+            ) : (
+              <Circle size={16} aria-hidden="true" />
+            )}
+            <span>{label}</span>
+          </li>
+        ))}
+      </ol>
+      <div
+        className="career-role-assessment-progress-mobile"
+        role="progressbar"
+        aria-label={`Шаг ${step} из 5`}
+        aria-valuemin={1}
+        aria-valuemax={5}
+        aria-valuenow={step}
+      >
+        <span>Шаг {step} из 5</span>
+        <div>
+          <i className={`is-step-${step}`} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -184,6 +209,7 @@ export function StartState({
   onToggleHowItWorks,
   onConsent,
   onStart,
+  onLater,
 }: {
   current: Extract<RoleSkillAssessmentCurrent, { state: 'ready' }>;
   consent: boolean;
@@ -192,6 +218,7 @@ export function StartState({
   onToggleHowItWorks: () => void;
   onConsent: (value: boolean) => void;
   onStart: () => void;
+  onLater: () => void;
 }) {
   return (
     <section className="career-role-assessment-card career-role-assessment-intro">
@@ -210,7 +237,7 @@ export function StartState({
         />
         <span>Согласен передать ответы модели для проверки по критериям.</span>
       </label>
-      <StartAction consent={consent} busy={busy} onStart={onStart} />
+      <StartAction consent={consent} busy={busy} onStart={onStart} onLater={onLater} />
     </section>
   );
 }
@@ -287,10 +314,12 @@ function StartAction({
   consent,
   busy,
   onStart,
+  onLater,
 }: {
   consent: boolean;
   busy: boolean;
   onStart: () => void;
+  onLater: () => void;
 }) {
   return (
     <div className="career-role-assessment-actions">
@@ -301,6 +330,9 @@ function StartAction({
         onClick={onStart}
       >
         <ArrowRight size={17} aria-hidden="true" /> {busy ? 'Готовим проверку…' : 'Начать проверку'}
+      </button>
+      <button className="career-quiet-button" type="button" onClick={onLater}>
+        Позже
       </button>
     </div>
   );
@@ -337,4 +369,71 @@ export function SkillOverview({
       </p>
     </section>
   );
+}
+
+export function RunSkillOverview({
+  run,
+  onBack,
+  page = false,
+}: {
+  run: RoleSkillAssessmentRun;
+  onBack?: () => void;
+  page?: boolean;
+}) {
+  return (
+    <section
+      className={`career-role-assessment-card career-role-assessment-skill-overview${page ? ' is-page' : ''}`}
+    >
+      {onBack ? (
+        <button className="career-quiet-button" type="button" onClick={onBack}>
+          <ArrowLeft size={16} aria-hidden="true" /> Назад к проверке
+        </button>
+      ) : null}
+      <h2>Что проверяем</h2>
+      <ul>
+        {run.skills.map((skill) => (
+          <RunSkillRow key={skill.id} run={run} skill={skill} />
+        ))}
+      </ul>
+      <p className="career-role-assessment-source">
+        <Clock size={14} aria-hidden="true" /> Сверка требований {run.sampleSize} свежих вакансий ·
+        обновлено {formatDate(run.evidenceObservedAt)}.
+      </p>
+    </section>
+  );
+}
+
+function RunSkillRow({
+  run,
+  skill,
+}: {
+  run: RoleSkillAssessmentRun;
+  skill: RoleSkillAssessmentRun['skills'][number];
+}) {
+  const caseRecord = run.cases.find((record) => record.assessmentCase.skillId === skill.id);
+  const untested = !caseRecord || caseRecord.status === 'skipped';
+  const label = untested ? 'Не проверено' : gradeLabel(skill.grade);
+  return (
+    <li>
+      {untested || skill.grade === 'partial' ? (
+        <SkillWarning size={15} aria-hidden="true" />
+      ) : (
+        <CheckCircle size={15} aria-hidden="true" />
+      )}
+      <div>
+        <strong>{skill.name}</strong>
+        <span>
+          {skill.isKeySkill ? 'Ключевой навык' : 'Навык роли'} · {label}
+        </span>
+      </div>
+    </li>
+  );
+}
+
+function gradeLabel(grade: RoleSkillRunGrade): string {
+  return grade === 'confirmed'
+    ? 'Подтверждено'
+    : grade === 'partial'
+      ? 'Частично'
+      : 'Не подтверждено';
 }

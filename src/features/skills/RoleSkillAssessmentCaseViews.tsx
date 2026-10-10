@@ -1,6 +1,7 @@
-import type { FormEvent, RefObject } from 'react';
+import { useState, type FormEvent, type RefObject } from 'react';
 import { ArrowRight, CheckCircle, WarningCircle } from '@phosphor-icons/react';
 import { VoiceInput } from '../coach/VoiceInput';
+import type { VoiceInputState } from '../coach/voiceInputMachine';
 import type { RoleSkillAssessmentMutationResult } from './roleSkillAssessmentApi';
 
 type AssessmentRun = RoleSkillAssessmentMutationResult['run'];
@@ -48,7 +49,9 @@ export function CaseState(props: CaseStateProps) {
   const canContinue =
     props.run.status === 'cases' && caseIndex >= 0 && caseIndex < props.run.currentCaseIndex;
   return (
-    <section className="career-role-assessment-card career-role-assessment-case">
+    <section
+      className={`career-role-assessment-card career-role-assessment-case${props.run.status === 'complete' ? ' is-skill-detail' : ''}`}
+    >
       <CaseHeading run={props.run} record={record} caseIndex={caseIndex} />
       <CasePrompt record={record} />
       <DiscussionHistory record={record} />
@@ -162,13 +165,14 @@ function CaseComposerActions(props: CaseStateProps) {
     : record.evaluation
       ? 'Дополнить и переоценить'
       : 'Пройти кейс';
+  const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
   return (
     <div className="career-role-assessment-composer-actions">
       <VoiceInput
         value={props.answer}
         disabled={props.busy}
         onChange={props.onAnswerChange}
-        onStateChange={() => undefined}
+        onStateChange={setVoiceState}
         onVoiceDraftChange={() => undefined}
         onSubmitVoice={props.onVoiceSubmit}
         onTextMode={() => props.inputRef.current?.focus()}
@@ -176,13 +180,11 @@ function CaseComposerActions(props: CaseStateProps) {
       <span>
         {props.answer.length}/10000{props.dirty ? ' · сохраняем черновик' : ''}
       </span>
-      <button
-        className="career-primary-button"
-        type="submit"
-        disabled={!props.answer.trim() || props.busy}
-      >
-        {buttonText} <ArrowRight size={16} aria-hidden="true" />
-      </button>
+      {props.answer.trim() && voiceState === 'idle' ? (
+        <button className="career-primary-button" type="submit" disabled={props.busy}>
+          {buttonText} <ArrowRight size={16} aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 }
