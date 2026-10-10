@@ -10,6 +10,7 @@ import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
 import { registerDecisionProfileRoutes } from './decisionProfileRoutes';
 import { registerCareerVectorRoutes } from './careerVectorRoutes';
+import { registerCareerDiaryRoutes } from './careerDiaryRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
@@ -363,6 +364,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerStarPrepRoutes(app, deps);
   registerReferralTrackRoutes(app, deps);
   registerCareerVectorRoutes(app, deps);
+  registerCareerDiaryRoutes(app, deps);
   registerDecisionProfileRoutes(app, deps);
   registerVacancySkipRoutes(app, deps);
 }

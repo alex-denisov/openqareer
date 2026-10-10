@@ -45,6 +45,7 @@ import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRep
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
+import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
@@ -380,6 +381,8 @@ export interface CandidateStore {
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  /** Карьерный дневник: кандидатские цели, замеры и разборы (B456). */
+  readonly careerDiaryRepo: SqliteCareerDiaryRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   /** Joins nested store writes into one SQLite transaction. */

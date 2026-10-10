@@ -10,6 +10,51 @@ import {
   workspace,
 } from './readabilityWorkspace';
 
+async function mockCareerDiaryRoutes(route: Route, path: string): Promise<boolean> {
+  const base = '/api/v1/candidate/career-diary';
+  if (!path.startsWith(base)) return false;
+  if (route.request().method() !== 'GET') {
+    await route.fulfill({
+      status: 501,
+      json: {
+        error: {
+          code: 'career_diary_write_not_stubbed',
+          message: 'Запись дневника не настроена в этой браузерной фикстуре.',
+        },
+      },
+    });
+    return true;
+  }
+  if (path === base) {
+    await route.fulfill({
+      json: {
+        data: {
+          asOf: '2026-10-10',
+          primaryWorkplace: null,
+          summary: {
+            goalsAchieved: 0,
+            goalsAtRisk: 0,
+            goalsTotal: 0,
+            achievementsReadyToAdd: 0,
+            weeklyReviewsTotal: 0,
+            weeklyReviewsInRow: 0,
+          },
+        },
+      },
+    });
+    return true;
+  }
+  if (
+    /\/(?:goals|reviews|achievements|workplaces)$/u.test(path) ||
+    /\/goals\/[^/]+\/measurements$/u.test(path)
+  ) {
+    await route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+    return true;
+  }
+  await route.fulfill({ status: 404, json: { error: { code: 'diary_entry_not_found' } } });
+  return true;
+}
+
 export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   const unmatched: string[] = [];
   let decisionProfile: Record<string, unknown> | null = null;
@@ -18,6 +63,7 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (await mockCareerDiaryRoutes(route, path)) return;
     if (path.endsWith('/auth/me')) {
       return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
     }
