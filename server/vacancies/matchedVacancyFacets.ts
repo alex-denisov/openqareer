@@ -1,7 +1,18 @@
-import type { MatchedVacancyFacets, MatchedVacancyFacetLevel } from '../../shared/matchedVacancyFacets';
+import {
+  MATCHED_VACANCY_SOURCE_GROUPS,
+  type MatchedVacancyFacets,
+  type MatchedVacancyFacetLevel,
+  type MatchedVacancySourceCatalogEntry,
+  type MatchedVacancySourceGroup,
+  type MatchedVacancySourceGroupId,
+} from '../../shared/matchedVacancyFacets';
 import { titleMatchesRole } from '../../shared/vacancyRoleTitleMatch';
 import { inferSeniorityLevel, levelFromRank } from './levelMatcher';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
+import type { VacancySourceConfig, VacancySourceType } from '../domain/unifiedVacancy';
+import { ATS_BOARD_SOURCES } from './atsBoardSources';
+import { DEFAULT_VACANCY_SOURCES } from './defaultVacancySources';
+import { vacancySourceRegistryView } from './vacancySourceRegistry';
 import { regionOfVacancy } from './vacancyGeography';
 
 export function matchedVacancyRegion(item: MatchedVacancyItem) {
@@ -36,20 +47,143 @@ function sourceFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyFacet
 }
 
 /** Сводка строится по полному совпавшему списку до пользовательских фильтров. */
+export interface MatchedVacancySourceDefinition {
+  readonly id: string;
+  readonly name: string;
+  readonly type?: VacancySourceType;
+  readonly targetUrl?: string;
+  readonly attributionUrl?: string;
+  readonly market?: string;
+  readonly category?: string;
+}
+
+const atsSourceIds = new Set(ATS_BOARD_SOURCES.map(({ id }) => id));
+const groupByRegistryCategory = new Map<string, MatchedVacancySourceGroupId>([
+  ['Агрегаторы и API', 'aggregators'],
+  ['Международные площадки', 'platforms'],
+  ['Telegram каналы', 'channels'],
+]);
+
+export function matchedVacancySourceRegistry(
+  runtimeSources: readonly VacancySourceConfig[] = [],
+): MatchedVacancySourceDefinition[] {
+  const registryView = vacancySourceRegistryView([]).map(
+    ({ id, name, market, category, attributionUrl }) => ({
+      id, name, market, category, attributionUrl,
+    }),
+  );
+  const sources = [
+    ...registryView,
+    ...DEFAULT_VACANCY_SOURCES,
+    ...ATS_BOARD_SOURCES,
+    ...runtimeSources,
+  ];
+  const byId = new Map<string, MatchedVacancySourceDefinition>();
+  for (const source of sources) {
+    byId.set(source.id, { ...byId.get(source.id), ...source });
+  }
+  return Array.from(byId.values());
+}
+
+function sourceGroupId(
+  source: MatchedVacancySourceDefinition,
+): MatchedVacancySourceGroupId | null {
+  if (atsSourceIds.has(source.id) || source.type === 'career_site') return 'ats';
+  const registryGroup = source.category
+    ? groupByRegistryCategory.get(source.category)
+    : undefined;
+  if (registryGroup) return registryGroup;
+  if (source.type === 'telegram') return 'channels';
+  if (['hh', 'hh_search', 'remotive', 'browser_session', 'direct', 'linkedin_crawler']
+    .includes(source.type ?? '')) return 'platforms';
+  if (source.type === 'json_api' || source.type === 'rss') return 'aggregators';
+  return null;
+}
+
+function sourceDomain(source: MatchedVacancySourceDefinition): string | null {
+  const value = source.attributionUrl ?? source.targetUrl;
+  if (!value) return null;
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function sourceCatalogFor(
+  items: readonly MatchedVacancyItem[],
+  registry: readonly MatchedVacancySourceDefinition[],
+): MatchedVacancySourceCatalogEntry[] {
+  const sources = new Map(registry.map((source) => [source.id, source]));
+  const counts = new Map(sourceFacets(items).map(({ sourceId, count }) => [sourceId, count]));
+  for (const item of items) {
+    for (const source of item.cluster.sources) {
+      if (!sources.has(source.sourceId)) {
+        sources.set(source.sourceId, { id: source.sourceId, name: source.sourceName ?? source.sourceId });
+      }
+    }
+  }
+  const groupOrder = new Map(MATCHED_VACANCY_SOURCE_GROUPS.map(({ id }, index) => [id, index]));
+  const groupIndex = (id: MatchedVacancySourceGroupId | null) =>
+    id ? groupOrder.get(id) ?? groupOrder.size : groupOrder.size;
+  return Array.from(sources.values())
+    .map((source) => ({
+      sourceId: source.id,
+      name: source.name,
+      groupId: sourceGroupId(source),
+      domain: sourceDomain(source),
+      market: source.market ?? null,
+      count: counts.get(source.id) ?? 0,
+    }))
+    .sort((a, b) =>
+      groupIndex(a.groupId) - groupIndex(b.groupId) ||
+      a.name.localeCompare(b.name, 'ru'),
+    );
+}
+
+function sourceGroupsFor(
+  items: readonly MatchedVacancyItem[],
+  catalog: readonly MatchedVacancySourceCatalogEntry[],
+): MatchedVacancySourceGroup[] {
+  const groupBySource = new Map(catalog.map(({ sourceId, groupId }) => [sourceId, groupId]));
+  const counts = new Map(MATCHED_VACANCY_SOURCE_GROUPS.map(({ id }) => [id, 0]));
+  for (const item of items) {
+    const itemGroups = new Set<MatchedVacancySourceGroupId>();
+    for (const source of item.cluster.sources) {
+      const groupId = groupBySource.get(source.sourceId);
+      if (groupId) itemGroups.add(groupId);
+    }
+    for (const groupId of itemGroups) counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
+  }
+  return MATCHED_VACANCY_SOURCE_GROUPS.map(({ id, name }) => ({
+    id, name, count: counts.get(id) ?? 0,
+  }));
+}
+
 export function buildMatchedVacancyFacets(
   items: readonly MatchedVacancyItem[],
   targetRoles: readonly string[] = [],
   readLevel?: MatchedVacancyLevelReader,
+  registry: readonly MatchedVacancySourceDefinition[] = [],
 ): MatchedVacancyFacets {
+  const sourceCatalog = sourceCatalogFor(items, registry);
   return {
     total: items.length,
     regions: counted(items.flatMap((item) => matchedVacancyRegion(item) ?? []))
       .map(({ value: id, count }) => ({ id, count })),
     remote: items.filter((item) => item.cluster.isRemote).length,
-    levels: counted(items.map((item) => matchedVacancyLevel(item, readLevel))).map(({ value: level, count }) => ({ level, count })),
-    roles: targetRoles.map((role) => ({ role, count: items.filter((item) =>
-      item.explanation.roleMatch !== 'none' && titleMatchesRole(item.cluster.canonicalTitle, role)).length }))
-      .filter(({ count }) => count > 0).sort((a, b) => b.count - a.count || a.role.localeCompare(b.role)),
+    levels: counted(items.map((item) => matchedVacancyLevel(item, readLevel)))
+      .map(({ value: level, count }) => ({ level, count })),
+    roles: targetRoles.map((role) => ({
+      role,
+      count: items.filter((item) =>
+        item.explanation.roleMatch !== 'none' &&
+        titleMatchesRole(item.cluster.canonicalTitle, role)).length,
+    }))
+      .filter(({ count }) => count > 0)
+      .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role)),
     sources: sourceFacets(items),
+    sourceGroups: sourceGroupsFor(items, sourceCatalog),
+    sourceCatalog,
   };
 }

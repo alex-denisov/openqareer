@@ -59,6 +59,11 @@ async function createPagingApp(waitForMatching?: Promise<void>, items?: MatchedV
 
   let call = 0;
   const engine = {
+    getSources: () => [{
+      id: 'registered-empty', name: 'Zero', type: 'rss', enabled: true,
+      targetUrl: 'https://zero.example/jobs', refreshIntervalMinutes: 60,
+      itemsFoundTotal: 0, itemsActiveTotal: 0, market: 'Великобритания',
+    }],
     getMatchedVacanciesAsync: async () => {
       call += 1;
       await waitForMatching;
@@ -113,6 +118,25 @@ describe('чтение подбора страницами', () => {
     expect(empty.json().meta.facets.total).toBe(0);
   });
 
+  it('принимает зарегистрированный источник с нулём совпадений', async () => {
+    const { app, authorization } = await createPagingApp();
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies?source=registered-empty',
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().meta.total).toBe(0);
+    expect(response.json().meta.facets.sourceCatalog).toContainEqual({
+      sourceId: 'registered-empty',
+      name: 'Zero',
+      groupId: 'aggregators',
+      domain: 'zero.example',
+      market: 'Великобритания',
+      count: 0,
+    });
+  });
+
   it('сужает смешанную подборку до пагинации по регионам, источникам и удалёнке', async () => {
     const items = pool('mixed', 40).map((item, index) => ({ ...item, cluster: {
       ...item.cluster, canonicalLocation: index < 30 ? 'Berlin' : 'Dubai',
@@ -130,6 +154,8 @@ describe('чтение подбора страницами', () => {
     expect(page.meta.total).toBe(30);
     expect(page.data).toHaveLength(10);
     expect(page.data.every((item: MatchedVacancyItem) => item.cluster.canonicalLocation === 'Berlin')).toBe(true);
+    const bothSources = (await get('source=eu-jobs&source=mena-jobs')).json();
+    expect(bothSources.meta.total).toBe(40);
     const remote = (await get('remote=1&source=mena-jobs')).json();
     expect(remote.meta.total).toBe(10);
     expect(remote.meta.facets.total).toBe(40);
