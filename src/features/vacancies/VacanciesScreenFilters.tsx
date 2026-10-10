@@ -17,6 +17,13 @@ export interface VacanciesScreenState {
   readonly remoteOnly: boolean;
   readonly freshnessDays?: number;
   readonly selectedCity?: string;
+  readonly selectedLocations?: readonly string[];
+  readonly locationSearch?: string;
+  readonly salaryMinimum?: number;
+  readonly salaryMaximum?: number;
+  readonly salaryCurrency?: string;
+  readonly includeMissingSalary?: boolean;
+  readonly formats?: readonly string[];
 }
 
 export interface VacanciesScreenFiltersProps {
@@ -42,18 +49,20 @@ export interface VacanciesScreenFiltersProps {
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
+  readonly locations?: readonly FacetOption[];
+  readonly salaryCurrencies?: readonly string[];
+  readonly formatCounts?: Readonly<Record<string, number>>;
 }
 
 export function countActiveFilters(state: VacanciesScreenState): number {
-  return (
-    state.roles.length +
-    state.regions.length +
-    (state.levels?.length ?? 0) +
-    (state.sources?.length ?? 0) +
-    Number(state.remoteOnly) +
-    Number(Boolean(state.selectedCity)) +
-    Number(Boolean(state.freshnessDays))
-  );
+  const groupIsActive = [
+    Boolean(state.roles.length || state.levels?.length),
+    Boolean(state.regions.length || state.selectedCity || state.selectedLocations?.length || state.locationSearch?.trim()),
+    Boolean(state.salaryMinimum !== undefined || state.salaryMaximum !== undefined),
+    Boolean(state.remoteOnly || state.formats?.length),
+    Boolean(state.sources?.length),
+  ];
+  return groupIsActive.filter(Boolean).length;
 }
 
 function regionLabel(id: string): string {
@@ -65,7 +74,7 @@ const LEVEL_LABELS: Readonly<Record<string, string>> = {
   unknown: 'Неизвестно',
 };
 
-type SelectionField = 'roles' | 'regions' | 'levels' | 'sources';
+type SelectionField = 'roles' | 'regions' | 'levels' | 'sources' | 'formats';
 interface FacetOption {
   readonly id: string;
   readonly label: string;
@@ -213,6 +222,308 @@ function PrimaryFacetGroups({
   );
 }
 
+function LocationFilterSearch({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const locationSearch = event.currentTarget.value;
+    props.onChange((state) => ({ ...state, locationSearch }));
+  };
+  return (
+    <label className="career-field">
+      <span>Страна, регион, штат или город</span>
+      <input type="search" value={props.state.locationSearch ?? ''} onChange={onChange} />
+    </label>
+  );
+}
+
+function toggleSelectedLocation(state: VacanciesScreenState, id: string): VacanciesScreenState {
+  const current = state.selectedLocations ?? [];
+  return {
+    ...state,
+    selectedLocations: current.includes(id)
+      ? current.filter((value) => value !== id)
+      : [...current, id],
+  };
+}
+
+function LocationFilterChips({
+  props,
+  options,
+  selected,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly options: readonly FacetOption[];
+  readonly selected: readonly string[];
+}) {
+  return (
+    <div className="chip-row">
+      {options.map((option) => (
+        <FacetChip
+          key={option.id}
+          option={option}
+          selected={selected.includes(option.id)}
+          onClick={() =>
+            props.onChange((state) => toggleSelectedLocation(state, option.id))
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+function LocationFilterActions({
+  remaining,
+  showAll,
+  hasSelection,
+  onToggleShowAll,
+  onClear,
+}: {
+  readonly remaining: number;
+  readonly showAll: boolean;
+  readonly hasSelection: boolean;
+  readonly onToggleShowAll: () => void;
+  readonly onClear: () => void;
+}) {
+  return (
+    <>
+      {remaining > 0 ? (
+        <button type="button" className="filters-reset" onClick={onToggleShowAll}>
+          {showAll ? 'Свернуть список локаций' : 'Ещё ' + remaining + ' локаций'}
+        </button>
+      ) : null}
+      <button type="button" className="filters-reset" disabled={!hasSelection} onClick={onClear}>
+        Снять все
+      </button>
+    </>
+  );
+}
+
+function LocationFilterSection({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const [showAll, setShowAll] = useState(false);
+  const options = props.locations ?? [];
+  const query = props.state.locationSearch?.trim().toLocaleLowerCase('ru-RU') ?? '';
+  const matches = options.filter((option) =>
+    !query || option.label.toLocaleLowerCase('ru-RU').includes(query),
+  );
+  const visible = showAll ? matches : matches.slice(0, 8);
+  const selected = props.state.selectedLocations ?? [];
+  const clear = () => props.onChange((state) => ({
+    ...state,
+    selectedLocations: [],
+    selectedCity: undefined,
+    regions: [],
+    locationSearch: '',
+  }));
+  return (
+    <div className="field-group vacancy-location-filter">
+      <h4>Локации</h4>
+      <LocationFilterSearch props={props} />
+      <p className="vacancy-filter-result-count">
+        Найти среди {matches.length} локаций в загруженных вакансиях
+      </p>
+      <LocationFilterChips props={props} options={visible} selected={selected} />
+      <LocationFilterActions
+        remaining={Math.max(0, matches.length - 8)}
+        showAll={showAll}
+        hasSelection={Boolean(selected.length || props.state.regions.length || query)}
+        onToggleShowAll={() => setShowAll((value) => !value)}
+        onClear={clear}
+      />
+    </div>
+  );
+}
+
+function SalaryCurrencySelect({
+  props,
+  currencies,
+  currency,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly currencies: readonly string[];
+  readonly currency: string;
+}) {
+  const onChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    const salaryCurrency = event.currentTarget.value;
+    props.onChange((state) => ({ ...state, salaryCurrency }));
+  };
+  return (
+    <label className="career-field">
+      <span>Валюта</span>
+      <select value={currency} onChange={onChange}>
+        {currencies.map((option) => <option key={option} value={option}>{option}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function updateSalaryAmount(
+  props: VacanciesScreenFiltersProps,
+  currency: string,
+  field: 'salaryMinimum' | 'salaryMaximum',
+  value: string,
+) {
+  props.onChange((state) => ({
+    ...state,
+    salaryCurrency: state.salaryCurrency ?? currency,
+    [field]: value ? Number(value) : undefined,
+  }));
+}
+
+function SalaryRangeFields({
+  props,
+  currency,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly currency: string;
+}) {
+  return (
+    <div className="vacancy-salary-range">
+      <label className="career-field">
+        <span>От</span>
+        <input
+          type="number"
+          min="0"
+          value={props.state.salaryMinimum ?? ''}
+          onChange={(event) => updateSalaryAmount(props, currency, 'salaryMinimum', event.currentTarget.value)}
+        />
+      </label>
+      <label className="career-field">
+        <span>До</span>
+        <input
+          type="number"
+          min="0"
+          value={props.state.salaryMaximum ?? ''}
+          onChange={(event) => updateSalaryAmount(props, currency, 'salaryMaximum', event.currentTarget.value)}
+        />
+      </label>
+    </div>
+  );
+}
+
+function MissingSalaryToggle({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const includeMissingSalary = event.currentTarget.checked;
+    props.onChange((state) => ({ ...state, includeMissingSalary }));
+  };
+  return (
+    <label className="vacancy-missing-salary-toggle">
+      <input
+        type="checkbox"
+        checked={Boolean(props.state.includeMissingSalary)}
+        onChange={onChange}
+      />
+      <span>Включать вакансии без этой зарплатной информации</span>
+    </label>
+  );
+}
+
+function SalaryFilterSection({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const currencies = props.salaryCurrencies ?? [];
+  const currency = props.state.salaryCurrency ?? currencies[0] ?? '';
+  const salaryRangeSet =
+    props.state.salaryMinimum !== undefined || props.state.salaryMaximum !== undefined;
+  return (
+    <div className="field-group vacancy-salary-filter">
+      <h4>Зарплата</h4>
+      {currencies.length ? (
+        <>
+          <SalaryCurrencySelect props={props} currencies={currencies} currency={currency} />
+          <SalaryRangeFields props={props} currency={currency} />
+          {salaryRangeSet ? <MissingSalaryToggle props={props} /> : null}
+        </>
+      ) : <p>В загруженных вакансиях зарплатные данные не указаны.</p>}
+    </div>
+  );
+}
+
+function FormatFilterSection({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const options = [
+    { id: 'remote', label: 'Удалённо' },
+    { id: 'hybrid', label: 'Гибрид' },
+    { id: 'office', label: 'В офисе' },
+    { id: 'unknown', label: 'Не указано' },
+  ];
+  return (
+    <div className="field-group vacancy-format-filter">
+      <h4>Формат</h4>
+      <div className="chip-row">
+        {options.map((option) => (
+          <FacetChip
+            key={option.id}
+            option={{ ...option, count: props.formatCounts?.[option.id] ?? 0 }}
+            selected={(props.state.formats ?? []).includes(option.id)}
+            onClick={() => props.onChange((state) => toggleValue(state, 'formats', option.id))}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SourceFacetGroup({
+  title,
+  count,
+  sources,
+  props,
+}: {
+  readonly title: string;
+  readonly count?: number;
+  readonly sources: readonly { readonly sourceId: string; readonly name: string; readonly count: number }[];
+  readonly props: VacanciesScreenFiltersProps;
+}) {
+  if (!sources.length) return null;
+  return (
+    <fieldset className="vacancy-source-group">
+      <legend>{title}{count === undefined ? '' : ' · ' + count}</legend>
+      <div className="chip-row">
+        {sources.map((source) => (
+          <FacetChip
+            key={source.sourceId}
+            option={{ id: source.sourceId, label: source.name, count: source.count }}
+            selected={(props.state.sources ?? []).includes(source.sourceId)}
+            onClick={() => props.onChange((state) => toggleValue(state, 'sources', source.sourceId))}
+          />
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const facets = props.facets;
+  if (!facets) return null;
+  const catalog = facets.sourceCatalog ?? [];
+  if (!catalog.length) {
+    return (
+      <FacetGroup
+        title="Источник"
+        field="sources"
+        props={props}
+        options={facets.sources.map(({ sourceId, name, count }) => ({ id: sourceId, label: name, count }))}
+      />
+    );
+  }
+  const grouped = (facets.sourceGroups ?? []).map((group) => ({
+    ...group,
+    sources: catalog.filter((source) => source.groupId === group.id),
+  }));
+  const ungrouped = catalog.filter((source) => source.groupId === null);
+  return (
+    <div className="field-group vacancy-source-filter">
+      <h4>Источники</h4>
+      {grouped.map((group) => (
+        <SourceFacetGroup
+          key={group.id}
+          title={group.name}
+          count={group.count}
+          sources={group.sources}
+          props={props}
+        />
+      ))}
+      <SourceFacetGroup title="Другие источники" sources={ungrouped} props={props} />
+    </div>
+  );
+}
+
 function FacetGroups({
   props,
   roleInputRef,
@@ -223,24 +534,12 @@ function FacetGroups({
   const facets = props.facets;
   return (
     <>
-      {facets ? (
-        <>
-          <PrimaryFacetGroups props={props} facets={facets} />
-        </>
-      ) : null}
+      {facets ? <PrimaryFacetGroups props={props} facets={facets} /> : null}
       <RoleFilterSection props={props} roleInputRef={roleInputRef} />
-      {facets ? (
-        <FacetGroup
-          title="Источник"
-          field="sources"
-          props={props}
-          options={facets.sources.map(({ sourceId, name, count }) => ({
-            id: sourceId,
-            label: name,
-            count,
-          }))}
-        />
-      ) : null}
+      <LocationFilterSection props={props} />
+      <SalaryFilterSection props={props} />
+      <FormatFilterSection props={props} />
+      <SourceFacetGroups props={props} />
     </>
   );
 }
@@ -348,36 +647,74 @@ function FiltersBar({
   );
 }
 
-export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
+function emptyVacancyFilterState(): VacanciesScreenState {
+  return {
+    roles: [],
+    regions: [],
+    levels: [],
+    sources: [],
+    remoteOnly: false,
+    selectedLocations: [],
+    locationSearch: '',
+    formats: [],
+    salaryMinimum: undefined,
+    salaryMaximum: undefined,
+    salaryCurrency: undefined,
+    includeMissingSalary: false,
+    selectedCity: undefined,
+  };
+}
+
+function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
   const [expanded, setExpanded] = useState(() => Boolean(props.focusRole));
+  const [draftState, setDraftState] = useState(props.state);
   const roleInputRef = useRef<HTMLInputElement>(null);
-
+  useEffect(() => setDraftState(props.state), [props.state]);
   useEffect(() => {
-    if (props.focusRole) {
-      setExpanded(true);
-      const timer = setTimeout(() => {
-        roleInputRef.current?.focus();
-      }, 50);
-      return () => clearTimeout(timer);
-    }
+    if (!props.focusRole) return;
+    setExpanded(true);
+    const timer = setTimeout(() => roleInputRef.current?.focus(), 50);
+    return () => clearTimeout(timer);
   }, [props.focusRole]);
+  const resetAll = () => {
+    setDraftState(emptyVacancyFilterState());
+    props.onReset();
+  };
+  const draftProps = { ...props, state: draftState, onChange: setDraftState, onReset: resetAll };
+  return {
+    expanded,
+    setExpanded,
+    draftProps,
+    roleInputRef,
+    resetAll,
+    changed: JSON.stringify(draftState) !== JSON.stringify(props.state),
+    apply: () => props.onChange(() => draftState),
+  };
+}
 
+function VacancyFilterPanel({
+  props,
+  model,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly model: ReturnType<typeof useVacancyFilterDraft>;
+}) {
   return (
     <>
       <FiltersBar
-        expanded={expanded}
-        onToggle={() => setExpanded((value) => !value)}
+        expanded={model.expanded}
+        onToggle={() => model.setExpanded((value) => !value)}
         activeCount={countActiveFilters(props.state)}
-        onReset={props.onReset}
-        props={props}
+        onReset={model.resetAll}
+        props={model.draftProps}
       />
       <div
-        className={`filters-panel vacancies-filters${expanded ? ' is-expanded is-mobile-open' : ''}`}
+        className={`filters-panel vacancies-filters${model.expanded ? ' is-expanded is-mobile-open' : ''}`}
         aria-label="Фильтры"
       >
         <div className="filters-panel-head">
           <h3>Фильтры</h3>
-          <button type="button" className="filters-reset" onClick={() => setExpanded(false)}>
+          <button type="button" className="filters-reset" onClick={() => model.setExpanded(false)}>
             Свернуть
           </button>
         </div>
@@ -386,8 +723,21 @@ export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
           premisesLoading={props.premisesLoading}
           onSavePremises={props.onSavePremises}
         />
-        <FacetGroups props={props} roleInputRef={roleInputRef} />
+        <FacetGroups props={model.draftProps} roleInputRef={model.roleInputRef} />
+        <button
+          type="button"
+          className="btn btn-primary vacancies-filter-apply"
+          disabled={!model.changed}
+          onClick={model.apply}
+        >
+          Применить
+        </button>
       </div>
     </>
   );
+}
+
+export function VacanciesFilters(props: VacanciesScreenFiltersProps) {
+  const model = useVacancyFilterDraft(props);
+  return <VacancyFilterPanel props={props} model={model} />;
 }

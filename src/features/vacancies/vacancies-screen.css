@@ -1,0 +1,32 @@
+.vacancy-collection-actions {
+  align-items: stretch;
+}
+
+.vacancy-collection-actions > .career-vacancy-action {
+  min-height: var(--career-target-min);
+}
+
+.vacancies-saved-panel {
+  display: grid;
+  gap: var(--career-space-4);
+  width: 100%;
+}
+
+.vacancies-saved-header {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.vac-saved-card {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+}
+
+.vac-saved-card h3,
+.vac-saved-card p {
+  margin: 0;
+}

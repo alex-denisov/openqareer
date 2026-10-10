@@ -25,10 +25,29 @@ describe('countActiveFilters', () => {
       remoteOnly: true,
       selectedCity: 'Берлин',
     };
-    // 2 roles + 1 region + 1 remoteOnly + 1 selectedCity = 5
+    // Roles, locations, format, and city activate three filter groups.
+    expect(countActiveFilters(state)).toBe(3);
+  });
+});
+
+describe('B446 filter group count', () => {
+  it('counts each active group once, regardless of its selected option count', () => {
+    const state = {
+      roles: ['Head', 'Director'],
+      regions: ['ru-central', 'ru-north-west'],
+      levels: ['head'],
+      sources: ['hh', 'linkedin'],
+      remoteOnly: true,
+      selectedCity: 'Москва',
+      salaryMinimum: 450_000,
+      includeMissingSalary: true,
+      formats: ['hybrid', 'remote'],
+    };
+
     expect(countActiveFilters(state)).toBe(5);
   });
 });
+
 
 describe('VacanciesFilters toggle and role limit', () => {
   const defaultProps = {

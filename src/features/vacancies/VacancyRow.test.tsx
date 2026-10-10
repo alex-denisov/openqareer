@@ -198,4 +198,16 @@ describe('VacancyRow (B266/B324)', () => {
       expect(html).toContain('Ссылка на вакансию недоступна');
     });
   });
+  it('exposes server-backed save and company want controls with current states', () => {
+    const html = render({
+      isSaved: true,
+      isCompanyWanted: true,
+      onToggleSaved: vi.fn(),
+      onToggleCompanyWant: vi.fn(),
+    } as never);
+
+    expect(html).toContain('Убрать из сохранённых');
+    expect(html).toContain('Убрать из «Хочу»');
+    expect(html).toContain('aria-pressed="true"');
+  });
 });

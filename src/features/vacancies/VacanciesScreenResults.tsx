@@ -82,9 +82,29 @@ function VacanciesListContent(props: ListContentProps) {
             onOpenArchive={props.onOpenArchive}
             onAddToProfile={props.onAddToProfile}
             onDiscussWithConsultant={props.onDiscussWithConsultant}
+            isSaved={props.savedClusterIds?.has(item.cluster.id)}
+            saveBusy={props.savedBusyIds?.has(item.cluster.id)}
+            isCompanyWanted={props.companyWantByClusterId?.get(item.cluster.id)}
+            companyWantKnown={props.companyWantKnownClusterIds?.has(item.cluster.id)}
+            companyWantBusy={props.companyBusyClusterIds?.has(item.cluster.id)}
+            companyContactsCount={props.companyContactsCountByClusterId?.get(item.cluster.id)}
+            onOpenCompanyPath={item.cluster.canonicalCompany
+              ? () => props.onOpenCompanyPath?.(item.cluster.canonicalCompany)
+              : undefined}
+            onToggleSaved={() => props.onToggleSaved?.(item.cluster)}
+            onToggleCompanyWant={() => props.onToggleCompanyWant?.(item.cluster.canonicalCompany)}
           />
         ))}
       </ul>
+      {props.hasMore ? (
+        <button
+          type="button"
+          className="companies-people-load-more"
+          onClick={props.onLoadMore}
+        >
+          Показать ещё 20
+        </button>
+      ) : null}
     </div>
   );
 }

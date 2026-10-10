@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { VacancyApplications } from './useVacancyApplications';
-import { VacanciesScreen } from './VacanciesScreen';
+import { VacanciesScreen, filterByScreenState } from './VacanciesScreen';
 
 function matchedItem(
   id: string,
@@ -241,5 +241,46 @@ describe('VacanciesScreen (B250)', () => {
       },
     });
     expect(html).not.toContain('Расширить географию');
+  });
+
+  it('uses server counts for the saved vacancies and companies tabs', () => {
+    const html = render({
+      savedVacancies: [
+        { id: 'saved-1', clusterId: 'c-1', stage: 'saved', vacancy: { title: 'VP Technology Ops' } },
+      ],
+      companiesCount: 61,
+    } as never);
+
+    expect(html).toContain('Сохранённые 1');
+    expect(html).toContain('Компании и люди 61');
+  });
+  it('filters by salary, explicit location text, and known work format without guessing missing salary', () => {
+    const eligible = {
+      ...matchedItem('eligible', 'VP Engineering'),
+      cluster: {
+        ...matchedItem('eligible', 'VP Engineering').cluster,
+        canonicalLocation: 'Berlin · hybrid',
+        isRemote: false,
+        salary: { from: 140_000, to: 180_000, currency: 'EUR' },
+      },
+    };
+    const missingSalary = matchedItem('missing-salary', 'VP Engineering');
+    const differentLocation = {
+      ...matchedItem('different-location', 'VP Engineering'),
+      cluster: { ...matchedItem('different-location', 'VP Engineering').cluster, canonicalLocation: 'Paris' },
+    };
+    const criteria = {
+      roles: [], regions: [], levels: [], sources: [], remoteOnly: false,
+      salaryMinimum: 130_000, salaryCurrency: 'EUR', includeMissingSalary: false,
+      formats: ['hybrid'], locationSearch: 'Berlin',
+    } as never;
+
+    const filtered = filterByScreenState(
+      [eligible, missingSalary, differentLocation],
+      criteria,
+      '2026-10-10T00:00:00.000Z',
+    );
+
+    expect(filtered.map((item) => item.cluster.id)).toEqual(['eligible']);
   });
 });

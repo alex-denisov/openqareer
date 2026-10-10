@@ -176,6 +176,14 @@ function companySeed(index: number) {
       industry: 'Разработка',
       recruiterName: '',
     },
+    {
+      name: 'Revolut',
+      vacancyCount: 1,
+      want: false,
+      location: 'Berlin',
+      industry: 'Финансы',
+      recruiterName: '',
+    },
   ];
   return (
     seeds[index] ?? {

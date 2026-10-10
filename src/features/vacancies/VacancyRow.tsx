@@ -18,7 +18,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { extractVacancyRequirements, LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import { VacancyInterviewForm } from './VacancyInterviewForm';
-import { NotAppliedActions, VacancyMoreActions, VacancyRowMeta } from './VacancyRowElements';
+import { CompanyPathButton, NotAppliedActions, VacancyCollectionActions, VacancyMoreActions, VacancyRowMeta, vacancySnapshot } from './VacancyRowElements';
 
 export interface VacancyRowProps {
   readonly item: MatchedVacancyItem;
@@ -41,6 +41,15 @@ export interface VacancyRowProps {
   readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
+  readonly isSaved?: boolean;
+  readonly saveBusy?: boolean;
+  readonly onToggleSaved?: () => void | Promise<void>;
+  readonly isCompanyWanted?: boolean;
+  readonly companyWantKnown?: boolean;
+  readonly companyWantBusy?: boolean;
+  readonly companyContactsCount?: number | null;
+  readonly onToggleCompanyWant?: () => void | Promise<void>;
+  readonly onOpenCompanyPath?: () => void;
 }
 
 function logoInitials(company: string): string {
@@ -56,15 +65,6 @@ function vacancySubtitle(cluster: MatchedVacancyItem['cluster']): string {
   const parts = [cluster.canonicalCompany, cluster.canonicalLocation].filter(Boolean);
   if (cluster.isRemote) parts.push('удалённо');
   return parts.join(' · ');
-}
-
-function vacancySnapshot(cluster: MatchedVacancyItem['cluster']): VacancyApplicationSnapshot {
-  return {
-    title: cluster.canonicalTitle,
-    company: cluster.canonicalCompany ?? '',
-    url: cluster.primaryUrl,
-    source: cluster.sources[0]?.sourceId ?? '',
-  };
 }
 
 function VacancyReqTag({
@@ -703,7 +703,12 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
       />
 
       <RecruiterSection cluster={cluster} />
-
+      {rowProps.onOpenCompanyPath ? (
+        <CompanyPathButton
+          count={rowProps.companyContactsCount}
+          onOpen={rowProps.onOpenCompanyPath}
+        />
+      ) : null}
       <VacancyActionButtons {...buildActionButtonsProps(rowProps, rowState, cluster)} />
 
       <DetailInterviewSection
@@ -758,6 +763,7 @@ function VacancyRowModals({
   );
 }
 
+
 export function VacancyRow(props: VacancyRowProps) {
   const { item, isSelected, onSelect } = props;
   const { cluster, explanation } = item;
@@ -775,7 +781,7 @@ export function VacancyRow(props: VacancyRowProps) {
         trust={rowState.trust}
         onSelect={onSelect}
       />
-
+      <VacancyCollectionActions {...props} />
       {isSelected ? (
         <VacancyRowDetail
           cluster={cluster}
@@ -784,7 +790,6 @@ export function VacancyRow(props: VacancyRowProps) {
           rowState={rowState}
         />
       ) : null}
-
       <VacancyRowModals cluster={cluster} rowState={rowState} />
     </li>
   );

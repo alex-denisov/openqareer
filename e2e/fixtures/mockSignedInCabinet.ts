@@ -10,8 +10,22 @@ import {
   workspace,
 } from './readabilityWorkspace';
 
+interface ApplicationStub {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly clusterId: string | null;
+  stage: string;
+  archivePreviousStage: string | null;
+  version: number;
+  readonly vacancy: unknown;
+  readonly createdAt: string;
+  updatedAt: string;
+}
+
 export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   const unmatched: string[] = [];
+  let applications: ApplicationStub[] = [];
+  let nextApplicationId = 1;
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
@@ -42,9 +56,63 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       };
       return route.fulfill({ json: { data: snapshotWithMomentum } });
     }
-    // The readability fixture has no tracked applications yet; an empty
-    // list is the honest state, not an unknown route.
-    if (path.endsWith('/candidate/applications') || path.endsWith('/candidate/drafts')) {
+    // Saved vacancies use the same candidate application tracker as the Responses screen.
+    if (path === '/api/v1/candidate/applications') {
+      if (route.request().method() === 'GET')
+        return route.fulfill({ json: { data: applications } });
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as {
+          clusterId?: string;
+          stage?: string;
+          manualVacancy?: unknown;
+        };
+        const timestamp = '2026-10-10T00:00:00.000Z';
+        const created: ApplicationStub = {
+          id: `application-${nextApplicationId++}`,
+          candidateId: 'candidate-fixture',
+          clusterId: body.clusterId ?? null,
+          stage: body.stage ?? 'saved',
+          archivePreviousStage: null,
+          version: 1,
+          vacancy: body.manualVacancy ?? null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        applications = [...applications, created];
+        return route.fulfill({ status: 201, json: { data: created } });
+      }
+    }
+    const applicationRoute = path.match(
+      /^\/api\/v1\/candidate\/applications\/([^/]+)(\/restore)?$/u,
+    );
+    if (applicationRoute && route.request().method() === 'PATCH') {
+      const record = applications.find(
+        (item) => item.id === decodeURIComponent(applicationRoute[1]!),
+      );
+      if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+      const body = route.request().postDataJSON() as { stage?: string };
+      if (body.stage === 'archived') record.archivePreviousStage = record.stage;
+      if (body.stage) record.stage = body.stage;
+      record.version += 1;
+      record.updatedAt = '2026-10-10T00:01:00.000Z';
+      return route.fulfill({ json: { data: record } });
+    }
+    if (
+      applicationRoute &&
+      route.request().method() === 'POST' &&
+      applicationRoute[2] === '/restore'
+    ) {
+      const record = applications.find(
+        (item) => item.id === decodeURIComponent(applicationRoute[1]!),
+      );
+      if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+      record.stage = record.archivePreviousStage ?? 'saved';
+      record.archivePreviousStage = null;
+      record.version += 1;
+      record.updatedAt = '2026-10-10T00:02:00.000Z';
+      return route.fulfill({ json: { data: record } });
+    }
+    if (path.endsWith('/candidate/drafts')) {
       return route.fulfill({ json: { data: [] } });
     }
     // B370: панель отправки откликов читает лимиты и квитанции; в фикстуре действий нет.
