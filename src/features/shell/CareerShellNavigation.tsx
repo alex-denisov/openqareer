@@ -7,7 +7,7 @@ import {
   type ReactElement,
   type RefObject,
 } from 'react';
-import { DotsThree, Wallet, ShieldCheck } from '@phosphor-icons/react';
+import { CaretLeft, DotsThree, Lightning, Sparkle, Wallet, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
@@ -94,8 +94,22 @@ function RailItems(props: NavigationStateProps) {
           />
         </CareerTooltip>
       ))}
+      <CareerTooltip side="right" content="Автоматизация">
+        <NavigationButton
+          label="Автоматизация"
+          icon={AutomationIcon}
+          active={props.activeView === 'automation'}
+          disabled={!props.isNavigable('automation')}
+          lockedReason={props.lockedReason('automation')}
+          onClick={() => props.onNavigate('automation')}
+        />
+      </CareerTooltip>
     </nav>
   );
+}
+
+function AutomationIcon({ size = 22, active = false }: SectionIconProps) {
+  return <Lightning size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
 }
 
 function AccountRailButton({ session, disabled, onOpen }: { readonly session?: AuthUser | null; readonly disabled: boolean; readonly onOpen: () => void }) {
@@ -170,47 +184,43 @@ export function CareerNavigationRail({
   );
 }
 
-export function CareerMobileTopbar({
-  session,
-  sessionPending,
-  ariaHidden,
-  tariffsAvailable,
-  tariffsLockedReason,
-  onNavigateHome,
-  onNavigateTariffs,
-  onOpenAccount,
-}: {
+interface CareerMobileTopbarProps {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
+  readonly activeView: ShellSection;
   readonly ariaHidden?: boolean;
   readonly tariffsAvailable: boolean;
   readonly tariffsLockedReason: string;
   readonly onNavigateHome: () => void;
+  readonly onNavigateResponses: () => void;
   readonly onNavigateTariffs: () => void;
   readonly onOpenAccount: () => void;
-}) {
-  return (
-    <header className="career-topbar" aria-hidden={ariaHidden || undefined}>
-      <button className="career-wordmark" type="button" onClick={onNavigateHome} aria-label="openqareer, главная">
-        <BrandMark variant="mark" size={26} />
-      </button>
-      <div className="career-topbar-actions">
-        <button
-          className="career-mobile-tariffs"
-          type="button"
-          disabled={!tariffsAvailable}
-          aria-label={tariffsAvailable ? 'Тарифы' : `Тарифы. ${tariffsLockedReason}`}
-          onClick={onNavigateTariffs}
-        >
-          <Wallet size={20} aria-hidden="true" /> <span>Тарифы</span>
-        </button>
-        {session?.role === 'admin' ? <a href="/admin" className="career-topbar-admin">Админка</a> : null}
-        <button className="career-account-trigger" type="button" disabled={sessionPending} onClick={onOpenAccount} aria-label="Открыть аккаунт">
-          <span className="career-rail-avatar" aria-hidden="true">{initialsFor(session?.displayName ?? session?.username ?? null)}</span>
-        </button>
-      </div>
-    </header>
-  );
+  readonly onOpenConsultant: () => void;
+}
+
+export function CareerMobileTopbar(props: CareerMobileTopbarProps) {
+  return <header className="career-topbar" aria-hidden={props.ariaHidden || undefined}>
+    {props.activeView === 'automation' ? <AutomationMobileTopbar {...props} /> : <DefaultMobileTopbar {...props} />}
+  </header>;
+}
+
+function AutomationMobileTopbar({ onNavigateResponses, onOpenConsultant }: CareerMobileTopbarProps) {
+  return <>
+    <button className="career-automation-topbar-back" type="button" aria-label="Назад к откликам" onClick={onNavigateResponses}><CaretLeft size={22} aria-hidden="true" /></button>
+    <span className="career-automation-topbar-title">Автоматизация</span>
+    <button className="career-automation-topbar-consultant" type="button" aria-label="Открыть консультанта" onClick={onOpenConsultant}><Sparkle size={20} aria-hidden="true" /></button>
+  </>;
+}
+
+function DefaultMobileTopbar(props: CareerMobileTopbarProps) {
+  return <>
+    <button className="career-wordmark" type="button" onClick={props.onNavigateHome} aria-label="openqareer, главная"><BrandMark variant="mark" size={26} /></button>
+    <div className="career-topbar-actions">
+      <button className="career-mobile-tariffs" type="button" disabled={!props.tariffsAvailable} aria-label={props.tariffsAvailable ? 'Тарифы' : `Тарифы. ${props.tariffsLockedReason}`} onClick={props.onNavigateTariffs}><Wallet size={20} aria-hidden="true" /><span>Тарифы</span></button>
+      {props.session?.role === 'admin' ? <a href="/admin" className="career-topbar-admin">Админка</a> : null}
+      <button className="career-account-trigger" type="button" disabled={props.sessionPending} onClick={props.onOpenAccount} aria-label="Открыть аккаунт"><span className="career-rail-avatar" aria-hidden="true">{initialsFor(props.session?.displayName ?? props.session?.username ?? null)}</span></button>
+    </div>
+  </>;
 }
 
 function useMoreMenu(open: boolean, triggerRef: RefObject<HTMLButtonElement | null>, menuRef: RefObject<HTMLDivElement | null>, close: () => void) {
@@ -299,7 +309,7 @@ export function CareerMobileNavigation({
       ) : null}
       <nav className="career-mobile-nav" aria-label="Основная навигация" aria-hidden={ariaHidden || undefined}>
         {primaryNavigation.map((item) => (
-          <NavigationButton key={item.key} label={item.label} icon={item.icon} active={activeView === item.target} disabled={!isNavigable(item.target)} lockedReason={lockedReason(item.target)} onClick={() => onNavigate(item.target)} />
+          <NavigationButton key={item.key} label={item.label} icon={item.icon} active={activeView === item.target || (activeView === 'automation' && item.target === 'responses')} disabled={!isNavigable(item.target)} lockedReason={lockedReason(item.target)} onClick={() => onNavigate(item.target)} />
         ))}
         <button ref={triggerRef} type="button" className="career-mobile-more-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-controls="career-mobile-more-menu" onClick={() => setMoreOpen((open) => !open)}>
           <DotsThree size={22} aria-hidden="true" /><span>Ещё</span>

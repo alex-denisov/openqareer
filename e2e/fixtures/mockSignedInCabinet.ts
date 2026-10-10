@@ -25,6 +25,8 @@ interface AutomationFixtureState {
   schedule: Record<string, unknown>;
   runtime: Record<string, unknown>;
   journal: AutomationJournalFixtureEntry[];
+  queueBehavior: { delayMs?: number; errorStatus?: number; totalOverride?: number };
+  snapshotDelayMs?: number;
 }
 
 interface AutomationJournalFixtureEntry {
@@ -38,10 +40,12 @@ interface AutomationJournalFixtureEntry {
   failureCode: string | null;
 }
 
-interface AutomationQueueFixtureItem {
+export interface AutomationQueueFixtureItem {
   id: string;
   status: string;
   sendTiming: string;
+  createdAt?: string;
+  updatedAt?: string;
   payload: {
     clusterId: string;
     applicationId: string | null;
@@ -56,6 +60,21 @@ interface AutomationQueueFixtureItem {
   };
 }
 
+export interface MockSignedInCabinetOptions {
+  readonly candidateId?: string;
+  readonly automationQueue?: readonly AutomationQueueFixtureItem[];
+  readonly automationQueueBehavior?: {
+    readonly delayMs?: number;
+    readonly errorStatus?: number;
+    readonly totalOverride?: number;
+  };
+  readonly automationSnapshotDelayMs?: number;
+  readonly automation?: {
+    readonly settings?: Partial<AutomationFixtureState['settings']>;
+    readonly runtime?: Partial<AutomationFixtureState['runtime']>;
+  };
+}
+
 const AUTOMATION_CONSENT_TEXT: Readonly<Record<string, string>> = {
   drafts: 'Разрешаю готовить черновики откликов и писем по выбранным мной вакансиям.',
   send_after_approval: 'Разрешаю отправлять каждый отклик только после моего отдельного одобрения.',
@@ -63,52 +82,92 @@ const AUTOMATION_CONSENT_TEXT: Readonly<Record<string, string>> = {
   automatic_submission:
     'Разрешаю отправлять подходящие отклики без отдельного одобрения каждого, в рамках выбранных правил и тарифных лимитов.',
 };
+const AUTOMATION_REQUIRED_CONSENTS = ['drafts', 'send_after_approval', 'notifications'] as const;
 
-function createAutomationFixtureState(): AutomationFixtureState {
+function createAutomationFixtureState(
+  options: MockSignedInCabinetOptions = {},
+): AutomationFixtureState {
+  const candidateId = options.candidateId ?? 'readability-candidate';
+  const settings = createAutomationSettings(candidateId, options.automation?.settings);
   return {
-    settings: {
-      candidateId: 'readability-candidate',
-      enabled: false,
-      mode: 'drafts_only',
-      pausedUntil: null,
-      rules: {
-        roles: [],
-        minimumMatchPercent: 80,
-        platforms: ['hh', 'linkedin'],
-        excludeStopCompanies: true,
-      },
-      updatedAt: null,
-    },
-    consents: [],
+    settings,
+    consents: fixtureAutomationConsents(settings.enabled),
     stops: [],
-    queue: [],
-    schedule: {
-      timezone: 'Europe/Moscow',
-      dailyLimits: { hh: 15, linkedin: 10 },
-      minPauseMinutes: 2,
-      maxPauseMinutes: 9,
-      sendWindows: {
-        hh: { start: '10:00', end: '18:00', days: [1, 2, 3, 4, 5] },
-        linkedin: { start: '09:00', end: '17:00', days: [1, 2, 3, 4] },
-      },
-      quietWindows: [
-        { start: '22:00', end: '08:00' },
-        { start: '13:00', end: '14:00' },
-      ],
-      excludedDates: [],
-      breakAfterSent: 8,
-      breakMinutes: 120,
-      stopAfterErrors: 3,
-    },
-    runtime: {
-      status: 'ready',
-      emergencyPaused: false,
-      consecutiveErrors: 0,
-      sentSinceBreak: 0,
-      nextSendAt: null,
-      pauseUntil: null,
-    },
+    queue: (options.automationQueue ?? []).map((item) => ({
+      ...item,
+      payload: { ...item.payload, materials: [...item.payload.materials] },
+    })),
+    schedule: defaultAutomationSchedule(),
+    runtime: { ...defaultAutomationRuntime(), ...options.automation?.runtime },
     journal: [],
+    queueBehavior: { ...options.automationQueueBehavior },
+    snapshotDelayMs: options.automationSnapshotDelayMs,
+  };
+}
+
+function createAutomationSettings(
+  candidateId: string,
+  overrides?: Partial<AutomationFixtureState['settings']>,
+): AutomationFixtureState['settings'] {
+  return {
+    candidateId,
+    enabled: false,
+    mode: 'drafts_only',
+    pausedUntil: null,
+    rules: {
+      roles: [],
+      minimumMatchPercent: 80,
+      platforms: ['hh', 'linkedin'],
+      excludeStopCompanies: true,
+    },
+    updatedAt: null,
+    ...overrides,
+    candidateId,
+  };
+}
+
+function fixtureAutomationConsents(enabled: boolean): AutomationFixtureState['consents'] {
+  if (!enabled) return [];
+  const acceptedAt = '2026-10-09T08:00:00.000Z';
+  return AUTOMATION_REQUIRED_CONSENTS.map((key) => ({
+    id: `consent-${key}`,
+    key,
+    version: 'B452-2026-10-10-v1',
+    text: AUTOMATION_CONSENT_TEXT[key] ?? '',
+    acceptedAt,
+    revokedAt: null,
+  }));
+}
+
+function defaultAutomationSchedule(): Record<string, unknown> {
+  return {
+    timezone: 'Europe/Moscow',
+    dailyLimits: { hh: 15, linkedin: 10 },
+    minPauseMinutes: 2,
+    maxPauseMinutes: 9,
+    sendWindows: {
+      hh: { start: '10:00', end: '18:00', days: [1, 2, 3, 4, 5] },
+      linkedin: { start: '09:00', end: '17:00', days: [1, 2, 3, 4] },
+    },
+    quietWindows: [
+      { start: '22:00', end: '08:00' },
+      { start: '13:00', end: '14:00' },
+    ],
+    excludedDates: [],
+    breakAfterSent: 8,
+    breakMinutes: 120,
+    stopAfterErrors: 1,
+  };
+}
+
+function defaultAutomationRuntime(): Record<string, unknown> {
+  return {
+    status: 'ready',
+    emergencyPaused: false,
+    consecutiveErrors: 0,
+    sentSinceBreak: 0,
+    nextSendAt: null,
+    pauseUntil: null,
   };
 }
 
@@ -167,6 +226,32 @@ function applyAutomationAction(
     item.payload = { ...item.payload, targetUrl: '', letterText: '', materials: [] };
 }
 
+function automationQueueSummary(item: AutomationQueueFixtureItem, candidateId: string) {
+  return {
+    id: item.id,
+    candidateId,
+    applicationId: item.payload.applicationId,
+    status: item.status,
+    displayStatus:
+      item.status === 'pending_approval'
+        ? item.sendTiming === 'today'
+          ? 'will_send_today'
+          : 'will_send_later'
+        : item.status,
+    sendTiming: item.sendTiming,
+    createdAt: item.createdAt ?? '2026-10-09T08:00:00.000Z',
+    updatedAt: item.updatedAt ?? '2026-10-09T08:00:00.000Z',
+    clusterId: item.payload.clusterId,
+    platform: item.payload.platform,
+    title: item.payload.title,
+    role: item.payload.role,
+    company: item.payload.company,
+    requirements: item.payload.requirements,
+    letterReady: item.payload.letterText.trim().length > 0,
+    materialCount: item.payload.materials.length,
+  };
+}
+
 function recordAutomationRemoval(
   state: AutomationFixtureState,
   item: AutomationQueueFixtureItem,
@@ -190,6 +275,9 @@ async function mockAutomationConfiguration(
 ): Promise<boolean> {
   const method = route.request().method();
   if (path.endsWith('/candidate/automation') && method === 'GET') {
+    if (state.snapshotDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, state.snapshotDelayMs));
+    }
     await route.fulfill({ json: { data: automationState(state) } });
     return true;
   }
@@ -388,6 +476,21 @@ async function mockAutomationQueue(
     return bulkAutomationQueue(route, state);
   }
   if (path.endsWith('/candidate/automation/queue') && method === 'GET') {
+    if (state.queueBehavior.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, state.queueBehavior.delayMs));
+    }
+    if (state.queueBehavior.errorStatus) {
+      await route.fulfill({
+        status: state.queueBehavior.errorStatus,
+        json: {
+          error: {
+            code: 'automation_queue_fixture_error',
+            message: 'Не удалось загрузить очередь.',
+          },
+        },
+      });
+      return true;
+    }
     const status = url.searchParams.get('status');
     const platform = url.searchParams.get('platform');
     const items = state.queue.filter(
@@ -397,8 +500,8 @@ async function mockAutomationQueue(
     await route.fulfill({
       json: {
         data: {
-          items,
-          total: items.length,
+          items: items.map((item) => automationQueueSummary(item, state.settings.candidateId)),
+          total: state.queueBehavior.totalOverride ?? items.length,
           limit: Number(url.searchParams.get('limit') ?? 20),
           offset: Number(url.searchParams.get('offset') ?? 0),
         },
@@ -448,12 +551,19 @@ async function mockAutomationQueueItem(
     const { action } = route.request().postDataJSON() as { action: string };
     applyAutomationAction(state, item, action);
     await route.fulfill({
-      json: { data: { item, execution: item.status === 'approved' ? 'scheduled' : 'not_started' } },
+      json: {
+        data: {
+          item: automationQueueSummary(item, state.settings.candidateId),
+          execution: item.status === 'approved' ? 'scheduled' : 'not_started',
+        },
+      },
     });
   } else if (letterMatch && route.request().method() === 'PATCH') {
     item.payload.letterText = (route.request().postDataJSON() as { letterText: string }).letterText;
     item.status = item.payload.letterText.trim() ? 'pending_approval' : 'letter_not_ready';
-    await route.fulfill({ json: { data: { item } } });
+    await route.fulfill({
+      json: { data: { item: automationQueueSummary(item, state.settings.candidateId) } },
+    });
   } else {
     await route.fulfill({ json: { data: { id: item.id, status: item.status, ...item.payload } } });
   }
@@ -521,12 +631,15 @@ async function mockAutomationApi(
   );
 }
 
-export async function mockSignedInCabinet(page: Page): Promise<string[]> {
+export async function mockSignedInCabinet(
+  page: Page,
+  options: MockSignedInCabinetOptions = {},
+): Promise<string[]> {
   const unmatched: string[] = [];
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
-  const automation = createAutomationFixtureState();
+  const automation = createAutomationFixtureState(options);
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;

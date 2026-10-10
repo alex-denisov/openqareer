@@ -597,13 +597,13 @@ describe('B440 fixed rail contract', () => {
     );
   }
 
-  it('renders four distinct primary section icons on rail and mobile', () => {
+  it('keeps four primary sections on mobile and adds automation to the desktop rail', () => {
     const html = shellHtml();
     const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
       (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
     );
-    expect(paths).toHaveLength(8);
-    expect(new Set(paths).size).toBe(4);
+    expect(paths).toHaveLength(9);
+    expect(new Set(paths).size).toBe(5);
   });
 
   it('has no rail expansion state and keeps tariff access on Wallet', () => {
