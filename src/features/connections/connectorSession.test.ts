@@ -5,6 +5,8 @@ import {
   closeConnectorSession,
   connectorAccountKey,
   exportPoolSessionCookies,
+  isAllowedConnectorUrl,
+  isConnectorSessionOpen,
   looksLikeHhLoginPage,
   looksLikeHhVpnBlock,
   looksLikeLinkedInLoginPage,
@@ -16,6 +18,7 @@ import {
   readSessionPage,
   resetConnectorSession,
   resizeConnectorSession,
+  showConnectorSession,
   sessionCheckFailure,
   sessionOpenFailureMessage,
 } from './connectorSession';
@@ -59,6 +62,46 @@ describe('openConnectorSession', () => {
     const result = await openConnectorSession('linkedin', 'https://www.linkedin.com/login');
 
     expect(result.opened).toBe(true);
+  });
+
+  it('rejects browser destinations outside the HTTPS platform allowlist before opening a popup', async () => {
+    const open = vi.fn(() => ({ closed: false }));
+    useWindow({ open });
+
+    expect(isAllowedConnectorUrl('linkedin', 'https://www.linkedin.com/login')).toBe(true);
+    expect(isAllowedConnectorUrl('hh', 'https://hh.ru/account/login')).toBe(true);
+    expect(isAllowedConnectorUrl('linkedin', 'https://linkedin.com:8443/login')).toBe(false);
+    expect(isAllowedConnectorUrl('linkedin', 'https://user@linkedin.com/login')).toBe(false);
+    const result = await openConnectorSession('linkedin', 'https://linkedin.com.example.test/login');
+
+    expect(result).toEqual({ opened: false, reason: 'url_not_allowed' });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('focuses and closes only the candidate popup owned by this browser window', async () => {
+    const popup = { closed: false, focus: vi.fn(), close: vi.fn() };
+    const open = vi.fn(() => popup);
+    useWindow({ open });
+
+    await openConnectorSession('hh', 'https://hh.ru/account/login');
+    expect(await isConnectorSessionOpen('hh')).toBe(true);
+    expect(await showConnectorSession('hh')).toBe(true);
+    expect(popup.focus).toHaveBeenCalledOnce();
+    await closeConnectorSession('hh');
+    expect(popup.close).toHaveBeenCalledOnce();
+    expect(await isConnectorSessionOpen('hh')).toBe(false);
+  });
+
+  it('uses a dedicated Tauri command to show an existing native session window', async () => {
+    const invoke = vi.fn(async () => true);
+    useWindow({ __TAURI_INTERNALS__: { invoke }, open: vi.fn() });
+
+    expect(await showConnectorSession('linkedin')).toBe(true);
+    expect(invoke).toHaveBeenCalledWith(
+      'show_connector_session',
+      { platform: 'linkedin' },
+      undefined,
+    );
   });
 
   it('reports failure when the desktop shell cannot open the native window', async () => {
