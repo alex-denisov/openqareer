@@ -1,5 +1,9 @@
 import type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
-import type { ApplicationStage, DeliveryReceipt } from '../../../shared/applicationStage';
+import {
+  APPLICATION_STAGES,
+  type ApplicationStage,
+  type DeliveryReceipt,
+} from '../../../shared/applicationStage';
 import type {
   CandidateActionKind,
   CandidateActionUsageSummary,
@@ -7,7 +11,14 @@ import type {
 } from '../../../shared/candidateActionPolicy';
 import type { SkipReasonId } from '../../../shared/skipReasons';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
-import { apiFetch, readData, readDataArray, readDataObject } from '../coach/apiClient';
+import {
+  apiFetch,
+  CoachApiError,
+  readData,
+  readDataArray,
+  readDataObject,
+  throwApiError,
+} from '../coach/apiClient';
 
 export type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
 
@@ -47,6 +58,193 @@ export async function listApplications(signal?: AbortSignal): Promise<Applicatio
   const tz = localTimezoneOffsetMinutes();
   const response = await apiFetch(`/api/v1/candidate/applications?tz=${tz}`, { signal });
   return readDataArray<ApplicationView>(response);
+}
+
+export interface ApplicationListQuery {
+  readonly stage?: readonly ApplicationStage[];
+  readonly channel?: readonly string[];
+  readonly from?: string;
+  readonly to?: string;
+  readonly sort?: 'date' | 'company' | 'stage';
+  readonly direction?: 'asc' | 'desc';
+  readonly limit?: number;
+  readonly offset?: number;
+}
+
+export interface ApplicationListPageMeta {
+  readonly total: number;
+  readonly offset: number;
+  readonly limit: number;
+  readonly stageCounts: Record<ApplicationStage, number>;
+}
+
+export interface ApplicationListPage {
+  readonly items: readonly ApplicationView[];
+  readonly meta: ApplicationListPageMeta;
+}
+
+export type ApplicationBulkAction =
+  | { readonly type: 'close' }
+  | { readonly type: 'set_stage'; readonly stage: ApplicationStage }
+  | { readonly type: 'retry' };
+
+export interface ApplicationBulkResult {
+  readonly state: 'prepared' | 'completed';
+  readonly preparedCount?: number;
+  readonly sentCount?: number;
+  readonly changedCount: number;
+  readonly stage?: ApplicationStage;
+}
+
+export type CompanyWantBulkAction = 'add' | 'set_next_step' | 'remove';
+
+export interface CompanyWantBulkItem {
+  readonly companyName: string;
+  readonly nextStep?: string;
+  readonly nextStepDueAt?: string | null;
+}
+
+export interface ApplicationBulkPreview {
+  readonly affectedCount: number;
+}
+
+export async function listApplicationsPage(
+  query: ApplicationListQuery = {},
+  signal?: AbortSignal,
+): Promise<ApplicationListPage> {
+  const params = applicationQueryParams(query);
+  const response = await apiFetch(`/api/v1/candidate/applications?${params.toString()}`, { signal });
+  return parseApplicationListPage(response, query);
+}
+
+function applicationQueryParams(query: ApplicationListQuery): URLSearchParams {
+  const params = new URLSearchParams({
+    tz: String(localTimezoneOffsetMinutes()),
+    limit: String(query.limit ?? 20),
+    offset: String(query.offset ?? 0),
+    sort: query.sort ?? 'date',
+    direction: query.direction ?? 'desc',
+  });
+  query.stage?.forEach((stage) => params.append('stage', stage));
+  query.channel?.forEach((channel) => params.append('channel', channel));
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  return params;
+}
+
+async function parseApplicationListPage(
+  response: Response,
+  query: ApplicationListQuery,
+): Promise<ApplicationListPage> {
+  if (!response.ok) await throwApiError(response);
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new CoachApiError('Сервис вернул ответ неожиданной формы. Повторите запрос.', 'malformed_response', true);
+  }
+  if (!payload || typeof payload !== 'object') {
+    throw new CoachApiError('Сервис вернул ответ неожиданной формы. Повторите запрос.', 'malformed_response', true);
+  }
+  const body = payload as { data?: unknown; meta?: Partial<ApplicationListPageMeta> };
+  if (!Array.isArray(body.data)) {
+    throw new CoachApiError('Сервис вернул ответ неожиданной формы. Повторите запрос.', 'malformed_response', true);
+  }
+  const items = body.data as ApplicationView[];
+  const meta = body.meta;
+  if (meta?.stageCounts && typeof meta.total === 'number') {
+    return {
+      items,
+      meta: {
+        total: meta.total,
+        offset: meta.offset ?? query.offset ?? 0,
+        limit: meta.limit ?? query.limit ?? 20,
+        stageCounts: meta.stageCounts,
+      },
+    };
+  }
+  return {
+    items,
+    meta: {
+      total: items.length,
+      offset: query.offset ?? 0,
+      limit: query.limit ?? 20,
+      stageCounts: countApplicationStages(items),
+    },
+  };
+}
+
+export async function previewApplicationBulk(
+  filters: ApplicationListQuery,
+  action: ApplicationBulkAction,
+): Promise<ApplicationBulkPreview> {
+  const response = await apiFetch('/api/v1/candidate/applications/bulk/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filters: toApplicationFilters(filters), action }),
+  });
+  return readDataObject<ApplicationBulkPreview>(response);
+}
+
+export async function executeApplicationBulk(
+  filters: ApplicationListQuery,
+  action: ApplicationBulkAction,
+  confirmCount: number,
+): Promise<ApplicationBulkResult> {
+  const response = await apiFetch('/api/v1/candidate/applications/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      filters: toApplicationFilters(filters),
+      action,
+      operationId: globalThis.crypto.randomUUID(),
+      confirmCount,
+    }),
+  });
+  return readDataObject<ApplicationBulkResult>(response);
+}
+
+export async function previewCompanyWantBulk(
+  action: CompanyWantBulkAction,
+  companies: readonly CompanyWantBulkItem[],
+): Promise<ApplicationBulkPreview> {
+  const response = await apiFetch('/api/v1/candidate/applications/company-wants/bulk/preview', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, companies }),
+  });
+  return readDataObject<ApplicationBulkPreview>(response);
+}
+
+export async function executeCompanyWantBulk(
+  action: CompanyWantBulkAction,
+  companies: readonly CompanyWantBulkItem[],
+  confirmCount: number,
+): Promise<{ readonly state: 'completed'; readonly changedCount: number }> {
+  const response = await apiFetch('/api/v1/candidate/applications/company-wants/bulk', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, companies, operationId: globalThis.crypto.randomUUID(), confirmCount }),
+  });
+  return readDataObject(response);
+}
+
+function toApplicationFilters(query: ApplicationListQuery) {
+  return {
+    stage: query.stage ?? [],
+    channel: query.channel ?? [],
+    ...(query.from ? { from: query.from } : {}),
+    ...(query.to ? { to: query.to } : {}),
+  };
+}
+
+function countApplicationStages(applications: readonly ApplicationView[]): Record<ApplicationStage, number> {
+  const counts = Object.fromEntries(APPLICATION_STAGES.map((stage) => [stage, 0])) as Record<
+    ApplicationStage,
+    number
+  >;
+  for (const application of applications) counts[application.stage] += 1;
+  return counts;
 }
 
 export async function createApplication(input: CreateApplicationInput): Promise<ApplicationView> {
