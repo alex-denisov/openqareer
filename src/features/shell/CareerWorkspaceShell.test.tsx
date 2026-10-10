@@ -82,6 +82,26 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('С чем разобраться?');
   });
 
+  it('opens the authenticated diary as a first-class cabinet screen', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        initialView="diary"
+        session={{
+          username: 'candidate',
+          email: 'candidate@example.com',
+          displayName: 'Кандидат',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-diary',
+        }}
+      />,
+    );
+
+    expect(html).toContain('career-diary-page');
+    expect(html).toContain('Карьерный дневник');
+    expect(html).toContain('aria-current="page"');
+  });
+
   it('locks every workspace section until the diagnostic produced a career picture', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
@@ -602,8 +622,8 @@ describe('B440 fixed rail contract', () => {
     const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
       (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
     );
-    expect(paths).toHaveLength(8);
-    expect(new Set(paths).size).toBe(4);
+    expect(paths).toHaveLength(9);
+    expect(new Set(paths).size).toBe(5);
   });
 
   it('has no rail expansion state and keeps tariff access on Wallet', () => {

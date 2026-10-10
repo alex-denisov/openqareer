@@ -8,4 +8,5 @@ export type CareerCabinetView =
   | 'resume'
   | 'career'
   | 'opportunities'
-  | 'responses';
+  | 'responses'
+  | 'diary';

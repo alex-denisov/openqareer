@@ -66,6 +66,7 @@ const pageNames: Record<ShellView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  diary: 'Карьерный дневник',
   tariffs: 'Тарифы',
 };
 
@@ -92,6 +93,7 @@ export function CareerWorkspaceShell({
     stage: CoachTurnStage;
     subject?: CoachTurnSubject;
     subjectTitle?: string;
+    initialPrompt?: string;
   }>({
     open: sessionPending,
     stage: 'today',
@@ -172,6 +174,7 @@ export function CareerWorkspaceShell({
   const navigationState = {
     careerPictureReady,
     resumeAvailable,
+    candidateSessionAvailable: Boolean(cabinetSession),
     canUseWorkspaceViews,
   };
 
@@ -210,13 +213,19 @@ export function CareerWorkspaceShell({
   }, [activeView]);
 
   const openExpert = useCallback(
-    (stage?: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => {
+    (
+      stage?: CoachTurnStage,
+      subject?: CoachTurnSubject,
+      subjectTitle?: string,
+      initialPrompt?: string,
+    ) => {
       setExpertSheetExpanded(false);
       setExpertConfig({
         open: true,
         stage: stage ?? stageForView(activeView),
         subject,
         subjectTitle,
+        initialPrompt,
       });
     },
     [activeView],
@@ -475,6 +484,7 @@ export function CareerWorkspaceShell({
           stage={expertConfig.stage}
           subject={expertConfig.subject}
           subjectTitle={expertConfig.subjectTitle}
+          initialPrompt={expertConfig.initialPrompt}
           initialUser={session ?? null}
           loadingSession={sessionPending}
           mobileExpanded={expertSheetExpanded}

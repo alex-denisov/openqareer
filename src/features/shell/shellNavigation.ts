@@ -5,6 +5,7 @@ export type ShellSection =
   | 'career'
   | 'opportunities'
   | 'responses'
+  | 'diary'
   | 'tariffs';
 
 export interface ShellNavigationState {
@@ -12,6 +13,8 @@ export interface ShellNavigationState {
   readonly careerPictureReady: boolean;
   /** Resume Studio reads a candidate-scoped API and needs a signed-in account. */
   readonly resumeAvailable: boolean;
+  /** A candidate session exists for the server-backed diary. */
+  readonly candidateSessionAvailable: boolean;
   /** A workspace or a cabinet session exists to render the section from. */
   readonly canUseWorkspaceViews: boolean;
 }
@@ -30,6 +33,7 @@ export function isSectionNavigable(
   state: ShellNavigationState,
 ): boolean {
   if (section === 'today') return true;
+  if (section === 'diary') return state.candidateSessionAvailable;
   if (!state.careerPictureReady) return false;
   if (section === 'resume') return state.resumeAvailable;
   if (section === 'tariffs') return true;
@@ -41,6 +45,9 @@ export function sectionLockReason(
   section: ShellSection,
   state: ShellNavigationState,
 ): string {
+  if (section === 'diary' && !state.candidateSessionAvailable) {
+    return 'Войдите в аккаунт, чтобы открыть карьерный дневник';
+  }
   if (!state.careerPictureReady) {
     return 'Завершите карьерную диагностику, чтобы открыть раздел';
   }

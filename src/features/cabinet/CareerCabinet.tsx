@@ -43,6 +43,7 @@ import type {
 } from '../vacancies/vacancyProfileRequirement';
 import type { NavigationOptions } from '../shell/pathIndicator';
 import type { CareerCabinetView } from './cabinetViews';
+import { CareerDiaryPage } from '../diary/CareerDiaryPage';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -71,7 +72,7 @@ interface CareerCabinetProps {
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string, initialPrompt?: string) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
 
@@ -243,6 +244,7 @@ export function CareerCabinet({
   );
   const clearProfileRequirement = useCallback(() => setVacancyProfileRequest(null), []);
   const showsVacanciesScreen = view === 'opportunities';
+  const showsDiaryScreen = view === 'diary';
   // B248 §2 — the same path indicator the anonymous wizard shows
   // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
   // confirmed applications instead of a second read of any of them
@@ -276,7 +278,7 @@ export function CareerCabinet({
             кампании (B248/B250) — общая шапка кабинета здесь дублировала бы
             их дженериковой версией (приёмка B250). Доска-заглушка
             (загрузка/ошибка/пусто) общей шапкой ещё пользуется. */}
-        {!showsVacanciesScreen ? (
+        {!showsVacanciesScreen && !showsDiaryScreen ? (
           <CabinetHeader
             view={view}
             loading={data.loading}
@@ -288,13 +290,13 @@ export function CareerCabinet({
             }
           />
         ) : null}
-        {pathIndicatorSteps && !showsVacanciesScreen && view !== 'profile' ? (
+        {pathIndicatorSteps && !showsVacanciesScreen && !showsDiaryScreen && view !== 'profile' ? (
           <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
             «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
-        {data.loading && !data.snapshot ? (
+        {data.loading && !data.snapshot && !showsDiaryScreen ? (
           <CareerTodaySkeleton showHeading={false} />
         ) : (
           <CabinetSection
@@ -414,7 +416,7 @@ function CabinetSection({
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string, initialPrompt?: string) => void;
 }) {
   useEffect(() => {
     if (view === 'career') {
@@ -462,6 +464,26 @@ function CabinetSection({
         importedSources={data.snapshot?.importedSources}
         regions={workspace?.regions ?? []}
         onRefreshFacts={() => void data.refresh()}
+      />
+    );
+  }
+
+  if (view === 'diary') {
+    return (
+      <CareerDiaryPage
+        onOpenConsultant={(goal) => {
+          const latestMeasurement = goal.latestMeasurement
+            ? `Последний замер от ${goal.latestMeasurement.measuredAt}: ${String(goal.latestMeasurement.value)} ${goal.unit} (источник: ${goal.latestMeasurement.source}).`
+            : 'Замеров пока нет.';
+          const initialPrompt = [
+            `Помогите разобрать карьерную цель «${goal.title}».`,
+            `Целевое значение: ${String(goal.targetValue)} ${goal.unit}.`,
+            latestMeasurement,
+            `Срок: ${goal.dueDate}.`,
+            `Статус риска: ${goal.risk.status}. ${goal.risk.explanation}`,
+          ].join(' ');
+          onOpenExpert?.('today', undefined, `По цели: ${goal.title}`, initialPrompt);
+        }}
       />
     );
   }
@@ -598,6 +620,7 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  diary: 'Карьерный дневник',
 };
 
 const VIEW_KICKER: Record<CareerCabinetView, string> = {
@@ -607,6 +630,7 @@ const VIEW_KICKER: Record<CareerCabinetView, string> = {
   career: 'Кампания',
   opportunities: 'Кампания',
   responses: 'Отклики в работе',
+  diary: 'Карьерный дневник',
 };
 
 // Шапка раздела говорит, что человек здесь получит, а не как устроен модуль
@@ -622,6 +646,7 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
     'Все вакансии по вашей роли из наших источников: фильтры, направления поиска и действия по каждой.',
   responses:
     'Весь активный поиск одним взглядом. Переписка, интервью и оффер живут на карточке — не отдельно.',
+  diary: 'Цели, замеры и заметки с источником каждого значения.',
 };
 
 /** Cards still live on the «Отклики» board — everything but rejected/archived (B251 S4). */

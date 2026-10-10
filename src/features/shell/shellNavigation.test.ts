@@ -8,12 +8,14 @@ import {
 const firstTime: ShellNavigationState = {
   careerPictureReady: false,
   resumeAvailable: false,
+  candidateSessionAvailable: false,
   canUseWorkspaceViews: false,
 };
 
 const finished: ShellNavigationState = {
   careerPictureReady: true,
   resumeAvailable: true,
+  candidateSessionAvailable: true,
   canUseWorkspaceViews: true,
 };
 
@@ -45,6 +47,12 @@ describe('shell navigation', () => {
       isSectionNavigable('resume', { ...finished, resumeAvailable: false }),
     ).toBe(false);
     expect(isSectionNavigable('career', { ...finished, resumeAvailable: false })).toBe(true);
+  });
+
+  it('opens the server-backed diary for signed-in candidates before a career picture exists', () => {
+    expect(isSectionNavigable('diary', { ...firstTime, candidateSessionAvailable: true })).toBe(true);
+    expect(isSectionNavigable('diary', firstTime)).toBe(false);
+    expect(sectionLockReason('diary', firstTime)).toBe('Войдите в аккаунт, чтобы открыть карьерный дневник');
   });
 
   it('says why a section is closed, and names the diagnostic first', () => {

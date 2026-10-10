@@ -7,7 +7,7 @@ import {
   type ReactElement,
   type RefObject,
 } from 'react';
-import { DotsThree, Wallet, ShieldCheck } from '@phosphor-icons/react';
+import { DotsThree, Notebook, Wallet, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
@@ -23,7 +23,11 @@ import {
 import { initialsFor } from './accountIdentity';
 
 type SectionIcon = (props: SectionIconProps) => ReactElement;
-type PrimaryTarget = Extract<ShellSection, 'today' | 'profile' | 'opportunities' | 'responses'>;
+function DiaryIcon({ size = 22, active = false }: SectionIconProps) {
+  return <Notebook size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
+}
+
+type PrimaryTarget = Extract<ShellSection, 'today' | 'profile' | 'opportunities' | 'responses' | 'diary'>;
 
 interface PrimaryNavigationItem {
   readonly key: PrimaryTarget;
@@ -37,6 +41,7 @@ const primaryNavigation: readonly PrimaryNavigationItem[] = [
   { key: 'profile', label: 'Профиль', icon: ProfileIcon, target: 'profile' },
   { key: 'opportunities', label: 'Вакансии', icon: VacanciesIcon, target: 'opportunities' },
   { key: 'responses', label: 'Отклики', icon: ResponsesIcon, target: 'responses' },
+  { key: 'diary', label: 'Карьерный дневник', icon: DiaryIcon, target: 'diary' },
 ];
 
 export interface NavigationButtonProps {
@@ -232,6 +237,8 @@ function MoreMenu({
   activeView,
   isCareerEnabled,
   careerLockedReason,
+  isDiaryEnabled,
+  diaryLockedReason,
   onNavigate,
   onOpenExpert,
   onClose,
@@ -240,34 +247,37 @@ function MoreMenu({
   readonly activeView: ShellSection;
   readonly isCareerEnabled: boolean;
   readonly careerLockedReason: string;
+  readonly isDiaryEnabled: boolean;
+  readonly diaryLockedReason: string;
   readonly onNavigate: (view: ShellSection) => void;
   readonly onOpenExpert: () => void;
   readonly onClose: () => void;
   readonly menuRef: RefObject<HTMLDivElement>;
 }) {
-  const [focusedIndex, setFocusedIndex] = useState(isCareerEnabled ? 0 : 1);
+  const [focusedIndex, setFocusedIndex] = useState(() => isCareerEnabled ? 0 : isDiaryEnabled ? 1 : 2);
   useEscapeLayer(onClose);
   return (
     <div className="career-mobile-more-menu" id="career-mobile-more-menu" role="menu" aria-label="Ещё разделы" ref={menuRef} tabIndex={-1}
       onKeyDown={(event) => {
         const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)'));
+        const index = items.findIndex((item) => item === event.target);
         if (event.key === 'Escape') { event.preventDefault(); onClose(); }
         if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
           event.preventDefault();
           const delta = event.key === 'ArrowDown' ? 1 : -1;
-          const index = items.findIndex((item) => item === event.target);
-          if (index >= 0 && items.length) {
-            const next = items[(index + delta + items.length) % items.length];
-            setFocusedIndex(next?.textContent === 'Карьера' ? 0 : 1);
-            next?.focus();
-          }
+          const next = items[(index + delta + items.length) % items.length];
+          if (index >= 0 && next) { setFocusedIndex(Number(next.dataset.menuIndex)); next.focus(); }
         }
-        if (event.key === 'Home') { event.preventDefault(); setFocusedIndex(isCareerEnabled ? 0 : 1); items[0]?.focus(); }
-        if (event.key === 'End') { event.preventDefault(); setFocusedIndex(1); items.at(-1)?.focus(); }
+        if (event.key === 'Home' || event.key === 'End') {
+          event.preventDefault();
+          const next = event.key === 'Home' ? items[0] : items.at(-1);
+          if (next) { setFocusedIndex(Number(next.dataset.menuIndex)); next.focus(); }
+        }
       }}
     >
-      <button role="menuitem" type="button" tabIndex={focusedIndex === 0 && isCareerEnabled ? 0 : -1} disabled={!isCareerEnabled} aria-label={!isCareerEnabled ? `Карьера. ${careerLockedReason}` : 'Карьера'} aria-current={activeView === 'career' ? 'page' : undefined} onClick={() => { onClose(); onNavigate('career'); }}>Карьера</button>
-      <button role="menuitem" type="button" tabIndex={focusedIndex === 1 || !isCareerEnabled ? 0 : -1} onClick={() => { onClose(); onOpenExpert(); }}>Консультант</button>
+      <button data-menu-index="0" role="menuitem" type="button" tabIndex={focusedIndex === 0 && isCareerEnabled ? 0 : -1} disabled={!isCareerEnabled} aria-label={!isCareerEnabled ? `Карьера. ${careerLockedReason}` : 'Карьера'} aria-current={activeView === 'career' ? 'page' : undefined} onClick={() => { onClose(); onNavigate('career'); }}>Карьера</button>
+      <button data-menu-index="1" role="menuitem" type="button" tabIndex={focusedIndex === 1 && isDiaryEnabled ? 0 : -1} disabled={!isDiaryEnabled} aria-label={!isDiaryEnabled ? `Карьерный дневник. ${diaryLockedReason}` : 'Карьерный дневник'} aria-current={activeView === 'diary' ? 'page' : undefined} onClick={() => { onClose(); onNavigate('diary'); }}>Карьерный дневник</button>
+      <button data-menu-index="2" role="menuitem" type="button" tabIndex={focusedIndex === 2 || (!isCareerEnabled && !isDiaryEnabled) ? 0 : -1} onClick={() => { onClose(); onOpenExpert(); }}>Консультант</button>
     </div>
   );
 }
@@ -295,10 +305,10 @@ export function CareerMobileNavigation({
   return (
     <>
       {moreOpen ? (
-        <MoreMenu activeView={activeView} isCareerEnabled={isNavigable('opportunities')} careerLockedReason={lockedReason('opportunities')} onNavigate={onNavigate} onOpenExpert={onOpenExpert} onClose={closeMenu} menuRef={menuRef} />
+        <MoreMenu activeView={activeView} isCareerEnabled={isNavigable('opportunities')} careerLockedReason={lockedReason('opportunities')} isDiaryEnabled={isNavigable('diary')} diaryLockedReason={lockedReason('diary')} onNavigate={onNavigate} onOpenExpert={onOpenExpert} onClose={closeMenu} menuRef={menuRef} />
       ) : null}
       <nav className="career-mobile-nav" aria-label="Основная навигация" aria-hidden={ariaHidden || undefined}>
-        {primaryNavigation.map((item) => (
+        {primaryNavigation.filter((item) => item.key !== 'diary').map((item) => (
           <NavigationButton key={item.key} label={item.label} icon={item.icon} active={activeView === item.target} disabled={!isNavigable(item.target)} lockedReason={lockedReason(item.target)} onClick={() => onNavigate(item.target)} />
         ))}
         <button ref={triggerRef} type="button" className="career-mobile-more-button" aria-haspopup="menu" aria-expanded={moreOpen} aria-controls="career-mobile-more-menu" onClick={() => setMoreOpen((open) => !open)}>
