@@ -1,15 +1,8 @@
-import type {
-  EvidenceItem,
-  RoleFitState,
-  RoleHypothesis,
-} from '../evidence/evidenceEngine';
+import type { EvidenceItem, RoleFitState, RoleHypothesis } from '../evidence/evidenceEngine';
 
 const ROLE_MARKET_MAP_REVISION = 'role-market-map-v1-2026-08-07' as const;
 
-type MarketGeography =
-  | 'russia'
-  | 'relocation'
-  | 'worldwide-remote';
+type MarketGeography = 'russia' | 'relocation' | 'worldwide-remote';
 type WorkMode = 'onsite' | 'hybrid' | 'remote';
 type MarketSampleStatus = 'fresh' | 'stale' | 'insufficient';
 
@@ -79,9 +72,7 @@ export function buildRoleMarketMap(
   now: string = new Date().toISOString(),
 ): RoleMarketMap {
   const confirmedIds = new Set(
-    input.evidence
-      .filter((item) => item.status === 'confirmed')
-      .map((item) => item.id),
+    input.evidence.filter((item) => item.status === 'confirmed').map((item) => item.id),
   );
   const roles = input.roleHypotheses.slice(0, 3).map((role) => ({
     id: role.id,
@@ -94,13 +85,10 @@ export function buildRoleMarketMap(
       .map((id) => `evidence:${id}`),
     gaps: role.gaps,
     nextExperiment:
-      role.gaps[0] ??
-      'Сравнить повторяющиеся задачи и уровень в свежей выборке вакансий.',
+      role.gaps[0] ?? 'Сравнить повторяющиеся задачи и уровень в свежей выборке вакансий.',
   }));
   const markets = input.markets.map((market) => mapMarket(market, now));
-  const marketNeedingEvidence = markets.find(
-    (market) => market.sampleStatus !== 'fresh',
-  );
+  const marketNeedingEvidence = markets.find((market) => market.sampleStatus !== 'fresh');
   const roleNeedingEvidence = roles.find(
     (role) => role.fitState !== 'plausible' || role.evidenceRefs.length === 0,
   );
@@ -121,8 +109,7 @@ export function buildRoleMarketMap(
       : roleNeedingEvidence
         ? {
             label: roleNeedingEvidence.nextExperiment,
-            reason:
-              'Эта проверка сильнее всего изменит сравнение карьерных гипотез.',
+            reason: 'Эта проверка сильнее всего изменит сравнение карьерных гипотез.',
             roleIds: [roleNeedingEvidence.id],
             marketIds: markets.map((market) => market.id),
           }
@@ -142,9 +129,7 @@ function mapMarket(market: RequestedMarket, now: string): MappedMarket {
     .filter((date) => !Number.isNaN(new Date(date).valueOf()))
     .sort();
   const lastObservedAt = validDates.at(-1) ?? null;
-  const stale = lastObservedAt
-    ? daysBetween(lastObservedAt, now) > 90
-    : false;
+  const stale = lastObservedAt ? daysBetween(lastObservedAt, now) > 90 : false;
   const sampleStatus: MarketSampleStatus = stale
     ? 'stale'
     : market.observations.length < 5
@@ -166,9 +151,7 @@ function mapMarket(market: RequestedMarket, now: string): MappedMarket {
     lastObservedAt,
     repeatedRequirements,
     gaps: [
-      ...(sampleStatus === 'stale'
-        ? ['Последняя рыночная выборка старше 90 дней.']
-        : []),
+      ...(sampleStatus === 'stale' ? ['Последняя рыночная выборка старше 90 дней.'] : []),
       ...(market.observations.length < 5
         ? ['Для сравнения нужно не менее 5 релевантных вакансий.']
         : []),
