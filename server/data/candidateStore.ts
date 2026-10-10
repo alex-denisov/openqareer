@@ -1,5 +1,6 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CareerStrategy } from '../../shared/careerStrategy';
+import type { RoleSkillAssessmentRun } from '../domain/roleSkillAssessment';
 import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
@@ -109,6 +110,8 @@ export interface CandidateExport extends CandidateSnapshot {
   careerStrategy: CareerStrategy | null;
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
   workPreferences: StoredWorkPreferenceRun | null;
+  /** Encrypted role assessment answers, evidence refs and results (B461). */
+  roleSkillAssessments: RoleSkillAssessmentRun[];
 }
 
 type CandidateDocumentKind =
@@ -382,6 +385,7 @@ export interface CandidateStore {
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
+  readonly roleSkillAssessments: import('./sqliteRoleSkillAssessmentRepository').RoleSkillAssessmentRepository;
   /** Joins nested store writes into one SQLite transaction. */
   transaction<T>(operation: () => T): T;
   createCandidate(input: {

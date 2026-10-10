@@ -50,6 +50,7 @@ import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
 import { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
+import { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import {
   SqliteWorkPreferenceRepository,
   type StoredWorkPreferenceRun,
@@ -112,6 +113,7 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
+  readonly roleSkillAssessments: SqliteRoleSkillAssessmentRepository;
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -161,6 +163,10 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
+    this.roleSkillAssessments = new SqliteRoleSkillAssessmentRepository(
+      this.database,
+      this.sealedText,
+    );
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
@@ -709,6 +715,7 @@ export class SqliteCandidateStore implements CandidateStore {
       // Решение о собственной роли — данные кандидата, а не служебная запись.
       careerStrategy: this.careerStrategyRepository.get(candidateId),
       workPreferences: this.workPreferenceRepository.get(candidateId),
+      roleSkillAssessments: this.roleSkillAssessments.list(candidateId),
       consultantConversations: this.exportConsultantConversations(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);

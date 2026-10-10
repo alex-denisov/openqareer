@@ -64,6 +64,7 @@ interface CareerExpertPanelProps {
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
   onCommandPrepared?: () => void;
+  onOpenRoleSkillAssessment?: () => void;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
   onEscape?: () => void;
@@ -81,6 +82,7 @@ export function CareerExpertPanel({
   initialSnapshot,
   onIdentityChange = () => undefined,
   onCommandPrepared,
+  onOpenRoleSkillAssessment,
   mobileExpanded = false,
   onToggleMobileExpanded,
   onEscape,
@@ -396,6 +398,15 @@ export function CareerExpertPanel({
             >
               <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
             </button>
+            {user && onOpenRoleSkillAssessment ? (
+              <button
+                type="button"
+                className="career-quiet-button"
+                onClick={onOpenRoleSkillAssessment}
+              >
+                <ArrowRight size={16} /> Проверить навыки роли
+              </button>
+            ) : null}
           </div>
         ) : null}
 

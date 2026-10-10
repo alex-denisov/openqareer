@@ -1,0 +1,767 @@
+.career-role-assessment {
+  display: grid;
+  gap: var(--career-space-5);
+  min-width: 0;
+  padding-bottom: var(--career-space-8);
+}
+
+.career-role-assessment-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-4);
+  min-width: 0;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-4) var(--career-space-5);
+  background: var(--career-bg-elevated);
+}
+
+.career-role-assessment-back {
+  display: inline-grid;
+  flex: 0 0 var(--career-target-min);
+  place-items: center;
+  width: var(--career-target-min);
+  min-height: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: 50%;
+  color: var(--career-text);
+  background: var(--career-surface);
+  cursor: pointer;
+}
+
+.career-role-assessment-header > div {
+  min-width: 0;
+}
+
+.career-role-assessment-kicker,
+.career-role-assessment-meta,
+.career-role-assessment-source,
+.career-role-assessment-case-source {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+.career-role-assessment-header h1 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-xl);
+  line-height: 1.2;
+}
+
+.career-role-assessment-subtitle {
+  margin: var(--career-space-1) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-role-assessment-save,
+.career-role-assessment-meta,
+.career-role-assessment-source,
+.career-role-assessment-grade,
+.career-role-assessment-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-save {
+  margin-inline-start: auto;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  white-space: nowrap;
+}
+
+.career-role-assessment-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: var(--career-space-2) 0;
+  list-style: none;
+}
+
+.career-role-assessment-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-height: var(--career-target-min);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-progress .is-current,
+.career-role-assessment-progress .is-done {
+  color: var(--career-accent);
+}
+
+.career-role-assessment-start {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(18rem, 0.9fr);
+  align-items: start;
+  gap: var(--career-space-5);
+}
+
+.career-role-assessment-card,
+.career-role-assessment-state {
+  min-width: 0;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-5);
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+}
+
+.career-role-assessment-intro,
+.career-role-assessment-dialogue,
+.career-role-assessment-suggestions,
+.career-role-assessment-case,
+.career-role-assessment-state {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-4);
+}
+
+.career-role-assessment-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--career-space-4);
+}
+
+.career-role-assessment-card-heading > div {
+  min-width: 0;
+}
+
+.career-role-assessment-card h2,
+.career-role-assessment-state h2 {
+  margin: var(--career-space-2) 0 0;
+  font-size: var(--career-text-lg);
+  line-height: 1.35;
+}
+
+.career-role-assessment-card h3 {
+  margin: var(--career-space-3) 0;
+  font-size: var(--career-text-md);
+  line-height: 1.4;
+}
+
+.career-role-assessment-card p,
+.career-role-assessment-state p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.55;
+}
+
+.career-role-assessment-lead {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.55;
+}
+
+.career-role-assessment-tag {
+  width: fit-content;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-1) var(--career-space-2);
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  line-height: 1.35;
+}
+
+.career-role-assessment-section-toggle {
+  width: fit-content;
+  min-height: var(--career-target-min);
+  border: 0;
+  padding: 0;
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-md);
+  font-weight: 700;
+  text-align: start;
+  cursor: pointer;
+}
+
+.career-role-assessment-howto {
+  display: grid;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding-inline-start: var(--career-space-6);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.55;
+}
+
+.career-role-assessment-howto li {
+  padding-inline-start: var(--career-space-1);
+}
+
+.career-role-assessment-howto strong,
+.career-role-assessment-howto span {
+  display: block;
+}
+
+.career-role-assessment-howto strong {
+  margin-bottom: var(--career-space-1);
+  color: var(--career-text);
+}
+
+.career-role-assessment-notice,
+.career-role-assessment-stale {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-notice > svg,
+.career-role-assessment-stale > svg {
+  flex: 0 0 auto;
+  margin-top: var(--career-space-1);
+  color: var(--career-accent);
+}
+
+.career-role-assessment-notice p,
+.career-role-assessment-stale p {
+  margin: 0;
+  color: inherit;
+  font-size: var(--career-text-xs);
+  line-height: 1.55;
+}
+
+.career-role-assessment-consent {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-height: var(--career-target-min);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.career-role-assessment-consent input,
+.career-role-assessment-suggestion input {
+  flex: 0 0 auto;
+  width: var(--career-space-5);
+  height: var(--career-space-5);
+  margin: 0;
+  accent-color: var(--career-accent);
+}
+
+.career-role-assessment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-role-assessment-skill-overview {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-4);
+}
+
+.career-role-assessment-skill-overview h2 {
+  margin: 0;
+}
+
+.career-role-assessment-skill-overview ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-role-assessment-skill-overview li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  min-height: var(--career-target-min);
+  border-bottom: var(--career-border-width) solid var(--career-line);
+  padding-block: var(--career-space-2);
+  color: var(--career-text-soft);
+}
+
+.career-role-assessment-skill-overview li > svg {
+  flex: 0 0 auto;
+  margin-top: var(--career-space-1);
+  color: var(--career-text-dim);
+}
+
+.career-role-assessment-skill-overview li div,
+.career-role-assessment-skill-overview li strong,
+.career-role-assessment-skill-overview li span {
+  display: block;
+  min-width: 0;
+}
+
+.career-role-assessment-skill-overview li strong {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-role-assessment-skill-overview li span {
+  margin-top: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-source {
+  color: var(--career-text-dim);
+}
+
+.career-role-assessment-state {
+  justify-items: start;
+}
+
+.career-role-assessment-state > svg {
+  color: var(--career-accent);
+}
+
+.career-role-assessment-state[role='alert'] > svg {
+  color: var(--career-warning);
+}
+
+.career-role-assessment-state .is-spinning {
+  animation: career-role-assessment-spin 1s linear infinite;
+}
+
+@keyframes career-role-assessment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.career-role-assessment-error {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-danger);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  color: var(--career-danger);
+  background: var(--career-danger-soft);
+}
+
+.career-role-assessment-error p {
+  flex: 1;
+  margin: 0;
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-role-assessment-dialogue,
+.career-role-assessment-case,
+.career-role-assessment-suggestions {
+  max-width: 100%;
+}
+
+.career-role-assessment-transcript {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-role-assessment-transcript article,
+.career-role-assessment-discussion-history article {
+  display: grid;
+  gap: var(--career-space-2);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-transcript article > span,
+.career-role-assessment-discussion-history article > strong {
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 700;
+}
+
+.career-role-assessment-transcript article p,
+.career-role-assessment-discussion-history article p {
+  overflow-wrap: anywhere;
+}
+
+.career-role-assessment-transcript article.is-current {
+  border-inline-start: var(--career-space-1) solid var(--career-accent);
+}
+
+.career-role-assessment-composer {
+  position: sticky;
+  z-index: 3;
+  bottom: var(--career-space-2);
+  display: grid;
+  gap: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-3);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-composer textarea,
+.career-role-assessment-inline-form textarea,
+.career-role-assessment-suggestion textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  color: var(--career-text);
+  background: var(--career-bg);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.career-role-assessment-composer textarea {
+  min-height: calc(var(--career-target-min) * 2);
+}
+
+.career-role-assessment-composer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-composer-actions > span {
+  margin-inline-end: auto;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-pending {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-suggestion-list {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-suggestion {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-suggestion input {
+  margin-top: var(--career-space-1);
+}
+
+.career-role-assessment-suggestion-number {
+  display: inline-grid;
+  place-items: center;
+  width: var(--career-target-min);
+  min-height: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: 50%;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-suggestion-body {
+  display: grid;
+  gap: var(--career-space-2);
+  min-width: 0;
+}
+
+.career-role-assessment-suggestion-body strong {
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-suggestion textarea {
+  min-height: var(--career-target-min);
+}
+
+.career-role-assessment-case-prompt {
+  display: grid;
+  gap: var(--career-space-2);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-case-prompt p {
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+}
+
+.career-role-assessment-case-prompt span,
+.career-role-assessment-case-source {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-role-assessment-evaluation {
+  display: grid;
+  gap: var(--career-space-3);
+  border-top: var(--career-border-width) solid var(--career-line);
+  padding-top: var(--career-space-4);
+}
+
+.career-role-assessment-evaluation h3 {
+  margin: 0;
+}
+
+.career-role-assessment-evaluation article {
+  display: grid;
+  gap: var(--career-space-2);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3);
+  background: var(--career-surface);
+}
+
+.career-role-assessment-evaluation article strong {
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-evaluation blockquote {
+  margin: 0;
+  border-inline-start: var(--career-space-1) solid var(--career-accent);
+  padding-inline-start: var(--career-space-3);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-grade {
+  width: fit-content;
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-2) var(--career-space-3);
+  color: var(--career-text-soft);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-grade.is-confirmed {
+  color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.career-role-assessment-grade.is-partial,
+.career-role-assessment-grade.is-untested {
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.career-role-assessment-grade.is-not_confirmed {
+  color: var(--career-text-soft);
+}
+
+.career-role-assessment-discussion-history {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-inline-form {
+  display: grid;
+  gap: var(--career-space-3);
+  border-top: var(--career-border-width) solid var(--career-line);
+  padding-top: var(--career-space-4);
+}
+
+.career-role-assessment-inline-form label {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 700;
+}
+
+.career-role-assessment-results {
+  display: grid;
+  gap: var(--career-space-4);
+}
+
+.career-role-assessment-profile-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+}
+
+.career-role-assessment-profile-change-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-profile-change-confirm p,
+.career-role-assessment-profile-change.is-reverted {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-role-assessment-results details {
+  color: var(--career-text-soft);
+}
+
+.career-role-assessment-results summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--career-target-min);
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.career-role-assessment-skill-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-3);
+}
+
+.career-role-assessment-skill-results > article {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-2);
+}
+
+.career-role-assessment-skill-results > article > .career-role-assessment-tag {
+  margin-top: 0;
+}
+
+.career-role-assessment-skill-results > article > .career-quiet-button {
+  justify-self: start;
+}
+
+.career-role-assessment-stale {
+  border-color: var(--career-warning);
+  color: var(--career-warning);
+  background: var(--career-warning-soft);
+}
+
+.career-role-assessment-stale > svg {
+  color: inherit;
+}
+
+.career-role-assessment-sr-only {
+  position: absolute;
+  width: var(--career-space-1);
+  height: var(--career-space-1);
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 900px) {
+  .career-role-assessment-start {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .career-role-assessment {
+    gap: var(--career-space-3);
+    padding-bottom: var(--career-space-5);
+  }
+
+  .career-role-assessment-header {
+    align-items: flex-start;
+    gap: var(--career-space-3);
+    border-inline: 0;
+    border-radius: 0;
+    padding: 0 0 var(--career-space-3);
+    background: transparent;
+  }
+
+  .career-role-assessment-back {
+    margin-top: var(--career-space-1);
+  }
+
+  .career-role-assessment-kicker {
+    display: none;
+  }
+
+  .career-role-assessment-header h1 {
+    font-size: var(--career-text-lg);
+  }
+
+  .career-role-assessment-subtitle {
+    overflow-wrap: anywhere;
+  }
+
+  .career-role-assessment-save {
+    display: none;
+  }
+
+  .career-role-assessment-progress {
+    gap: var(--career-space-2);
+  }
+
+  .career-role-assessment-progress li {
+    gap: var(--career-space-1);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-role-assessment-card,
+  .career-role-assessment-state {
+    border-radius: var(--career-radius-lg);
+    padding: var(--career-space-4);
+  }
+
+  .career-role-assessment-card-heading {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+
+  .career-role-assessment-composer {
+    bottom: var(--career-space-2);
+    box-shadow: var(--career-shadow-tooltip);
+  }
+
+  .career-role-assessment-composer-actions {
+    justify-content: space-between;
+  }
+
+  .career-role-assessment-composer-actions .career-primary-button {
+    flex: 1 1 auto;
+  }
+
+  .career-role-assessment-suggestion {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .career-role-assessment-suggestion-number {
+    display: none;
+  }
+
+  .career-role-assessment-suggestion-actions,
+  .career-role-assessment-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-role-assessment-actions > button {
+    width: 100%;
+  }
+
+  .career-role-assessment-skill-results {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-role-assessment-error {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+}
