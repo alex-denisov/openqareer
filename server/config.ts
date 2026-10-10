@@ -17,6 +17,7 @@ import {
   type CloudflareGatewayConfig,
 } from './providers/cloudflareAiGateway';
 import type { ProviderQueueEntry } from './providers/providerQueue';
+import type { RobokassaGatewayConfig } from './billing/robokassaProtocol';
 
 declare const __OPENQAREER_RELEASE__: string;
 
@@ -101,6 +102,44 @@ const configSchema = z.object({
       .transform(parseEmailMxBypassDomains),
   ),
   OPENQAREER_PUBLIC_URL: blankAsUnset(z.string().url().max(2_048)),
+  OPENQAREER_ROBOKASSA_MERCHANT_LOGIN: blankAsUnset(z.string().trim().min(1).max(200)),
+  OPENQAREER_ROBOKASSA_PASSWORD_1: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_ROBOKASSA_PASSWORD_2: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_ROBOKASSA_TEST_PASSWORD_1: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_ROBOKASSA_TEST_PASSWORD_2: blankAsUnset(z.string().min(1).max(2_048)),
+  OPENQAREER_ROBOKASSA_HASH_ALGORITHM: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum(['MD5', 'SHA1', 'SHA256', 'SHA384', 'SHA512']).default('SHA256'),
+  ),
+  OPENQAREER_ROBOKASSA_TEST_MODE: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
+  OPENQAREER_ROBOKASSA_RECURRING_APPROVED: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  ),
+  OPENQAREER_ROBOKASSA_VAT: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum([
+      'none', 'vat0', 'vat5', 'vat7', 'vat10', 'vat20', 'vat22',
+      'vat105', 'vat107', 'vat110', 'vat120', 'vat122',
+    ]).optional(),
+  ),
+  OPENQAREER_ROBOKASSA_PAYMENT_METHOD: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum(['full_payment', 'full_prepayment', 'advance']).optional(),
+  ),
+  OPENQAREER_ROBOKASSA_TAX_SYSTEM: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.enum(['osn', 'usn_income', 'usn_income_outcome', 'esn', 'patent']).optional(),
+  ),
+  OPENQAREER_ROBOKASSA_PAYMENT_METHODS: z.preprocess(
+    (value) => (value === '' || value === undefined ? undefined : value),
+    z.string().default('BankCard,SBP,SberPay,TinkoffPay')
+      .transform((value) => value.split(',').map((method) => method.trim()).filter(Boolean))
+      .pipe(z.array(z.enum(['BankCard', 'SBP', 'SberPay', 'TinkoffPay'])).min(1).max(4)),
+  ),
   OPENQAREER_DESKTOP_TUNNEL_SERVER: blankAsUnset(
     z
       .string()
@@ -152,6 +191,55 @@ function parseEmailMxBypassDomains(value: string): string[] {
     .filter(Boolean);
 }
 
+function readRobokassaConfig(parsed: z.infer<typeof configSchema>): RobokassaGatewayConfig | undefined {
+  const configured = [
+    parsed.OPENQAREER_ROBOKASSA_MERCHANT_LOGIN,
+    parsed.OPENQAREER_ROBOKASSA_PASSWORD_1,
+    parsed.OPENQAREER_ROBOKASSA_PASSWORD_2,
+    parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_1,
+    parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_2,
+    parsed.OPENQAREER_ROBOKASSA_VAT,
+    parsed.OPENQAREER_ROBOKASSA_PAYMENT_METHOD,
+  ].some((value) => value !== undefined) || parsed.OPENQAREER_ROBOKASSA_RECURRING_APPROVED;
+  if (!configured) return undefined;
+
+  const activePassword1 = parsed.OPENQAREER_ROBOKASSA_TEST_MODE
+    ? parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_1
+    : parsed.OPENQAREER_ROBOKASSA_PASSWORD_1;
+  const activePassword2 = parsed.OPENQAREER_ROBOKASSA_TEST_MODE
+    ? parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_2
+    : parsed.OPENQAREER_ROBOKASSA_PASSWORD_2;
+  if (!parsed.OPENQAREER_ROBOKASSA_MERCHANT_LOGIN || !activePassword1 || !activePassword2) {
+    throw new Error('complete Robokassa credentials are required for the selected mode');
+  }
+  if (!parsed.OPENQAREER_ROBOKASSA_VAT) {
+    throw new Error('OPENQAREER_ROBOKASSA_VAT is required for fiscal receipt itemization');
+  }
+  if (!parsed.OPENQAREER_ROBOKASSA_PAYMENT_METHOD) {
+    throw new Error('OPENQAREER_ROBOKASSA_PAYMENT_METHOD must match the merchant fiscal policy');
+  }
+  return {
+    merchantLogin: parsed.OPENQAREER_ROBOKASSA_MERCHANT_LOGIN,
+    password1: parsed.OPENQAREER_ROBOKASSA_PASSWORD_1 ?? '',
+    password2: parsed.OPENQAREER_ROBOKASSA_PASSWORD_2 ?? '',
+    ...(parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_1
+      ? { testPassword1: parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_1 }
+      : {}),
+    ...(parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_2
+      ? { testPassword2: parsed.OPENQAREER_ROBOKASSA_TEST_PASSWORD_2 }
+      : {}),
+    hashAlgorithm: parsed.OPENQAREER_ROBOKASSA_HASH_ALGORITHM,
+    testMode: parsed.OPENQAREER_ROBOKASSA_TEST_MODE,
+    recurringApproved: parsed.OPENQAREER_ROBOKASSA_RECURRING_APPROVED,
+    vat: parsed.OPENQAREER_ROBOKASSA_VAT,
+    paymentMethod: parsed.OPENQAREER_ROBOKASSA_PAYMENT_METHOD,
+    ...(parsed.OPENQAREER_ROBOKASSA_TAX_SYSTEM
+      ? { taxSystem: parsed.OPENQAREER_ROBOKASSA_TAX_SYSTEM }
+      : {}),
+    paymentMethods: parsed.OPENQAREER_ROBOKASSA_PAYMENT_METHODS,
+  };
+}
+
 export interface ServerConfig {
   host: '127.0.0.1';
   port: number;
@@ -184,6 +272,8 @@ export interface ServerConfig {
   release: string;
   logLevel: 'fatal' | 'error' | 'warn' | 'info';
   secureCookies: boolean;
+  /** Runtime enforcement of paid AI entitlements; absent in test config literals. */
+  billingEnforcement?: boolean;
   allowedOrigins: string[];
   seedAccounts: Array<{
     username: string;
@@ -203,6 +293,7 @@ export interface ServerConfig {
   emailVerificationFixedCode?: string;
   emailMxCheckBypassDomains?: readonly string[];
   desktopTunnel?: DesktopTunnelConfig;
+  robokassa?: RobokassaGatewayConfig;
 }
 
 interface DesktopTunnelConfig {
@@ -275,6 +366,13 @@ export function readServerConfig(
       : (() => {
           throw new Error('complete account email configuration is required');
         })();
+  const robokassa = readRobokassaConfig(parsed);
+  if (secureCookies && robokassa?.testMode) {
+    throw new Error('Robokassa test mode is development-only');
+  }
+  if (robokassa?.recurringApproved && !accountEmail) {
+    throw new Error('complete account email configuration is required for subscription reminders');
+  }
   if (secureCookies && parsed.OPENQAREER_TEST_FIXED_CODE) {
     throw new Error('OPENQAREER_TEST_FIXED_CODE is development-only');
   }
@@ -338,6 +436,7 @@ export function readServerConfig(
     emailVerificationRequired: parsed.OPENQAREER_EMAIL_VERIFICATION_REQUIRED,
     emailVerificationFixedCode: parsed.OPENQAREER_TEST_FIXED_CODE,
     secureCookies,
+    billingEnforcement: true,
     allowedOrigins: secureCookies
       ? [
           'https://openqareer.com',
@@ -359,6 +458,7 @@ export function readServerConfig(
     cloudflareGateway: readCloudflareGatewayConfig(environment),
     vertex: readVertexConfig(environment),
     accountEmail,
+    ...(robokassa ? { robokassa } : {}),
     desktopTunnel,
   };
 }

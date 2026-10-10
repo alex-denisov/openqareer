@@ -13,6 +13,7 @@ import { deriveCandidateTargetLevel } from '../vacancies/candidateLevel';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
+import { candidateHasLlmAccess } from './helpers';
 
 /**
  * Роли и всё, что о них известно, — один расчёт на два маршрута.
@@ -136,7 +137,7 @@ async function nameCandidateRoles(
     targetRoles,
     resumeText: facts.map((fact) => fact.statement).join(' '),
   });
-  const naming = roleNamer
+  const naming = roleNamer && candidateHasLlmAccess(deps, candidateId)
     ? await roleNamer.nameRoles(facts, language)
     : { roles: [] as NamedRole[] };
   reportRoleNamingFailures(request, roleNamingFailures, naming.failures ?? []);

@@ -36,6 +36,7 @@ import {
   MIGRATION_39,
 } from '../sqliteSchema';
 import { MIGRATION_40 } from '../consultantHistorySchema';
+import { MIGRATION_BILLING } from '../../billing/billingSchema';
 
 const MIGRATIONS = [
   MIGRATION_1,
@@ -77,6 +78,7 @@ const MIGRATIONS = [
   MIGRATION_38,
   MIGRATION_39,
   MIGRATION_40,
+  MIGRATION_BILLING,
 ];
 
 export function applyMigrations(

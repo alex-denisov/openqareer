@@ -28,12 +28,21 @@ function authenticate(deps: CandidateDraftRouteDeps, request: FastifyRequest, re
 function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, candidate: CandidateIdentity) {
   const principal = authenticateSession(request, deps.authService, deps.config);
   const user = principal?.candidate?.id === candidate.id ? deps.authService.getUser?.(principal.userId) : null;
-  return { tier: user?.subscriptionTier ?? 'free', timezone: isValidTimezone(user?.timezone) ? user!.timezone! : DEFAULT_ACCOUNT_TIMEZONE, headline: user?.headline ?? '' };
+  const subscription = principal?.candidate?.id === candidate.id
+    ? deps.billingRepository?.getSubscription(principal.userId, new Date().toISOString())
+    : null;
+  return {
+    tier: subscription?.planId ?? user?.subscriptionTier ?? 'free',
+    timezone: isValidTimezone(user?.timezone) ? user!.timezone! : DEFAULT_ACCOUNT_TIMEZONE,
+    headline: user?.headline ?? '',
+  };
 }
 async function generate(deps: CandidateDraftRouteDeps, request: FastifyRequest, reply: FastifyReply, candidate: CandidateIdentity, input: z.infer<typeof createSchema>) {
   const account = accountContext(deps, request, candidate);
   const limit = account.tier === 'pro' ? (input.kind === 'comment' ? 3 : 0) :
-    account.tier === 'executive' || account.tier === 'enterprise' ? (input.kind === 'comment' ? 5 : 2) : 0;
+    account.tier === 'max' || account.tier === 'executive' || account.tier === 'enterprise'
+      ? (input.kind === 'comment' ? 5 : 2)
+      : 0;
   if (!limit) return sendError(reply, request, 402, 'paywall_required', 'Для этого черновика нужен другой тариф.', false);
   const localDate = formatLocalDate(new Date(), account.timezone);
   if (deps.candidateDraftRepository.countForDay(candidate.id, localDate, input.kind) >= limit)

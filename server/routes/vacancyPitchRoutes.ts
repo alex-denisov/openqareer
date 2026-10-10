@@ -12,6 +12,7 @@ import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
+  candidateHasLlmAccess,
   csrfError,
   hasSafeMutationOrigin,
   sendError,
@@ -77,6 +78,7 @@ function toUsableCoverLetterFacts(facts: readonly VacancyPitchInputFact[]) {
 async function writeCoverLetterBody(
   deps: RouteDeps,
   request: FastifyRequest,
+  candidateId: string,
   vacancy: {
     title: string;
     company?: string;
@@ -91,7 +93,7 @@ async function writeCoverLetterBody(
   contextMs: number,
 ): Promise<{ body?: string; stage?: string }> {
   const { coverLetterWriter } = deps;
-  if (!coverLetterWriter) return {};
+  if (!coverLetterWriter || !candidateHasLlmAccess(deps, candidateId)) return {};
   const writing = coverLetterWriter.writeCoverLetter({
     facts: toUsableCoverLetterFacts(facts),
     vacancy: {
@@ -189,6 +191,7 @@ async function writeVacancyPitch(
   const written = await writeCoverLetterBody(
     deps,
     request,
+    candidateId,
     vacancy,
     facts,
     pitch.language,
