@@ -1,4 +1,6 @@
 import type { Page } from '@playwright/test';
+import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
+import type { VacanciesScreenState } from '../../src/features/vacancies/VacanciesScreenFilters';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
@@ -22,9 +24,76 @@ interface ApplicationStub {
   updatedAt: string;
 }
 
-export async function mockSignedInCabinet(page: Page): Promise<string[]> {
+export interface MockSignedInCabinetOptions {
+  readonly vacancyTotal?: number;
+  readonly vacancyFacets?: MatchedVacancyFacets;
+  readonly vacancyInitialFilters?: VacanciesScreenState;
+  readonly savedVacanciesCount?: number;
+  readonly companyCount?: number;
+}
+
+function seedInitialVacancyItems(
+  items: ReturnType<typeof matchedVacancyPage>['data'],
+): typeof items {
+  return items.map((item, index) => {
+    // Keep the original Berlin Product Lead fixture for the later action flow.
+    if (index >= 6 || index === 1) return item;
+    const sourceId = index % 2 === 0 ? 'hh' : 'linkedin';
+    return {
+      ...item,
+      cluster: {
+        ...item.cluster,
+        canonicalLocation: 'Москва',
+        salary: { from: 500_000, to: 650_000, currency: '₽' },
+        isRemote: index % 2 === 0,
+        descriptionSummary:
+          index % 2 === 0
+            ? item.cluster.descriptionSummary
+            : `${item.cluster.descriptionSummary} Гибридный формат работы.`,
+        sources: item.cluster.sources.map((source, sourceIndex) =>
+          sourceIndex === 0
+            ? {
+                ...source,
+                sourceType: sourceId === 'hh' ? 'json_api' : 'jobspy',
+                sourceId,
+                sourceName: sourceId === 'hh' ? 'hh.ru' : 'LinkedIn',
+              }
+            : source,
+        ),
+      },
+    };
+  });
+}
+
+function savedApplicationFixtures(count: number): ApplicationStub[] {
+  const timestamp = '2026-10-10T00:00:00.000Z';
+  return Array.from({ length: count }, (_, index) => {
+    const sequence = index + 1;
+    return {
+      id: `saved-fixture-${sequence}`,
+      candidateId: 'candidate-fixture',
+      clusterId: `saved-cluster-${sequence}`,
+      stage: 'saved',
+      archivePreviousStage: null,
+      version: 1,
+      vacancy: {
+        title: `Saved role ${sequence}`,
+        company: `Saved company ${sequence}`,
+        url: `https://example.test/saved/${sequence}`,
+        source: 'fixture',
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  });
+}
+
+export async function mockSignedInCabinet(
+  page: Page,
+  options: MockSignedInCabinetOptions = {},
+): Promise<string[]> {
   const unmatched: string[] = [];
-  let applications: ApplicationStub[] = [];
+  let applications = savedApplicationFixtures(options.savedVacanciesCount ?? 0);
   let nextApplicationId = 1;
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
@@ -352,8 +421,22 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       });
     }
     if (path.endsWith('/candidate/matched-vacancies')) {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      const page = matchedVacancyPage(offset, options.vacancyTotal);
       return route.fulfill({
-        json: matchedVacancyPage(Number(url.searchParams.get('offset') ?? 0)),
+        json: {
+          ...page,
+          ...(offset === 0 && options.vacancyInitialFilters
+            ? { data: seedInitialVacancyItems(page.data) }
+            : {}),
+          meta: {
+            ...page.meta,
+            ...(options.vacancyFacets ? { facets: options.vacancyFacets } : {}),
+            ...(offset === 0 && options.vacancyInitialFilters
+              ? { initialFilters: options.vacancyInitialFilters }
+              : {}),
+          },
+        },
       });
     }
     if (
@@ -376,6 +459,6 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     unmatched.push(path);
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
-  await mockCandidateCompanies(page);
+  await mockCandidateCompanies(page, { companyCount: options.companyCount });
   return unmatched;
 }

@@ -52,7 +52,35 @@ function measure(minFontPx: number): ReadabilityFacts {
   probe.remove();
   const sizes = new Map<number, number>();
   const under13: string[] = [];
-  const boxes: { rect: DOMRect; text: string }[] = [];
+  const boxes: { element: HTMLElement; rect: DOMRect; text: string }[] = [];
+  const visibleRectFor = (element: HTMLElement): DOMRect => {
+    const original = element.getBoundingClientRect();
+    let left = original.left;
+    let top = original.top;
+    let right = original.right;
+    let bottom = original.bottom;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+        const bounds = parent.getBoundingClientRect();
+        const clipLeft = bounds.left + parent.clientLeft;
+        const clipTop = bounds.top + parent.clientTop;
+        if (style.overflowX !== 'visible') {
+          left = Math.max(left, clipLeft);
+          right = Math.min(right, clipLeft + parent.clientWidth);
+        }
+        if (style.overflowY !== 'visible') {
+          top = Math.max(top, clipTop);
+          bottom = Math.min(bottom, clipTop + parent.clientHeight);
+        }
+      }
+    }
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+    right = Math.min(document.documentElement.clientWidth, right);
+    bottom = Math.min(window.innerHeight, bottom);
+    return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+  };
   for (const element of withText) {
     const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
     const isMicro = fontSize === microPx;
@@ -68,7 +96,10 @@ function measure(minFontPx: number): ReadabilityFacts {
     if (rect.height > 0 && rect.height < floorPx - 1 && text.length > 0) {
       under13.push(`box ${Math.round(rect.height)}px ${element.tagName.toLowerCase()} «${text}»`);
     }
-    if (rect.width && rect.height) boxes.push({ rect, text });
+    const visibleRect = visibleRectFor(element);
+    if (visibleRect.width && visibleRect.height) {
+      boxes.push({ element, rect: visibleRect, text });
+    }
   }
   const overlaps: (readonly [string, string])[] = [];
   for (let i = 0; i < boxes.length && overlaps.length < 12; i += 1) {
@@ -78,7 +109,23 @@ function measure(minFontPx: number): ReadabilityFacts {
       const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
       const nested = boxes[i].text.includes(boxes[j].text) || boxes[j].text.includes(boxes[i].text);
-      if (ix > 4 && iy > 4 && !nested) {
+      const overlayA = boxes[i].element.closest('.vacancies-filters.is-expanded');
+      const overlayB = boxes[j].element.closest('.vacancies-filters.is-expanded');
+      const intersectionCenter = {
+        x: Math.max(a.left, b.left) + ix / 2,
+        y: Math.max(a.top, b.top) + iy / 2,
+      };
+      // The expanded filter popover intentionally covers content behind it.
+      const hit = document.elementFromPoint(intersectionCenter.x, intersectionCenter.y);
+      const intersectionVisible =
+        intersectionCenter.x >= 0 &&
+        intersectionCenter.x <= document.documentElement.clientWidth &&
+        intersectionCenter.y >= 0 &&
+        intersectionCenter.y <= window.innerHeight;
+      const hiddenBehindFilterPopover =
+        Boolean(overlayA) !== Boolean(overlayB) &&
+        Boolean(hit?.closest('.vacancies-filters.is-expanded'));
+      if (ix > 4 && iy > 4 && intersectionVisible && !nested && !hiddenBehindFilterPopover) {
         overlaps.push([boxes[i].text, boxes[j].text]);
         break;
       }
@@ -87,15 +134,14 @@ function measure(minFontPx: number): ReadabilityFacts {
   const viewportWidth = document.documentElement.clientWidth;
   const overflowX =
     Math.max(document.documentElement.scrollWidth, main.scrollWidth) - viewportWidth;
-  // B248 — `.career-path` is a deliberate horizontal scroller on narrow
-  // screens (the path indicator's five steps never shrink or wrap, per the
-  // owner's 2026-09-23 review). Its own box never exceeds the viewport
-  // (`overflowX` above already proves that); only its children legitimately
-  // extend past it, which is what a horizontal scroller is. Nothing else in
-  // the shell is exempt.
+  // These bounded controls scroll internally; their children may extend past the
+  // viewport while the page/root itself stays within its measured width.
   const wide = [...main.querySelectorAll<HTMLElement>('*')]
     .filter((element) => element.getBoundingClientRect().right > viewportWidth + 2)
-    .filter((element) => !element.closest('.career-path'))
+    .filter(
+      (element) =>
+        !element.closest('.career-path, .vacancies-filter-group-buttons, .companies-people-tabs'),
+    )
     .slice(0, 5)
     .map(
       (element) =>

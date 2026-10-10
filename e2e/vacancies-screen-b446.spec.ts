@@ -1,10 +1,16 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 async function openVacancies(page: Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+  await page.mouse.move(1, 1);
+  await page.mouse.click(1, 1);
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   await expect(page.getByRole('tab', { name: /Подборка/u })).toBeVisible();
 }
@@ -39,7 +45,7 @@ async function measureResponsiveWidths(page: Page, testInfo: TestInfo) {
       }, width),
     );
   }
-  const factsPath = testInfo.outputPath('B446-responsive-facts.json');
+  const factsPath = `output/playwright/B446/B446-responsive-facts-${testInfo.project.name}.json`;
   await writeFile(factsPath, JSON.stringify(facts, null, 2));
   await testInfo.attach('B446-responsive-facts.json', {
     path: factsPath,
@@ -73,18 +79,130 @@ async function focusWithKeyboard(page: Page, target: Locator): Promise<void> {
 }
 
 async function openFilters(page: Page) {
-  await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+  const mobileToggle = page.getByRole('button', { name: 'Фильтры' });
+  if (await mobileToggle.isVisible()) {
+    await mobileToggle.click();
+    return;
+  }
+  await page.locator('[data-filter-group="locations"]').click();
 }
 
 test('B446: filter a vacancy, save it, set company want, and keep it after reload', async ({
   page,
 }, testInfo) => {
-  await mockSignedInCabinet(page);
+  await mockSignedInCabinet(page, {
+    vacancyTotal: 148,
+    vacancyFacets: {
+      total: 148,
+      regions: [],
+      remote: 74,
+      levels: [],
+      roles: [
+        { role: 'Head', count: 12 },
+        { role: 'Director', count: 8 },
+      ],
+      sources: [
+        { sourceId: 'hh', name: 'hh.ru', count: 74 },
+        { sourceId: 'linkedin', name: 'LinkedIn', count: 74 },
+      ],
+    },
+    vacancyInitialFilters: {
+      roles: ['Head', 'Director'],
+      regions: [],
+      levels: [],
+      sources: ['hh', 'linkedin'],
+      remoteOnly: false,
+      selectedLocations: [
+        'Москва',
+        ...Array.from({ length: 46 }, (_, index) => `Город ${index + 1}`),
+      ],
+      salaryMinimum: 450_000,
+      salaryCurrency: '₽',
+      formats: ['hybrid', 'remote'],
+    },
+    savedVacanciesCount: 18,
+    companyCount: 61,
+  });
   await openVacancies(page);
+  const shell = page.locator('.career-shell');
+  await expect(shell).toHaveClass(/career-shell--vacancies/u);
+  await expect(shell.locator('.career-expert-peek')).toHaveCount(0);
+  await expect(page.locator('.path-strip')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: 'Подборка 148' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Сохранённые 18' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Компании и люди 61' })).toBeVisible();
+  await expect(page.locator('.vacancies-filter-toolbar')).toBeVisible();
+  if (testInfo.project.name === 'desktop-1440') {
+    const expectedFilterSummaries = [
+      ['roles', 'Head, Director'],
+      ['locations', 'Москва +46'],
+      ['salary', 'от 450 тыс. ₽'],
+      ['format', '2'],
+      ['sources', '2'],
+    ] as const;
+    for (const [group, summary] of expectedFilterSummaries) {
+      const trigger = page.locator(`[data-filter-group="${group}"]`);
+      await expect(trigger).toBeVisible();
+      await expect(trigger).toContainText(summary);
+    }
+  } else {
+    await expect(page.getByRole('button', { name: 'Фильтры' })).toBeVisible();
+    const chips = page.getByRole('group', { name: 'Выбранные фильтры' });
+    for (const summary of ['Head, Director', 'Москва +46', 'от 450 тыс. ₽', '2']) {
+      await expect(chips).toContainText(summary);
+    }
+  }
+  if (testInfo.project.name === 'desktop-1440') {
+    await expect(shell.locator('.career-expert-panel')).toBeVisible();
+  } else {
+    await expect(shell.locator('.career-topbar')).toHaveCount(0);
+    await expect(page.locator('.vacancies-mobile-topbar')).toBeVisible();
+    await page.getByRole('button', { name: 'Уведомления' }).click();
+    await expect(page.getByRole('heading', { name: 'Уведомления' })).toBeVisible();
+    await page.getByRole('button', { name: 'Закрыть аккаунт' }).click();
+    await page.getByRole('button', { name: 'Спросить консультанта' }).click();
+    await expect(shell.locator('.career-expert-panel')).toBeVisible();
+    await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+    await expect(page.locator('.career-expert-panel')).toHaveCount(0);
+  }
+  const viewportSuffix = testInfo.project.name === 'mobile-390' ? '390' : '1440';
+  mkdirSync('output/playwright/B446', { recursive: true });
   await measureResponsiveWidths(page, testInfo);
-  await page.screenshot({ path: testInfo.outputPath('B446-home.png'), fullPage: true });
+  await page.screenshot({
+    path: `output/playwright/B446/B446-home-${viewportSuffix}.png`,
+    fullPage: true,
+  });
   await openFilters(page);
-  await page.screenshot({ path: testInfo.outputPath('B446-filters.png'), fullPage: true });
+  await page.screenshot({
+    path: `output/playwright/B446/B446-filters-${viewportSuffix}.png`,
+    fullPage: true,
+  });
+  if (testInfo.project.name === 'mobile-390') {
+    const mobileSheet = page.locator('.vacancies-filters.is-mobile-open');
+    await expect(mobileSheet.getByText(/условия поиска/iu)).toHaveCount(0);
+    await expect(mobileSheet.getByRole('button', { name: /изменить условия/iu })).toHaveCount(0);
+    const expectedSheetRows = [
+      ['roles', 'Head, Director'],
+      ['locations', 'Москва +46'],
+      ['salary', 'от 450 тыс. ₽'],
+      ['format', 'Гибрид, удалённо'],
+      ['sources', 'hh.ru, LinkedIn'],
+    ] as const;
+    await expect(mobileSheet.locator('[data-filter-sheet-group]')).toHaveCount(5);
+    for (const [group, summary] of expectedSheetRows) {
+      await expect(mobileSheet.locator(`[data-filter-sheet-group="${group}"]`)).toContainText(
+        summary,
+      );
+    }
+    await expect(mobileSheet.getByRole('button', { name: 'Сбросить' })).toBeVisible();
+    await expect(mobileSheet.getByRole('button', { name: 'Показать результаты' })).toBeVisible();
+  }
+  if (testInfo.project.name === 'desktop-1440') {
+    await page.locator('.vacancies-summary-reset').click();
+  } else {
+    await page.locator('.vacancies-sheet-reset').click();
+    await page.locator('[data-filter-sheet-group="locations"]').click();
+  }
 
   const locationSearch = page.getByRole('searchbox', {
     name: 'Страна, регион, штат или город',
@@ -94,10 +212,11 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   if (await screenError.count())
     throw new Error((await screenError.textContent()) ?? 'Unknown screen error');
   await page.getByRole('button', { name: 'Применить' }).click();
-  if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
-  }
-  await page.screenshot({ path: testInfo.outputPath('B446-filtered.png'), fullPage: true });
+  await expect(page.locator('.vacancies-filters')).toBeHidden();
+  await page.screenshot({
+    path: `output/playwright/B446/B446-filtered-${viewportSuffix}.png`,
+    fullPage: true,
+  });
 
   const vacancy = page
     .locator('.vac-list-item')
@@ -113,7 +232,10 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   expect(actionHeights.every((height) => height >= 44)).toBe(true);
   await companyWantButton.click();
   await expect(vacancy.getByRole('button', { name: 'Убрать из «Хочу»' })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('B446-company-want.png'), fullPage: true });
+  await page.screenshot({
+    path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
+    fullPage: true,
+  });
   await vacancy.locator('.vac-row').click();
   const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
   await focusWithKeyboard(page, companyPathButton);
@@ -123,23 +245,38 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     'true',
   );
   await expect(page.getByRole('heading', { name: 'Revolut' })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('B446-company-path.png'), fullPage: true });
+  await page.screenshot({
+    path: `output/playwright/B446/B446-company-path-${viewportSuffix}.png`,
+    fullPage: true,
+  });
   await page.getByRole('tab', { name: /Подборка/u }).click();
   await focusWithKeyboard(page, saveButton);
   await page.keyboard.press('Space');
-  await expect(page.getByRole('tab', { name: 'Сохранённые 1' })).toBeVisible();
+  await expect(page.getByRole('tab', { name: 'Сохранённые 19' })).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Сохранённые 1' }).click();
+  await page.getByRole('tab', { name: 'Сохранённые 19' }).click();
   const savedSearch = page.getByRole('searchbox', {
-    name: 'Компания или роль среди 1 сохранённых',
+    name: 'Компания или роль среди 19 сохранённых',
   });
   await savedSearch.fill('Merchant Onboarding');
   await expect(
     page.getByRole('heading', { name: 'Product Lead, Merchant Onboarding' }),
   ).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('B446-saved.png'), fullPage: true });
+  await page.screenshot({
+    path: `output/playwright/B446/B446-saved-${viewportSuffix}.png`,
+    fullPage: true,
+  });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openVacancies(page);
+  await openFilters(page);
+  if (testInfo.project.name === 'desktop-1440') {
+    await page.locator('.vacancies-summary-reset').click();
+  } else {
+    await page.locator('.vacancies-sheet-reset').click();
+    await page.locator('[data-filter-sheet-group="locations"]').click();
+  }
+  await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Berlin');
+  await page.getByRole('button', { name: 'Применить' }).click();
   const reloadedVacancy = page
     .locator('.vac-list-item')
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
@@ -148,13 +285,13 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   await expect(removeCompanyWant).toBeVisible();
   await removeCompanyWant.click();
   await expect(reloadedVacancy.getByRole('button', { name: 'Хочу в эту компанию' })).toBeVisible();
-  await expect(page.getByRole('tab', { name: 'Сохранённые 1' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Сохранённые 1' }).click();
+  await expect(page.getByRole('tab', { name: 'Сохранённые 19' })).toBeVisible();
+  await page.getByRole('tab', { name: 'Сохранённые 19' }).click();
   await expect(
     page.getByRole('heading', { name: 'Product Lead, Merchant Onboarding' }),
   ).toBeVisible();
   await page.screenshot({
-    path: testInfo.outputPath('B446-saved-after-reload.png'),
+    path: `output/playwright/B446/B446-saved-after-reload-${viewportSuffix}.png`,
     fullPage: true,
   });
 });

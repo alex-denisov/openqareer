@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookmarkSimple, Funnel } from '@phosphor-icons/react';
+
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
-import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
-import { pluralRu } from '../../../shared/pluralRu';
-import { VacancyAddRoleRow } from './VacancyAddRoleRow';
+import {
+  VACANCY_FILTER_GROUPS,
+  VacanciesFilterToolbar,
+  filterGroupIsActive,
+  filterGroupMatches,
+  summarizeVacancyFilterGroup,
+  type VacancyFilterGroup,
+} from './VacanciesFilterToolbar';
+import {
+  candidateRegionLabel,
+  isMobileFilterViewport,
+  MobileVacancyFilterOverview,
+  PremisesFilterSection,
+  RoleFilterSection,
+  VacanciesFilterPopover,
+  VacancyFilterActions,
+} from './VacanciesFilterPopover';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
-import { CareerRoutePremises } from '../cabinet/CareerRoutePremises';
-import { CareerRoutePremisesEditor } from '../cabinet/CareerRoutePremisesEditor';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 export interface VacanciesScreenState {
@@ -40,9 +52,6 @@ export interface VacanciesScreenFiltersProps {
   readonly regions?: readonly string[];
   readonly suggestedRegions?: readonly string[];
   readonly candidateLevel?: string;
-  readonly savedSearchesCount?: number;
-  readonly savedSearchesOpen?: boolean;
-  readonly onToggleSavedSearches?: () => void;
   readonly onOpenProfileLevel?: () => void;
   readonly onAddCustomRole?: (title: string) => Promise<boolean>;
   readonly premises?: RoutePremisesDraft;
@@ -57,16 +66,17 @@ export interface VacanciesScreenFiltersProps {
 export function countActiveFilters(state: VacanciesScreenState): number {
   const groupIsActive = [
     Boolean(state.roles.length || state.levels?.length),
-    Boolean(state.regions.length || state.selectedCity || state.selectedLocations?.length || state.locationSearch?.trim()),
+    Boolean(
+      state.regions.length ||
+      state.selectedCity ||
+      state.selectedLocations?.length ||
+      state.locationSearch?.trim(),
+    ),
     Boolean(state.salaryMinimum !== undefined || state.salaryMaximum !== undefined),
     Boolean(state.remoteOnly || state.formats?.length),
     Boolean(state.sources?.length),
   ];
   return groupIsActive.filter(Boolean).length;
-}
-
-function regionLabel(id: string): string {
-  return CANDIDATE_REGION_CATALOGUE.find((entry) => entry.id === id)?.label ?? id;
 }
 
 const LEVEL_LABELS: Readonly<Record<string, string>> = {
@@ -75,6 +85,7 @@ const LEVEL_LABELS: Readonly<Record<string, string>> = {
 };
 
 type SelectionField = 'roles' | 'regions' | 'levels' | 'sources' | 'formats';
+
 interface FacetOption {
   readonly id: string;
   readonly label: string;
@@ -162,62 +173,51 @@ function RemoteGroup({ props }: { readonly props: VacanciesScreenFiltersProps })
   );
 }
 
-function RoleFilterSection({
-  props,
-  roleInputRef,
-}: {
-  readonly props: VacanciesScreenFiltersProps;
-  readonly roleInputRef?: React.Ref<HTMLInputElement>;
-}) {
-  if (!props.onAddCustomRole) return null;
-  return (
-    <div className="field-group" data-testid="role-filter">
-      <VacancyAddRoleRow
-        roleCount={props.campaignRoles?.length ?? 0}
-        onAddCustomRole={props.onAddCustomRole}
-        inputRef={roleInputRef}
-      />
-    </div>
-  );
-}
-
 // География, удалённость, уровень и роль — из выдачи, с числами
 function PrimaryFacetGroups({
   props,
   facets,
+  activeGroup,
 }: {
   readonly props: VacanciesScreenFiltersProps;
   readonly facets: NonNullable<VacanciesScreenFiltersProps['facets']>;
+  readonly activeGroup?: VacancyFilterGroup;
 }) {
   return (
     <>
-      <FacetGroup
-        title="География"
-        field="regions"
-        props={props}
-        options={facets.regions.map(({ id, count }) => ({
-          id,
-          label: regionLabel(id),
-          count,
-        }))}
-      />
-      <RemoteGroup props={props} />
-      <FacetGroup
-        title="Уровень"
-        field="levels"
-        props={props}
-        options={facets.levels.map(({ level, count }) => ({
-          id: level,
-          label: LEVEL_LABELS[level],
-          count,
-        }))}
-      />
-      <FacetGroup
-        title="Роль"
-        field="roles"
-        props={props}
-        options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
-      />
+      {filterGroupMatches(activeGroup, 'locations') ? (
+        <FacetGroup
+          title="География"
+          field="regions"
+          props={props}
+          options={facets.regions.map(({ id, count }) => ({
+            id,
+            label: candidateRegionLabel(id),
+            count,
+          }))}
+        />
+      ) : null}
+      {filterGroupMatches(activeGroup, 'format') ? <RemoteGroup props={props} /> : null}
+      {filterGroupMatches(activeGroup, 'roles') ? (
+        <>
+          <FacetGroup
+            title="Уровень"
+            field="levels"
+            props={props}
+            options={facets.levels.map(({ level, count }) => ({
+              id: level,
+              label: LEVEL_LABELS[level],
+              count,
+            }))}
+          />
+          <FacetGroup
+            title="Роль"
+            field="roles"
+            props={props}
+            options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -261,9 +261,7 @@ function LocationFilterChips({
           key={option.id}
           option={option}
           selected={selected.includes(option.id)}
-          onClick={() =>
-            props.onChange((state) => toggleSelectedLocation(state, option.id))
-          }
+          onClick={() => props.onChange((state) => toggleSelectedLocation(state, option.id))}
         />
       ))}
     </div>
@@ -301,18 +299,19 @@ function LocationFilterSection({ props }: { readonly props: VacanciesScreenFilte
   const [showAll, setShowAll] = useState(false);
   const options = props.locations ?? [];
   const query = props.state.locationSearch?.trim().toLocaleLowerCase('ru-RU') ?? '';
-  const matches = options.filter((option) =>
-    !query || option.label.toLocaleLowerCase('ru-RU').includes(query),
+  const matches = options.filter(
+    (option) => !query || option.label.toLocaleLowerCase('ru-RU').includes(query),
   );
   const visible = showAll ? matches : matches.slice(0, 8);
   const selected = props.state.selectedLocations ?? [];
-  const clear = () => props.onChange((state) => ({
-    ...state,
-    selectedLocations: [],
-    selectedCity: undefined,
-    regions: [],
-    locationSearch: '',
-  }));
+  const clear = () =>
+    props.onChange((state) => ({
+      ...state,
+      selectedLocations: [],
+      selectedCity: undefined,
+      regions: [],
+      locationSearch: '',
+    }));
   return (
     <div className="field-group vacancy-location-filter">
       <h4>Локации</h4>
@@ -349,7 +348,11 @@ function SalaryCurrencySelect({
     <label className="career-field">
       <span>Валюта</span>
       <select value={currency} onChange={onChange}>
-        {currencies.map((option) => <option key={option} value={option}>{option}</option>)}
+        {currencies.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
       </select>
     </label>
   );
@@ -383,7 +386,9 @@ function SalaryRangeFields({
           type="number"
           min="0"
           value={props.state.salaryMinimum ?? ''}
-          onChange={(event) => updateSalaryAmount(props, currency, 'salaryMinimum', event.currentTarget.value)}
+          onChange={(event) =>
+            updateSalaryAmount(props, currency, 'salaryMinimum', event.currentTarget.value)
+          }
         />
       </label>
       <label className="career-field">
@@ -392,7 +397,9 @@ function SalaryRangeFields({
           type="number"
           min="0"
           value={props.state.salaryMaximum ?? ''}
-          onChange={(event) => updateSalaryAmount(props, currency, 'salaryMaximum', event.currentTarget.value)}
+          onChange={(event) =>
+            updateSalaryAmount(props, currency, 'salaryMaximum', event.currentTarget.value)
+          }
         />
       </label>
     </div>
@@ -430,7 +437,9 @@ function SalaryFilterSection({ props }: { readonly props: VacanciesScreenFilters
           <SalaryRangeFields props={props} currency={currency} />
           {salaryRangeSet ? <MissingSalaryToggle props={props} /> : null}
         </>
-      ) : <p>В загруженных вакансиях зарплатные данные не указаны.</p>}
+      ) : (
+        <p>В загруженных вакансиях зарплатные данные не указаны.</p>
+      )}
     </div>
   );
 }
@@ -467,20 +476,29 @@ function SourceFacetGroup({
 }: {
   readonly title: string;
   readonly count?: number;
-  readonly sources: readonly { readonly sourceId: string; readonly name: string; readonly count: number }[];
+  readonly sources: readonly {
+    readonly sourceId: string;
+    readonly name: string;
+    readonly count: number;
+  }[];
   readonly props: VacanciesScreenFiltersProps;
 }) {
   if (!sources.length) return null;
   return (
     <fieldset className="vacancy-source-group">
-      <legend>{title}{count === undefined ? '' : ' · ' + count}</legend>
+      <legend>
+        {title}
+        {count === undefined ? '' : ' · ' + count}
+      </legend>
       <div className="chip-row">
         {sources.map((source) => (
           <FacetChip
             key={source.sourceId}
             option={{ id: source.sourceId, label: source.name, count: source.count }}
             selected={(props.state.sources ?? []).includes(source.sourceId)}
-            onClick={() => props.onChange((state) => toggleValue(state, 'sources', source.sourceId))}
+            onClick={() =>
+              props.onChange((state) => toggleValue(state, 'sources', source.sourceId))
+            }
           />
         ))}
       </div>
@@ -498,7 +516,11 @@ function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersPr
         title="Источник"
         field="sources"
         props={props}
-        options={facets.sources.map(({ sourceId, name, count }) => ({ id: sourceId, label: name, count }))}
+        options={facets.sources.map(({ sourceId, name, count }) => ({
+          id: sourceId,
+          label: name,
+          count,
+        }))}
       />
     );
   }
@@ -527,123 +549,27 @@ function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersPr
 function FacetGroups({
   props,
   roleInputRef,
+  activeGroup,
 }: {
   readonly props: VacanciesScreenFiltersProps;
   readonly roleInputRef?: React.Ref<HTMLInputElement>;
+  readonly activeGroup?: VacancyFilterGroup;
 }) {
-  const facets = props.facets;
   return (
     <>
-      {facets ? <PrimaryFacetGroups props={props} facets={facets} /> : null}
-      <RoleFilterSection props={props} roleInputRef={roleInputRef} />
-      <LocationFilterSection props={props} />
-      <SalaryFilterSection props={props} />
-      <FormatFilterSection props={props} />
-      <SourceFacetGroups props={props} />
-    </>
-  );
-}
-
-function SavedSearchesButton({ props }: { readonly props: VacanciesScreenFiltersProps }) {
-  if (!props.onToggleSavedSearches) return null;
-  return (
-    <button
-      type="button"
-      className="saved-btn"
-      aria-expanded={props.savedSearchesOpen}
-      onClick={props.onToggleSavedSearches}
-    >
-      <BookmarkSimple weight="bold" aria-hidden="true" />
-      <span>
-        Сохранённые поиски
-        {props.savedSearchesCount !== undefined ? (
-          <>
-            {' '}
-            · <span className="vacancy-facet-count">{props.savedSearchesCount}</span>
-          </>
-        ) : null}
-      </span>
-    </button>
-  );
-}
-
-function PremisesFilterSection({
-  premises,
-  premisesLoading,
-  onSavePremises,
-}: {
-  readonly premises?: RoutePremisesDraft;
-  readonly premisesLoading?: boolean;
-  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-
-  if (!premises) return null;
-  if (editing) {
-    return (
-      <CareerRoutePremisesEditor
-        initial={premises}
-        saving={saving}
-        error={error}
-        onCancel={() => setEditing(false)}
-        onSave={(draft) => {
-          setSaving(true);
-          setError(undefined);
-          void onSavePremises?.(draft)
-            .then(() => setEditing(false))
-            .catch((reason: unknown) =>
-              setError(reason instanceof Error ? reason.message : 'Не удалось сохранить.'),
-            )
-            .finally(() => setSaving(false));
-        }}
-      />
-    );
-  }
-  return (
-    <CareerRoutePremises
-      targetRole={premises.targetRole}
-      regions={premises.regions}
-      workMode={premises.workMode ?? undefined}
-      editDisabled={premisesLoading}
-      onEdit={() => setEditing(true)}
-    />
-  );
-}
-
-function FiltersBar({
-  expanded,
-  onToggle,
-  activeCount,
-  onReset,
-  props,
-}: {
-  readonly expanded: boolean;
-  readonly onToggle: () => void;
-  readonly activeCount: number;
-  readonly onReset: () => void;
-  readonly props: VacanciesScreenFiltersProps;
-}) {
-  return (
-    <div className="filters-bar">
-      <button
-        type="button"
-        className="filters-toggle vacancies-mobile-filter-toggle"
-        aria-expanded={expanded}
-        aria-label="Фильтры и сохранённые запросы"
-        onClick={onToggle}
-      >
-        <Funnel weight="bold" aria-hidden="true" />
-        <span>Фильтры · {pluralRu(activeCount, ['активный', 'активных', 'активных'])}</span>
-      </button>
-      {activeCount > 0 ? (
-        <button type="button" className="filters-reset" onClick={onReset}>
-          Сбросить
-        </button>
+      {props.facets ? (
+        <PrimaryFacetGroups props={props} facets={props.facets} activeGroup={activeGroup} />
       ) : null}
-      <SavedSearchesButton props={props} />
-    </div>
+      {filterGroupMatches(activeGroup, 'roles') ? (
+        <RoleFilterSection props={props} roleInputRef={roleInputRef} />
+      ) : null}
+      {filterGroupMatches(activeGroup, 'locations') ? (
+        <LocationFilterSection props={props} />
+      ) : null}
+      {filterGroupMatches(activeGroup, 'salary') ? <SalaryFilterSection props={props} /> : null}
+      {filterGroupMatches(activeGroup, 'format') ? <FormatFilterSection props={props} /> : null}
+      {filterGroupMatches(activeGroup, 'sources') ? <SourceFacetGroups props={props} /> : null}
+    </>
   );
 }
 
@@ -692,6 +618,127 @@ function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
   };
 }
 
+function VacancyFilterGroupContent({
+  props,
+  draftProps,
+  activeGroup,
+  roleInputRef,
+  mobile,
+  showPremises,
+  onBackToOverview,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly draftProps: VacanciesScreenFiltersProps;
+  readonly activeGroup: VacancyFilterGroup | null;
+  readonly roleInputRef: ReturnType<typeof useVacancyFilterDraft>['roleInputRef'];
+  readonly mobile: boolean;
+  readonly showPremises: boolean;
+  readonly onBackToOverview: () => void;
+}) {
+  return (
+    <>
+      {showPremises ? (
+        <PremisesFilterSection
+          premises={props.premises}
+          premisesLoading={props.premisesLoading}
+          onSavePremises={props.onSavePremises}
+        />
+      ) : null}
+      {mobile && activeGroup !== null ? (
+        <button
+          type="button"
+          className="filters-reset vacancies-filter-back"
+          onClick={onBackToOverview}
+        >
+          Все фильтры
+        </button>
+      ) : null}
+      <FacetGroups
+        props={draftProps}
+        roleInputRef={roleInputRef}
+        activeGroup={activeGroup ?? undefined}
+      />
+    </>
+  );
+}
+
+function VacancyFilterPopoverContent({
+  props,
+  model,
+  activeGroup,
+  onApply,
+  onSelectGroup,
+  onBackToOverview,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly model: ReturnType<typeof useVacancyFilterDraft>;
+  readonly activeGroup: VacancyFilterGroup | null;
+  readonly onApply: () => void;
+  readonly onSelectGroup: (group: VacancyFilterGroup) => void;
+  readonly onBackToOverview: () => void;
+}) {
+  const mobile = isMobileFilterViewport();
+  const mobileOverview = mobile && activeGroup === null;
+  const showPremises = !mobile && (activeGroup === null || activeGroup === 'roles');
+  return (
+    <>
+      {mobileOverview ? (
+        <MobileVacancyFilterOverview props={model.draftProps} onSelectGroup={onSelectGroup} />
+      ) : (
+        <VacancyFilterGroupContent
+          props={props}
+          draftProps={model.draftProps}
+          activeGroup={activeGroup}
+          roleInputRef={model.roleInputRef}
+          mobile={mobile}
+          showPremises={showPremises}
+          onBackToOverview={onBackToOverview}
+        />
+      )}
+      <VacancyFilterActions
+        mobile={mobile}
+        mobileOverview={mobileOverview}
+        changed={model.changed}
+        onReset={model.resetAll}
+        onApply={onApply}
+      />
+    </>
+  );
+}
+
+function VacancyFilterGroupToolbar({
+  props,
+  model,
+  activeGroup,
+  onSelectGroup,
+  onClearGroup,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly model: ReturnType<typeof useVacancyFilterDraft>;
+  readonly activeGroup: VacancyFilterGroup | null;
+  readonly onSelectGroup: (group: VacancyFilterGroup) => void;
+  readonly onClearGroup: () => void;
+}) {
+  const groups = VACANCY_FILTER_GROUPS.map((group) => ({
+    ...group,
+    active: filterGroupIsActive(model.draftProps.state, group.id),
+    summary: summarizeVacancyFilterGroup(model.draftProps.state, group.id),
+  }));
+  return (
+    <VacanciesFilterToolbar
+      groups={groups}
+      expanded={model.expanded}
+      activeGroup={activeGroup}
+      onToggle={() => {
+        onClearGroup();
+        model.setExpanded((value) => !value);
+      }}
+      onSelectGroup={onSelectGroup}
+      activeCount={countActiveFilters(props.state)}
+    />
+  );
+}
+
 function VacancyFilterPanel({
   props,
   model,
@@ -699,41 +746,46 @@ function VacancyFilterPanel({
   readonly props: VacanciesScreenFiltersProps;
   readonly model: ReturnType<typeof useVacancyFilterDraft>;
 }) {
+  const [activeGroup, setActiveGroup] = useState<VacancyFilterGroup | null>(null);
+  const panelOpen = model.expanded || activeGroup !== null;
+  const closePanel = () => {
+    model.setExpanded(false);
+    setActiveGroup(null);
+  };
+  const selectGroup = (group: VacancyFilterGroup) => {
+    const next = activeGroup === group ? null : group;
+    const mobile = isMobileFilterViewport();
+    model.setExpanded(mobile && next !== null);
+    setActiveGroup(next);
+  };
   return (
-    <>
-      <FiltersBar
-        expanded={model.expanded}
-        onToggle={() => model.setExpanded((value) => !value)}
-        activeCount={countActiveFilters(props.state)}
-        onReset={model.resetAll}
-        props={model.draftProps}
+    <div className="vacancies-filter-wrap">
+      <VacancyFilterGroupToolbar
+        props={props}
+        model={model}
+        activeGroup={activeGroup}
+        onSelectGroup={selectGroup}
+        onClearGroup={() => setActiveGroup(null)}
       />
-      <div
-        className={`filters-panel vacancies-filters${model.expanded ? ' is-expanded is-mobile-open' : ''}`}
-        aria-label="Фильтры"
+      <VacanciesFilterPopover
+        title={VACANCY_FILTER_GROUPS.find(({ id }) => id === activeGroup)?.label ?? 'Фильтры'}
+        open={panelOpen}
+        mobileOpen={model.expanded}
+        onClose={closePanel}
       >
-        <div className="filters-panel-head">
-          <h3>Фильтры</h3>
-          <button type="button" className="filters-reset" onClick={() => model.setExpanded(false)}>
-            Свернуть
-          </button>
-        </div>
-        <PremisesFilterSection
-          premises={props.premises}
-          premisesLoading={props.premisesLoading}
-          onSavePremises={props.onSavePremises}
+        <VacancyFilterPopoverContent
+          props={props}
+          model={model}
+          activeGroup={activeGroup}
+          onApply={() => {
+            model.apply();
+            closePanel();
+          }}
+          onSelectGroup={selectGroup}
+          onBackToOverview={() => setActiveGroup(null)}
         />
-        <FacetGroups props={model.draftProps} roleInputRef={model.roleInputRef} />
-        <button
-          type="button"
-          className="btn btn-primary vacancies-filter-apply"
-          disabled={!model.changed}
-          onClick={model.apply}
-        >
-          Применить
-        </button>
-      </div>
-    </>
+      </VacanciesFilterPopover>
+    </div>
   );
 }
 

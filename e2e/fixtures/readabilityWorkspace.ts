@@ -132,16 +132,42 @@ export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
 });
 
 /** Подбор едет страницами по 50 (INC-029, B211). */
-export function matchedVacancyPage(offset: number) {
+export function matchedVacancyPage(offset: number, total = matchedVacancies.length) {
   const pageSize = 50;
-  const items = matchedVacancies.slice(offset, offset + pageSize);
-  const nextOffset = offset + pageSize < matchedVacancies.length ? offset + pageSize : null;
+  const pool = Array.from({ length: total }, (_, index) => {
+    const source = matchedVacancies[index % matchedVacancies.length]!;
+    if (index < matchedVacancies.length) return source;
+    const clusterId = `cluster-${index}`;
+    return {
+      ...source,
+      cluster: {
+        ...source.cluster,
+        id: clusterId,
+        canonicalTitle: `${source.cluster.canonicalTitle} · ${index + 1}`,
+        primaryUrl: `https://example.test/vacancy/${index}`,
+        sources: source.cluster.sources.map((item) => ({
+          ...item,
+          sourceUrl: `https://example.test/vacancy/${index}`,
+        })),
+      },
+      explanation: { ...source.explanation, clusterId },
+    };
+  });
+  const items = pool.slice(offset, offset + pageSize);
+  const nextOffset = offset + pageSize < total ? offset + pageSize : null;
   return {
     data: items,
     meta: {
-      total: matchedVacancies.length,
+      total,
       nextOffset,
-      ...(offset === 0 ? { pageOffsets: [0, 50] } : {}),
+      ...(offset === 0
+        ? {
+            pageOffsets: Array.from(
+              { length: Math.ceil(total / pageSize) },
+              (_, index) => index * pageSize,
+            ),
+          }
+        : {}),
     },
   };
 }

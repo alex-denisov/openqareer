@@ -769,7 +769,7 @@ test.describe('B250 vacancies screen', () => {
     await expect(banner).toContainText('По роли Enterprise Architect найдено 5 вакансий');
     if (testInfo.project.name === 'mobile-390') {
       const filterToggle = page.getByRole('button', {
-        name: 'Фильтры и сохранённые запросы',
+        name: 'Фильтры',
       });
       await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
       const firstRow = page.locator('.vac-list-item').first();
@@ -1317,21 +1317,18 @@ test.describe('B250 vacancies screen', () => {
     await expect(filters.locator('.add-role-row button')).toBeDisabled();
   });
 
-  test('B324: saved searches panel toggles from filter bar', async ({ page }) => {
+  test('B324: saved vacancies are a primary screen tab', async ({ page }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    const savedBtn = page.locator('.filters-bar .saved-btn');
-    await expect(savedBtn).toBeVisible();
-    await savedBtn.click();
-
-    const savedSection = page.locator('.filters-panel[aria-label="Сохранённые поиски"]');
-    await expect(savedSection).toBeVisible();
-
-    await savedBtn.click();
-    await expect(savedSection).not.toBeVisible();
+    const savedTab = page.getByRole('tab', { name: /Сохранённые/u });
+    await expect(savedTab).toBeVisible();
+    await expect(page.locator('.filters-bar .saved-btn')).toHaveCount(0);
+    await savedTab.click();
+    await expect(savedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
   });
 
   test('B324: captures all 8 states at 1440 and 390', async ({ page }, testInfo) => {
@@ -1356,42 +1353,50 @@ test.describe('B250 vacancies screen', () => {
     });
 
     // 2. filters-expanded
-    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
+    const filterToggle = isMobile
+      ? page.locator('.vacancies-mobile-filter-toggle')
+      : page.getByRole('button', { name: 'Роли', exact: true });
     await filterToggle.click();
     await expect(page.locator('.filters-panel.is-expanded')).toBeVisible();
     await page.screenshot({
       path: `output/playwright/B324/filters-expanded-${vpSuffix}.png`,
       fullPage: true,
     });
-    // Close filters panel
-    await filterToggle.click();
+    // Close filters panel from inside the popover.
+    await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
     await expect(page.locator('.filters-panel.is-expanded')).not.toBeVisible();
 
     // 3. map-view
     const switchBar = page.locator('.view-switch[role="tablist"]');
-    const mapTab = switchBar.getByRole('tab', { name: 'Карта' });
-    await mapTab.click();
+    const mapControl = isMobile
+      ? page.getByRole('button', { name: 'Карта' })
+      : switchBar.getByRole('tab', { name: 'Карта' });
+    await mapControl.click();
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
     await page.screenshot({
       path: `output/playwright/B324/map-view-${vpSuffix}.png`,
       fullPage: true,
     });
 
-    // 4. saved-searches
-    const listTab = switchBar.getByRole('tab', { name: 'Список' });
-    await listTab.click();
+    // 4. saved-vacancies
+    const listControl = isMobile
+      ? page.getByRole('button', { name: 'Список' })
+      : switchBar.getByRole('tab', { name: 'Список' });
+    await listControl.click();
     await expect(page.locator('.vacancies-list-container')).toBeVisible();
 
-    const savedBtn = page.locator('.filters-bar .saved-btn');
-    await savedBtn.click();
-    const savedSection = page.locator('.filters-panel[aria-label="Сохранённые поиски"]');
-    await expect(savedSection).toBeVisible();
+    const saveVacancy = firstItem.getByRole('button', { name: 'Сохранить вакансию' });
+    await saveVacancy.click();
+    const savedTab = page.getByRole('tab', { name: /Сохранённые/u });
+    await expect(savedTab).toBeVisible();
+    await savedTab.click();
+    await expect(savedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
     await page.screenshot({
-      path: `output/playwright/B324/saved-searches-${vpSuffix}.png`,
+      path: `output/playwright/B324/saved-vacancies-${vpSuffix}.png`,
       fullPage: true,
     });
-    await savedBtn.click();
-    await expect(savedSection).not.toBeVisible();
+    await page.getByRole('tab', { name: /Подборка/u }).click();
 
     // 5. detail-modal
     const detailActions = firstItem.locator('.vac-detail .vacancies-detail-actions');

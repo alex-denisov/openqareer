@@ -1,6 +1,6 @@
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
-import { useEffect, useMemo, useState } from 'react';
-import { Check, List, MapTrifold } from '@phosphor-icons/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bell, Check, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
@@ -10,18 +10,18 @@ import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
-import { CareerPathIndicator } from '../shell/CareerPathIndicator';
 import { PageHeader } from '../shell/PageHeader';
 import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
-import { VacanciesFilters, type VacanciesScreenState } from './VacanciesScreenFilters';
+import {
+  countActiveFilters,
+  VacanciesFilters,
+  type VacanciesScreenState,
+} from './VacanciesScreenFilters';
 import { VacanciesMainBody } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
-import {
-  OpportunityTabs,
-  SavedSearchesSection,
-  type OpportunityTab,
-} from './VacanciesScreenSections';
+import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
+import { VacanciesScreenSummary } from './VacanciesScreenSummary';
 
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
@@ -44,6 +44,7 @@ export interface VacanciesPathIndicator {
 
 export interface VacanciesScreenProps {
   readonly facets?: MatchedVacancyFacets;
+  readonly initialFilters?: VacanciesScreenState;
   /** `false` — подборка прочитана не целиком: счётчик говорит «Загружено». */
   readonly poolComplete?: boolean;
   readonly onFiltersChange?: (state: VacanciesScreenState) => void;
@@ -73,6 +74,7 @@ export interface VacanciesScreenProps {
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
   readonly onOpenConnections?: () => void;
+  readonly onOpenNotifications?: () => void;
   readonly onOpenProfile?: (context: VacancyProfileRequirement) => void;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
   readonly onOpenExpert?: (
@@ -108,20 +110,34 @@ function initialSelectedId(matched: readonly MatchedVacancyItem[]): string | und
   return undefined;
 }
 
+function filterBoardVacancies(
+  matched: readonly MatchedVacancyItem[],
+  state: VacanciesScreenState,
+  now: string,
+  onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
+) {
+  const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
+  return filterByScreenState(matched, filters, now);
+}
+
 function useVacanciesScreenBoard(
   matched: readonly MatchedVacancyItem[],
   campaign: CampaignMetaView | undefined,
   now: string,
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
+  initialFilters?: VacanciesScreenState,
 ) {
   const { roles, regions, suggestedRegions } = extractBoardRegions(campaign);
-  const [state, setState] = useState<VacanciesScreenState>({
-    roles: [],
-    regions: [],
-    levels: [],
-    sources: [],
-    remoteOnly: false,
-  });
+  const [state, setState] = useState<VacanciesScreenState>(
+    initialFilters ?? {
+      roles: [],
+      regions: [],
+      levels: [],
+      sources: [],
+      remoteOnly: false,
+    },
+  );
+  useInitialVacancyFilters(initialFilters, setState);
   const [visibleCount, setVisibleCount] = useState(20);
   const [selectedId, setSelectedId] = useState<string | null | undefined>(() =>
     initialSelectedId(matched),
@@ -130,16 +146,13 @@ function useVacanciesScreenBoard(
   useEffect(() => {
     if (selectedId === undefined && matched.length > 0) setSelectedId(initialSelectedId(matched));
   }, [matched, selectedId]);
-  useEffect(() => onFiltersChange?.(state), [state, onFiltersChange]);
+  useEffect(() => {
+    onFiltersChange?.(state);
+  }, [state, onFiltersChange]);
   useEffect(() => setVisibleCount(20), [state]);
 
   const filtered = useMemo(
-    () =>
-      filterByScreenState(
-        matched,
-        onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state,
-        now,
-      ),
+    () => filterBoardVacancies(matched, state, now, onFiltersChange),
     [matched, state, now, onFiltersChange],
   );
   return {
@@ -154,10 +167,23 @@ function useVacanciesScreenBoard(
     loadMore: () => setVisibleCount((count) => count + 20),
     selectedId,
     setSelectedId,
-    toggleSelect: (id: string) => setSelectedId((prev) => prev === id ? null : id),
+    toggleSelect: (id: string) => setSelectedId((prev) => (prev === id ? null : id)),
     roleHypotheses: campaign?.roleHypotheses ?? [],
     primaryRole: state.roles[0] ?? roles[0],
   };
+}
+
+
+function useInitialVacancyFilters(
+  initialFilters: VacanciesScreenState | undefined,
+  setState: (state: VacanciesScreenState) => void,
+) {
+  const applied = useRef(Boolean(initialFilters));
+  useEffect(() => {
+    if (!initialFilters || applied.current) return;
+    setState(initialFilters);
+    applied.current = true;
+  }, [initialFilters, setState]);
 }
 
 function ViewSwitch({
@@ -221,38 +247,35 @@ export interface ListContentProps {
   readonly hasMore?: boolean;
   readonly onLoadMore?: () => void;
   readonly countShownAbove: boolean;
+  readonly poolComplete?: boolean;
 }
 
-function VacanciesFiltersSection({
-  board,
-  actions,
-  candidateLevel,
-  subscriptionsCount,
-  savedSearchesOpen,
-  onToggleSavedSearches,
-  onReset,
-  facets,
-  premises,
-  premisesLoading,
-  onSavePremises,
-  focusRole,
-  filterOptions,
-}: {
+interface VacanciesFiltersSectionProps {
   readonly facets?: MatchedVacancyFacets;
   readonly board: ReturnType<typeof useVacanciesScreenBoard>;
   readonly actions: ReturnType<typeof useVacancyCampaignActions>;
   readonly candidateLevel?: string | null;
-  readonly subscriptionsCount?: number;
-  readonly savedSearchesOpen: boolean;
-  readonly onToggleSavedSearches: () => void;
   readonly onReset: () => void;
   readonly premises?: RoutePremisesDraft;
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
   readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions>;
-}) {
-  const filterProps = {
+}
+
+function buildVacanciesFilterProps({
+  facets,
+  board,
+  actions,
+  candidateLevel,
+  onReset,
+  premises,
+  premisesLoading,
+  onSavePremises,
+  focusRole,
+  filterOptions,
+}: VacanciesFiltersSectionProps) {
+  return {
     state: board.state,
     facets,
     onChange: board.setState,
@@ -263,21 +286,23 @@ function VacanciesFiltersSection({
     suggestedRegions: board.suggestedRegions,
     candidateLevel: candidateLevel ?? undefined,
     onAddCustomRole: (role: string) => actions.addCustomRole(role),
-    savedSearchesCount: subscriptionsCount, savedSearchesOpen, onToggleSavedSearches,
     premises,
     premisesLoading,
     onSavePremises,
     focusRole,
     ...filterOptions,
   };
-  return <VacanciesFilters {...filterProps} />;
+}
+
+function VacanciesFiltersSection(props: VacanciesFiltersSectionProps) {
+  return <VacanciesFilters {...buildVacanciesFilterProps(props)} />;
 }
 
 function useVacanciesScreenState(input: VacanciesScreenProps) {
   const { campaign, matched, now: providedNow } = input;
   const now = providedNow ?? new Date().toISOString();
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
-  const board = useVacanciesScreenBoard(matched, activeCampaign, now, input.onFiltersChange);
+  const board = useVacanciesScreenBoard(matched, activeCampaign, now, input.onFiltersChange, input.initialFilters);
   const collections = useVacancyCollections(input);
   const actions = useVacancyCampaignActions(activeCampaign, {
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
@@ -286,26 +311,54 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
   const [outreachVacancy, setOutreachVacancy] = useState<MatchedVacancyItem['cluster']>();
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
   const [activeTab, setActiveTab] = useState<OpportunityTab>('selection');
-  const [savedSearchesOpen, setSavedSearchesOpen] = useState(false);
   const [companyPathSearch, setCompanyPathSearch] = useState<string>();
 
   const chooseTab = (tab: OpportunityTab) => {
     setActiveTab(tab);
-    if (tab !== 'selection') setSavedSearchesOpen(false);
   };
   const openCompanyPath = (companyName?: string) => {
     if (!companyName?.trim()) return;
     setCompanyPathSearch(companyName);
     chooseTab('companies');
   };
-  const resetFilters = () =>
-    board.setState({ roles: [], regions: [], levels: [], sources: [], remoteOnly: false });
+  const resetFilters = () => resetVacancyFilters(board);
 
   return {
-    now, activeCampaign, board, collections, actions, outreachVacancy, setOutreachVacancy,
-    viewMode, setViewMode, activeTab, chooseTab, companyPathSearch, openCompanyPath,
-    savedSearchesOpen, setSavedSearchesOpen, resetFilters,
+    now,
+    activeCampaign,
+    board,
+    collections,
+    actions,
+    outreachVacancy,
+    setOutreachVacancy,
+    viewMode,
+    setViewMode,
+    activeTab,
+    chooseTab,
+    companyPathSearch,
+    openCompanyPath,
+    resetFilters,
   };
+}
+
+
+function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) {
+  board.setState({
+    roles: [],
+    regions: [],
+    levels: [],
+    sources: [],
+    remoteOnly: false,
+    selectedCity: undefined,
+    selectedLocations: [],
+    locationSearch: '',
+    salaryMinimum: undefined,
+    salaryMaximum: undefined,
+    salaryCurrency: undefined,
+    includeMissingSalary: false,
+    formats: [],
+    freshnessDays: undefined,
+  });
 }
 
 function companyRowStates(
@@ -342,9 +395,9 @@ function buildListProps(
 ): ListContentProps {
   const { board, collections } = screenState;
   const savedClusterIds = new Set(
-    collections.savedApplications.map((application) => application.clusterId).filter(
-      (id): id is string => Boolean(id),
-    ),
+    collections.savedApplications
+      .map((application) => application.clusterId)
+      .filter((id): id is string => Boolean(id)),
   );
   const companyStates = companyRowStates(board.filtered, collections);
   return {
@@ -362,11 +415,12 @@ function buildListProps(
     onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
     onDiscussWithConsultant: input.onOpenExpert
-      ? (cluster) => input.onOpenExpert?.(
-          'vacancies',
-          { kind: 'vacancy', id: cluster.id },
-          `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`,
-        )
+      ? (cluster) =>
+          input.onOpenExpert?.(
+            'vacancies',
+            { kind: 'vacancy', id: cluster.id },
+            `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`,
+          )
       : undefined,
     savedClusterIds,
     savedBusyIds: collections.savedBusyIds,
@@ -378,23 +432,45 @@ function buildListProps(
     hasMore: board.hasMore,
     onLoadMore: board.loadMore,
     countShownAbove: Boolean(input.facets),
+    poolComplete: input.poolComplete,
   };
+}
+
+function screenFilteredCount(
+  input: VacanciesScreenProps,
+  localCount: number,
+  state: Parameters<typeof countActiveFilters>[0],
+) {
+  const hasClientFilters =
+    state.selectedCity !== undefined || (!input.onFiltersChange && countActiveFilters(state) > 0);
+  if (hasClientFilters && input.poolComplete !== false) return localCount;
+  return input.total ?? localCount;
 }
 
 function ResultCount({
   input,
   shown,
+  onToggleView,
+  viewMode,
 }: {
   readonly input: VacanciesScreenProps;
   readonly shown: number;
+  readonly onToggleView: () => void;
+  readonly viewMode: 'list' | 'map';
 }) {
-  if (!input.facets) return null;
-  const verb = input.poolComplete === false ? 'Загружено' : 'Показано';
+  const label = input.poolComplete === false ? 'Загружено' : 'Показано';
+  const poolTotal = input.facets?.total;
+  const ariaCount = poolTotal === undefined ? `${label} ${shown}` : `${label} ${shown} из ${poolTotal}`;
   return (
-    <p className="list-hint" aria-live="polite">
-      {verb} <span className="vacancy-facet-count">{shown}</span> из{' '}
-      <span className="vacancy-facet-count">{input.facets.total}</span>
-    </p>
+    <div className="vacancies-mobile-results-summary">
+      <p className="list-hint" aria-live="polite" aria-label={ariaCount}>
+        <span className="vacancy-facet-count">{shown}</span> вакансий по вашим условиям
+      </p>
+      <button type="button" className="vacancies-mobile-map-action" onClick={onToggleView}>
+        {viewMode === 'list' ? <MapTrifold aria-hidden="true" /> : <List aria-hidden="true" />}
+        <span>{viewMode === 'list' ? 'Карта' : 'Список'}</span>
+      </button>
+    </div>
   );
 }
 
@@ -421,6 +497,41 @@ function mainBodyProps(
   };
 }
 
+function VacanciesFilterContent({
+  input,
+  screenState,
+}: {
+  readonly input: VacanciesScreenProps;
+  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
+}) {
+  const { board, actions, resetFilters } = screenState;
+  const filterOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
+  return (
+    <div className="vacancies-filter-section">
+      <VacanciesScreenSummary
+        poolTotal={input.facets?.total ?? input.matched.length}
+        filteredTotal={screenFilteredCount(input, board.filtered.length, board.state)}
+        shownCount={board.visibleItems.length}
+        poolComplete={input.poolComplete !== false}
+        activeFilters={countActiveFilters(board.state)}
+        catalogSummary={input.facets?.catalogSummary}
+        onReset={resetFilters}
+      />
+      <VacanciesFiltersSection
+        facets={input.facets}
+        board={board}
+        actions={actions}
+        candidateLevel={input.candidateLevel}
+        onReset={resetFilters}
+        premises={input.premises}
+        premisesLoading={input.premisesLoading}
+        onSavePremises={input.onSavePremises}
+        focusRole={input.focusRoleFilter}
+        filterOptions={filterOptions}
+      />
+    </div>
+  );
+}
 
 function VacanciesScreenContent({
   input,
@@ -429,81 +540,50 @@ function VacanciesScreenContent({
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
 }) {
-  const { board, actions, activeCampaign, savedSearchesOpen, setSavedSearchesOpen, resetFilters } =
-    screenState;
-  const filterOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
-
+  const { board, activeCampaign } = screenState;
+  const filteredTotal = screenFilteredCount(input, board.filtered.length, board.state);
+  const shown = input.poolComplete === false ? board.visibleItems.length : filteredTotal;
   return (
     <div className="vacancies-content">
-      <VacancyHypothesisSection campaign={activeCampaign} board={board} actions={actions} />
-      <VacanciesFiltersSection
-        facets={input.facets}
+      <VacancyHypothesisSection
+        campaign={activeCampaign}
         board={board}
-        actions={actions}
-        candidateLevel={input.candidateLevel}
-        subscriptionsCount={input.subscriptions?.length}
-        savedSearchesOpen={savedSearchesOpen}
-        onToggleSavedSearches={() => setSavedSearchesOpen((prev) => !prev)}
-        onReset={resetFilters}
-        premises={input.premises}
-        premisesLoading={input.premisesLoading}
-        onSavePremises={input.onSavePremises}
-        focusRole={input.focusRoleFilter}
-        filterOptions={filterOptions}
-      />
-      <SavedSearchesSection
-        defaultQuery={board.state.roles[0] ?? board.primaryRole}
-        open={savedSearchesOpen}
-        subscriptions={input.subscriptions}
-        onClose={() => setSavedSearchesOpen(false)}
-        onRefresh={input.onRefreshSubscriptions}
+        actions={screenState.actions}
       />
       <ResultCount
         input={input}
-        shown={board.state.selectedCity ? board.filtered.length : input.total}
+        shown={shown}
+        onToggleView={() =>
+          screenState.setViewMode((current) => (current === 'list' ? 'map' : 'list'))
+        }
+        viewMode={screenState.viewMode}
       />
       <VacanciesMainBody {...mainBodyProps(input, screenState)} />
     </div>
   );
 }
 
-function VacanciesScreenHeader({
-  input,
-  screenState,
-  activeTab,
-}: {
-  readonly input: VacanciesScreenProps;
-  readonly screenState: ReturnType<typeof useVacanciesScreenState>;
-  readonly activeTab: OpportunityTab;
-}) {
-  const { board, viewMode, setViewMode } = screenState;
+function VacanciesScreenHeader({ input }: { readonly input: VacanciesScreenProps }) {
   return (
     <>
-      <PageHeader
-        kicker={board.primaryRole ? `Кампания · ${board.primaryRole}` : 'Кампания'}
-        title="Вакансии"
-        description={
-          activeTab === 'companies'
-            ? 'Работодатели и люди по вакансиям текущей подборки.'
-            : activeTab === 'saved'
-              ? 'Сохранённые источники и запросы вакансий.'
-              : 'Отклик оформляется здесь, без перехода на площадку.'
-        }
-        right={
-          activeTab === 'selection' ? (
-            <ViewSwitch viewMode={viewMode} onChange={setViewMode} />
-          ) : undefined
-        }
-        onAskConsultant={input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined}
-      />
-      {activeTab === 'selection' && input.pathIndicator ? (
-        <nav className="path-strip" aria-label="Путь кампании">
-          <CareerPathIndicator
-            steps={input.pathIndicator.steps}
-            onNavigate={input.pathIndicator.onNavigate}
-          />
-        </nav>
-      ) : null}
+      <header className="vacancies-mobile-topbar" aria-label="Навигация по вакансиям">
+        {input.onOpenNotifications ? (
+          <button type="button" aria-label="Уведомления" onClick={input.onOpenNotifications}>
+            <Bell size={20} aria-hidden="true" />
+          </button>
+        ) : null}
+        <h1>Вакансии</h1>
+        {input.onOpenExpert ? (
+          <button
+            type="button"
+            aria-label="Спросить консультанта"
+            onClick={() => input.onOpenExpert?.('vacancies')}
+          >
+            <Sparkle size={20} aria-hidden="true" />
+          </button>
+        ) : null}
+      </header>
+      <PageHeader kicker="" title="Вакансии" description="" />
     </>
   );
 }
@@ -566,22 +646,28 @@ function VacanciesScreenFrame({
 }) {
   return (
     <div className="vacancies-screen">
-      <VacanciesScreenHeader input={input} screenState={screenState} activeTab={activeTab} />
-      <OpportunityTabs
-        active={activeTab}
-        totalVacancies={input.total}
-        savedCount={screenState.collections.savedApplications.length}
-        companiesCount={screenState.collections.companiesCount}
-        onSelect={onSelectTab}
-      />
-      {screenState.collections.actionError ? (
-        <p className="career-inline-error" role="alert">{screenState.collections.actionError}</p>
+      <VacanciesScreenHeader input={input} />
+      {activeTab === 'selection' ? (
+        <VacanciesFilterContent input={input} screenState={screenState} />
       ) : null}
-      <OpportunityContent
-        input={input}
-        screenState={screenState}
-        activeTab={activeTab}
-      />
+      <div className="vacancies-tabs-row">
+        <OpportunityTabs
+          active={activeTab}
+          totalVacancies={input.total}
+          savedCount={screenState.collections.savedApplications.length}
+          companiesCount={screenState.collections.companiesCount}
+          onSelect={onSelectTab}
+        />
+        {activeTab === 'selection' ? (
+          <ViewSwitch viewMode={screenState.viewMode} onChange={screenState.setViewMode} />
+        ) : null}
+      </div>
+      {screenState.collections.actionError ? (
+        <p className="career-inline-error" role="alert">
+          {screenState.collections.actionError}
+        </p>
+      ) : null}
+      <OpportunityContent input={input} screenState={screenState} activeTab={activeTab} />
       <VacancyOutreachDialog screenState={screenState} />
     </div>
   );

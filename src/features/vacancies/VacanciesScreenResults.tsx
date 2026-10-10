@@ -1,9 +1,6 @@
-import { Info } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { pluralRu } from '../../../shared/pluralRu';
 import { VacancyRow } from './VacancyRow';
 import { VacancyMapView } from './VacancyMapView';
-import { CareerTooltip } from '../shell/CareerTooltip';
 import type { ListContentProps } from './VacanciesScreen';
 import {
   VacanciesEmptyFilterState,
@@ -28,32 +25,17 @@ interface VacanciesMainBodyProps {
   readonly onSelectCity: (city?: string) => void;
 }
 
-function VacanciesListHeader({
-  totalCount,
-  countShownAbove,
-}: {
-  readonly totalCount: number;
-  readonly countShownAbove: boolean;
-}) {
+function VacanciesTableHeader() {
   return (
-    <div className={`list-head vacancies-list-head${countShownAbove ? ' has-count-above' : ''}`}>
-      {countShownAbove ? null : (
-        <span className="list-hint vacancies-list-hint">
-          {`${pluralRu(totalCount, ['вакансия', 'вакансии', 'вакансий'])} · показаны совпадающие по роли и уровню`}
-        </span>
-      )}
-      <span className="fit-legend">
-        Совпадение: роль · уровень · география
-        <CareerTooltip content="Порядок задаёт сервер: сначала роль, уровень и география, затем совпавшие требования; фантомные и сомнительные вакансии ниже, с причиной. «В базе» — дни с первого сбора записи, а не дата публикации.">
-          <button
-            type="button"
-            className="info-btn"
-            aria-label="Как устроен порядок и что значит «в базе»"
-          >
-            <Info size={16} aria-hidden="true" />
-          </button>
-        </CareerTooltip>
-      </span>
+    <div className="vacancies-table-header" role="row" aria-label="Колонки списка вакансий">
+      <div className="vacancies-table-header-cells">
+        <span role="columnheader">Роль</span>
+        <span role="columnheader">Уровень</span>
+        <span role="columnheader">Гео</span>
+        <span role="columnheader">Деньги</span>
+        <span aria-hidden="true" />
+      </div>
+      <span className="vacancies-table-header-actions" aria-hidden="true" />
     </div>
   );
 }
@@ -61,14 +43,12 @@ function VacanciesListHeader({
 function VacanciesListContent(props: ListContentProps) {
   return (
     <div className="vacancies-list-container">
-      <VacanciesListHeader
-        totalCount={props.total || props.items.length}
-        countShownAbove={props.countShownAbove}
-      />
+      <VacanciesTableHeader />
       <ul className="vac-list">
         {props.items.map((item) => (
           <VacancyRow
             key={item.cluster.id}
+            layout="screen"
             item={item}
             now={props.now}
             isSelected={props.selectedId === item.cluster.id}
@@ -88,23 +68,25 @@ function VacanciesListContent(props: ListContentProps) {
             companyWantKnown={props.companyWantKnownClusterIds?.has(item.cluster.id)}
             companyWantBusy={props.companyBusyClusterIds?.has(item.cluster.id)}
             companyContactsCount={props.companyContactsCountByClusterId?.get(item.cluster.id)}
-            onOpenCompanyPath={item.cluster.canonicalCompany
-              ? () => props.onOpenCompanyPath?.(item.cluster.canonicalCompany)
-              : undefined}
+            onOpenCompanyPath={
+              item.cluster.canonicalCompany
+                ? () => props.onOpenCompanyPath?.(item.cluster.canonicalCompany)
+                : undefined
+            }
             onToggleSaved={() => props.onToggleSaved?.(item.cluster)}
             onToggleCompanyWant={() => props.onToggleCompanyWant?.(item.cluster.canonicalCompany)}
           />
         ))}
       </ul>
       {props.hasMore ? (
-        <button
-          type="button"
-          className="companies-people-load-more"
-          onClick={props.onLoadMore}
-        >
+        <button type="button" className="companies-people-load-more" onClick={props.onLoadMore}>
           Показать ещё 20
         </button>
       ) : null}
+      <p className="vacancies-screen-page-count" aria-live="polite">
+        {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
+        {props.total || props.items.length}
+      </p>
     </div>
   );
 }

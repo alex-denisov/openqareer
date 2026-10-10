@@ -46,8 +46,17 @@ const campaign: CampaignMetaView = {
   ],
 };
 
-const facets = { total: 2, regions: [{ id: 'mena' as const, count: 2 }], remote: 0, levels: [],
-  roles: [{ role: 'VP Technology Ops', count: 1 }, { role: 'COO', count: 1 }], sources: [] };
+const facets = {
+  total: 2,
+  regions: [{ id: 'mena' as const, count: 2 }],
+  remote: 0,
+  levels: [],
+  roles: [
+    { role: 'VP Technology Ops', count: 1 },
+    { role: 'COO', count: 1 },
+  ],
+  sources: [],
+};
 
 describe('VacanciesScreen — фильтр ролей (C56)', () => {
   let container: HTMLDivElement;
@@ -82,7 +91,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (button) => button.textContent === 'Все роли кампании',
     );
     expect(allRolesButton).toBeUndefined();
-    expect(container.textContent).toContain('Фильтры · 0 активных');
+    expect(container.textContent).toContain('Фильтры 0');
   });
 
   it('сужает список до выбранной роли и позволяет вернуться ко «Всем ролям»', async () => {
@@ -98,20 +107,41 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       );
     });
 
-    const cooButton = Array.from(container.querySelectorAll('button')).find((button) =>
+    const rolesGroup = () =>
+      container.querySelector<HTMLButtonElement>('button[data-filter-group="roles"]');
+    await act(async () => rolesGroup()?.click());
+    let cooButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.vacancy-facet-chip')).find((button) =>
       button.textContent?.startsWith('COO'),
     );
     await act(async () => cooButton?.click());
+    const apply = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Применить',
+    );
+    await act(async () => apply?.click());
 
     const list = container.querySelector('.vac-list');
     expect(list?.textContent).toContain('COO');
-    expect(list?.textContent).not.toContain('VP Technology Ops');
+    const visibleTitles = Array.from(list?.querySelectorAll('.vac-title') ?? []).map(
+      (title) => title.textContent,
+    );
+    expect(visibleTitles).toEqual(['COO']);
 
     const allRolesButton = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Все роли кампании',
     );
     expect(allRolesButton).toBeUndefined();
+    expect(rolesGroup()?.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => rolesGroup()?.click());
+    expect(rolesGroup()?.getAttribute('aria-expanded')).toBe('true');
+    cooButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.vacancy-facet-chip')).find((button) =>
+      button.textContent?.startsWith('COO'),
+    );
     await act(async () => cooButton?.click());
+    expect(cooButton?.getAttribute('aria-pressed')).toBe('false');
+    const applyAgain = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Применить',
+    );
+    await act(async () => applyAgain?.click());
     const restoredList = container.querySelector('.vac-list');
     expect(restoredList?.textContent).toContain('VP Technology Ops');
     expect(restoredList?.textContent).toContain('COO');
@@ -119,41 +149,85 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
 
   it('изменение фильтра запрашивает первую страницу, без подсказок из кампании', async () => {
     const changes: unknown[] = [];
-    await act(async () => root.render(<VacanciesScreen
-      matched={[matchedItem('c-1', 'VP Technology Ops')]} total={2} facets={facets}
-      campaign={{ ...campaign, suggestedRegions: ['us'], remoteOnly: true }}
-      onFiltersChange={(state) => changes.push(state)} />));
+    await act(async () =>
+      root.render(
+        <VacanciesScreen
+          matched={[matchedItem('c-1', 'VP Technology Ops')]}
+          total={2}
+          facets={facets}
+          campaign={{ ...campaign, suggestedRegions: ['us'], remoteOnly: true }}
+          onFiltersChange={(state) => changes.push(state)}
+        />,
+      ),
+    );
     expect(container.textContent).not.toContain('Добавить:');
-    expect(changes[0]).toEqual({ roles: [], regions: [], levels: [], sources: [], remoteOnly: false });
+    expect(changes[0]).toEqual({
+      roles: [],
+      regions: [],
+      levels: [],
+      sources: [],
+      remoteOnly: false,
+    });
+    const locations = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Локации',
+    );
+    await act(async () => locations?.click());
     const region = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('MENA · 2'));
+      button.textContent?.includes('MENA · 2'),
+    );
     await act(async () => region?.click());
-    expect(changes.at(-1)).toEqual({ roles: [], regions: ['mena'], levels: [], sources: [], remoteOnly: false });
+    const apply = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Применить',
+    );
+    await act(async () => apply?.click());
+    expect(changes.at(-1)).toEqual({
+      roles: [],
+      regions: ['mena'],
+      levels: [],
+      sources: [],
+      remoteOnly: false,
+    });
   });
   it('счётчик учитывает выбранный на карте город и возвращает серверный total при очистке', async () => {
     const mapped = (id: string, city: string, lat: number, lng: number): MatchedVacancyItem => {
       const item = matchedItem(id, 'COO');
-      return { ...item, cluster: { ...item.cluster, canonicalLocation: city,
-        companyFeatures: { city, coordinates: { lat, lng } } } };
+      return {
+        ...item,
+        cluster: {
+          ...item.cluster,
+          canonicalLocation: city,
+          companyFeatures: { city, coordinates: { lat, lng } },
+        },
+      };
     };
-    await act(async () => root.render(<VacanciesScreen
-      matched={[mapped('c-1', 'Амстердам', 52.3676, 4.9041), mapped('c-2', 'Велдховен', 51.4172, 5.4055)]}
-      total={8} facets={{ ...facets, total: 12 }} />));
-    const counter = () => container.querySelector('.list-hint[aria-live="polite"]')?.textContent;
+    await act(async () =>
+      root.render(
+        <VacanciesScreen
+          matched={[
+            mapped('c-1', 'Амстердам', 52.3676, 4.9041),
+            mapped('c-2', 'Велдховен', 51.4172, 5.4055),
+          ]}
+          total={8}
+          facets={{ ...facets, total: 12 }}
+        />,
+      ),
+    );
+    const counter = () => container.querySelector('.list-hint[aria-live="polite"]')?.getAttribute('aria-label');
     expect(counter()).toBe('Показано 8 из 12');
-    const mapTab = Array.from(container.querySelectorAll('[role="tab"]')).find((tab) =>
-      tab.textContent === 'Карта');
+    const mapTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
+      (tab) => tab.textContent === 'Карта',
+    );
     await act(async () => (mapTab as HTMLButtonElement).click());
-    const city = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Амстердам'));
-    expect(city).toBeDefined();
+    const city = container.querySelector<HTMLButtonElement>('.vacancy-map-cities button');
+    expect(city?.textContent).toContain('Амстердам');
     await act(async () => city?.click());
+    expect(city?.getAttribute('aria-pressed')).toBe('true');
     expect(counter()).toBe('Показано 1 из 12');
     expect(container.querySelectorAll('.career-map-cards-grid > *')).toHaveLength(1);
-    const clear = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent === 'Все города на карте');
+    const clear = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Все города на карте',
+    );
     await act(async () => clear?.click());
     expect(counter()).toBe('Показано 8 из 12');
   });
-
 });

@@ -71,6 +71,7 @@ interface CareerCabinetProps {
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
+  onOpenNotifications?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
@@ -91,6 +92,7 @@ export function CareerCabinet({
   onNavigate,
   onOpenTariffs,
   onOpenConnections,
+  onOpenNotifications,
   onOpenExpert,
   onUpdateWorkspace,
 }: CareerCabinetProps) {
@@ -321,6 +323,7 @@ export function CareerCabinet({
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
+            onOpenNotifications={onOpenNotifications}
             onOpenExpert={onOpenExpert}
           />
         )}
@@ -385,6 +388,7 @@ function CabinetSection({
   onSavePremises,
   onOpenTariffs,
   onOpenConnections,
+  onOpenNotifications,
   onOpenExpert,
 }: {
   view: CareerCabinetView;
@@ -414,6 +418,7 @@ function CabinetSection({
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
+  onOpenNotifications?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   useEffect(() => {
@@ -489,6 +494,7 @@ function CabinetSection({
       onOpenResponses={() => onNavigate('responses')}
       onOpenArchive={() => onNavigate('responses', { openArchive: true })}
       onOpenConnections={onOpenConnections}
+      onOpenNotifications={onOpenNotifications}
       onOpenProfile={onOpenProfileRequirement}
       onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
