@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CareerDiaryGoalInput, CareerDiaryMeasurementInput } from '../../../shared/careerDiary';
+import type { CareerDiaryAchievementInput, CareerDiaryGoalInput, CareerDiaryMeasurementInput, CareerDiaryWeeklyReviewInput } from '../../../shared/careerDiary';
 import { apiFetch, readData } from '../coach/apiClient';
 import {
+  createCareerDiaryAchievement,
   createCareerDiaryGoal,
   listCareerDiaryGoals,
   recordCareerDiaryMeasurement,
+  setCareerDiaryAchievementStatus,
+  upsertCareerDiaryReview,
 } from './careerDiaryApi';
 
 vi.mock('../coach/apiClient', () => ({
@@ -73,5 +76,51 @@ describe('career diary API client', () => {
       }),
     );
     expect(readData).toHaveBeenCalledOnce();
+  });
+
+  it('upserts a weekly review by its Monday date', async () => {
+    const input: CareerDiaryWeeklyReviewInput = {
+      weekStart: '2026-10-05',
+      movedForward: 'Согласовал план.',
+      blockers: 'Не было данных.',
+      learning: 'Нужно сверять источник.',
+      risks: 'Сроки.',
+      nextWeek: 'Получить подтверждение.',
+    };
+
+    await upsertCareerDiaryReview(input.weekStart, input);
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/reviews/2026-10-05',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify(input) }),
+    );
+  });
+
+  it('creates an achievement with an idempotency key', async () => {
+    const input: CareerDiaryAchievementInput = {
+      situation: 'Не хватало данных.',
+      action: 'Собрал отчёт.',
+      result: 'Решение принято.',
+    };
+
+    await createCareerDiaryAchievement(input);
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/achievements',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'Idempotency-Key': expect.any(String) }),
+        body: JSON.stringify(input),
+      }),
+    );
+  });
+
+  it('changes an achievement status at its candidate-scoped endpoint', async () => {
+    await setCareerDiaryAchievementStatus('achievement-1', 'dismissed');
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/achievements/achievement-1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'dismissed' }) }),
+    );
   });
 });

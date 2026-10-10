@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Plus } from '@phosphor-icons/react';
-import type { CareerDiaryGoalSummary } from '../../../shared/careerDiary';
+import type { CareerDiaryAchievement, CareerDiaryGoalSummary } from '../../../shared/careerDiary';
 import { useCareerDiaryMutations } from './useCareerDiaryMutations';
 import { CareerDiaryGoalDetail } from './CareerDiaryGoalDetail';
 import { CareerDiaryGoalForm } from './CareerDiaryGoalForm';
 import { CareerDiaryGoalList } from './CareerDiaryGoalList';
-import { CareerDiaryRecordList } from './CareerDiaryRecordList';
+import { CareerDiaryAchievements } from './CareerDiaryAchievements';
+import { CareerDiaryWeeklyReviews } from './CareerDiaryWeeklyReviews';
 import { CareerDiarySummary } from './CareerDiarySummary';
 import { CareerDiaryTabs } from './CareerDiaryTabs';
-import type { CareerDiaryTab } from './useCareerDiaryRecords';
+import type { CareerDiaryRecord, CareerDiaryTab } from './useCareerDiaryRecords';
 import { useCareerDiaryRecords } from './useCareerDiaryRecords';
 import { useCareerDiaryGoalDetail } from './useCareerDiaryGoalDetail';
 import { useCareerDiaryGoals } from './useCareerDiaryGoals';
+import { useCareerDiaryAchievementProfileStatuses } from './useCareerDiaryAchievementProfileStatuses';
 import { useCareerDiaryOverview } from './useCareerDiaryOverview';
 import './career-diary.css';
 
@@ -43,6 +45,11 @@ function useCareerDiaryController(onOpenConsultant: CareerDiaryPageProps['onOpen
   const goals = useCareerDiaryGoals();
   const records = useCareerDiaryRecords(activeTab);
   const detail = useCareerDiaryGoalDetail(selectedGoalId);
+  const achievementRecords = records.records.filter(isAchievementRecord);
+  const profileStatuses = useCareerDiaryAchievementProfileStatuses(
+    activeTab === 'achievements',
+    achievementRecords,
+  );
   const mutations = useCareerDiaryMutations({
     formGoal,
     selectedGoalId,
@@ -58,11 +65,19 @@ function useCareerDiaryController(onOpenConsultant: CareerDiaryPageProps['onOpen
     setActiveTab(tab);
     setSelectedGoalId(null);
   }, []);
+  const reloadRecords = records.reload;
+  const reloadOverview = overview.reload;
+  const reloadProfileStatuses = profileStatuses.reload;
+  const reloadDiaryRecords = useCallback(() => {
+    reloadRecords();
+    reloadOverview();
+    reloadProfileStatuses();
+  }, [reloadOverview, reloadProfileStatuses, reloadRecords]);
 
   return {
     activeTab, selectTab, overview, goals, records, detail, selectedGoalId,
     setSelectedGoalId, formGoal, openNewGoal, openEditGoal, closeGoalForm,
-    onOpenConsultant, ...mutations,
+    profileStatuses, reloadDiaryRecords, onOpenConsultant, ...mutations,
   };
 }
 
@@ -121,10 +136,10 @@ function DiaryTabPanel(props: ReturnType<typeof useCareerDiaryController>) {
 }
 
 function TabContent(props: ReturnType<typeof useCareerDiaryController>) {
-  if (props.activeTab !== 'goals') {
+  if (props.activeTab === 'reviews') {
     return (
-      <CareerDiaryRecordList
-        tab={props.activeTab}
+      <CareerDiaryWeeklyReviews
+        overview={props.overview.overview}
         records={props.records.records}
         state={props.records.state}
         error={props.records.error}
@@ -132,6 +147,25 @@ function TabContent(props: ReturnType<typeof useCareerDiaryController>) {
         loadingMore={props.records.loadingMore}
         onRetry={props.records.reload}
         onLoadMore={props.records.loadMore}
+        onSaved={props.reloadDiaryRecords}
+      />
+    );
+  }
+  if (props.activeTab === 'achievements') {
+    return (
+      <CareerDiaryAchievements
+        records={props.records.records}
+        state={props.records.state}
+        error={props.records.error}
+        nextCursor={props.records.nextCursor}
+        loadingMore={props.records.loadingMore}
+        profileStatuses={props.profileStatuses.statuses}
+        profileStatusesLoading={props.profileStatuses.loading}
+        profileStatusesError={props.profileStatuses.error}
+        onRetry={props.records.reload}
+        onLoadMore={props.records.loadMore}
+        onRetryProfileStatuses={props.profileStatuses.reload}
+        onRecordsChanged={props.reloadDiaryRecords}
       />
     );
   }
@@ -148,4 +182,8 @@ function TabContent(props: ReturnType<typeof useCareerDiaryController>) {
       onOpenGoal={props.setSelectedGoalId}
     />
   );
+}
+
+function isAchievementRecord(record: CareerDiaryRecord): record is CareerDiaryAchievement {
+  return 'situation' in record;
 }

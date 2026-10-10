@@ -810,6 +810,172 @@
   }
 }
 
+.career-diary-review-workspace,
+.career-diary-review-current,
+.career-diary-review-past,
+.career-diary-review-form,
+.career-diary-achievement-workspace,
+.career-diary-achievement-form,
+.career-diary-profile-proposal,
+.career-diary-profile-proposal__action {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-diary-review-current,
+.career-diary-review-form,
+.career-diary-review-past,
+.career-diary-achievement-form,
+.career-diary-profile-proposal {
+  padding: var(--career-space-5);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-diary-review-current__header,
+.career-diary-achievement-form__header,
+.career-diary-profile-proposal__header,
+.career-diary-achievement__header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.career-diary-review-current__header,
+.career-diary-achievement__header {
+  justify-content: space-between;
+}
+
+.career-diary-review-current__header h2,
+.career-diary-review-form__header h3,
+.career-diary-achievement-form__header h2,
+.career-diary-profile-proposal__header h2,
+.career-diary-achievement__header h3 {
+  margin: 0;
+  font-size: var(--career-text-md);
+  overflow-wrap: anywhere;
+}
+
+.career-diary-review-current__header p {
+  margin: var(--career-space-1) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-diary-review-workspace form,
+.career-diary-achievement-form form {
+  display: grid;
+  gap: var(--career-space-4);
+}
+
+.career-diary-review-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-4);
+}
+
+.career-diary-review-form textarea,
+.career-diary-achievement-form textarea {
+  min-block-size: calc(var(--career-space-8) * 4);
+}
+
+.career-diary-achievement__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-diary-profile-proposal__evidence {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-diary-profile-proposal__evidence p {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.career-diary-profile-proposal__evidence strong {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-diary-consultant-response {
+  margin: 0;
+  padding: var(--career-space-3);
+  border-inline-start: var(--career-border-width) solid var(--career-accent);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+@media (max-width: 767px) {
+  .career-diary-review-current,
+  .career-diary-review-form,
+  .career-diary-review-past,
+  .career-diary-achievement-form,
+  .career-diary-profile-proposal {
+    padding: var(--career-space-3);
+  }
+
+  .career-diary-review-current__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .career-diary-review-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-diary-review-workspace.is-editing .career-diary-review-past {
+    display: none;
+  }
+
+  .career-diary-achievement__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+.career-diary-records__list {
+  display: grid;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.career-diary-error-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-danger);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-danger);
+}
+
+.career-diary-error-state p {
+  margin: 0;
+  font-size: var(--career-text-sm);
+}
+
+.career-diary-achievement__header h3 {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .career-diary-skeleton {
     animation: none;

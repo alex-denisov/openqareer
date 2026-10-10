@@ -1,5 +1,7 @@
 import {
   type CareerDiaryAchievement,
+  type CareerDiaryAchievementInput,
+  type CareerDiaryAchievementStatus,
   type CareerDiaryGoalInput,
   type CareerDiaryGoalPatch,
   type CareerDiaryGoalSummary,
@@ -8,6 +10,7 @@ import {
   type CareerDiaryOverview,
   type CareerDiaryPage,
   type CareerDiaryWeeklyReview,
+  type CareerDiaryWeeklyReviewInput,
 } from '../../../shared/careerDiary';
 import { apiFetch, readData } from '../coach/apiClient';
 
@@ -17,7 +20,7 @@ async function readResponse<T>(path: string, init?: RequestInit): Promise<T> {
   return readData<T>(await apiFetch(path, init));
 }
 
-function jsonMutation(method: 'PATCH' | 'POST', body: unknown): RequestInit {
+function jsonMutation(method: 'PATCH' | 'POST' | 'PUT', body: unknown): RequestInit {
   return {
     method,
     headers: { 'Content-Type': 'application/json' },
@@ -112,4 +115,30 @@ export function listCareerDiaryAchievements(input: {
   return readResponse(pagePath('achievements', input.limit, input.cursor), {
     signal: input.signal,
   });
+}
+
+export function upsertCareerDiaryReview(
+  weekStart: string,
+  input: CareerDiaryWeeklyReviewInput,
+): Promise<CareerDiaryWeeklyReview> {
+  return readResponse(
+    `${API_ROOT}/reviews/${encodeURIComponent(weekStart)}`,
+    jsonMutation('PUT', input),
+  );
+}
+
+export function createCareerDiaryAchievement(
+  input: CareerDiaryAchievementInput,
+): Promise<CareerDiaryAchievement> {
+  return readResponse(`${API_ROOT}/achievements`, idempotentMutation(input));
+}
+
+export function setCareerDiaryAchievementStatus(
+  achievementId: string,
+  status: CareerDiaryAchievementStatus,
+): Promise<CareerDiaryAchievement> {
+  return readResponse(
+    `${API_ROOT}/achievements/${encodeURIComponent(achievementId)}`,
+    jsonMutation('PATCH', { status }),
+  );
 }
