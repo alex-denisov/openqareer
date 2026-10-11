@@ -103,6 +103,12 @@ function fixture(
     },
     goals,
     workplace: place,
+    profileExperience: {
+      id: 'experience-1',
+      title: 'Head of Engineering',
+      employer: 'Норма Групп',
+      current: true,
+    },
   };
 }
 

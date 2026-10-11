@@ -82,7 +82,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('С чем разобраться?');
   });
 
-  it('opens the authenticated diary as a first-class cabinet screen', () => {
+  it('waits for profile work status before rendering the authenticated diary', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         initialView="diary"
@@ -97,9 +97,8 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('career-diary-page');
-    expect(html).toContain('Карьерный дневник');
-    expect(html).toContain('aria-current="page"');
+    expect(html).toContain('Проверяем место работы из профиля');
+    expect(html).not.toContain('career-diary-page');
   });
 
   it('locks every workspace section until the diagnostic produced a career picture', () => {
@@ -545,7 +544,9 @@ describe('CareerWorkspaceShell brand chrome', () => {
       constraints: '',
       urgency: 'active',
     });
-    const html = renderToStaticMarkup(<CareerWorkspaceShell session={candidateSession} workspace={workspace} />);
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell session={candidateSession} workspace={workspace} />,
+    );
 
     it('keeps the openqareer mark and removes the contextless expert door', () => {
       expect(html).toContain('career-brand-mark');
@@ -578,7 +579,10 @@ describe('CareerWorkspaceShell brand chrome', () => {
 
     it('styles the administrator link with a class, not a blocked attribute', () => {
       const adminHtml = renderToStaticMarkup(
-        <CareerWorkspaceShell session={{ ...candidateSession, role: 'admin' }} workspace={workspace} />,
+        <CareerWorkspaceShell
+          session={{ ...candidateSession, role: 'admin' }}
+          workspace={workspace}
+        />,
       );
       expect(adminHtml).toContain('Админка');
       expect(adminHtml).toContain('career-rail-admin');
@@ -613,17 +617,21 @@ describe('B440 fixed rail contract', () => {
 
   function shellHtml(initialView: ShellSection = 'today') {
     return renderToStaticMarkup(
-      <CareerWorkspaceShell session={candidateSession} workspace={workspace} initialView={initialView} />,
+      <CareerWorkspaceShell
+        session={candidateSession}
+        workspace={workspace}
+        initialView={initialView}
+      />,
     );
   }
 
-  it('renders four distinct primary section icons on rail and mobile', () => {
+  it('hides diary navigation icons until the profile work status is known', () => {
     const html = shellHtml();
     const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
       (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
     );
-    expect(paths).toHaveLength(9);
-    expect(new Set(paths).size).toBe(5);
+    expect(paths).toHaveLength(8);
+    expect(new Set(paths).size).toBe(4);
   });
 
   it('has no rail expansion state and keeps tariff access on Wallet', () => {
