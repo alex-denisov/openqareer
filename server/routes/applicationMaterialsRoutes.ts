@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -22,6 +23,15 @@ const handleLinkMaterial: Handler = async (deps, request, reply) => {
     role,
     body.documentId,
   );
+  if (role === 'cover_letter') {
+    recordNotificationFromSource(deps, request, candidate.id, {
+      kind: 'email_approval',
+      sourceType: 'application_material',
+      sourceId: params.id,
+      idempotencyKey: `email-approval:${params.id}:${body.documentId}`,
+      createdAt: linked.linkedAt,
+    });
+  }
   return { data: linked, meta: { requestId: request.id } };
 };
 

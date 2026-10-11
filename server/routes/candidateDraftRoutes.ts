@@ -7,6 +7,7 @@ import type { LinkedinDraftWriter } from '../providers/linkedinDraftWriter';
 import type { SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraftRepository';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, authenticateSession, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 
 export type CandidateDraftRouteDeps = RouteDeps & {
   readonly candidateDraftRepository: SqliteCandidateDraftRepository;
@@ -51,6 +52,15 @@ async function generate(deps: CandidateDraftRouteDeps, request: FastifyRequest, 
   const targetPostUrl = input.kind === 'comment' && /^https?:\/\/\S+$/u.test(input.sourceText ?? '') ? input.sourceText : null;
   try {
     const draft = deps.candidateDraftRepository.create({ candidateId: candidate.id, kind: input.kind, topic: input.topic, targetPostUrl, text, localDate });
+    if (draft.kind === 'post') {
+      recordNotificationFromSource(deps, request, candidate.id, {
+        kind: 'post_approval',
+        sourceType: 'draft',
+        sourceId: draft.id,
+        idempotencyKey: `post-approval:${draft.id}`,
+        createdAt: draft.createdAt,
+      });
+    }
     return reply.send({ data: draft });
   } catch (err) {
     const removed = err instanceof Error && err.message.includes('candidate_not_found');

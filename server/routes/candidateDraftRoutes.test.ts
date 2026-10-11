@@ -11,24 +11,29 @@ import { config } from '../appTestHarness';
 import type { RouteDeps } from './deps';
 import { SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraftRepository';
 import { registerCandidateDraftRoutes } from './candidateDraftRoutes';
+import { registerNotificationRoutes } from './notificationRoutes';
+import { SqliteNotificationRepository } from '../data/sqliteNotificationRepository';
 
 const close: (() => Promise<unknown>)[] = [];
 afterEach(async () => { for (const fn of close.splice(0)) await fn(); vi.useRealTimers(); });
 async function setup(tier = 'pro', writer = vi.fn(async () => ({ text: 'Мой опыт.' }))) {
   const db = new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT; INSERT INTO candidates (id) VALUES ('alice'), ('bob');");
   const repository = new SqliteCandidateDraftRepository(db);
+  const notificationRepository = new SqliteNotificationRepository(db);
   const logs: string[] = [];
   const app = Fastify({ logger: { stream: { write: (line: string) => { logs.push(line); } } } });
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
   const candidate = { id: 'alice', locale: 'ru-RU', dataClass: 'synthetic', createdAt: '' };
-  const deps = { config, candidateStore: { authenticate: () => null, getSnapshot: () => ({ memory: [] }) },
+  const deps = { config, candidateStore: { authenticate: () => null, getSnapshot: () => ({ memory: [] }), notificationRepository },
     authService: { authenticate: (token: string) => token === 'session' ? { userId: 'user', candidate } : null,
       getUser: () => ({ candidateId: 'alice', subscriptionTier: tier, timezone: 'Asia/Tokyo', headline: 'Эксперт' }) },
     candidateDraftRepository: repository, linkedinDraftWriter: { writeDraft: writer },
   } as unknown as RouteDeps & { candidateDraftRepository: SqliteCandidateDraftRepository; linkedinDraftWriter: { writeDraft: typeof writer } };
   registerCandidateDraftRoutes(app, deps);
-  close.push(async () => { await app.close(); db.close(); });
+  registerNotificationRoutes(app, deps);
+  close.push(async () => { await app.close(); notificationRepository.close(); db.close(); });
   const headers = { authorization: 'Bearer session', origin: config.allowedOrigins[0] };
   const post = (payload: Record<string, unknown> = { kind: 'comment', topic: 'Опыт' }, extraHeaders = headers) => app.inject({ method: 'POST', url: '/api/v1/candidate/drafts', headers: extraHeaders, payload });
   return { app, post, headers, repository, writer, logs };
@@ -73,6 +78,17 @@ describe('candidate draft HTTP boundary', () => {
     expect(response.body).not.toContain('private provider detail');
     expect(logs.join('')).not.toContain('private provider detail');
     expect(repository.listRecent('alice')).toEqual([]);
+  });
+  it('creates an in-app approval notification when a post draft is prepared', async () => {
+    const { post, app, headers } = await setup('executive');
+    const generated = await post({ kind: 'post', topic: 'Запуск продукта' });
+    expect(generated.statusCode).toBe(200);
+    const inbox = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/notifications',
+      headers,
+    });
+    expect(inbox.json().data.items.map((item: { kind: string }) => item.kind)).toContain('post_approval');
   });
   it('does not recreate drafts if the candidate deletes their account during generation', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'draft-route-deletion-'));

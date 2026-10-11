@@ -56,6 +56,7 @@ import {
 } from './sqliteWorkPreferenceRepository';
 import { SqliteVacancyApplicationRepository } from './sqliteVacancyApplicationRepository';
 import { ApplicationTrackerController } from './store/applicationTrackerController';
+import { SqliteNotificationRepository } from './sqliteNotificationRepository';
 import {
   createApplicationTrackerMethods,
   type ApplicationTrackerMethods,
@@ -107,6 +108,7 @@ import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from './sqliteBus
 export { CandidateNotFoundError, CandidateStoreConflictError, CandidateDocumentRetentionError };
 
 export class SqliteCandidateStore implements CandidateStore {
+  readonly notificationRepository: SqliteNotificationRepository;
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
@@ -161,6 +163,7 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
+    this.notificationRepository = new SqliteNotificationRepository(this.database);
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
@@ -769,6 +772,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   close(): void {
+    this.notificationRepository.close();
     this.database.close();
   }
 

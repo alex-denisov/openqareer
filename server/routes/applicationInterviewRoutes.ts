@@ -3,6 +3,7 @@ import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
 import { isoDateField } from './isoDateField';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -29,6 +30,15 @@ const handleCreateInterview: Handler = async (deps, request, reply) => {
   const applicationId = (request.params as { id: string }).id;
   const body = createInterviewSchema.parse(request.body);
   const created = candidateStore.createApplicationInterview(candidate.id, applicationId, body);
+  if (created.scheduledAt) {
+    recordNotificationFromSource(deps, request, candidate.id, {
+      kind: 'interview_reminder',
+      sourceType: 'interview',
+      sourceId: created.id,
+      idempotencyKey: `interview-reminder:${created.id}:${created.scheduledAt}`,
+      createdAt: created.createdAt,
+    });
+  }
   return { data: created, meta: { requestId: request.id } };
 };
 
@@ -45,6 +55,15 @@ const handlePatchInterview: Handler = async (deps, request, reply) => {
     params.iid,
     body,
   );
+  if (patched && body.scheduledAt) {
+    recordNotificationFromSource(deps, request, candidate.id, {
+      kind: 'interview_reminder',
+      sourceType: 'interview',
+      sourceId: patched.id,
+      idempotencyKey: `interview-reminder:${patched.id}:${patched.scheduledAt}`,
+      createdAt: new Date().toISOString(),
+    });
+  }
   if (body.followUpDueAt !== undefined) {
     const app = candidateStore.getApplication(candidate.id, params.id);
     if (app) {

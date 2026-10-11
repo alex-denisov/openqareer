@@ -15,6 +15,7 @@ import {
   withDeps,
 } from './helpers';
 import { registerCoachResultRoute } from './coachResultRoute';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
 import { buildCoachSubjectContext } from './coachSubjectContext';
 import {
@@ -154,6 +155,14 @@ async function generateTurn(
   }
   try {
     const output = await completeTurnWithProvider(deps, candidateId, key, { ...input, marketObservations });
+    if (input.internalPurpose !== 'consultant-summary' && output.result.actionProposals.length > 0) {
+      recordNotificationFromSource(deps, request, candidateId, {
+        kind: 'consultant_edits',
+        sourceType: 'coach_turn',
+        sourceId: key,
+        idempotencyKey: `consultant-edits:${key}`,
+      });
+    }
     await generatePendingConversationSummaries(deps, request, candidateId, attemptedSummaries);
     return output;
   } catch (error) {

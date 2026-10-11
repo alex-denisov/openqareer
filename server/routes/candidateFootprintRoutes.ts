@@ -19,6 +19,7 @@ import {
   toPublicFootprintQueryPlan,
 } from '../osint/candidateFootprintQueryPlan';
 import type { RouteDeps } from './deps';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import {
   authenticateCandidate,
   authenticateSession,
@@ -147,6 +148,16 @@ async function handleGetFootprintAudit(
   );
   if (!candidate) return undefined;
   const audit = latestFootprintAudit(deps, candidate.id);
+  if (audit?.state === 'completed' && audit.findings.length > 0) {
+    // Completed audits are materialized once in the candidate inbox; no finding text is copied.
+    recordNotificationFromSource(deps, request, candidate.id, {
+      kind: 'footprint_findings',
+      sourceType: 'footprint_audit',
+      sourceId: audit.id,
+      idempotencyKey: `footprint-findings:${audit.id}`,
+      ...(audit.completedAt ? { createdAt: audit.completedAt } : {}),
+    });
+  }
   return { data: { audit }, meta: { requestId: request.id } };
 }
 

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APPLICATION_STAGES } from '../../shared/applicationStage';
@@ -13,6 +14,7 @@ import { registerCareerVectorRoutes } from './careerVectorRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -149,14 +151,48 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const applicationId = (request.params as { id: string }).id;
   const body = patchApplicationSchema.parse(request.body);
+  const current = candidateStore.getApplication(candidate.id, applicationId);
   const patched = candidateStore.patchApplication(
     candidate.id,
     applicationId,
     body,
     config.applicationArchiveStaleDays,
   );
+  recordApplicationNotifications(
+    deps, request, candidate.id, applicationId, current?.stage ?? null, patched, body,
+  );
   return { data: patched, meta: { requestId: request.id } };
 };
+
+function recordApplicationNotifications(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  applicationId: string,
+  previousStage: string | null,
+  updated: { readonly stage: string; readonly version: number },
+  input: z.infer<typeof patchApplicationSchema>,
+): void {
+  const createdAt = input.occurredAt ?? new Date().toISOString();
+  if (previousStage !== updated.stage && ['responded', 'interview', 'offer'].includes(updated.stage)) {
+    recordNotificationFromSource(deps, request, candidateId, {
+      kind: 'employer_reply',
+      sourceType: 'application',
+      sourceId: applicationId,
+      idempotencyKey: `employer-reply:${applicationId}:${updated.version}`,
+      createdAt,
+    });
+  }
+  if (input.deliveryReceipt?.kind === 'failure_note') {
+    recordNotificationFromSource(deps, request, candidateId, {
+      kind: 'delivery_error',
+      sourceType: 'application',
+      sourceId: applicationId,
+      idempotencyKey: `delivery-error:${applicationId}:${updated.version}`,
+      createdAt,
+    });
+  }
+}
 
 const handleRestoreApplication: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
@@ -287,6 +323,24 @@ function todayNewVacancies(
     : undefined;
 }
 
+function recordFreshVacancyNotification(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  vacancies: readonly TodayNewVacancy[],
+): void {
+  if (!vacancies.length) return;
+  const sourceId = createHash('sha256')
+    .update(vacancies.map((vacancy) => vacancy.clusterId).sort().join('\0'))
+    .digest('hex');
+  recordNotificationFromSource(deps, request, candidateId, {
+    kind: 'new_vacancies_by_role',
+    sourceType: 'matched_vacancy_batch',
+    sourceId,
+    idempotencyKey: `new-vacancies:${sourceId}`,
+  });
+}
+
 /**
  * `GET /today` (architecture.md §4, §57, §97; C55): дайджест дня. Подбор
  * читается тем же асинхронным путём, что и «Вакансии» (`readMatchedSnapshot`)
@@ -324,6 +378,7 @@ const handleToday: Handler = async (deps, request, reply) => {
     companyEventsSinceVisit,
     shortlist: newVacancies,
   });
+  recordFreshVacancyNotification(deps, request, candidate.id, freshNewVacancies);
   return { data: snapshot, meta: { requestId: request.id } };
 };
 

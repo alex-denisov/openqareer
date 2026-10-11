@@ -61,6 +61,7 @@ import type {
   VacancySourceHealth,
   VacancySubscriptionInput,
 } from '../domain/vacancy';
+import type { SqliteNotificationRepository } from './sqliteNotificationRepository';
 
 export interface CandidateIdentity {
   id: string;
@@ -372,6 +373,8 @@ export interface CommittedResumeImport {
 }
 
 export interface CandidateStore {
+  /** Candidate inbox and preferences share the candidate SQLite database. */
+  readonly notificationRepository?: SqliteNotificationRepository;
   /** Candidate-scoped, encrypted profile revision journal on the same SQLite connection. */
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   /** Подготовка STAR на отклик (B392), запечатанный текст кандидата. */
