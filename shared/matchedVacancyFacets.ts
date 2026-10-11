@@ -18,15 +18,6 @@ export const MATCHED_VACANCY_SOURCE_GROUPS = [
 
 export type MatchedVacancySourceGroupId = (typeof MATCHED_VACANCY_SOURCE_GROUPS)[number]['id'];
 
-export interface MatchedVacancySourceCatalogEntry {
-  readonly sourceId: string;
-  readonly name: string;
-  readonly groupId: MatchedVacancySourceGroupId | null;
-  readonly domain: string | null;
-  readonly market: string | null;
-  readonly count: number;
-}
-
 export interface MatchedVacancySourceGroup {
   readonly id: MatchedVacancySourceGroupId;
   readonly name: string;
@@ -53,5 +44,4 @@ export interface MatchedVacancyFacets {
     readonly count: number;
   }[];
   readonly sourceGroups?: readonly MatchedVacancySourceGroup[];
-  readonly sourceCatalog?: readonly MatchedVacancySourceCatalogEntry[];
 }

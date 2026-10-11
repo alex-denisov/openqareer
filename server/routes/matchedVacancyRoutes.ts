@@ -260,7 +260,7 @@ const handleMatchedVacancies: Handler = async (
   if (!candidate) return undefined;
   const filters = matchedVacanciesQuerySchema.parse(request.query);
   const { offset } = filters;
-  const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources());
+  const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources?.() ?? []);
   const knownSourceIds = sourceRegistry.map(({ id }) => id);
   const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);

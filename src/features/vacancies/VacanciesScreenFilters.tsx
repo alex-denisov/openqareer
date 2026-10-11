@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 
-import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
+import type {
+  MatchedVacancyFacets,
+  MatchedVacancySourceGroupId,
+} from '../../../shared/matchedVacancyFacets';
+import { getVacancySources, type VacancySourceRegistryEntry } from '../coach/coachApi';
 import {
   VACANCY_FILTER_GROUPS,
   VacanciesFilterToolbar,
@@ -506,29 +510,60 @@ function SourceFacetGroup({
   );
 }
 
+const SOURCE_GROUP_BY_CATEGORY: Readonly<Record<string, MatchedVacancySourceGroupId>> = {
+  'ATS компаний': 'ats',
+  'Агрегаторы и API': 'aggregators',
+  'Международные площадки': 'platforms',
+  'Telegram каналы': 'channels',
+};
+
+function useVacancySourceCatalog(): VacancySourceRegistryEntry[] {
+  const [catalog, setCatalog] = useState<VacancySourceRegistryEntry[]>([]);
+  useEffect(() => {
+    let active = true;
+    void getVacancySources()
+      .then((sources) => {
+        if (active) setCatalog(Array.isArray(sources) ? sources : []);
+      })
+      .catch(() => {
+        if (active) setCatalog([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return catalog;
+}
+
+function matchedSourceOptions(
+  facets: MatchedVacancyFacets,
+  catalog: readonly VacancySourceRegistryEntry[],
+) {
+  const sourceById = new Map<string, VacancySourceRegistryEntry>(
+    catalog.map((source) => [source.id, source] as const),
+  );
+  return facets.sources.map(({ sourceId, name, count }) => {
+    const source = sourceById.get(sourceId);
+    return {
+      sourceId,
+      name: source?.name ?? name,
+      groupId: source?.category ? SOURCE_GROUP_BY_CATEGORY[source.category] ?? null : null,
+      count,
+    };
+  });
+}
+
 function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const catalog = useVacancySourceCatalog();
   const facets = props.facets;
   if (!facets) return null;
-  const catalog = facets.sourceCatalog ?? [];
-  if (!catalog.length) {
-    return (
-      <FacetGroup
-        title="Источник"
-        field="sources"
-        props={props}
-        options={facets.sources.map(({ sourceId, name, count }) => ({
-          id: sourceId,
-          label: name,
-          count,
-        }))}
-      />
-    );
-  }
+  const matchedSources = matchedSourceOptions(facets, catalog);
+  if (!matchedSources.length) return null;
   const grouped = (facets.sourceGroups ?? []).map((group) => ({
     ...group,
-    sources: catalog.filter((source) => source.groupId === group.id),
+    sources: matchedSources.filter((source) => source.groupId === group.id),
   }));
-  const ungrouped = catalog.filter((source) => source.groupId === null);
+  const ungrouped = matchedSources.filter((source) => source.groupId === null);
   return (
     <div className="field-group vacancy-source-filter">
       <h4>Источники</h4>

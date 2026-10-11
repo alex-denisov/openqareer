@@ -70,15 +70,12 @@ describe('сводка всей подборки', () => {
         { id: 'aggregators', name: 'Агрегаторы', count: 0 },
         { id: 'channels', name: 'Каналы', count: 0 },
       ],
-      sourceCatalog: [
-        { sourceId: 'jobs', name: 'Работа', groupId: null, domain: null, market: null, count: 3 },
-      ],
     });
     expect(items[0].cluster.sources).toHaveLength(2);
   });
 
 
-  it('строит каталог из реестра и считает группу по уникальным вакансиям', () => {
+  it('возвращает только ненулевые источники и считает группы по уникальным вакансиям', () => {
     const source = (sourceId: string, sourceName: string) => ({
       sourceId, sourceName, sourceType: 'direct' as const, sourceUrl: '', observedAt: '',
     });
@@ -106,13 +103,12 @@ describe('сводка всей подборки', () => {
       { id: 'aggregators', name: 'Агрегаторы', count: 2 },
       { id: 'channels', name: 'Каналы', count: 1 },
     ]);
-    expect(facets.sourceCatalog).toEqual([
-      { sourceId: 'remotive', name: 'Remotive', groupId: 'platforms', domain: 'www.remotive.com', market: 'Global', count: 0 },
-      { sourceId: 'ats-acme', name: 'Acme', groupId: 'ats', domain: 'careers.acme.com', market: 'США', count: 1 },
-      { sourceId: 'hh', name: 'hh.ru', groupId: 'aggregators', domain: 'hh.ru', market: 'Россия и СНГ', count: 2 },
-      { sourceId: 'zero', name: 'Zero', groupId: 'aggregators', domain: 'zero.example', market: 'Великобритания', count: 0 },
-      { sourceId: 'tg-jobs', name: 'Telegram', groupId: 'channels', domain: 't.me', market: 'Россия', count: 1 },
+    expect(facets.sources).toEqual([
+      { sourceId: 'hh', name: 'hh.ru', count: 2 },
+      { sourceId: 'ats-acme', name: 'Acme', count: 1 },
+      { sourceId: 'tg-jobs', name: 'Telegram', count: 1 },
     ]);
+    expect(facets).not.toHaveProperty('sourceCatalog');
   });
 });
 
@@ -173,7 +169,11 @@ describe('каталог источников на выборке SQLite', () =>
         { id: 'aggregators', name: 'Агрегаторы', count: 0 },
         { id: 'channels', name: 'Каналы', count: 0 },
       ]);
-      expect(facets.sourceCatalog?.find(({ sourceId }) => sourceId === 'other-rss')?.count).toBe(0);
+      expect(facets.sources).toEqual([
+        { sourceId: 'acme-careers', name: 'Acme Careers', count: 1 },
+        { sourceId: 'remotive', name: 'Remotive', count: 1 },
+      ]);
+      expect(facets).not.toHaveProperty('sourceCatalog');
     } finally {
       pool.close();
     }

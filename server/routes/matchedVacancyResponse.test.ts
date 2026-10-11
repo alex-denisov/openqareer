@@ -29,7 +29,6 @@ describe('unconfirmedCandidateMatchResponse', () => {
             { id: 'aggregators', name: 'Агрегаторы', count: 0 },
             { id: 'channels', name: 'Каналы', count: 0 },
           ],
-          sourceCatalog: [],
         },
         campaign: campaignMeta(campaign),
       },

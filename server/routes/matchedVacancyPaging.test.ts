@@ -43,7 +43,12 @@ function pool(prefix: string, size: number): MatchedVacancyItem[] {
   })) as unknown as MatchedVacancyItem[];
 }
 
-async function createPagingApp(waitForMatching?: Promise<void>, items?: MatchedVacancyItem[], unconfirmed = false) {
+async function createPagingApp(
+  waitForMatching?: Promise<void>,
+  items?: MatchedVacancyItem[],
+  unconfirmed = false,
+  includeSourceReader = true,
+) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
     encryptionKey: config.dataEncryptionKey,
@@ -59,11 +64,11 @@ async function createPagingApp(waitForMatching?: Promise<void>, items?: MatchedV
 
   let call = 0;
   const engine = {
-    getSources: () => [{
+    ...(includeSourceReader ? { getSources: () => [{
       id: 'registered-empty', name: 'Zero', type: 'rss', enabled: true,
       targetUrl: 'https://zero.example/jobs', refreshIntervalMinutes: 60,
       itemsFoundTotal: 0, itemsActiveTotal: 0, market: 'Великобритания',
-    }],
+    }] } : {}),
     getMatchedVacanciesAsync: async () => {
       call += 1;
       await waitForMatching;
@@ -127,14 +132,19 @@ describe('чтение подбора страницами', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().meta.total).toBe(0);
-    expect(response.json().meta.facets.sourceCatalog).toContainEqual({
-      sourceId: 'registered-empty',
-      name: 'Zero',
-      groupId: 'aggregators',
-      domain: 'zero.example',
-      market: 'Великобритания',
-      count: 0,
+    expect(response.json().meta.facets.sources).toEqual([]);
+    expect(response.json().meta.facets).not.toHaveProperty('sourceCatalog');
+  });
+
+  it('serves a matched page when the engine omits its optional source reader', async () => {
+    const { app, authorization } = await createPagingApp(undefined, undefined, false, false);
+    const response = await app.inject({
+      url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization },
     });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.length).toBeGreaterThan(0);
   });
 
   it('сужает смешанную подборку до пагинации по регионам, источникам и удалёнке', async () => {

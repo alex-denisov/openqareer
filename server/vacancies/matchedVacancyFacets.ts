@@ -2,7 +2,6 @@ import {
   MATCHED_VACANCY_SOURCE_GROUPS,
   type MatchedVacancyFacets,
   type MatchedVacancyFacetLevel,
-  type MatchedVacancySourceCatalogEntry,
   type MatchedVacancySourceGroup,
   type MatchedVacancySourceGroupId,
 } from '../../shared/matchedVacancyFacets';
@@ -38,12 +37,20 @@ function counted<T>(values: readonly T[]): Array<{ value: T; count: number }> {
 }
 
 /** Каждый кластер считается один раз на источник, даже при нескольких ссылках. */
-function sourceFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyFacets['sources'] {
+function sourceFacets(
+  items: readonly MatchedVacancyItem[],
+  registry: readonly MatchedVacancySourceDefinition[],
+): MatchedVacancyFacets['sources'] {
   const sources = items.flatMap((item) => [...new Map(item.cluster.sources
     .map((source) => [source.sourceId, source])).values()]);
   const names = new Map(sources.map((source) => [source.sourceId, source.sourceName ?? source.sourceId]));
+  const registryNames = new Map(registry.map(({ id, name }) => [id, name]));
   return counted(sources.map((source) => source.sourceId))
-    .map(({ value: sourceId, count }) => ({ sourceId, name: names.get(sourceId)!, count }));
+    .map(({ value: sourceId, count }) => ({
+      sourceId,
+      name: registryNames.get(sourceId) ?? names.get(sourceId)!,
+      count,
+    }));
 }
 
 /** Сводка строится по полному совпавшему списку до пользовательских фильтров. */
@@ -100,57 +107,19 @@ function sourceGroupId(
   return null;
 }
 
-function sourceDomain(source: MatchedVacancySourceDefinition): string | null {
-  const value = source.attributionUrl ?? source.targetUrl;
-  if (!value) return null;
-  try {
-    return new URL(value).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-}
-
-function sourceCatalogFor(
-  items: readonly MatchedVacancyItem[],
-  registry: readonly MatchedVacancySourceDefinition[],
-): MatchedVacancySourceCatalogEntry[] {
-  const sources = new Map(registry.map((source) => [source.id, source]));
-  const counts = new Map(sourceFacets(items).map(({ sourceId, count }) => [sourceId, count]));
-  for (const item of items) {
-    for (const source of item.cluster.sources) {
-      if (!sources.has(source.sourceId)) {
-        sources.set(source.sourceId, { id: source.sourceId, name: source.sourceName ?? source.sourceId });
-      }
-    }
-  }
-  const groupOrder = new Map(MATCHED_VACANCY_SOURCE_GROUPS.map(({ id }, index) => [id, index]));
-  const groupIndex = (id: MatchedVacancySourceGroupId | null) =>
-    id ? groupOrder.get(id) ?? groupOrder.size : groupOrder.size;
-  return Array.from(sources.values())
-    .map((source) => ({
-      sourceId: source.id,
-      name: source.name,
-      groupId: sourceGroupId(source),
-      domain: sourceDomain(source),
-      market: source.market ?? null,
-      count: counts.get(source.id) ?? 0,
-    }))
-    .sort((a, b) =>
-      groupIndex(a.groupId) - groupIndex(b.groupId) ||
-      a.name.localeCompare(b.name, 'ru'),
-    );
-}
-
 function sourceGroupsFor(
   items: readonly MatchedVacancyItem[],
-  catalog: readonly MatchedVacancySourceCatalogEntry[],
+  registry: readonly MatchedVacancySourceDefinition[],
 ): MatchedVacancySourceGroup[] {
-  const groupBySource = new Map(catalog.map(({ sourceId, groupId }) => [sourceId, groupId]));
+  const sourceById = new Map(registry.map((source) => [source.id, source]));
   const counts = new Map(MATCHED_VACANCY_SOURCE_GROUPS.map(({ id }) => [id, 0]));
   for (const item of items) {
     const itemGroups = new Set<MatchedVacancySourceGroupId>();
     for (const source of item.cluster.sources) {
-      const groupId = groupBySource.get(source.sourceId);
+      const groupId = sourceGroupId(sourceById.get(source.sourceId) ?? {
+        id: source.sourceId,
+        name: source.sourceName ?? source.sourceId,
+      });
       if (groupId) itemGroups.add(groupId);
     }
     for (const groupId of itemGroups) counts.set(groupId, (counts.get(groupId) ?? 0) + 1);
@@ -166,7 +135,6 @@ export function buildMatchedVacancyFacets(
   readLevel?: MatchedVacancyLevelReader,
   registry: readonly MatchedVacancySourceDefinition[] = [],
 ): MatchedVacancyFacets {
-  const sourceCatalog = sourceCatalogFor(items, registry);
   return {
     total: items.length,
     regions: counted(items.flatMap((item) => matchedVacancyRegion(item) ?? []))
@@ -182,8 +150,7 @@ export function buildMatchedVacancyFacets(
     }))
       .filter(({ count }) => count > 0)
       .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role)),
-    sources: sourceFacets(items),
-    sourceGroups: sourceGroupsFor(items, sourceCatalog),
-    sourceCatalog,
+    sources: sourceFacets(items, registry),
+    sourceGroups: sourceGroupsFor(items, registry),
   };
 }
