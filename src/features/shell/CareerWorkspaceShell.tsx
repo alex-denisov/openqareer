@@ -27,6 +27,8 @@ import {
   CareerNavigationRail,
 } from './CareerShellNavigation';
 import { CareerTodaySkeleton } from './CareerTodaySkeleton';
+import { NotificationsBell } from '../notifications/NotificationsBell';
+import { NotificationsScreen } from '../notifications/NotificationsScreen';
 
 type ShellView = ShellSection;
 
@@ -66,6 +68,7 @@ const pageNames: Record<ShellView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  notifications: 'Уведомления',
   tariffs: 'Тарифы',
 };
 
@@ -103,6 +106,8 @@ export function CareerWorkspaceShell({
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
   // A diagnostic that is under way owns the «Сегодня» screen even after the
   // account its own source step demanded arrives (B141).
@@ -189,6 +194,7 @@ export function CareerWorkspaceShell({
     const target = view === 'career' ? 'opportunities' : view;
     const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
     if (!isNavigable(target)) return;
+    if (target !== 'notifications') setSelectedNotificationId(null);
     setActiveView(target);
     setNavigationOptions(targetOptions);
     setExpertConfig((prev) => ({ ...prev, open: false }));
@@ -249,6 +255,14 @@ export function CareerWorkspaceShell({
     setExpertConfig((previous) => ({ ...previous, open: false }));
     setAccountOpen(true);
   }, []);
+  const openNotificationSettings = useCallback(() => {
+    setAccountSection('notif');
+    openAccount();
+  }, [openAccount]);
+  function openNotificationCenter(notificationId?: string) {
+    setSelectedNotificationId(notificationId ?? null);
+    navigate('notifications');
+  }
   const openConnections = useCallback(() => {
     setAccountSection('connections');
     openAccount();
@@ -320,6 +334,15 @@ export function CareerWorkspaceShell({
         onOpenAccount={openAccount}
       />
 
+      {cabinetSession && !sessionPending && !accountOpen && !onboardingIsFullscreen ? (
+        <NotificationsBell
+          unreadCount={notificationUnreadCount}
+          onUnreadCountChange={setNotificationUnreadCount}
+          onOpenCenter={openNotificationCenter}
+          onOpenSettings={openNotificationSettings}
+        />
+      ) : null}
+
       <main
         id="career-main"
         className="career-main"
@@ -362,7 +385,7 @@ export function CareerWorkspaceShell({
               onSignIn={openAccount}
             />
           ) : null}
-          {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
+          {cabinetSession && !intakeVisible && activeView !== 'tariffs' && activeView !== 'notifications' ? (
             <CareerCabinet
               key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
               view={activeView as CareerCabinetView}
@@ -374,6 +397,15 @@ export function CareerWorkspaceShell({
               onOpenConnections={openConnections}
               onOpenExpert={openExpert}
               onUpdateWorkspace={onUpdateWorkspace}
+            />
+          ) : null}
+          {cabinetSession && !intakeVisible && activeView === 'notifications' ? (
+            <NotificationsScreen
+              key={activeView}
+              initialSelectedId={selectedNotificationId}
+              onUnreadCountChange={setNotificationUnreadCount}
+              onNavigate={navigate}
+              onOpenSettings={openNotificationSettings}
             />
           ) : null}
           {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (

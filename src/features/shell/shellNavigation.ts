@@ -5,6 +5,7 @@ export type ShellSection =
   | 'career'
   | 'opportunities'
   | 'responses'
+  | 'notifications'
   | 'tariffs';
 
 export interface ShellNavigationState {
@@ -30,6 +31,7 @@ export function isSectionNavigable(
   state: ShellNavigationState,
 ): boolean {
   if (section === 'today') return true;
+  if (section === 'notifications') return state.resumeAvailable;
   if (!state.careerPictureReady) return false;
   if (section === 'resume') return state.resumeAvailable;
   if (section === 'tariffs') return true;
@@ -41,6 +43,9 @@ export function sectionLockReason(
   section: ShellSection,
   state: ShellNavigationState,
 ): string {
+  if (section === 'notifications' && !state.resumeAvailable) {
+    return 'Войдите в аккаунт, чтобы открыть уведомления';
+  }
   if (!state.careerPictureReady) {
     return 'Завершите карьерную диагностику, чтобы открыть раздел';
   }

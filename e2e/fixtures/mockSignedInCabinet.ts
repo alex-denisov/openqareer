@@ -1,4 +1,5 @@
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import { mockNotificationRequest } from './mockNotifications';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
@@ -10,7 +11,13 @@ import {
   workspace,
 } from './readabilityWorkspace';
 
-export async function mockSignedInCabinet(page: Page): Promise<string[]> {
+export async function mockSignedInCabinet(
+  page: Page,
+  options: {
+    readonly notificationHandler?: (route: Route, path: string) => Promise<boolean>;
+    readonly applicationHandler?: (route: Route, path: string) => Promise<boolean>;
+  } = {},
+): Promise<string[]> {
   const unmatched: string[] = [];
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
@@ -18,6 +25,13 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path.startsWith('/api/v1/candidate/notifications') && options.notificationHandler) {
+      if (await options.notificationHandler(route, path)) return;
+    }
+    if (/^\/api\/v1\/candidate\/applications(?:\/|$)/u.test(path) && options.applicationHandler) {
+      if (await options.applicationHandler(route, path)) return;
+    }
+    if (await mockNotificationRequest(route, path)) return;
     if (path.endsWith('/auth/me')) {
       return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
     }
