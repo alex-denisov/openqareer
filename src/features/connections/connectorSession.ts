@@ -27,6 +27,33 @@ export interface SessionOpenResult {
   readonly reason?: string;
 }
 
+const CONNECTOR_DOMAINS: Readonly<Record<ConnectionPlatform, readonly string[]>> = {
+  linkedin: ['linkedin.com', 'linkedin.cn'],
+  hh: ['hh.ru', 'headhunter.ru'],
+};
+const browserWindows = new WeakMap<object, Map<ConnectionPlatform, Window>>();
+
+function windowsForCurrentBrowser(): Map<ConnectionPlatform, Window> {
+  const key = window as unknown as object;
+  let sessions = browserWindows.get(key);
+  if (!sessions) {
+    sessions = new Map();
+    browserWindows.set(key, sessions);
+  }
+  return sessions;
+}
+
+export function isAllowedConnectorUrl(platform: ConnectionPlatform, value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) return false;
+    const host = url.hostname.toLowerCase();
+    return CONNECTOR_DOMAINS[platform].some((domain) => host === domain || host.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
 export interface SessionLayout {
   readonly x: number;
   readonly y: number;
@@ -106,17 +133,62 @@ export async function openConnectorSession(
   if (typeof window === 'undefined') {
     return { opened: false, reason: 'no_window_environment' };
   }
+  if (!isAllowedConnectorUrl(platform, url)) return { opened: false, reason: 'url_not_allowed' };
 
   if (isTauriEnvironment()) {
     return openConnectorSessionInDesktop(platform, url, layout);
   }
 
+  const sessions = windowsForCurrentBrowser();
+  const existing = sessions.get(platform);
+  if (existing && !existing.closed) {
+    existing.focus?.();
+    return { opened: true };
+  }
   const popup = window.open(
     url,
     `OpenQareer_${platform}_Session`,
     'width=960,height=820,menubar=no,toolbar=no,location=yes,status=no',
   );
+  if (popup) sessions.set(platform, popup);
   return popup ? { opened: true } : { opened: false, reason: 'window_blocked' };
+}
+
+export async function showConnectorSession(platform: ConnectionPlatform): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (isTauriEnvironment()) {
+    try {
+      return (await invokeDesktopCommand<boolean>('show_connector_session', { platform })) === true;
+    } catch {
+      return false;
+    }
+  }
+  const sessions = windowsForCurrentBrowser();
+  const popup = sessions.get(platform);
+  if (!popup || popup.closed) {
+    sessions.delete(platform);
+    return false;
+  }
+  popup.focus?.();
+  return true;
+}
+
+export async function isConnectorSessionOpen(platform: ConnectionPlatform): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  if (isTauriEnvironment()) {
+    try {
+      return (await invokeDesktopCommand<boolean>('is_connector_session_open', { platform, sessionKey: null })) === true;
+    } catch {
+      return false;
+    }
+  }
+  const sessions = windowsForCurrentBrowser();
+  const popup = sessions.get(platform);
+  if (!popup || popup.closed) {
+    sessions.delete(platform);
+    return false;
+  }
+  return true;
 }
 
 async function openConnectorSessionInDesktop(
@@ -180,11 +252,17 @@ export async function closeConnectorSession(
   platform: ConnectionPlatform,
   sessionKey?: ManagedSessionKey,
 ): Promise<void> {
-  if (!isTauriEnvironment()) return;
-  await invokeDesktopCommand<boolean>('close_connector_session', {
-    platform,
-    ...(sessionKey ? { sessionKey } : {}),
-  });
+  if (isTauriEnvironment()) {
+    await invokeDesktopCommand<boolean>('close_connector_session', {
+      platform,
+      ...(sessionKey ? { sessionKey } : {}),
+    });
+    return;
+  }
+  const sessions = windowsForCurrentBrowser();
+  const popup = sessions.get(platform);
+  if (popup && !popup.closed) popup.close?.();
+  sessions.delete(platform);
 }
 
 /** Hex SHA-256 of the account, so the desktop store key carries no username. */

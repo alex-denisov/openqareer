@@ -36,6 +36,8 @@ const RESUME_DETAIL_BODY = `<main>
 interface BridgeOptions {
   /** How many resume reads answer `session_window_missing` before succeeding. */
   readonly missingWindowReads?: number;
+  /** Keep a cancellation test on the provider login page. */
+  readonly waitingForSignIn?: boolean;
 }
 
 /**
@@ -45,7 +47,7 @@ interface BridgeOptions {
 async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promise<void> {
   await page.addInitScript(installDesktopApiTestBridge);
   await page.addInitScript(
-    ({ listBody, detailBody, missingWindowReads }) => {
+    ({ listBody, detailBody, missingWindowReads, waitingForSignIn }) => {
       localStorage.setItem('openqareer_session_token', 'desktop-e2e-session');
       const calls: string[] = [];
       let sessionOpen = false;
@@ -68,6 +70,7 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
               sessionOpen = true;
               return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
             }
+            if (command === 'show_connector_session') return Promise.resolve(sessionOpen);
             if (command === 'close_connector_session' || command === 'reset_connector_session') {
               sessionOpen = false;
               return Promise.resolve(true);
@@ -78,8 +81,8 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
               return Promise.resolve({
                 ready: true,
                 url: 'https://hh.ru/applicant/resumes',
-                signedInApplicant: true,
-                login: false,
+                signedInApplicant: !waitingForSignIn,
+                login: waitingForSignIn,
                 otp: false,
                 captcha: false,
               });
@@ -107,6 +110,7 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
       listBody: RESUME_LIST_BODY,
       detailBody: RESUME_DETAIL_BODY,
       missingWindowReads: options.missingWindowReads ?? 0,
+      waitingForSignIn: options.waitingForSignIn ?? false,
     },
   );
 }
@@ -182,6 +186,9 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
     await expect(dialog).toBeVisible();
+    const showWindow = dialog.getByRole('button', { name: 'Показать окно входа' });
+    await expect(showWindow).toBeVisible();
+    await showWindow.click();
 
     // The picker lives here, next to the session that answers it — never in the
     // wizard behind the dialog (owner report, 2026-08-26).
@@ -200,6 +207,23 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     const card = page.locator('.career-platform-card', { hasText: 'hh.ru' });
     await expect(card.getByText('Подключено', { exact: true })).toBeVisible();
     await expect(card.getByRole('button', { name: 'Отключить' })).toBeVisible();
+
+    const calls = await page.evaluate(
+      () => (window as unknown as { __connectorCalls: string[] }).__connectorCalls,
+    );
+    expect(calls).toContain('close_connector_session');
+    expect(calls).toContain('show_connector_session');
+  });
+
+  test('the session toolbar cancels and closes the native window', async ({ page }) => {
+    await stubDesktopBridge(page, { waitingForSignIn: true });
+    await stubCandidateApi(page);
+    await openHhDialog(page);
+
+    const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
+    await expect(dialog.getByRole('button', { name: 'Отмена' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Отмена' }).click();
+    await expect(dialog).toHaveCount(0);
 
     const calls = await page.evaluate(
       () => (window as unknown as { __connectorCalls: string[] }).__connectorCalls,

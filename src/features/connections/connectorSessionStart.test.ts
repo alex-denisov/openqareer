@@ -118,6 +118,31 @@ describe('startConnectorSession', () => {
       undefined,
     );
   });
+
+  it('opens a browser popup synchronously before yielding to preserve the user gesture', async () => {
+    const { onStep } = recorder();
+    let releaseFrame: (() => void) | undefined;
+    const waitForFrame = vi.fn(
+      () => new Promise<void>((resolve) => { releaseFrame = resolve; }),
+    );
+    const openSession = vi.fn(async () => ({ opened: true }));
+
+    const started = startConnectorSession({
+      platform: 'hh',
+      url: 'https://hh.ru/account/login',
+      isDesktop: false,
+      measureLayout: () => LAYOUT,
+      waitForFrame,
+      onStep,
+      openSession,
+    });
+
+    releaseFrame?.();
+    await Promise.resolve();
+    expect(waitForFrame).not.toHaveBeenCalled();
+    expect(openSession).toHaveBeenCalledWith('hh', 'https://hh.ru/account/login', undefined);
+    await expect(started).resolves.toEqual({ opened: true });
+  });
 });
 
 describe('nextAnimationFrame', () => {

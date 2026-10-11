@@ -176,6 +176,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
       />
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
+        isReconnect={Boolean(connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected'))}
         onClose={() => setImportPlatform(undefined)}
         onConnectSuccess={handleHhSessionImport}
         onAuthenticatedEmpty={() => {
@@ -186,6 +187,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
       />
       <LinkedInConnectModal
         isOpen={importPlatform === 'linkedin'}
+        isReconnect={Boolean(connections.some((connection) => connection.platform === 'linkedin' && connection.status === 'connected'))}
         onClose={() => setImportPlatform(undefined)}
         onImportSuccess={handleLinkedInSessionImport}
         onConnectionFailure={setNotice}
@@ -361,6 +363,20 @@ export function AccountConnections({
               {connection.status === 'connected' ? (
                 <>
                   <p>{connectionCopy(connection)}</p>
+                  {onSessionImport ? (
+                    <button
+                      className="career-quiet-button"
+                      type="button"
+                      disabled={busyPlatform === connection.platform}
+                      onClick={() => onSessionImport(connection.platform)}
+                    >
+                      {busyPlatform === connection.platform
+                        ? 'Подключаем…'
+                        : isDesktop
+                          ? `Подключить снова ${label}`
+                          : `Открыть окно входа ${label}`}
+                    </button>
+                  ) : null}
                   <button
                     className="career-quiet-button"
                     type="button"
@@ -374,7 +390,18 @@ export function AccountConnections({
                   <small>{disconnectBoundaryCopy(connection)}</small>
                 </>
               ) : connection.status === 'imported' && !isDesktop ? (
-                <p>{importedWithoutConnectionCopy(connection.importedAt)}</p>
+                <>
+                  <p>{importedWithoutConnectionCopy(connection.importedAt)}</p>
+                  {onSessionImport ? (
+                    <button
+                      className="career-quiet-button"
+                      type="button"
+                      onClick={() => onSessionImport(connection.platform)}
+                    >
+                      {`Открыть окно входа ${label}`}
+                    </button>
+                  ) : null}
+                </>
               ) : isDesktop ? (
                 <div className="career-connection-panel">
                   {connection.status === 'imported' ? (
@@ -391,10 +418,22 @@ export function AccountConnections({
                   </button>
                 </div>
               ) : (
-                <p>
-                  Профили на площадках подключаются в приложении OpenQareer для компьютера
-                  через вашу собственную сессию. На сайте можно загрузить резюме файлом.
-                </p>
+                <>
+                  <p>
+                    Войти можно в отдельном окне браузера. Сайт не может проверить
+                    вход или импортировать профиль; для сохранения данных используйте
+                    приложение OpenQareer для компьютера.
+                  </p>
+                  {onSessionImport ? (
+                    <button
+                      className="career-quiet-button"
+                      type="button"
+                      onClick={() => onSessionImport(connection.platform)}
+                    >
+                      {`Открыть окно входа ${label}`}
+                    </button>
+                  ) : null}
+                </>
               )}
             </article>
           );

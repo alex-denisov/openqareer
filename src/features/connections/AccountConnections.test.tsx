@@ -12,6 +12,7 @@ describe('AccountConnections', () => {
   it('shows a connected platform and the honest local-disconnect boundary', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
+        isDesktop
         connections={[
           {
             platform: 'linkedin',
@@ -26,6 +27,7 @@ describe('AccountConnections', () => {
           },
         ]}
         onDisconnect={() => undefined}
+        onSessionImport={() => undefined}
       />,
     );
 
@@ -33,6 +35,7 @@ describe('AccountConnections', () => {
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Подключено');
     expect(html).toContain('Отключить LinkedIn');
+    expect(html).toContain('Подключить снова LinkedIn');
     expect(html).toContain('входы в LinkedIn и hh.ru в приложении будут забыты');
   });
 
@@ -42,6 +45,7 @@ describe('AccountConnections', () => {
   it('holds both platforms connected at the same time', () => {
     const html = renderToStaticMarkup(
       <AccountConnections
+        isDesktop
         connections={[
           {
             platform: 'linkedin',
@@ -67,6 +71,7 @@ describe('AccountConnections', () => {
           },
         ]}
         onDisconnect={() => undefined}
+        onSessionImport={() => undefined}
       />,
     );
 
@@ -109,12 +114,13 @@ describe('AccountConnections', () => {
           },
         ]}
         onDisconnect={() => undefined}
+        onSessionImport={() => undefined}
       />,
     );
 
     // Площадок много: копия не называет одну и не говорит «десктопное» (B236).
-    expect(html).toContain('подключаются в приложении OpenQareer для компьютера');
-    expect(html).toContain('На сайте можно загрузить резюме файлом');
+    expect(html).toContain('Сайт не может проверить');
+    expect(html).toContain('Открыть окно входа LinkedIn');
     expect(html).not.toContain('десктопн');
     expect(html).not.toContain('Подключить LinkedIn');
   });
