@@ -1,10 +1,11 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet, type MockCareerDiaryFixture } from './fixtures/mockSignedInCabinet';
 
 const AS_OF = '2026-12-06';
-const EVIDENCE = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B460';
+const EVIDENCE = e2eEvidenceDirectory('B460');
 
 function workplace(id: string, company: string, title: string, sourceExperienceId: string | null) {
   return {

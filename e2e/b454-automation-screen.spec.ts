@@ -2,12 +2,13 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import {
   mockSignedInCabinet,
   type AutomationQueueFixtureItem,
 } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B454';
+const EVIDENCE_DIR = e2eEvidenceDirectory('B454');
 
 const queueItem: AutomationQueueFixtureItem = {
   id: 'automation-queue-item',

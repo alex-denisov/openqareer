@@ -1,9 +1,10 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B470';
+const EVIDENCE_DIR = e2eEvidenceDirectory('B470');
 
 test.beforeAll(() => mkdirSync(EVIDENCE_DIR, { recursive: true }));
 

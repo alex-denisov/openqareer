@@ -11,9 +11,10 @@ import {
   type CareerDiaryOverview,
 } from '../shared/careerDiary';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 
 const DIARY_API = '/api/v1/candidate/career-diary';
-const EVIDENCE = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B457';
+const EVIDENCE = e2eEvidenceDirectory('B457');
 
 type DiaryScenario = 'partial' | 'empty' | 'many';
 

@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/v1-release/tasks/evidence/B443');
+const EVIDENCE_DIR = e2eEvidenceDirectory('B443');
 const CLI_PATH = path.resolve(process.cwd(), 'src/features/account/renderAccountCli.ts');
 const BATCH_HTML_DIR = path.join(os.tmpdir(), 'oq-b443-html');
 

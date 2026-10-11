@@ -10,10 +10,11 @@ import type {
 } from '../shared/careerDiary';
 import type { CareerCommand, CoachResult } from '../src/features/coach/coachApi';
 import { candidateSnapshot } from './fixtures/readabilityWorkspace';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 const DIARY_API = '/api/v1/candidate/career-diary';
-const EVIDENCE = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B458';
+const EVIDENCE = e2eEvidenceDirectory('B458');
 const AS_OF = '2026-10-10';
 
 type DiaryMode = 'empty' | 'partial' | 'many';

@@ -2,9 +2,10 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 import { mockSignedInCabinet, type MockCareerDiaryFixture } from './fixtures/mockSignedInCabinet';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 
 const AS_OF = '2026-12-06';
-const EVIDENCE = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B459';
+const EVIDENCE = e2eEvidenceDirectory('B459');
 
 function workplace(startDate = '2026-10-18', status: 'active' | 'archived' = 'active') {
   return {
