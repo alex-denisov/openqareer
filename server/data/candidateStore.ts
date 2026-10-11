@@ -39,11 +39,16 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import type {
+  RelocationConsentState,
+  RelocationQuestionnaire,
+} from '../../shared/relocationQuestionnaire';
 import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
@@ -109,6 +114,15 @@ export interface CandidateExport extends CandidateSnapshot {
   careerStrategy: CareerStrategy | null;
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
   workPreferences: StoredWorkPreferenceRun | null;
+  /** Private relocation data is present only while its separate consent is active. */
+  relocationQuestionnaire: RelocationQuestionnaire | null;
+  relocationConsent: RelocationConsentState;
+}
+
+export interface LinkedInLanguageImportSnapshot {
+  readonly capturedAt: string;
+  readonly importedAt: string;
+  readonly languages: readonly ResumeDraft['languages'][number][];
 }
 
 type CandidateDocumentKind =
@@ -382,6 +396,8 @@ export interface CandidateStore {
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
+  /** Separate, encrypted relocation questionnaire and purpose-specific consent. */
+  readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
   /** Joins nested store writes into one SQLite transaction. */
   transaction<T>(operation: () => T): T;
   createCandidate(input: {
@@ -406,6 +422,8 @@ export interface CandidateStore {
   ): void;
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
+  /** Minimal language facts from the candidate's latest stored LinkedIn import; never calls LinkedIn. */
+  getLinkedInLanguageImport(candidateId: string): LinkedInLanguageImportSnapshot | null;
   getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[];
   listConsultantConversations(
     candidateId: string,

@@ -41,6 +41,9 @@ import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sql
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
+import { createSqliteCandidateStoreLinkedInMethods } from './linkedInLanguageImport';
+import { runSqliteTransaction } from './sqliteTransaction';
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
@@ -112,6 +115,8 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
+  readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
+  declare getLinkedInLanguageImport: CandidateStore['getLinkedInLanguageImport'];
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -161,11 +166,20 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
+    Object.assign(this, createSqliteCandidateStoreLinkedInMethods({
+      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+      listConnections: (candidateId) => this.sourceConnections.list(candidateId),
+      readResume: (candidateId) => this.resumeRepository.get(candidateId),
+    }));
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
     this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
+    this.relocationQuestionnaireRepo = new SqliteRelocationQuestionnaireRepository(
+      this.database,
+      this.sealedText,
+    );
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
@@ -709,6 +723,8 @@ export class SqliteCandidateStore implements CandidateStore {
       // Решение о собственной роли — данные кандидата, а не служебная запись.
       careerStrategy: this.careerStrategyRepository.get(candidateId),
       workPreferences: this.workPreferenceRepository.get(candidateId),
+      relocationQuestionnaire: this.relocationQuestionnaireRepo.getProfile(candidateId),
+      relocationConsent: this.relocationQuestionnaireRepo.getConsent(candidateId),
       consultantConversations: this.exportConsultantConversations(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);
@@ -786,19 +802,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   transaction<T>(operation: () => T): T {
-    // SQLite has no nested BEGIN. A batch review runs several dossier writes
-    // that each know how to be atomic on their own, so an outer transaction
-    // joins them instead of crashing on the second BEGIN (B166).
-    if (this.database.isTransaction) return operation();
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
-      const result = operation();
-      this.database.exec('COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec('ROLLBACK');
-      throw error;
-    }
+    return runSqliteTransaction(this.database, operation);
   }
 }
 
