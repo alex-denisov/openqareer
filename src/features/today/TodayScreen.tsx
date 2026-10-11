@@ -9,7 +9,13 @@ import { CompanyReminderModal } from './CompanyReminderModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
-import type { TodayDigest, TodayFollowUp, TodayQueueItem, TodaySinceLastVisit, TodaySnapshot } from './todayApi';
+import type {
+  TodayDigest,
+  TodayFollowUp,
+  TodayQueueItem,
+  TodaySinceLastVisit,
+  TodaySnapshot,
+} from './todayApi';
 import { formatTodaySalary } from './todayCompensation';
 import {
   buildReturningDigestItems,
@@ -20,6 +26,7 @@ import {
 } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 import { CareerTooltip } from '../shell/CareerTooltip';
+import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
 
@@ -148,14 +155,11 @@ function TodayContent({
   const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
   return (
     <div className="career-today">
-      <TodayReturnBanner
-        sinceLastVisit={sinceLastVisit}
-        digest={digest}
-        onNavigate={onNavigate}
-      />
+      <TodayReturnBanner sinceLastVisit={sinceLastVisit} digest={digest} onNavigate={onNavigate} />
       <p className="career-today-subtitle">
         Что изменилось с прошлого визита и что решить сегодня.
       </p>
+      <CareerDiaryShortcut onNavigate={onNavigate} />
       {vacanciesPending ? <TodayPendingNotice /> : null}
       <TodayDigestRow digest={digest} />
       <SearchMomentum momentum={snapshot.momentum} onNavigate={onNavigate} />
@@ -181,6 +185,41 @@ function TodayContent({
       </div>
       <ExecutiveOnboardingCard />
     </div>
+  );
+}
+
+function CareerDiaryShortcut({
+  onNavigate,
+}: {
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  const diary = useCareerDiaryAccess();
+  if (diary.state === 'loading') {
+    return (
+      <p className="career-diary-access-status" role="status">
+        Проверяем статус места работы…
+      </p>
+    );
+  }
+  if (diary.state === 'error') {
+    return (
+      <section className="career-diary-access-error">
+        <p role="alert">{diary.error ?? 'Не удалось проверить место работы.'}</p>
+        <button className="career-btn is-ghost" type="button" onClick={diary.reload}>
+          Повторить
+        </button>
+      </section>
+    );
+  }
+  if (!diary.isVisible || !onNavigate) return null;
+  return (
+    <button
+      className="career-btn is-ghost career-today-diary-shortcut"
+      type="button"
+      onClick={() => onNavigate('diary')}
+    >
+      Открыть карьерный дневник
+    </button>
   );
 }
 
@@ -404,15 +443,12 @@ function TodayQueue({
 function ConsultantCardBody({ action }: { action: ReasonedCareerAction }) {
   return (
     <div className="career-today-item-body">
-      <span className="career-today-item-kind is-accent">
-        Консультант · Один шаг на сегодня
-      </span>
+      <span className="career-today-item-kind is-accent">Консультант · Один шаг на сегодня</span>
       <div className="career-today-item-title">{action.headline}</div>
       <div className="career-today-item-rationale">{action.rationale}</div>
       {action.expectedChange ? (
         <div className="career-today-item-effect">
-          <span className="career-today-effect-label">Что изменится:</span>{' '}
-          {action.expectedChange}
+          <span className="career-today-effect-label">Что изменится:</span> {action.expectedChange}
         </div>
       ) : null}
     </div>
@@ -486,9 +522,7 @@ function QueueRow({
         <span className={`career-today-item-kind${isAccentKind ? ' is-accent' : ''}`}>
           {(item.eyebrow ?? queueKindLabel(item)).replace(/follow-up/gi, 'Напоминание компании')}
         </span>
-        <div className="career-today-item-title">
-          {formatQueueTitle(item.company, item.title)}
-        </div>
+        <div className="career-today-item-title">{formatQueueTitle(item.company, item.title)}</div>
         <div className="career-today-item-meta">
           <span className="metric">{secondLine}</span>
           {item.location ? <span>{item.location}</span> : null}
@@ -522,15 +556,16 @@ function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
 }
 
 function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title?: string }) {
-  const content = ok === null ? (
-    <span className="career-today-fit-dot is-unknown" aria-label={title}>
-      {label} —
-    </span>
-  ) : (
-    <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
-      {ok ? label : `${label} —`}
-    </span>
-  );
+  const content =
+    ok === null ? (
+      <span className="career-today-fit-dot is-unknown" aria-label={title}>
+        {label} —
+      </span>
+    ) : (
+      <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
+        {ok ? label : `${label} —`}
+      </span>
+    );
 
   if (title) {
     return <CareerTooltip content={title}>{content}</CareerTooltip>;
@@ -563,11 +598,7 @@ function FollowUpQueueAction({
       >
         Черновик напоминания
       </button>
-      <MarkFollowUpButton
-        applicationId={item.applicationId}
-        isSaving={isSaving}
-        onMark={onMark}
-      />
+      <MarkFollowUpButton applicationId={item.applicationId} isSaving={isSaving} onMark={onMark} />
       {modalOpen ? (
         <CompanyReminderModal
           isOpen={modalOpen}
@@ -662,11 +693,7 @@ function FollowUpItemActions({
       >
         Черновик
       </button>
-      <MarkFollowUpButton
-        applicationId={item.applicationId}
-        isSaving={isSaving}
-        onMark={onMark}
-      />
+      <MarkFollowUpButton applicationId={item.applicationId} isSaving={isSaving} onMark={onMark} />
       {modalOpen ? (
         <CompanyReminderModal
           isOpen={modalOpen}

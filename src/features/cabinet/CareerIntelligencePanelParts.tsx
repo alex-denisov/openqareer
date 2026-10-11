@@ -96,7 +96,10 @@ export function AtsReadability({
           ))}
         </dl>
       ) : (
-        <p>ATS парсит файл, а не текст: без PDF или DOCX нельзя проверить порядок блоков и извлечение.</p>
+        <p>
+          ATS парсит файл, а не текст: без PDF или DOCX нельзя проверить порядок блоков и
+          извлечение.
+        </p>
       )}
       <DiagnosticAction journey={journey} onNavigate={onNavigate} />
     </section>
@@ -192,7 +195,7 @@ export function NextAction({
         />
       ) : journey?.nextAction.expectedChange ? (
         <div className="career-next-action-effect">
-      <strong>Что изменится</strong>
+          <strong>Что изменится</strong>
           <p>{journey.nextAction.expectedChange}</p>
         </div>
       ) : null}

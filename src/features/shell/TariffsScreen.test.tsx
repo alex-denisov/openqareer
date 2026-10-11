@@ -64,18 +64,20 @@ describe('TariffsScreen billing management', () => {
   it('shows the server-confirmed plan, next charge amount and available receipt links', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue({
-      receipts: [{
-        invoiceId: 41,
-        planId: 'basic',
-        amountKopecks: 399_000,
-        currency: 'RUB',
-        paidAt: '2026-10-10T10:00:00.000Z',
-        paymentMethod: null,
-        receiptUrl: 'https://receipts.example.test/41',
-        receiptStatus: 'done',
-        fiscalDocumentNumber: '123456789',
-        fiscalDate: '2026-10-10T10:00:02.000Z',
-      }],
+      receipts: [
+        {
+          invoiceId: 41,
+          planId: 'basic',
+          amountKopecks: 399_000,
+          currency: 'RUB',
+          paidAt: '2026-10-10T10:00:00.000Z',
+          paymentMethod: null,
+          receiptUrl: 'https://receipts.example.test/41',
+          receiptStatus: 'done',
+          fiscalDocumentNumber: '123456789',
+          fiscalDate: '2026-10-10T10:00:02.000Z',
+        },
+      ],
       nextCursor: null,
     });
     vi.spyOn(billingApi, 'cancelCandidateBillingRenewal').mockResolvedValue(canceledSubscription);
@@ -88,8 +90,9 @@ describe('TariffsScreen billing management', () => {
     expect(text).toContain('Следующее списание');
     expect(text).toContain('3 990 ₽');
     expect(text).toContain('История платежей');
-    expect(desktop.querySelector('a[href="https://receipts.example.test/41"]')?.textContent)
-      .toContain('Открыть чек');
+    expect(
+      desktop.querySelector('a[href="https://receipts.example.test/41"]')?.textContent,
+    ).toContain('Открыть чек');
     const ids = [...container.querySelectorAll('[id]')].map((element) => element.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -97,7 +100,9 @@ describe('TariffsScreen billing management', () => {
   it('offers one-click cancellation and keeps access through the paid period', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
-    const cancel = vi.spyOn(billingApi, 'cancelCandidateBillingRenewal').mockResolvedValue(canceledSubscription);
+    const cancel = vi
+      .spyOn(billingApi, 'cancelCandidateBillingRenewal')
+      .mockResolvedValue(canceledSubscription);
     await mount();
     const desktop = container.querySelector('.career-tariffs-desktop') as HTMLElement;
     const button = [...desktop.querySelectorAll('button')].find((item) =>
@@ -115,18 +120,20 @@ describe('TariffsScreen billing management', () => {
   it('does not invent or render unsafe receipt URLs', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue({
-      receipts: [{
-        invoiceId: 42,
-        planId: 'basic',
-        amountKopecks: 399_000,
-        currency: 'RUB',
-        paidAt: '2026-10-10T10:00:00.000Z',
-        paymentMethod: null,
-        receiptUrl: 'javascript:alert(1)',
-        receiptStatus: null,
-        fiscalDocumentNumber: null,
-        fiscalDate: null,
-      }],
+      receipts: [
+        {
+          invoiceId: 42,
+          planId: 'basic',
+          amountKopecks: 399_000,
+          currency: 'RUB',
+          paidAt: '2026-10-10T10:00:00.000Z',
+          paymentMethod: null,
+          receiptUrl: 'javascript:alert(1)',
+          receiptStatus: null,
+          fiscalDocumentNumber: null,
+          fiscalDate: null,
+        },
+      ],
       nextCursor: null,
     });
     vi.spyOn(billingApi, 'cancelCandidateBillingRenewal').mockResolvedValue(canceledSubscription);
@@ -139,7 +146,8 @@ describe('TariffsScreen billing management', () => {
   });
 
   it('does not guess that the candidate is on Free when the billing API fails, and can retry', async () => {
-    const summary = vi.spyOn(billingApi, 'getCandidateBillingSummary')
+    const summary = vi
+      .spyOn(billingApi, 'getCandidateBillingSummary')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(freeSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
@@ -159,20 +167,23 @@ describe('TariffsScreen billing management', () => {
 
   it('loads previous receipts using the server cursor', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
-    const listReceipts = vi.spyOn(billingApi, 'getCandidateBillingReceipts')
+    const listReceipts = vi
+      .spyOn(billingApi, 'getCandidateBillingReceipts')
       .mockResolvedValueOnce({
-        receipts: [{
-          invoiceId: 41,
-          planId: 'basic',
-          amountKopecks: 399_000,
-          currency: 'RUB',
-          paidAt: '2026-10-10T10:00:00.000Z',
-          paymentMethod: null,
-          receiptUrl: null,
-          receiptStatus: null,
-          fiscalDocumentNumber: null,
-          fiscalDate: null,
-        }],
+        receipts: [
+          {
+            invoiceId: 41,
+            planId: 'basic',
+            amountKopecks: 399_000,
+            currency: 'RUB',
+            paidAt: '2026-10-10T10:00:00.000Z',
+            paymentMethod: null,
+            receiptUrl: null,
+            receiptStatus: null,
+            fiscalDocumentNumber: null,
+            fiscalDate: null,
+          },
+        ],
         nextCursor: '41',
       })
       .mockResolvedValueOnce({ receipts: [], nextCursor: null });
@@ -198,15 +209,18 @@ describe('TariffsScreen billing management', () => {
 
     expect(desktop.textContent).toContain('Списаний пока нет');
     expect(desktop.textContent).toContain('Оплаченных платежей пока нет');
-    expect([...desktop.querySelectorAll('button')].some((button) =>
-      button.textContent?.includes('Отключить автопродление'),
-    )).toBe(false);
+    expect(
+      [...desktop.querySelectorAll('button')].some((button) =>
+        button.textContent?.includes('Отключить автопродление'),
+      ),
+    ).toBe(false);
   });
 
   it('keeps cancellation recoverable when the request fails', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
-    const cancel = vi.spyOn(billingApi, 'cancelCandidateBillingRenewal')
+    const cancel = vi
+      .spyOn(billingApi, 'cancelCandidateBillingRenewal')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(canceledSubscription);
     await mount();
@@ -226,7 +240,8 @@ describe('TariffsScreen billing management', () => {
 
   it('lets the candidate retry a failed receipt-history request', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
-    const getReceipts = vi.spyOn(billingApi, 'getCandidateBillingReceipts')
+    const getReceipts = vi
+      .spyOn(billingApi, 'getCandidateBillingReceipts')
       .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValueOnce(emptyReceipts);
     vi.spyOn(billingApi, 'cancelCandidateBillingRenewal').mockResolvedValue(canceledSubscription);

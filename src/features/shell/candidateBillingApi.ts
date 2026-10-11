@@ -55,11 +55,13 @@ export async function getCandidateBillingSummary(): Promise<CandidateBillingSumm
   return readData<CandidateBillingSummary>(await apiFetch('/api/v1/candidate/billing'));
 }
 
-export async function getCandidateBillingReceipts(input: {
-  readonly cursor?: string;
-  readonly limit?: number;
-  readonly signal?: AbortSignal;
-} = {}): Promise<CandidateBillingReceiptPage> {
+export async function getCandidateBillingReceipts(
+  input: {
+    readonly cursor?: string;
+    readonly limit?: number;
+    readonly signal?: AbortSignal;
+  } = {},
+): Promise<CandidateBillingReceiptPage> {
   const query = new URLSearchParams();
   if (input.cursor) query.set('cursor', input.cursor);
   query.set('limit', String(input.limit ?? 20));
@@ -74,10 +76,9 @@ export async function getCandidateBillingReceipts(input: {
 }
 
 export async function cancelCandidateBillingRenewal(): Promise<CandidateBillingCancellation> {
-  return readData<CandidateBillingCancellation>(await apiFetch(
-    '/api/v1/candidate/billing/subscription/cancel-renewal',
-    { method: 'POST' },
-  ));
+  return readData<CandidateBillingCancellation>(
+    await apiFetch('/api/v1/candidate/billing/subscription/cancel-renewal', { method: 'POST' }),
+  );
 }
 
 function readNextCursor(value: unknown): string | null {

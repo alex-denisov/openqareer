@@ -49,6 +49,7 @@ import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuest
 import { createSqliteCandidateStoreLinkedInMethods } from './linkedInLanguageImport';
 import { runSqliteTransaction } from './sqliteTransaction';
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
+import { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
@@ -118,6 +119,7 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  readonly careerDiaryRepo: SqliteCareerDiaryRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
   readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
   declare getLinkedInLanguageImport: CandidateStore['getLinkedInLanguageImport'];
@@ -194,6 +196,11 @@ export class SqliteCandidateStore implements CandidateStore {
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
+    this.careerDiaryRepo = new SqliteCareerDiaryRepository(
+      this.database,
+      this.sealedText,
+      (operation) => this.transaction(operation),
+    );
     this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
     this.relocationQuestionnaireRepo = new SqliteRelocationQuestionnaireRepository(
       this.database,

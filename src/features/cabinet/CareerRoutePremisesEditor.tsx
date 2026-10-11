@@ -43,7 +43,11 @@ export function CareerRoutePremisesEditor({
   }
 
   return (
-    <form className="career-route-premises-editor" onSubmit={submit} aria-label="Роль и условия маршрута">
+    <form
+      className="career-route-premises-editor"
+      onSubmit={submit}
+      aria-label="Роль и условия маршрута"
+    >
       <div className="career-route-premises-field">
         <label htmlFor="premises-role">Роль и уровень</label>
         <input

@@ -6,6 +6,7 @@ export type ShellSection =
   | 'opportunities'
   | 'responses'
   | 'automation'
+  | 'diary'
   | 'tariffs';
 
 export interface ShellNavigationState {
@@ -13,6 +14,10 @@ export interface ShellNavigationState {
   readonly careerPictureReady: boolean;
   /** Resume Studio reads a candidate-scoped API and needs a signed-in account. */
   readonly resumeAvailable: boolean;
+  /** A candidate session exists for the server-backed diary. */
+  readonly candidateSessionAvailable: boolean;
+  /** The profile contains a current job or an accepted offer. */
+  readonly careerDiaryAvailable: boolean;
   /** A workspace or a cabinet session exists to render the section from. */
   readonly canUseWorkspaceViews: boolean;
 }
@@ -26,11 +31,11 @@ export interface ShellNavigationState {
  * buy a result the product has not shown them yet, and it is a door out of an
  * unfinished diagnostic that leads nowhere useful.
  */
-export function isSectionNavigable(
-  section: ShellSection,
-  state: ShellNavigationState,
-): boolean {
+export function isSectionNavigable(section: ShellSection, state: ShellNavigationState): boolean {
   if (section === 'today') return true;
+  if (section === 'diary') {
+    return state.candidateSessionAvailable && state.careerDiaryAvailable;
+  }
   if (!state.careerPictureReady) return false;
   if (section === 'resume') return state.resumeAvailable;
   if (section === 'tariffs') return true;
@@ -38,10 +43,13 @@ export function isSectionNavigable(
 }
 
 /** Why a closed section is closed, in the candidate's language. */
-export function sectionLockReason(
-  section: ShellSection,
-  state: ShellNavigationState,
-): string {
+export function sectionLockReason(section: ShellSection, state: ShellNavigationState): string {
+  if (section === 'diary' && !state.candidateSessionAvailable) {
+    return 'Войдите в аккаунт, чтобы открыть карьерный дневник';
+  }
+  if (section === 'diary' && !state.careerDiaryAvailable) {
+    return 'В профиле нет текущего места работы или принятого предложения';
+  }
   if (!state.careerPictureReady) {
     return 'Завершите карьерную диагностику, чтобы открыть раздел';
   }

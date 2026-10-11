@@ -1,7 +1,6 @@
 import { PathCheckIcon } from './sectionIcons';
 import type { NavigationOptions, PathDestination, PathStep } from './pathIndicator';
 
-
 interface CareerPathIndicatorProps {
   readonly steps: readonly PathStep[];
   readonly onNavigate: (destination: PathDestination, options?: NavigationOptions) => void;
@@ -94,11 +93,7 @@ function MobilePathSummary({ steps, onNavigate }: CareerPathIndicatorProps) {
       >
         <span className="career-path-mobile-dots" aria-hidden="true">
           {steps.map((step) => (
-            <span
-              key={step.id}
-              data-state={stepDataState(step)}
-              data-status={step.state}
-            />
+            <span key={step.id} data-state={stepDataState(step)} data-status={step.state} />
           ))}
         </span>
 

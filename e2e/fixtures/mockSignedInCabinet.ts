@@ -11,6 +11,326 @@ import {
   todaySnapshot,
   workspace,
 } from './readabilityWorkspace';
+import type { ResumeDraft } from '../../server/domain/resumeDraft';
+
+export interface MockCareerDiaryFixture {
+  overview: Record<string, unknown>;
+  goals: Array<Record<string, unknown> & { id: string }>;
+  workplace: (Record<string, unknown> & { id: string }) | null;
+  workplaces?: Array<Record<string, unknown> & { id: string }>;
+  profileExperience?: Record<string, unknown> & { id: string };
+  createdByIdempotencyKey?: Record<string, string>;
+}
+
+async function mockEmptyCareerDiaryRoutes(
+  route: Route,
+  path: string,
+  base: string,
+): Promise<boolean> {
+  if (route.request().method() !== 'GET') {
+    await route.fulfill({
+      status: 501,
+      json: {
+        error: {
+          code: 'career_diary_write_not_stubbed',
+          message: 'Запись дневника не настроена в этой браузерной фикстуре.',
+        },
+      },
+    });
+    return true;
+  }
+  if (path === base) {
+    await route.fulfill({
+      json: {
+        data: {
+          asOf: '2026-10-10',
+          primaryWorkplace: null,
+          summary: {
+            goalsAchieved: 0,
+            goalsAtRisk: 0,
+            goalsTotal: 0,
+            achievementsReadyToAdd: 0,
+            weeklyReviewsTotal: 0,
+            weeklyReviewsInRow: 0,
+          },
+        },
+      },
+    });
+    return true;
+  }
+  if (
+    [`${base}/goals`, `${base}/reviews`, `${base}/achievements`, `${base}/workplaces`].includes(
+      path,
+    ) ||
+    (path.startsWith(`${base}/goals/`) && path.endsWith('/measurements'))
+  ) {
+    await route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+    return true;
+  }
+  await route.fulfill({ status: 404, json: { error: { code: 'diary_entry_not_found' } } });
+  return true;
+}
+
+async function mockCareerDiaryFixtureRoutes(
+  route: Route,
+  path: string,
+  base: string,
+  fixture: MockCareerDiaryFixture,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path === base && method === 'GET') {
+    await route.fulfill({ json: { data: fixture.overview } });
+    return true;
+  }
+  if (path === `${base}/goals` && method === 'GET') {
+    await route.fulfill({ json: { data: { items: fixture.goals, nextCursor: null } } });
+    return true;
+  }
+  if (path === `${base}/workplaces` && method === 'GET') {
+    const items = mockCareerDiaryWorkplaces(fixture);
+    await route.fulfill({ json: { data: { items, nextCursor: null } } });
+    return true;
+  }
+  if (path.startsWith(`${base}/goals/`) && path.endsWith('/measurements') && method === 'GET') {
+    await route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+    return true;
+  }
+  if (path === `${base}/reviews` && method === 'GET') {
+    await route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+    return true;
+  }
+  if (path === `${base}/achievements` && method === 'GET') {
+    await route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+    return true;
+  }
+  if (path === `${base}/workplaces` && method === 'POST') {
+    return mockCreateWorkplace(route, fixture);
+  }
+  const primaryId = routeWorkplaceActionId(path, base, 'primary');
+  if (primaryId) return mockSetPrimaryWorkplace(route, method, fixture, primaryId);
+  const archiveId = routeWorkplaceActionId(path, base, 'archive');
+  if (archiveId) return mockArchiveWorkplace(route, method, fixture, archiveId);
+  const workplaceId = routeResourceId(path, base, 'workplaces');
+  if (workplaceId !== null) return mockWorkplaceRequest(route, method, fixture, workplaceId);
+  const goalId = routeResourceId(path, base, 'goals');
+  if (goalId !== null) return mockGoalRequest(route, method, fixture, goalId);
+  await route.fulfill({ status: 404, json: { error: { code: 'diary_entry_not_found' } } });
+  return true;
+}
+
+function routeResourceId(path: string, base: string, collection: string): string | null {
+  const prefix = `${base}/${collection}/`;
+  if (!path.startsWith(prefix)) return null;
+  const encodedId = path.slice(prefix.length);
+  if (!encodedId || encodedId.includes('/')) return null;
+  return decodeURIComponent(encodedId);
+}
+
+function routeWorkplaceActionId(
+  path: string,
+  base: string,
+  action: 'primary' | 'archive',
+): string | null {
+  const prefix = `${base}/workplaces/`;
+  const suffix = `/${action}`;
+  if (!path.startsWith(prefix) || !path.endsWith(suffix)) return null;
+  const encodedId = path.slice(prefix.length, -suffix.length);
+  return encodedId && !encodedId.includes('/') ? decodeURIComponent(encodedId) : null;
+}
+
+function mockCareerDiaryWorkplaces(
+  fixture: MockCareerDiaryFixture,
+): Array<Record<string, unknown> & { id: string }> {
+  if (fixture.workplaces) return fixture.workplaces;
+  fixture.workplaces = fixture.workplace ? [fixture.workplace] : [];
+  return fixture.workplaces;
+}
+
+function mockProfileSnapshot(fixture?: MockCareerDiaryFixture) {
+  const snapshot = structuredClone(candidateSnapshot);
+  const experience = fixture?.profileExperience;
+  if (experience && snapshot.resume) {
+    snapshot.resume = {
+      ...snapshot.resume,
+      draft: {
+        ...snapshot.resume.draft,
+        experience: [experience as unknown as ResumeDraft['experience'][number]],
+      },
+    };
+  }
+  return snapshot;
+}
+
+async function mockWorkplaceRequest(
+  route: Route,
+  method: string,
+  fixture: MockCareerDiaryFixture,
+  workplaceId: string,
+): Promise<boolean> {
+  const workplaces = mockCareerDiaryWorkplaces(fixture);
+  const index = workplaces.findIndex((item) => item.id === workplaceId);
+  if (index < 0) {
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: 'career_diary_record_not_found' } },
+    });
+    return true;
+  }
+  if (method === 'GET') {
+    await route.fulfill({ json: { data: workplaces[index] } });
+    return true;
+  }
+  if (method !== 'PATCH') {
+    await route.fulfill({ status: 405, json: { error: { code: 'method_not_allowed' } } });
+    return true;
+  }
+  const patch = route.request().postDataJSON() as Record<string, unknown>;
+  if (workplaces[index]?.status === 'archived' && 'planning' in patch) {
+    await route.fulfill({
+      status: 409,
+      json: { error: { code: 'career_diary_workplace_archived' } },
+    });
+    return true;
+  }
+  workplaces[index] = { ...workplaces[index]!, ...patch };
+  if (fixture.workplace?.id === workplaceId) {
+    fixture.workplace = workplaces[index]!;
+    fixture.overview = { ...fixture.overview, primaryWorkplace: fixture.workplace };
+  }
+  await route.fulfill({ json: { data: workplaces[index] } });
+  return true;
+}
+
+async function mockCreateWorkplace(
+  route: Route,
+  fixture: MockCareerDiaryFixture,
+): Promise<boolean> {
+  const input = route.request().postDataJSON() as Record<string, unknown>;
+  const key = route.request().headers()['idempotency-key'] ?? '';
+  const existingId = fixture.createdByIdempotencyKey?.[key];
+  if (existingId) {
+    const existing = mockCareerDiaryWorkplaces(fixture).find((item) => item.id === existingId);
+    if (existing) {
+      await route.fulfill({ json: { data: existing } });
+      return true;
+    }
+  }
+  const id = `workplace-created-${mockCareerDiaryWorkplaces(fixture).length + 1}`;
+  const workplace = {
+    id,
+    company: String(input.company ?? ''),
+    title: String(input.title ?? ''),
+    startDate: String(input.startDate ?? ''),
+    endDate: null,
+    sourceExperienceId: null,
+    status: 'active',
+    isPrimary: false,
+    createdAt: '2026-12-06T12:00:00.000Z',
+    updatedAt: '2026-12-06T12:00:00.000Z',
+  };
+  mockCareerDiaryWorkplaces(fixture).push(workplace);
+  fixture.createdByIdempotencyKey = { ...fixture.createdByIdempotencyKey, [key]: id };
+  await route.fulfill({ status: 201, json: { data: workplace } });
+  return true;
+}
+
+async function mockSetPrimaryWorkplace(
+  route: Route,
+  method: string,
+  fixture: MockCareerDiaryFixture,
+  workplaceId: string,
+): Promise<boolean> {
+  if (method !== 'PUT') {
+    await route.fulfill({ status: 405, json: { error: { code: 'method_not_allowed' } } });
+    return true;
+  }
+  const workplaces = mockCareerDiaryWorkplaces(fixture);
+  const selected = workplaces.find((item) => item.id === workplaceId);
+  if (!selected) {
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: 'career_diary_record_not_found' } },
+    });
+    return true;
+  }
+  fixture.workplaces = workplaces.map((item) => ({ ...item, isPrimary: item.id === workplaceId }));
+  fixture.workplace = fixture.workplaces.find((item) => item.id === workplaceId) ?? null;
+  fixture.overview = { ...fixture.overview, primaryWorkplace: fixture.workplace };
+  await route.fulfill({ json: { data: fixture.workplace } });
+  return true;
+}
+
+async function mockArchiveWorkplace(
+  route: Route,
+  method: string,
+  fixture: MockCareerDiaryFixture,
+  workplaceId: string,
+): Promise<boolean> {
+  if (method !== 'PUT') {
+    await route.fulfill({ status: 405, json: { error: { code: 'method_not_allowed' } } });
+    return true;
+  }
+  const workplaces = mockCareerDiaryWorkplaces(fixture);
+  const index = workplaces.findIndex((item) => item.id === workplaceId);
+  if (index < 0) {
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: 'career_diary_record_not_found' } },
+    });
+    return true;
+  }
+  workplaces[index] = {
+    ...workplaces[index]!,
+    status: 'archived',
+    endDate: '2026-12-06',
+    isPrimary: false,
+  };
+  if (fixture.workplace?.id === workplaceId) {
+    fixture.workplace = null;
+    fixture.overview = { ...fixture.overview, primaryWorkplace: null };
+  }
+  await route.fulfill({ json: { data: workplaces[index] } });
+  return true;
+}
+
+async function mockGoalRequest(
+  route: Route,
+  method: string,
+  fixture: MockCareerDiaryFixture,
+  goalId: string,
+): Promise<boolean> {
+  const index = fixture.goals.findIndex((goal) => goal.id === goalId);
+  if (index < 0) {
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: 'career_diary_record_not_found' } },
+    });
+    return true;
+  }
+  if (method === 'GET') {
+    await route.fulfill({ json: { data: fixture.goals[index] } });
+    return true;
+  }
+  if (method !== 'PATCH') {
+    await route.fulfill({ status: 405, json: { error: { code: 'method_not_allowed' } } });
+    return true;
+  }
+  const patch = route.request().postDataJSON() as Record<string, unknown>;
+  fixture.goals[index] = { ...fixture.goals[index]!, ...patch };
+  await route.fulfill({ json: { data: fixture.goals[index] } });
+  return true;
+}
+
+async function mockCareerDiaryRoutes(
+  route: Route,
+  path: string,
+  fixture?: MockCareerDiaryFixture,
+): Promise<boolean> {
+  const base = '/api/v1/candidate/career-diary';
+  if (!path.startsWith(base)) return false;
+  if (!fixture) return mockEmptyCareerDiaryRoutes(route, path, base);
+  return mockCareerDiaryFixtureRoutes(route, path, base, fixture);
+}
 
 interface ApplicationStub {
   readonly id: string;
@@ -55,6 +375,7 @@ interface FixtureReceipt {
 }
 
 export interface MockSignedInCabinetOptions {
+  readonly careerDiary?: MockCareerDiaryFixture;
   readonly vacancyTotal?: number;
   readonly vacancyFacets?: MatchedVacancyFacets;
   readonly vacancyInitialFilters?: VacanciesScreenState;
@@ -869,9 +1190,6 @@ export async function mockSignedInCabinet(
   options: MockSignedInCabinetOptions = {},
 ): Promise<string[]> {
   const unmatched: string[] = [];
-  let decisionProfile: Record<string, unknown> | null = null;
-  let skillQuizCommandId: string | null = null;
-  let skillQuizReverted = false;
   let billingCurrentPlan: FixtureCurrentPlan = options.billing?.initialPlan ?? 'basic';
   let billingAutoRenew = billingCurrentPlan !== 'free';
   let billingPeriodEnd = '2026-11-08T00:00:00.000Z';
@@ -1075,6 +1393,8 @@ export async function mockSignedInCabinet(
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
+  const careerDiary = options.careerDiary ? structuredClone(options.careerDiary) : undefined;
+  const profileSnapshot = mockProfileSnapshot(careerDiary);
   const automation = createAutomationFixtureState(options);
   const linkedinDrafts = createLinkedinDraftFixtureState(options);
   const relocationConsent = {
@@ -1088,6 +1408,7 @@ export async function mockSignedInCabinet(
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (await mockCareerDiaryRoutes(route, path, careerDiary)) return;
     if (await mockConnectionRoutes(route, url, connectionState)) return;
     if (
       route.request().method() === 'POST' &&
@@ -1719,7 +2040,7 @@ export async function mockSignedInCabinet(
     if (path.endsWith('/candidate/me')) {
       return route.fulfill({
         json: {
-          data: candidateSnapshot,
+          data: profileSnapshot,
           meta: { memory: { nextOffset: null }, turns: { nextOffset: null } },
         },
       });
@@ -1820,10 +2141,10 @@ export async function mockSignedInCabinet(
       return route.fulfill({
         json: {
           data: {
-            draft: candidateSnapshot.resume.draft,
+            draft: profileSnapshot.resume?.draft ?? candidateSnapshot.resume.draft,
             savedAt: {
-              createdAt: candidateSnapshot.resume.createdAt,
-              updatedAt: candidateSnapshot.resume.updatedAt,
+              createdAt: profileSnapshot.resume?.createdAt ?? candidateSnapshot.resume.createdAt,
+              updatedAt: profileSnapshot.resume?.updatedAt ?? candidateSnapshot.resume.updatedAt,
             },
             projection: {
               master: emptyDocument,
@@ -1924,6 +2245,9 @@ function checkoutResponse(invoice: FixtureInvoice) {
     autoRenew: invoice.autoRenew,
     paymentUrl: invoice.paymentUrl,
     createdAt: invoice.createdAt,
+  };
+}
+
 function emptyRelocationProfile(): Record<string, unknown> {
   return {
     schemaVersion: 1,

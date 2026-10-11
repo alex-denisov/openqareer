@@ -1,7 +1,4 @@
-import type {
-  WorkFamilyCount,
-  WorkPreferenceResult,
-} from '../../../shared/workPreferences';
+import type { WorkFamilyCount, WorkPreferenceResult } from '../../../shared/workPreferences';
 import { pluralRu } from '../../../shared/pluralRu';
 
 /**
@@ -35,15 +32,10 @@ export function describeWorkPreferences(input: {
 }): WorkPreferencesView {
   const { result } = input;
   return {
-    basisLine: `${pluralRu(result.answered, [
-      'выбор',
-      'выбора',
-      'выборов',
-    ])} · ${pluralRu(result.counts.length, [
-      'вид работы',
-      'вида работы',
-      'видов работы',
-    ])} · ${formatDay(input.completedAt)}`,
+    basisLine: `${pluralRu(result.answered, ['выбор', 'выбора', 'выборов'])} · ${pluralRu(
+      result.counts.length,
+      ['вид работы', 'вида работы', 'видов работы'],
+    )} · ${formatDay(input.completedAt)}`,
     top: result.ranked,
     excludedLine: result.excluded.length
       ? `Вы назвали «точно нет»: ${result.excluded

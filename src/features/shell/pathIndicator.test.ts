@@ -169,7 +169,12 @@ describe('buildPathIndicator', () => {
     it('sets step «Роль» as current on career screen, even if role is already done', () => {
       const steps = buildPathIndicator({
         track: [
-          { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+          {
+            id: 'career-picture',
+            label: 'Карьерная картина',
+            status: 'complete',
+            reason: 'Готово',
+          },
           { id: 'role-market', label: 'Роль и рынок', status: 'complete', reason: 'Готово' },
         ],
         matchedPoolCount: 5,
@@ -221,7 +226,12 @@ describe('buildPathIndicator', () => {
     it('has zero current steps on «Сегодня» screen, keeping completion statuses separate', () => {
       const steps = buildPathIndicator({
         track: [
-          { id: 'career-picture', label: 'Карьерная картина', status: 'complete', reason: 'Готово' },
+          {
+            id: 'career-picture',
+            label: 'Карьерная картина',
+            status: 'complete',
+            reason: 'Готово',
+          },
           { id: 'role-market', label: 'Роль и рынок', status: 'active', reason: 'Проверяем рынок' },
         ],
         matchedPoolCount: 0,
@@ -248,4 +258,3 @@ describe('buildPathIndicator', () => {
     });
   });
 });
-

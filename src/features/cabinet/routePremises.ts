@@ -1,9 +1,6 @@
 import type { AccountSnapshot } from '../coach/coachApi';
 import { prepareCareerWorkspace } from '../journey/careerJourneyEngine';
-import {
-  normalizeCandidateRegions,
-  type CandidateRegion,
-} from '../workspace/candidateRegions';
+import { normalizeCandidateRegions, type CandidateRegion } from '../workspace/candidateRegions';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 
 export type RouteWorkMode = NonNullable<AccountSnapshot['profile']['workMode']>;

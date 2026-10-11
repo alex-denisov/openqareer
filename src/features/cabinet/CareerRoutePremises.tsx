@@ -1,8 +1,5 @@
 import type { AccountSnapshot } from '../coach/coachApi';
-import {
-  candidateRegionLabels,
-  type CandidateRegion,
-} from '../workspace/candidateRegions';
+import { candidateRegionLabels, type CandidateRegion } from '../workspace/candidateRegions';
 
 /**
  * Предпосылки маршрута: роль, география и формат — то, из чего собирается
@@ -22,7 +19,11 @@ export function CareerRoutePremises({
   readonly onEdit: () => void;
 }) {
   return (
-    <section className="career-route-premises" aria-labelledby="career-route-premises-title" lang="ru">
+    <section
+      className="career-route-premises"
+      aria-labelledby="career-route-premises-title"
+      lang="ru"
+    >
       <header>
         <div>
           <span className="career-cabinet-kicker">Условия поиска</span>
@@ -39,18 +40,14 @@ export function CareerRoutePremises({
         </div>
         <div>
           <dt>Где</dt>
-          <dd>
-            {candidateRegionLabels(regions).join(', ') || 'Регионы не выбраны'}
-          </dd>
+          <dd>{candidateRegionLabels(regions).join(', ') || 'Регионы не выбраны'}</dd>
         </div>
         <div>
           <dt>Формат работы</dt>
           <dd>{routeWorkModeLabel(workMode)}</dd>
         </div>
       </dl>
-      <p>
-        После сохранения подбор пересоберётся. Прежние условия останутся в истории.
-      </p>
+      <p>После сохранения подбор пересоберётся. Прежние условия останутся в истории.</p>
     </section>
   );
 }

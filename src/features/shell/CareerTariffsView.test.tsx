@@ -97,7 +97,9 @@ describe('CareerTariffsView · заявка на план с консульта�
       '/api/v1/candidate/plan-requests',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(container.textContent).toContain('Заявка отправлена 25 сентября — свяжемся в течение рабочего дня');
+    expect(container.textContent).toContain(
+      'Заявка отправлена 25 сентября — свяжемся в течение рабочего дня',
+    );
     expect(
       [...container.querySelectorAll('button')].some(
         (button) => button.textContent === 'Оставить заявку',
@@ -108,9 +110,7 @@ describe('CareerTariffsView · заявка на план с консульта�
 
   it('B336: если у сохранённой заявки нет даты, пишет «Заявка уже отправлена»', async () => {
     vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
-    vi.spyOn(apiClient, 'readData').mockResolvedValueOnce([
-      { planId: 'consultant' },
-    ] as never);
+    vi.spyOn(apiClient, 'readData').mockResolvedValueOnce([{ planId: 'consultant' }] as never);
     mount();
     // Wait for initial load
     await act(async () => {
