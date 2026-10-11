@@ -26,6 +26,8 @@ export interface CountryComparisonPanelProps {
   readonly state?: PanelState;
   readonly errorMessage?: string;
   readonly onRetry?: () => void;
+  readonly title?: string;
+  readonly showParetoSummary?: boolean;
 }
 
 export function CountryComparisonPanel({
@@ -33,6 +35,8 @@ export function CountryComparisonPanel({
   state = 'ready',
   errorMessage = 'Не удалось загрузить сравнение стран.',
   onRetry,
+  title = 'Сравнение стран',
+  showParetoSummary = true,
 }: CountryComparisonPanelProps) {
   if (state === 'loading')
     return <PanelStateMessage busy>Загружаем проверенные данные по странам…</PanelStateMessage>;
@@ -41,7 +45,7 @@ export function CountryComparisonPanel({
     return <PanelStateMessage>Выберите страны для сравнения.</PanelStateMessage>;
   if (countries.length > 3)
     return <PanelStateMessage>Для читаемого сравнения выберите до трёх стран.</PanelStateMessage>;
-  return <ReadyComparison countries={countries} />;
+  return <ReadyComparison countries={countries} title={title} showParetoSummary={showParetoSummary} />;
 }
 
 function PanelStateMessage({
@@ -79,8 +83,12 @@ function ErrorState({
 
 function ReadyComparison({
   countries,
+  title,
+  showParetoSummary,
 }: {
   readonly countries: readonly CountryComparisonCountry[];
+  readonly title: string;
+  readonly showParetoSummary: boolean;
 }) {
   const pareto = calculateParetoFrontier(countries);
   return (
@@ -89,11 +97,11 @@ function ReadyComparison({
       aria-labelledby="career-country-comparison-title"
     >
       <h2 id="career-country-comparison-title" className="career-country-comparison-title">
-        Сравнение стран
+        {title}
       </h2>
       <DesktopMatrix countries={countries} />
       <MobileStack countries={countries} />
-      <ParetoSummary countries={countries} result={pareto} />
+      {showParetoSummary ? <ParetoSummary countries={countries} result={pareto} /> : null}
     </section>
   );
 }
