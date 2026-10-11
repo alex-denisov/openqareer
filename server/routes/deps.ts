@@ -33,6 +33,10 @@ export interface RuntimeMemoryReport {
 }
 
 export interface RouteDeps {
+  /** Текущий тариф кандидата из биллинга, если сервис подключён. */
+  billingRepository?: {
+    getSubscription(userId: string): { planId: string } | null;
+  };
   /** Настройки веера обхода hh.ru: набор ролей выбирает владелец (B214). */
   hhCrawlSettings?: import('../vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Память и пауза опросов — только администратору (B220). */

@@ -88,6 +88,747 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
   });
 }
 
+interface AutomationFixtureState {
+  settings: {
+    candidateId: string;
+    enabled: boolean;
+    mode: string;
+    pausedUntil: string | null;
+    rules: Record<string, unknown>;
+    updatedAt: string | null;
+  };
+  consents: Array<Record<string, unknown>>;
+  stops: Array<{ company: string; origin: string; createdAt: string }>;
+  queue: AutomationQueueFixtureItem[];
+  schedule: Record<string, unknown>;
+  runtime: Record<string, unknown>;
+  journal: AutomationJournalFixtureEntry[];
+  queueBehavior: { delayMs?: number; errorStatus?: number; totalOverride?: number };
+  snapshotDelayMs?: number;
+}
+
+interface AutomationJournalFixtureEntry {
+  id: string;
+  queueItemId: string;
+  platform: string;
+  result: 'delivered' | 'error' | 'removed';
+  company: string;
+  occurredAt: string;
+  receiptId: string | null;
+  failureCode: string | null;
+}
+
+interface LinkedinDraftFixtureState {
+  readonly candidateId: string;
+  drafts: Array<Record<string, unknown>>;
+  topics: Array<Record<string, unknown>>;
+  cadence: {
+    timezone: string;
+    lastPublishedAt: string | null;
+    nextAllowedAt: string | null;
+    canPublish: boolean;
+  };
+  nextDraftId: number;
+}
+
+export interface AutomationQueueFixtureItem {
+  id: string;
+  status: string;
+  sendTiming: string;
+  createdAt?: string;
+  updatedAt?: string;
+  payload: {
+    clusterId: string;
+    applicationId: string | null;
+    platform: string;
+    title: string;
+    role: string;
+    company: string;
+    targetUrl: string;
+    requirements: { matched: number; total: number };
+    letterText: string;
+    materials: Array<{ documentId: string; kind: string; fileName: string; version: number }>;
+  };
+}
+
+export interface MockSignedInCabinetOptions {
+  readonly candidateId?: string;
+  readonly automationQueue?: readonly AutomationQueueFixtureItem[];
+  readonly automationQueueBehavior?: {
+    readonly delayMs?: number;
+    readonly errorStatus?: number;
+    readonly totalOverride?: number;
+  };
+  readonly automationSnapshotDelayMs?: number;
+  readonly automation?: {
+    readonly settings?: Partial<AutomationFixtureState['settings']>;
+    readonly runtime?: Partial<AutomationFixtureState['runtime']>;
+  };
+  readonly linkedinDrafts?: readonly Record<string, unknown>[];
+  readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
+  readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
+}
+
+const AUTOMATION_CONSENT_TEXT: Readonly<Record<string, string>> = {
+  drafts: 'Разрешаю готовить черновики откликов и писем по выбранным мной вакансиям.',
+  send_after_approval: 'Разрешаю отправлять каждый отклик только после моего отдельного одобрения.',
+  notifications: 'Разрешаю показывать очередь и журнал автооткликов в уведомлениях приложения.',
+  automatic_submission:
+    'Разрешаю отправлять подходящие отклики без отдельного одобрения каждого, в рамках выбранных правил и тарифных лимитов.',
+};
+const AUTOMATION_REQUIRED_CONSENTS = ['drafts', 'send_after_approval', 'notifications'] as const;
+
+function createAutomationFixtureState(
+  options: MockSignedInCabinetOptions = {},
+): AutomationFixtureState {
+  const candidateId = options.candidateId ?? 'readability-candidate';
+  const settings = createAutomationSettings(candidateId, options.automation?.settings);
+  return {
+    settings,
+    consents: fixtureAutomationConsents(settings.enabled),
+    stops: [],
+    queue: (options.automationQueue ?? []).map((item) => ({
+      ...item,
+      payload: { ...item.payload, materials: [...item.payload.materials] },
+    })),
+    schedule: defaultAutomationSchedule(),
+    runtime: { ...defaultAutomationRuntime(), ...options.automation?.runtime },
+    journal: [],
+    queueBehavior: { ...options.automationQueueBehavior },
+    snapshotDelayMs: options.automationSnapshotDelayMs,
+  };
+}
+
+function createAutomationSettings(
+  candidateId: string,
+  overrides?: Partial<AutomationFixtureState['settings']>,
+): AutomationFixtureState['settings'] {
+  return {
+    candidateId,
+    enabled: false,
+    mode: 'drafts_only',
+    pausedUntil: null,
+    rules: {
+      roles: [],
+      minimumMatchPercent: 80,
+      platforms: ['hh', 'linkedin'],
+      excludeStopCompanies: true,
+    },
+    updatedAt: null,
+    ...overrides,
+    candidateId,
+  };
+}
+
+function fixtureAutomationConsents(enabled: boolean): AutomationFixtureState['consents'] {
+  if (!enabled) return [];
+  const acceptedAt = '2026-10-09T08:00:00.000Z';
+  return AUTOMATION_REQUIRED_CONSENTS.map((key) => ({
+    id: `consent-${key}`,
+    key,
+    version: 'B452-2026-10-10-v1',
+    text: AUTOMATION_CONSENT_TEXT[key] ?? '',
+    acceptedAt,
+    revokedAt: null,
+  }));
+}
+
+function defaultAutomationSchedule(): Record<string, unknown> {
+  return {
+    timezone: 'Europe/Moscow',
+    dailyLimits: { hh: 15, linkedin: 10 },
+    minPauseMinutes: 2,
+    maxPauseMinutes: 9,
+    sendWindows: {
+      hh: { start: '10:00', end: '18:00', days: [1, 2, 3, 4, 5] },
+      linkedin: { start: '09:00', end: '17:00', days: [1, 2, 3, 4] },
+    },
+    quietWindows: [
+      { start: '22:00', end: '08:00' },
+      { start: '13:00', end: '14:00' },
+    ],
+    excludedDates: [],
+    breakAfterSent: 8,
+    breakMinutes: 120,
+    stopAfterErrors: 1,
+  };
+}
+
+function defaultAutomationRuntime(): Record<string, unknown> {
+  return {
+    status: 'ready',
+    emergencyPaused: false,
+    consecutiveErrors: 0,
+    sentSinceBreak: 0,
+    nextSendAt: null,
+    pauseUntil: null,
+  };
+}
+
+function automationState(state: AutomationFixtureState) {
+  const queueCounts = Object.fromEntries(
+    [
+      'letter_not_ready',
+      'pending_approval',
+      'approved',
+      'removed',
+      'consultant',
+      'sent',
+      'attempted',
+      'failed',
+    ].map((status) => [status, state.queue.filter((item) => item.status === status).length]),
+  );
+  return {
+    settings: state.settings,
+    consents: state.consents,
+    stopCompanies: state.stops,
+    queueCounts,
+    schedule: state.schedule,
+    schedulerRuntime: state.runtime,
+    linkedinPublishing: { enabled: false, reason: 'Публикацию в LinkedIn запускает кандидат.' },
+  };
+}
+
+function applyAutomationAction(
+  state: AutomationFixtureState,
+  item: AutomationQueueFixtureItem,
+  action: string,
+): void {
+  if ((action === 'remove' || action === 'stop_company') && item.status !== 'removed') {
+    recordAutomationRemoval(state, item);
+  }
+  item.status =
+    action === 'approve_and_send' ? 'approved' : action === 'consultant' ? 'consultant' : 'removed';
+  if (action === 'stop_company') {
+    const company = item.payload.company;
+    state.stops = [
+      ...state.stops.filter((stop) => stop.company !== company),
+      { company, origin: 'manual', createdAt: new Date().toISOString() },
+    ];
+    state.queue
+      .filter(
+        (queued) =>
+          queued.payload.company === company && !['sent', 'removed'].includes(queued.status),
+      )
+      .forEach((queued) => {
+        recordAutomationRemoval(state, queued);
+        queued.status = 'removed';
+        queued.payload = { ...queued.payload, targetUrl: '', letterText: '', materials: [] };
+      });
+  }
+  if (item.status === 'removed')
+    item.payload = { ...item.payload, targetUrl: '', letterText: '', materials: [] };
+}
+
+function automationQueueSummary(item: AutomationQueueFixtureItem, candidateId: string) {
+  return {
+    id: item.id,
+    candidateId,
+    applicationId: item.payload.applicationId,
+    status: item.status,
+    displayStatus:
+      item.status === 'pending_approval'
+        ? item.sendTiming === 'today'
+          ? 'will_send_today'
+          : 'will_send_later'
+        : item.status,
+    sendTiming: item.sendTiming,
+    createdAt: item.createdAt ?? '2026-10-09T08:00:00.000Z',
+    updatedAt: item.updatedAt ?? '2026-10-09T08:00:00.000Z',
+    clusterId: item.payload.clusterId,
+    platform: item.payload.platform,
+    title: item.payload.title,
+    role: item.payload.role,
+    company: item.payload.company,
+    requirements: item.payload.requirements,
+    letterReady: item.payload.letterText.trim().length > 0,
+    materialCount: item.payload.materials.length,
+  };
+}
+
+function recordAutomationRemoval(
+  state: AutomationFixtureState,
+  item: AutomationQueueFixtureItem,
+): void {
+  state.journal.push({
+    id: `journal-${state.journal.length + 1}`,
+    queueItemId: item.id,
+    platform: item.payload.platform,
+    result: 'removed',
+    company: item.payload.company,
+    occurredAt: new Date().toISOString(),
+    receiptId: null,
+    failureCode: null,
+  });
+}
+
+async function mockAutomationConfiguration(
+  route: Route,
+  path: string,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/automation') && method === 'GET') {
+    if (state.snapshotDelayMs) {
+      await new Promise((resolve) => setTimeout(resolve, state.snapshotDelayMs));
+    }
+    await route.fulfill({ json: { data: automationState(state) } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/enable') && method === 'POST') {
+    const body = route.request().postDataJSON() as {
+      mode: string;
+      rules?: Record<string, unknown>;
+      consentKeys: string[];
+    };
+    const acceptedAt = new Date().toISOString();
+    state.settings = {
+      ...state.settings,
+      enabled: true,
+      mode: body.mode,
+      rules: body.rules ?? state.settings.rules,
+      updatedAt: acceptedAt,
+    };
+    if (!state.runtime.emergencyPaused)
+      state.runtime = { ...state.runtime, status: 'ready', nextSendAt: acceptedAt };
+    state.consents = body.consentKeys.map((key) => ({
+      id: `consent-${key}`,
+      key,
+      version: 'B452-2026-10-10-v1',
+      text: AUTOMATION_CONSENT_TEXT[key] ?? '',
+      acceptedAt,
+      revokedAt: null,
+    }));
+    await route.fulfill({ json: { data: automationState(state) } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/disable') && method === 'POST') {
+    state.settings = { ...state.settings, enabled: false };
+    state.runtime = { ...state.runtime, status: 'prepared', nextSendAt: null };
+    state.queue
+      .filter((item) => item.status === 'approved')
+      .forEach((item) => {
+        item.status = 'pending_approval';
+      });
+    await route.fulfill({ json: { data: { settings: state.settings } } });
+    return true;
+  }
+  return updateAutomationConfiguration(route, path, state);
+}
+
+async function mockAutomationScheduler(
+  route: Route,
+  path: string,
+  url: URL,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/automation/schedule')) {
+    if (method === 'PUT') {
+      state.schedule = route.request().postDataJSON() as Record<string, unknown>;
+      if (!state.runtime.emergencyPaused)
+        state.runtime = { ...state.runtime, status: 'ready', nextSendAt: new Date().toISOString() };
+    }
+    if (method === 'GET' || method === 'PUT') {
+      await route.fulfill({
+        json: {
+          data: {
+            schedule: state.schedule,
+            runtime: state.runtime,
+            stateLabel: fixtureAutomationStateLabel(String(state.runtime.status)),
+          },
+        },
+      });
+      return true;
+    }
+  }
+  if (path.endsWith('/candidate/automation/emergency-pause') && method === 'POST') {
+    state.runtime = { ...state.runtime, emergencyPaused: true, status: 'paused', nextSendAt: null };
+    await route.fulfill({ json: { data: { runtime: state.runtime, stateLabel: 'Пауза' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/dispatch') && method === 'POST') {
+    await route.fulfill({ status: 503, json: { error: { code: 'runner_not_connected' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/journal/export') && method === 'GET') {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/csv; charset=utf-8',
+      body: '\uFEFFВремя,Компания,Канал,Результат,Квитанция,Код ошибки',
+    });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/journal') && method === 'GET') {
+    const result = url.searchParams.get('result');
+    const platform = url.searchParams.get('platform');
+    const entries = state.journal.filter(
+      (entry) => (!result || entry.result === result) && (!platform || entry.platform === platform),
+    );
+    const counts = state.journal.reduce(
+      (value, entry) => ({
+        total: value.total + 1,
+        delivered: value.delivered + Number(entry.result === 'delivered'),
+        errors: value.errors + Number(entry.result === 'error'),
+        removed: value.removed + Number(entry.result === 'removed'),
+      }),
+      { total: 0, delivered: 0, errors: 0, removed: 0 },
+    );
+    await route.fulfill({
+      json: {
+        data: { entries, periodDays: Number(url.searchParams.get('periodDays') ?? 30), counts },
+      },
+    });
+    return true;
+  }
+  return false;
+}
+
+function fixtureAutomationStateLabel(status: string): string {
+  if (status === 'daily_limit_reached') return 'Лимит дня достигнут';
+  if (status === 'linkedin_not_connected') return 'LinkedIn не подключён';
+  if (status === 'paused') return 'Пауза';
+  if (status === 'error') return 'Ошибка отправки';
+  return status === 'prepared' ? 'Подготовлено' : 'По расписанию';
+}
+
+async function updateAutomationConfiguration(
+  route: Route,
+  path: string,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/automation/rules') && method === 'PUT') {
+    state.settings = {
+      ...state.settings,
+      rules: route.request().postDataJSON(),
+      updatedAt: new Date().toISOString(),
+    };
+    await route.fulfill({ json: { data: { settings: state.settings } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/pause') && method === 'POST') {
+    const { days } = route.request().postDataJSON() as { days: number };
+    const pausedUntil = new Date(Date.now() + days * 86_400_000).toISOString();
+    state.settings = {
+      ...state.settings,
+      pausedUntil,
+    };
+    state.runtime = {
+      ...state.runtime,
+      status: 'paused',
+      pauseUntil: pausedUntil,
+      nextSendAt: pausedUntil,
+    };
+    await route.fulfill({ json: { data: { settings: state.settings } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/pause') && method === 'DELETE') {
+    state.settings = { ...state.settings, pausedUntil: null };
+    state.runtime = {
+      ...state.runtime,
+      status: 'ready',
+      emergencyPaused: false,
+      pauseUntil: null,
+      nextSendAt: new Date().toISOString(),
+      consecutiveErrors: 0,
+    };
+    await route.fulfill({ json: { data: { settings: state.settings } } });
+    return true;
+  }
+  const revoke = path.match(/\/candidate\/automation\/consents\/([^/]+)\/revoke$/u);
+  if (!revoke || method !== 'POST') return false;
+  const key = decodeURIComponent(revoke[1]!);
+  state.consents = state.consents.map((consent) =>
+    consent.key === key ? { ...consent, revokedAt: new Date().toISOString() } : consent,
+  );
+  state.settings = { ...state.settings, enabled: false };
+  state.queue
+    .filter((item) => item.status === 'approved')
+    .forEach((item) => {
+      item.status = 'pending_approval';
+    });
+  await route.fulfill({ json: { data: { revoked: true, ...automationState(state) } } });
+  return true;
+}
+
+async function mockAutomationQueue(
+  route: Route,
+  path: string,
+  url: URL,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/automation/queue/refresh') && method === 'POST') {
+    const body = route.request().postDataJSON() as { opportunities?: unknown[] };
+    await route.fulfill({
+      json: { data: { added: 0, skipped: body.opportunities?.length ?? 0, items: [] } },
+    });
+    return true;
+  }
+  if (path.endsWith('/candidate/automation/queue/bulk') && method === 'POST') {
+    return bulkAutomationQueue(route, state);
+  }
+  if (path.endsWith('/candidate/automation/queue') && method === 'GET') {
+    if (state.queueBehavior.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, state.queueBehavior.delayMs));
+    }
+    if (state.queueBehavior.errorStatus) {
+      await route.fulfill({
+        status: state.queueBehavior.errorStatus,
+        json: {
+          error: {
+            code: 'automation_queue_fixture_error',
+            message: 'Не удалось загрузить очередь.',
+          },
+        },
+      });
+      return true;
+    }
+    const status = url.searchParams.get('status');
+    const platform = url.searchParams.get('platform');
+    const items = state.queue.filter(
+      (item) =>
+        (!status || item.status === status) && (!platform || item.payload.platform === platform),
+    );
+    await route.fulfill({
+      json: {
+        data: {
+          items: items.map((item) => automationQueueSummary(item, state.settings.candidateId)),
+          total: state.queueBehavior.totalOverride ?? items.length,
+          limit: Number(url.searchParams.get('limit') ?? 20),
+          offset: Number(url.searchParams.get('offset') ?? 0),
+        },
+      },
+    });
+    return true;
+  }
+  return mockAutomationQueueItem(route, path, state);
+}
+
+async function bulkAutomationQueue(route: Route, state: AutomationFixtureState): Promise<boolean> {
+  const { filter, action } = route.request().postDataJSON() as {
+    filter: { status: string; platform?: string };
+    action: string;
+  };
+  const selected = state.queue.filter(
+    (item) =>
+      item.status === filter.status &&
+      (!filter.platform || item.payload.platform === filter.platform),
+  );
+  selected.forEach((item) => applyAutomationAction(state, item, action));
+  await route.fulfill({ json: { data: { matched: selected.length, updated: selected.length } } });
+  return true;
+}
+
+async function mockAutomationQueueItem(
+  route: Route,
+  path: string,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const actionMatch = path.match(/\/candidate\/automation\/queue\/([^/]+)\/actions$/u);
+  const letterMatch = path.match(/\/candidate\/automation\/queue\/([^/]+)\/letter$/u);
+  const previewMatch = path.match(/\/candidate\/automation\/queue\/([^/]+)\/preview$/u);
+  const match = actionMatch ?? letterMatch ?? previewMatch;
+  if (!match) return false;
+  const item = state.queue.find(
+    (candidateItem) => candidateItem.id === decodeURIComponent(match[1]!),
+  );
+  if (!item) {
+    await route.fulfill({
+      status: 404,
+      json: { error: { code: 'automation_queue_item_not_found' } },
+    });
+    return true;
+  }
+  if (actionMatch && route.request().method() === 'POST') {
+    const { action } = route.request().postDataJSON() as { action: string };
+    applyAutomationAction(state, item, action);
+    await route.fulfill({
+      json: {
+        data: {
+          item: automationQueueSummary(item, state.settings.candidateId),
+          execution: item.status === 'approved' ? 'scheduled' : 'not_started',
+        },
+      },
+    });
+  } else if (letterMatch && route.request().method() === 'PATCH') {
+    item.payload.letterText = (route.request().postDataJSON() as { letterText: string }).letterText;
+    item.status = item.payload.letterText.trim() ? 'pending_approval' : 'letter_not_ready';
+    await route.fulfill({
+      json: { data: { item: automationQueueSummary(item, state.settings.candidateId) } },
+    });
+  } else {
+    await route.fulfill({ json: { data: { id: item.id, status: item.status, ...item.payload } } });
+  }
+  return true;
+}
+
+async function mockAutomationStops(
+  route: Route,
+  path: string,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (
+    path.endsWith('/candidate/automation/stop-companies/import-rejections') &&
+    method === 'POST'
+  ) {
+    await route.fulfill({ json: { data: { imported: 0, stopCompanies: state.stops } } });
+    return true;
+  }
+  if (!path.endsWith('/candidate/automation/stop-companies')) return false;
+  if (method === 'GET') {
+    await route.fulfill({ json: { data: { stopCompanies: state.stops } } });
+    return true;
+  }
+  const { company } = route.request().postDataJSON() as { company: string };
+  state.stops =
+    method === 'POST'
+      ? [
+          ...state.stops.filter((item) => item.company !== company),
+          { company, origin: 'manual', createdAt: new Date().toISOString() },
+        ]
+      : state.stops.filter((item) => item.company !== company);
+  if (method === 'POST') {
+    state.queue
+      .filter(
+        (item) =>
+          item.payload.company === company &&
+          ['letter_not_ready', 'pending_approval', 'approved'].includes(item.status),
+      )
+      .forEach((item) => {
+        item.status = 'removed';
+        item.payload = { ...item.payload, targetUrl: '', letterText: '', materials: [] };
+      });
+  }
+  await route.fulfill({
+    json: {
+      data: { added: method === 'POST', removed: method === 'DELETE', stopCompanies: state.stops },
+    },
+  });
+  return true;
+}
+
+async function mockAutomationApi(
+  route: Route,
+  path: string,
+  url: URL,
+  state: AutomationFixtureState,
+): Promise<boolean> {
+  if (!path.includes('/candidate/automation')) return false;
+  return (
+    (await mockAutomationConfiguration(route, path, state)) ||
+    (await mockAutomationScheduler(route, path, url, state)) ||
+    (await mockAutomationQueue(route, path, url, state)) ||
+    (await mockAutomationStops(route, path, state))
+  );
+}
+
+function createLinkedinDraftFixtureState(
+  options: MockSignedInCabinetOptions,
+): LinkedinDraftFixtureState {
+  return {
+    candidateId: options.candidateId ?? 'readability-candidate',
+    drafts: [...(options.linkedinDrafts ?? [])],
+    topics: [...(options.linkedinDraftTopics ?? [])],
+    cadence: {
+      timezone: 'Europe/Moscow',
+      lastPublishedAt: null,
+      nextAllowedAt: null,
+      canPublish: true,
+      ...options.linkedinDraftCadence,
+    },
+    nextDraftId: 1,
+  };
+}
+
+async function mockLinkedinDraftApi(
+  route: Route,
+  path: string,
+  url: URL,
+  state: LinkedinDraftFixtureState,
+): Promise<boolean> {
+  const method = route.request().method();
+  if (path.endsWith('/candidate/drafts/topics') && method === 'GET') {
+    const limit = Number(url.searchParams.get('limit') ?? 3);
+    const offset = Number(url.searchParams.get('offset') ?? 0);
+    return route
+      .fulfill({
+        json: {
+          data: {
+            items: state.topics.slice(offset, offset + limit),
+            total: state.topics.length,
+            cadence: state.cadence,
+          },
+        },
+      })
+      .then(() => true);
+  }
+  const dismissMatch = path.match(/\/candidate\/drafts\/topics\/([^/]+)\/dismiss$/u);
+  if (dismissMatch && method === 'POST') {
+    const id = decodeURIComponent(dismissMatch[1]);
+    state.topics = state.topics.filter((topic) => topic.id !== id);
+    await route.fulfill({ json: { data: { id, decision: 'dismissed' } } });
+    return true;
+  }
+  if (path.endsWith('/candidate/drafts') && method === 'GET') {
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    await route.fulfill({ json: { data: state.drafts.slice(0, limit) } });
+    return true;
+  }
+  if (path.endsWith('/candidate/drafts') && method === 'POST') {
+    const input = route.request().postDataJSON() as Record<string, unknown>;
+    const draft = {
+      id: `draft-fixture-${state.nextDraftId++}`,
+      candidateId: state.candidateId,
+      kind: input.kind,
+      topic: input.topic,
+      text: `Черновик по теме «${String(input.topic)}».`,
+      status: 'draft',
+      localDate: '2026-10-10',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    state.drafts = [draft, ...state.drafts];
+    if (typeof input.topicId === 'string')
+      state.topics = state.topics.filter((topic) => topic.id !== input.topicId);
+    await route.fulfill({ json: { data: draft } });
+    return true;
+  }
+  const draftMatch = path.match(/\/candidate\/drafts\/([^/]+)$/u);
+  if (draftMatch && method === 'PATCH') {
+    const id = decodeURIComponent(draftMatch[1]);
+    const index = state.drafts.findIndex((draft) => draft.id === id);
+    if (index < 0) {
+      await route.fulfill({
+        status: 404,
+        json: { error: { code: 'draft_not_found', message: 'Черновик не найден.' } },
+      });
+      return true;
+    }
+    const update = route.request().postDataJSON() as Record<string, unknown>;
+    const existing = state.drafts[index];
+    const changed = { ...existing, ...update, updatedAt: new Date().toISOString() };
+    if (update.text) changed.status = 'draft';
+    if (update.status === 'published') {
+      changed.publishedAt = changed.updatedAt;
+      state.cadence = {
+        ...state.cadence,
+        lastPublishedAt: String(changed.publishedAt),
+        nextAllowedAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+        canPublish: false,
+      };
+    }
+    state.drafts = state.drafts.map((draft, draftIndex) =>
+      draftIndex === index ? changed : draft,
+    );
+    await route.fulfill({ json: { data: changed } });
+    return true;
+  }
+  return false;
+}
+
 export async function mockSignedInCabinet(
   page: Page,
   options: MockSignedInCabinetOptions = {},
@@ -260,6 +1001,8 @@ export async function mockSignedInCabinet(
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
+  const automation = createAutomationFixtureState(options);
+  const linkedinDrafts = createLinkedinDraftFixtureState(options);
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -477,11 +1220,13 @@ export async function mockSignedInCabinet(
     if (/\/candidate\/applications\/[^/]+\/labels\/[^/]+$/u.test(path)) {
       return route.fulfill({ status: 404, json: { error: { code: 'application_not_found' } } });
     }
+    if (await mockLinkedinDraftApi(route, path, url, linkedinDrafts)) return;
     // The readability fixture has no tracked applications yet; an empty
     // list is the honest state, not an unknown route.
     if (path.endsWith('/candidate/drafts')) {
       return route.fulfill({ json: { data: [] } });
     }
+    if (await mockAutomationApi(route, path, url, automation)) return;
     // B370: панель отправки откликов читает лимиты и квитанции; в фикстуре действий нет.
     if (path.endsWith('/candidate/actions/usage')) {
       return route.fulfill({

@@ -9,9 +9,7 @@ import type {
 import { isCandidateLinkedinSafetyStopReason } from '../../shared/candidateActionPolicy';
 
 export type CandidateLinkedinSafetyStopPublicReason =
-  | CandidateLinkedinSafetyStopReason
-  | 'manual_pause'
-  | 'platform_pause';
+  CandidateLinkedinSafetyStopReason | 'manual_pause' | 'platform_pause';
 
 export interface CandidateLinkedinSafetyStopStatus {
   readonly paused: boolean;
@@ -159,7 +157,9 @@ export class SqliteCandidateActionRepository {
 
   private migrateReceiptStatusConstraint(): void {
     const row = this.database
-      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_action_receipts'")
+      .prepare(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'candidate_action_receipts'",
+      )
       .get() as { sql?: string } | undefined;
     if (row?.sql?.includes("'failed'") && row.sql.includes("'pending'")) return;
 
@@ -216,7 +216,9 @@ export class SqliteCandidateActionRepository {
 
   private normalizeStoredFailureCodes(): void {
     const rows = this.database
-      .prepare('SELECT id, failure_code FROM candidate_action_receipts WHERE failure_code IS NOT NULL')
+      .prepare(
+        'SELECT id, failure_code FROM candidate_action_receipts WHERE failure_code IS NOT NULL',
+      )
       .all() as Array<{ id: string; failure_code: string }>;
     const normalize = this.database.prepare(
       "UPDATE candidate_action_receipts SET failure_code = 'legacy_failure' WHERE id = ?",
@@ -255,8 +257,7 @@ export class SqliteCandidateActionRepository {
     );
     for (const item of scopes) {
       const row = query.get(item.scope) as
-        | { active: number; reason: string | null; updated_at: string }
-        | undefined;
+        { active: number; reason: string | null; updated_at: string } | undefined;
       if (row?.active !== 1) continue;
       const reason: CandidateLinkedinSafetyStopPublicReason = item.platformWide
         ? 'platform_pause'
@@ -397,10 +398,7 @@ export class SqliteCandidateActionRepository {
     return mapReceiptRow(row);
   }
 
-  updateBatchStatus(
-    batchId: string,
-    status: 'completed' | 'partial_failure' | 'aborted',
-  ): void {
+  updateBatchStatus(batchId: string, status: 'completed' | 'partial_failure' | 'aborted'): void {
     this.database
       .prepare(`UPDATE candidate_action_batches SET status = ? WHERE id = ?`)
       .run(status, batchId);
@@ -473,6 +471,16 @@ export class SqliteCandidateActionRepository {
       .all(candidateId, batchId ?? null, batchId ?? null, limit) as unknown as ActionReceiptRow[];
 
     return rows.map(mapReceiptRow);
+  }
+
+  getReceipt(candidateId: string, receiptId: string): StoredActionReceipt | null {
+    const row = this.database
+      .prepare(
+        `SELECT * FROM candidate_action_receipts
+      WHERE candidate_id = ? AND id = ?`,
+      )
+      .get(candidateId, receiptId) as ActionReceiptRow | undefined;
+    return row ? mapReceiptRow(row) : null;
   }
 }
 

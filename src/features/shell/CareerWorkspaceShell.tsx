@@ -27,6 +27,7 @@ import {
   CareerNavigationRail,
 } from './CareerShellNavigation';
 import { CareerTodaySkeleton } from './CareerTodaySkeleton';
+import { CandidateAutomationScreen } from '../automation/CandidateAutomationScreen';
 
 type ShellView = ShellSection;
 
@@ -34,7 +35,7 @@ type ShellView = ShellSection;
 function stageForView(view: ShellView): CoachTurnStage {
   if (view === 'profile') return 'profile';
   if (view === 'opportunities') return 'vacancies';
-  if (view === 'responses') return 'responses';
+  if (view === 'responses' || view === 'automation') return 'responses';
   return 'today';
 }
 
@@ -66,6 +67,7 @@ const pageNames: Record<ShellView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  automation: 'Автоматизация',
   tariffs: 'Тарифы',
 };
 
@@ -181,10 +183,18 @@ export function CareerWorkspaceShell({
   };
 
   function isNavigable(view: ShellView) {
+    if (view === 'automation')
+      return Boolean(cabinetSession) && isSectionNavigable('responses', navigationState);
     return isSectionNavigable(view, navigationState);
   }
 
   function lockedReason(view: ShellView): string {
+    if (view === 'automation') {
+      if (!careerPictureReady) return sectionLockReason('responses', navigationState);
+      return cabinetSession
+        ? sectionLockReason('responses', navigationState)
+        : 'Войдите в аккаунт, чтобы открыть автоматизацию';
+    }
     return sectionLockReason(view, navigationState);
   }
 
@@ -336,12 +346,15 @@ export function CareerWorkspaceShell({
         <CareerMobileTopbar
           session={session}
           sessionPending={sessionPending}
+          activeView={activeView}
           ariaHidden={accountOpen || onboardingIsFullscreen}
           tariffsAvailable={isNavigable('tariffs')}
           tariffsLockedReason={lockedReason('tariffs')}
           onNavigateHome={() => navigate('today')}
+          onNavigateResponses={() => navigate('responses')}
           onNavigateTariffs={() => navigate('tariffs')}
           onOpenAccount={openAccount}
+          onOpenConsultant={() => openExpert('responses')}
         />
       )}
 
@@ -383,7 +396,47 @@ export function CareerWorkspaceShell({
               onSignIn={openAccount}
             />
           ) : null}
-          {cabinetSession && !intakeVisible && activeView !== 'tariffs' ? (
+          {cabinetSession && activeView === 'responses' ? (
+            <div
+              className="career-responses-automation-switch"
+              role="tablist"
+              tabIndex={0}
+              aria-label="Отклики"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected="true"
+                onClick={() => navigate('responses')}
+              >
+                Воронка
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected="false"
+                onClick={() => navigate('automation')}
+              >
+                Автоматизация
+              </button>
+            </div>
+          ) : null}
+          {cabinetSession &&
+          !intakeVisible &&
+          activeView === 'automation' &&
+          cabinetSession.candidateId ? (
+            <CandidateAutomationScreen
+              key={cabinetSession.candidateId}
+              candidateId={cabinetSession.candidateId}
+              onOpenConsultant={() => openExpert('responses')}
+              onOpenConnections={openConnections}
+              onOpenTariffs={() => navigate('tariffs')}
+            />
+          ) : null}
+          {cabinetSession &&
+          !intakeVisible &&
+          activeView !== 'tariffs' &&
+          activeView !== 'automation' ? (
             <CareerCabinet
               key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
               view={activeView as CareerCabinetView}
@@ -476,7 +529,8 @@ export function CareerWorkspaceShell({
       {activeView !== 'opportunities' &&
       !expertPanelOpen &&
       !accountOpen &&
-      !onboardingIsFullscreen ? (
+      !onboardingIsFullscreen &&
+      activeView !== 'automation' ? (
         <button
           className="career-expert-peek"
           type="button"

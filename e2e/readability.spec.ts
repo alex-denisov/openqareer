@@ -272,7 +272,7 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
     const rail = page.locator('aside#career-rail');
-    await expect(rail.locator('.career-nav-button span')).toHaveCount(4);
+    await expect(rail.locator('.career-nav-button span')).toHaveCount(5);
     const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
       nodes.map((node) => ({
         text: node.textContent,
@@ -294,16 +294,13 @@ test.describe('B232 readability gate', () => {
       ['Подборка', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
       ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],
+      ['Автоматизация', '.automation-screen'],
     ] as const;
     for (const [label, target] of routes) {
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
-      await expect(
-        page.getByRole('button', { name: new RegExp(`^${label}\\.`) }).first(),
-      ).toBeVisible();
-      await page
-        .getByRole('button', { name: new RegExp(`^${label}\\.`) })
-        .first()
-        .click();
+      const routeName = new RegExp(`^${label}(?:\\.|$)`);
+      await expect(page.getByRole('button', { name: routeName }).first()).toBeVisible();
+      await page.getByRole('button', { name: routeName }).first().click();
       await expect(page.locator(target).first()).toBeVisible();
     }
     expect(unmatched).toEqual([]);
@@ -618,7 +615,8 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
   });
 
-  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }) => {
+  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'resize desktop context to cover both layouts');
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
