@@ -26,6 +26,8 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onStageFilterChange: (stage: ApplicationStage | null) => void;
   readonly onClearFilter?: () => void;
   readonly onOpenVacancies: () => void;
+  /** Открывает экран «Автоматизация» оболочки; без него остаётся панель действий внутри раздела. */
+  readonly onOpenAutomation?: () => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
@@ -67,10 +69,19 @@ const OPEN_APPLICATION_STAGES: readonly ApplicationStage[] = [
 
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  const tableView = renderTableView(props.state, workspace, props.onOpenExpert);
+  const tableView = renderTableView(
+    props.state,
+    workspace,
+    props.onOpenExpert,
+    props.onOpenAutomation,
+  );
   return (
     <div className="career-responses-board-wrap">
-      <ResponsesWorkspaceNavigation section={workspace.section} onChange={workspace.setSection} />
+      <ResponsesWorkspaceNavigation
+        section={workspace.section}
+        onChange={workspace.setSection}
+        onOpenAutomation={props.onOpenAutomation}
+      />
       {workspace.section === 'funnel' ? (
         <FunnelWorkspace props={props} workspace={workspace} tableView={tableView} />
       ) : workspace.section === 'company-wants' ? (
@@ -270,6 +281,7 @@ function renderTableView(
   state: UseApplications,
   workspace: WorkspaceController,
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
+  onOpenAutomation?: () => void,
 ) {
   const applications = applicationsForQuery(state.applications, workspace.query);
   return (
@@ -283,7 +295,7 @@ function renderTableView(
       allSelectedByFilter={workspace.allSelectedByFilter}
       pageMeta={state.pageMeta}
       query={workspace.query}
-      onOpenAutomation={() => workspace.setSection('automation')}
+      onOpenAutomation={onOpenAutomation ?? (() => workspace.setSection('automation'))}
       onBulkComplete={workspace.bulkComplete}
       onOpenExpert={onOpenExpert}
     />
@@ -443,9 +455,11 @@ export function ResponsesFunnelSummary({
 export function ResponsesWorkspaceNavigation({
   section,
   onChange,
+  onOpenAutomation,
 }: {
   readonly section: ResponsesWorkspaceSection;
   readonly onChange: (section: ResponsesWorkspaceSection) => void;
+  readonly onOpenAutomation?: () => void;
 }) {
   const tabs: readonly [ResponsesWorkspaceSection, string][] = [
     ['funnel', 'Воронка'],
@@ -472,7 +486,11 @@ export function ResponsesWorkspaceNavigation({
         type="button"
         className={`career-responses-automation-link${section === 'automation' ? ' is-active' : ''}`}
         aria-pressed={section === 'automation'}
-        onClick={() => onChange(section === 'automation' ? 'funnel' : 'automation')}
+        onClick={() =>
+          onOpenAutomation
+            ? onOpenAutomation()
+            : onChange(section === 'automation' ? 'funnel' : 'automation')
+        }
       >
         Автоматизация
       </button>

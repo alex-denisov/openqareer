@@ -56,9 +56,11 @@ export function ResponsesBoard({
   initialArchiveOpen,
   initialTab,
   onOpenExpert,
+  onOpenAutomation,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  onOpenAutomation?: () => void;
   initialStageFilter?: ApplicationStage;
   initialArchiveOpen?: boolean;
   initialTab?: 'board' | 'analytics';
@@ -89,6 +91,7 @@ export function ResponsesBoard({
       initialTab={initialTab}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
+      onOpenAutomation={onOpenAutomation}
     />
   );
 }
@@ -408,6 +411,7 @@ function ReadyBoard({
   initialTab,
   onClearFilter,
   onOpenExpert,
+  onOpenAutomation,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
@@ -417,6 +421,7 @@ function ReadyBoard({
   initialTab?: 'board' | 'analytics';
   onClearFilter?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenAutomation?: () => void;
 }) {
   return (
     <ResponsesWorkspaceScreen
@@ -426,6 +431,7 @@ function ReadyBoard({
       onClearFilter={onClearFilter}
       onOpenVacancies={onOpenVacancies}
       onOpenExpert={onOpenExpert}
+      onOpenAutomation={onOpenAutomation}
       initialTab={initialTab}
       columnsContent={
         <BoardColumnsView

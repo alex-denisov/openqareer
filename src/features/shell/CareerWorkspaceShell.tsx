@@ -432,31 +432,6 @@ export function CareerWorkspaceShell({
                 onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
               />
             ) : null}
-            {cabinetSession && activeView === 'responses' ? (
-              <div
-                className="career-responses-automation-switch"
-                role="tablist"
-                tabIndex={0}
-                aria-label="Отклики"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected="true"
-                  onClick={() => navigate('responses')}
-                >
-                  Воронка
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                  onClick={() => navigate('automation')}
-                >
-                  Автоматизация
-                </button>
-              </div>
-            ) : null}
             {cabinetSession &&
             !intakeVisible &&
             activeView === 'automation' &&
@@ -484,6 +459,7 @@ export function CareerWorkspaceShell({
                 onOpenTariffs={() => navigate('tariffs')}
                 onOpenConnections={openConnections}
                 onOpenNotifications={openNotifications}
+                onOpenAutomation={() => navigate('automation')}
                 onOpenExpert={openExpert}
                 onUpdateWorkspace={onUpdateWorkspace}
               />

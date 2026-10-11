@@ -73,6 +73,7 @@ interface CareerCabinetProps {
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenNotifications?: () => void;
+  onOpenAutomation?: () => void;
   onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -99,6 +100,7 @@ export function CareerCabinet({
   onOpenTariffs,
   onOpenConnections,
   onOpenNotifications,
+  onOpenAutomation,
   onOpenExpert,
   onUpdateWorkspace,
 }: CareerCabinetProps) {
@@ -331,6 +333,7 @@ export function CareerCabinet({
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
             onOpenNotifications={onOpenNotifications}
+            onOpenAutomation={onOpenAutomation}
             onOpenExpert={onOpenExpert}
           />
         )}
@@ -396,6 +399,7 @@ function CabinetSection({
   onOpenTariffs,
   onOpenConnections,
   onOpenNotifications,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   view: CareerCabinetView;
@@ -426,6 +430,7 @@ function CabinetSection({
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenNotifications?: () => void;
+  onOpenAutomation?: () => void;
   onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -508,6 +513,7 @@ function CabinetSection({
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
+        onOpenAutomation={onOpenAutomation}
         initialStageFilter={navigationOptions?.stage}
         initialArchiveOpen={navigationOptions?.openArchive}
         onOpenExpert={onOpenExpert}
