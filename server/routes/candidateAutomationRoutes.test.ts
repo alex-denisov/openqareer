@@ -49,6 +49,7 @@ type Inject = (
 
 afterEach(async () => {
   for (const close of cleanup.splice(0)) await close();
+  vi.useRealTimers();
 });
 
 function cluster(id: string, company: string, title: string) {
@@ -214,6 +215,8 @@ describe('candidate automation API (B452)', () => {
   });
 
   it('builds only server-verified queue items, honors stop companies and previews owned materials', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
     const { inject, repository, candidateStore, listApplications } = await setup();
     await enable(inject);
     repository.addStopCompany('alice', 'Blocked Co', 'manual');

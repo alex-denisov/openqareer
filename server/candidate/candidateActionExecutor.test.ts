@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import {
   CandidateActionExecutor,
@@ -35,6 +35,10 @@ function grantActionConsent(
 }
 
 const daytime = '2026-10-01T12:00:00Z';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('CandidateActionExecutor', () => {
   it('refuses a batch and records nothing when no real platform runner is connected', async () => {
@@ -88,6 +92,8 @@ describe('CandidateActionExecutor', () => {
   });
 
   it('never records delivered without provider confirmation evidence', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(daytime));
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
     const run = vi.fn(async (): Promise<RunnerOutcome> => ({ status: 'delivered' }));
@@ -102,7 +108,6 @@ describe('CandidateActionExecutor', () => {
     const result = await executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: daytime,
       actions: [{ platform: 'hh', actionKind: 'hh_apply', targetUrl: 'https://hh.ru/vacancy/123' }],
     });
 
@@ -244,6 +249,8 @@ describe('CandidateActionExecutor', () => {
   });
 
   it('executes a confirmed and consented batch and retains only status metadata', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(daytime));
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
     const executor = new CandidateActionExecutor({
@@ -257,7 +264,6 @@ describe('CandidateActionExecutor', () => {
     const result = await executor.executeBatch({
       candidateId: 'cand-1',
       confirmedByCandidate: true,
-      nowIso: daytime,
       actions: [
         {
           platform: 'hh',
