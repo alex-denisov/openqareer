@@ -245,6 +245,18 @@ export async function mockSignedInCabinet(
     return true;
   }
 
+  const applicationLabels: Array<{ id: string; name: string; createdAt: string }> = [];
+  const companyWants: Array<{
+    companyKey: string;
+    companyName: string;
+    nextStep: string | null;
+    nextStepDueAt: string | null;
+    updatedAt: string;
+  }> = [];
+  const applicationOperationResults = new Map<
+    string,
+    { fingerprint: string; result: Record<string, unknown> }
+  >();
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
@@ -349,6 +361,124 @@ export async function mockSignedInCabinet(
       record.updatedAt = '2026-10-10T00:02:00.000Z';
       return route.fulfill({ json: { data: record } });
     }
+    if (path.endsWith('/candidate/application-labels')) {
+      if (route.request().method() === 'POST') {
+        const name = String(route.request().postDataJSON().name ?? '')
+          .trim()
+          .replace(/\s+/gu, ' ');
+        const existing = applicationLabels.find(
+          (label) => label.name.toLocaleLowerCase('und') === name.toLocaleLowerCase('und'),
+        );
+        const label = existing ?? {
+          id: `mock-label-${applicationLabels.length + 1}`,
+          name,
+          createdAt: new Date().toISOString(),
+        };
+        if (!existing) applicationLabels.push(label);
+        return route.fulfill({ status: existing ? 200 : 201, json: { data: label } });
+      }
+      return route.fulfill({ json: { data: applicationLabels } });
+    }
+    if (path.endsWith('/candidate/applications/company-wants/bulk/preview')) {
+      const body = route.request().postDataJSON();
+      const wanted = new Set(
+        companyWants.map((company) => company.companyName.toLocaleLowerCase('und')),
+      );
+      const companies = Array.isArray(body.companies)
+        ? (body.companies as Array<{ companyName: string }>)
+        : [];
+      const affectedCount = companies.filter((company) =>
+        body.action === 'add'
+          ? !wanted.has(company.companyName.toLocaleLowerCase('und'))
+          : wanted.has(company.companyName.toLocaleLowerCase('und')),
+      ).length;
+      return route.fulfill({ json: { data: { affectedCount } } });
+    }
+    if (path.endsWith('/candidate/applications/company-wants/bulk')) {
+      const body = route.request().postDataJSON();
+      const replay = applicationOperationResults.get(String(body.operationId));
+      const fingerprint = JSON.stringify({
+        action: body.action,
+        companies: body.companies,
+        confirmCount: body.confirmCount,
+      });
+      if (replay) {
+        if (replay.fingerprint !== fingerprint)
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: 'idempotency_key_reused' } },
+          });
+        return route.fulfill({ json: { data: { ...replay.result, replayed: true } } });
+      }
+      const companies = Array.isArray(body.companies)
+        ? (body.companies as Array<Record<string, unknown>>)
+        : [];
+      const keys = new Set(
+        companyWants.map((company) => company.companyName.toLocaleLowerCase('und')),
+      );
+      const targets = companies.filter((company) => {
+        const exists = keys.has(String(company.companyName).toLocaleLowerCase('und'));
+        return body.action === 'add' ? !exists : exists;
+      });
+      if (Number(body.confirmCount) !== targets.length) {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: 'bulk_confirmation_count_changed',
+              details: { affectedCount: targets.length },
+            },
+          },
+        });
+      }
+      for (const company of targets)
+        applyMockCompanyWant(companyWants, company, String(body.action));
+      const result = { state: 'completed', changedCount: targets.length };
+      applicationOperationResults.set(String(body.operationId), { fingerprint, result });
+      return route.fulfill({ json: { data: { ...result, replayed: false } } });
+    }
+    if (path.endsWith('/candidate/applications/company-wants')) {
+      return route.fulfill({ json: { data: companyWants } });
+    }
+    if (path.endsWith('/candidate/applications/bulk/preview')) {
+      return route.fulfill({ json: { data: { affectedCount: 0 } } });
+    }
+    if (path.endsWith('/candidate/applications/bulk')) {
+      const body = route.request().postDataJSON();
+      const fingerprint = JSON.stringify({
+        filters: body.filters,
+        action: body.action,
+        confirmCount: body.confirmCount,
+      });
+      const replay = applicationOperationResults.get(String(body.operationId));
+      if (replay) {
+        if (replay.fingerprint !== fingerprint)
+          return route.fulfill({
+            status: 409,
+            json: { error: { code: 'idempotency_key_reused' } },
+          });
+        return route.fulfill({ json: { data: { ...replay.result, replayed: true } } });
+      }
+      if (Number(body.confirmCount) !== 0) {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: { code: 'bulk_confirmation_count_changed', details: { affectedCount: 0 } },
+          },
+        });
+      }
+      const result =
+        body.action?.type === 'retry'
+          ? { state: 'prepared', preparedCount: 0, sentCount: 0, changedCount: 0 }
+          : { state: 'completed', changedCount: 0 };
+      applicationOperationResults.set(String(body.operationId), { fingerprint, result });
+      return route.fulfill({ json: { data: { ...result, replayed: false } } });
+    }
+    if (/\/candidate\/applications\/[^/]+\/labels\/[^/]+$/u.test(path)) {
+      return route.fulfill({ status: 404, json: { error: { code: 'application_not_found' } } });
+    }
+    // The readability fixture has no tracked applications yet; an empty
+    // list is the honest state, not an unknown route.
     if (path.endsWith('/candidate/drafts')) {
       return route.fulfill({ json: { data: [] } });
     }
@@ -629,4 +759,39 @@ export async function mockSignedInCabinet(
   });
   await mockCandidateCompanies(page, { companyCount: options.companyCount });
   return unmatched;
+}
+
+function applyMockCompanyWant(
+  wants: Array<{
+    companyKey: string;
+    companyName: string;
+    nextStep: string | null;
+    nextStepDueAt: string | null;
+    updatedAt: string;
+  }>,
+  company: Record<string, unknown>,
+  action: string,
+): void {
+  const companyName = String(company.companyName ?? '')
+    .trim()
+    .replace(/\s+/gu, ' ');
+  const normalized = companyName.normalize('NFKC').toLocaleLowerCase('und');
+  const index = wants.findIndex(
+    (want) => want.companyName.normalize('NFKC').toLocaleLowerCase('und') === normalized,
+  );
+  if (action === 'add' && index < 0) {
+    wants.push({
+      companyKey: `mock:${normalized}`,
+      companyName,
+      nextStep: null,
+      nextStepDueAt: null,
+      updatedAt: new Date().toISOString(),
+    });
+  }
+  if (action === 'set_next_step' && index >= 0) {
+    wants[index]!.nextStep = String(company.nextStep ?? '');
+    wants[index]!.nextStepDueAt = company.nextStepDueAt ? String(company.nextStepDueAt) : null;
+    wants[index]!.updatedAt = new Date().toISOString();
+  }
+  if (action === 'remove' && index >= 0) wants.splice(index, 1);
 }
