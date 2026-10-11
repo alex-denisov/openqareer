@@ -47,6 +47,8 @@ import type { SqliteReferralTrackRepository } from './sqliteReferralTrackReposit
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { InterviewSession } from '../domain/interviewSimulator';
+import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import type { SqliteStarStoriesRepository, StoredStarStory } from './sqliteStarStoriesRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
@@ -115,6 +117,8 @@ export interface CandidateExport extends CandidateSnapshot {
   roleSkillAssessments: RoleSkillAssessmentRun[];
   /** Candidate-owned reusable STAR stories (B466). */
   starStories: StoredStarStory[];
+  /** Current encrypted mock-interview session (B356). */
+  interviewSession: InterviewSession | null;
 }
 
 type CandidateDocumentKind =
@@ -384,6 +388,7 @@ export interface CandidateStore {
   readonly starPrepRepo: SqliteStarPrepRepository;
   /** Повторно используемые STAR-истории кандидата (B466), текст запечатан. */
   readonly starStoriesRepo: SqliteStarStoriesRepository;
+  readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
   /** Трек внутренней рекомендации на отклик (B389), контакт запечатан. */
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */

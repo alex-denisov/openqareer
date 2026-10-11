@@ -3,6 +3,7 @@ import {
   createRoleSkillAssessmentFixture,
   type MockSignedInCabinetOptions,
 } from './mockRoleSkillAssessment';
+import { mockInterviewSimulatorRoutes } from './mockInterviewSimulator';
 import { createMockStarStoriesFixture } from './mockStarStories';
 export type { MockSignedInCabinetOptions } from './mockRoleSkillAssessment';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
@@ -362,5 +363,6 @@ export async function mockSignedInCabinet(
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
   await mockCandidateCompanies(page);
+  await mockInterviewSimulatorRoutes(page);
   return unmatched;
 }

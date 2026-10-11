@@ -13,6 +13,7 @@ import { registerCareerVectorRoutes } from './careerVectorRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
 import { registerStarStoryRoutes } from './starStoryRoutes';
+import { registerInterviewSimulatorRoutes } from './interviewSimulatorRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
@@ -369,6 +370,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationOfferRoutes(app, deps);
   registerStarPrepRoutes(app, deps);
   registerStarStoryRoutes(app, deps);
+  registerInterviewSimulatorRoutes(app, deps);
   registerReferralTrackRoutes(app, deps);
   registerCareerVectorRoutes(app, deps);
   registerDecisionProfileRoutes(app, deps);

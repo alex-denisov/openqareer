@@ -38,6 +38,7 @@ import {
 import { MIGRATION_40 } from '../consultantHistorySchema';
 import { MIGRATION_41 } from '../roleSkillAssessmentSchema';
 import { MIGRATION_42 } from '../starStoriesSchema';
+import { MIGRATION_43 } from '../interviewSimulatorSchema';
 
 const MIGRATIONS = [
   MIGRATION_1,
@@ -81,6 +82,7 @@ const MIGRATIONS = [
   MIGRATION_40,
   MIGRATION_41,
   MIGRATION_42,
+  MIGRATION_43,
 ];
 
 export function applyMigrations(

@@ -44,9 +44,11 @@ import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileReposito
 import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
+import { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
+import { toExportedSourceConnection } from './store/exportedSourceConnection';
 import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
@@ -112,6 +114,7 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly starStoriesRepo: SqliteStarStoriesRepository;
+  readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
@@ -172,6 +175,7 @@ export class SqliteCandidateStore implements CandidateStore {
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.starStoriesRepo = new SqliteStarStoriesRepository(this.database, this.sealedText);
+    this.interviewSimulatorRepo = new SqliteInterviewSimulatorRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
     this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
     this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
@@ -706,20 +710,13 @@ export class SqliteCandidateStore implements CandidateStore {
     const snapshot = this.getSnapshot(candidateId);
     return {
       ...snapshot,
-      sourceConnections: this.sourceConnections.list(candidateId).map((connection) => ({
-        id: connection.id,
-        platform: connection.platform,
-        accessMode: connection.accessMode,
-        connectedAt: connection.connectedAt,
-        lastImportedAt: connection.lastImportedAt,
-        capturedAt: connection.receipt.capturedAt,
-        factCount: connection.receipt.factCount,
-      })),
+      sourceConnections: this.sourceConnections.list(candidateId).map(toExportedSourceConnection),
       // Решение о собственной роли — данные кандидата, а не служебная запись.
       careerStrategy: this.careerStrategyRepository.get(candidateId),
       workPreferences: this.workPreferenceRepository.get(candidateId),
       roleSkillAssessments: this.roleSkillAssessments.list(candidateId),
       starStories: this.starStoriesRepo.list(candidateId),
+      interviewSession: this.interviewSimulatorRepo.getCurrent(candidateId),
       consultantConversations: this.exportConsultantConversations(candidateId),
       documentContents: snapshot.documents.flatMap((document) => {
         const stored = this.documentRepository.get(candidateId, document.id);
