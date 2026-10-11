@@ -4,10 +4,45 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { listCareerDiaryAchievements, listCareerDiaryReviews } from './careerDiaryApi';
 import type { CareerDiaryLoadState } from './useCareerDiaryOverview';
 
-export type CareerDiaryTab = 'goals' | 'reviews' | 'achievements';
+export type CareerDiaryTab = 'goals' | 'reviews' | 'achievements' | 'quarter' | 'adaptation';
 export type CareerDiaryRecord = CareerDiaryWeeklyReview | CareerDiaryAchievement;
 
 const RECORDS_PAGE_SIZE = 20;
+
+function useLoadCareerDiaryRecordPage(
+  tab: CareerDiaryTab,
+  revision: number,
+  setRecords: (records: CareerDiaryRecord[]) => void,
+  setNextCursor: (cursor: string | null) => void,
+  setState: (state: CareerDiaryLoadState) => void,
+  setError: (error: string | null) => void,
+) {
+  useEffect(() => {
+    if (tab !== 'reviews' && tab !== 'achievements') {
+      setRecords([]);
+      setNextCursor(null);
+      setError(null);
+      setState('ready');
+      return undefined;
+    }
+    const controller = new AbortController();
+    setState('loading');
+    setError(null);
+    const request = tab === 'reviews'
+      ? listCareerDiaryReviews({ limit: RECORDS_PAGE_SIZE, signal: controller.signal })
+      : listCareerDiaryAchievements({ limit: RECORDS_PAGE_SIZE, signal: controller.signal });
+    void request.then((page) => {
+      setRecords([...page.items]);
+      setNextCursor(page.nextCursor);
+      setState('ready');
+    }).catch((reason: unknown) => {
+      if (controller.signal.aborted) return;
+      setError(apiErrorMessage(reason, 'Не удалось загрузить записи дневника.'));
+      setState('error');
+    });
+    return () => controller.abort();
+  }, [revision, tab, setError, setNextCursor, setRecords, setState]);
+}
 
 export function useCareerDiaryRecords(tab: CareerDiaryTab) {
   const [records, setRecords] = useState<CareerDiaryRecord[]>([]);
@@ -18,31 +53,10 @@ export function useCareerDiaryRecords(tab: CareerDiaryTab) {
   const [revision, setRevision] = useState(0);
   const loadingMoreRef = useRef(false);
   const reload = useCallback(() => setRevision((current) => current + 1), []);
-
-  useEffect(() => {
-    if (tab === 'goals') return undefined;
-    const controller = new AbortController();
-    setState('loading');
-    setError(null);
-    const request = tab === 'reviews'
-      ? listCareerDiaryReviews({ limit: RECORDS_PAGE_SIZE, signal: controller.signal })
-      : listCareerDiaryAchievements({ limit: RECORDS_PAGE_SIZE, signal: controller.signal });
-    void request
-      .then((page) => {
-        setRecords([...page.items]);
-        setNextCursor(page.nextCursor);
-        setState('ready');
-      })
-      .catch((reason: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(apiErrorMessage(reason, 'Не удалось загрузить записи дневника.'));
-        setState('error');
-      });
-    return () => controller.abort();
-  }, [revision, tab]);
+  useLoadCareerDiaryRecordPage(tab, revision, setRecords, setNextCursor, setState, setError);
 
   const loadMore = useCallback(async () => {
-    if (tab === 'goals' || !nextCursor || loadingMoreRef.current) return;
+    if ((tab !== 'reviews' && tab !== 'achievements') || !nextCursor || loadingMoreRef.current) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {

@@ -18,6 +18,8 @@ const diaryApi = vi.hoisted(() => ({
   listCareerDiaryMeasurements: vi.fn(),
   listCareerDiaryReviews: vi.fn(),
   listCareerDiaryAchievements: vi.fn(),
+  getCareerDiaryWorkplace: vi.fn(),
+  updateCareerDiaryWorkplace: vi.fn(),
   createCareerDiaryGoal: vi.fn(),
   updateCareerDiaryGoal: vi.fn(),
   deleteCareerDiaryGoal: vi.fn(),
@@ -101,6 +103,7 @@ describe('CareerDiaryPage goals', () => {
     diaryApi.listCareerDiaryMeasurements.mockResolvedValue(page([measurement]));
     diaryApi.listCareerDiaryReviews.mockResolvedValue(page([]));
     diaryApi.listCareerDiaryAchievements.mockResolvedValue(page([]));
+    diaryApi.updateCareerDiaryGoal.mockResolvedValue(riskyGoal);
   });
 
   afterEach(() => {
@@ -129,6 +132,20 @@ describe('CareerDiaryPage goals', () => {
     expect(host.textContent).toContain('Цели и KPI');
     expect(buttonNamed(/снизить число инцидентов p1/i)).not.toBeNull();
     expect(host.textContent).toContain('Под риском');
+  });
+
+  it('shows quarter results and persists the candidate keep decision', async () => {
+    await renderPage();
+
+    await act(async () => buttonNamed('Анализ квартала').click());
+    expect(host.textContent).toContain('Итоги Q4 2026');
+    expect(host.textContent).toContain('Целей достигнуто');
+    expect(host.textContent).toContain('Насколько можно верить расчёту');
+
+    await act(async () => buttonNamed('Оставить в Q4').click());
+    expect(diaryApi.updateCareerDiaryGoal).toHaveBeenCalledWith('goal-1', expect.objectContaining({
+      quarterDecision: { quarterId: 'Q4 2026', decision: 'keep', decidedAt: '2026-12-02' },
+    }));
   });
 
   it('opens a goal detail with its data-backed chart and measurement history', async () => {

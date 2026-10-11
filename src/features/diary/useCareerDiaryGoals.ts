@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { CareerDiaryGoalSummary } from '../../../shared/careerDiary';
+import type { CareerDiaryGoalWithQuarterDecision } from './careerDiaryPlanning';
 import { apiErrorMessage } from '../coach/apiClient';
 import { listCareerDiaryGoals } from './careerDiaryApi';
 import type { CareerDiaryLoadState } from './useCareerDiaryOverview';
@@ -7,7 +7,7 @@ import type { CareerDiaryLoadState } from './useCareerDiaryOverview';
 const GOALS_PAGE_SIZE = 20;
 
 export function useCareerDiaryGoals() {
-  const [goals, setGoals] = useState<CareerDiaryGoalSummary[]>([]);
+  const [goals, setGoals] = useState<CareerDiaryGoalWithQuarterDecision[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [state, setState] = useState<CareerDiaryLoadState>('loading');
   const [error, setError] = useState<string | null>(null);

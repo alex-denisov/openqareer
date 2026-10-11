@@ -317,6 +317,109 @@ describe('career diary API (B456)', () => {
     }
   });
 
+  it('round-trips adaptation planning in the candidate-scoped workplace payload', async () => {
+    const { app, candidateStore, first, second } = await createApi();
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/career-diary/workplaces',
+        headers: auth(first),
+        payload: { company: 'Норма Групп', title: 'Head of Engineering', startDate: '2026-11-06' },
+      });
+      const workplaceId = created.json().data.id as string;
+      const planning = {
+        adaptationPlan: {
+          id: 'plan-1',
+          workplaceId,
+          startDate: '2026-11-06',
+          createdAt: '2026-10-20T12:00:00.000Z',
+          status: 'active',
+          closedAt: null,
+          tasks: [{
+            id: 'task-1',
+            title: 'Сверить ожидания',
+            description: 'Уточнить приоритеты первых недель.',
+            stage: 'prep',
+            category: 'alignment',
+            dueDate: '2026-11-06',
+            completed: false,
+            source: 'template',
+          }],
+        },
+      };
+      const saved = await app.inject({
+        method: 'PATCH',
+        url: '/api/v1/candidate/career-diary/workplaces/' + workplaceId,
+        headers: auth(first),
+        payload: { planning },
+      });
+      expect(saved.statusCode).toBe(200);
+      expect(saved.json().data.planning).toEqual(planning);
+      const reread = await app.inject({
+        method: 'GET',
+        url: '/api/v1/candidate/career-diary/workplaces/' + workplaceId,
+        headers: auth(first),
+      });
+      expect(reread.json().data.planning).toEqual(planning);
+
+      const otherCandidate = await app.inject({
+        method: 'GET',
+        url: '/api/v1/candidate/career-diary/workplaces/' + workplaceId,
+        headers: auth(second),
+      });
+      expect(otherCandidate.statusCode).toBe(404);
+
+      await app.inject({
+        method: 'PUT',
+        url: '/api/v1/candidate/career-diary/workplaces/' + workplaceId + '/archive',
+        headers: auth(first),
+        payload: { endDate: '2026-12-31' },
+      });
+      const rejected = await app.inject({
+        method: 'PATCH',
+        url: '/api/v1/candidate/career-diary/workplaces/' + workplaceId,
+        headers: auth(first),
+        payload: { planning },
+      });
+      expect(rejected.statusCode).toBe(409);
+    } finally {
+      await app.close();
+      candidateStore.close();
+    }
+  });
+
+  it('persists a quarter decision together with the goal horizon change', async () => {
+    const { app, candidateStore, first } = await createApi();
+    try {
+      const created = await app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/career-diary/goals',
+        headers: auth(first),
+        payload: goalInput,
+      });
+      const goalId = created.json().data.id as string;
+      const updated = await app.inject({
+        method: 'PATCH',
+        url: '/api/v1/candidate/career-diary/goals/' + goalId,
+        headers: auth(first),
+        payload: {
+          horizon: 'next_quarter',
+          dueDate: '2027-03-31',
+          quarterDecision: { quarterId: 'Q4 2026', decision: 'move', decidedAt: '2026-12-06' },
+        },
+      });
+      expect(updated.statusCode).toBe(200);
+      expect(updated.json().data).toMatchObject({
+        horizon: 'next_quarter',
+        dueDate: '2027-03-31',
+        quarterDecision: { quarterId: 'Q4 2026', decision: 'move' },
+      });
+    } finally {
+      await app.close();
+      candidateStore.close();
+    }
+  });
+
   it('uses stable cursor pages and rejects malformed cursors', async () => {
     const { app, candidateStore, first } = await createApi();
     try {

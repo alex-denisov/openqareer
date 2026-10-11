@@ -3,7 +3,6 @@ import {
   type CareerDiaryAchievementInput,
   type CareerDiaryAchievementStatus,
   type CareerDiaryGoalInput,
-  type CareerDiaryGoalPatch,
   type CareerDiaryGoalSummary,
   type CareerDiaryMeasurement,
   type CareerDiaryMeasurementInput,
@@ -12,6 +11,12 @@ import {
   type CareerDiaryWeeklyReview,
   type CareerDiaryWeeklyReviewInput,
 } from '../../../shared/careerDiary';
+import type {
+  CareerDiaryGoalPatchWithQuarterDecision,
+  CareerDiaryGoalWithQuarterDecision,
+  CareerDiaryWorkplacePatchWithPlanning,
+  CareerDiaryWorkplaceWithPlanning,
+} from './careerDiaryPlanning';
 import { apiFetch, readData } from '../coach/apiClient';
 
 const API_ROOT = '/api/v1/candidate/career-diary';
@@ -48,18 +53,38 @@ export function getCareerDiaryOverview(signal?: AbortSignal): Promise<CareerDiar
   return readResponse(API_ROOT, { signal });
 }
 
+export function getCareerDiaryWorkplace(
+  workplaceId: string,
+  signal?: AbortSignal,
+): Promise<CareerDiaryWorkplaceWithPlanning> {
+  return readResponse(
+    `${API_ROOT}/workplaces/${encodeURIComponent(workplaceId)}`,
+    { signal },
+  );
+}
+
+export function updateCareerDiaryWorkplace(
+  workplaceId: string,
+  patch: CareerDiaryWorkplacePatchWithPlanning,
+): Promise<CareerDiaryWorkplaceWithPlanning> {
+  return readResponse(
+    `${API_ROOT}/workplaces/${encodeURIComponent(workplaceId)}`,
+    jsonMutation('PATCH', patch),
+  );
+}
+
 export function listCareerDiaryGoals(input: {
   limit: number;
   cursor?: string;
   signal?: AbortSignal;
-}): Promise<CareerDiaryPage<CareerDiaryGoalSummary>> {
+}): Promise<CareerDiaryPage<CareerDiaryGoalWithQuarterDecision>> {
   return readResponse(pagePath('goals', input.limit, input.cursor), { signal: input.signal });
 }
 
 export function getCareerDiaryGoal(
   goalId: string,
   signal?: AbortSignal,
-): Promise<CareerDiaryGoalSummary> {
+): Promise<CareerDiaryGoalWithQuarterDecision> {
   return readResponse(`${API_ROOT}/goals/${encodeURIComponent(goalId)}`, { signal });
 }
 
@@ -69,8 +94,8 @@ export function createCareerDiaryGoal(input: CareerDiaryGoalInput): Promise<Care
 
 export function updateCareerDiaryGoal(
   goalId: string,
-  patch: CareerDiaryGoalPatch,
-): Promise<CareerDiaryGoalSummary> {
+  patch: CareerDiaryGoalPatchWithQuarterDecision,
+): Promise<CareerDiaryGoalWithQuarterDecision> {
   return readResponse(
     `${API_ROOT}/goals/${encodeURIComponent(goalId)}`,
     jsonMutation('PATCH', patch),

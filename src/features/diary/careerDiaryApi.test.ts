@@ -4,9 +4,12 @@ import { apiFetch, readData } from '../coach/apiClient';
 import {
   createCareerDiaryAchievement,
   createCareerDiaryGoal,
+  getCareerDiaryWorkplace,
   listCareerDiaryGoals,
   recordCareerDiaryMeasurement,
   setCareerDiaryAchievementStatus,
+  updateCareerDiaryGoal,
+  updateCareerDiaryWorkplace,
   upsertCareerDiaryReview,
 } from './careerDiaryApi';
 
@@ -121,6 +124,38 @@ describe('career diary API client', () => {
     expect(apiFetch).toHaveBeenCalledWith(
       '/api/v1/candidate/career-diary/achievements/achievement-1',
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ status: 'dismissed' }) }),
+    );
+  });
+
+  it('loads and updates the candidate-scoped workplace planning payload', async () => {
+    const planning = { adaptationPlan: null };
+    const signal = new AbortController().signal;
+
+    await getCareerDiaryWorkplace('workplace id/one', signal);
+    await updateCareerDiaryWorkplace('workplace id/one', { planning });
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/workplaces/workplace%20id%2Fone',
+      expect.objectContaining({ signal }),
+    );
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/workplaces/workplace%20id%2Fone',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ planning }) }),
+    );
+  });
+
+  it('persists a quarter decision through the existing goal patch route', async () => {
+    const patch = {
+      horizon: 'next_quarter' as const,
+      dueDate: '2027-03-31',
+      quarterDecision: { quarterId: 'Q4 2026', decision: 'move' as const, decidedAt: '2026-12-06' },
+    };
+
+    await updateCareerDiaryGoal('goal-1', patch);
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/goals/goal-1',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify(patch) }),
     );
   });
 });

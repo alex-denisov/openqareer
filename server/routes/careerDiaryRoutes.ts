@@ -8,6 +8,7 @@ import type {
   CareerDiaryMeasurement,
   CareerDiaryWorkplace,
 } from '../../shared/careerDiary';
+import { careerDiaryPlanningSchema, careerDiaryQuarterDecisionSchema } from '../domain/careerDiaryAdaptation';
 import type { RouteDeps } from './deps';
 import {
   CareerDiaryIdempotencyConflictError,
@@ -58,7 +59,9 @@ const goalInputSchema = goalFieldsSchema.refine(
   (value) => value.dueDate >= value.startDate,
   'due_date_before_start',
 );
-const goalPatchSchema = goalFieldsSchema.partial().strict().refine(
+const goalPatchSchema = goalFieldsSchema.partial().extend({
+  quarterDecision: careerDiaryQuarterDecisionSchema.optional(),
+}).strict().refine(
   (value) => Object.keys(value).length > 0 &&
     (!value.startDate || !value.dueDate || value.dueDate >= value.startDate),
   'invalid_goal_patch',
@@ -104,7 +107,9 @@ const workplaceSchema = workplaceFieldsSchema.refine(
   (value) => !value.endDate || value.endDate >= value.startDate,
   'end_date_before_start',
 );
-const workplacePatchSchema = workplaceFieldsSchema.partial().strict().refine(
+const workplacePatchSchema = workplaceFieldsSchema.partial().extend({
+  planning: careerDiaryPlanningSchema.optional(),
+}).strict().refine(
   (value) => Object.keys(value).length > 0 &&
     (!value.startDate || !value.endDate || value.endDate === null || value.endDate >= value.startDate),
   'invalid_workplace_patch',
@@ -573,6 +578,20 @@ const handleUpdateWorkplace: Handler = async (deps, request, reply) => {
   const current = deps.candidateStore.careerDiaryRepo.listWorkplaces(candidate.id)
     .find((item) => item.id === workplaceId);
   if (!current) return missingRecord(reply, request);
+  if (parsed.data.planning && current.status === 'archived') {
+    return sendError(
+      reply,
+      request,
+      409,
+      'career_diary_workplace_archived',
+      'Архивное место работы доступно только для чтения.',
+      false,
+    );
+  }
+  if (parsed.data.planning?.adaptationPlan?.workplaceId !== undefined &&
+      parsed.data.planning.adaptationPlan.workplaceId !== workplaceId) {
+    return invalidInput(reply, request);
+  }
   const startDate = parsed.data.startDate ?? current.startDate;
   const endDate = parsed.data.endDate === undefined ? current.endDate : parsed.data.endDate;
   if (endDate && endDate < startDate) return invalidInput(reply, request);
