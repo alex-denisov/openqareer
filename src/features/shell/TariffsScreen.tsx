@@ -2,22 +2,12 @@ import { useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { CareerTariffsView, type TariffTierId } from '../tariffs';
 import { BillingManagementPanel } from '../tariffs/BillingManagementPanel';
-import {
-  cancelCandidateBillingRenewal,
-  type CandidateCurrentPlanId,
-} from './candidateBillingApi';
+import { cancelCandidateBillingRenewal, type CandidateCurrentPlanId } from './candidateBillingApi';
 import { useCandidateBillingReceipts, useCandidateBillingSummary } from './candidateBillingHooks';
-import { usePlanRequests, type PlanRequestId } from './planRequestApi';
 
 type CancellationState = 'idle' | 'pending' | 'done' | 'error';
 
-/** Выбор тарифа пока ведёт на сохранённую заявку; B470 подключает checkout. */
-function requestFor(tier: TariffTierId): PlanRequestId {
-  return tier === 'max' || tier === 'exec' ? 'consultant' : 'automation';
-}
-
 export function TariffsScreen() {
-  const requests = usePlanRequests();
   const billing = useCandidateBillingSummary();
   const receipts = useCandidateBillingReceipts();
   const [cancellationState, setCancellationState] = useState<CancellationState>('idle');
@@ -61,9 +51,9 @@ export function TariffsScreen() {
   return (
     <CareerTariffsView
       activeTierId={tariffTierFor(summary.currentPlan)}
+      billingSummary={summary}
       billingPanel={panel}
-      onSelectTier={(tier) => requests.send(requestFor(tier))}
-      onRequestTier={(tier) => requests.send(requestFor(tier))}
+      onSummaryChanged={billing.applySummary}
     />
   );
 }
@@ -78,7 +68,10 @@ function BillingLoadingState() {
 
 function BillingErrorState({ onRetry }: { readonly onRetry: () => void }) {
   return (
-    <section className="career-tariffs career-billing-page-state" aria-labelledby="billing-load-error">
+    <section
+      className="career-tariffs career-billing-page-state"
+      aria-labelledby="billing-load-error"
+    >
       <h2 id="billing-load-error">Не удалось загрузить тариф</h2>
       <p role="alert">Проверьте соединение и повторите попытку.</p>
       <button className="career-btn career-btn-secondary" type="button" onClick={onRetry}>

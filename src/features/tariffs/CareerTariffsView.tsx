@@ -1,13 +1,12 @@
 import { useState, type ReactNode } from 'react';
 import { ListChecks } from '@phosphor-icons/react';
-import {
-  TARIFF_LEVELS,
-  type TariffSubscriptionInfo,
-  type TariffTierId,
-} from './tariffsData';
+import type { CandidateBillingSummary } from '../shell/candidateBillingApi';
+import { TARIFF_LEVELS, type TariffSubscriptionInfo, type TariffTierId } from './tariffsData';
 import { TariffCard } from './TariffCard';
 import { TariffComparisonTable } from './TariffComparisonTable';
 import { TariffMobileView } from './TariffMobileView';
+import { PaywallModal } from './PaywallModal';
+import type { TariffUpgradeContext } from './TariffUpgradeFlow';
 
 if (typeof document !== 'undefined') {
   void import('./tariffs.css');
@@ -18,6 +17,8 @@ export interface CareerTariffsViewProps {
   readonly activeTierId?: TariffTierId;
   readonly initialView?: string;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingSummary?: CandidateBillingSummary | null;
+  readonly onSummaryChanged?: (summary: CandidateBillingSummary) => void;
   readonly billingPanel?: ReactNode;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
@@ -27,46 +28,145 @@ export function CareerTariffsView({
   activeTierId = 'free',
   initialView = 'home',
   subscription,
+  billingSummary,
+  onSummaryChanged,
   billingPanel,
   onSelectTier,
   onRequestTier,
 }: CareerTariffsViewProps) {
   const [compareOpen, setCompareOpen] = useState(false);
+  const [mobileCompareRevision, setMobileCompareRevision] = useState(0);
+  const activeTier = billingSummary ? tierForPlan(billingSummary.currentPlan) : activeTierId;
+  const upgrade = useTariffUpgradeCallbacks(onSelectTier, onRequestTier);
+  const compare = () => {
+    setCompareOpen(true);
+    setMobileCompareRevision((revision) => revision + 1);
+  };
 
   return (
-    <section className="career-tariffs" aria-labelledby="tariffs-page-title">
-      <div className="career-tariffs-desktop">
-        <TariffsDesktopHeader
-          onToggleCompare={() => setCompareOpen((prev) => !prev)}
-        />
-        {billingPanel}
-        <div className="career-tariffs-ladder">
-          {TARIFF_LEVELS.map((level) => (
-            <TariffCard
-              key={level.id}
-              level={level}
-              activeTierId={activeTierId}
-              subscription={subscription}
-              onSelectTier={onSelectTier}
-              onRequestTier={onRequestTier}
-            />
-          ))}
-        </div>
-        <TariffComparisonTable defaultOpen={compareOpen} />
-      </div>
+    <TariffsViewFrame
+      activeTier={activeTier}
+      initialView={initialView}
+      subscription={subscription}
+      billingSummary={billingSummary}
+      billingPanel={billingPanel}
+      compareOpen={compareOpen}
+      mobileCompareRevision={mobileCompareRevision}
+      upgradeContext={upgrade.context}
+      onSelectTier={upgrade.selectTier}
+      onRequestTier={upgrade.requestTier}
+      onCompare={compare}
+      onCloseUpgrade={upgrade.close}
+      onNavigateToCompare={compare}
+      onSummaryChanged={onSummaryChanged}
+    />
+  );
+}
 
-      <div className="career-tariffs-mobile">
-        <TariffMobileView
-          activeTierId={activeTierId}
-          initialView={initialView}
-          subscription={subscription}
-          billingPanel={billingPanel}
-          onSelectTier={onSelectTier}
-          onRequestTier={onRequestTier}
-        />
-      </div>
+function useTariffUpgradeCallbacks(
+  onSelectTier?: (id: TariffTierId) => void,
+  onRequestTier?: (id: TariffTierId) => void,
+) {
+  const [context, setContext] = useState<TariffUpgradeContext | null>(null);
+  const selectTier = (id: TariffTierId) => {
+    const next = upgradeContextForTier(id);
+    if (next) setContext(next);
+    else onSelectTier?.(id);
+  };
+  const requestTier = (id: TariffTierId) => {
+    if (id === 'exec') setContext({ kind: 'executive' });
+    else onRequestTier?.(id);
+  };
+  const close = () => setContext(null);
+  return { context, selectTier, requestTier, close };
+}
+
+interface TariffsViewFrameProps {
+  readonly activeTier: TariffTierId;
+  readonly initialView: string;
+  readonly subscription?: TariffSubscriptionInfo;
+  readonly billingSummary?: CandidateBillingSummary | null;
+  readonly billingPanel?: ReactNode;
+  readonly compareOpen: boolean;
+  readonly mobileCompareRevision: number;
+  readonly upgradeContext: TariffUpgradeContext | null;
+  readonly onSelectTier: (id: TariffTierId) => void;
+  readonly onRequestTier: (id: TariffTierId) => void;
+  readonly onCompare: () => void;
+  readonly onCloseUpgrade: () => void;
+  readonly onNavigateToCompare: () => void;
+  readonly onSummaryChanged?: (summary: CandidateBillingSummary) => void;
+}
+
+function TariffsViewFrame(props: TariffsViewFrameProps) {
+  return (
+    <section className="career-tariffs" aria-labelledby="tariffs-page-title">
+      <TariffsDesktopView {...props} />
+      <TariffsMobileView {...props} />
+      {props.upgradeContext ? <TariffUpgradeHost {...props} /> : null}
     </section>
   );
+}
+
+function TariffsDesktopView(props: TariffsViewFrameProps) {
+  return (
+    <div className="career-tariffs-desktop">
+      <TariffsDesktopHeader onToggleCompare={props.onCompare} />
+      {props.billingPanel}
+      <div className="career-tariffs-ladder">
+        {TARIFF_LEVELS.map((level) => (
+          <TariffCard
+            key={level.id}
+            level={level}
+            activeTierId={props.activeTier}
+            subscription={props.subscription}
+            onSelectTier={props.onSelectTier}
+            onRequestTier={props.onRequestTier}
+          />
+        ))}
+      </div>
+      <TariffComparisonTable defaultOpen={props.compareOpen} />
+    </div>
+  );
+}
+
+function TariffsMobileView(props: TariffsViewFrameProps) {
+  return (
+    <div className="career-tariffs-mobile">
+      <TariffMobileView
+        key={props.mobileCompareRevision}
+        activeTierId={props.activeTier}
+        initialView={props.mobileCompareRevision > 0 ? 'cmp' : props.initialView}
+        subscription={props.subscription}
+        billingPanel={props.billingPanel}
+        onSelectTier={props.onSelectTier}
+        onRequestTier={props.onRequestTier}
+      />
+    </div>
+  );
+}
+
+function TariffUpgradeHost(props: TariffsViewFrameProps) {
+  return (
+    <PaywallModal
+      isOpen
+      context={props.upgradeContext!}
+      summary={props.billingSummary}
+      onClose={props.onCloseUpgrade}
+      onNavigate={props.onNavigateToCompare}
+      onSummaryChanged={props.onSummaryChanged}
+    />
+  );
+}
+
+function upgradeContextForTier(id: TariffTierId): TariffUpgradeContext | null {
+  if (id === 'go') return { kind: 'plan', planId: 'basic' };
+  if (id === 'pro' || id === 'max') return { kind: 'plan', planId: id };
+  return null;
+}
+
+function tierForPlan(plan: CandidateBillingSummary['currentPlan']): TariffTierId {
+  return plan === 'basic' ? 'go' : plan;
 }
 
 function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: () => void }) {
@@ -82,8 +182,8 @@ function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: (
         </button>
       </div>
       <p className="career-tariffs-lead">
-        Месячная подписка, автопродление, отмена в 1 клик. Перейти можно на любой тариф, а не
-        только на следующий. Оплата ещё не включена: напишем, когда откроется.
+        Оплата проходит через Robokassa. Тариф включится после подтверждения платежа; автопродление
+        можно отменить в аккаунте.
       </p>
     </div>
   );

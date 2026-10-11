@@ -25,7 +25,9 @@ export function useCandidateBillingSummary() {
       .catch(() => {
         if (active) setState('error');
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [revision]);
 
   const retry = useCallback(() => {
@@ -33,21 +35,27 @@ export function useCandidateBillingSummary() {
     setRevision((current) => current + 1);
   }, []);
   const applyCancellation = useCallback((cancellation: CandidateBillingCancellation) => {
-    setSummary((current) => current
-      ? {
-          ...current,
-          currentPlan: cancellation.planId,
-          subscription: {
-            status: cancellation.status,
-            currentPeriodEndsAt: cancellation.currentPeriodEndsAt,
-            nextChargeAt: cancellation.nextChargeAt,
-            autoRenew: cancellation.autoRenew,
-          },
-        }
-      : current);
+    setSummary((current) =>
+      current
+        ? {
+            ...current,
+            currentPlan: cancellation.planId,
+            subscription: {
+              status: cancellation.status,
+              currentPeriodEndsAt: cancellation.currentPeriodEndsAt,
+              nextChargeAt: cancellation.nextChargeAt,
+              autoRenew: cancellation.autoRenew,
+            },
+          }
+        : current,
+    );
+  }, []);
+  const applySummary = useCallback((nextSummary: CandidateBillingSummary) => {
+    setSummary(nextSummary);
+    setState('ready');
   }, []);
 
-  return { summary, state, retry, applyCancellation };
+  return { summary, state, retry, applyCancellation, applySummary };
 }
 
 export function useCandidateBillingReceipts() {
@@ -70,7 +78,9 @@ export function useCandidateBillingReceipts() {
       .catch(() => {
         if (active) setState('error');
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [revision]);
 
   const retry = useCallback(() => {

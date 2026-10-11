@@ -10,12 +10,88 @@ import {
   workspace,
 } from './readabilityWorkspace';
 
-export async function mockSignedInCabinet(page: Page): Promise<string[]> {
+type FixturePaidPlan = 'basic' | 'pro' | 'max';
+type FixtureCurrentPlan = 'free' | FixturePaidPlan;
+type FixtureCheckoutStatus = 'pending' | 'processing' | 'paid' | 'failed';
+type FixtureExecutiveStatus = 'submitted' | 'waitlisted';
+
+interface FixtureInvoice {
+  readonly invoiceId: number;
+  readonly planId: FixturePaidPlan;
+  readonly amountKopecks: number;
+  readonly currency: 'RUB';
+  readonly status: FixtureCheckoutStatus;
+  readonly autoRenew: boolean;
+  readonly paymentUrl: string;
+  readonly createdAt: string;
+  readonly idempotencyKey: string;
+}
+
+interface FixtureReceipt {
+  readonly invoiceId: number;
+  readonly planId: FixturePaidPlan;
+  readonly amountKopecks: number;
+  readonly currency: 'RUB';
+  readonly paidAt: string | null;
+  readonly paymentMethod: string | null;
+  readonly receiptUrl: string | null;
+  readonly receiptStatus: string | null;
+  readonly fiscalDocumentNumber: string | null;
+  readonly fiscalDate: string | null;
+}
+
+export interface MockSignedInCabinetOptions {
+  readonly billing?: {
+    readonly initialPlan?: FixtureCurrentPlan;
+    readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
+    readonly executiveStatus?: FixtureExecutiveStatus;
+  };
+}
+
+export async function mockSignedInCabinet(
+  page: Page,
+  options: MockSignedInCabinetOptions = {},
+): Promise<string[]> {
   const unmatched: string[] = [];
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
-  let billingAutoRenew = true;
+  let billingCurrentPlan: FixtureCurrentPlan = options.billing?.initialPlan ?? 'basic';
+  let billingAutoRenew = billingCurrentPlan !== 'free';
+  let billingPeriodEnd = '2026-11-08T00:00:00.000Z';
+  let currentInvoice: FixtureInvoice | null = null;
+  let checkoutStatusIndex = 0;
+  const executiveRequest = {
+    id: 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
+    task: '',
+    timeline: '',
+    status: options.billing?.executiveStatus ?? 'waitlisted',
+    createdAt: '2026-10-11T12:00:00.000Z',
+    updatedAt: '2026-10-11T12:00:00.000Z',
+  };
+  let storedExecutiveRequest: typeof executiveRequest | null = null;
+  let receiptRows: FixtureReceipt[] =
+    billingCurrentPlan === 'free'
+      ? []
+      : [
+          {
+            invoiceId: 41,
+            planId: billingCurrentPlan,
+            amountKopecks:
+              billingCurrentPlan === 'basic'
+                ? 399000
+                : billingCurrentPlan === 'pro'
+                  ? 990000
+                  : 3990000,
+            currency: 'RUB' as const,
+            paidAt: '2026-10-10T10:00:00.000Z',
+            paymentMethod: null,
+            receiptUrl: null,
+            receiptStatus: 'not-provided',
+            fiscalDocumentNumber: null,
+            fiscalDate: null,
+          },
+        ];
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -26,16 +102,22 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       return route.fulfill({ json: { data: workspace } });
     }
     if (path === '/api/v1/candidate/billing' && route.request().method() === 'GET') {
+      const currentPlan =
+        currentInvoice?.status === 'paid' ? currentInvoice.planId : billingCurrentPlan;
+      const subscription =
+        currentPlan === 'free'
+          ? null
+          : {
+              status: 'active',
+              currentPeriodEndsAt: billingPeriodEnd,
+              nextChargeAt: billingAutoRenew ? billingPeriodEnd : null,
+              autoRenew: billingAutoRenew,
+            };
       return route.fulfill({
         json: {
           data: {
-            currentPlan: 'basic',
-            subscription: {
-              status: 'active',
-              currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
-              nextChargeAt: billingAutoRenew ? '2026-11-08T00:00:00.000Z' : null,
-              autoRenew: billingAutoRenew,
-            },
+            currentPlan,
+            subscription,
             plans: [
               {
                 id: 'basic',
@@ -48,7 +130,7 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
               {
                 id: 'max',
                 name: 'Max',
-                amountKopecks: 1990000,
+                amountKopecks: 3990000,
                 currency: 'RUB',
                 interval: 'month',
               },
@@ -57,23 +139,76 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
         },
       });
     }
-    if (path === '/api/v1/candidate/billing/receipts' && route.request().method() === 'GET') {
+    if (path === '/api/v1/candidate/billing/checkouts' && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as {
+        planId?: FixturePaidPlan;
+        autoRenew?: boolean;
+      };
+      const amounts: Record<FixturePaidPlan, number> = { basic: 399000, pro: 990000, max: 3990000 };
+      const key = route.request().headers()['idempotency-key'] ?? 'fixture-idempotency-key';
+      if (!body.planId || !(body.planId in amounts)) {
+        return route.fulfill({
+          status: 400,
+          json: { error: { code: 'billing_checkout_invalid' } },
+        });
+      }
+      if (!currentInvoice || currentInvoice.idempotencyKey !== key) {
+        currentInvoice = {
+          invoiceId: 731,
+          planId: body.planId,
+          amountKopecks: amounts[body.planId],
+          currency: 'RUB',
+          status: 'pending',
+          autoRenew: body.autoRenew === true,
+          paymentUrl: 'https://auth.robokassa.ru/Merchant/Index?InvoiceID=731',
+          createdAt: '2026-10-11T12:00:00.000Z',
+          idempotencyKey: key,
+        };
+      }
       return route.fulfill({
-        json: {
-          data: [
+        status: 201,
+        headers: { location: '/api/v1/candidate/billing/checkouts/731' },
+        json: { data: checkoutResponse(currentInvoice) },
+      });
+    }
+    if (path === '/api/v1/candidate/billing/checkouts/731' && route.request().method() === 'GET') {
+      if (!currentInvoice)
+        return route.fulfill({
+          status: 404,
+          json: { error: { code: 'billing_checkout_not_found' } },
+        });
+      const statuses = options.billing?.checkoutStatuses ?? ['pending'];
+      const status = statuses[Math.min(checkoutStatusIndex, statuses.length - 1)] ?? 'pending';
+      checkoutStatusIndex += 1;
+      currentInvoice = { ...currentInvoice, status };
+      if (status === 'paid') {
+        billingCurrentPlan = currentInvoice.planId;
+        billingAutoRenew = currentInvoice.autoRenew;
+        billingPeriodEnd = '2026-11-11T00:00:00.000Z';
+        if (!receiptRows.some((receipt) => receipt.invoiceId === currentInvoice?.invoiceId)) {
+          receiptRows = [
+            ...receiptRows,
             {
-              invoiceId: 41,
-              planId: 'basic',
-              amountKopecks: 399000,
+              invoiceId: currentInvoice.invoiceId,
+              planId: currentInvoice.planId,
+              amountKopecks: currentInvoice.amountKopecks,
               currency: 'RUB',
-              paidAt: '2026-10-10T10:00:00.000Z',
+              paidAt: '2026-10-11T12:05:00.000Z',
               paymentMethod: null,
               receiptUrl: null,
               receiptStatus: 'not-provided',
               fiscalDocumentNumber: null,
               fiscalDate: null,
             },
-          ],
+          ];
+        }
+      }
+      return route.fulfill({ json: { data: checkoutResponse(currentInvoice) } });
+    }
+    if (path === '/api/v1/candidate/billing/receipts' && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: {
+          data: receiptRows,
           meta: { nextCursor: null },
         },
       });
@@ -86,13 +221,33 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       return route.fulfill({
         json: {
           data: {
-            planId: 'basic',
+            planId: billingCurrentPlan === 'free' ? 'basic' : billingCurrentPlan,
             status: 'active',
-            currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+            currentPeriodEndsAt: billingPeriodEnd,
             nextChargeAt: null,
             autoRenew: false,
             cancellationEventId: 'fixture-cancellation-event',
           },
+        },
+      });
+    }
+    if (path === '/api/v1/candidate/executive-requests' && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { task?: string; timeline?: string };
+      const replayed = storedExecutiveRequest !== null;
+      storedExecutiveRequest = {
+        ...executiveRequest,
+        task: body.task ?? '',
+        timeline: body.timeline ?? '',
+      };
+      return route.fulfill({
+        status: replayed ? 200 : 201,
+        json: { data: storedExecutiveRequest, meta: { requestId: 'fixture-request' } },
+      });
+    }
+    if (path === '/api/v1/candidate/executive-requests' && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: {
+          data: { items: storedExecutiveRequest ? [storedExecutiveRequest] : [], nextCursor: null },
         },
       });
     }
@@ -382,4 +537,17 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   });
   await mockCandidateCompanies(page);
   return unmatched;
+}
+
+function checkoutResponse(invoice: FixtureInvoice) {
+  return {
+    invoiceId: invoice.invoiceId,
+    planId: invoice.planId,
+    amountKopecks: invoice.amountKopecks,
+    currency: invoice.currency,
+    status: invoice.status,
+    autoRenew: invoice.autoRenew,
+    paymentUrl: invoice.paymentUrl,
+    createdAt: invoice.createdAt,
+  };
 }
