@@ -14,6 +14,7 @@ import {
 } from '../domain/interviewSimulator';
 import { CoachProviderError } from '../providers/coachProvider';
 import type { CandidateIdentity, StoredMemory } from '../data/candidateStore';
+import type { ApplicationView } from '../domain/applicationDerivedFields';
 import type { RouteDeps } from './deps';
 import {
   authenticateSession,
@@ -127,6 +128,37 @@ const handleGetSession: Handler = async (deps, request, reply) => {
   return { data: { session: sessionView(session) }, meta: { requestId: request.id } };
 };
 
+function createAndPersistStartedSession(
+  deps: RouteDeps,
+  candidateId: string,
+  current: InterviewSession | null,
+  input: z.infer<typeof startSchema>,
+  application: ApplicationView | null,
+  roleTitle: string,
+  stories: ReturnType<typeof candidateStories>['stories'],
+  verifiedSkills: string[],
+): InterviewSession | null {
+  const now = new Date().toISOString();
+  const session = createInterviewSession({
+    id: randomUUID(),
+    mode: input.mode,
+    roleTitle,
+    applicationId: application?.id ?? null,
+    vacancyTitle: application?.vacancy?.title,
+    questionTypes: input.questionTypes as readonly InterviewQuestionType[],
+    stressMode: input.stressMode,
+    stories,
+    verifiedSkills,
+    questionIds: Array.from({ length: INTERVIEW_QUESTION_COUNT }, () => randomUUID()),
+    now,
+  });
+  return current
+    ? deps.candidateStore.interviewSimulatorRepo.replaceCompleted(
+        candidateId, current.id, current.version, session, now,
+      )
+    : deps.candidateStore.interviewSimulatorRepo.create(candidateId, session, now);
+}
+
 const handleStartSession: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, deps.candidateStore, deps.authService, deps.config);
@@ -154,29 +186,9 @@ const handleStartSession: Handler = async (deps, request, reply) => {
   const { snapshot, stories, verifiedSkills } = candidateStories(deps, candidate.id);
   const roleTitle = application?.vacancy?.title ?? parsed.data.roleTitle ?? snapshot.resume?.draft.targetRole;
   if (!roleTitle) return sendError(reply, request, 422, 'interview_role_required', 'Выберите роль для тренировки.', false);
-  const now = new Date().toISOString();
-  const session = createInterviewSession({
-    id: randomUUID(),
-    mode: parsed.data.mode,
-    roleTitle,
-    applicationId: application?.id ?? null,
-    vacancyTitle: application?.vacancy?.title,
-    questionTypes: parsed.data.questionTypes as readonly InterviewQuestionType[],
-    stressMode: parsed.data.stressMode,
-    stories,
-    verifiedSkills,
-    questionIds: Array.from({ length: INTERVIEW_QUESTION_COUNT }, () => randomUUID()),
-    now,
-  });
-  const saved = current
-    ? deps.candidateStore.interviewSimulatorRepo.replaceCompleted(
-        candidate.id,
-        current.id,
-        current.version,
-        session,
-        now,
-      )
-    : deps.candidateStore.interviewSimulatorRepo.create(candidate.id, session, now);
+  const saved = createAndPersistStartedSession(
+    deps, candidate.id, current, parsed.data, application, roleTitle, stories, verifiedSkills,
+  );
   if (!saved) return sendConflict(reply, request, 'interview_session_changed', 'Обновите состояние тренировки и повторите действие.');
   reply.code(201);
   return { data: { session: sessionView(saved) }, meta: { requestId: request.id } };

@@ -31,6 +31,8 @@ function providerResult(message: string): CoachProviderResult {
 async function setup(
   coachProvider: CoachProvider = { createTurn: async () => providerResult('Уточните личный вклад.') },
   tier: 'free' | 'pro' | 'executive' | 'enterprise' = 'pro',
+  subscriptionStatus: 'active' | 'trialing' | 'past_due' | 'canceled' = 'active',
+  subscriptionExpiresAt: string | null = null,
 ) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -77,8 +79,8 @@ async function setup(
     getUser: (userId: string) => ({
       candidateId: userId === 'owner-user' ? owner.id : other.id,
       subscriptionTier: tier,
-      subscriptionStatus: 'active',
-      subscriptionExpiresAt: null,
+      subscriptionStatus,
+      subscriptionExpiresAt,
     }),
   };
   const app = await buildApp({
@@ -117,6 +119,30 @@ describe('candidate interview simulator routes', () => {
     expect(response.statusCode).toBe(402);
     expect(response.json().error.code).toBe('paywall_required');
     expect(candidateStore.interviewSimulatorRepo.getCurrent(ownerId)).toBeNull();
+  });
+
+  it('allows a canceled paid subscription until its paid-through date', async () => {
+    const { app, ownerAuth } = await setup(undefined, 'pro', 'canceled', '2099-01-01T00:00:00.000Z');
+    const response = await app.inject({
+      method: 'POST',
+      url: URL,
+      headers: { authorization: ownerAuth, ...ORIGIN },
+      payload: { mode: 'text', roleTitle: 'Руководитель инженерной команды' },
+    });
+
+    expect(response.statusCode).toBe(201);
+  });
+
+  it('blocks a canceled paid subscription after its paid-through date', async () => {
+    const { app, ownerAuth } = await setup(undefined, 'pro', 'canceled', '2000-01-01T00:00:00.000Z');
+    const response = await app.inject({
+      method: 'POST',
+      url: URL,
+      headers: { authorization: ownerAuth, ...ORIGIN },
+      payload: { mode: 'text', roleTitle: 'Руководитель инженерной команды' },
+    });
+
+    expect(response.statusCode).toBe(402);
   });
 
   it('starts from candidate STAR evidence, evaluates an answer, and resumes at the same question', async () => {

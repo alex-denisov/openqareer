@@ -99,5 +99,11 @@ test('B356 fixture serves the full interview flow through its own route', async 
   expect(advanced.body.data?.session?.currentQuestion?.id).toBe(
     advanced.body.data?.session?.questions[1]?.id,
   );
-  expect(unmatched).not.toContain('/api/v1/candidate/interview-sessions');
+  const unsupported = await simulatorRequest(
+    page,
+    '/api/v1/candidate/interview-sessions/unsupported/path',
+    'GET',
+  );
+  expect(unsupported.status).toBe(404);
+  expect(unmatched).toContain('/api/v1/candidate/interview-sessions/unsupported/path');
 });
