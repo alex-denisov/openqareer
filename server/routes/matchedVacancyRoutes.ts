@@ -7,7 +7,8 @@ import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
-import { buildMatchedVacancyFacets } from '../vacancies/matchedVacancyFacets';
+import { buildMatchedVacancyFacets, matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import type { MatchedVacancySourceDefinition } from '../vacancies/matchedVacancyFacets';
 import {
   filterMatchedVacancies,
   matchedVacanciesQuerySchema,
@@ -64,6 +65,27 @@ export function finishMatchedVacancies(
   return applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId));
 }
 
+function matchedVacancyFacetAndFilter(
+  items: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+  filters: MatchedVacancyFilters,
+  readLevel: (item: MatchedVacancyItem) => number | null | undefined,
+  sourceRegistry: readonly MatchedVacancySourceDefinition[],
+) {
+  return {
+    facets: filters.offset === 0
+      ? buildMatchedVacancyFacets(items, targetRoles, readLevel, sourceRegistry)
+      : undefined,
+    filtered: filterMatchedVacancies(
+      items,
+      filters,
+      targetRoles,
+      readLevel,
+      sourceRegistry.map(({ id }) => id),
+    ),
+  };
+}
+
 function buildMatchedResponse(
   snapshot: readonly MatchedVacancyItem[],
   targetRoles: string[],
@@ -73,6 +95,7 @@ function buildMatchedResponse(
   targetLevel: ReturnType<typeof readTargetLevel>,
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
+  sourceRegistry: readonly MatchedVacancySourceDefinition[],
 ) {
   const { offset } = filters;
   const pageAndExplanationsStartedAt = performance.now();
@@ -90,9 +113,13 @@ function buildMatchedResponse(
   const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
   const readLevel = (item: MatchedVacancyItem) =>
     titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const facets =
-    offset === 0 ? buildMatchedVacancyFacets(matched, targetRoles, readLevel) : undefined;
-  const filtered = filterMatchedVacancies(matched, filters, targetRoles, readLevel);
+  const { facets, filtered } = matchedVacancyFacetAndFilter(
+    matched,
+    targetRoles,
+    filters,
+    readLevel,
+    sourceRegistry,
+  );
   const page = buildMatchedVacancyPage(filtered, offset);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
@@ -175,6 +202,7 @@ async function readMatchedPage(
   campaign: CampaignResolution,
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
+  sourceRegistry: readonly MatchedVacancySourceDefinition[],
 ) {
   const startedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
@@ -194,6 +222,7 @@ async function readMatchedPage(
       targetLevel,
       titleParseStore,
       filters,
+      sourceRegistry,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
   };
@@ -231,6 +260,8 @@ const handleMatchedVacancies: Handler = async (
   if (!candidate) return undefined;
   const filters = matchedVacanciesQuerySchema.parse(request.query);
   const { offset } = filters;
+  const sourceRegistry = matchedVacancySourceRegistry(multiSourceEngine.getSources?.() ?? []);
+  const knownSourceIds = sourceRegistry.map(({ id }) => id);
   const candidateCampaignStartedAt = performance.now();
   const { confirmedSkills } = readMatchProfile(candidateStore, candidate.id);
   const campaign = readCampaign(candidateStore, candidate.id);
@@ -238,8 +269,8 @@ const handleMatchedVacancies: Handler = async (
   const candidateCampaignMs = elapsedMs(candidateCampaignStartedAt);
 
   if (confirmedSkills.length === 0 && targetRoles.length === 0) {
-    filterMatchedVacancies([], filters, targetRoles);
-    return unconfirmedCandidateMatchResponse(request.id, offset, campaign);
+    filterMatchedVacancies([], filters, targetRoles, undefined, knownSourceIds);
+    return unconfirmedCandidateMatchResponse(request.id, offset, campaign, sourceRegistry);
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
@@ -253,6 +284,7 @@ const handleMatchedVacancies: Handler = async (
     campaign,
     titleParseStore,
     filters,
+    sourceRegistry,
   );
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает

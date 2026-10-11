@@ -24,8 +24,12 @@ export function filterMatchedVacancies(
   filters: MatchedVacancyFilters,
   targetRoles: readonly string[],
   readLevel?: MatchedVacancyLevelReader,
+  knownSourceIds: readonly string[] = [],
 ): MatchedVacancyItem[] {
-  const sourceIds = new Set(items.flatMap((item) => item.cluster.sources.map((source) => source.sourceId)));
+  const sourceIds = new Set([
+    ...knownSourceIds,
+    ...items.flatMap((item) => item.cluster.sources.map((source) => source.sourceId)),
+  ]);
   z.array(z.string().refine((source) => sourceIds.has(source), 'Неизвестный источник')).parse(filters.source);
   z.array(z.string().refine((role) => targetRoles.includes(role), 'Неизвестная роль')).parse(filters.role);
   return items.filter((item) =>

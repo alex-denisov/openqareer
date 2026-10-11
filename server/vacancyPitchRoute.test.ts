@@ -136,23 +136,63 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>) {
   return { cookie, candidateId };
 }
 
-describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
-  const sampleCluster: VacancyCluster = {
-    id: 'cluster-99',
-    canonicalTitle: 'Senior Platform Engineer',
-    canonicalCompany: 'CloudScale Inc',
-    canonicalLocation: 'Remote',
-    isRemote: true,
-    descriptionSummary: 'Разработка высоконагруженной платформы на Node.js и Kubernetes',
-    skills: ['Node.js', 'TypeScript', 'Kubernetes', 'PostgreSQL'],
-    primaryUrl: 'https://example.com/vacancies/99',
-    sources: [],
-    firstObservedAt: '2026-09-17T00:00:00.000Z',
-    lastSeenAt: '2026-09-17T00:00:00.000Z',
-    status: 'active',
-    vacanciesCount: 1,
-  };
+describe('POST /api/v1/candidate/vacancies/:id/letter-approvals (B449)', () => {
+  it('stores a candidate-approved letter snapshot on a saved application without sending it', async () => {
+    const { app, candidates } = await createApp([sampleCluster]);
+    const { cookie, candidateId } = await login(app);
+    const body = {
+      circle: 1,
+      language: 'ru',
+      tone: 'executive',
+      recipient: { id: 'recruiter-1', name: 'Мария Орлова', role: 'Рекрутер' },
+      subject: 'Head of Platform',
+      body: 'Мария, добрый день. Подтверждённый факт о платформе.',
+      usedEvidenceIds: [],
+      includedWorkplaceIds: ['experience-1'],
+    };
 
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/vacancies/cluster-99/letter-approvals',
+      headers: { cookie, origin: 'http://localhost:3000' },
+      payload: body,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({ status: 'approved', sent: false });
+    const applicationId = response.json().data.applicationId as string;
+    const application = candidates.getApplication(candidateId, applicationId);
+    expect(application).toMatchObject({ clusterId: 'cluster-99', stage: 'saved' });
+    expect(application?.materials.coverLetter).toBe(true);
+    const documentId = response.json().data.documentId as string;
+    const document = candidates.getDocument(candidateId, documentId);
+    expect(document?.extractedText).toContain(body.body);
+    expect(JSON.parse(Buffer.from(document!.contentBase64, 'base64').toString('utf8'))).toMatchObject({
+      version: 1,
+      circle: 1,
+      recipient: body.recipient,
+      body: body.body,
+    });
+  });
+});
+
+const sampleCluster: VacancyCluster = {
+  id: 'cluster-99',
+  canonicalTitle: 'Senior Platform Engineer',
+  canonicalCompany: 'CloudScale Inc',
+  canonicalLocation: 'Remote',
+  isRemote: true,
+  descriptionSummary: 'Разработка высоконагруженной платформы на Node.js и Kubernetes',
+  skills: ['Node.js', 'TypeScript', 'Kubernetes', 'PostgreSQL'],
+  primaryUrl: 'https://example.com/vacancies/99',
+  sources: [],
+  firstObservedAt: '2026-09-17T00:00:00.000Z',
+  lastSeenAt: '2026-09-17T00:00:00.000Z',
+  status: 'active',
+  vacanciesCount: 1,
+};
+
+describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
   it('rejects unauthenticated requests with 401 or redirection', async () => {
     const { app } = await createApp([sampleCluster]);
     const response = await app.inject({
@@ -280,7 +320,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       method: 'POST',
       url: '/api/v1/candidate/vacancies/cluster-99/pitch',
       headers: { cookie, origin: 'http://localhost:3000' },
-      payload: { tone: 'technical' },
+      payload: { tone: 'technical', excludedEvidenceIds: ['mem-102'] },
     });
 
     expect(response.statusCode).toBe(200);
@@ -296,6 +336,7 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
       usedEvidenceIds: expect.arrayContaining(['mem-101']),
     });
 
+    expect(json.data.usedEvidenceIds).not.toContain('mem-102');
     expect(json.data.linkedInNote.length).toBeLessThanOrEqual(300);
   });
 

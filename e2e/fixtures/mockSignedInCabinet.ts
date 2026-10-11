@@ -1,4 +1,6 @@
-import type { Page } from '@playwright/test';
+import type { Page, Route } from '@playwright/test';
+import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
+import type { VacanciesScreenState } from '../../src/features/vacancies/VacanciesScreenFilters';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
@@ -10,14 +12,263 @@ import {
   workspace,
 } from './readabilityWorkspace';
 
-export async function mockSignedInCabinet(page: Page): Promise<string[]> {
+interface ApplicationStub {
+  readonly id: string;
+  readonly candidateId: string;
+  readonly clusterId: string | null;
+  stage: string;
+  archivePreviousStage: string | null;
+  version: number;
+  readonly vacancy: unknown;
+  readonly createdAt: string;
+  updatedAt: string;
+}
+
+export interface MockSignedInCabinetOptions {
+  readonly vacancyTotal?: number;
+  readonly vacancyFacets?: MatchedVacancyFacets;
+  readonly vacancyInitialFilters?: VacanciesScreenState;
+  readonly savedVacanciesCount?: number;
+  readonly companyCount?: number;
+}
+
+function seedInitialVacancyItems(
+  items: ReturnType<typeof matchedVacancyPage>['data'],
+): typeof items {
+  return items.map((item, index) => {
+    // Keep the original Berlin Product Lead fixture for the later action flow.
+    if (index >= 6 || index === 1) return item;
+    const sourceId = index % 2 === 0 ? 'hh' : 'linkedin';
+    return {
+      ...item,
+      cluster: {
+        ...item.cluster,
+        canonicalLocation: 'Москва',
+        salary: { from: 500_000, to: 650_000, currency: '₽' },
+        isRemote: index % 2 === 0,
+        descriptionSummary:
+          index % 2 === 0
+            ? item.cluster.descriptionSummary
+            : `${item.cluster.descriptionSummary} Гибридный формат работы.`,
+        sources: item.cluster.sources.map((source, sourceIndex) =>
+          sourceIndex === 0
+            ? {
+                ...source,
+                sourceType: sourceId === 'hh' ? 'json_api' : 'jobspy',
+                sourceId,
+                sourceName: sourceId === 'hh' ? 'hh.ru' : 'LinkedIn',
+              }
+            : source,
+        ),
+      },
+    };
+  });
+}
+
+function savedApplicationFixtures(count: number): ApplicationStub[] {
+  const timestamp = '2026-10-10T00:00:00.000Z';
+  return Array.from({ length: count }, (_, index) => {
+    const sequence = index + 1;
+    return {
+      id: `saved-fixture-${sequence}`,
+      candidateId: 'candidate-fixture',
+      clusterId: `saved-cluster-${sequence}`,
+      stage: 'saved',
+      archivePreviousStage: null,
+      version: 1,
+      vacancy: {
+        title: `Saved role ${sequence}`,
+        company: `Saved company ${sequence}`,
+        url: `https://example.test/saved/${sequence}`,
+        source: 'fixture',
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+  });
+}
+
+export async function mockSignedInCabinet(
+  page: Page,
+  options: MockSignedInCabinetOptions = {},
+): Promise<string[]> {
   const unmatched: string[] = [];
+  let applications = savedApplicationFixtures(options.savedVacanciesCount ?? 0);
+  let nextApplicationId = 1;
+  const connectionState = createMockConnectionState();
+
+  type MockConnectionContact = Record<string, unknown> & {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
+  };
+
+  type MockConnectionState = {
+    readonly contacts: Map<string, MockConnectionContact>;
+    importReceipt: {
+      state: 'unknown' | 'imported';
+      importedAt: string | null;
+      importedCount: number | null;
+    };
+  };
+
+  function createMockConnectionState(): MockConnectionState {
+    return {
+      contacts: new Map(),
+      importReceipt: { state: 'unknown', importedAt: null, importedCount: null },
+    };
+  }
+
+  async function mockConnectionRoutes(
+    route: Route,
+    url: URL,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    const path = url.pathname;
+    if (path === '/api/v1/candidate/connection-contacts') {
+      return mockConnectionContactList(route, url, state);
+    }
+    if (path === '/api/v1/candidate/connection-contacts/linkedin-import') {
+      return mockConnectionImport(route, state);
+    }
+    const contact = path.match(/^\/api\/v1\/candidate\/connection-contacts\/([^/]+)$/u);
+    if (contact) return mockConnectionMutation(route, decodeURIComponent(contact[1]!), state);
+    const circles = path.match(/^\/api\/v1\/candidate\/vacancies\/([^/]+)\/connection-circles$/u);
+    if (circles) return mockConnectionCircles(route, decodeURIComponent(circles[1]!), state);
+    return false;
+  }
+
+  async function mockConnectionContactList(
+    route: Route,
+    url: URL,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() !== 'GET') return false;
+    const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
+    const contacts = Array.from(state.contacts.values());
+    const items = contacts.slice(offset, offset + limit);
+    return route
+      .fulfill({
+        json: {
+          data: {
+            items,
+            total: contacts.length,
+            offset,
+            limit,
+            nextOffset: offset + items.length < contacts.length ? offset + items.length : null,
+            linkedinImport: state.importReceipt,
+          },
+        },
+      })
+      .then(() => true);
+  }
+
+  async function mockConnectionImport(route: Route, state: MockConnectionState): Promise<boolean> {
+    if (route.request().method() !== 'PUT') return false;
+    const body = route.request().postDataJSON() as { contacts?: Array<Record<string, unknown>> };
+    const importedAt = '2026-10-10T12:00:00.000Z';
+    for (const [id, contact] of state.contacts) {
+      if (contact.source === 'linkedin_import') state.contacts.delete(id);
+    }
+    for (const [index, contact] of (body.contacts ?? []).entries()) {
+      const id = String(contact.externalId ?? contact.linkedinUrl ?? `imported-${index + 1}`);
+      state.contacts.set(id, {
+        ...contact,
+        id,
+        source: 'linkedin_import',
+        createdAt: importedAt,
+        updatedAt: importedAt,
+      });
+    }
+    state.importReceipt = {
+      state: 'imported',
+      importedAt,
+      importedCount: (body.contacts ?? []).length,
+    };
+    return route.fulfill({ json: { data: state.importReceipt } }).then(() => true);
+  }
+
+  async function mockConnectionMutation(
+    route: Route,
+    id: string,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() === 'DELETE') {
+      const contact = state.contacts.get(id);
+      if (contact?.source === 'linkedin_import') {
+        await route.fulfill({
+          status: 409,
+          json: { error: { code: 'connection_contact_read_only' } },
+        });
+        return true;
+      }
+      if (contact?.source === 'manual') state.contacts.delete(id);
+      await route.fulfill({ status: 204 });
+      return true;
+    }
+    if (route.request().method() !== 'PUT') return false;
+    const previous = state.contacts.get(id);
+    const now = '2026-10-10T12:00:00.000Z';
+    const contact = {
+      ...(route.request().postDataJSON() as Record<string, unknown>),
+      id,
+      source: 'manual',
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+    };
+    state.contacts.set(id, contact);
+    await route.fulfill({ status: previous ? 200 : 201, json: { data: contact } });
+    return true;
+  }
+
+  async function mockConnectionCircles(
+    route: Route,
+    vacancyId: string,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() !== 'GET') return false;
+    const knownState = state.importReceipt.state === 'imported' ? 'none' : 'unknown';
+    await route.fulfill({
+      json: {
+        data: {
+          vacancyId,
+          circles: [
+            { circle: 1, state: knownState, paths: [] },
+            { circle: 2, state: knownState, paths: [] },
+            { circle: 3, state: 'available', paths: [{ nextStep: 'cold_application' }] },
+          ],
+          linkedinImport: state.importReceipt,
+        },
+      },
+    });
+    return true;
+  }
+
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (await mockConnectionRoutes(route, url, connectionState)) return;
+    if (
+      route.request().method() === 'POST' &&
+      /\/api\/v1\/candidate\/vacancies\/[^/]+\/letter-approvals$/u.test(path)
+    ) {
+      return route.fulfill({
+        status: 200,
+        json: {
+          data: {
+            applicationId: 'application-b449-approved',
+            documentId: 'document-b449-letter',
+            approvedAt: '2026-10-10T12:00:00.000Z',
+            status: 'approved',
+            sent: false,
+          },
+        },
+      });
+    }
     if (path.endsWith('/auth/me')) {
       return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
     }
@@ -42,9 +293,63 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       };
       return route.fulfill({ json: { data: snapshotWithMomentum } });
     }
-    // The readability fixture has no tracked applications yet; an empty
-    // list is the honest state, not an unknown route.
-    if (path.endsWith('/candidate/applications') || path.endsWith('/candidate/drafts')) {
+    // Saved vacancies use the same candidate application tracker as the Responses screen.
+    if (path === '/api/v1/candidate/applications') {
+      if (route.request().method() === 'GET')
+        return route.fulfill({ json: { data: applications } });
+      if (route.request().method() === 'POST') {
+        const body = route.request().postDataJSON() as {
+          clusterId?: string;
+          stage?: string;
+          manualVacancy?: unknown;
+        };
+        const timestamp = '2026-10-10T00:00:00.000Z';
+        const created: ApplicationStub = {
+          id: `application-${nextApplicationId++}`,
+          candidateId: 'candidate-fixture',
+          clusterId: body.clusterId ?? null,
+          stage: body.stage ?? 'saved',
+          archivePreviousStage: null,
+          version: 1,
+          vacancy: body.manualVacancy ?? null,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+        applications = [...applications, created];
+        return route.fulfill({ status: 201, json: { data: created } });
+      }
+    }
+    const applicationRoute = path.match(
+      /^\/api\/v1\/candidate\/applications\/([^/]+)(\/restore)?$/u,
+    );
+    if (applicationRoute && route.request().method() === 'PATCH') {
+      const record = applications.find(
+        (item) => item.id === decodeURIComponent(applicationRoute[1]!),
+      );
+      if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+      const body = route.request().postDataJSON() as { stage?: string };
+      if (body.stage === 'archived') record.archivePreviousStage = record.stage;
+      if (body.stage) record.stage = body.stage;
+      record.version += 1;
+      record.updatedAt = '2026-10-10T00:01:00.000Z';
+      return route.fulfill({ json: { data: record } });
+    }
+    if (
+      applicationRoute &&
+      route.request().method() === 'POST' &&
+      applicationRoute[2] === '/restore'
+    ) {
+      const record = applications.find(
+        (item) => item.id === decodeURIComponent(applicationRoute[1]!),
+      );
+      if (!record) return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+      record.stage = record.archivePreviousStage ?? 'saved';
+      record.archivePreviousStage = null;
+      record.version += 1;
+      record.updatedAt = '2026-10-10T00:02:00.000Z';
+      return route.fulfill({ json: { data: record } });
+    }
+    if (path.endsWith('/candidate/drafts')) {
       return route.fulfill({ json: { data: [] } });
     }
     // B370: панель отправки откликов читает лимиты и квитанции; в фикстуре действий нет.
@@ -284,8 +589,22 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
       });
     }
     if (path.endsWith('/candidate/matched-vacancies')) {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      const page = matchedVacancyPage(offset, options.vacancyTotal);
       return route.fulfill({
-        json: matchedVacancyPage(Number(url.searchParams.get('offset') ?? 0)),
+        json: {
+          ...page,
+          ...(offset === 0 && options.vacancyInitialFilters
+            ? { data: seedInitialVacancyItems(page.data) }
+            : {}),
+          meta: {
+            ...page.meta,
+            ...(options.vacancyFacets ? { facets: options.vacancyFacets } : {}),
+            ...(offset === 0 && options.vacancyInitialFilters
+              ? { initialFilters: options.vacancyInitialFilters }
+              : {}),
+          },
+        },
       });
     }
     if (
@@ -308,6 +627,6 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     unmatched.push(path);
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
-  await mockCandidateCompanies(page);
+  await mockCandidateCompanies(page, { companyCount: options.companyCount });
   return unmatched;
 }

@@ -30,6 +30,7 @@ import { readableError } from './companiesAndPeopleUtils';
 
 interface CompaniesAndPeopleScreenProps {
   readonly onOpenConnections?: () => void;
+  readonly initialSearch?: string;
 }
 
 interface CompanyListState {
@@ -174,19 +175,27 @@ interface CompanyFiltersState {
   readonly setSearchInput: (search: string) => void;
 }
 
-function useCompanyFilters(): CompanyFiltersState {
+function useCompanyFilters(initialSearch?: string): CompanyFiltersState {
   const [sort, setSort] = useState<CandidateCompanySort>('default');
   const [filter, setFilter] = useState<CandidateCompanyFilter>('all');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch ?? '');
+  const [search, setSearch] = useState(initialSearch?.trim() ?? '');
   useEffect(() => {
     const timeout = window.setTimeout(() => setSearch(searchInput.trim()), 200);
     return () => window.clearTimeout(timeout);
   }, [searchInput]);
+  useEffect(() => {
+    if (!initialSearch?.trim()) return;
+    setSearchInput(initialSearch);
+    setSearch(initialSearch.trim());
+  }, [initialSearch]);
   return { sort, filter, searchInput, search, setSort, setFilter, setSearchInput };
 }
 
-function useCompanySelection(items: readonly CandidateCompanyOpportunity[]) {
+function useCompanySelection(
+  items: readonly CandidateCompanyOpportunity[],
+  preferredName?: string,
+) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   useEffect(() => {
     if (!items.length) {
@@ -194,9 +203,18 @@ function useCompanySelection(items: readonly CandidateCompanyOpportunity[]) {
       return;
     }
     if (selectedKey && items.some((company) => company.key === selectedKey)) return;
+    if (preferredName?.trim()) {
+      const preferred = items.find((company) =>
+        company.name.toLocaleLowerCase('ru-RU').includes(preferredName.toLocaleLowerCase('ru-RU')),
+      );
+      if (preferred) {
+        setSelectedKey(preferred.key);
+        return;
+      }
+    }
     if (window.innerWidth >= 761) setSelectedKey(items[0]!.key);
     else if (selectedKey) setSelectedKey(null);
-  }, [items, selectedKey]);
+  }, [items, preferredName, selectedKey]);
   return { selectedKey, setSelectedKey };
 }
 
@@ -319,10 +337,10 @@ interface CompaniesAndPeopleModel {
   readonly refresh: () => void;
 }
 
-function useCompaniesAndPeopleModel(): CompaniesAndPeopleModel {
-  const filters = useCompanyFilters();
+function useCompaniesAndPeopleModel(initialSearch?: string): CompaniesAndPeopleModel {
+  const filters = useCompanyFilters(initialSearch);
   const page = useCompanyList(filters.search, filters.sort, filters.filter);
-  const selection = useCompanySelection(page.items);
+  const selection = useCompanySelection(page.items, initialSearch);
   const detail = useCompanyDetail(selection.selectedKey);
   const reloadPage = page.reload;
   const reloadDetail = detail.reload;
@@ -342,15 +360,8 @@ function useCompaniesAndPeopleModel(): CompaniesAndPeopleModel {
     detail,
     selectedKey: selection.selectedKey,
     setSelectedKey: selection.setSelectedKey,
-    selected:
-      detailedCompany ??
-      page.items.find((company) => company.key === selection.selectedKey) ??
-      null,
-    linkedin: page.page?.linkedin ?? {
-      status: 'disconnected',
-      importedAt: null,
-      contactsImported: false,
-    },
+    selected: detailedCompany ?? page.items.find((company) => company.key === selection.selectedKey) ?? null,
+    linkedin: page.page?.linkedin ?? { status: 'disconnected', importedAt: null, contactsImported: false },
     consentGranted: recruiterSearch.consentOverride ?? page.page?.searchConsentGranted ?? false,
     consentRequiredKey: recruiterSearch.consentRequiredKey,
     filterSheetOpen,
@@ -519,7 +530,10 @@ function CompanyPageError({
   );
 }
 
-export function CompaniesAndPeopleScreen({ onOpenConnections }: CompaniesAndPeopleScreenProps) {
-  const model = useCompaniesAndPeopleModel();
+export function CompaniesAndPeopleScreen({
+  onOpenConnections,
+  initialSearch,
+}: CompaniesAndPeopleScreenProps) {
+  const model = useCompaniesAndPeopleModel(initialSearch);
   return <CompaniesAndPeopleView model={model} onOpenConnections={onOpenConnections} />;
 }

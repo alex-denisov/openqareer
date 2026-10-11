@@ -7,17 +7,19 @@ export function OpportunityTabs({
   active,
   totalVacancies,
   savedCount,
+  companiesCount,
   onSelect,
 }: {
   readonly active: OpportunityTab;
   readonly totalVacancies: number;
   readonly savedCount: number;
+  readonly companiesCount?: number;
   readonly onSelect: (tab: OpportunityTab) => void;
 }) {
   const tabs: Array<{ id: OpportunityTab; label: string }> = [
     { id: 'selection', label: `Подборка ${totalVacancies}` },
     { id: 'saved', label: `Сохранённые ${savedCount}` },
-    { id: 'companies', label: 'Компании и люди' },
+    { id: 'companies', label: companiesCount === undefined ? 'Компании и люди' : `Компании и люди ${companiesCount}` },
   ];
   return (
     <div className="companies-people-tabs" role="tablist" aria-label="Разделы вакансий">

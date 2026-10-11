@@ -224,3 +224,281 @@ function finishCompany(
     recruiters,
   };
 }
+
+export type ConnectionCircleStrength = 'direct' | 'strong' | 'weak' | 'unknown';
+export type ConnectionCircleNumber = 1 | 2 | 3;
+export type ConnectionCircleState = 'available' | 'none' | 'unknown';
+
+export interface ConnectionCircleWorkplace {
+  readonly companyName: string;
+  readonly startDate?: string | null;
+  readonly endDate?: string | null;
+}
+
+export interface ConnectionCirclePerson {
+  readonly id: string;
+  readonly fullName: string;
+  readonly roleTitle: string | null;
+  readonly companyName: string | null;
+  readonly linkedinUrl?: string | null;
+  readonly workplaces?: readonly ConnectionCircleWorkplace[];
+}
+
+export interface CandidateConnectionContact extends ConnectionCirclePerson {
+  readonly source: 'manual' | 'linkedin_import';
+  readonly relationship: string;
+  readonly strength: Exclude<ConnectionCircleStrength, 'direct'>;
+  readonly knowsRecruiterIds: readonly string[];
+}
+
+export interface ConnectionCirclePath {
+  readonly id: string;
+  readonly circle: ConnectionCircleNumber;
+  readonly path: readonly ConnectionCirclePerson[];
+  readonly recipient: ConnectionCirclePerson;
+  readonly evidence: readonly string[];
+  readonly strength: ConnectionCircleStrength;
+  readonly source: 'manual' | 'linkedin_import' | 'work_history' | 'cold';
+  readonly nextStep: 'write_known_contact' | 'ask_for_introduction' | 'cold_application';
+}
+
+export interface ConnectionCircleResult {
+  readonly circle: ConnectionCircleNumber;
+  readonly state: ConnectionCircleState;
+  readonly message: string;
+  readonly paths: readonly ConnectionCirclePath[];
+}
+
+export interface BuildConnectionCirclesInput {
+  readonly candidate: { readonly id: string; readonly fullName: string };
+  readonly vacancy: { readonly id: string; readonly companyName: string; readonly title: string };
+  readonly candidateWorkplaces: readonly ConnectionCircleWorkplace[];
+  readonly recruiters: readonly ConnectionCirclePerson[];
+  readonly contacts: readonly CandidateConnectionContact[];
+  /** False means the candidate has not imported an exhaustive LinkedIn contact list. */
+  readonly linkedinContactsImported: boolean;
+}
+
+const CONNECTION_PATH_LIMIT = 100;
+
+export function buildConnectionCircles(input: BuildConnectionCirclesInput): {
+  readonly circles: readonly ConnectionCircleResult[];
+} {
+  const direct = directConnectionPaths(input);
+  const introductions = introductionPaths(input);
+  const cold = coldOutreachPaths(input);
+  return {
+    circles: [
+      resultForCircle(1, direct, input.linkedinContactsImported),
+      resultForCircle(2, introductions, input.linkedinContactsImported),
+      { circle: 3, state: 'available', message: '', paths: cold.slice(0, CONNECTION_PATH_LIMIT) },
+    ],
+  };
+}
+
+function directConnectionPaths(input: BuildConnectionCirclesInput): ConnectionCirclePath[] {
+  return input.recruiters
+    .flatMap((recruiter) => {
+      const directContact = input.contacts.find((contact) =>
+        sameConnectionPerson(contact, recruiter),
+      );
+      if (directContact) return [directContactPath(input.candidate, directContact, recruiter)];
+      const evidence = sharedWorkplaceEvidence(
+        input.candidateWorkplaces,
+        recruiter.workplaces ?? [],
+      );
+      return evidence ? [workplacePath(input.candidate, recruiter, evidence)] : [];
+    })
+    .sort(compareConnectionPaths);
+}
+
+function introductionPaths(input: BuildConnectionCirclesInput): ConnectionCirclePath[] {
+  const paths = input.contacts.flatMap((contact) =>
+    input.recruiters
+      .filter((recruiter) => contact.knowsRecruiterIds.includes(recruiter.id))
+      .map((recruiter) => introductionPath(input.candidate, contact, recruiter)),
+  );
+  return paths.sort(compareConnectionPaths).slice(0, CONNECTION_PATH_LIMIT);
+}
+
+function coldOutreachPaths(input: BuildConnectionCirclesInput): ConnectionCirclePath[] {
+  const recipients =
+    input.recruiters.length > 0
+      ? input.recruiters
+      : [
+          {
+            id: 'vacancy:' + input.vacancy.id,
+            fullName: input.vacancy.companyName,
+            roleTitle: input.vacancy.title,
+            companyName: input.vacancy.companyName,
+          },
+        ];
+  return recipients.map((recipient) => ({
+    id: 'circle-3:' + recipient.id,
+    circle: 3,
+    path: [candidateNode(input.candidate), recipient],
+    recipient,
+    evidence: ['Холодный отклик по вакансии; ничего не отправлено.'],
+    strength: 'unknown',
+    source: 'cold',
+    nextStep: 'cold_application',
+  }));
+}
+
+function directContactPath(
+  candidate: BuildConnectionCirclesInput['candidate'],
+  contact: CandidateConnectionContact,
+  recruiter: ConnectionCirclePerson,
+): ConnectionCirclePath {
+  return {
+    id: 'circle-1:' + recruiter.id + ':' + contact.id,
+    circle: 1,
+    path: [candidateNode(candidate), recruiter],
+    recipient: recruiter,
+    evidence: [contact.relationship || 'Прямой контакт подтверждён кандидатом.'],
+    strength: 'direct',
+    source: contact.source,
+    nextStep: 'write_known_contact',
+  };
+}
+
+function workplacePath(
+  candidate: BuildConnectionCirclesInput['candidate'],
+  recruiter: ConnectionCirclePerson,
+  match: { companyName: string; evidence: string; strength: 'strong' | 'weak' },
+): ConnectionCirclePath {
+  return {
+    id: 'circle-1:work:' + recruiter.id + ':' + candidateCompanyKey(match.companyName),
+    circle: 1,
+    path: [candidateNode(candidate), recruiter],
+    recipient: recruiter,
+    evidence: [match.evidence],
+    strength: match.strength,
+    source: 'work_history',
+    nextStep: 'write_known_contact',
+  };
+}
+
+function introductionPath(
+  candidate: BuildConnectionCirclesInput['candidate'],
+  contact: CandidateConnectionContact,
+  recruiter: ConnectionCirclePerson,
+): ConnectionCirclePath {
+  return {
+    id: 'circle-2:' + contact.id + ':' + recruiter.id,
+    circle: 2,
+    path: [candidateNode(candidate), contactNode(contact), recruiter],
+    recipient: recruiter,
+    evidence: [contact.relationship, 'Связь с адресатом указана в источнике контакта.'],
+    strength: contact.strength,
+    source: contact.source,
+    nextStep: 'ask_for_introduction',
+  };
+}
+
+function resultForCircle(
+  circle: 1 | 2,
+  paths: readonly ConnectionCirclePath[],
+  linkedinContactsImported: boolean,
+): ConnectionCircleResult {
+  const state = paths.length > 0 ? 'available' : linkedinContactsImported ? 'none' : 'unknown';
+  const message =
+    state === 'none'
+      ? 'Знакомых не найдено в импортированном списке.'
+      : state === 'unknown'
+        ? 'Связи неизвестны: список LinkedIn не импортирован.'
+        : '';
+  return { circle, state, message, paths: paths.slice(0, CONNECTION_PATH_LIMIT) };
+}
+
+function sharedWorkplaceEvidence(
+  candidateWorkplaces: readonly ConnectionCircleWorkplace[],
+  recruiterWorkplaces: readonly ConnectionCircleWorkplace[],
+): { companyName: string; evidence: string; strength: 'strong' | 'weak' } | null {
+  for (const candidate of candidateWorkplaces) {
+    const recruiter = recruiterWorkplaces.find(
+      (item) =>
+        candidateCompanyKey(item.companyName) === candidateCompanyKey(candidate.companyName),
+    );
+    if (!recruiter) continue;
+    const overlaps = workplacePeriodsOverlap(candidate, recruiter);
+    const phrase = overlaps
+      ? 'Периоды работы пересекались'
+      : 'Общий работодатель, периоды не подтверждены';
+    return {
+      companyName: candidate.companyName,
+      evidence: phrase + ': ' + candidate.companyName + '.',
+      strength: overlaps ? 'strong' : 'weak',
+    };
+  }
+  return null;
+}
+
+function workplacePeriodsOverlap(
+  left: ConnectionCircleWorkplace,
+  right: ConnectionCircleWorkplace,
+): boolean {
+  const leftStart = yearOf(left.startDate);
+  const rightStart = yearOf(right.startDate);
+  if (leftStart === null || rightStart === null) return false;
+  const leftEnd = yearOf(left.endDate) ?? Number.POSITIVE_INFINITY;
+  const rightEnd = yearOf(right.endDate) ?? Number.POSITIVE_INFINITY;
+  return leftStart <= rightEnd && rightStart <= leftEnd;
+}
+
+function yearOf(date: string | null | undefined): number | null {
+  const year = date?.match(/(?:19|20)\d{2}/u)?.[0];
+  return year ? Number(year) : null;
+}
+
+function sameConnectionPerson(
+  contact: CandidateConnectionContact,
+  recruiter: ConnectionCirclePerson,
+): boolean {
+  const contactUrl = normalizeLinkedInUrl(contact.linkedinUrl);
+  const recruiterUrl = normalizeLinkedInUrl(recruiter.linkedinUrl);
+  if (contactUrl && recruiterUrl) return contactUrl === recruiterUrl;
+  return (
+    normalizePersonName(contact.fullName) === normalizePersonName(recruiter.fullName) &&
+    candidateCompanyKey(contact.companyName ?? '') ===
+      candidateCompanyKey(recruiter.companyName ?? '')
+  );
+}
+
+function normalizeLinkedInUrl(value: string | null | undefined): string {
+  return value ? value.trim().replace(/\/$/u, '').toLocaleLowerCase('und') : '';
+}
+
+function normalizePersonName(value: string): string {
+  return value.normalize('NFKC').trim().replace(/\s+/gu, ' ').toLocaleLowerCase('und');
+}
+
+function candidateNode(
+  candidate: BuildConnectionCirclesInput['candidate'],
+): ConnectionCirclePerson {
+  return { id: candidate.id, fullName: candidate.fullName, roleTitle: null, companyName: null };
+}
+
+function contactNode(contact: CandidateConnectionContact): ConnectionCirclePerson {
+  return {
+    id: contact.id,
+    fullName: contact.fullName,
+    roleTitle: contact.roleTitle,
+    companyName: contact.companyName,
+    linkedinUrl: contact.linkedinUrl,
+  };
+}
+
+function compareConnectionPaths(left: ConnectionCirclePath, right: ConnectionCirclePath): number {
+  const strengthRank: Record<ConnectionCircleStrength, number> = {
+    direct: 4,
+    strong: 3,
+    weak: 2,
+    unknown: 1,
+  };
+  return (
+    strengthRank[right.strength] - strengthRank[left.strength] ||
+    left.recipient.fullName.localeCompare(right.recipient.fullName, 'ru') ||
+    left.id.localeCompare(right.id)
+  );
+}

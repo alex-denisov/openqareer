@@ -17,6 +17,7 @@ import {
   listCandidateConnectionViews,
   deriveImportedFactSources,
 } from '../connectors/nativeSourceConnection';
+import { registerCandidateConnectionRoutes } from './candidateConnectionRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -540,4 +541,5 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     withDeps(deps, handleSearchRecruiter),
   );
+  registerCandidateConnectionRoutes(app, deps);
 }

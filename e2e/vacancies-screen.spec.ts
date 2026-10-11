@@ -173,6 +173,7 @@ interface VacancyStubScenario {
   readonly delayMatchedMs?: number;
   readonly campaignUpdates?: unknown[];
   readonly matchedReadCount?: { value: number };
+  readonly sourceCatalogReadCount?: { value: number };
 }
 
 async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Promise<void> {
@@ -189,11 +190,22 @@ async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Prom
       return route.fulfill({ json: { data: null } });
     }
     if (pathname === '/api/v1/candidate/vacancy-sources') {
+      if (scenario.sourceCatalogReadCount) scenario.sourceCatalogReadCount.value += 1;
       return route.fulfill({
         json: {
           data: [
-            { id: 'hh', name: 'hh.ru', health: { status: 'healthy' } },
-            { id: 'remotive', name: 'Remotive', health: { status: 'unavailable' } },
+            {
+              id: 'hh',
+              name: 'hh.ru',
+              category: 'Агрегаторы и API',
+              health: { status: 'healthy' },
+            },
+            {
+              id: 'remotive',
+              name: 'Remotive',
+              category: 'Международные площадки',
+              health: { status: 'unavailable' },
+            },
           ],
         },
       });
@@ -409,9 +421,32 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openVacancies(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Вакансии"]:visible').first().click();
-  await expect(page.locator('.vacancies-screen')).toBeVisible();
+  const vacanciesNavigation = page.locator('button[aria-label="Вакансии"]:visible').first();
+  await expect(vacanciesNavigation).toBeVisible({ timeout: 15_000 });
+  await vacanciesNavigation.click();
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
+  ).toBeVisible({ timeout: 15_000 });
+}
+
+async function openFilterGroup(
+  page: Page,
+  group: 'roles' | 'locations' | 'salary' | 'format' | 'sources',
+) {
+  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
+  const popover = page.locator('#vacancies-filter-popover');
+  if (mobile) {
+    const backToOverview = page.getByRole('button', { name: 'Все фильтры', exact: true });
+    if (await backToOverview.isVisible()) await backToOverview.click();
+    if (!(await popover.isVisible())) {
+      await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
+    }
+    await page.locator(`[data-filter-sheet-group="${group}"]`).click();
+  } else {
+    await page.locator(`[data-filter-group="${group}"]`).click();
+  }
+  await expect(popover).toBeVisible();
+  return popover;
 }
 
 // B338-2: сводка подборки, из которой строятся фильтры.
@@ -430,7 +465,13 @@ const FACETS = {
     { role: 'Enterprise Architect', count: 34 },
     { role: 'Cloud Architect', count: 6 },
   ],
-  sources: [{ sourceId: 'indeed', name: 'Indeed', count: 61 }],
+  sources: [{ sourceId: 'hh', name: 'hh.ru', count: 61 }],
+  sourceGroups: [
+    { id: 'platforms', name: 'Площадки', count: 0 },
+    { id: 'ats', name: 'ATS компаний', count: 0 },
+    { id: 'aggregators', name: 'Агрегаторы', count: 61 },
+    { id: 'channels', name: 'Каналы', count: 0 },
+  ],
 };
 
 test.describe('B250 vacancies screen', () => {
@@ -498,29 +539,43 @@ test.describe('B250 vacancies screen', () => {
     );
   });
 
-  test('shows the campaign banner, filters from the pool summary and pool rows', async ({
-    page,
-  }) => {
-    await stubSession(page);
+  test('shows the approved vacancy summary, tabs, pool filters and rows', async ({ page }) => {
+    const sourceCatalogReadCount = { value: 0 };
+    await stubSession(page, { sourceCatalogReadCount });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
-    await expect(page.locator('.career-page-header-kicker')).toContainText('Enterprise Architect');
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
+    ).toBeVisible();
+    await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
+      '61 вакансий по вашим условиям',
+    );
+    const tabs = page.getByRole('tablist', { name: 'Разделы вакансий' });
+    await expect(tabs.getByRole('tab')).toHaveCount(3);
+    await expect(tabs.getByRole('tab', { name: 'Подборка 61' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(tabs.getByRole('tab', { name: 'Сохранённые 0' })).toBeVisible();
+    await expect(tabs.getByRole('tab', { name: 'Компании и люди' })).toBeVisible();
 
-    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
-    if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
-      await filterToggle.click();
-    }
-    const filters = page.locator('.vacancies-filters');
-    // B338-2: каждое значение — из сводки подборки, с числом; предустановленных нет.
+    // Каждый набор значений открывается из своей группы фильтров.
+    const filters = await openFilterGroup(page, 'roles');
     await expect(filters.getByRole('button', { name: 'Enterprise Architect · 34' })).toBeVisible();
     await expect(filters.getByRole('button', { name: 'Cloud Architect · 6' })).toBeVisible();
     await expect(filters.getByRole('button', { name: 'VP · 30' })).toBeVisible();
+
+    await openFilterGroup(page, 'format');
     await expect(filters.getByRole('button', { name: 'Удалённо · 12' })).toBeVisible();
-    await expect(filters.getByRole('button', { name: 'Indeed · 61' })).toBeVisible();
-    await expect(filters.getByText(/Добавить:/)).toHaveCount(0);
+
+    await openFilterGroup(page, 'sources');
+    await expect(filters.getByRole('button', { name: 'hh.ru · 61' })).toBeVisible();
+    await expect(filters.locator('.vacancy-source-group legend')).toHaveText('Агрегаторы · 61');
+    await expect.poll(() => sourceCatalogReadCount.value).toBeGreaterThan(0);
+    await expect(filters.locator('.vacancy-source-filter .vacancy-facet-chip')).toHaveCount(1);
+    await expect(filters.getByRole('button', { name: /Добавить:/ })).toHaveCount(0);
 
     const rows = page.locator('.vac-list-item');
     await expect(rows).toHaveCount(6);
@@ -555,10 +610,10 @@ test.describe('B250 vacancies screen', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.vacancies-screen')).toBeVisible();
 
-    // C74: filters collapsed by default on <= 480px into single line with active count
+    // На телефоне фильтр свернут, а число активных групп остаётся видимым.
     const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
     await expect(filterToggle).toBeVisible();
-    await expect(filterToggle).toContainText(/Фильтры\s*·\s*\d+\s*активн/);
+    await expect(filterToggle).toHaveText(/^Фильтры\s+\d+$/);
     await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
 
     // C74: first row of vacancies list is visible without scrolling on 390
@@ -680,7 +735,7 @@ test.describe('B250 vacancies screen', () => {
     await expect(detail).not.toBeVisible();
   });
 
-  test('the path indicator shows exactly one current step, and it is «Подборка»', async ({
+  test('the approved vacancy tabs have exactly one current section, «Подборка»', async ({
     page,
   }) => {
     await stubSession(page);
@@ -688,14 +743,20 @@ test.describe('B250 vacancies screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    await expect(page.locator('.career-path-step')).toHaveCount(5);
-    const active = page.locator('.career-path-step[data-state="active"]');
-    await expect(active).toHaveCount(1);
-    await expect(active).toContainText('Подборка');
-    // Профиль и Роль уже подтверждены — пул непуст, поэтому предыдущие шаги
-    // пути не могут остаться «текущими» (приёмка B250).
-    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
-    await expect(page.locator('.career-path-step').nth(1)).toHaveAttribute('data-state', 'done');
+    const tabs = page.getByRole('tablist', { name: 'Разделы вакансий' });
+    await expect(tabs.getByRole('tab', { selected: true })).toHaveCount(1);
+    await expect(tabs.getByRole('tab', { name: 'Подборка 61' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await expect(tabs.getByRole('tab', { name: 'Сохранённые 0' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
+    await expect(tabs.getByRole('tab', { name: 'Компании и люди' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    );
   });
 
   test('shows the «Откликнуться» button on 1440 and inside the mobile panel on 390', async ({
@@ -769,7 +830,7 @@ test.describe('B250 vacancies screen', () => {
     await expect(banner).toContainText('По роли Enterprise Architect найдено 5 вакансий');
     if (testInfo.project.name === 'mobile-390') {
       const filterToggle = page.getByRole('button', {
-        name: 'Фильтры и сохранённые запросы',
+        name: 'Фильтры',
       });
       await expect(filterToggle).toHaveAttribute('aria-expanded', 'false');
       const firstRow = page.locator('.vac-list-item').first();
@@ -820,11 +881,7 @@ test.describe('B250 vacancies screen', () => {
         .locator('.vacancy-hypothesis-banner')
         .getByRole('button', { name: 'Расширить географию' }),
     ).toHaveCount(0);
-    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
-    if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
-      await filterToggle.click();
-    }
-    const filters = page.locator('.vacancies-filters');
+    const filters = await openFilterGroup(page, 'locations');
     await expect(filters.getByRole('button', { name: 'Добавить: MENA' })).toHaveCount(0);
     const mena = filters.getByRole('button', { name: /MENA · 3/ });
     await expect(mena).toBeVisible();
@@ -975,31 +1032,24 @@ test.describe('B250 vacancies screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    await expect(page.locator('.vacancies-screen h1')).toHaveText('Вакансии');
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
+    ).toBeVisible();
 
     const rows = page.locator('.vac-row');
     await expect(rows).toHaveCount(3);
 
-    // 1. Fresh item should be sorted to first position
+    // 1. Fresh item should be sorted first and have no detail alert.
     const row0 = rows.nth(0);
     await expect(row0).toContainText('Fresh Tech Corp');
-    await expect(row0.locator('.vac-trust-line')).toHaveCount(0);
+    if ((await row0.getAttribute('aria-expanded')) !== 'true') await row0.click();
+    const freshDetail = page.locator('.vac-list-item').nth(0).locator('.vac-detail');
+    await expect(freshDetail).toBeVisible();
+    await expect(freshDetail.locator('.vacancies-detail-trust-alert')).toHaveCount(0);
 
-    // 2. Stale item should be sorted to second position with single line reason
+    // 2. Stale item should be sorted second and explain the age in its detail.
     const row1 = rows.nth(1);
     await expect(row1).toContainText('Legacy Systems Inc');
-    const staleTrustLine = row1.locator('.vac-trust-line.is-stale');
-    await expect(staleTrustLine).toBeVisible();
-    await expect(staleTrustLine).toContainText('Вакансия открыта более 60 дней');
-
-    // 3. Dead link item should be sorted to third (bottom) position with single line reason
-    const row2 = rows.nth(2);
-    await expect(row2).toContainText('Ghost Corp');
-    const deadTrustLine = row2.locator('.vac-trust-line.is-suspicious');
-    await expect(deadTrustLine).toBeVisible();
-    await expect(deadTrustLine).toContainText('Ссылка на вакансию недоступна');
-
-    // 4. Click stale item and verify detail panel trust alert
     await row1.click();
     const staleDetail = page.locator('.vac-list-item').nth(1).locator('.vac-detail');
     await expect(staleDetail).toBeVisible();
@@ -1013,7 +1063,9 @@ test.describe('B250 vacancies screen', () => {
       fullPage: true,
     });
 
-    // 5. Click dead link item and verify detail panel trust alert
+    // 3. Dead link item remains last and explains why its link is suspicious.
+    const row2 = rows.nth(2);
+    await expect(row2).toContainText('Ghost Corp');
     await row2.click();
     const deadDetail = page.locator('.vac-list-item').nth(2).locator('.vac-detail');
     await expect(deadDetail).toBeVisible();
@@ -1027,18 +1079,22 @@ test.describe('B250 vacancies screen', () => {
     });
   });
 
-  test('B324: view switch toggles map and city selection filters list', async ({ page }) => {
+  test('B324: the screen switches between list and map and filters by city', async ({
+    page,
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    const switchBar = page.locator('.view-switch[role="tablist"]');
-    await expect(switchBar).toBeVisible();
-    const mapTab = switchBar.getByRole('tab', { name: 'Карта' });
-    const listTab = switchBar.getByRole('tab', { name: 'Список' });
-
-    await mapTab.click();
+    const mobile = testInfo.project.name === 'mobile-390';
+    if (mobile) {
+      await page.getByRole('button', { name: 'Карта', exact: true }).click();
+    } else {
+      const switchBar = page.getByRole('tablist', { name: 'Режим просмотра' });
+      await expect(switchBar).toBeVisible();
+      await switchBar.getByRole('tab', { name: 'Карта' }).click();
+    }
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
 
     // Город выбирается кнопкой в списке под картой.
@@ -1047,8 +1103,15 @@ test.describe('B250 vacancies screen', () => {
       await cityBtn.click();
     }
 
-    // Switch back to list view
-    await listTab.click();
+    // Возврат в список использует управление текущей раскладки.
+    if (mobile) {
+      await page.getByRole('button', { name: 'Список', exact: true }).click();
+    } else {
+      await page
+        .getByRole('tablist', { name: 'Режим просмотра' })
+        .getByRole('tab', { name: 'Список' })
+        .click();
+    }
     await expect(page.locator('.vacancies-list-container')).toBeVisible();
   });
 
@@ -1230,9 +1293,7 @@ test.describe('B250 vacancies screen', () => {
     await page.screenshot({ path: 'output/playwright/B375/map-390.png' });
   });
 
-  test('B375: моноширинный шрифт ограничен только числами (слова в системном шрифте)', async ({
-    page,
-  }, testInfo) => {
+  test('B375: salary and role use the approved primary font', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'desktop-1440') {
       test.skip(true, 'B375 captures target widths in one browser session');
     }
@@ -1261,14 +1322,31 @@ test.describe('B250 vacancies screen', () => {
     const vacancyRow = page.locator('.vac-row').first();
     await expect(vacancyRow).toBeVisible();
 
-    // "не указана" in vac-comp
-    const compEl = vacancyRow.locator('.vac-comp');
-    await expect(compEl).toContainText('не указана');
-
-    // "Требования: 1 из 2"
-    const reqEl = vacancyRow.locator('.vac-req');
-    await expect(reqEl).toContainText('Требования:');
-    await expect(reqEl).toContainText('из');
+    const salary = vacancyRow.locator('.vacancies-screen-cell--salary .career-numeric');
+    const title = vacancyRow.locator('.vacancies-screen-cell--role .vac-title');
+    await expect(salary).toHaveText('не указана');
+    await expect(vacancyRow.locator('.vacancy-screen-money-source')).toContainText(
+      'зарплата не указана',
+    );
+    await expect(title).toContainText('Frontend Engineer');
+    if ((await vacancyRow.getAttribute('aria-expanded')) !== 'true') await vacancyRow.click();
+    const details = page.locator('.vac-list-item').first().locator('.vac-detail');
+    await expect(details.locator('.req-summary')).toContainText(
+      'Требования вакансии: 1 из 2 подтверждены фактами профиля',
+    );
+    await expect(details.locator('.vac-detail-grid')).toContainText('React');
+    await expect(details.locator('.vac-detail-grid')).toContainText('GraphQL');
+    const fontFamilies = await page.evaluate(() => {
+      const salaryValue = document.querySelector('.vacancies-screen-cell--salary .career-numeric');
+      const roleTitle = document.querySelector('.vacancies-screen-cell--role .vac-title');
+      if (!salaryValue || !roleTitle) return null;
+      return {
+        salary: getComputedStyle(salaryValue).fontFamily,
+        title: getComputedStyle(roleTitle).fontFamily,
+      };
+    });
+    expect(fontFamilies).not.toBeNull();
+    expect(fontFamilies!.salary).toBe(fontFamilies!.title);
 
     // Screenshots at 1440, 1176, 390
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -1302,11 +1380,7 @@ test.describe('B250 vacancies screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
-    await filterToggle.click();
-
-    const filters = page.locator('.filters-panel.is-expanded');
-    await expect(filters).toBeVisible();
+    const filters = await openFilterGroup(page, 'roles');
 
     // Verify limit note and disabled inputs
     const limitNote = filters.locator('.role-limit-note');
@@ -1317,21 +1391,18 @@ test.describe('B250 vacancies screen', () => {
     await expect(filters.locator('.add-role-row button')).toBeDisabled();
   });
 
-  test('B324: saved searches panel toggles from filter bar', async ({ page }) => {
+  test('B324: saved vacancies are a primary screen tab', async ({ page }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    const savedBtn = page.locator('.filters-bar .saved-btn');
-    await expect(savedBtn).toBeVisible();
-    await savedBtn.click();
-
-    const savedSection = page.locator('.filters-panel[aria-label="Сохранённые поиски"]');
-    await expect(savedSection).toBeVisible();
-
-    await savedBtn.click();
-    await expect(savedSection).not.toBeVisible();
+    const savedTab = page.getByRole('tab', { name: /Сохранённые/u });
+    await expect(savedTab).toBeVisible();
+    await expect(page.locator('.filters-bar .saved-btn')).toHaveCount(0);
+    await savedTab.click();
+    await expect(savedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
   });
 
   test('B324: captures all 8 states at 1440 and 390', async ({ page }, testInfo) => {
@@ -1356,42 +1427,50 @@ test.describe('B250 vacancies screen', () => {
     });
 
     // 2. filters-expanded
-    const filterToggle = page.locator('.vacancies-mobile-filter-toggle');
+    const filterToggle = isMobile
+      ? page.locator('.vacancies-mobile-filter-toggle')
+      : page.getByRole('button', { name: 'Роли', exact: true });
     await filterToggle.click();
     await expect(page.locator('.filters-panel.is-expanded')).toBeVisible();
     await page.screenshot({
       path: `output/playwright/B324/filters-expanded-${vpSuffix}.png`,
       fullPage: true,
     });
-    // Close filters panel
-    await filterToggle.click();
+    // Close filters panel from inside the popover.
+    await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
     await expect(page.locator('.filters-panel.is-expanded')).not.toBeVisible();
 
     // 3. map-view
     const switchBar = page.locator('.view-switch[role="tablist"]');
-    const mapTab = switchBar.getByRole('tab', { name: 'Карта' });
-    await mapTab.click();
+    const mapControl = isMobile
+      ? page.getByRole('button', { name: 'Карта' })
+      : switchBar.getByRole('tab', { name: 'Карта' });
+    await mapControl.click();
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
     await page.screenshot({
       path: `output/playwright/B324/map-view-${vpSuffix}.png`,
       fullPage: true,
     });
 
-    // 4. saved-searches
-    const listTab = switchBar.getByRole('tab', { name: 'Список' });
-    await listTab.click();
+    // 4. saved-vacancies
+    const listControl = isMobile
+      ? page.getByRole('button', { name: 'Список' })
+      : switchBar.getByRole('tab', { name: 'Список' });
+    await listControl.click();
     await expect(page.locator('.vacancies-list-container')).toBeVisible();
 
-    const savedBtn = page.locator('.filters-bar .saved-btn');
-    await savedBtn.click();
-    const savedSection = page.locator('.filters-panel[aria-label="Сохранённые поиски"]');
-    await expect(savedSection).toBeVisible();
+    const saveVacancy = firstItem.getByRole('button', { name: 'Сохранить вакансию' });
+    await saveVacancy.click();
+    const savedTab = page.getByRole('tab', { name: /Сохранённые/u });
+    await expect(savedTab).toBeVisible();
+    await savedTab.click();
+    await expect(savedTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
     await page.screenshot({
-      path: `output/playwright/B324/saved-searches-${vpSuffix}.png`,
+      path: `output/playwright/B324/saved-vacancies-${vpSuffix}.png`,
       fullPage: true,
     });
-    await savedBtn.click();
-    await expect(savedSection).not.toBeVisible();
+    await page.getByRole('tab', { name: /Подборка/u }).click();
 
     // 5. detail-modal
     const detailActions = firstItem.locator('.vac-detail .vacancies-detail-actions');
@@ -1524,16 +1603,13 @@ test.describe('B250 vacancies screen', () => {
     await openVacancies(page);
 
     // (a) Проверка группы фильтра «Уровень»
-    if (isMobile) {
-      await page.locator('.vacancies-mobile-filter-toggle').click();
-    }
-    const filtersPanel = page.locator('.filters-panel');
+    const filtersPanel = await openFilterGroup(page, 'roles');
     await expect(filtersPanel.locator('.level-note')).toHaveText(
       'Уровень берётся из опыта в профиле',
     );
     await expect(filtersPanel.getByText('изменить в профиле')).not.toBeVisible();
     if (isMobile) {
-      await page.locator('.vacancies-mobile-filter-toggle').click();
+      await filtersPanel.getByRole('button', { name: 'Свернуть', exact: true }).click();
     }
 
     // (б) Разбор вакансии: уровень отделен от навыков
@@ -1555,7 +1631,7 @@ test.describe('B250 vacancies screen', () => {
     });
   });
 
-  test('B371: тап по ⓘ на 390 оставляет подсказку открытой, Escape и клик вне закрывают, hover на 1440 работает без клика', async ({
+  test('B371: fit tooltip stays open on tap and closes on Escape or outside click', async ({
     page,
   }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile-390';
@@ -1565,21 +1641,21 @@ test.describe('B250 vacancies screen', () => {
     await openVacancies(page);
     await page.mouse.move(0, 0);
 
-    const infoBtn = page.locator('.fit-legend .info-btn');
-    await expect(infoBtn).toBeVisible();
-    await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+    const fitMarker = page.getByRole('img', { name: 'Уровень: совпадает' }).first();
+    await expect(fitMarker).toBeVisible();
+    await expect(fitMarker).toHaveAttribute('aria-expanded', 'false');
 
-    const tooltipId = await infoBtn.getAttribute('aria-describedby');
+    const tooltipId = await fitMarker.getAttribute('aria-describedby');
     expect(tooltipId).toBeTruthy();
     const tooltipBubble = page.locator(`[id="${tooltipId}"]`);
     await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
 
     if (isMobile) {
       // 1. Mobile 390: тап оставляет открытой, повторный клик или тап вне закрывают
-      await infoBtn.click();
-      await expect(infoBtn).toHaveAttribute('aria-expanded', 'true');
+      await fitMarker.click();
+      await expect(fitMarker).toHaveAttribute('aria-expanded', 'true');
       await expect(tooltipBubble).toBeVisible();
-      await expect(tooltipBubble).toContainText('Порядок задаёт сервер');
+      await expect(tooltipBubble).toHaveText('Уровень: совпадает');
 
       // Подсказка остаётся открытой
       await page.waitForTimeout(300);
@@ -1592,19 +1668,19 @@ test.describe('B250 vacancies screen', () => {
       // Тап вне подсказки закрывает её
       await page.mouse.click(20, 100);
       await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
-      await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+      await expect(fitMarker).toHaveAttribute('aria-expanded', 'false');
 
       // Повторный тап открывает, а затем Escape закрывает
-      await infoBtn.click();
+      await fitMarker.click();
       await expect(tooltipBubble).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
-      await expect(infoBtn).toHaveAttribute('aria-expanded', 'false');
+      await expect(fitMarker).toHaveAttribute('aria-expanded', 'false');
     } else {
       // 2. Desktop 1440: наведение показывает без клика
-      await infoBtn.hover();
+      await fitMarker.hover();
       await expect(tooltipBubble).toBeVisible();
-      await expect(tooltipBubble).toContainText('Порядок задаёт сервер');
+      await expect(tooltipBubble).toHaveText('Уровень: совпадает');
       await page.screenshot({
         path: 'output/playwright/B371/tooltip-hover-1440.png',
         fullPage: false,
@@ -1615,7 +1691,7 @@ test.describe('B250 vacancies screen', () => {
       await expect(tooltipBubble).not.toHaveAttribute('data-open', 'true');
 
       // Проверка клика на десктопе и снимок 1176
-      await infoBtn.click();
+      await fitMarker.click();
       await expect(tooltipBubble).toBeVisible();
       await page.mouse.move(0, 0);
       await expect(tooltipBubble).toBeVisible();

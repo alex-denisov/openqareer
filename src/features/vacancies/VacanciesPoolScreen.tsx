@@ -7,7 +7,7 @@ export function VacanciesPoolScreen({
   ...props
 }: {
   readonly pool: MatchedPool;
-} & Omit<VacanciesScreenProps, 'matched' | 'total'>) {
+} & Omit<VacanciesScreenProps, 'matched' | 'total' | 'initialFilters'>) {
   const selection = useMatchedPool(pool);
   return (
     <VacanciesScreen
@@ -16,6 +16,7 @@ export function VacanciesPoolScreen({
       total={selection.total}
       poolComplete={selection.complete}
       facets={selection.facets}
+      initialFilters={selection.initialFilters}
       campaign={selection.campaign}
       candidateLevel={selection.candidateLevel}
       loading={selection.loading}

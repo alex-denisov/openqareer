@@ -93,8 +93,12 @@ export function CareerWorkspaceShell({
     subject?: CoachTurnSubject;
     subjectTitle?: string;
   }>({
-    open: sessionPending,
-    stage: 'today',
+    open:
+      sessionPending ||
+      (initialView === 'opportunities' &&
+        typeof window !== 'undefined' &&
+        window.matchMedia('(min-width: 761px)').matches),
+    stage: initialView === 'opportunities' ? stageForView(initialView) : 'today',
   });
   const [expertSheetExpanded, setExpertSheetExpanded] = useState(false);
   const autoOpenedExpert = useRef(sessionPending);
@@ -142,7 +146,8 @@ export function CareerWorkspaceShell({
   });
 
   useEffect(() => {
-    if (autoOpenedExpert.current || intakeVisible || !session?.candidateId || visibleWorkspace) return;
+    if (autoOpenedExpert.current || intakeVisible || !session?.candidateId || visibleWorkspace)
+      return;
     autoOpenedExpert.current = true;
     setExpertConfig((current) => ({ ...current, open: true }));
   }, [intakeVisible, session?.candidateId, visibleWorkspace]);
@@ -191,7 +196,15 @@ export function CareerWorkspaceShell({
     if (!isNavigable(target)) return;
     setActiveView(target);
     setNavigationOptions(targetOptions);
-    setExpertConfig((prev) => ({ ...prev, open: false }));
+    const showVacancyExpert =
+      target === 'opportunities' && window.matchMedia('(min-width: 761px)').matches;
+    setExpertConfig((previous) => ({
+      ...previous,
+      open: showVacancyExpert,
+      stage: target === 'opportunities' ? stageForView(target) : previous.stage,
+      subject: undefined,
+      subjectTitle: undefined,
+    }));
     setExpertSheetExpanded(false);
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, behavior: 'auto' });
@@ -232,7 +245,8 @@ export function CareerWorkspaceShell({
   }, [closeExpert, expertConfig.open, onboardingIsFullscreen]);
 
   const handleExpertEscape = useCallback(() => {
-    const onPhone = typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 760px)').matches);
+    const onPhone =
+      typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 760px)').matches);
     if (onPhone && expertSheetExpanded) {
       setExpertSheetExpanded(false);
       return;
@@ -247,6 +261,14 @@ export function CareerWorkspaceShell({
   const openAccount = useCallback(() => {
     setExpertSheetExpanded(false);
     setExpertConfig((previous) => ({ ...previous, open: false }));
+    setAccountSection('security');
+    setAccountOpen(true);
+  }, []);
+
+  const openNotifications = useCallback(() => {
+    setExpertSheetExpanded(false);
+    setExpertConfig((previous) => ({ ...previous, open: false }));
+    setAccountSection('notif');
     setAccountOpen(true);
   }, []);
   const openConnections = useCallback(() => {
@@ -291,9 +313,10 @@ export function CareerWorkspaceShell({
   return (
     <div
       className={`career-shell ${expertPanelOpen ? 'expert-is-open' : ''} ${
-        onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''
-      }`}
+        activeView === 'opportunities' ? 'career-shell--vacancies' : ''
+      } ${onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''}`}
       data-testid="career-shell"
+      data-shell-view={activeView}
     >
       <a className="career-skip-link" href="#career-main">
         К содержанию
@@ -309,22 +332,20 @@ export function CareerWorkspaceShell({
         onNavigate={navigate}
         onOpenAccount={openAccount}
       />
-      <CareerMobileTopbar
-        session={session}
-        sessionPending={sessionPending}
-        ariaHidden={accountOpen || onboardingIsFullscreen}
-        tariffsAvailable={isNavigable('tariffs')}
-        tariffsLockedReason={lockedReason('tariffs')}
-        onNavigateHome={() => navigate('today')}
-        onNavigateTariffs={() => navigate('tariffs')}
-        onOpenAccount={openAccount}
-      />
+      {activeView === 'opportunities' ? null : (
+        <CareerMobileTopbar
+          session={session}
+          sessionPending={sessionPending}
+          ariaHidden={accountOpen || onboardingIsFullscreen}
+          tariffsAvailable={isNavigable('tariffs')}
+          tariffsLockedReason={lockedReason('tariffs')}
+          onNavigateHome={() => navigate('today')}
+          onNavigateTariffs={() => navigate('tariffs')}
+          onOpenAccount={openAccount}
+        />
+      )}
 
-      <main
-        id="career-main"
-        className="career-main"
-        aria-hidden={accountOpen ? true : undefined}
-      >
+      <main id="career-main" className="career-main" aria-hidden={accountOpen ? true : undefined}>
         <AppErrorBoundary>
           {sessionPending ? (
             <SessionGate
@@ -372,6 +393,7 @@ export function CareerWorkspaceShell({
               onNavigate={navigate}
               onOpenTariffs={() => navigate('tariffs')}
               onOpenConnections={openConnections}
+              onOpenNotifications={openNotifications}
               onOpenExpert={openExpert}
               onUpdateWorkspace={onUpdateWorkspace}
             />
@@ -451,7 +473,10 @@ export function CareerWorkspaceShell({
         ariaHidden={accountOpen || onboardingIsFullscreen}
       />
 
-      {!expertPanelOpen && !accountOpen && !onboardingIsFullscreen ? (
+      {activeView !== 'opportunities' &&
+      !expertPanelOpen &&
+      !accountOpen &&
+      !onboardingIsFullscreen ? (
         <button
           className="career-expert-peek"
           type="button"
@@ -546,7 +571,9 @@ function SessionGate({
           <CareerTodaySkeleton />
           {waitIsLong ? (
             <div className="career-session-gate-actions">
-              <p className="career-session-gate-note" role="status">Загрузка дольше обычного.</p>
+              <p className="career-session-gate-note" role="status">
+                Загрузка дольше обычного.
+              </p>
               <button className="career-primary-button" type="button" onClick={onRetry}>
                 Повторить
               </button>
