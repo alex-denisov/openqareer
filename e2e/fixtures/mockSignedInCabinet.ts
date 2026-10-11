@@ -97,153 +97,153 @@ export async function mockSignedInCabinet(
   let nextApplicationId = 1;
   const connectionState = createMockConnectionState();
 
-type MockConnectionContact = Record<string, unknown> & {
-  readonly id: string;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-};
-
-type MockConnectionState = {
-  readonly contacts: Map<string, MockConnectionContact>;
-  importReceipt: {
-    state: 'unknown' | 'imported';
-    importedAt: string | null;
-    importedCount: number | null;
+  type MockConnectionContact = Record<string, unknown> & {
+    readonly id: string;
+    readonly createdAt: string;
+    readonly updatedAt: string;
   };
-};
 
-function createMockConnectionState(): MockConnectionState {
-  return {
-    contacts: new Map(),
-    importReceipt: { state: 'unknown', importedAt: null, importedCount: null },
+  type MockConnectionState = {
+    readonly contacts: Map<string, MockConnectionContact>;
+    importReceipt: {
+      state: 'unknown' | 'imported';
+      importedAt: string | null;
+      importedCount: number | null;
+    };
   };
-}
 
-async function mockConnectionRoutes(
-  route: Route,
-  url: URL,
-  state: MockConnectionState,
-): Promise<boolean> {
-  const path = url.pathname;
-  if (path === '/api/v1/candidate/connection-contacts') {
-    return mockConnectionContactList(route, url, state);
+  function createMockConnectionState(): MockConnectionState {
+    return {
+      contacts: new Map(),
+      importReceipt: { state: 'unknown', importedAt: null, importedCount: null },
+    };
   }
-  if (path === '/api/v1/candidate/connection-contacts/linkedin-import') {
-    return mockConnectionImport(route, state);
-  }
-  const contact = path.match(/^\/api\/v1\/candidate\/connection-contacts\/([^/]+)$/u);
-  if (contact) return mockConnectionMutation(route, decodeURIComponent(contact[1]!), state);
-  const circles = path.match(/^\/api\/v1\/candidate\/vacancies\/([^/]+)\/connection-circles$/u);
-  if (circles) return mockConnectionCircles(route, decodeURIComponent(circles[1]!), state);
-  return false;
-}
 
-async function mockConnectionContactList(
-  route: Route,
-  url: URL,
-  state: MockConnectionState,
-): Promise<boolean> {
-  if (route.request().method() !== 'GET') return false;
-  const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-  const contacts = Array.from(state.contacts.values());
-  const items = contacts.slice(offset, offset + limit);
-  return route
-    .fulfill({
+  async function mockConnectionRoutes(
+    route: Route,
+    url: URL,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    const path = url.pathname;
+    if (path === '/api/v1/candidate/connection-contacts') {
+      return mockConnectionContactList(route, url, state);
+    }
+    if (path === '/api/v1/candidate/connection-contacts/linkedin-import') {
+      return mockConnectionImport(route, state);
+    }
+    const contact = path.match(/^\/api\/v1\/candidate\/connection-contacts\/([^/]+)$/u);
+    if (contact) return mockConnectionMutation(route, decodeURIComponent(contact[1]!), state);
+    const circles = path.match(/^\/api\/v1\/candidate\/vacancies\/([^/]+)\/connection-circles$/u);
+    if (circles) return mockConnectionCircles(route, decodeURIComponent(circles[1]!), state);
+    return false;
+  }
+
+  async function mockConnectionContactList(
+    route: Route,
+    url: URL,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() !== 'GET') return false;
+    const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+    const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
+    const contacts = Array.from(state.contacts.values());
+    const items = contacts.slice(offset, offset + limit);
+    return route
+      .fulfill({
+        json: {
+          data: {
+            items,
+            total: contacts.length,
+            offset,
+            limit,
+            nextOffset: offset + items.length < contacts.length ? offset + items.length : null,
+            linkedinImport: state.importReceipt,
+          },
+        },
+      })
+      .then(() => true);
+  }
+
+  async function mockConnectionImport(route: Route, state: MockConnectionState): Promise<boolean> {
+    if (route.request().method() !== 'PUT') return false;
+    const body = route.request().postDataJSON() as { contacts?: Array<Record<string, unknown>> };
+    const importedAt = '2026-10-10T12:00:00.000Z';
+    for (const [id, contact] of state.contacts) {
+      if (contact.source === 'linkedin_import') state.contacts.delete(id);
+    }
+    for (const [index, contact] of (body.contacts ?? []).entries()) {
+      const id = String(contact.externalId ?? contact.linkedinUrl ?? `imported-${index + 1}`);
+      state.contacts.set(id, {
+        ...contact,
+        id,
+        source: 'linkedin_import',
+        createdAt: importedAt,
+        updatedAt: importedAt,
+      });
+    }
+    state.importReceipt = {
+      state: 'imported',
+      importedAt,
+      importedCount: (body.contacts ?? []).length,
+    };
+    return route.fulfill({ json: { data: state.importReceipt } }).then(() => true);
+  }
+
+  async function mockConnectionMutation(
+    route: Route,
+    id: string,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() === 'DELETE') {
+      const contact = state.contacts.get(id);
+      if (contact?.source === 'linkedin_import') {
+        await route.fulfill({
+          status: 409,
+          json: { error: { code: 'connection_contact_read_only' } },
+        });
+        return true;
+      }
+      if (contact?.source === 'manual') state.contacts.delete(id);
+      await route.fulfill({ status: 204 });
+      return true;
+    }
+    if (route.request().method() !== 'PUT') return false;
+    const previous = state.contacts.get(id);
+    const now = '2026-10-10T12:00:00.000Z';
+    const contact = {
+      ...(route.request().postDataJSON() as Record<string, unknown>),
+      id,
+      source: 'manual',
+      createdAt: previous?.createdAt ?? now,
+      updatedAt: now,
+    };
+    state.contacts.set(id, contact);
+    await route.fulfill({ status: previous ? 200 : 201, json: { data: contact } });
+    return true;
+  }
+
+  async function mockConnectionCircles(
+    route: Route,
+    vacancyId: string,
+    state: MockConnectionState,
+  ): Promise<boolean> {
+    if (route.request().method() !== 'GET') return false;
+    const knownState = state.importReceipt.state === 'imported' ? 'none' : 'unknown';
+    await route.fulfill({
       json: {
         data: {
-          items,
-          total: contacts.length,
-          offset,
-          limit,
-          nextOffset: offset + items.length < contacts.length ? offset + items.length : null,
+          vacancyId,
+          circles: [
+            { circle: 1, state: knownState, paths: [] },
+            { circle: 2, state: knownState, paths: [] },
+            { circle: 3, state: 'available', paths: [{ nextStep: 'cold_application' }] },
+          ],
           linkedinImport: state.importReceipt,
         },
       },
-    })
-    .then(() => true);
-}
-
-async function mockConnectionImport(route: Route, state: MockConnectionState): Promise<boolean> {
-  if (route.request().method() !== 'PUT') return false;
-  const body = route.request().postDataJSON() as { contacts?: Array<Record<string, unknown>> };
-  const importedAt = '2026-10-10T12:00:00.000Z';
-  for (const [id, contact] of state.contacts) {
-    if (contact.source === 'linkedin_import') state.contacts.delete(id);
-  }
-  for (const [index, contact] of (body.contacts ?? []).entries()) {
-    const id = String(contact.externalId ?? contact.linkedinUrl ?? `imported-${index + 1}`);
-    state.contacts.set(id, {
-      ...contact,
-      id,
-      source: 'linkedin_import',
-      createdAt: importedAt,
-      updatedAt: importedAt,
     });
-  }
-  state.importReceipt = {
-    state: 'imported',
-    importedAt,
-    importedCount: (body.contacts ?? []).length,
-  };
-  return route.fulfill({ json: { data: state.importReceipt } }).then(() => true);
-}
-
-async function mockConnectionMutation(
-  route: Route,
-  id: string,
-  state: MockConnectionState,
-): Promise<boolean> {
-  if (route.request().method() === 'DELETE') {
-    const contact = state.contacts.get(id);
-    if (contact?.source === 'linkedin_import') {
-      await route.fulfill({
-        status: 409,
-        json: { error: { code: 'connection_contact_read_only' } },
-      });
-      return true;
-    }
-    if (contact?.source === 'manual') state.contacts.delete(id);
-    await route.fulfill({ status: 204 });
     return true;
   }
-  if (route.request().method() !== 'PUT') return false;
-  const previous = state.contacts.get(id);
-  const now = '2026-10-10T12:00:00.000Z';
-  const contact = {
-    ...(route.request().postDataJSON() as Record<string, unknown>),
-    id,
-    source: 'manual',
-    createdAt: previous?.createdAt ?? now,
-    updatedAt: now,
-  };
-  state.contacts.set(id, contact);
-  await route.fulfill({ status: previous ? 200 : 201, json: { data: contact } });
-  return true;
-}
-
-async function mockConnectionCircles(
-  route: Route,
-  vacancyId: string,
-  state: MockConnectionState,
-): Promise<boolean> {
-  if (route.request().method() !== 'GET') return false;
-  const knownState = state.importReceipt.state === 'imported' ? 'none' : 'unknown';
-  await route.fulfill({
-    json: {
-      data: {
-        vacancyId,
-        circles: [
-          { circle: 1, state: knownState, paths: [] },
-          { circle: 2, state: knownState, paths: [] },
-          { circle: 3, state: 'available', paths: [{ nextStep: 'cold_application' }] },
-        ],
-        linkedinImport: state.importReceipt,
-      },
-    },
-  });
-  return true;
-}
 
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;

@@ -40,43 +40,54 @@ function VacanciesTableHeader() {
   );
 }
 
+function VacancyScreenRow({
+  item,
+  props,
+}: {
+  readonly item: MatchedVacancyItem;
+  readonly props: ListContentProps;
+}) {
+  return (
+    <VacancyRow
+      layout="screen"
+      item={item}
+      now={props.now}
+      isSelected={props.selectedId === item.cluster.id}
+      onSelect={() => props.onToggleSelect(item.cluster.id)}
+      applications={props.applications}
+      archivedApplicationClusterIds={props.archivedApplicationClusterIds}
+      onMarkAlreadyApplied={props.onMarkAlreadyApplied}
+      onScheduleInterview={props.onScheduleInterview}
+      onOpenNetworking={props.onOpenNetworking}
+      onOpenLetter={props.onOpenLetter}
+      onOpenResponses={props.onOpenResponses}
+      onOpenArchive={props.onOpenArchive}
+      onAddToProfile={props.onAddToProfile}
+      onDiscussWithConsultant={props.onDiscussWithConsultant}
+      isSaved={props.savedClusterIds?.has(item.cluster.id)}
+      saveBusy={props.savedBusyIds?.has(item.cluster.id)}
+      isCompanyWanted={props.companyWantByClusterId?.get(item.cluster.id)}
+      companyWantKnown={props.companyWantKnownClusterIds?.has(item.cluster.id)}
+      companyWantBusy={props.companyBusyClusterIds?.has(item.cluster.id)}
+      companyContactsCount={props.companyContactsCountByClusterId?.get(item.cluster.id)}
+      onOpenCompanyPath={
+        item.cluster.canonicalCompany
+          ? () => props.onOpenCompanyPath?.(item.cluster.canonicalCompany)
+          : undefined
+      }
+      onToggleSaved={() => props.onToggleSaved?.(item.cluster)}
+      onToggleCompanyWant={() => props.onToggleCompanyWant?.(item.cluster.canonicalCompany)}
+    />
+  );
+}
+
 function VacanciesListContent(props: ListContentProps) {
   return (
     <div className="vacancies-list-container">
       <VacanciesTableHeader />
       <ul className="vac-list">
         {props.items.map((item) => (
-          <VacancyRow
-            key={item.cluster.id}
-            layout="screen"
-            item={item}
-            now={props.now}
-            isSelected={props.selectedId === item.cluster.id}
-            onSelect={() => props.onToggleSelect(item.cluster.id)}
-            applications={props.applications}
-            archivedApplicationClusterIds={props.archivedApplicationClusterIds}
-            onMarkAlreadyApplied={props.onMarkAlreadyApplied}
-            onScheduleInterview={props.onScheduleInterview}
-            onOpenNetworking={props.onOpenNetworking}
-            onOpenLetter={props.onOpenLetter}
-            onOpenResponses={props.onOpenResponses}
-            onOpenArchive={props.onOpenArchive}
-            onAddToProfile={props.onAddToProfile}
-            onDiscussWithConsultant={props.onDiscussWithConsultant}
-            isSaved={props.savedClusterIds?.has(item.cluster.id)}
-            saveBusy={props.savedBusyIds?.has(item.cluster.id)}
-            isCompanyWanted={props.companyWantByClusterId?.get(item.cluster.id)}
-            companyWantKnown={props.companyWantKnownClusterIds?.has(item.cluster.id)}
-            companyWantBusy={props.companyBusyClusterIds?.has(item.cluster.id)}
-            companyContactsCount={props.companyContactsCountByClusterId?.get(item.cluster.id)}
-            onOpenCompanyPath={
-              item.cluster.canonicalCompany
-                ? () => props.onOpenCompanyPath?.(item.cluster.canonicalCompany)
-                : undefined
-            }
-            onToggleSaved={() => props.onToggleSaved?.(item.cluster)}
-            onToggleCompanyWant={() => props.onToggleCompanyWant?.(item.cluster.canonicalCompany)}
-          />
+          <VacancyScreenRow key={item.cluster.id} item={item} props={props} />
         ))}
       </ul>
       {props.hasMore ? (

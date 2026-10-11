@@ -23,7 +23,7 @@ interface LetterRouteState {
   sendAttempts: string[];
 }
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B449';
+const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'B449');
 const FACT_ID = 'fact-platform-delivery';
 const WORKPLACE_ID = 'work-platform';
 
@@ -234,8 +234,12 @@ async function installLetterMocks(page: Page, state: LetterRouteState): Promise<
 
 async function openLetter(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', 'true');
-  await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+  const vacanciesNavigation = page.locator('button[aria-label="Вакансии"]:visible').first();
+  await expect(vacanciesNavigation).toBeVisible({ timeout: 15_000 });
+  await vacanciesNavigation.click();
+  await expect(
+    page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
+  ).toBeVisible({ timeout: 15_000 });
   const firstItem = page.locator('.vac-list-item').first();
   await expect(firstItem).toBeVisible();
   const row = firstItem.locator('.vac-row');
