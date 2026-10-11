@@ -425,6 +425,7 @@ export function CareerAccountPanel({
             onDeleteAccount={deleteAccount}
             onSignOut={signOut}
             onDataChanged={onDataChanged}
+            onOpenTariffs={tariffsAvailable ? onOpenTariffs : undefined}
           />
         ) : null}
 

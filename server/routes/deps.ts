@@ -13,6 +13,8 @@ import type { CoverLetterWriter } from '../providers/coverLetterWriter';
 import type { VacancySample } from '../domain/vacancy';
 import type { MultiSourceVacancyEngine } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyIntelligenceService } from '../vacancies/vacancyIntelligenceService';
+import type { RobokassaGateway } from '../billing/robokassaGateway';
+import type { SqliteBillingRepository } from '../billing/sqliteBillingRepository';
 
 export interface RuntimeMemoryReport {
   readonly ingestPaused: boolean;
@@ -33,10 +35,9 @@ export interface RuntimeMemoryReport {
 }
 
 export interface RouteDeps {
-  /** Текущий тариф кандидата из биллинга, если сервис подключён. */
-  billingRepository?: {
-    getSubscription(userId: string): { planId: string } | null;
-  };
+  /** Disabled until merchant credentials and recurring approval are configured. */
+  robokassaGateway?: RobokassaGateway;
+  billingRepository?: SqliteBillingRepository;
   /** Настройки веера обхода hh.ru: набор ролей выбирает владелец (B214). */
   hhCrawlSettings?: import('../vacancies/hhCrawlSettings').HhCrawlSettingsStore;
   /** Память и пауза опросов — только администратору (B220). */

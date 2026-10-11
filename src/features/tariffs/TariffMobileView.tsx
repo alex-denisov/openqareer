@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   CaretLeft,
   CaretRight,
@@ -22,6 +23,7 @@ interface TariffMobileViewProps {
   readonly activeTierId: TariffTierId;
   readonly initialView?: string;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingPanel?: ReactNode;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }
@@ -30,6 +32,7 @@ export function TariffMobileView({
   activeTierId,
   initialView = 'home',
   subscription,
+  billingPanel,
   onSelectTier,
   onRequestTier,
 }: TariffMobileViewProps) {
@@ -57,6 +60,7 @@ export function TariffMobileView({
   return (
     <MobileHomeView
       activeTierId={activeTierId}
+      billingPanel={billingPanel}
       onGoLevel={(id) => setCurrentView(`lvl-${id}`)}
       onGoCompare={() => setCurrentView('cmp')}
     />
@@ -65,10 +69,12 @@ export function TariffMobileView({
 
 function MobileHomeView({
   activeTierId,
+  billingPanel,
   onGoLevel,
   onGoCompare,
 }: {
   readonly activeTierId: TariffTierId;
+  readonly billingPanel?: ReactNode;
   readonly onGoLevel: (id: TariffTierId) => void;
   readonly onGoCompare: () => void;
 }) {
@@ -82,14 +88,11 @@ function MobileHomeView({
         </p>
       </div>
 
+      {billingPanel}
+
       <MobileHomeList activeTierId={activeTierId} onGoLevel={onGoLevel} />
 
-      <button
-        type="button"
-        className="career-mob-link-row"
-        data-go="cmp"
-        onClick={onGoCompare}
-      >
+      <button type="button" className="career-mob-link-row" data-go="cmp" onClick={onGoCompare}>
         <span className="career-mob-link-content">
           <ListChecks size={18} aria-hidden="true" />
           Сравнить по шагам пути
@@ -196,9 +199,7 @@ function MobileLevelFeatures({
   return (
     <>
       <div className="career-mob-group">
-        <h4 className="career-mob-group-title">
-          {isActive ? 'Что входит' : 'Объём работы'}
-        </h4>
+        <h4 className="career-mob-group-title">{isActive ? 'Что входит' : 'Объём работы'}</h4>
         <ul className="career-tariff-bullet-list">
           {level.vol.map((item) => (
             <li key={item} className="career-tariff-bullet-item">
@@ -243,17 +244,11 @@ function MobileLevelDetailView({
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }) {
-  const [feedback, setFeedback] = useState<string | null>(null);
   const isActive = level.id === activeTierId;
 
   const handleAction = () => {
-    if (level.id === 'exec') {
-      onRequestTier?.(level.id);
-      setFeedback('Заявка принята. Команда ответит в течение недели.');
-    } else {
-      onSelectTier?.(level.id);
-      setFeedback('Оплата ещё не подключена: мы напишем, когда откроется.');
-    }
+    if (level.id === 'exec') onRequestTier?.(level.id);
+    else onSelectTier?.(level.id);
   };
 
   return (
@@ -265,7 +260,6 @@ function MobileLevelDetailView({
         isActive={isActive}
         activeTierId={activeTierId}
         subscription={subscription}
-        feedback={feedback}
         onAction={handleAction}
       />
     </div>
@@ -301,12 +295,10 @@ function MobileActiveSubscription({
 function MobileUpgradeAction({
   level,
   activeTierId,
-  feedback,
   onAction,
 }: {
   readonly level: TariffLevel;
   readonly activeTierId: TariffTierId;
-  readonly feedback: string | null;
   readonly onAction: () => void;
 }) {
   const currentIdx = TIER_ORDER.indexOf(activeTierId);
@@ -315,11 +307,6 @@ function MobileUpgradeAction({
 
   return (
     <div>
-      {feedback ? (
-        <p className="career-tariffs-lead career-mob-feedback" role="status">
-          {feedback}
-        </p>
-      ) : null}
       <button type="button" className="career-mob-action-btn" onClick={onAction}>
         {level.request ? (
           <>
@@ -344,14 +331,12 @@ function MobileLevelActions({
   isActive,
   activeTierId,
   subscription,
-  feedback,
   onAction,
 }: {
   readonly level: TariffLevel;
   readonly isActive: boolean;
   readonly activeTierId: TariffTierId;
   readonly subscription?: TariffSubscriptionInfo;
-  readonly feedback: string | null;
   readonly onAction: () => void;
 }) {
   if (isActive) {
@@ -360,14 +345,7 @@ function MobileLevelActions({
     }
     return null;
   }
-  return (
-    <MobileUpgradeAction
-      level={level}
-      activeTierId={activeTierId}
-      feedback={feedback}
-      onAction={onAction}
-    />
-  );
+  return <MobileUpgradeAction level={level} activeTierId={activeTierId} onAction={onAction} />;
 }
 
 function MobileComparisonGroup({
@@ -431,11 +409,7 @@ function MobileComparisonView({ onBack }: { readonly onBack: () => void }) {
       </p>
 
       {groups.map((group) => (
-        <MobileComparisonGroup
-          key={group.title}
-          title={group.title}
-          tierIndex={group.tierIndex}
-        />
+        <MobileComparisonGroup key={group.title} title={group.title} tierIndex={group.tierIndex} />
       ))}
     </div>
   );

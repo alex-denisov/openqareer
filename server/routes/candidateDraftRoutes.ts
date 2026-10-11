@@ -95,7 +95,7 @@ function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, 
   const isCandidateSession = principal?.candidate?.id === candidate.id;
   const user = isCandidateSession ? deps.authService.getUser?.(principal.userId) : null;
   const subscription = isCandidateSession
-    ? deps.billingRepository?.getSubscription(principal.userId)
+    ? deps.billingRepository?.getSubscription(principal.userId, new Date().toISOString())
     : null;
   return {
     tier: subscription?.planId ?? user?.subscriptionTier ?? 'free',

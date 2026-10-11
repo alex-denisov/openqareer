@@ -1,0 +1,355 @@
+.career-upgrade-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: var(--career-space-4);
+  background: color-mix(in oklch, var(--career-bg) 85%, transparent);
+}
+
+.career-upgrade-backdrop.is-flow-page {
+  inset-inline-start: var(--career-rail-width);
+  background: var(--career-bg);
+  padding: 0;
+}
+
+.career-paywall-modal.career-upgrade-modal {
+  display: grid;
+  gap: var(--career-space-4);
+  inline-size: 100%;
+  min-inline-size: 0;
+  max-inline-size: calc(var(--career-space-8) * 22);
+  max-block-size: calc(100dvh - var(--career-space-8));
+  overflow: auto;
+  color: var(--career-text);
+}
+
+.career-paywall-modal.career-upgrade-modal.is-flow-page {
+  inline-size: 100%;
+  max-inline-size: none;
+  max-block-size: none;
+  block-size: 100%;
+  align-content: start;
+  border: 0;
+  border-radius: 0;
+  background: var(--career-bg);
+  padding: var(--career-space-6) clamp(var(--career-space-4), 5vw, var(--career-space-8));
+}
+
+.career-upgrade-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.career-upgrade-header .career-paywall-title {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.career-upgrade-back,
+.career-paywall-close-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  color: var(--career-text);
+  cursor: pointer;
+}
+
+.career-upgrade-back:hover,
+.career-paywall-close-btn:hover {
+  background: var(--career-surface-raised);
+}
+
+.career-upgrade-back:focus-visible,
+.career-paywall-close-btn:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-upgrade-offer,
+.career-upgrade-payment-main,
+.career-upgrade-order,
+.career-upgrade-executive,
+.career-upgrade-state {
+  min-inline-size: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  padding: var(--career-space-4);
+}
+
+.career-upgrade-offer {
+  display: grid;
+  gap: var(--career-space-4);
+}
+
+.career-upgrade-intro,
+.career-upgrade-state p,
+.career-upgrade-note,
+.career-upgrade-receipt,
+.career-upgrade-error {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.45;
+}
+
+.career-upgrade-benefits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-4);
+}
+
+.career-upgrade-benefits section,
+.career-upgrade-order {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-3);
+}
+
+.career-upgrade-benefits h3,
+.career-upgrade-order h3,
+.career-upgrade-payment-main h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+}
+
+.career-upgrade-benefits ul {
+  display: grid;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-upgrade-benefits li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.career-upgrade-benefits li svg {
+  flex: none;
+  color: var(--career-accent);
+}
+
+.career-upgrade-benefits .is-free {
+  color: var(--career-text-soft);
+}
+
+.career-upgrade-benefits .is-free li span:first-child {
+  flex: none;
+  color: var(--career-text-dim);
+}
+
+.career-upgrade-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-upgrade-actions .career-btn,
+.career-upgrade-executive > .career-btn,
+.career-upgrade-state > .career-btn,
+.career-upgrade-state > a {
+  min-block-size: var(--career-target-min);
+}
+
+.career-upgrade-payment {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--career-space-4);
+}
+
+.career-upgrade-payment-main {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  padding: var(--career-space-4);
+}
+
+.career-upgrade-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  padding: var(--career-space-3);
+}
+
+.career-upgrade-note svg {
+  flex: none;
+  color: var(--career-accent);
+}
+
+.career-upgrade-order p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.45;
+}
+
+.career-upgrade-order strong {
+  color: var(--career-text);
+}
+
+.career-upgrade-consent {
+  align-items: flex-start;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  line-height: 1.4;
+}
+
+.career-shell .career-upgrade-consent .career-checkbox {
+  width: var(--career-control-min);
+  min-width: var(--career-control-min);
+  inline-size: var(--career-control-min);
+  min-inline-size: var(--career-control-min);
+  height: var(--career-control-min);
+  min-height: var(--career-control-min);
+  min-block-size: var(--career-control-min);
+  padding: 0;
+}
+
+.career-upgrade-field {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.career-upgrade-field input,
+.career-upgrade-field textarea {
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  box-sizing: border-box;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font: inherit;
+  font-weight: 400;
+  padding: var(--career-space-2) var(--career-space-3);
+}
+
+.career-upgrade-field textarea {
+  min-block-size: calc(var(--career-target-min) * 2);
+  resize: vertical;
+}
+
+.career-upgrade-field input:focus-visible,
+.career-upgrade-field textarea:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-upgrade-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-3);
+}
+
+.career-upgrade-state > svg {
+  color: var(--career-accent);
+}
+
+.career-upgrade-state.is-success > svg {
+  color: var(--career-success);
+}
+
+.career-upgrade-state.is-error > svg,
+.career-upgrade-error {
+  color: var(--career-danger);
+}
+
+.career-upgrade-error {
+  color: var(--career-danger);
+}
+
+.career-upgrade-loading {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-upgrade-spinner {
+  flex: none;
+  color: currentColor;
+}
+
+@media (max-width: 48rem) {
+  .career-upgrade-backdrop {
+    inset-block-start: var(--career-mobile-topbar-height);
+    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom));
+    place-items: end stretch;
+    padding: var(--career-space-3);
+  }
+
+  .career-upgrade-backdrop.is-flow-page {
+    inset-block-start: var(--career-mobile-topbar-height);
+    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom));
+    inset-inline-start: 0;
+  }
+
+  .career-paywall-modal.career-upgrade-modal {
+    max-block-size: 100%;
+    border-radius: var(--career-radius-md);
+    padding: var(--career-space-4);
+    align-self: end;
+  }
+
+  .career-paywall-modal.career-upgrade-modal.is-flow-page {
+    border-radius: 0;
+    padding: var(--career-space-4);
+  }
+
+  .career-upgrade-benefits,
+  .career-upgrade-payment {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-upgrade-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .career-upgrade-actions .career-btn {
+    inline-size: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-upgrade-modal *,
+  .career-upgrade-backdrop * {
+    scroll-behavior: auto;
+    animation: none;
+    transition: none;
+  }
+}
