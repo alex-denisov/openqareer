@@ -22,6 +22,7 @@ async function setup(
   tier = 'pro',
   writer = vi.fn(async () => ({ text: 'Мой опыт.' })),
   memory: readonly Record<string, unknown>[] = [],
+  subscriptionPlanId?: string,
 ) {
   const db = new DatabaseSync(':memory:');
   const repository = new SqliteCandidateDraftRepository(db);
@@ -39,6 +40,9 @@ async function setup(
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
   const candidate = { id: 'alice', locale: 'ru-RU', dataClass: 'synthetic', createdAt: '' };
+  const getSubscription = vi.fn((_userId: string) =>
+    subscriptionPlanId ? { planId: subscriptionPlanId } : null,
+  );
   const deps = {
     config,
     candidateStore: { authenticate: () => null, getSnapshot: () => ({ memory }) },
@@ -51,6 +55,7 @@ async function setup(
         headline: 'Эксперт',
       }),
     },
+    billingRepository: { getSubscription },
     candidateDraftRepository: repository,
     candidateActionRepository: actionRepository,
     linkedinDraftWriter: { writeDraft: writer },
@@ -69,9 +74,32 @@ async function setup(
     extraHeaders = headers,
   ) =>
     app.inject({ method: 'POST', url: '/api/v1/candidate/drafts', headers: extraHeaders, payload });
-  return { app, post, headers, repository, actionRepository, writer, logs };
+  return { app, post, headers, repository, actionRepository, writer, logs, getSubscription };
 }
 describe('candidate draft HTTP boundary', () => {
+  it('does not install draft workflow schema when candidate_drafts is absent', async () => {
+    const database = new DatabaseSync(':memory:');
+    const app = Fastify();
+    close.push(async () => {
+      await app.close();
+      database.close();
+    });
+    const deps = {
+      config,
+      candidateStore: {},
+      authService: {},
+      candidateDraftRepository: {},
+      candidateActionRepository: { getDatabase: () => database },
+    } as unknown as Parameters<typeof registerCandidateDraftRoutes>[1];
+
+    expect(() => registerCandidateDraftRoutes(app, deps)).not.toThrow();
+    expect(
+      database
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'candidate_draft_%'")
+        .all(),
+    ).toEqual([]);
+  });
+
   it('authenticates and rejects unsafe mutation origins', async () => {
     const { app, post } = await setup();
     expect((await app.inject('/api/v1/candidate/drafts')).statusCode).toBe(401);
@@ -102,6 +130,20 @@ describe('candidate draft HTTP boundary', () => {
     expect(response.statusCode).toBe(429);
     expect(response.json().error.code).toBe('draft_daily_limit');
     expect(repository.countForDay('alice', '2026-09-30', 'comment')).toBe(3);
+  });
+  it('uses the billing plan for quotas and grants max the executive daily limit', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-13T09:30:00Z'));
+    const { post, writer, getSubscription } = await setup('free', undefined, [], 'max');
+
+    expect((await post({ kind: 'post', topic: 'Первый черновик' })).statusCode).toBe(200);
+    expect((await post({ kind: 'post', topic: 'Второй черновик' })).statusCode).toBe(200);
+    const overLimit = await post({ kind: 'post', topic: 'Третий черновик' });
+
+    expect(overLimit.statusCode).toBe(429);
+    expect(overLimit.json().error.code).toBe('draft_daily_limit');
+    expect(writer).toHaveBeenCalledTimes(2);
+    expect(getSubscription).toHaveBeenCalledWith('user');
   });
   it('serializes concurrent generation so quota cannot be bypassed', async () => {
     const { post, repository } = await setup();

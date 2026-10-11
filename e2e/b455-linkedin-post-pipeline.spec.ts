@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B455';
+const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'B455');
 const cadence = {
   timezone: 'Europe/Moscow',
   lastPublishedAt: null,

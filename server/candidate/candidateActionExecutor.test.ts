@@ -192,6 +192,8 @@ describe('CandidateActionExecutor', () => {
   });
 
   it('rechecks actions_on_behalf consent after asynchronous session resolution', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(daytime));
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
     const consentStore = grantActionConsent(db);
@@ -226,6 +228,8 @@ describe('CandidateActionExecutor', () => {
   });
 
   it('does not create a batch or call the provider when a dispatch guard rejects', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(daytime));
     const db = new DatabaseSync(':memory:');
     const repo = new SqliteCandidateActionRepository(db);
     const executor = new CandidateActionExecutor({

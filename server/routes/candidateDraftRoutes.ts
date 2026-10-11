@@ -92,16 +92,26 @@ function routeError(reply: FastifyReply, request: FastifyRequest, status: number
 
 function accountContext(deps: CandidateDraftRouteDeps, request: FastifyRequest, candidate: CandidateIdentity) {
   const principal = authenticateSession(request, deps.authService, deps.config);
-  const user = principal?.candidate?.id === candidate.id ? deps.authService.getUser?.(principal.userId) : null;
+  const isCandidateSession = principal?.candidate?.id === candidate.id;
+  const user = isCandidateSession ? deps.authService.getUser?.(principal.userId) : null;
+  const subscription = isCandidateSession
+    ? deps.billingRepository?.getSubscription(principal.userId)
+    : null;
   return {
-    tier: user?.subscriptionTier ?? 'free',
+    tier: subscription?.planId ?? user?.subscriptionTier ?? 'free',
     timezone: isValidTimezone(user?.timezone) ? user!.timezone! : DEFAULT_ACCOUNT_TIMEZONE,
     headline: user?.headline ?? '',
   };
 }
 
 function workflowDatabase(deps: CandidateDraftRouteDeps): DatabaseSync | null {
-  return deps.candidateActionRepository?.getDatabase() ?? null;
+  const database = deps.candidateActionRepository?.getDatabase() ?? null;
+  if (!database) return null;
+  return database
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidate_drafts'")
+    .get()
+    ? database
+    : null;
 }
 
 function installWorkflowSchema(database: DatabaseSync): void {
@@ -344,7 +354,8 @@ function workflowError(reply: FastifyReply, request: FastifyRequest, result: Exc
 
 function dailyDraftLimit(tier: string, kind: z.infer<typeof createSchema>['kind']): number {
   if (tier === 'pro') return kind === 'comment' ? 3 : 0;
-  if (tier === 'executive' || tier === 'enterprise') return kind === 'comment' ? 5 : 2;
+  if (tier === 'executive' || tier === 'enterprise' || tier === 'max')
+    return kind === 'comment' ? 5 : 2;
   return 0;
 }
 

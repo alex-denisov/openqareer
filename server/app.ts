@@ -67,6 +67,7 @@ interface BuildAppOptions {
   authService: SessionAuth;
   serveStatic?: boolean;
   searchVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
+  billingRepository?: RouteDeps['billingRepository'];
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
   importProfile?: (url: string) => Promise<ProfileUrlImportResult>;
   careerCommandExecutor?: ConnectorExecutor;
@@ -341,6 +342,7 @@ function assembleRouteDeps(
     ...(options.candidateActionExecutor
       ? { candidateActionExecutor: options.candidateActionExecutor }
       : {}),
+    ...(options.billingRepository ? { billingRepository: options.billingRepository } : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
     ...(options.linkedinRemoteLogin ? { linkedinRemoteLogin: options.linkedinRemoteLogin } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
