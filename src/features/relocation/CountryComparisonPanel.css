@@ -1,0 +1,201 @@
+.career-country-comparison {
+  min-width: 0;
+  color: var(--career-text);
+}
+
+.career-country-comparison-title {
+  margin: 0 0 var(--career-space-4);
+  font-size: var(--career-text-lg);
+  line-height: 1.3;
+}
+
+.career-country-comparison-desktop {
+  min-width: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-country-comparison-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+.career-country-comparison-table caption {
+  padding: var(--career-space-3) var(--career-space-4);
+  color: var(--career-text-soft);
+  text-align: left;
+}
+
+.career-country-comparison-table th,
+.career-country-comparison-table td {
+  padding: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.career-country-comparison-table thead th {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-country-comparison-table thead th:first-child,
+.career-country-comparison-table tbody th {
+  width: 22%;
+}
+
+.career-country-comparison-table tbody th {
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+
+.career-country-comparison-value {
+  display: block;
+  color: var(--career-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-country-comparison-sources {
+  margin: var(--career-space-2) 0 0;
+  padding-inline-start: var(--career-space-4);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-country-comparison-sources li + li {
+  margin-block-start: var(--career-space-2);
+}
+
+.career-country-comparison-sources a {
+  display: inline-flex;
+  min-height: var(--career-target-min);
+  align-items: center;
+  color: var(--career-accent);
+  text-decoration: none;
+}
+
+.career-country-comparison-sources a:focus-visible,
+.career-country-comparison-retry:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-country-comparison-no-data {
+  display: grid;
+  gap: var(--career-space-2);
+  color: var(--career-text-dim);
+}
+
+.career-country-comparison-no-data strong {
+  color: var(--career-text-soft);
+}
+
+.career-country-comparison-pareto {
+  margin-block-start: var(--career-space-4);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-country-comparison-pareto h3,
+.career-country-comparison-pareto p {
+  margin: 0;
+}
+
+.career-country-comparison-pareto h3 {
+  margin-block-end: var(--career-space-2);
+  font-size: var(--career-text-md);
+}
+
+.career-country-comparison-pareto p {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-country-comparison-mobile {
+  display: none;
+}
+
+.career-country-comparison-state {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-country-comparison-state p {
+  margin: 0;
+}
+
+.career-country-comparison-retry {
+  width: fit-content;
+  min-height: var(--career-target-min);
+  padding-inline: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  color: var(--career-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  .career-country-comparison-desktop {
+    display: none;
+  }
+
+  .career-country-comparison-mobile {
+    display: grid;
+    gap: var(--career-space-3);
+  }
+
+  .career-country-comparison-mobile-criterion {
+    min-width: 0;
+    padding: var(--career-space-4);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-country-comparison-mobile-criterion h3 {
+    margin: 0 0 var(--career-space-3);
+    font-size: var(--career-text-md);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .career-country-comparison-mobile-criterion dl {
+    display: grid;
+    gap: var(--career-space-3);
+    margin: 0;
+  }
+
+  .career-country-comparison-mobile-entry {
+    display: grid;
+    min-width: 0;
+    gap: var(--career-space-1);
+  }
+
+  .career-country-comparison-mobile-entry dt {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-country-comparison-mobile-entry dd {
+    min-width: 0;
+    margin: 0;
+  }
+}

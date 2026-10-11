@@ -1077,6 +1077,14 @@ export async function mockSignedInCabinet(
   let skillQuizReverted = false;
   const automation = createAutomationFixtureState(options);
   const linkedinDrafts = createLinkedinDraftFixtureState(options);
+  const relocationConsent = {
+    status: 'not_granted',
+    granted: false,
+    versionId: null as string | null,
+    grantedAt: null as string | null,
+    revokedAt: null as string | null,
+  };
+  let relocationProfile: Record<string, unknown> | null = null;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -1499,6 +1507,139 @@ export async function mockSignedInCabinet(
       }
       return route.fulfill({ json: { data: decisionProfile } });
     }
+    if (path.endsWith('/candidate/relocation-questionnaire/consent')) {
+      if (route.request().method() === 'PUT') {
+        return route.fulfill({
+          status: 409,
+          json: {
+            error: {
+              code: 'relocation_consent_text_not_approved',
+              message: 'Текст согласия ожидает проверки и пока не может быть принят.',
+            },
+          },
+        });
+      }
+      if (route.request().method() === 'DELETE') {
+        const revoked = relocationConsent.granted;
+        relocationConsent.status = 'revoked';
+        relocationConsent.granted = false;
+        relocationConsent.revokedAt = '2026-10-10T12:00:00.000Z';
+        relocationProfile = null;
+        return route.fulfill({
+          json: { data: { consent: relocationConsent, revoked, deleted: true } },
+        });
+      }
+    }
+    if (path.endsWith('/candidate/relocation-questionnaire/languages/linkedin')) {
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: {
+            code: 'linkedin_languages_unavailable',
+            message: 'Импортированный профиль не содержит языков.',
+          },
+        },
+      });
+    }
+    if (
+      path.endsWith('/candidate/relocation-questionnaire/progress') &&
+      route.request().method() === 'PUT'
+    ) {
+      if (!relocationConsent.granted)
+        return route.fulfill({
+          status: 409,
+          json: { error: { code: 'relocation_consent_required' } },
+        });
+      const profile = relocationProfile ?? emptyRelocationProfile();
+      const revision = profile.revision as number;
+      if (route.request().headers()['if-match'] !== `"${revision}"`)
+        return route.fulfill({
+          status: 412,
+          json: {
+            error: {
+              code: 'relocation_profile_revision_conflict',
+              details: { currentRevision: revision },
+            },
+          },
+        });
+      relocationProfile = {
+        ...profile,
+        ...route.request().postDataJSON(),
+        revision: revision + 1,
+        updatedAt: '2026-10-10T12:00:00.000Z',
+      };
+      return route.fulfill({
+        headers: { etag: `"${revision + 1}"` },
+        json: { data: { profile: relocationProfile, alerts: [] } },
+      });
+    }
+    const relocationStep = path.match(/\/candidate\/relocation-questionnaire\/steps\/([^/]+)$/u);
+    if (relocationStep && route.request().method() === 'PUT') {
+      if (!relocationConsent.granted)
+        return route.fulfill({
+          status: 409,
+          json: { error: { code: 'relocation_consent_required' } },
+        });
+      const stepFields: Readonly<Record<string, string>> = {
+        citizenship_documents: 'citizenshipDocuments',
+        education: 'education',
+        family: 'family',
+        languages: 'languages',
+      };
+      const step = decodeURIComponent(relocationStep[1]!);
+      const field = stepFields[step];
+      if (!field)
+        return route.fulfill({ status: 404, json: { error: { code: 'unknown_relocation_step' } } });
+      const profile = relocationProfile ?? emptyRelocationProfile();
+      const revision = profile.revision as number;
+      if (route.request().headers()['if-match'] !== `"${revision}"`)
+        return route.fulfill({
+          status: 412,
+          json: {
+            error: {
+              code: 'relocation_profile_revision_conflict',
+              details: { currentRevision: revision },
+            },
+          },
+        });
+      relocationProfile = {
+        ...profile,
+        [field]: route.request().postDataJSON(),
+        revision: revision + 1,
+        updatedAt: '2026-10-10T12:00:00.000Z',
+      };
+      return route.fulfill({
+        headers: { etag: `"${revision + 1}"` },
+        json: { data: { profile: relocationProfile, alerts: [] } },
+      });
+    }
+    if (
+      path.endsWith('/candidate/relocation-questionnaire') &&
+      route.request().method() === 'GET'
+    ) {
+      return route.fulfill({
+        headers: relocationConsent.granted
+          ? { etag: `"${(relocationProfile?.revision as number | undefined) ?? 0}"` }
+          : {},
+        json: {
+          data: {
+            profile: relocationConsent.granted
+              ? (relocationProfile ?? emptyRelocationProfile())
+              : null,
+            consent: relocationConsent,
+            consentTextStatus: 'pending_dpo_review',
+            alerts: [],
+          },
+        },
+      });
+    }
+    if (
+      path.endsWith('/candidate/relocation-questionnaire') &&
+      route.request().method() === 'DELETE'
+    ) {
+      relocationProfile = null;
+      return route.fulfill({ status: 204 });
+    }
     if (path.endsWith('/candidate/skill-quiz/apply') && route.request().method() === 'POST') {
       const body = route.request().postDataJSON();
       skillQuizCommandId = route.request().headers()['idempotency-key'] ?? 'skill-quiz-command';
@@ -1587,7 +1728,15 @@ export async function mockSignedInCabinet(
       return route.fulfill({ json: { data: { revoked: 2 } } });
     }
     if (path.endsWith('/candidate/export')) {
-      return route.fulfill({ json: { data: { profile: account.profile } } });
+      return route.fulfill({
+        json: {
+          data: {
+            profile: account.profile,
+            relocationQuestionnaire: relocationProfile,
+            relocationConsent,
+          },
+        },
+      });
     }
     if (path.endsWith('/candidate/me') && route.request().method() === 'DELETE') {
       return route.fulfill({ json: { data: { deleted: true } } });
@@ -1775,5 +1924,20 @@ function checkoutResponse(invoice: FixtureInvoice) {
     autoRenew: invoice.autoRenew,
     paymentUrl: invoice.paymentUrl,
     createdAt: invoice.createdAt,
+function emptyRelocationProfile(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    revision: 0,
+    currentStep: 'citizenship_documents',
+    skippedSteps: [],
+    citizenshipDocuments: { citizenshipCountryCodes: [], documents: [] },
+    education: { education: [], certificates: [] },
+    family: {
+      partnerStatus: 'unknown',
+      relocationTimeframe: 'unknown',
+      familyMovePlan: 'undecided',
+    },
+    languages: { languages: [] },
+    updatedAt: null,
   };
 }

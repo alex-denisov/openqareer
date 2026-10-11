@@ -7,6 +7,7 @@ import type {
 } from './candidateStore';
 import type { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
 import type { SqliteDocumentRepository } from './sqliteDocumentRepository';
+import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import type { SqliteWorkPreferenceRepository } from './sqliteWorkPreferenceRepository';
 import type { SourceConnectionController } from './store/sourceConnectionController';
 
@@ -18,6 +19,10 @@ interface CandidateExportDependencies {
   readonly careerStrategyRepository: Pick<SqliteCareerStrategyRepository, 'get'>;
   readonly workPreferenceRepository: Pick<SqliteWorkPreferenceRepository, 'get'>;
   readonly documentRepository: Pick<SqliteDocumentRepository, 'get'>;
+  readonly relocationQuestionnaireRepo: Pick<
+    SqliteRelocationQuestionnaireRepository,
+    'getProfile' | 'getConsent'
+  >;
   readonly exportConsultantConversations: (
     candidateId: string,
   ) => ConsultantConversationExport[];
@@ -44,6 +49,8 @@ export function createSqliteCandidateStoreExportMethods(
         })),
         careerStrategy: dependencies.careerStrategyRepository.get(candidateId),
         workPreferences: dependencies.workPreferenceRepository.get(candidateId),
+        relocationQuestionnaire: dependencies.relocationQuestionnaireRepo.getProfile(candidateId),
+        relocationConsent: dependencies.relocationQuestionnaireRepo.getConsent(candidateId),
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
           const stored = dependencies.documentRepository.get(candidateId, document.id);
