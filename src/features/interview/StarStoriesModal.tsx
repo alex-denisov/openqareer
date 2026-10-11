@@ -10,7 +10,7 @@ import { createPortal } from 'react-dom';
 import { ArrowLeft, Notebook, Plus, X } from '@phosphor-icons/react';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { apiErrorMessage } from '../coach/apiClient';
-import { useModalAccessibility } from './InterviewPrepModal';
+import { useModalAccessibility } from './interviewModalAccessibility';
 import { createStarStory, getStarStories, updateStarStory } from './starStoriesApi';
 import type {
   StarStoriesSnapshot,
