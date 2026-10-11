@@ -26,7 +26,6 @@ import type {
   AccountAppSettings,
   AccountConsent,
   AccountDevice,
-  AccountNotificationEvent,
   AccountPaymentItem,
 } from './accountTypes';
 
@@ -283,9 +282,7 @@ function AccountConnectionRow({
       <div className="career-account-row-right">
         <span className={`career-account-tag is-${tag}`}>{tagLabel}</span>
         <button type="button" className="career-btn is-sm" onClick={onAction}>
-          {actionLabel === 'Управлять' ? (
-            <SlidersHorizontal size={16} aria-hidden="true" />
-          ) : null}
+          {actionLabel === 'Управлять' ? <SlidersHorizontal size={16} aria-hidden="true" /> : null}
           {actionLabel}
         </button>
       </div>
@@ -293,10 +290,7 @@ function AccountConnectionRow({
   );
 }
 
-function PrimaryConnectionsRows({
-  onManageLinkedIn,
-  onManageHh,
-}: ConnectionsSectionProps) {
+function PrimaryConnectionsRows({ onManageLinkedIn, onManageHh }: ConnectionsSectionProps) {
   return (
     <>
       <AccountConnectionRow
@@ -371,98 +365,6 @@ export function AccountConnectionsSection(props: ConnectionsSectionProps) {
       <div className="career-account-rows">
         <PrimaryConnectionsRows {...props} />
         <SecondaryConnectionsRows />
-      </div>
-    </section>
-  );
-}
-
-interface NotificationsSectionProps {
-  readonly events: readonly AccountNotificationEvent[];
-  readonly mandatoryEvents: readonly AccountNotificationEvent[];
-}
-
-function NotificationsTableRows({
-  events,
-  mandatoryEvents,
-}: NotificationsSectionProps) {
-  return (
-    <tbody>
-      {events.map((e) => (
-        <tr key={e.id}>
-          <td>
-            <strong>{e.title}</strong>
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" defaultChecked={e.app} aria-label={`${e.title}, приложение`} />
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" disabled aria-label={`${e.title}, Telegram`} />
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" defaultChecked={e.email} aria-label={`${e.title}, почта`} />
-          </td>
-        </tr>
-      ))}
-      {mandatoryEvents.map((e) => (
-        <tr key={e.id}>
-          <td>
-            <strong>{e.title}</strong>
-            <br />
-            <span className="career-account-row-desc">{e.mandatoryNote}</span>
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" checked disabled aria-label={`${e.title}, приложение`} />
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" disabled aria-label={`${e.title}, Telegram`} />
-          </td>
-          <td className="career-account-table-tc">
-            <input type="checkbox" checked disabled aria-label={`${e.title}, почта`} />
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  );
-}
-
-export function AccountNotificationsSection({
-  events,
-  mandatoryEvents,
-}: NotificationsSectionProps) {
-  return (
-    <section className="career-account-card" aria-labelledby="notif-title">
-      <div className="career-account-card-header">
-        <h3 id="notif-title" className="career-account-card-title">
-          Уведомления
-        </h3>
-      </div>
-      <div className="career-account-table-wrap">
-        <table className="career-account-table">
-          <thead>
-            <tr>
-              <th>Событие</th>
-              <th className="career-account-table-tc">Приложение</th>
-              <th className="career-account-table-tc">Telegram</th>
-              <th className="career-account-table-tc">Почта</th>
-            </tr>
-          </thead>
-          <NotificationsTableRows events={events} mandatoryEvents={mandatoryEvents} />
-        </table>
-      </div>
-      <p className="career-account-row-desc">
-        Столбец Telegram недоступен, пока бот не подключён (вкладка «Подключения»).
-      </p>
-      <div className="career-account-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Не беспокоить</span>
-          <span className="career-account-row-desc">
-            Ночью 22:00-08:00 уведомления копятся и приходят утром
-          </span>
-        </div>
-        <button type="button" className="career-btn is-ghost is-sm">
-          <PencilSimple size={16} aria-hidden="true" />
-          Изменить
-        </button>
       </div>
     </section>
   );
@@ -576,9 +478,7 @@ function AppTogglesList({ settings }: { readonly settings: AccountAppSettings })
       <label htmlFor="app-autoupdate-chk" className="career-account-row">
         <div className="career-account-row-content">
           <span className="career-account-row-label">Автообновление</span>
-          <span className="career-account-row-desc">
-            Новые версии ставятся после перезапуска
-          </span>
+          <span className="career-account-row-desc">Новые версии ставятся после перезапуска</span>
         </div>
         <input
           id="app-autoupdate-chk"
@@ -617,11 +517,7 @@ function AppTogglesList({ settings }: { readonly settings: AccountAppSettings })
   );
 }
 
-export function AccountAppSettingsSection({
-  settings,
-}: {
-  readonly settings: AccountAppSettings;
-}) {
+export function AccountAppSettingsSection({ settings }: { readonly settings: AccountAppSettings }) {
   return (
     <section className="career-account-card" aria-labelledby="app-title">
       <div className="career-account-card-header">
@@ -739,7 +635,9 @@ function ProSubscriptionCard({
         <div className="career-account-row">
           <div className="career-account-row-content">
             <span className="career-account-row-label">Тариф</span>
-            <span className="career-account-row-desc">Pro, 9 900 ₽ в месяц, действует до 08.11</span>
+            <span className="career-account-row-desc">
+              Pro, 9 900 ₽ в месяц, действует до 08.11
+            </span>
           </div>
           <button type="button" className="career-btn is-sm" onClick={onOpenTariffs}>
             <TrendUp size={16} aria-hidden="true" />

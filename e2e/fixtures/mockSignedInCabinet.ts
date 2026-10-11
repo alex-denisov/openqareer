@@ -14,6 +14,7 @@ import {
 export async function mockSignedInCabinet(
   page: Page,
   options: {
+    readonly accountNotificationHandler?: (route: Route, path: string) => Promise<boolean>;
     readonly notificationHandler?: (route: Route, path: string) => Promise<boolean>;
     readonly applicationHandler?: (route: Route, path: string) => Promise<boolean>;
   } = {},
@@ -25,6 +26,9 @@ export async function mockSignedInCabinet(
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path.startsWith('/api/v1/candidate/notifications') && options.accountNotificationHandler) {
+      if (await options.accountNotificationHandler(route, path)) return;
+    }
     if (path.startsWith('/api/v1/candidate/notifications') && options.notificationHandler) {
       if (await options.notificationHandler(route, path)) return;
     }

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { buildApp } from '../app';
 import { apps, candidateAuthorization, config, createApp, noSessions, stores, successProvider } from '../appTestHarness';
@@ -94,16 +95,16 @@ describe('candidate notification routes', () => {
       headers: { authorization },
     });
     expect(defaults.statusCode).toBe(200);
-    expect(defaults.json().data.events).toContainEqual({ key: 'ev-approval', app: true, email: false });
+    expect(defaults.json().data.events).toContainEqual({ key: 'ev-approval', app: true, email: false, telegram: false });
 
     const updated = await app.inject({
       method: 'PUT',
       url: '/api/v1/candidate/notifications/preferences/ev-approval',
       headers: { authorization, origin: 'http://localhost:3000' },
-      payload: { app: false, email: true },
+      payload: { app: false, email: true, telegram: true },
     });
     expect(updated.statusCode).toBe(200);
-    expect(updated.json().data).toMatchObject({ key: 'ev-approval', app: false, email: true });
+    expect(updated.json().data).toMatchObject({ key: 'ev-approval', app: false, email: true, telegram: true });
 
     const readAll = await app.inject({
       method: 'PUT',
@@ -112,6 +113,77 @@ describe('candidate notification routes', () => {
     });
     expect(readAll.statusCode).toBe(200);
     expect(readAll.json().data.updated).toBe(0);
+  });
+
+  it('reports locked mandatory channels and unavailable delivery sources', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/notifications/channels',
+      headers: { authorization: candidateAuthorization(app) },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({
+      emailAvailable: false,
+      telegram: { available: false, connected: false, botUsername: 'openqareer_bot' },
+      mandatory: {
+        security: { app: true, email: true, telegram: false, locked: true, sourceAvailable: false },
+        payments: { app: true, email: true, telegram: false, locked: true, sourceAvailable: false },
+      },
+    });
+    const forbidden = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/notifications/preferences/mand-payments',
+      headers: { authorization: candidateAuthorization(app), origin: 'http://localhost:3000' },
+      payload: { app: false, email: false },
+    });
+    expect(forbidden.statusCode).toBe(400);
+  });
+
+  it('does not create Telegram link codes without a ready bot webhook', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/notifications/telegram/link',
+      headers: { authorization: candidateAuthorization(app), origin: 'http://localhost:3000' },
+    });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.code).toBe('telegram_unavailable');
+  });
+
+  it('rejects Telegram webhook requests without the configured secret', async () => {
+    const app = await createApp();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/integrations/telegram/webhook',
+      payload: { message: { text: '/start not-a-code', chat: { id: 12345 } } },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.code).toBe('telegram_webhook_unauthorized');
+  });
+
+  it('unsubscribes only after POST and leaves app and Telegram preferences untouched', async () => {
+    const app = await createApp();
+    const token = Buffer.alloc(32, 8).toString('base64url');
+    const candidateStore = stores.at(-1)!;
+    const identity = candidateStore.authenticate(candidateAuthorization(app).slice('Bearer '.length))!;
+    const tokenHash = createHash('sha256').update(`openqareer:notification-unsubscribe-v1:\0${token}`).digest('hex');
+    candidateStore.notificationRepository.issueUnsubscribeToken(identity.id, tokenHash, '2027-10-11T12:00:00.000Z', '2026-10-11T12:00:00.000Z');
+    const page = await app.inject({ url: `/api/v1/candidate/notifications/unsubscribe?token=${token}` });
+    expect(page.statusCode).toBe(200);
+    expect(page.body).toContain('Отписаться от необязательных писем?');
+    expect(candidateStore.notificationRepository.getPreferences(identity.id).find((item) => item.key === 'ev-reply')?.email).toBe(true);
+
+    const applied = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/notifications/unsubscribe',
+      headers: { origin: 'http://localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
+      payload: new URLSearchParams({ token }).toString(),
+    });
+    expect(applied.statusCode).toBe(200);
+    const preferences = candidateStore.notificationRepository.getPreferences(identity.id);
+    expect(preferences.every((item) => !item.email)).toBe(true);
+    expect(preferences.find((item) => item.key === 'ev-reply')).toMatchObject({ app: true, telegram: true });
   });
 
   it('validates pagination and reports another candidate’s notification as not found', async () => {

@@ -44,6 +44,10 @@ const configSchema = z.object({
       .regex(/^-?\d{3,20}$/u)
       .optional(),
   ),
+  OPENQAREER_TELEGRAM_WEBHOOK_SECRET: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/u).optional(),
+  ),
   OPENQAREER_PREVIEW_API_TOKEN: z.string().min(32),
   OPENQAREER_DATA_ENCRYPTION_KEY: z.string().transform((value, context) => {
     const decoded = Buffer.from(value, 'base64');
@@ -162,6 +166,8 @@ export interface ServerConfig {
   /** B266: owner alerts (plan requests). Both unset → alerts are silently off. */
   telegramBotToken?: string;
   telegramOwnerChatId?: string;
+  telegramWebhookSecret?: string;
+  publicBaseUrl?: string;
   previewToken: string;
   dataEncryptionKey: Buffer;
   databasePath: string;
@@ -259,14 +265,11 @@ export function readServerConfig(
     throw new Error('seed account usernames must be unique');
   }
   const resendApiKey = parsed.OPENQAREER_RESEND_API_KEY;
-  const accountEmailValues = [
-    resendApiKey,
-    parsed.OPENQAREER_ACCOUNT_EMAIL_FROM,
-    parsed.OPENQAREER_PUBLIC_URL,
-  ];
-  const accountEmail = accountEmailValues.every((value) => value === undefined)
+  const emailProviderValues = [resendApiKey, parsed.OPENQAREER_ACCOUNT_EMAIL_FROM];
+  const hasEmailProviderValue = emailProviderValues.some((value) => value !== undefined);
+  const accountEmail = !hasEmailProviderValue
     ? undefined
-    : accountEmailValues.every((value) => value !== undefined)
+    : emailProviderValues.every((value) => value !== undefined) && parsed.OPENQAREER_PUBLIC_URL
       ? {
           apiKey: resendApiKey!,
           from: parsed.OPENQAREER_ACCOUNT_EMAIL_FROM!,
@@ -317,6 +320,10 @@ export function readServerConfig(
     exaApiKey: parsed.OPENQAREER_EXA_API_KEY,
     telegramBotToken: parsed.OPENQAREER_TELEGRAM_BOT_TOKEN,
     telegramOwnerChatId: parsed.OPENQAREER_TELEGRAM_OWNER_CHAT_ID,
+    ...(parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET
+      ? { telegramWebhookSecret: parsed.OPENQAREER_TELEGRAM_WEBHOOK_SECRET }
+      : {}),
+    ...(parsed.OPENQAREER_PUBLIC_URL ? { publicBaseUrl: parsed.OPENQAREER_PUBLIC_URL } : {}),
     previewToken: parsed.OPENQAREER_PREVIEW_API_TOKEN,
     dataEncryptionKey: parsed.OPENQAREER_DATA_ENCRYPTION_KEY,
     databasePath: parsed.OPENQAREER_DATABASE_PATH,

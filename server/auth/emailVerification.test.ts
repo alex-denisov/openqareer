@@ -76,6 +76,16 @@ afterEach(() => {
 });
 
 describe('B398 email verification', () => {
+  it('resolves candidate notification email only after required verification', async () => {
+    const { auth, candidates } = createVerificationServices();
+    const registered = await register(auth, candidates);
+    const candidateId = registered.principal.candidate!.id;
+
+    expect(auth.getCandidateEmail(candidateId)).toBeNull();
+    await auth.verifyEmail(registered.sessionToken, '123456');
+    expect(auth.getCandidateEmail(candidateId)).toBe('candidate@example.com');
+  });
+
   it('uses the purpose-derived key for verification code hashes', () => {
     const secret = Buffer.alloc(32, 17);
     const message = 'openqareer-email-verification-v1\u0000candidate-b433\u0000123456';

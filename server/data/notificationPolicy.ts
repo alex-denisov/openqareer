@@ -22,6 +22,13 @@ export interface NotificationPreference {
   readonly key: NotificationPreferenceKey;
   readonly app: boolean;
   readonly email: boolean;
+  readonly telegram: boolean;
+}
+
+export interface NotificationPreferenceChannels {
+  readonly app: boolean;
+  readonly email: boolean;
+  readonly telegram?: boolean;
 }
 
 export interface NotificationEventInput {
@@ -48,12 +55,12 @@ export interface NotificationPage {
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: readonly NotificationPreference[] = [
-  { key: 'ev-reply', app: true, email: true },
-  { key: 'ev-reminder', app: true, email: false },
-  { key: 'ev-approval', app: true, email: false },
-  { key: 'ev-delivery-error', app: true, email: true },
-  { key: 'ev-target-company', app: true, email: false },
-  { key: 'ev-weekly-digest', app: true, email: true },
+  { key: 'ev-reply', app: true, email: true, telegram: true },
+  { key: 'ev-reminder', app: true, email: false, telegram: true },
+  { key: 'ev-approval', app: true, email: false, telegram: false },
+  { key: 'ev-delivery-error', app: true, email: true, telegram: true },
+  { key: 'ev-target-company', app: true, email: false, telegram: false },
+  { key: 'ev-weekly-digest', app: true, email: true, telegram: false },
 ];
 
 const EVENT_PRESENTATION: Record<NotificationEventKind, { title: string; action: string; view: string }> = {
@@ -73,11 +80,11 @@ const EVENT_PREFERENCE: Record<NotificationEventKind, NotificationPreferenceKey 
   email_approval: 'ev-approval',
   post_approval: 'ev-approval',
   interview_reminder: 'ev-reminder',
-  new_vacancies_by_role: null,
-  employer_opened_letter: null,
-  consultant_edits: null,
-  footprint_findings: null,
-  import_completed: null,
+  new_vacancies_by_role: 'ev-target-company',
+  employer_opened_letter: 'ev-reply',
+  consultant_edits: 'ev-weekly-digest',
+  footprint_findings: 'ev-weekly-digest',
+  import_completed: 'ev-weekly-digest',
   employer_reply: 'ev-reply',
   delivery_error: 'ev-delivery-error',
 };

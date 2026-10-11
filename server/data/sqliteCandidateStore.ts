@@ -163,7 +163,7 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
-    this.notificationRepository = new SqliteNotificationRepository(this.database);
+    this.notificationRepository = new SqliteNotificationRepository(this.database, this.sealedText);
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);

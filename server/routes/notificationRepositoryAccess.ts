@@ -2,6 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import type { RouteDeps } from './deps';
 import { SqliteNotificationRepository } from '../data/sqliteNotificationRepository';
 import type { NotificationEventInput } from '../data/notificationPolicy';
+import { SealedText } from '../data/sealedText';
 
 const repositories = new WeakMap<RouteDeps, SqliteNotificationRepository>();
 
@@ -10,7 +11,10 @@ export function notificationRepositoryFor(deps: RouteDeps): SqliteNotificationRe
   if (shared) return shared;
   const existing = repositories.get(deps);
   if (existing) return existing;
-  const repository = new SqliteNotificationRepository({ databasePath: deps.config.databasePath });
+  const repository = new SqliteNotificationRepository(
+    { databasePath: deps.config.databasePath },
+    new SealedText(deps.config.dataEncryptionKey),
+  );
   repositories.set(deps, repository);
   return repository;
 }

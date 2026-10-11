@@ -7,14 +7,14 @@ import { MIN_PASSWORD_LENGTH } from '../../../shared/accountValidation';
 import {
   AccountAppSettingsSection,
   AccountConsentsSection,
-  AccountNotificationsSection,
   AccountSubscriptionSection,
 } from './AccountDesktopSections';
+import { AccountNotificationsSection } from './AccountNotificationsSection';
 import { AccountConfirmDialog } from './AccountDialogs';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
+import { useAccountNotificationSettings } from './useAccountNotificationSettings';
 import {
   DEFAULT_APP_SETTINGS,
-  DEFAULT_NOTIFICATION_EVENTS,
   DEFAULT_PAYMENT_HISTORY,
   MANDATORY_NOTIFICATION_EVENTS,
   DEFAULT_ACCOUNT_CONSENTS,
@@ -67,9 +67,7 @@ export function AuthenticatedAccount(props: AuthenticatedAccountProps) {
     if (!activeConsentDialog) return;
     setConsents((curr) =>
       curr.map((item) =>
-        item.id === activeConsentDialog.id
-          ? { ...item, date: item.date ? '' : '09.10' }
-          : item,
+        item.id === activeConsentDialog.id ? { ...item, date: item.date ? '' : '09.10' } : item,
       ),
     );
     setActiveConsentDialog(null);
@@ -198,12 +196,7 @@ function AccountTabRouter(props: TabRouterProps) {
     );
   }
   if (props.section === 'notif') {
-    return (
-      <AccountNotificationsSection
-        events={DEFAULT_NOTIFICATION_EVENTS}
-        mandatoryEvents={MANDATORY_NOTIFICATION_EVENTS}
-      />
-    );
+    return <AccountNotificationSettings />;
   }
   if (props.section === 'app') {
     return <AccountAppSettingsSection settings={DEFAULT_APP_SETTINGS} />;
@@ -214,6 +207,13 @@ function AccountTabRouter(props: TabRouterProps) {
       payments={DEFAULT_PAYMENT_HISTORY}
       onOpenTariffs={props.onOpenTariffs}
     />
+  );
+}
+
+function AccountNotificationSettings() {
+  const settings = useAccountNotificationSettings();
+  return (
+    <AccountNotificationsSection {...settings} mandatoryEvents={MANDATORY_NOTIFICATION_EVENTS} />
   );
 }
 
@@ -464,8 +464,12 @@ function AccountModalsHost(props: ModalsHostProps) {
 
   return (
     <>
-      {props.showLogout ? <LogoutConfirmDialog onConfirm={handleLogout} onCancel={props.onCloseLogout} /> : null}
-      {props.showDelete ? <DeleteConfirmDialog onConfirm={handleDelete} onCancel={props.onCloseDelete} /> : null}
+      {props.showLogout ? (
+        <LogoutConfirmDialog onConfirm={handleLogout} onCancel={props.onCloseLogout} />
+      ) : null}
+      {props.showDelete ? (
+        <DeleteConfirmDialog onConfirm={handleDelete} onCancel={props.onCloseDelete} />
+      ) : null}
       {props.activeConsent ? (
         <AccountConfirmDialog
           title={props.activeConsent.date ? 'Отозвать согласие?' : 'Дать согласие?'}

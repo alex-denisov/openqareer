@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
+import { SealedText } from './sealedText';
 import { SqliteNotificationRepository } from './sqliteNotificationRepository';
 import type { NotificationEventKind } from './notificationPolicy';
 
@@ -76,9 +77,9 @@ describe('SQLite candidate notification repository', () => {
     const expiredAt = '2027-01-10T00:00:00.000Z';
     expect(repository.deleteExpired(expiredAt)).toBe(1);
     expect(repository.getPreferences('candidate-a').find((item) => item.key === 'ev-approval'))
-      .toMatchObject({ app: true, email: false });
+      .toMatchObject({ app: true, email: false, telegram: false });
     repository.setPreference('candidate-a', 'ev-approval', { app: false, email: true }, NOW);
-    expect(repository.recordEvent('candidate-a', event('disabled', 'email_approval', NOW))).toBeNull();
+    expect(repository.recordEvent('candidate-a', event('disabled', 'email_approval', NOW))).not.toBeNull();
     expect(repository.list('candidate-a', { limit: 10, now: expiredAt })).toMatchObject({
       items: [],
       unreadCount: 0,
@@ -107,5 +108,49 @@ describe('SQLite candidate notification repository', () => {
       expect(item.action.href).toMatch(/^\/app\?/u);
       expect(item.action.href).not.toMatch(/^https?:/u);
     }
+  });
+
+  it('queues selected email and Telegram once while hiding app-disabled events', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    database.prepare('INSERT INTO candidates (id) VALUES (?)').run('candidate-a');
+    const repository = new SqliteNotificationRepository(database, new SealedText(Buffer.alloc(32, 4)));
+    databases.push(database);
+    repositories.push(repository);
+    repository.setPreference('candidate-a', 'ev-reply', { app: false, email: true, telegram: true }, NOW);
+    repository.linkTelegramChat('candidate-a', '100', NOW);
+    const input = event('outbox-once', 'employer_reply', NOW);
+    const first = repository.recordEvent('candidate-a', input, NOW);
+    const replay = repository.recordEvent('candidate-a', input, NOW);
+
+    expect(first?.id).toBe(replay?.id);
+    expect(repository.list('candidate-a', { limit: 10, now: NOW }).items).toEqual([]);
+    expect(repository.claimDueDeliveries(NOW, 10)).toMatchObject([
+      { notificationId: first?.id, candidateId: 'candidate-a', channel: 'email' },
+      { notificationId: first?.id, candidateId: 'candidate-a', channel: 'telegram' },
+    ]);
+    expect(repository.getTelegramChat('candidate-a')).toBe('100');
+  });
+
+  it('consumes a Telegram code once and encrypts the chat id at rest', () => {
+    const database = new DatabaseSync(':memory:');
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    database.prepare('INSERT INTO candidates (id) VALUES (?)').run('candidate-a');
+    const repository = new SqliteNotificationRepository(database, new SealedText(Buffer.alloc(32, 4)));
+    databases.push(database);
+    repositories.push(repository);
+    const codeHash = 'c'.repeat(64);
+    repository.createTelegramLinkCode('candidate-a', codeHash, '2026-10-11T12:10:00.000Z', NOW);
+
+    expect(repository.consumeTelegramLinkCode(codeHash, '987654321', NOW)).toBe('candidate-a');
+    expect(repository.consumeTelegramLinkCode(codeHash, '987654321', NOW)).toBeNull();
+    expect(repository.getTelegramLinkStatus('candidate-a').connected).toBe(true);
+    const stored = database.prepare(
+      'SELECT chat_id_cipher FROM candidate_notification_telegram_chats WHERE candidate_id = ?',
+    ).get('candidate-a') as { chat_id_cipher: string };
+    expect(stored.chat_id_cipher).not.toContain('987654321');
+    const reopened = new SqliteNotificationRepository(database, new SealedText(Buffer.alloc(32, 4)));
+    repositories.push(reopened);
+    expect(reopened.getTelegramLinkStatus('candidate-a').connected).toBe(true);
   });
 });

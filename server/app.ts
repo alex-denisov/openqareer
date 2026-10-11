@@ -161,11 +161,31 @@ function loggerOptions(
   return {
     level: config.logLevel,
     redact: {
-      paths: ['req.headers.authorization', 'req.headers.cookie'],
-      censor: '[REDACTED]',
+      paths: ['req.headers.authorization', 'req.headers.cookie', 'req.url'],
+      censor: (value, path) =>
+        path.join('.') === 'req.url' ? redactRequestUrlForLogs(value) : '[REDACTED]',
     },
     ...(logDestination ? { stream: logDestination } : {}),
   };
+}
+
+export function redactRequestUrlForLogs(value: unknown): string {
+  if (typeof value !== 'string') return '[REDACTED]';
+  try {
+    const url = new URL(value, 'http://localhost');
+    for (const key of [...url.searchParams.keys()]) {
+      const normalized = key.toLowerCase();
+      if (
+        ['token', 'code', 'secret', 'password'].includes(normalized) ||
+        normalized.endsWith('_token')
+      ) {
+        url.searchParams.set(key, '[REDACTED]');
+      }
+    }
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return '[REDACTED]';
+  }
 }
 
 async function createFastifyBase(

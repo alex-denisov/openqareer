@@ -22,10 +22,10 @@ import {
   AccountAppSettingsSection,
   AccountConnectionsSection,
   AccountConsentsSection,
-  AccountNotificationsSection,
   AccountProfileSection,
   AccountSubscriptionSection,
 } from './AccountDesktopSections';
+import { AccountNotificationsSection } from './AccountNotificationsSection';
 import {
   MobileAccountConnections,
   MobileAccountConsents,
