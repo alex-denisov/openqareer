@@ -105,6 +105,7 @@ export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
   consultantConversations: ConsultantConversationExport[];
+  executiveRequests: StoredExecutiveRequest[];
   /** Выбранная роль с историей решений (B180, срез 2). */
   careerStrategy: CareerStrategy | null;
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
@@ -667,6 +668,32 @@ export interface CandidateStore {
   /** B266: a paid-plan request, idempotent per candidate and plan. */
   requestPlan?(candidateId: string, planId: PlanRequestId, note?: string): StoredPlanRequest;
   listPlanRequests?(candidateId: string): StoredPlanRequest[];
+  /** B471: candidate-owned Executive intake, idempotent by client request key. */
+  createExecutiveRequest?(
+    candidateId: string,
+    input: ExecutiveRequestInput,
+    capacity: number,
+  ): {
+    readonly request: StoredExecutiveRequest;
+    readonly created: boolean;
+    readonly replayed: boolean;
+  };
+  listExecutiveRequests?(
+    candidateId: string,
+    query: ExecutiveRequestPageQuery,
+  ): ExecutiveRequestPage<StoredExecutiveRequest>;
+  getExecutiveRequest?(
+    candidateId: string,
+    requestId: string,
+  ): StoredExecutiveRequest | null;
+  listExecutiveRequestQueue?(
+    query: ExecutiveRequestQueueQuery,
+  ): ExecutiveRequestPage<StoredExecutiveRequest & { readonly candidateId: string }>;
+  setExecutiveRequestStatus?(
+    requestId: string,
+    status: ExecutiveRequestStatus,
+    capacity: number,
+  ): StoredExecutiveRequest | null;
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
@@ -743,4 +770,41 @@ export type PlanRequestId = 'consultant' | 'automation';
 export interface StoredPlanRequest {
   readonly planId: PlanRequestId;
   readonly createdAt: string;
+}
+
+export type ExecutiveRequestStatus =
+  | 'submitted'
+  | 'waitlisted'
+  | 'in_review'
+  | 'accepted'
+  | 'declined'
+  | 'completed';
+
+export interface ExecutiveRequestInput {
+  readonly task: string;
+  readonly timeline: string;
+  readonly idempotencyKey: string;
+}
+
+export interface StoredExecutiveRequest {
+  readonly id: string;
+  readonly task: string;
+  readonly timeline: string;
+  readonly status: ExecutiveRequestStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ExecutiveRequestPageQuery {
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export interface ExecutiveRequestQueueQuery extends ExecutiveRequestPageQuery {
+  readonly status?: ExecutiveRequestStatus;
+}
+
+export interface ExecutiveRequestPage<T> {
+  readonly items: readonly T[];
+  readonly nextCursor: string | null;
 }

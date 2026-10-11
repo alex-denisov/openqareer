@@ -25,6 +25,7 @@ import { registerApplicationRoutes } from './applicationRoutes';
 import { registerMatchedVacancyRoutes } from './matchedVacancyRoutes';
 import { registerVacancyPitchRoutes } from './vacancyPitchRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
+import { registerExecutiveRequestRoutes } from './executiveRequestRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -601,6 +602,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
   registerVacancyApplicationRoutes(app, deps);
   registerApplicationRoutes(app, deps);
   registerPlanRequestRoutes(app, deps);
+  registerExecutiveRequestRoutes(app, deps);
   registerCampaignRoutes(app, deps);
   app.get('/api/v1/candidate/strategy', withDeps(deps, handleReadStrategy));
   app.post(

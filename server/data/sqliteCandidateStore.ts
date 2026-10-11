@@ -12,7 +12,6 @@ import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
 import type {
   CandidateCredentials,
-  CandidateExport,
   CandidateIdentity,
   CandidateSnapshot,
   CandidateStore,
@@ -32,6 +31,11 @@ import type {
   NativeSourceReceiptInput,
 } from './candidateStore';
 import { insertPlanRequest, selectPlanRequests } from './store/planRequestStore';
+import {
+  exportExecutiveRequests,
+} from './store/executiveRequestStore';
+import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandidateStoreExecutiveRequestMethods';
+import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
 import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
@@ -132,10 +136,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   constructor(options: SqliteStoreOptions) {
     if (options.databasePath !== ':memory:') {
-      mkdirSync(dirname(options.databasePath), {
-        recursive: true,
-        mode: 0o700,
-      });
+      mkdirSync(dirname(options.databasePath), { recursive: true, mode: 0o700 });
     }
     this.database = new DatabaseSync(options.databasePath, {
       timeout: 5_000,
@@ -161,6 +162,20 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
+    Object.assign(
+      this,
+      createSqliteCandidateStoreExportMethods({
+        getSnapshot: (candidateId) => this.getSnapshot(candidateId),
+        sourceConnections: this.sourceConnections,
+        careerStrategyRepository: this.careerStrategyRepository,
+        workPreferenceRepository: this.workPreferenceRepository,
+        documentRepository: this.documentRepository,
+        exportConsultantConversations: (candidateId) =>
+          this.exportConsultantConversations(candidateId),
+        exportExecutiveRequests: (candidateId) =>
+          exportExecutiveRequests(this.database, this.sealedText, candidateId),
+      }),
+    );
     this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
     this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
     this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
@@ -175,6 +190,15 @@ export class SqliteCandidateStore implements CandidateStore {
     this.conversations = new ConversationController({ database: this.database, sealedText: this.sealedText, documentRepository: this.documentRepository });
     this.sourceConnections = new SourceConnectionController({ database: this.database, sealedText: this.sealedText });
     this.configureDatabase();
+    Object.assign(
+      this,
+      createSqliteCandidateStoreExecutiveRequestMethods({
+        database: this.database,
+        sealedText: this.sealedText,
+        requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+        transaction: (operation) => this.transaction(operation),
+      }),
+    );
     this.consultantHistory = new ConsultantHistoryStore(this.database, this.sealedText);
     this.consultantMethods = createSqliteCandidateStoreConsultantMethods({
       history: this.consultantHistory,
@@ -502,6 +526,12 @@ export class SqliteCandidateStore implements CandidateStore {
   declare deleteDocument: SqliteCandidateStoreDocumentMethods['deleteDocument'];
   declare setDocumentRetention: SqliteCandidateStoreDocumentMethods['setDocumentRetention'];
   declare purgeExpiredDocuments: SqliteCandidateStoreDocumentMethods['purgeExpiredDocuments'];
+  declare exportCandidate: CandidateStore['exportCandidate'];
+  declare createExecutiveRequest: NonNullable<CandidateStore['createExecutiveRequest']>;
+  declare listExecutiveRequests: NonNullable<CandidateStore['listExecutiveRequests']>;
+  declare getExecutiveRequest: NonNullable<CandidateStore['getExecutiveRequest']>;
+  declare listExecutiveRequestQueue: NonNullable<CandidateStore['listExecutiveRequestQueue']>;
+  declare setExecutiveRequestStatus: NonNullable<CandidateStore['setExecutiveRequestStatus']>;
 
   requestPlan: CandidateStore['requestPlan'] = (id, plan, note) => insertPlanRequest(this.database, id, plan, note);
   listPlanRequests: CandidateStore['listPlanRequests'] = (id) => selectPlanRequests(this.database, id);
@@ -691,30 +721,6 @@ export class SqliteCandidateStore implements CandidateStore {
       }
       return distinct.length;
     });
-  }
-
-  exportCandidate(candidateId: string): CandidateExport {
-    const snapshot = this.getSnapshot(candidateId);
-    return {
-      ...snapshot,
-      sourceConnections: this.sourceConnections.list(candidateId).map((connection) => ({
-        id: connection.id,
-        platform: connection.platform,
-        accessMode: connection.accessMode,
-        connectedAt: connection.connectedAt,
-        lastImportedAt: connection.lastImportedAt,
-        capturedAt: connection.receipt.capturedAt,
-        factCount: connection.receipt.factCount,
-      })),
-      // Решение о собственной роли — данные кандидата, а не служебная запись.
-      careerStrategy: this.careerStrategyRepository.get(candidateId),
-      workPreferences: this.workPreferenceRepository.get(candidateId),
-      consultantConversations: this.exportConsultantConversations(candidateId),
-      documentContents: snapshot.documents.flatMap((document) => {
-        const stored = this.documentRepository.get(candidateId, document.id);
-        return stored ? [stored] : [];
-      }),
-    };
   }
 
   deleteCandidate(candidateId: string): boolean {
