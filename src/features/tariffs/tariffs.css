@@ -28,14 +28,14 @@
   margin: 0;
   font-size: var(--career-text-xl);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
   line-height: 1.25;
 }
 
 .career-tariffs-lead {
   margin: 0;
   font-size: var(--career-text-sm);
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
   line-height: 1.45;
 }
 
@@ -47,7 +47,7 @@
 }
 
 .career-tariff-card {
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
   transition: border-color 180ms ease, box-shadow 180ms ease;
@@ -84,12 +84,12 @@
 .career-tariff-name {
   font-size: var(--career-text-base);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-tariff-sub {
   font-size: var(--career-text-xs);
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-tariff-pricing {
@@ -101,18 +101,18 @@
 .career-tariff-price {
   font-size: var(--career-text-base);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
   font-variant-numeric: tabular-nums;
 }
 
 .career-tariff-term {
   font-size: var(--career-text-xs);
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-tariff-promise {
   font-size: var(--career-text-sm);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
   line-height: 1.4;
 }
 
@@ -131,15 +131,15 @@
   font-size: var(--career-text-xs);
   font-weight: 600;
   color: var(--career-success);
-  background: var(--career-surface-subtle);
-  border: 1px solid var(--career-border);
+  background: var(--career-accent-soft);
+  border: 1px solid var(--career-line);
 }
 
 .career-tariff-chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
   transition: transform 180ms ease;
 }
 
@@ -148,9 +148,9 @@
 }
 
 .career-tariff-body {
-  border-top: 1px solid var(--career-border);
+  border-top: 1px solid var(--career-line);
   padding: var(--career-space-5);
-  background: var(--career-surface-subtle);
+  background: var(--career-accent-soft);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--career-space-6);
@@ -166,7 +166,7 @@
   margin: 0;
   font-size: var(--career-text-sm);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-tariff-bullet-list {
@@ -183,7 +183,7 @@
   align-items: flex-start;
   gap: var(--career-space-2);
   font-size: var(--career-text-sm);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
   line-height: 1.4;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .career-tariff-bullet-icon.is-off {
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 /* Subscription block inside active Pro tier */
@@ -209,7 +209,7 @@
   padding: var(--career-space-3);
   border-radius: var(--career-radius-sm);
   background: var(--career-surface);
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
 }
 
 .career-tariff-sub-row {
@@ -220,18 +220,18 @@
 }
 
 .career-tariff-sub-label {
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-tariff-sub-value {
-  color: var(--career-text-primary);
+  color: var(--career-text);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 /* Comparison section */
 .career-tariffs-compare {
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
   overflow: hidden;
@@ -256,11 +256,11 @@
   margin: 0;
   font-size: var(--career-text-base);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-tariffs-compare-body {
-  border-top: 1px solid var(--career-border);
+  border-top: 1px solid var(--career-line);
   padding: var(--career-space-4);
   overflow-x: auto;
 }
@@ -277,7 +277,7 @@
   grid-template-columns: 240px repeat(5, 1fr);
   align-items: center;
   padding: var(--career-space-2) var(--career-space-3);
-  border-bottom: 1px solid var(--career-border);
+  border-bottom: 1px solid var(--career-line);
   font-size: var(--career-text-sm);
 }
 
@@ -286,9 +286,9 @@
 }
 
 .career-cmp-row.is-head {
-  background: var(--career-surface-subtle);
+  background: var(--career-accent-soft);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-cmp-row.is-here {
@@ -297,7 +297,7 @@
 
 .career-cmp-step {
   font-weight: 600;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-cmp-cell {
@@ -313,12 +313,12 @@
 }
 
 .career-cmp-cell.is-no {
-  color: var(--career-text-muted);
+  color: var(--career-text-dim);
 }
 
 .career-cmp-cell.is-text {
   font-size: var(--career-text-xs);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
 }
 
 /* Mobile 390 specific styles */
@@ -371,9 +371,9 @@
   width: 44px;
   height: 44px;
   border-radius: var(--career-radius-circle);
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   background: var(--career-surface);
-  color: var(--career-text-primary);
+  color: var(--career-text);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -394,7 +394,7 @@
   flex-direction: column;
   gap: var(--career-space-2);
   padding: var(--career-space-4);
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
   cursor: pointer;
@@ -417,19 +417,19 @@
 .career-mob-name {
   font-size: var(--career-text-base);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }
 
 .career-mob-price {
   font-size: var(--career-text-base);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
   font-variant-numeric: tabular-nums;
 }
 
 .career-mob-r2 {
   font-size: var(--career-text-sm);
-  color: var(--career-text-secondary);
+  color: var(--career-text-soft);
   line-height: 1.4;
 }
 
@@ -445,10 +445,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--career-space-4);
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
-  color: var(--career-text-primary);
+  color: var(--career-text);
   font-weight: 600;
   font-size: var(--career-text-sm);
   cursor: pointer;
@@ -484,8 +484,8 @@
 
 .career-mob-action-btn.is-secondary {
   background: var(--career-surface);
-  color: var(--career-text-primary);
-  border: 1px solid var(--career-border);
+  color: var(--career-text);
+  border: 1px solid var(--career-line);
 }
 
 .career-tariff-sub-section {
@@ -511,7 +511,7 @@
   flex-direction: column;
   gap: var(--career-space-3);
   padding: var(--career-space-4);
-  border: 1px solid var(--career-border);
+  border: 1px solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
 }
@@ -520,5 +520,5 @@
   margin: 0;
   font-size: var(--career-text-sm);
   font-weight: 700;
-  color: var(--career-text-primary);
+  color: var(--career-text);
 }

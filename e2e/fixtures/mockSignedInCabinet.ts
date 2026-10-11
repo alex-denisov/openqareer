@@ -15,6 +15,7 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
   let decisionProfile: Record<string, unknown> | null = null;
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
+  let billingAutoRenew = true;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -23,6 +24,77 @@ export async function mockSignedInCabinet(page: Page): Promise<string[]> {
     }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });
+    }
+    if (path === '/api/v1/candidate/billing' && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: {
+          data: {
+            currentPlan: 'basic',
+            subscription: {
+              status: 'active',
+              currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+              nextChargeAt: billingAutoRenew ? '2026-11-08T00:00:00.000Z' : null,
+              autoRenew: billingAutoRenew,
+            },
+            plans: [
+              {
+                id: 'basic',
+                name: 'Basic',
+                amountKopecks: 399000,
+                currency: 'RUB',
+                interval: 'month',
+              },
+              { id: 'pro', name: 'Pro', amountKopecks: 990000, currency: 'RUB', interval: 'month' },
+              {
+                id: 'max',
+                name: 'Max',
+                amountKopecks: 1990000,
+                currency: 'RUB',
+                interval: 'month',
+              },
+            ],
+          },
+        },
+      });
+    }
+    if (path === '/api/v1/candidate/billing/receipts' && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: {
+          data: [
+            {
+              invoiceId: 41,
+              planId: 'basic',
+              amountKopecks: 399000,
+              currency: 'RUB',
+              paidAt: '2026-10-10T10:00:00.000Z',
+              paymentMethod: null,
+              receiptUrl: null,
+              receiptStatus: 'not-provided',
+              fiscalDocumentNumber: null,
+              fiscalDate: null,
+            },
+          ],
+          meta: { nextCursor: null },
+        },
+      });
+    }
+    if (
+      path === '/api/v1/candidate/billing/subscription/cancel-renewal' &&
+      route.request().method() === 'POST'
+    ) {
+      billingAutoRenew = false;
+      return route.fulfill({
+        json: {
+          data: {
+            planId: 'basic',
+            status: 'active',
+            currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+            nextChargeAt: null,
+            autoRenew: false,
+            cancellationEventId: 'fixture-cancellation-event',
+          },
+        },
+      });
     }
     if (path.endsWith('/candidate/today')) {
       const existingMomentum =

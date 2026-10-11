@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import {
   CaretLeft,
   CaretRight,
@@ -22,6 +23,7 @@ interface TariffMobileViewProps {
   readonly activeTierId: TariffTierId;
   readonly initialView?: string;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingPanel?: ReactNode;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }
@@ -30,6 +32,7 @@ export function TariffMobileView({
   activeTierId,
   initialView = 'home',
   subscription,
+  billingPanel,
   onSelectTier,
   onRequestTier,
 }: TariffMobileViewProps) {
@@ -57,6 +60,7 @@ export function TariffMobileView({
   return (
     <MobileHomeView
       activeTierId={activeTierId}
+      billingPanel={billingPanel}
       onGoLevel={(id) => setCurrentView(`lvl-${id}`)}
       onGoCompare={() => setCurrentView('cmp')}
     />
@@ -65,10 +69,12 @@ export function TariffMobileView({
 
 function MobileHomeView({
   activeTierId,
+  billingPanel,
   onGoLevel,
   onGoCompare,
 }: {
   readonly activeTierId: TariffTierId;
+  readonly billingPanel?: ReactNode;
   readonly onGoLevel: (id: TariffTierId) => void;
   readonly onGoCompare: () => void;
 }) {
@@ -81,6 +87,8 @@ function MobileHomeView({
           только на следующий.
         </p>
       </div>
+
+      {billingPanel}
 
       <MobileHomeList activeTierId={activeTierId} onGoLevel={onGoLevel} />
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ListChecks } from '@phosphor-icons/react';
 import {
   TARIFF_LEVELS,
@@ -18,6 +18,7 @@ export interface CareerTariffsViewProps {
   readonly activeTierId?: TariffTierId;
   readonly initialView?: string;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingPanel?: ReactNode;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }
@@ -26,6 +27,7 @@ export function CareerTariffsView({
   activeTierId = 'free',
   initialView = 'home',
   subscription,
+  billingPanel,
   onSelectTier,
   onRequestTier,
 }: CareerTariffsViewProps) {
@@ -37,6 +39,7 @@ export function CareerTariffsView({
         <TariffsDesktopHeader
           onToggleCompare={() => setCompareOpen((prev) => !prev)}
         />
+        {billingPanel}
         <div className="career-tariffs-ladder">
           {TARIFF_LEVELS.map((level) => (
             <TariffCard
@@ -57,6 +60,7 @@ export function CareerTariffsView({
           activeTierId={activeTierId}
           initialView={initialView}
           subscription={subscription}
+          billingPanel={billingPanel}
           onSelectTier={onSelectTier}
           onRequestTier={onRequestTier}
         />
