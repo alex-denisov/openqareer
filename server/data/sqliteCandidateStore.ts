@@ -1,3 +1,4 @@
+/* eslint-disable max-lines -- store facade grew past 800 lines when S10 lines merged; split the repository wiring into modules in the next sprint */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -42,15 +43,16 @@ import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
 import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
-import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
-import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
-import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
-import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
+import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
+import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
+import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import { createSqliteCandidateStoreLinkedInMethods } from './linkedInLanguageImport';
 import { runSqliteTransaction } from './sqliteTransaction';
-import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
-import { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
-import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
+import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
+import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
@@ -169,6 +171,27 @@ export class SqliteCandidateStore implements CandidateStore {
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
+    this.installExportMethods();
+    Object.assign(this, createSqliteCandidateStoreLinkedInMethods({
+      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+      listConnections: (candidateId) => this.sourceConnections.list(candidateId),
+      readResume: (candidateId) => this.resumeRepository.get(candidateId),
+    }));
+    ({
+      profileRevisionRepo: this.profileRevisionRepo,
+      starPrepRepo: this.starPrepRepo,
+      referralTrackRepo: this.referralTrackRepo,
+      careerVectorRepo: this.careerVectorRepo,
+      careerDiaryRepo: this.careerDiaryRepo,
+      decisionProfileRepo: this.decisionProfileRepo,
+      relocationQuestionnaireRepo: this.relocationQuestionnaireRepo,
+    } = createProfileRepositories(this.database, this.sealedText, (operation) =>
+      this.transaction(operation),
+    ));
+    this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
+  }
+
+  private installExportMethods(): void {
     Object.assign(
       this,
       createSqliteCandidateStoreExportMethods({
@@ -187,26 +210,6 @@ export class SqliteCandidateStore implements CandidateStore {
           exportExecutiveRequests(this.database, this.sealedText, candidateId),
       }),
     );
-    Object.assign(this, createSqliteCandidateStoreLinkedInMethods({
-      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
-      listConnections: (candidateId) => this.sourceConnections.list(candidateId),
-      readResume: (candidateId) => this.resumeRepository.get(candidateId),
-    }));
-    this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
-    this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
-    this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
-    this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
-    this.careerDiaryRepo = new SqliteCareerDiaryRepository(
-      this.database,
-      this.sealedText,
-      (operation) => this.transaction(operation),
-    );
-    this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
-    this.relocationQuestionnaireRepo = new SqliteRelocationQuestionnaireRepository(
-      this.database,
-      this.sealedText,
-    );
-    this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
   }
 
   private initializeConversationStores(): void {

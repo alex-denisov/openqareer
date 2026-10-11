@@ -40,7 +40,7 @@ async function setup(
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
   const candidate = { id: 'alice', locale: 'ru-RU', dataClass: 'synthetic', createdAt: '' };
-  const getSubscription = vi.fn((_userId: string) =>
+  const getSubscription = vi.fn((_userId: string, _now?: string) =>
     subscriptionPlanId ? { planId: subscriptionPlanId } : null,
   );
   const deps = {
@@ -143,7 +143,7 @@ describe('candidate draft HTTP boundary', () => {
     expect(overLimit.statusCode).toBe(429);
     expect(overLimit.json().error.code).toBe('draft_daily_limit');
     expect(writer).toHaveBeenCalledTimes(2);
-    expect(getSubscription).toHaveBeenCalledWith('user');
+    expect(getSubscription).toHaveBeenCalledWith('user', expect.any(String));
   });
   it('serializes concurrent generation so quota cannot be bypassed', async () => {
     const { post, repository } = await setup();
