@@ -9,6 +9,7 @@ import type { CandidateIdentity, CandidateSnapshot } from '../data/candidateStor
 import type { LinkedinDraftWriter } from '../providers/linkedinDraftWriter';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, authenticateSession, csrfError, hasSafeMutationOrigin, sendError } from './helpers';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 
 export type CandidateDraftRouteDeps = RouteDeps & {
   readonly candidateDraftRepository: SqliteCandidateDraftRepository;
@@ -452,6 +453,15 @@ function persistDraft(
       text,
       localDate,
     });
+    if (draft.kind === 'post') {
+      recordNotificationFromSource(deps, request, candidate.id, {
+        kind: 'post_approval',
+        sourceType: 'draft',
+        sourceId: draft.id,
+        idempotencyKey: `post-approval:${draft.id}`,
+        createdAt: draft.createdAt,
+      });
+    }
     const database = workflowDatabase(deps);
     if (database && input.topicId) saveTopicDecision(database, candidate.id, input.topicId, 'used');
     return reply.send({ data: draft });

@@ -94,6 +94,31 @@ export class AuthService extends AuthServiceCore {
     this.database.exec(MIGRATION_39);
   }
 
+  getCandidateEmail(candidateId: string): string | null {
+    const row = this.database.prepare(
+      `SELECT candidate_id, email, display_name, role, is_test, created_at
+       FROM users WHERE candidate_id = ? AND role = 'candidate' AND blocked_at IS NULL AND email IS NOT NULL
+       ORDER BY created_at DESC LIMIT 1`,
+    ).get(candidateId) as {
+      candidate_id: string;
+      email: string;
+      display_name: string | null;
+      role: 'candidate' | 'admin';
+      is_test: number;
+      created_at: string;
+    } | undefined;
+    if (!row) return null;
+    const status = this.emailVerification.status({
+      candidateId: row.candidate_id,
+      createdAt: row.created_at,
+      displayName: row.display_name,
+      email: row.email,
+      isTest: row.is_test === 1,
+      role: row.role,
+    });
+    return status.emailVerified === false ? null : row.email;
+  }
+
   override updateAccount(
     sessionToken: string,
     input: AccountProfileUpdate,

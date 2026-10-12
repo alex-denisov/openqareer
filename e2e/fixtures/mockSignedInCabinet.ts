@@ -1,6 +1,7 @@
 import type { Page, Route } from '@playwright/test';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
-import type { VacanciesScreenState } from '../../src/features/vacancies/VacanciesScreenFilters';
+import type { VacanciesScreenState } from '../../src/features/vacancies/vacanciesScreenState';
+import { mockNotificationRequest } from './mockNotifications';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
@@ -395,6 +396,9 @@ export interface MockSignedInCabinetOptions {
     readonly settings?: Partial<AutomationFixtureState['settings']>;
     readonly runtime?: Partial<AutomationFixtureState['runtime']>;
   };
+  readonly accountNotificationHandler?: (route: Route, path: string) => Promise<boolean>;
+  readonly notificationHandler?: (route: Route, path: string) => Promise<boolean>;
+  readonly applicationHandler?: (route: Route, path: string) => Promise<boolean>;
   readonly linkedinDrafts?: readonly Record<string, unknown>[];
   readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
   readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
@@ -431,6 +435,23 @@ function seedInitialVacancyItems(
       },
     };
   });
+}
+
+async function mockCandidateNotificationRoutes(
+  route: Route,
+  path: string,
+  options: MockSignedInCabinetOptions,
+): Promise<boolean> {
+  if (path.startsWith('/api/v1/candidate/notifications') && options.accountNotificationHandler) {
+    if (await options.accountNotificationHandler(route, path)) return true;
+  }
+  if (path.startsWith('/api/v1/candidate/notifications') && options.notificationHandler) {
+    if (await options.notificationHandler(route, path)) return true;
+  }
+  if (/^\/api\/v1\/candidate\/applications(?:\/|$)/u.test(path) && options.applicationHandler) {
+    if (await options.applicationHandler(route, path)) return true;
+  }
+  return mockNotificationRequest(route, path);
 }
 
 function savedApplicationFixtures(count: number): ApplicationStub[] {
@@ -1405,6 +1426,7 @@ export async function mockSignedInCabinet(
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (await mockCandidateNotificationRoutes(route, path, options)) return;
     if (await mockCareerDiaryRoutes(route, path, careerDiary)) return;
     if (await mockConnectionRoutes(route, url, connectionState)) return;
     if (

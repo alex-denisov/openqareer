@@ -13,6 +13,8 @@ import {
   summarizeVacancyFilterGroup,
   type VacancyFilterGroup,
 } from './VacanciesFilterToolbar';
+import type { VacanciesScreenState } from './vacanciesScreenState';
+export type { VacanciesScreenState } from './vacanciesScreenState';
 import {
   candidateRegionLabel,
   isMobileFilterViewport,
@@ -25,23 +27,6 @@ import {
 } from './VacanciesFilterPopover';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
-
-export interface VacanciesScreenState {
-  readonly roles: readonly string[];
-  readonly regions: readonly string[];
-  readonly levels?: readonly string[];
-  readonly sources?: readonly string[];
-  readonly remoteOnly: boolean;
-  readonly freshnessDays?: number;
-  readonly selectedCity?: string;
-  readonly selectedLocations?: readonly string[];
-  readonly locationSearch?: string;
-  readonly salaryMinimum?: number;
-  readonly salaryMaximum?: number;
-  readonly salaryCurrency?: string;
-  readonly includeMissingSalary?: boolean;
-  readonly formats?: readonly string[];
-}
 
 export interface VacanciesScreenFiltersProps {
   readonly state: VacanciesScreenState;

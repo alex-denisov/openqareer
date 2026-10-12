@@ -27,6 +27,13 @@ describe('shell navigation', () => {
     expect(isSectionNavigable('today', finished)).toBe(true);
   });
 
+  it('makes notifications available to an account even before the career picture is complete', () => {
+    const notifications = 'notifications';
+    expect(isSectionNavigable(notifications, firstTime)).toBe(false);
+    expect(isSectionNavigable(notifications, { ...firstTime, resumeAvailable: true })).toBe(true);
+    expect(sectionLockReason(notifications, firstTime)).toContain('аккаунт');
+  });
+
   /**
    * B169 §5 — «Тарифы» was the one section a candidate could reach mid-wizard.
    * Pricing before the product has said anything about their career asks them

@@ -31,6 +31,8 @@ import { CareerDiaryAccessProvider } from './careerDiaryAccess';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
 import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
 import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
+import { NotificationsBell } from '../notifications/NotificationsBell';
+import { NotificationsScreen } from '../notifications/NotificationsScreen';
 
 type ShellView = ShellSection;
 
@@ -70,6 +72,7 @@ const pageNames: Record<ShellView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  notifications: 'Уведомления',
   automation: 'Автоматизация',
   diary: 'Карьерный дневник',
   tariffs: 'Тарифы',
@@ -117,6 +120,8 @@ export function CareerWorkspaceShell({
     () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
   );
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
   const [sessionWaitIsLong, setSessionWaitIsLong] = useState(false);
   // A diagnostic that is under way owns the «Сегодня» screen even after the
   // account its own source step demanded arrives (B141).
@@ -230,6 +235,7 @@ export function CareerWorkspaceShell({
     const target = view === 'career' ? 'opportunities' : view;
     const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
     if (!isNavigable(target)) return;
+    if (target !== 'notifications') setSelectedNotificationId(null);
     setActiveView(target);
     setNavigationOptions(targetOptions);
     const showVacancyExpert =
@@ -307,6 +313,11 @@ export function CareerWorkspaceShell({
     setAccountOpen(true);
   }, []);
 
+  const openNotificationSettings = useCallback(() => openAccount('notif'), [openAccount]);
+  function openNotificationCenter(notificationId?: string) {
+    setSelectedNotificationId(notificationId ?? null);
+    navigate('notifications');
+  }
   const openNotifications = useCallback(() => {
     openAccount('notif');
   }, [openAccount]);
@@ -385,6 +396,19 @@ export function CareerWorkspaceShell({
           />
         )}
 
+        {cabinetSession &&
+        !sessionPending &&
+        !accountOpen &&
+        !onboardingIsFullscreen &&
+        !expertPanelOpen ? (
+          <NotificationsBell
+            unreadCount={notificationUnreadCount}
+            onUnreadCountChange={setNotificationUnreadCount}
+            onOpenCenter={openNotificationCenter}
+            onOpenSettings={openNotificationSettings}
+          />
+        ) : null}
+
         <main id="career-main" className="career-main" aria-hidden={accountOpen ? true : undefined}>
           <AppErrorBoundary>
             {sessionPending ? (
@@ -445,6 +469,7 @@ export function CareerWorkspaceShell({
             !intakeVisible &&
             activeView !== 'tariffs' &&
             activeView !== 'automation' &&
+            activeView !== 'notifications' &&
             (activeView !== 'diary' || diaryAccess.isVisible) ? (
               <CareerCabinet
                 key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
@@ -459,6 +484,15 @@ export function CareerWorkspaceShell({
                 onOpenNotifications={openNotifications}
                 onOpenExpert={openExpert}
                 onUpdateWorkspace={onUpdateWorkspace}
+              />
+            ) : null}
+            {cabinetSession && !intakeVisible && activeView === 'notifications' ? (
+              <NotificationsScreen
+                key={activeView}
+                initialSelectedId={selectedNotificationId}
+                onUnreadCountChange={setNotificationUnreadCount}
+                onNavigate={navigate}
+                onOpenSettings={openNotificationSettings}
               />
             ) : null}
             {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (

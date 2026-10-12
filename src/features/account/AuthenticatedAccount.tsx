@@ -7,14 +7,14 @@ import { MIN_PASSWORD_LENGTH } from '../../../shared/accountValidation';
 import {
   AccountAppSettingsSection,
   AccountConsentsSection,
-  AccountNotificationsSection,
 } from './AccountDesktopSections';
+import { AccountNotificationsSection } from './AccountNotificationsSection';
 import { CandidateBillingAccountSection } from './CandidateBillingAccountSection';
 import { AccountConfirmDialog } from './AccountDialogs';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
+import { useAccountNotificationSettings } from './useAccountNotificationSettings';
 import {
   DEFAULT_APP_SETTINGS,
-  DEFAULT_NOTIFICATION_EVENTS,
   MANDATORY_NOTIFICATION_EVENTS,
   DEFAULT_ACCOUNT_CONSENTS,
 } from './accountData';
@@ -197,17 +197,19 @@ function AccountTabRouter(props: TabRouterProps) {
     );
   }
   if (props.section === 'notif') {
-    return (
-      <AccountNotificationsSection
-        events={DEFAULT_NOTIFICATION_EVENTS}
-        mandatoryEvents={MANDATORY_NOTIFICATION_EVENTS}
-      />
-    );
+    return <AccountNotificationSettings />;
   }
   if (props.section === 'app') {
     return <AccountAppSettingsSection settings={DEFAULT_APP_SETTINGS} />;
   }
   return <CandidateBillingAccountSection onOpenTariffs={props.onOpenTariffs} />;
+}
+
+function AccountNotificationSettings() {
+  const settings = useAccountNotificationSettings();
+  return (
+    <AccountNotificationsSection {...settings} mandatoryEvents={MANDATORY_NOTIFICATION_EVENTS} />
+  );
 }
 
 function TimezoneForm({

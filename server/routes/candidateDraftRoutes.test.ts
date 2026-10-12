@@ -12,6 +12,8 @@ import type { RouteDeps } from './deps';
 import { SqliteCandidateDraftRepository } from '../candidate/sqliteCandidateDraftRepository';
 import { SqliteCandidateActionRepository } from '../candidate/sqliteCandidateActionRepository';
 import { registerCandidateDraftRoutes } from './candidateDraftRoutes';
+import { registerNotificationRoutes } from './notificationRoutes';
+import { SqliteNotificationRepository } from '../data/sqliteNotificationRepository';
 
 const close: (() => Promise<unknown>)[] = [];
 afterEach(async () => {
@@ -25,8 +27,10 @@ async function setup(
   subscriptionPlanId?: string,
 ) {
   const db = new DatabaseSync(':memory:');
+  db.exec("CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT; INSERT INTO candidates (id) VALUES ('alice'), ('bob');");
   const repository = new SqliteCandidateDraftRepository(db);
   const actionRepository = new SqliteCandidateActionRepository(db);
+  const notificationRepository = new SqliteNotificationRepository(db);
   const logs: string[] = [];
   const app = Fastify({
     logger: {
@@ -45,7 +49,11 @@ async function setup(
   );
   const deps = {
     config,
-    candidateStore: { authenticate: () => null, getSnapshot: () => ({ memory }) },
+    candidateStore: {
+      authenticate: () => null,
+      getSnapshot: () => ({ memory }),
+      notificationRepository,
+    },
     authService: {
       authenticate: (token: string) => (token === 'session' ? { userId: 'user', candidate } : null),
       getUser: () => ({
@@ -64,8 +72,10 @@ async function setup(
     linkedinDraftWriter: { writeDraft: typeof writer };
   };
   registerCandidateDraftRoutes(app, deps);
+  registerNotificationRoutes(app, deps);
   close.push(async () => {
     await app.close();
+    notificationRepository.close();
     db.close();
   });
   const headers = { authorization: 'Bearer session', origin: config.allowedOrigins[0] };
@@ -74,9 +84,32 @@ async function setup(
     extraHeaders = headers,
   ) =>
     app.inject({ method: 'POST', url: '/api/v1/candidate/drafts', headers: extraHeaders, payload });
-  return { app, post, headers, repository, actionRepository, writer, logs, getSubscription };
+  return {
+    app,
+    post,
+    headers,
+    repository,
+    actionRepository,
+    writer,
+    logs,
+    getSubscription,
+  };
 }
 describe('candidate draft HTTP boundary', () => {
+  it('creates an in-app approval notification when a post draft is prepared', async () => {
+    const { post, app, headers } = await setup('executive', undefined, [], 'executive');
+    const generated = await post({ kind: 'post', topic: 'Запуск продукта' });
+    expect(generated.statusCode).toBe(200);
+    const inbox = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/notifications',
+      headers,
+    });
+    expect(inbox.json().data.items.map((item: { kind: string }) => item.kind)).toContain(
+      'post_approval',
+    );
+  });
+
   it('does not install draft workflow schema when candidate_drafts is absent', async () => {
     const database = new DatabaseSync(':memory:');
     const app = Fastify();

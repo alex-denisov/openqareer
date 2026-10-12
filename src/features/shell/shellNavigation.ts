@@ -5,6 +5,7 @@ export type ShellSection =
   | 'career'
   | 'opportunities'
   | 'responses'
+  | 'notifications'
   | 'automation'
   | 'diary'
   | 'tariffs';
@@ -33,6 +34,7 @@ export interface ShellNavigationState {
  */
 export function isSectionNavigable(section: ShellSection, state: ShellNavigationState): boolean {
   if (section === 'today') return true;
+  if (section === 'notifications') return state.resumeAvailable;
   if (section === 'diary') {
     return state.candidateSessionAvailable && state.careerDiaryAvailable;
   }
@@ -44,6 +46,9 @@ export function isSectionNavigable(section: ShellSection, state: ShellNavigation
 
 /** Why a closed section is closed, in the candidate's language. */
 export function sectionLockReason(section: ShellSection, state: ShellNavigationState): string {
+  if (section === 'notifications' && !state.resumeAvailable) {
+    return 'Войдите в аккаунт, чтобы открыть уведомления';
+  }
   if (section === 'diary' && !state.candidateSessionAvailable) {
     return 'Войдите в аккаунт, чтобы открыть карьерный дневник';
   }

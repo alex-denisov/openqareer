@@ -167,6 +167,8 @@ export interface SessionAuth {
   resendEmailVerification?(sessionToken: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   changeUnverifiedEmail?(sessionToken: string, email: string, currentPassword: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  /** Server-only recipient lookup for queued candidate email delivery. */
+  getCandidateEmail?(candidateId: string): string | null;
   /** B173: proof of which published documents the account accepted, and when. */
   recordLegalConsent?(input: {
     userId: string;

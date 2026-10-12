@@ -73,9 +73,11 @@ test.describe('B443: Account Screen Mockup 8', () => {
     // 3. Уведомления (Criterion 4)
     const notifHtml = readHtml('desktop-notif.html');
     await page.setContent(notifHtml, { waitUntil: 'load' });
-    await expect(page.locator('text=Ответ работодателя')).toBeVisible();
+    await expect(page.getByRole('cell', { name: 'Ответ работодателя', exact: true })).toBeVisible();
     await expect(
-      page.locator('text=Столбец Telegram недоступен, пока бот не подключён'),
+      page
+        .locator('.career-account-notifications-desktop')
+        .getByText('Столбец Telegram недоступен, пока бот не подключён'),
     ).toBeVisible();
     await page.screenshot({
       path: path.join(EVIDENCE_DIR, 'account-desktop-1440-notif.png'),

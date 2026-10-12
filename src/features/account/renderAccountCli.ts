@@ -1,7 +1,9 @@
 import fs from 'node:fs';
+import { register } from 'node:module';
 import path from 'node:path';
-import { renderAccountHtml } from './renderAccountHtml';
 import type { AccountSectionId, MobileAccountViewId } from './accountTypes';
+
+register(new URL('./renderAccountCssLoader.mjs', import.meta.url), import.meta.url);
 
 interface CliArgs {
   readonly out: string;
@@ -32,7 +34,8 @@ function parseArgs(): CliArgs {
   return { out, batchDir, section, mobileView, isPro, isMobile };
 }
 
-function runBatchRender(dir: string) {
+async function runBatchRender(dir: string) {
+  const { renderAccountHtml } = await import('./renderAccountHtml');
   fs.mkdirSync(dir, { recursive: true });
   const desktopViews: readonly { id: AccountSectionId; file: string; isPro?: boolean }[] = [
     { id: 'prof', file: 'desktop-prof.html' },
@@ -60,12 +63,13 @@ function runBatchRender(dir: string) {
   }
 }
 
-function runCli() {
+async function runCli() {
   const args = parseArgs();
   if (args.batchDir) {
-    runBatchRender(args.batchDir);
+    await runBatchRender(args.batchDir);
     return;
   }
+  const { renderAccountHtml } = await import('./renderAccountHtml');
   const html = renderAccountHtml({
     initialSection: args.section,
     initialMobileView: args.mobileView,
@@ -79,4 +83,4 @@ function runCli() {
   }
 }
 
-runCli();
+await runCli();
