@@ -1357,3 +1357,26 @@
     background: var(--career-surface-raised);
   }
 }
+
+/* One filled action per screen (approved mockup 6): the filled one is the
+   approval in the queue, the saves are outlined. */
+@media (min-width: 761px) {
+  .automation-auto-content .career-btn-primary:not(.automation-approve-all) {
+    color: var(--career-text-soft);
+    background: transparent;
+    border-color: var(--career-line-strong);
+  }
+
+  .automation-filter-grid select {
+    appearance: none;
+    padding-inline-end: var(--career-space-8);
+    background-color: var(--career-bg-elevated);
+    background-image: linear-gradient(45deg, transparent 50%, var(--career-text-soft) 50%),
+      linear-gradient(135deg, var(--career-text-soft) 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) 50%,
+      calc(100% - 13px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+  }
+}
