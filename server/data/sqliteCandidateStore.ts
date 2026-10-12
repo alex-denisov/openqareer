@@ -55,6 +55,9 @@ import { runSqliteTransaction } from './sqliteTransaction';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
+import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
+import type { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
 import type { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
@@ -123,6 +126,9 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly notificationRepository: SqliteNotificationRepository;
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   readonly starPrepRepo: SqliteStarPrepRepository;
+  readonly starStoriesRepo: SqliteStarStoriesRepository;
+  readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
+  readonly roleSkillAssessments: SqliteRoleSkillAssessmentRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
   readonly careerDiaryRepo: SqliteCareerDiaryRepository;
@@ -176,12 +182,6 @@ export class SqliteCandidateStore implements CandidateStore {
     ));
     this.initializeConversationStores();
     this.notificationRepository = new SqliteNotificationRepository(this.database, this.sealedText);
-    this.installExportMethods();
-    Object.assign(this, createSqliteCandidateStoreLinkedInMethods({
-      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
-      listConnections: (candidateId) => this.sourceConnections.list(candidateId),
-      readResume: (candidateId) => this.resumeRepository.get(candidateId),
-    }));
     ({
       profileRevisionRepo: this.profileRevisionRepo,
       starPrepRepo: this.starPrepRepo,
@@ -190,10 +190,26 @@ export class SqliteCandidateStore implements CandidateStore {
       careerDiaryRepo: this.careerDiaryRepo,
       decisionProfileRepo: this.decisionProfileRepo,
       relocationQuestionnaireRepo: this.relocationQuestionnaireRepo,
+      roleSkillAssessments: this.roleSkillAssessments,
+      starStoriesRepo: this.starStoriesRepo,
+      interviewSimulatorRepo: this.interviewSimulatorRepo,
     } = createProfileRepositories(this.database, this.sealedText, (operation) =>
       this.transaction(operation),
     ));
+    this.installLinkedInMethods();
+    this.installExportMethods();
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
+  }
+
+  private installLinkedInMethods(): void {
+    Object.assign(
+      this,
+      createSqliteCandidateStoreLinkedInMethods({
+        requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+        listConnections: (candidateId) => this.sourceConnections.list(candidateId),
+        readResume: (candidateId) => this.resumeRepository.get(candidateId),
+      }),
+    );
   }
 
   private installExportMethods(): void {
@@ -213,6 +229,9 @@ export class SqliteCandidateStore implements CandidateStore {
           this.exportConsultantConversations(candidateId),
         exportExecutiveRequests: (candidateId) =>
           exportExecutiveRequests(this.database, this.sealedText, candidateId),
+        roleSkillAssessments: this.roleSkillAssessments,
+        starStoriesRepo: this.starStoriesRepo,
+        interviewSimulatorRepo: this.interviewSimulatorRepo,
       }),
     );
   }

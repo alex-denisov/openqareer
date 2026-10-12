@@ -14,6 +14,8 @@ import { registerCareerVectorRoutes } from './careerVectorRoutes';
 import { registerCareerDiaryRoutes } from './careerDiaryRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
+import { registerStarStoryRoutes } from './starStoryRoutes';
+import { registerInterviewSimulatorRoutes } from './interviewSimulatorRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
@@ -412,6 +414,8 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationInterviewRoutes(app, deps);
   registerApplicationOfferRoutes(app, deps);
   registerStarPrepRoutes(app, deps);
+  registerStarStoryRoutes(app, deps);
+  registerInterviewSimulatorRoutes(app, deps);
   registerReferralTrackRoutes(app, deps);
   registerCareerVectorRoutes(app, deps);
   registerCareerDiaryRoutes(app, deps);

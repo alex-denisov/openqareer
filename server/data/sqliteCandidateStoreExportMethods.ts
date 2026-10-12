@@ -10,6 +10,10 @@ import type { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import type { SqliteWorkPreferenceRepository } from './sqliteWorkPreferenceRepository';
 import type { SourceConnectionController } from './store/sourceConnectionController';
+import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
+import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
+import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
+import { toExportedSourceConnection } from './store/exportedSourceConnection';
 
 type CandidateExportMethod = Required<Pick<CandidateStore, 'exportCandidate'>>;
 
@@ -27,6 +31,9 @@ interface CandidateExportDependencies {
     candidateId: string,
   ) => ConsultantConversationExport[];
   readonly exportExecutiveRequests: (candidateId: string) => StoredExecutiveRequest[];
+  readonly roleSkillAssessments: Pick<RoleSkillAssessmentRepository, 'list'>;
+  readonly starStoriesRepo: Pick<SqliteStarStoriesRepository, 'list'>;
+  readonly interviewSimulatorRepo: Pick<SqliteInterviewSimulatorRepository, 'getCurrent'>;
 }
 
 export function createSqliteCandidateStoreExportMethods(
@@ -38,19 +45,14 @@ export function createSqliteCandidateStoreExportMethods(
       return {
         ...snapshot,
         executiveRequests: dependencies.exportExecutiveRequests(candidateId),
-        sourceConnections: dependencies.sourceConnections.list(candidateId).map((connection) => ({
-          id: connection.id,
-          platform: connection.platform,
-          accessMode: connection.accessMode,
-          connectedAt: connection.connectedAt,
-          lastImportedAt: connection.lastImportedAt,
-          capturedAt: connection.receipt.capturedAt,
-          factCount: connection.receipt.factCount,
-        })),
+        sourceConnections: dependencies.sourceConnections.list(candidateId).map(toExportedSourceConnection),
         careerStrategy: dependencies.careerStrategyRepository.get(candidateId),
         workPreferences: dependencies.workPreferenceRepository.get(candidateId),
         relocationQuestionnaire: dependencies.relocationQuestionnaireRepo.getProfile(candidateId),
         relocationConsent: dependencies.relocationQuestionnaireRepo.getConsent(candidateId),
+        roleSkillAssessments: dependencies.roleSkillAssessments.list(candidateId),
+        starStories: dependencies.starStoriesRepo.list(candidateId),
+        interviewSession: dependencies.interviewSimulatorRepo.getCurrent(candidateId),
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
           const stored = dependencies.documentRepository.get(candidateId, document.id);

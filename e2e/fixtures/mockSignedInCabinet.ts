@@ -2,6 +2,12 @@ import type { Page, Route } from '@playwright/test';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import type { VacanciesScreenState } from '../../src/features/vacancies/vacanciesScreenState';
 import { mockNotificationRequest } from './mockNotifications';
+import {
+  createRoleSkillAssessmentFixture,
+  type MockSignedInCabinetOptions as MockRoleSkillAssessmentOptions,
+} from './mockRoleSkillAssessment';
+import { mockInterviewSimulatorRoutes } from './mockInterviewSimulator';
+import { createMockStarStoriesFixture } from './mockStarStories';
 import { mockCandidateCompanies } from './mockCandidateCompanies';
 import {
   account,
@@ -372,7 +378,7 @@ interface FixtureReceipt {
   readonly fiscalDate: string | null;
 }
 
-export interface MockSignedInCabinetOptions {
+export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptions {
   readonly candidateId?: string;
   readonly careerDiary?: MockCareerDiaryFixture;
   readonly vacancyTotal?: number;
@@ -475,6 +481,49 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
       updatedAt: timestamp,
     };
   });
+}
+
+async function mockLineCRoutes(
+  route: Route,
+  path: string,
+  options: MockSignedInCabinetOptions,
+  assessmentFixture: ReturnType<typeof createRoleSkillAssessmentFixture>,
+  starStoriesFixture: ReturnType<typeof createMockStarStoriesFixture>,
+): Promise<boolean> {
+  const method = route.request().method();
+  const isAssessmentRoute = path.startsWith('/api/v1/candidate/role-skill-assessments/');
+  const isStarStoryRoute =
+    path === '/api/v1/candidate/star-stories' || path.startsWith('/api/v1/candidate/star-stories/');
+  if (!isAssessmentRoute && !isStarStoryRoute) return false;
+
+  if (isAssessmentRoute && path.endsWith('/current') && options.assessmentDelayMs) {
+    await new Promise((resolve) => setTimeout(resolve, options.assessmentDelayMs));
+  }
+
+  let body: Record<string, unknown> = {};
+  if (method === 'POST' || method === 'PATCH') {
+    try {
+      body = route.request().postDataJSON() as Record<string, unknown>;
+    } catch {
+      return false;
+    }
+  }
+  const response = isAssessmentRoute
+    ? assessmentFixture.handle(path, method, body)
+    : starStoriesFixture.handle(path, method, body);
+  if (!response) return false;
+  if (response.error) {
+    await route.fulfill({
+      status: response.status ?? 400,
+      json: { error: response.error },
+    });
+    return true;
+  }
+  await route.fulfill({
+    status: response.status ?? 200,
+    json: { data: response.data },
+  });
+  return true;
 }
 
 interface AutomationFixtureState {
@@ -1412,6 +1461,8 @@ export async function mockSignedInCabinet(
   let skillQuizCommandId: string | null = null;
   let skillQuizReverted = false;
   const careerDiary = options.careerDiary ? structuredClone(options.careerDiary) : undefined;
+  const assessmentFixture = createRoleSkillAssessmentFixture(options);
+  const starStoriesFixture = createMockStarStoriesFixture();
   const profileSnapshot = mockProfileSnapshot(careerDiary);
   const automation = createAutomationFixtureState(options);
   const linkedinDrafts = createLinkedinDraftFixtureState(options);
@@ -1427,6 +1478,7 @@ export async function mockSignedInCabinet(
     const url = new URL(route.request().url());
     const path = url.pathname;
     if (await mockCandidateNotificationRoutes(route, path, options)) return;
+    if (await mockLineCRoutes(route, path, options, assessmentFixture, starStoriesFixture)) return;
     if (await mockCareerDiaryRoutes(route, path, careerDiary)) return;
     if (await mockConnectionRoutes(route, url, connectionState)) return;
     if (
@@ -2216,6 +2268,7 @@ export async function mockSignedInCabinet(
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
   await mockCandidateCompanies(page, { companyCount: options.companyCount });
+  await mockInterviewSimulatorRoutes(page);
   return unmatched;
 }
 

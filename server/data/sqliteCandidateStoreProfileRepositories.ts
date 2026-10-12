@@ -6,7 +6,10 @@ import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileReposito
 import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
+import { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
+import { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 
 /** Репозитории профиля, дневника и переезда: общий набор, чтобы конструктор хранилища не рос. */
 export function createProfileRepositories(
@@ -22,5 +25,8 @@ export function createProfileRepositories(
     careerDiaryRepo: new SqliteCareerDiaryRepository(database, sealedText, transaction),
     decisionProfileRepo: new SqliteDecisionProfileRepository(database, sealedText),
     relocationQuestionnaireRepo: new SqliteRelocationQuestionnaireRepository(database, sealedText),
+    roleSkillAssessments: new SqliteRoleSkillAssessmentRepository(database, sealedText),
+    starStoriesRepo: new SqliteStarStoriesRepository(database, sealedText),
+    interviewSimulatorRepo: new SqliteInterviewSimulatorRepository(database, sealedText),
   };
 }

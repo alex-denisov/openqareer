@@ -150,7 +150,7 @@ test('mobile navigation uses four sections plus More and the consultant sheet co
   await page.getByRole('button', { name: 'Спросить консультанта' }).click();
   const composer = page.getByLabel('Сообщение карьерному консультанту');
   await expect(composer).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Голосовой ввод скоро' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Голосовой ввод' })).toBeEnabled();
   await page.getByRole('button', { name: 'С чего начать?' }).click();
   await expect(composer).toHaveValue('С чего начать?');
   await expect(panel.getByRole('button', { name: 'Отправить вопрос' })).toBeEnabled();

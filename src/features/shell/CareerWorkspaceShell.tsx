@@ -33,6 +33,7 @@ import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
 import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { NotificationsScreen } from '../notifications/NotificationsScreen';
+import { RoleSkillAssessmentScreen } from '../skills/RoleSkillAssessmentScreen';
 
 type ShellView = ShellSection;
 
@@ -99,6 +100,7 @@ export function CareerWorkspaceShell({
     document.getElementById('root')?.removeAttribute('aria-busy');
   }, []);
   const [activeView, setActiveView] = useState<ShellView>(initialView);
+  const [roleSkillAssessmentOpen, setRoleSkillAssessmentOpen] = useState(false);
   const [expertConfig, setExpertConfig] = useState<{
     open: boolean;
     stage: CoachTurnStage;
@@ -191,8 +193,8 @@ export function CareerWorkspaceShell({
   // The page name lives in the navigation and in the tab title; repeating it in
   // the top bar only duplicated the active item.
   useEffect(() => {
-    document.title = `${pageNames[activeView]} · openqareer`;
-  }, [activeView]);
+    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : pageNames[activeView]} · openqareer`;
+  }, [activeView, roleSkillAssessmentOpen]);
 
   const navigationState = {
     careerPictureReady,
@@ -232,6 +234,7 @@ export function CareerWorkspaceShell({
   const [navigationOptions, setNavigationOptions] = useState<NavigationOptions | undefined>();
 
   function navigate(view: ShellView, options?: NavigationOptions) {
+    setRoleSkillAssessmentOpen(false);
     const target = view === 'career' ? 'opportunities' : view;
     const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
     if (!isNavigable(target)) return;
@@ -286,6 +289,17 @@ export function CareerWorkspaceShell({
   const closeExpert = useCallback(() => {
     setExpertSheetExpanded(false);
     setExpertConfig((prev) => ({ ...prev, open: false }));
+  }, []);
+
+  const openRoleSkillAssessment = useCallback(() => {
+    setExpertConfig((previous) => ({ ...previous, open: false }));
+    setExpertSheetExpanded(false);
+    setRoleSkillAssessmentOpen(true);
+  }, []);
+
+  const closeRoleSkillAssessment = useCallback(() => {
+    setRoleSkillAssessmentOpen(false);
+    window.requestAnimationFrame(() => document.getElementById('career-main')?.focus());
   }, []);
 
   useEffect(() => {
@@ -447,6 +461,13 @@ export function CareerWorkspaceShell({
                 onSignIn={openAccount}
               />
             ) : null}
+            {roleSkillAssessmentOpen && cabinetSession ? (
+              <RoleSkillAssessmentScreen
+                session={cabinetSession}
+                onClose={closeRoleSkillAssessment}
+                onOpenOpportunities={() => navigate('opportunities')}
+              />
+            ) : null}
             {cabinetSession && activeView === 'diary' ? <CareerDiaryAccessStatus /> : null}
             {cabinetSession && activeView === 'diary' && diaryAccess.isVisible ? (
               <CareerDiaryShellControls
@@ -470,6 +491,7 @@ export function CareerWorkspaceShell({
             activeView !== 'tariffs' &&
             activeView !== 'automation' &&
             activeView !== 'notifications' &&
+            !roleSkillAssessmentOpen &&
             (activeView !== 'diary' || diaryAccess.isVisible) ? (
               <CareerCabinet
                 key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
@@ -495,7 +517,11 @@ export function CareerWorkspaceShell({
                 onOpenSettings={openNotificationSettings}
               />
             ) : null}
-            {!cabinetSession && visibleWorkspace && journey && activeView !== 'tariffs' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView !== 'tariffs' ? (
               <CareerPathIndicator
                 steps={buildPathIndicator({
                   track: journey.track,
@@ -509,7 +535,11 @@ export function CareerWorkspaceShell({
                 onNavigate={navigate}
               />
             ) : null}
-            {!cabinetSession && visibleWorkspace && journey && activeView === 'today' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView === 'today' ? (
               <TodayJourneyView
                 workspace={visibleWorkspace}
                 journey={journey}
@@ -518,7 +548,11 @@ export function CareerWorkspaceShell({
                 onUpdateWorkspace={onUpdateWorkspace}
               />
             ) : null}
-            {!cabinetSession && visibleWorkspace && journey && activeView === 'profile' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView === 'profile' ? (
               <ProfileJourneyView
                 workspace={visibleWorkspace}
                 journey={journey}
@@ -527,7 +561,11 @@ export function CareerWorkspaceShell({
                 onUpdateWorkspace={onUpdateWorkspace}
               />
             ) : null}
-            {!cabinetSession && visibleWorkspace && journey && activeView === 'career' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView === 'career' ? (
               <CareerMapView
                 workspace={visibleWorkspace}
                 journey={journey}
@@ -536,7 +574,11 @@ export function CareerWorkspaceShell({
                 onUpdateWorkspace={onUpdateWorkspace}
               />
             ) : null}
-            {!cabinetSession && visibleWorkspace && journey && activeView === 'opportunities' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView === 'opportunities' ? (
               <OpportunitiesView
                 workspace={visibleWorkspace}
                 journey={journey}
@@ -548,7 +590,11 @@ export function CareerWorkspaceShell({
             {/* Трекер откликов читает `/api/v1/candidate/applications` — сессия
               обязательна; до входа в аккаунт кабинет ниже возьмёт этот раздел
               на себя (B251 S3). */}
-            {!cabinetSession && visibleWorkspace && journey && activeView === 'responses' ? (
+            {!roleSkillAssessmentOpen &&
+            !cabinetSession &&
+            visibleWorkspace &&
+            journey &&
+            activeView === 'responses' ? (
               <div className="career-responses-signin-hint">
                 <h3>Отклики появятся после входа в аккаунт</h3>
                 <p>Отклики хранятся на сервере вместе с профилем. Войдите, чтобы открыть их.</p>
@@ -557,7 +603,7 @@ export function CareerWorkspaceShell({
                 </button>
               </div>
             ) : null}
-            {activeView === 'tariffs' ? <TariffsScreen /> : null}
+            {!roleSkillAssessmentOpen && activeView === 'tariffs' ? <TariffsScreen /> : null}
           </AppErrorBoundary>
         </main>
 
@@ -574,6 +620,7 @@ export function CareerWorkspaceShell({
         !expertPanelOpen &&
         !accountOpen &&
         !onboardingIsFullscreen &&
+        !roleSkillAssessmentOpen &&
         activeView !== 'automation' ? (
           <button
             className="career-expert-peek"
@@ -605,6 +652,7 @@ export function CareerWorkspaceShell({
             onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
             onIdentityChange={resetForAccount}
             onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
+            onOpenRoleSkillAssessment={openRoleSkillAssessment}
             onEscape={handleExpertEscape}
             onClose={closeExpert}
           />

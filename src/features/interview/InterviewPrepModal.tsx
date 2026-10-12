@@ -1,15 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  Buildings,
-  ChatCircleDots,
-  Check,
-  Copy,
-  Target,
-  X,
-} from '@phosphor-icons/react';
+import { ArrowRight, Buildings, ChatCircleDots, Check, Copy, Target, X } from '@phosphor-icons/react';
 import type { CandidateMemory } from '../coach/coachApi';
-import { useEscapeLayer } from '../shell/escapeLayers';
+import { StarStoriesModal } from './StarStoriesModal';
+import { MockInterviewSimulator } from './MockInterviewSimulator';
+import type { InterviewDiaryPort, MockInterviewVacancy } from './mockInterviewSimulatorTypes';
+import { useModalAccessibility } from './interviewModalAccessibility';
 import {
   generateInterviewPrepBrief,
   type CompanyOverview,
@@ -23,93 +19,185 @@ export type InterviewPrepTab = 'overview' | 'star' | 'questions';
 export interface InterviewPrepModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
-  readonly vacancy: {
-    readonly id: string;
-    readonly title: string;
-    readonly company?: string;
-    readonly descriptionSummary?: string;
-    readonly skills?: readonly string[];
-    readonly location?: string;
-    readonly isRemote?: boolean;
-  };
+  readonly vacancy: MockInterviewVacancy;
   readonly facts?: readonly CandidateMemory[];
   readonly candidateName?: string;
   readonly initialTab?: InterviewPrepTab;
   readonly onAskConsultant?: () => void;
+  readonly onOpenStarStories?: () => void;
+  readonly onWriteDiary?: InterviewDiaryPort;
 }
 
 export function InterviewPrepModal(props: InterviewPrepModalProps) {
-  const {
-    isOpen,
-    onClose,
-    vacancy,
-    facts = [],
-    candidateName,
-    initialTab = 'overview',
-    onAskConsultant,
-  } = props;
-  const [tab, setTab] = useState<InterviewPrepTab>(initialTab);
-  const cardRef = useRef<HTMLDivElement>(null);
+  return <InterviewPrepModalState {...props} />;
+}
 
-  useModalAccessibility(isOpen, onClose, cardRef);
+function InterviewPrepModalState(props: InterviewPrepModalProps) {
+  const [tab, setTab] = useState<InterviewPrepTab>(props.initialTab ?? 'overview');
+  const [mockInterviewOpen, setMockInterviewOpen] = useState(false);
+  const [starStoriesOpen, setStarStoriesOpen] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const afterStarStoriesClose = useRef<(() => void) | null>(null);
+  const setDialogRef = useCallback((node: HTMLDivElement | null) => { cardRef.current = node; }, []);
+  const openStarStories = useCallback((afterClose?: () => void) => {
+    afterStarStoriesClose.current = afterClose ?? null;
+    setStarStoriesOpen(true);
+  }, []);
+  const closeStarStories = useCallback(() => {
+    setStarStoriesOpen(false);
+    afterStarStoriesClose.current?.();
+    afterStarStoriesClose.current = null;
+  }, []);
+  const onClose = props.onClose;
+  const handleEscape = useCallback(() => {
+    if (mockInterviewOpen) setMockInterviewOpen(false);
+    else onClose();
+  }, [mockInterviewOpen, onClose]);
+  useModalAccessibility(props.isOpen, handleEscape, cardRef);
+  if (!props.isOpen) return null;
+  const brief = generateInterviewPrepBrief({
+    vacancy: props.vacancy,
+    candidateName: props.candidateName,
+    facts: props.facts ?? [],
+  });
+  const portal = (
+    <InterviewPrepOverlay
+      props={props}
+      tab={tab}
+      brief={brief}
+      cardRef={cardRef}
+      dialogRef={setDialogRef}
+      mockInterviewOpen={mockInterviewOpen}
+      starStoriesOpen={starStoriesOpen}
+      setTab={setTab}
+      setMockInterviewOpen={setMockInterviewOpen}
+      openStarStories={openStarStories}
+      closeStarStories={closeStarStories}
+    />
+  );
+  if (typeof document === 'undefined') return portal;
+  const portalRoot = document.querySelector<HTMLElement>('.career-shell') ?? document.body;
+  return createPortal(portal, portalRoot);
+}
 
-  const brief = useMemo(() => {
-    return generateInterviewPrepBrief({ vacancy, candidateName, facts });
-  }, [vacancy, candidateName, facts]);
+function InterviewPrepOverlay({
+  props,
+  tab,
+  brief,
+  cardRef,
+  dialogRef,
+  mockInterviewOpen,
+  starStoriesOpen,
+  setTab,
+  setMockInterviewOpen,
+  openStarStories,
+  closeStarStories,
+}: {
+  readonly props: InterviewPrepModalProps;
+  readonly tab: InterviewPrepTab;
+  readonly brief: InterviewPrepBrief;
+  readonly cardRef: React.MutableRefObject<HTMLDivElement | null>;
+  readonly dialogRef: React.RefCallback<HTMLDivElement>;
+  readonly mockInterviewOpen: boolean;
+  readonly starStoriesOpen: boolean;
+  readonly setTab: (tab: InterviewPrepTab) => void;
+  readonly setMockInterviewOpen: (open: boolean) => void;
+  readonly openStarStories: (afterClose?: () => void) => void;
+  readonly closeStarStories: () => void;
+}) {
+  return (
+    <>
+      <InterviewPrepBackdrop props={props} tab={tab} brief={brief} cardRef={cardRef} dialogRef={dialogRef} mockInterviewOpen={mockInterviewOpen} setTab={setTab} setMockInterviewOpen={setMockInterviewOpen} openStarStories={openStarStories} />
+      <StarStoriesLayer props={props} open={starStoriesOpen} onClose={closeStarStories} />
+    </>
+  );
+}
 
-  if (!isOpen) return null;
-
-  const dialog = (
+function InterviewPrepBackdrop({ props, tab, brief, cardRef, dialogRef, mockInterviewOpen, setTab, setMockInterviewOpen, openStarStories }: {
+  readonly props: InterviewPrepModalProps;
+  readonly tab: InterviewPrepTab;
+  readonly brief: InterviewPrepBrief;
+  readonly cardRef: React.MutableRefObject<HTMLDivElement | null>;
+  readonly dialogRef: React.RefCallback<HTMLDivElement>;
+  readonly mockInterviewOpen: boolean;
+  readonly setTab: (tab: InterviewPrepTab) => void;
+  readonly setMockInterviewOpen: (open: boolean) => void;
+  readonly openStarStories: (afterClose?: () => void) => void;
+}) {
+  return (
     <div
-      className="career-interview-backdrop"
+      className={`career-interview-backdrop ${mockInterviewOpen ? 'career-interview-backdrop--simulator' : ''}`}
       role="presentation"
-      onMouseDown={(e) => {
-        if (!cardRef.current?.contains(e.target as Node)) onClose();
+      onMouseDown={(event) => {
+        if (!mockInterviewOpen && !cardRef.current?.contains(event.target as Node)) props.onClose();
       }}
     >
-      <div
-        className="career-interview-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="career-interview-title"
-        tabIndex={-1}
-        ref={cardRef}
-      >
-        <InterviewHeader
-          title={vacancy.title}
-          company={vacancy.company}
-          onClose={onClose}
-          onAskConsultant={onAskConsultant}
+      {mockInterviewOpen ? (
+        <MockInterviewSimulator
+          vacancy={props.vacancy}
+          dialogRef={dialogRef}
+          onBackToPreparation={() => setMockInterviewOpen(false)}
+          onOpenStarStories={openStarStories}
+          onAskConsultant={props.onAskConsultant}
+          onWriteDiary={props.onWriteDiary}
         />
-        <InterviewTabNav tab={tab} onTabChange={setTab} />
-        <main className="career-interview-body">
-          <InterviewTabContent tab={tab} brief={brief} />
-        </main>
-      </div>
+      ) : (
+        <InterviewPrepDialog props={props} tab={tab} brief={brief} dialogRef={dialogRef} onTabChange={setTab} onStart={() => setMockInterviewOpen(true)} />
+      )}
     </div>
   );
+}
 
-  // Портал в `document.body` — как ImportModalShell (B148 §2): карточка
-  // отклика на мобильной ширине маскируется через `mask-image` для
-  // затухающего края горизонтального скролла колонок, а маска, как и
-  // `filter`/`transform`, создаёт containing block для потомков с
-  // `position: fixed`. Без портала модалка «прилипала» к колонке карточек
-  // вместо вьюпорта, и хедер перекрывал кнопку закрытия.
-  return typeof document === 'undefined' ? dialog : createPortal(dialog, document.body);
+function StarStoriesLayer({ props, open, onClose }: { readonly props: InterviewPrepModalProps; readonly open: boolean; readonly onClose: () => void }) {
+  return <StarStoriesModal isOpen={open} onClose={onClose} onAskConsultant={props.onAskConsultant} />;
+}
+
+function InterviewPrepDialog({
+  props,
+  tab,
+  brief,
+  dialogRef,
+  onTabChange,
+  onStart,
+}: {
+  readonly props: InterviewPrepModalProps;
+  readonly tab: InterviewPrepTab;
+  readonly brief: InterviewPrepBrief;
+  readonly dialogRef: React.RefCallback<HTMLDivElement>;
+  readonly onTabChange: (tab: InterviewPrepTab) => void;
+  readonly onStart: () => void;
+}) {
+  return (
+    <div className="career-interview-modal" role="dialog" aria-modal="true" aria-labelledby="career-interview-title" tabIndex={-1} ref={dialogRef}>
+      <InterviewHeader
+        title={props.vacancy.title}
+        company={props.vacancy.company}
+        onClose={props.onClose}
+        onAskConsultant={props.onAskConsultant}
+        onStartMockInterview={onStart}
+      />
+      <InterviewTabNav tab={tab} onTabChange={onTabChange} />
+      <main className="career-interview-body">
+        <InterviewTabContent tab={tab} brief={brief} onOpenStarStories={props.onOpenStarStories} />
+      </main>
+    </div>
+  );
 }
 
 function InterviewTabContent({
   tab,
   brief,
+  onOpenStarStories,
 }: {
   readonly tab: InterviewPrepTab;
   readonly brief: InterviewPrepBrief;
+  readonly onOpenStarStories?: () => void;
 }) {
   if (tab === 'overview') {
     return <OverviewTab overview={brief.companyOverview} focus={brief.interviewerFocus} />;
   }
   if (tab === 'star') {
-    return <StarTab questions={brief.starQuestions} />;
+    return <StarTab questions={brief.starQuestions} onOpenStarStories={onOpenStarStories} />;
   }
   return <QuestionsTab questions={brief.counterQuestions} />;
 }
@@ -119,11 +207,13 @@ function InterviewHeader({
   company,
   onClose,
   onAskConsultant,
+  onStartMockInterview,
 }: {
   readonly title: string;
   readonly company?: string;
   readonly onClose: () => void;
   readonly onAskConsultant?: () => void;
+  readonly onStartMockInterview: () => void;
 }) {
   return (
     <header className="career-interview-header">
@@ -132,16 +222,7 @@ function InterviewHeader({
           <h2 id="career-interview-title" className="career-interview-title">
             Интервью: «{title}»{company ? `, ${company}` : ''}
           </h2>
-          {onAskConsultant ? (
-            <button
-              type="button"
-              className="career-btn career-btn-secondary career-ask-consultant-btn"
-              onClick={onAskConsultant}
-            >
-              <ChatCircleDots size={16} aria-hidden="true" />
-              <span>Спросить консультанта</span>
-            </button>
-          ) : null}
+          <InterviewHeaderActions onStart={onStartMockInterview} onAskConsultant={onAskConsultant} />
         </div>
         <p className="career-interview-subtitle">
           Справка — из текста вакансии; ответы — из фактов профиля. Это заготовки, не скрипт.
@@ -159,6 +240,23 @@ function InterviewHeader({
   );
 }
 
+function InterviewHeaderActions({ onStart, onAskConsultant }: { readonly onStart: () => void; readonly onAskConsultant?: () => void }) {
+  return (
+    <>
+      <button type="button" className="career-btn career-btn-primary career-btn-sm career-interview-launch-btn" onClick={onStart}>
+        <ArrowRight aria-hidden="true" />
+        <span>Начать мок-интервью</span>
+      </button>
+      {onAskConsultant ? (
+        <button type="button" className="career-btn career-btn-secondary career-ask-consultant-btn" onClick={onAskConsultant}>
+          <ChatCircleDots size={16} aria-hidden="true" />
+          <span>Спросить консультанта</span>
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 const TAB_CONFIG = [
   { id: 'overview' as const, label: 'Компания и что им важно', icon: Buildings },
   { id: 'star' as const, label: 'Вопросы к вам (STAR)', icon: Target },
@@ -173,7 +271,11 @@ function InterviewTabNav({
   readonly onTabChange: (tab: InterviewPrepTab) => void;
 }) {
   return (
-    <div className="career-interview-tabs" role="tablist" aria-label="Разделы подготовки к интервью">
+    <div
+      className="career-interview-tabs"
+      role="tablist"
+      aria-label="Разделы подготовки к интервью"
+    >
       {TAB_CONFIG.map((item) => {
         const Icon = item.icon;
         const isActive = tab === item.id;
@@ -247,7 +349,13 @@ function OverviewTab({
   );
 }
 
-function StarTab({ questions }: { readonly questions: readonly StarQuestion[] }) {
+function StarTab({
+  questions,
+  onOpenStarStories,
+}: {
+  readonly questions: readonly StarQuestion[];
+  readonly onOpenStarStories?: () => void;
+}) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const handleCopyAnswer = async (q: StarQuestion) => {
@@ -268,6 +376,15 @@ function StarTab({ questions }: { readonly questions: readonly StarQuestion[] })
 
   return (
     <div className="career-interview-star-list">
+      {onOpenStarStories ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary"
+          onClick={onOpenStarStories}
+        >
+          Открыть STAR-истории
+        </button>
+      ) : null}
       <p className="career-cabinet-tag">
         STAR: ситуация → задача → что сделали вы → результат в цифрах.
       </p>
@@ -349,7 +466,11 @@ function StarQuestionCard({
           onClick={onCopy}
           aria-label="Скопировать ответ по структуре STAR"
         >
-          {isCopied ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+          {isCopied ? (
+            <Check size={14} aria-hidden="true" />
+          ) : (
+            <Copy size={14} aria-hidden="true" />
+          )}
           <span>{isCopied ? 'Скопировано' : 'Скопировать'}</span>
         </button>
       </footer>
@@ -384,7 +505,11 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
               onClick={() => void handleCopy(q, idx)}
               aria-label="Скопировать вопрос"
             >
-              {copiedIdx === idx ? <Check size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}
+              {copiedIdx === idx ? (
+                <Check size={14} aria-hidden="true" />
+              ) : (
+                <Copy size={14} aria-hidden="true" />
+              )}
               <span>{copiedIdx === idx ? 'Скопировано' : 'Скопировать'}</span>
             </button>
           </li>
@@ -392,48 +517,4 @@ function QuestionsTab({ questions }: { readonly questions: readonly string[] }) 
       </ol>
     </div>
   );
-}
-
-function useModalAccessibility(
-  isOpen: boolean,
-  onClose: () => void,
-  containerRef: React.RefObject<HTMLDivElement | null>,
-) {
-  useEscapeLayer(onClose, isOpen);
-  useEffect(() => {
-    if (!isOpen || typeof document === 'undefined') return;
-    const previousActiveElement = document.activeElement as HTMLElement | null;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    containerRef.current?.focus();
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Tab') return;
-      const focusable = Array.from(
-        containerRef.current?.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]',
-        ) ?? [],
-      );
-      if (focusable.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = focusable[0]!;
-      const last = focusable[focusable.length - 1]!;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', handleKeyDown);
-      previousActiveElement?.focus?.();
-    };
-  }, [isOpen, onClose, containerRef]);
 }

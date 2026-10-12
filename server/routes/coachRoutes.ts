@@ -17,6 +17,7 @@ import {
 } from './helpers';
 import { registerCoachResultRoute } from './coachResultRoute';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
+import { registerRoleSkillAssessmentRoutes } from './roleSkillAssessmentRoutes';
 import { coachTurnRequestSchema, coachProposalRejectRequestSchema } from './schemas';
 import { buildCoachSubjectContext } from './coachSubjectContext';
 import {
@@ -27,11 +28,7 @@ import {
 
 const activeTurns = new WeakMap<RouteDeps, Set<string>>();
 
-type Handler = (
-  deps: RouteDeps,
-  request: FastifyRequest,
-  reply: FastifyReply,
-) => Promise<unknown>;
+type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
 function marketObservationsFrom(sample: HhVacancySample) {
   return sample.items.map((item) => ({
@@ -114,11 +111,16 @@ async function completeTurnWithProvider(
 }
 
 async function deliverTurn(
-  deps: RouteDeps, request: FastifyRequest, reply: FastifyReply,
-  candidateId: string, key: string,
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateId: string,
+  key: string,
   input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
   marketQuery?: string,
-  summaryTasks: NonNullable<Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']> = [],
+  summaryTasks: NonNullable<
+    Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']
+  > = [],
 ) {
   const active = activeTurns.get(deps) ?? new Set<string>();
   activeTurns.set(deps, active);
@@ -127,7 +129,9 @@ async function deliverTurn(
   if (active.has(operation)) return pending();
   active.add(operation);
   const work = generateClosedConversationSummaries(deps, request, candidateId, summaryTasks)
-    .then((attempted) => generateTurn(deps, request, candidateId, key, input, marketQuery, attempted))
+    .then((attempted) =>
+      generateTurn(deps, request, candidateId, key, input, marketQuery, attempted),
+    )
     .finally(() => active.delete(operation));
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
     // Failure is persisted by the worker; polling does not restart generation.
@@ -135,12 +139,23 @@ async function deliverTurn(
     return pending();
   }
   const output = await work;
-  if (!output) return sendError(reply, request, 502, 'market_source_unavailable', 'hh.ru не вернул свежую выборку. Повторите позже.', true);
+  if (!output)
+    return sendError(
+      reply,
+      request,
+      502,
+      'market_source_unavailable',
+      'hh.ru не вернул свежую выборку. Повторите позже.',
+      true,
+    );
   return providerResponse(request, output);
 }
 
 async function generateTurn(
-  deps: RouteDeps, request: FastifyRequest, candidateId: string, key: string,
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  key: string,
   input: Omit<Parameters<CoachProvider['createTurn']>[0], 'marketObservations'>,
   marketQuery?: string,
   attemptedSummaries: ReadonlySet<string> = new Set(),
@@ -155,8 +170,14 @@ async function generateTurn(
     marketObservations = fetched;
   }
   try {
-    const output = await completeTurnWithProvider(deps, candidateId, key, { ...input, marketObservations });
-    if (input.internalPurpose !== 'consultant-summary' && output.result.actionProposals.length > 0) {
+    const output = await completeTurnWithProvider(deps, candidateId, key, {
+      ...input,
+      marketObservations,
+    });
+    if (
+      input.internalPurpose !== 'consultant-summary' &&
+      output.result.actionProposals.length > 0
+    ) {
       recordNotificationFromSource(deps, request, candidateId, {
         kind: 'consultant_edits',
         sourceType: 'coach_turn',
@@ -176,7 +197,9 @@ async function generateClosedConversationSummaries(
   deps: RouteDeps,
   request: FastifyRequest,
   candidateId: string,
-  tasks: NonNullable<Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']>,
+  tasks: NonNullable<
+    Extract<ReturnType<CandidateStore['startTurn']>, { state: 'ready' }>['closedConversations']
+  >,
 ): Promise<ReadonlySet<string>> {
   const attempted = new Set<string>();
   for (const task of tasks) {
@@ -211,7 +234,8 @@ async function generatePendingConversationSummaries(
   attempted: ReadonlySet<string>,
 ): Promise<void> {
   try {
-    const tasks = deps.candidateStore.listPendingConsultantSummaries(candidateId)
+    const tasks = deps.candidateStore
+      .listPendingConsultantSummaries(candidateId)
       .filter((task) => !attempted.has(task.conversationId));
     await generateClosedConversationSummaries(deps, request, candidateId, tasks);
   } catch {
@@ -229,7 +253,16 @@ function continueStartedTurn(
   marketQuery?: string,
 ) {
   if (started.state === 'completed') return providerResponse(request, started.output);
-  return deliverTurn(deps, request, reply, candidateId, key, started.input, marketQuery, started.closedConversations);
+  return deliverTurn(
+    deps,
+    request,
+    reply,
+    candidateId,
+    key,
+    started.input,
+    marketQuery,
+    started.closedConversations,
+  );
 }
 
 const handleCoachTurn: Handler = async (deps, request, reply) => {
@@ -260,14 +293,7 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (body.subject) {
     const context = await buildCoachSubjectContext(deps, candidate.id, body.subject);
     if (context === null) {
-      return sendError(
-        reply,
-        request,
-        404,
-        'subject_not_found',
-        'Объект не найден.',
-        false,
-      );
+      return sendError(reply, request, 404, 'subject_not_found', 'Объект не найден.', false);
     }
     stageContext = context;
   }
@@ -314,6 +340,7 @@ const handleVerifySkillQuiz: Handler = async (deps, request, reply) => {
 
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCoachResultRoute(app, deps);
+  registerRoleSkillAssessmentRoutes(app, deps);
   app.post(
     '/api/v1/coach/turn',
     {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   getCandidateWorkspace,
   getSession,
@@ -38,6 +38,8 @@ import {
 } from './features/workspace/workspaceStorage';
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
+
+const EXPIRED_SESSION_NOTICE = 'Сессия закончилась. Войдите снова, чтобы продолжить.';
 
 const AdminConsole = lazy(() => loadAdminConsole());
 const CareerWorkspaceShell = lazy(async () => {
@@ -126,6 +128,7 @@ export default function App() {
   // Почему кандидат снова видит форму входа — одной фразой на самой форме
   // (PRB-038); без неё выброс на вход посреди работы выглядит поломкой.
   const [signInNotice, setSignInNotice] = useState<string>();
+  const expiredSessionNotice = useRef(false);
   const sessionRevision = useRef(0);
 
   const navigate = useCallback((path: string) => {
@@ -269,7 +272,7 @@ export default function App() {
   // ответ `/auth/me` попал в state. `null` — кандидат уже разлогинен, молчим.
   const sessionRef = useRef(state.session);
   sessionRef.current = state.session;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleExpired = () => {
       if (sessionRef.current === null) return;
       sessionRevision.current += 1;
@@ -283,7 +286,8 @@ export default function App() {
         onboardingComplete: false,
       });
       setSessionError(undefined);
-      setSignInNotice('Сессия закончилась. Войдите снова, чтобы продолжить.');
+      expiredSessionNotice.current = true;
+      setSignInNotice(EXPIRED_SESSION_NOTICE);
       navigate('/login');
     };
     window.addEventListener(SESSION_EXPIRED_EVENT, handleExpired);
@@ -418,11 +422,16 @@ export default function App() {
       onboardingComplete: false,
     });
     setSessionError(undefined);
-    setSignInNotice(undefined);
+    if (session) {
+      expiredSessionNotice.current = false;
+      setSignInNotice(undefined);
+    } else {
+      setSignInNotice(expiredSessionNotice.current ? EXPIRED_SESSION_NOTICE : undefined);
+    }
     if (session === null) {
       clearCareerCabinetCache();
       setIsResolvingSession(false);
-      navigate(isDesktop ? '/login' : '/');
+      navigate(isDesktop || expiredSessionNotice.current ? '/login' : '/');
       return;
     }
     if (emailVerificationPending) {

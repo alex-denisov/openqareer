@@ -1,5 +1,7 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CareerStrategy } from '../../shared/careerStrategy';
+import type { RoleSkillAssessmentRun } from '../domain/roleSkillAssessment';
+import type { InterviewSession } from '../domain/interviewSimulator';
 import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
@@ -52,6 +54,9 @@ import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocation
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
 import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
+import type { SqliteStarStoriesRepository, StoredStarStory } from './sqliteStarStoriesRepository';
+import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -120,6 +125,12 @@ export interface CandidateExport extends CandidateSnapshot {
   /** Private relocation data is present only while its separate consent is active. */
   relocationQuestionnaire: RelocationQuestionnaire | null;
   relocationConsent: RelocationConsentState;
+  /** Encrypted role assessment answers, evidence refs and results (B461). */
+  roleSkillAssessments: RoleSkillAssessmentRun[];
+  /** Candidate-owned reusable STAR stories (B466). */
+  starStories: StoredStarStory[];
+  /** Current encrypted mock-interview session (B356). */
+  interviewSession: InterviewSession | null;
 }
 
 export interface LinkedInLanguageImportSnapshot {
@@ -395,6 +406,10 @@ export interface CandidateStore {
   readonly profileRevisionRepo: SqliteProfileRevisionRepository;
   /** Подготовка STAR на отклик (B392), запечатанный текст кандидата. */
   readonly starPrepRepo: SqliteStarPrepRepository;
+  /** Повторно используемые STAR-истории кандидата (B466), текст запечатан. */
+  readonly starStoriesRepo: SqliteStarStoriesRepository;
+  readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
+  readonly roleSkillAssessments: RoleSkillAssessmentRepository;
   /** Трек внутренней рекомендации на отклик (B389), контакт запечатан. */
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */
