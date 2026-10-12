@@ -106,14 +106,15 @@ async function openAutomationPosts(page: Page) {
   await mockSignedInCabinet(page, { candidateId: 'candidate-b232' });
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-    await page.getByRole('tab', { name: 'Автоматизация', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
-  }
+  await enterAutomationFromResponses(page);
   await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Черновики для LinkedIn' })).toBeVisible();
+}
+
+async function enterAutomationFromResponses(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Отклики', exact: true }).click();
+  const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
+  await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
 }
 
 function fulfillError(route: Route, status: number, code: string, message: string) {
@@ -214,12 +215,7 @@ for (const state of ['empty', 'error', 'partial', 'many'] as const) {
     await openAutomationPosts(page);
     await installStateApi(page, state);
     await page.reload({ waitUntil: 'domcontentloaded' });
-    if ((page.viewportSize()?.width ?? 1440) <= 760) {
-      await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-      await page.getByRole('tab', { name: 'Автоматизация', exact: true }).click();
-    } else {
-      await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
-    }
+    await enterAutomationFromResponses(page);
     await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
     const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
     await expect(card).toBeVisible();
@@ -283,12 +279,7 @@ test('loading: очередь и темы имеют собственное со
     return route.fulfill({ json: { data: [] } });
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-    await page.getByRole('tab', { name: 'Автоматизация', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
-  }
+  await enterAutomationFromResponses(page);
   await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
   await expect(card.getByText('Загружаем черновики…', { exact: true })).toBeVisible();
@@ -357,12 +348,7 @@ test('тема → правка → одобрение → ручная публ
     return route.fulfill({ json: { data: { id: 'dismissed', decision: 'dismissed' } } });
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-    await page.getByRole('tab', { name: 'Автоматизация', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
-  }
+  await enterAutomationFromResponses(page);
   await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
   await card.getByRole('button', { name: 'Взять в работу', exact: true }).click();

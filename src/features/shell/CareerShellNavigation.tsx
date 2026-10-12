@@ -11,7 +11,6 @@ import {
 import {
   CaretLeft,
   DotsThree,
-  Lightning,
   Notebook,
   Sparkle,
   Wallet,
@@ -107,29 +106,18 @@ function RailItems(props: NavigationStateProps) {
           <NavigationButton
             label={item.label}
             icon={item.icon}
-            active={props.activeView === item.target}
+            active={
+              props.activeView === item.target ||
+              (props.activeView === 'automation' && item.target === 'responses')
+            }
             disabled={!props.isNavigable(item.target)}
             lockedReason={props.lockedReason(item.target)}
             onClick={() => props.onNavigate(item.target)}
           />
         </CareerTooltip>
       ))}
-      <CareerTooltip side="right" content="Автоматизация">
-        <NavigationButton
-          label="Автоматизация"
-          icon={AutomationIcon}
-          active={props.activeView === 'automation'}
-          disabled={!props.isNavigable('automation')}
-          lockedReason={props.lockedReason('automation')}
-          onClick={() => props.onNavigate('automation')}
-        />
-      </CareerTooltip>
     </nav>
   );
-}
-
-function AutomationIcon({ size = 22, active = false }: SectionIconProps) {
-  return <Lightning size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
 }
 
 function AccountRailButton({

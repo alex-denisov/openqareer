@@ -434,7 +434,11 @@ async function seedWorkspace(page: Page): Promise<void> {
 async function openResponses(page: Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
-  await expect(page.getByRole('tab', { name: 'Воронка' })).toBeVisible();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Разделы откликов' })
+      .getByRole('tab', { name: 'Воронка' }),
+  ).toBeVisible();
 }
 
 test.describe('B450 responses workspace', () => {

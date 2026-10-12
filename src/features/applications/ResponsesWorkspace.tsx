@@ -12,12 +12,11 @@ import type {
 import type { UseApplications } from './useApplications';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { ResponsesApplicationsTable } from './ResponsesApplicationsTable';
-import { CandidateActionPanel } from './CandidateActionPanel';
 import { ResponsesOffersPanel } from './ResponsesOffersPanel';
 import { CompanyWantsPanel } from './ResponsesCompanyWants';
 import './responses-workspace.css';
 
-export type ResponsesWorkspaceSection = 'funnel' | 'company-wants' | 'offers' | 'automation';
+export type ResponsesWorkspaceSection = 'funnel' | 'company-wants' | 'offers';
 export type ResponsesViewMode = 'columns' | 'table';
 
 export interface ResponsesWorkspaceScreenProps {
@@ -26,6 +25,7 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onStageFilterChange: (stage: ApplicationStage | null) => void;
   readonly onClearFilter?: () => void;
   readonly onOpenVacancies: () => void;
+  readonly onOpenAutomation?: () => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
@@ -67,21 +67,25 @@ const OPEN_APPLICATION_STAGES: readonly ApplicationStage[] = [
 
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  const tableView = renderTableView(props.state, workspace, props.onOpenExpert);
+  const tableView = renderTableView(
+    props.state,
+    workspace,
+    props.onOpenExpert,
+    props.onOpenAutomation,
+  );
   return (
     <div className="career-responses-board-wrap">
-      <ResponsesWorkspaceNavigation section={workspace.section} onChange={workspace.setSection} />
+      <ResponsesWorkspaceNavigation
+        section={workspace.section}
+        onChange={workspace.setSection}
+        onOpenAutomation={props.onOpenAutomation}
+      />
       {workspace.section === 'funnel' ? (
         <FunnelWorkspace props={props} workspace={workspace} tableView={tableView} />
       ) : workspace.section === 'company-wants' ? (
         <CompanyWantsPanel />
-      ) : workspace.section === 'offers' ? (
-        <ResponsesOffersPanel state={props.state} />
       ) : (
-        <CandidateActionPanel
-          applications={props.state.applications}
-          onRefreshApplications={props.state.refreshApplications}
-        />
+        <ResponsesOffersPanel state={props.state} />
       )}
     </div>
   );
@@ -237,8 +241,13 @@ function loadInitialStage(
   loadPage: UseApplications['loadPage'],
   stageFilter?: ApplicationStage | null,
 ) {
-  if (stageFilter && loadPage)
-    void loadPage({ stage: [stageFilter], limit: 20, offset: 0 }).catch(() => undefined);
+  if (stageFilter && loadPage) {
+    // Keep the existing board mounted while the server applies the stage filter.
+    // Unmounting it here retriggers this effect on every response and reloads forever.
+    void loadPage({ stage: [stageFilter], limit: 20, offset: 0 }, false, true).catch(
+      () => undefined,
+    );
+  }
 }
 
 function applyWorkspaceQuery(
@@ -270,6 +279,7 @@ function renderTableView(
   state: UseApplications,
   workspace: WorkspaceController,
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
+  onOpenAutomation?: () => void,
 ) {
   const applications = applicationsForQuery(state.applications, workspace.query);
   return (
@@ -283,7 +293,7 @@ function renderTableView(
       allSelectedByFilter={workspace.allSelectedByFilter}
       pageMeta={state.pageMeta}
       query={workspace.query}
-      onOpenAutomation={() => workspace.setSection('automation')}
+      onOpenAutomation={() => onOpenAutomation?.()}
       onBulkComplete={workspace.bulkComplete}
       onOpenExpert={onOpenExpert}
     />
@@ -443,9 +453,11 @@ export function ResponsesFunnelSummary({
 export function ResponsesWorkspaceNavigation({
   section,
   onChange,
+  onOpenAutomation,
 }: {
   readonly section: ResponsesWorkspaceSection;
   readonly onChange: (section: ResponsesWorkspaceSection) => void;
+  readonly onOpenAutomation?: () => void;
 }) {
   const tabs: readonly [ResponsesWorkspaceSection, string][] = [
     ['funnel', 'Воронка'],
@@ -468,12 +480,7 @@ export function ResponsesWorkspaceNavigation({
           </button>
         ))}
       </div>
-      <button
-        type="button"
-        className={`career-responses-automation-link${section === 'automation' ? ' is-active' : ''}`}
-        aria-pressed={section === 'automation'}
-        onClick={() => onChange(section === 'automation' ? 'funnel' : 'automation')}
-      >
+      <button type="button" className="career-responses-automation-link" onClick={onOpenAutomation}>
         Автоматизация
       </button>
     </nav>

@@ -30,7 +30,7 @@ import { CareerTodaySkeleton } from './CareerTodaySkeleton';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
 import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
-import { CandidateAutomationScreen } from '../automation/CandidateAutomationScreen';
+import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
 
 type ShellView = ShellSection;
 
@@ -92,6 +92,9 @@ export function CareerWorkspaceShell({
   onSessionChange = () => undefined,
   initialView = 'today',
 }: CareerWorkspaceShellProps) {
+  useEffect(() => {
+    document.getElementById('root')?.removeAttribute('aria-busy');
+  }, []);
   const [activeView, setActiveView] = useState<ShellView>(initialView);
   const [expertConfig, setExpertConfig] = useState<{
     open: boolean;
@@ -133,7 +136,7 @@ export function CareerWorkspaceShell({
   const diaryAccess = useCareerDiaryShellAccess(
     Boolean(cabinetSession),
     cabinetSession?.candidateId,
-    cabinetRevision + (activeView === 'diary' ? 0.5 : 0),
+    cabinetRevision,
   );
   const canUseWorkspaceViews = Boolean(visibleWorkspace || cabinetSession);
   const journey = useMemo(
@@ -297,23 +300,17 @@ export function CareerWorkspaceShell({
     setAccountOpen(false);
     setAccountSection('security');
   }, []);
-  const openAccount = useCallback(() => {
+  const openAccount = useCallback((section: AccountSection = 'security') => {
     setExpertSheetExpanded(false);
     setExpertConfig((previous) => ({ ...previous, open: false }));
-    setAccountSection('security');
+    setAccountSection(section);
     setAccountOpen(true);
   }, []);
 
   const openNotifications = useCallback(() => {
-    setExpertSheetExpanded(false);
-    setExpertConfig((previous) => ({ ...previous, open: false }));
-    setAccountSection('notif');
-    setAccountOpen(true);
-  }, []);
-  const openConnections = useCallback(() => {
-    setAccountSection('connections');
-    openAccount();
+    openAccount('notif');
   }, [openAccount]);
+  const openConnections = useCallback(() => openAccount('connections'), [openAccount]);
   const resetForAccount = useCallback(
     (nextSession: AuthUser | null) => {
       setActiveView('today');
@@ -432,36 +429,11 @@ export function CareerWorkspaceShell({
                 onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
               />
             ) : null}
-            {cabinetSession && activeView === 'responses' ? (
-              <div
-                className="career-responses-automation-switch"
-                role="tablist"
-                tabIndex={0}
-                aria-label="Отклики"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected="true"
-                  onClick={() => navigate('responses')}
-                >
-                  Воронка
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected="false"
-                  onClick={() => navigate('automation')}
-                >
-                  Автоматизация
-                </button>
-              </div>
-            ) : null}
             {cabinetSession &&
             !intakeVisible &&
             activeView === 'automation' &&
             cabinetSession.candidateId ? (
-              <CandidateAutomationScreen
+              <CareerAutomationWorkspace
                 key={cabinetSession.candidateId}
                 candidateId={cabinetSession.candidateId}
                 onOpenConsultant={() => openExpert('responses')}
@@ -481,6 +453,7 @@ export function CareerWorkspaceShell({
                 session={cabinetSession}
                 workspace={visibleWorkspace}
                 onNavigate={navigate}
+                onOpenAutomation={() => navigate('automation')}
                 onOpenTariffs={() => navigate('tariffs')}
                 onOpenConnections={openConnections}
                 onOpenNotifications={openNotifications}

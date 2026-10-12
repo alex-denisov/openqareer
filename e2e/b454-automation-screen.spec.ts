@@ -35,12 +35,9 @@ const queueItem: AutomationQueueFixtureItem = {
 async function openAutomation(page: Page) {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-    await page.getByRole('tab', { name: 'Автоматизация', exact: true }).click();
-  } else {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
-  }
+  await page.getByRole('button', { name: 'Отклики', exact: true }).click();
+  const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
+  await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await expect(page.locator('.career-automation-topbar-title')).toHaveText('Автоматизация');
   } else

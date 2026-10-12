@@ -70,6 +70,7 @@ interface CareerCabinetProps {
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
+  onOpenAutomation?: () => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenNotifications?: () => void;
@@ -90,18 +91,19 @@ interface CareerCabinetProps {
  */
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
-export function CareerCabinet({
-  view,
-  navigationOptions,
-  session,
-  workspace,
-  onNavigate,
-  onOpenTariffs,
-  onOpenConnections,
-  onOpenNotifications,
-  onOpenExpert,
-  onUpdateWorkspace,
-}: CareerCabinetProps) {
+export function CareerCabinet(props: CareerCabinetProps) {
+  const {
+    view,
+    navigationOptions,
+    session,
+    workspace,
+    onNavigate,
+    onOpenTariffs,
+    onOpenConnections,
+    onOpenNotifications,
+    onOpenExpert,
+    onUpdateWorkspace,
+  } = props;
   const data = useCareerCabinetData(session.candidateId);
   // Карьерная картина вошедшего кандидата: анкета плюс факты с сервера.
   // Без неё «ATS-читаемость» и «Следующее действие» показывали пустые
@@ -332,6 +334,7 @@ export function CareerCabinet({
             onOpenConnections={onOpenConnections}
             onOpenNotifications={onOpenNotifications}
             onOpenExpert={onOpenExpert}
+            onOpenAutomation={props.onOpenAutomation}
           />
         )}
       </div>
@@ -396,6 +399,7 @@ function CabinetSection({
   onOpenTariffs,
   onOpenConnections,
   onOpenNotifications,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   view: CareerCabinetView;
@@ -426,6 +430,7 @@ function CabinetSection({
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
   onOpenNotifications?: () => void;
+  onOpenAutomation?: () => void;
   onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -508,6 +513,7 @@ function CabinetSection({
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
+        onOpenAutomation={onOpenAutomation}
         initialStageFilter={navigationOptions?.stage}
         initialArchiveOpen={navigationOptions?.openArchive}
         onOpenExpert={onOpenExpert}

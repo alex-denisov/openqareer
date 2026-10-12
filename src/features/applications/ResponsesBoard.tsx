@@ -55,6 +55,7 @@ export function ResponsesBoard({
   initialStageFilter,
   initialArchiveOpen,
   initialTab,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
@@ -62,6 +63,7 @@ export function ResponsesBoard({
   initialStageFilter?: ApplicationStage;
   initialArchiveOpen?: boolean;
   initialTab?: 'board' | 'analytics';
+  onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   const [stageFilter, setStageFilter] = useStageFilter(initialStageFilter);
@@ -87,6 +89,7 @@ export function ResponsesBoard({
       onStageFilterChange={setStageFilter}
       initialArchiveOpen={initialArchiveOpen}
       initialTab={initialTab}
+      onOpenAutomation={onOpenAutomation}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
@@ -407,6 +410,7 @@ function ReadyBoard({
   initialArchiveOpen,
   initialTab,
   onClearFilter,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
@@ -416,6 +420,7 @@ function ReadyBoard({
   initialArchiveOpen?: boolean;
   initialTab?: 'board' | 'analytics';
   onClearFilter?: () => void;
+  onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
@@ -425,6 +430,7 @@ function ReadyBoard({
       onStageFilterChange={onStageFilterChange}
       onClearFilter={onClearFilter}
       onOpenVacancies={onOpenVacancies}
+      onOpenAutomation={onOpenAutomation}
       onOpenExpert={onOpenExpert}
       initialTab={initialTab}
       columnsContent={
@@ -438,13 +444,21 @@ function ReadyBoard({
         />
       }
       emptyContent={<EmptyState state={state} onOpenVacancies={onOpenVacancies} />}
-      analyticsContent={
-        <PipelineAnalyticsView
-          applications={state.applications}
-          onOpenVacancies={onOpenVacancies}
-          onOpenExpert={onOpenExpert}
-        />
-      }
+      analyticsContent={pipelineAnalyticsContent(state, onOpenVacancies, onOpenExpert)}
+    />
+  );
+}
+
+function pipelineAnalyticsContent(
+  state: UseApplications,
+  onOpenVacancies: () => void,
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
+) {
+  return (
+    <PipelineAnalyticsView
+      applications={state.applications}
+      onOpenVacancies={onOpenVacancies}
+      onOpenExpert={onOpenExpert}
     />
   );
 }

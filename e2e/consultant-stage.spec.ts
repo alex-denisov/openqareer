@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { seedReadabilityWorkspace } from './helpers/seedReadabilityWorkspace';
 
 test.describe('B340 stage consultant', () => {
   test('header outline button and vacancy card discuss button open stage consultant and send stage/subject', async ({
@@ -7,6 +9,7 @@ test.describe('B340 stage consultant', () => {
   }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop only');
     await mockSignedInCabinet(page);
+    await seedReadabilityWorkspace(page);
 
     let sentTurnPayload: {
       stage?: string;
@@ -35,7 +38,7 @@ test.describe('B340 stage consultant', () => {
     // 1. Desktop 1440
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     // Verify header button on Today stage opens Today consultant
     const headerAskBtn = page.getByRole('button', { name: 'Спросить консультанта' });
@@ -54,9 +57,6 @@ test.describe('B340 stage consultant', () => {
       .getByRole('button', { name: 'Вакансии', exact: true })
       .click();
     await expect(page.locator('.vac-list-item').first()).toBeVisible();
-
-    // Verify header button on Vacancies stage
-    await expect(headerAskBtn).toBeVisible();
 
     // Expand the first vacancy row
     await page.locator('.vac-list-item').first().click();

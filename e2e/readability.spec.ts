@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B232 — читаемость кабинета как гейт, а не как разовый аудит.
@@ -173,7 +174,10 @@ function collectPageErrors(page: Page): string[] {
  * тонком экране; вместо этого путь записывается и тест падает по списку.
  */
 
-async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promise<void> {
+async function openSection(
+  page: Page,
+  label: (typeof SECTIONS)[number] | 'Отклики',
+): Promise<void> {
   if (label === 'Роль') {
     // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
     // Отклики · Консультант); it opens from the path indicator's «Роль»
@@ -205,6 +209,7 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
     // B366: шаг «Роль» открывает экран «Вакансии» с фокусом на фильтре ролей.
     Роль: page.locator('.vacancies-content').first(),
     Вакансии: page.locator('.vac-list-item').first(),
+    Отклики: page.getByRole('heading', { name: 'Отклики', exact: true }),
   }[label];
   await expect(landmark).toBeVisible();
   await page.evaluate(
@@ -235,7 +240,7 @@ test.describe('B232 readability gate', () => {
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     for (const width of DESKTOP_WIDTHS) {
       await page.setViewportSize({ width, height: 860 });
@@ -253,7 +258,7 @@ test.describe('B232 readability gate', () => {
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     for (const label of SECTIONS) {
       await openSection(page, label);
@@ -269,10 +274,11 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop only');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const rail = page.locator('aside#career-rail');
     await expect(rail.locator('.career-nav-button span')).toHaveCount(5);
+    await expect(rail.getByRole('button', { name: 'Автоматизация', exact: true })).toHaveCount(0);
     const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
       nodes.map((node) => ({
         text: node.textContent,
@@ -298,9 +304,25 @@ test.describe('B232 readability gate', () => {
     ] as const;
     for (const [label, target] of routes) {
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
-      const routeName = new RegExp(`^${label}(?:\\.|$)`);
-      await expect(page.getByRole('button', { name: routeName }).first()).toBeVisible();
-      await page.getByRole('button', { name: routeName }).first().click();
+      await waitForCareerShell(page);
+      if (label === 'Автоматизация') {
+        await page.getByRole('button', { name: 'Отклики', exact: true }).click();
+        const responsesNavigation = page.getByRole('navigation', {
+          name: 'Разделы откликов',
+        });
+        const automation = responsesNavigation.getByRole('button', {
+          name: 'Автоматизация',
+          exact: true,
+        });
+        await expect(automation).toBeVisible();
+        await automation.click();
+      } else {
+        const routeName = new RegExp(`^${label}(?:\\.|$)`);
+        const routeButton = page.getByRole('button', { name: routeName }).first();
+        await expect(routeButton).toBeVisible();
+        await expect(routeButton).toBeEnabled({ timeout: 15_000 });
+        await routeButton.click();
+      }
       await expect(page.locator(target).first()).toBeVisible();
     }
     expect(unmatched).toEqual([]);
@@ -312,7 +334,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await openSection(page, 'Сегодня');
 
     const facts = await page.evaluate(() => {
@@ -350,7 +372,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     const spills = await page.evaluate((minSlack) => {
       const cw = document.documentElement.clientWidth;
       return [...document.querySelectorAll<HTMLElement>('.career-mobile-nav .career-nav-button')]
@@ -378,7 +400,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const beforeContent = await page
       .locator('nav.career-mobile-nav .career-nav-button.is-active')
@@ -400,7 +422,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop composition only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.setViewportSize({ width: 1280, height: 860 });
     await openSection(page, 'Сегодня');
 
@@ -455,7 +477,7 @@ test.describe('B232 readability gate', () => {
       });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await openSection(page, 'Вакансии');
     if (info.project.name === 'mobile-390') {
       await page.locator('.vac-list-item').first().locator('.vac-row').click();
@@ -482,7 +504,7 @@ test.describe('B232 readability gate', () => {
   test('search keeps tariff detail behind an explicit link', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const tariffsTrigger = page
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
@@ -501,7 +523,7 @@ test.describe('B232 readability gate', () => {
   test('«Профиль» shows the candidate resume, not an error state', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.locator('button[aria-label="Профиль"]:visible').first().click();
 
     await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
@@ -514,7 +536,7 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const rail = page.locator('.career-rail');
     const railBox = await rail.boundingBox();
@@ -536,52 +558,57 @@ test.describe('B232 readability gate', () => {
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.screenshot({ path: 'output/playwright/C52/rail-and-path-390.png' });
     await page
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
   });
 
-  test('capture C73 screenshots: path indicator on campaign screens and today', async ({
+  test('capture C73 screenshots: Today keeps the path; B450 Responses and B446 vacancies stay focused', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     // Today screen: 0 active steps
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
     await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
     await page
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C73/path-indicator-today-1440.png' });
     await page.screenshot({ path: 'output/playwright/C73/screen-today-1440.png' });
 
-    // Open opportunities (vacancies): exactly one active step ('Подборка')
+    // B446's approved vacancies screen owns the page header and filter area.
+    // The shell path indicator is not duplicated over this full screen.
     await openSection(page, 'Вакансии');
-    const active = page.locator('.career-path-step[data-state="active"]');
-    await expect(active).toHaveCount(1);
-    await expect(active).toContainText('Подборка');
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-1440.png' });
+    await expect(page.locator('.career-path')).toHaveCount(0);
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-1440.png' });
+
+    // B450's responses header owns the workspace; it hides the duplicate path strip.
+    await openSection(page, 'Отклики');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C73/screen-responses-1440.png' });
 
     // 390 viewport
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: 'output/playwright/C73/screen-today-390.png' });
     await page
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C73/path-indicator-today-390.png' });
 
     await openSection(page, 'Вакансии');
+    await expect(page.locator('.career-path')).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
+    await openSection(page, 'Отклики');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C73/screen-responses-390.png' });
   });
 
   test('B344 D9: на 1176 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
@@ -590,9 +617,10 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
 
-    await openSection(page, 'Вакансии');
+    await openSection(page, 'Сегодня');
     const reasons = page.locator('.career-path-reason:visible');
     const count = await reasons.count();
     for (let i = 0; i < count; i++) {
@@ -620,7 +648,7 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const railBox = await page.locator('.career-rail').boundingBox();
     expect(railBox?.width).toBe(76);
@@ -630,7 +658,7 @@ test.describe('B232 readability gate', () => {
     // 390 mobile
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.screenshot({ path: 'output/playwright/B335/rail-390.png' });
   });
 
@@ -638,7 +666,7 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     // Profile screen: languages
     await page.locator('button[aria-label="Профиль"]:visible').first().click();
@@ -670,7 +698,7 @@ test.describe('B232 readability gate', () => {
     // Tariffs at 390
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     const mobileTariffsTrigger = page
       .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
       .first();
@@ -792,7 +820,7 @@ test.describe('B232 readability gate', () => {
     // Viewport 1176: desktop app window
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.locator('.career-responses-board')).toBeVisible();
@@ -817,7 +845,7 @@ test.describe('B232 readability gate', () => {
     // Viewport 390: mobile layout
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.locator('.career-responses-board')).toBeVisible();

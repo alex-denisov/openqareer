@@ -41,6 +41,7 @@ export interface UseApplications {
   readonly loadPage?: (
     query: ApplicationListQuery,
     append?: boolean,
+    keepContent?: boolean,
   ) => Promise<readonly ApplicationView[]>;
   readonly error?: string;
   /** The load failed because the browser has no connection (offline state). */

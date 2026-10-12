@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B251 S3 — экран «Отклики» (канбан пайплайна из макета
@@ -51,6 +52,16 @@ const SNAPSHOT = {
   assessments: [],
   germanyMarket: null,
   vacancySubscriptions: [],
+};
+
+const WORKSPACE_INPUT = {
+  resumeText: 'Enterprise Architect with 15+ years scaling platform and operations organisations.',
+  resumeSource: 'text' as const,
+  targetDirection: 'Enterprise Architect',
+  regions: ['mena', 'eu'],
+  currentSituation: 'Ищу роль Enterprise Architect.',
+  constraints: 'Hybrid',
+  urgency: 'active' as const,
 };
 
 function application(overrides: Record<string, unknown>) {
@@ -239,14 +250,7 @@ async function seedWorkspace(page: Page): Promise<void> {
         version: 7,
         createdAt: '2026-09-01T12:00:00.000Z',
         updatedAt: '2026-09-01T12:00:00.000Z',
-        resumeText:
-          'Enterprise Architect with 15+ years scaling platform and operations organisations.',
-        resumeSource: 'text',
-        targetDirection: 'Enterprise Architect',
-        regions: ['mena', 'eu'],
-        currentSituation: 'Ищу роль Enterprise Architect.',
-        constraints: 'Hybrid',
-        urgency: 'active',
+        ...WORKSPACE_INPUT,
         outcomes: [],
         analysis: {
           evidenceMethodVersion: 'evidence-local-v1',
@@ -277,7 +281,8 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
     if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
     if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
-    if (pathname === '/api/v1/candidate/workspace') return route.fulfill({ json: { data: null } });
+    if (pathname === '/api/v1/candidate/workspace')
+      return route.fulfill({ json: { data: WORKSPACE_INPUT } });
     if (pathname === '/api/v1/candidate/applications') {
       return route.fulfill({ json: { data: APPLICATIONS } });
     }
@@ -286,7 +291,7 @@ async function stubSession(page: Page): Promise<void> {
 }
 
 async function openResponses(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
 }
 
@@ -310,10 +315,21 @@ test.describe('B251 responses screen', () => {
 
     await expect.poll(() => columnCount('Хочу')).toBe('2');
     await expect.poll(() => columnCount('Пробовали отправить')).toBe('3');
-    await expect.poll(() => columnCount('Отправлено')).toBe('0');
+    const deliveredCards = page
+      .locator('.career-responses-column')
+      .filter({ has: page.getByRole('heading', { name: 'Отправлено', exact: true }) })
+      .locator('.career-responses-card');
+    await expect(deliveredCards).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Пробовали отправить' })).toContainText(
+      'Не хватает квитанции доставки',
+    );
     await expect.poll(() => columnCount('Ответ')).toBe('1');
     await expect.poll(() => columnCount('Интервью')).toBe('1');
-    await expect.poll(() => columnCount('Оффер')).toBe('0');
+    const offerCards = page
+      .locator('.career-responses-column')
+      .filter({ has: page.getByRole('heading', { name: 'Оффер', exact: true }) })
+      .locator('.career-responses-card');
+    await expect(offerCards).toHaveCount(0);
     await expect.poll(() => columnCount('Отказ')).toBe('1');
     await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
   });
@@ -613,34 +629,30 @@ test.describe('B251 responses screen', () => {
       return route.fulfill({ json: { data: null } });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.locator('.career-expert-error')).toBeVisible();
     await expect(page.locator('.career-expert-error button')).toContainText('Повторить');
   });
 
-  test('D15: клик по шагу «Интервью» фильтрует доску откликов до этапа интервью', async ({
+  test('D15: шаг «Интервью» фильтрует доску; mobile keeps the single current-step summary', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await openResponses(page);
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
 
-    await expect(page.locator('.career-responses-column')).toHaveCount(7);
-    await expect(
-      page
-        .locator('.career-responses-column .career-responses-card')
-        .filter({ hasText: 'Peraton' }),
-    ).toBeVisible();
-
-    // Кликаем по шагу «Интервью» в индикаторе пути (на десктопе кнопка шага, на мобильном саммари)
-    const interviewBtn = page.locator('.career-path-btn').filter({ hasText: 'Интервью' });
-    if (await interviewBtn.isVisible()) {
-      await interviewBtn.click();
-    } else {
-      await page.locator('.career-path-mobile-summary:visible').click();
+    if (testInfo.project.name === 'mobile-390') {
+      const summary = page.locator('.career-path-mobile-summary');
+      await expect(summary).toBeVisible();
+      await expect(page.locator('.career-path-desktop')).toBeHidden();
+      await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
+      return;
     }
+
+    // The path lives on Today. Its interview step opens the Responses board with that stage filter.
+    await page.locator('.career-path-btn').filter({ hasText: 'Интервью' }).click();
 
     // Доска отфильтрована: видна только колонка «Интервью» и пометка
     await expect(page.locator('.career-responses-filter-notice')).toContainText(

@@ -625,13 +625,17 @@ describe('B440 fixed rail contract', () => {
     );
   }
 
-  it('keeps four primary sections on mobile and adds automation to the desktop rail', () => {
+  it('keeps automation inside Responses instead of adding a second rail entry', () => {
     const html = shellHtml();
-    const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
-      (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
+    const automationHtml = shellHtml('automation');
+    const rail = automationHtml.slice(
+      automationHtml.indexOf('<aside id="career-rail"'),
+      automationHtml.indexOf('</aside>'),
     );
-    expect(paths).toHaveLength(9);
-    expect(new Set(paths).size).toBe(5);
+    expect(html).not.toContain('career-responses-automation-switch');
+    expect(rail).not.toContain('aria-label="Автоматизация"');
+    expect(rail).toMatch(/<button class="career-nav-button is-active"[^>]*aria-label="Отклики"/u);
+    expect(automationHtml).toContain('class="automation-screen"');
   });
 
   it('has no rail expansion state and keeps tariff access on Wallet', () => {
