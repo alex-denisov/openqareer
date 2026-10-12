@@ -211,7 +211,9 @@ test('согласия → очередь → одобрение → журна�
     page.getByRole('heading', { name: 'Автоотклики включены', exact: true }),
   ).toBeVisible();
   await openQueueIfNeeded(page);
-  const row = page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible').filter({ hasText: 'FinCloud' });
+  const row = page
+    .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
+    .filter({ hasText: 'FinCloud' });
   await expect(row).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'queue-pending', row);
   await row.getByRole('button', { name: 'Одобрить и отправить', exact: true }).click();
@@ -286,7 +288,9 @@ test('частичная очередь показывает продолжен�
     automationQueue: queueFixtureSet(1),
     automationQueueBehavior: { totalOverride: 3 },
   });
-  await expect(page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')).toHaveCount(1);
+  await expect(
+    page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible'),
+  ).toHaveCount(1);
   await expect(page.getByRole('button', { name: 'Показать ещё', exact: true })).toBeVisible();
   await captureAutomationState(
     page,
@@ -301,12 +305,16 @@ test('большая очередь сохраняет все доступные
     candidateId: 'candidate-b232',
     automationQueue: queueFixtureSet(20),
   });
-  await expect(page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')).toHaveCount(20);
+  await expect(
+    page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible'),
+  ).toHaveCount(20);
   await captureAutomationState(
     page,
     testInfo.project.name,
     'many',
-    page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible').first(),
+    page
+      .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
+      .first(),
   );
 });
 
@@ -405,7 +413,11 @@ test('настройки, правила, согласия, посты и экс
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   }
-  await page.getByRole('button', { name: /Согласия/u }).filter({ visible: true }).first().click();
+  await page
+    .getByRole('button', { name: /Согласия/u })
+    .filter({ visible: true })
+    .first()
+    .click();
   const consentManager = page.getByRole('dialog', { name: 'Согласия и режим' });
   await expect(consentManager).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'consent-manager', consentManager);
@@ -433,7 +445,9 @@ test('письмо, стоп-компания и снятие записи вы�
   await openAutomation(page);
   await openQueueIfNeeded(page);
 
-  const first = page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible').filter({ hasText: 'FinCloud' });
+  const first = page
+    .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
+    .filter({ hasText: 'FinCloud' });
   await first.getByRole('button', { name: 'Править письмо', exact: true }).click();
   const letterDialog = page.getByRole('dialog', { name: /Письмо · FinCloud/u });
   await expect(letterDialog).toBeVisible();
@@ -449,9 +463,13 @@ test('письмо, стоп-компания и снятие записи вы�
     .getByRole('button', { name: 'В стоп-компании', exact: true })
     .click();
   await expect(
-    page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible').filter({ hasText: 'FinCloud' }),
+    page
+      .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
+      .filter({ hasText: 'FinCloud' }),
   ).toHaveCount(0);
-  const second = page.locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible').filter({ hasText: 'Компания 2' });
+  const second = page
+    .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
+    .filter({ hasText: 'Компания 2' });
   await second.getByRole('button', { name: 'Снять с очереди', exact: true }).click();
   await expect(page.getByText('Записей по этим фильтрам пока нет.', { exact: true })).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { Check, EnvelopeSimple, Prohibit, X } from '@phosphor-icons/react';
+import { Check, EnvelopeSimple, Prohibit, X, type Icon } from '@phosphor-icons/react';
 import type { AutomationQueueAction, AutomationQueueItem } from './automationApi';
 import {
   automationDateLabel,
@@ -18,6 +18,17 @@ export interface AutomationQueueTableProps {
   readonly onAction: (item: AutomationQueueItem, action: AutomationQueueAction) => void;
   readonly onEdit: (item: AutomationQueueItem) => void;
 }
+
+interface RowActionProps {
+  readonly item: AutomationQueueItem;
+  readonly busy: boolean;
+  readonly enabled: boolean;
+  readonly canApprove: boolean;
+  readonly onAction: (action: AutomationQueueAction) => void;
+  readonly onEdit: () => void;
+}
+
+const COLUMNS = ['Компания и роль', 'Канал', 'Совпадение', 'Уйдёт', 'Статус', 'Действия'] as const;
 
 function isEditable(status: AutomationQueueItem['status']): boolean {
   return status === 'pending_approval' || status === 'letter_not_ready';
@@ -41,12 +52,11 @@ export function AutomationQueueTable(props: AutomationQueueTableProps) {
               onChange={props.onToggleAll}
             />
           </th>
-          <th scope="col">Компания и роль</th>
-          <th scope="col">Канал</th>
-          <th scope="col">Совпадение</th>
-          <th scope="col">Уйдёт</th>
-          <th scope="col">Статус</th>
-          <th scope="col">Действия</th>
+          {COLUMNS.map((label) => (
+            <th scope="col" key={label}>
+              {label}
+            </th>
+          ))}
         </tr>
       </thead>
       <tbody>
@@ -68,33 +78,18 @@ export function AutomationQueueTable(props: AutomationQueueTableProps) {
   );
 }
 
-function QueueTableRow({
-  item,
-  selected,
-  busy,
-  enabled,
-  canApprove,
-  onToggle,
-  onAction,
-  onEdit,
-}: {
-  readonly item: AutomationQueueItem;
-  readonly selected: boolean;
-  readonly busy: boolean;
-  readonly enabled: boolean;
-  readonly canApprove: boolean;
-  readonly onToggle: () => void;
-  readonly onAction: (action: AutomationQueueAction) => void;
-  readonly onEdit: () => void;
-}) {
+function QueueTableRow(
+  props: RowActionProps & { readonly selected: boolean; readonly onToggle: () => void },
+) {
+  const { item } = props;
   return (
-    <tr className={selected ? 'is-selected' : undefined}>
+    <tr className={props.selected ? 'is-selected' : undefined}>
       <td className="automation-queue-table-check">
         <input
           type="checkbox"
           aria-label={`Выбрать ${item.company}`}
-          checked={selected}
-          onChange={onToggle}
+          checked={props.selected}
+          onChange={props.onToggle}
         />
       </td>
       <th scope="row">
@@ -113,53 +108,65 @@ function QueueTableRow({
         <span className="automation-queue-status">{automationQueueStatusLabel(item.status)}</span>
       </td>
       <td>
-        <div className="automation-queue-table-actions">
-          {item.status === 'pending_approval' ? (
-            <button
-              type="button"
-              aria-label="Одобрить и отправить"
-              title="Одобрить и отправить"
-              disabled={busy || !enabled || !canApprove}
-              onClick={() => onAction('approve_and_send')}
-            >
-              <Check size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-          {isEditable(item.status) ? (
-            <button
-              type="button"
-              aria-label="Править письмо"
-              title="Править письмо"
-              disabled={busy}
-              onClick={onEdit}
-            >
-              <EnvelopeSimple size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-          {isOpen(item.status) ? (
-            <button
-              type="button"
-              aria-label="Снять с очереди"
-              title="Снять с очереди"
-              disabled={busy}
-              onClick={() => onAction('remove')}
-            >
-              <X size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-          {isEditable(item.status) ? (
-            <button
-              type="button"
-              aria-label="В стоп-компании"
-              title="В стоп-компании"
-              disabled={busy}
-              onClick={() => onAction('stop_company')}
-            >
-              <Prohibit size={18} aria-hidden="true" />
-            </button>
-          ) : null}
-        </div>
+        <QueueTableActions {...props} />
       </td>
     </tr>
+  );
+}
+
+function QueueIconButton({
+  label,
+  icon: IconComponent,
+  disabled,
+  onClick,
+}: {
+  readonly label: string;
+  readonly icon: Icon;
+  readonly disabled: boolean;
+  readonly onClick: () => void;
+}) {
+  return (
+    <button type="button" aria-label={label} title={label} disabled={disabled} onClick={onClick}>
+      <IconComponent size={18} aria-hidden="true" />
+    </button>
+  );
+}
+
+function QueueTableActions({ item, busy, enabled, canApprove, onAction, onEdit }: RowActionProps) {
+  return (
+    <div className="automation-queue-table-actions">
+      {item.status === 'pending_approval' ? (
+        <QueueIconButton
+          label="Одобрить и отправить"
+          icon={Check}
+          disabled={busy || !enabled || !canApprove}
+          onClick={() => onAction('approve_and_send')}
+        />
+      ) : null}
+      {isEditable(item.status) ? (
+        <QueueIconButton
+          label="Править письмо"
+          icon={EnvelopeSimple}
+          disabled={busy}
+          onClick={onEdit}
+        />
+      ) : null}
+      {isOpen(item.status) ? (
+        <QueueIconButton
+          label="Снять с очереди"
+          icon={X}
+          disabled={busy}
+          onClick={() => onAction('remove')}
+        />
+      ) : null}
+      {isEditable(item.status) ? (
+        <QueueIconButton
+          label="В стоп-компании"
+          icon={Prohibit}
+          disabled={busy}
+          onClick={() => onAction('stop_company')}
+        />
+      ) : null}
+    </div>
   );
 }
