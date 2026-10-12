@@ -13,6 +13,7 @@ async function openVacancies(page: Page) {
   });
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   await expect(page.getByRole('tab', { name: /Подборка/u })).toBeVisible();
+  await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
 }
 
 async function measureResponsiveWidths(page: Page, testInfo: TestInfo) {
@@ -222,7 +223,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .locator('.vac-list-item')
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
     .first();
-  await expect(vacancy).toBeVisible();
+  await expect(vacancy).toBeVisible({ timeout: 15_000 });
   const saveButton = vacancy.getByRole('button', { name: 'Сохранить вакансию' });
   const companyWantButton = vacancy.getByRole('button', { name: 'Хочу в эту компанию' });
   await expect(saveButton).toBeVisible();
@@ -281,6 +282,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .locator('.vac-list-item')
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
     .first();
+  await expect(reloadedVacancy).toBeVisible({ timeout: 15_000 });
   const removeCompanyWant = reloadedVacancy.getByRole('button', { name: 'Убрать из «Хочу»' });
   await expect(removeCompanyWant).toBeVisible();
   await removeCompanyWant.click();

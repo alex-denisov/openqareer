@@ -45,9 +45,10 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [initialFilters, setInitialFilters] = useState<VacanciesScreenState>();
   const [filters, setFilterState] = useState<VacanciesScreenState>();
   const setFilters = useCallback((value: VacanciesScreenState) => {
-    const active = value.roles.length + value.regions.length + (value.levels?.length ?? 0) +
-      (value.sources?.length ?? 0) + Number(value.remoteOnly);
-    setFilterState((previous) => active || previous ? value : undefined);
+    const hasServerFilters = hasMatchedPoolFilters(value);
+    setFilterState((previous) =>
+      hasServerFilters || hasMatchedPoolFilters(previous) ? value : undefined,
+    );
   }, []);
   const initialPool = filters ? undefined : provided;
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
@@ -70,6 +71,17 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
     facets, initialFilters, setFilters, matched, total, poolTotal, loading, failed, complete,
     campaign, candidateLevel, failureSourceLabel, refresh,
   };
+}
+
+function hasMatchedPoolFilters(filters: VacanciesScreenState | undefined): boolean {
+  return Boolean(
+    filters &&
+      (filters.roles.length > 0 ||
+        filters.regions.length > 0 ||
+        (filters.levels?.length ?? 0) > 0 ||
+        (filters.sources?.length ?? 0) > 0 ||
+        filters.remoteOnly),
+  );
 }
 
 function useMatchedPoolReader(
