@@ -1,4 +1,3 @@
-/* eslint-disable max-lines -- store facade grew past 800 lines when S10 lines merged; split the repository wiring into modules in the next sprint */
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -39,10 +38,13 @@ import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandi
 import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
-import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
-import { SqliteMarketRepository } from './sqliteMarketRepository';
-import { SqliteResumeRepository } from './sqliteResumeRepository';
-import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
+import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
+import type { SqliteMarketRepository } from './sqliteMarketRepository';
+import type { SqliteResumeRepository } from './sqliteResumeRepository';
+import type {
+  SqliteCandidateMediaRepository,
+  StoredCandidateMedia,
+} from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
@@ -54,18 +56,18 @@ import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepositor
 import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
-import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
+import type { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
-import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
-import { SqliteDocumentRepository } from './sqliteDocumentRepository';
-import { SqliteVacancyRepository } from './sqliteVacancyRepository';
-import { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
-import {
+import type { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
+import type { SqliteDocumentRepository } from './sqliteDocumentRepository';
+import type { SqliteVacancyRepository } from './sqliteVacancyRepository';
+import type { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
+import type {
   SqliteWorkPreferenceRepository,
-  type StoredWorkPreferenceRun,
+  StoredWorkPreferenceRun,
 } from './sqliteWorkPreferenceRepository';
-import { SqliteVacancyApplicationRepository } from './sqliteVacancyApplicationRepository';
-import { ApplicationTrackerController } from './store/applicationTrackerController';
+import type { ApplicationTrackerController } from './store/applicationTrackerController';
+import { createSqliteCandidateStoreRepositories } from './sqliteCandidateStoreRepositories';
 import {
   createApplicationTrackerMethods,
   type ApplicationTrackerMethods,
@@ -165,7 +167,7 @@ export class SqliteCandidateStore implements CandidateStore {
       workPreferenceRepository: this.workPreferenceRepository,
       candidateMediaRepository: this.candidateMediaRepository,
       applicationTracker: this.applicationTracker,
-    } = createRepositories(
+    } = createSqliteCandidateStoreRepositories(
       this.database,
       this.sealedText,
       (operation) => this.transaction(operation),
@@ -845,48 +847,4 @@ function referencedMediaIds(draft: ResumeDraft): string[] {
     draft.candidate.photoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),
   ].filter((value): value is string => Boolean(value));
-}
-
-interface StoreRepositories {
-  assessmentsRepository: SqliteAssessmentRepository;
-  marketRepository: SqliteMarketRepository;
-  resumeRepository: SqliteResumeRepository;
-  workspaceRepository: SqliteWorkspaceRepository;
-  careerCommandRepository: SqliteCareerCommandRepository;
-  documentRepository: SqliteDocumentRepository;
-  vacancyRepository: SqliteVacancyRepository;
-  careerStrategyRepository: SqliteCareerStrategyRepository;
-  workPreferenceRepository: SqliteWorkPreferenceRepository;
-  candidateMediaRepository: SqliteCandidateMediaRepository;
-  applicationTracker: ApplicationTrackerController;
-}
-
-function createRepositories(
-  database: DatabaseSync,
-  sealedText: SealedText,
-  transaction: <T>(operation: () => T) => T,
-): StoreRepositories {
-  const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
-  const workspaceRepository = new SqliteWorkspaceRepository(database, sealedText);
-  const documentRepository = new SqliteDocumentRepository(database, sealedText);
-  return {
-    applicationTracker: new ApplicationTrackerController(
-      database,
-      sealedText,
-      legacyApplications,
-      workspaceRepository,
-      documentRepository,
-      transaction,
-    ),
-    assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
-    marketRepository: new SqliteMarketRepository(database, sealedText),
-    resumeRepository: new SqliteResumeRepository(database, sealedText),
-    workspaceRepository,
-    careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText, transaction),
-    documentRepository,
-    vacancyRepository: new SqliteVacancyRepository(database, sealedText),
-    careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
-    workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
-    candidateMediaRepository: new SqliteCandidateMediaRepository(database, sealedText),
-  };
 }

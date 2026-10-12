@@ -3,7 +3,7 @@ import type { LightMyRequestResponse } from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { DatabaseSync } from 'node:sqlite';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CandidateAutomationRules } from '../domain/candidateAutomation';
 import { DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE } from '../candidate/candidateAutomationScheduler';
 import { SqliteCandidateActionRepository } from '../candidate/sqliteCandidateActionRepository';
@@ -46,6 +46,11 @@ type Inject = (
   url: string,
   payload?: object,
 ) => Promise<LightMyRequestResponse>;
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
+});
 
 afterEach(async () => {
   for (const close of cleanup.splice(0)) await close();

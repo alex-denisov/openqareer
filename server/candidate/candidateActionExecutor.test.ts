@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import {
   CandidateActionExecutor,
@@ -35,6 +35,11 @@ function grantActionConsent(
 }
 
 const daytime = '2026-10-01T12:00:00Z';
+
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(daytime));
+});
 
 afterEach(() => {
   vi.useRealTimers();
