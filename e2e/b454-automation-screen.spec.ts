@@ -32,6 +32,12 @@ const queueItem: AutomationQueueFixtureItem = {
   },
 };
 
+/** The desktop screen shows the queue on the same page; only 390 has the button. */
+async function openQueueIfNeeded(page: Page) {
+  const openQueue = page.getByRole('button', { name: 'Открыть очередь', exact: true });
+  if (await openQueue.isVisible()) await openQueue.click();
+}
+
 async function openAutomation(page: Page) {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -163,7 +169,7 @@ async function enableAutomationAndOpenQueue(
   await expect(
     page.getByRole('heading', { name: 'Автоотклики включены', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Открыть очередь', exact: true }).click();
+  await openQueueIfNeeded(page);
   await expect(
     page.getByRole('heading', { name: 'Очередь на одобрение', exact: true }),
   ).toBeVisible();
@@ -204,7 +210,7 @@ test('согласия → очередь → одобрение → журна�
   await expect(
     page.getByRole('heading', { name: 'Автоотклики включены', exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Открыть очередь', exact: true }).click();
+  await openQueueIfNeeded(page);
   const row = page.getByRole('listitem').filter({ hasText: 'FinCloud' });
   await expect(row).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'queue-pending', row);
@@ -366,7 +372,8 @@ test('настройки, правила, согласия, посты и экс
   });
   await openAutomation(page);
 
-  await page.getByRole('button', { name: /Настройка режима/u }).click();
+  const settingsShortcut = page.getByRole('button', { name: /Настройка режима/u });
+  if (await settingsShortcut.isVisible()) await settingsShortcut.click();
   const settings = page.locator('[data-page="settings"]');
   await expect(settings).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'settings', settings);
@@ -379,7 +386,8 @@ test('настройки, правила, согласия, посты и экс
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   }
-  await page.getByRole('button', { name: /Правила отбора/u }).click();
+  const rulesShortcut = page.getByRole('button', { name: /Правила отбора/u });
+  if (await rulesShortcut.isVisible()) await rulesShortcut.click();
   const rules = page.locator('[data-page="rules"]');
   await expect(rules).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'rules', rules);
@@ -397,7 +405,7 @@ test('настройки, правила, согласия, посты и экс
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   }
-  await page.getByRole('button', { name: /Согласия/u }).click();
+  await page.getByRole('button', { name: /Согласия/u }).filter({ visible: true }).first().click();
   const consentManager = page.getByRole('dialog', { name: 'Согласия и режим' });
   await expect(consentManager).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'consent-manager', consentManager);
@@ -423,7 +431,7 @@ test('письмо, стоп-компания и снятие записи вы�
     automationQueue: queueFixtureSet(2),
   });
   await openAutomation(page);
-  await page.getByRole('button', { name: 'Открыть очередь', exact: true }).click();
+  await openQueueIfNeeded(page);
 
   const first = page.locator('.automation-queue-list > li').filter({ hasText: 'FinCloud' });
   await first.getByRole('button', { name: 'Править письмо', exact: true }).click();
@@ -455,7 +463,7 @@ test('массовое снятие изменяет только видимые
     automationQueue: queueFixtureSet(2),
   });
   await openAutomation(page);
-  await page.getByRole('button', { name: 'Открыть очередь', exact: true }).click();
+  await openQueueIfNeeded(page);
   await page.getByRole('checkbox', { name: /Выбрать показанные/u }).check();
   await page.getByRole('button', { name: 'Снять', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Обновлено записей: 2.' })).toBeVisible();

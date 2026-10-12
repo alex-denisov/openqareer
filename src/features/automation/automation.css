@@ -1230,3 +1230,41 @@
     flex-direction: column;
   }
 }
+
+/* Desktop 1440 (approved mockup 6): the shell header already names the screen,
+   the sections are scrolled to rather than opened from shortcut cards, and the
+   mode is a list of rows. 390 keeps its own heading and shortcut list. */
+@media (min-width: 761px) {
+  .automation-screen-heading,
+  .automation-shortcuts,
+  .automation-open-queue,
+  .automation-home-note {
+    display: none;
+  }
+
+  .automation-mode-picker {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+    border: 0;
+  }
+
+  .automation-mode-picker legend {
+    padding: 0;
+    margin-block-end: var(--career-space-2);
+  }
+
+  .automation-mode-picker label:has(input:checked) {
+    border-color: var(--career-accent);
+    background: var(--career-accent-soft);
+  }
+
+  .automation-mode-picker label:has(input:disabled) {
+    opacity: 0.7;
+  }
+}
+
+@media (max-width: 760px) {
+  .automation-consent-open {
+    display: none;
+  }
+}
