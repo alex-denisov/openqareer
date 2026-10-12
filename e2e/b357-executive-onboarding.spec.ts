@@ -20,6 +20,12 @@ test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
     const card = page.locator('[data-testid="executive-onboarding-card"]');
+    await expect(card).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/B357/onboarding-1440.png' });
+
+    // The approved 1440 Today screen no longer includes the onboarding block.
+    // It remains available in the legacy compact Today layout.
+    await page.setViewportSize({ width: 1176, height: 800 });
     await expect(card).toBeVisible();
 
     // Check title and advice box
@@ -51,12 +57,7 @@ test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
     await expect(card.locator('[data-testid="quantums-list"]')).toBeVisible();
     await expect(card.locator('[data-testid="quantums-list"]')).toContainText('Time to market');
 
-    // Screenshot 1440
-    await page.screenshot({ path: 'output/playwright/B357/onboarding-1440.png' });
-
-    // --- 1176px ---
-    await page.setViewportSize({ width: 1176, height: 800 });
-    await page.waitForTimeout(300);
+    // Screenshot 1176px after exercising the retained component.
     await page.screenshot({ path: 'output/playwright/B357/onboarding-1176.png' });
 
     // --- 390px ---

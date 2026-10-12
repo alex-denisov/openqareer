@@ -631,19 +631,21 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
-    await expect(page.locator('.career-expert-error')).toBeVisible();
-    await expect(page.locator('.career-expert-error button')).toContainText('Повторить');
+    const responseError = page.locator('.career-main .career-expert-error');
+    await expect(responseError).toBeVisible();
+    await expect(responseError).toContainText('Сервис не завершил действие');
+    await expect(responseError.getByRole('button', { name: 'Повторить' })).toBeVisible();
   });
 
-  test('D15: шаг «Интервью» фильтрует доску; mobile keeps the single current-step summary', async ({
+  test('D15: desktop Today omits the path; mobile keeps the single current-step summary', async ({
     page,
   }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
 
     if (testInfo.project.name === 'mobile-390') {
+      await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
       const summary = page.locator('.career-path-mobile-summary');
       await expect(summary).toBeVisible();
       await expect(page.locator('.career-path-desktop')).toBeHidden();
@@ -651,41 +653,8 @@ test.describe('B251 responses screen', () => {
       return;
     }
 
-    // The path lives on Today. Its interview step opens the Responses board with that stage filter.
-    await page.locator('.career-path-btn').filter({ hasText: 'Интервью' }).click();
-
-    // Доска отфильтрована: видна только колонка «Интервью» и пометка
-    await expect(page.locator('.career-responses-filter-notice')).toContainText(
-      'Показаны отклики на этапе «Интервью»',
-    );
-    await expect(page.locator('.career-responses-column')).toHaveCount(1);
-    await expect(page.locator('.career-responses-column-head h2')).toHaveText('Интервью');
-    const interviewCards = page.locator('.career-responses-column .career-responses-card');
-    await expect(interviewCards).toHaveCount(1);
-    await expect(interviewCards).toContainText('Enterprise Architect Director — раунд 2');
-    await expect(interviewCards.filter({ hasText: 'Peraton' })).toHaveCount(0);
-
-    // Скриншоты для D15 на 1176 и 390
-    await mkdir('output/playwright/B344', { recursive: true });
-    await page.setViewportSize({ width: 1176, height: 900 });
-    await page.screenshot({
-      path: 'output/playwright/B344/d15-responses-interview-filter-1176.png',
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
-    await page.screenshot({
-      path: 'output/playwright/B344/d15-responses-interview-filter-390.png',
-      fullPage: true,
-    });
-
-    // Возвращаем десктоп и снимаем фильтр
-    await page.setViewportSize({ width: 1176, height: 900 });
-    await page.locator('.career-responses-filter-reset').click();
-    await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
-    await expect(page.locator('.career-responses-column')).toHaveCount(7);
-    await expect(
-      page.locator('.career-responses-card').filter({ hasText: 'Peraton' }),
-    ).toBeVisible();
+    // The approved desktop Today layout no longer includes the campaign stepper.
+    await expect(page.locator('.career-path')).toHaveCount(0);
   });
 
   test('B450: переключение колонок и таблицы открывает результативность по каналам', async ({

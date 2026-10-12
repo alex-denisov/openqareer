@@ -38,13 +38,41 @@ export function isConsultantActionResolved(
   candidateId: string | undefined,
   action: ReasonedCareerAction,
   storage: Storage | undefined = getStorage(),
+  now = new Date(),
 ): boolean {
   if (!storage) return false;
   try {
     const value = storage.getItem(actionStorageKey(candidateId, action));
+    if (value?.startsWith('deferred:')) {
+      const deferredUntil = Date.parse(value.slice('deferred:'.length));
+      if (Number.isNaN(deferredUntil) || now.getTime() >= deferredUntil) {
+        storage.removeItem(actionStorageKey(candidateId, action));
+        return false;
+      }
+      return true;
+    }
     return value === 'accepted' || value === 'dismissed' || value === '1';
   } catch {
     return false;
+  }
+}
+
+export function deferConsultantActionUntilTomorrow(
+  candidateId: string | undefined,
+  action: ReasonedCareerAction,
+  storage: Storage | undefined = getStorage(),
+  now = new Date(),
+): void {
+  if (!storage) return;
+  const nextLocalDay = new Date(now);
+  nextLocalDay.setHours(24, 0, 0, 0);
+  try {
+    storage.setItem(
+      actionStorageKey(candidateId, action),
+      `deferred:${nextLocalDay.toISOString()}`,
+    );
+  } catch {
+    // quota or private mode: state still updates in-memory
   }
 }
 

@@ -4,14 +4,19 @@ import { todaySnapshot } from './fixtures/readabilityWorkspace';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 test.describe('B397: Search Momentum Widget', () => {
-  test('renders momentum metrics on desktop and mobile without horizontal overflow (Criterion 6)', async ({
+  test('renders compact momentum on mobile and the S10 funnel on desktop (Criterion 6)', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
     const widget = page.locator('[data-testid="search-momentum-widget"]');
+    if (testInfo.project.name === 'desktop-1440') {
+      await expect(widget).toBeHidden();
+      await expect(page.getByRole('region', { name: 'Воронка за 30 дней' })).toBeVisible();
+      return;
+    }
     await expect(widget).toBeVisible({ timeout: 15_000 });
 
     await expect(page.locator('[data-testid="search-momentum-card-applied"]')).toContainText(
@@ -46,7 +51,8 @@ test.describe('B397: Search Momentum Widget', () => {
 
   test('renders honest empty state when no confirmed applications exist (Criterion 3)', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop uses the S10 funnel.');
     await mockSignedInCabinet(page);
     await page.route('**/api/v1/candidate/today*', async (route) => {
       const emptyMomentum = {
@@ -78,7 +84,8 @@ test.describe('B397: Search Momentum Widget', () => {
 
   test('shows burnout protection hint at 30 applications and 0 interviews (Criterion 4)', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop uses the S10 funnel.');
     await mockSignedInCabinet(page);
     await page.route('**/api/v1/candidate/today*', async (route) => {
       const burnoutMomentum = {
@@ -94,9 +101,10 @@ test.describe('B397: Search Momentum Widget', () => {
       });
     });
 
-    await page.goto('/app');
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
     const hint = page.locator('[data-testid="search-momentum-hint"]');
-    await expect(hint).toBeVisible();
+    await expect(hint).toBeVisible({ timeout: 15_000 });
     await expect(hint).toContainText('30 откликов без интервью — возможно, стоит сменить тактику');
 
     const button = page.locator('[data-testid="search-momentum-consultant-action"]');

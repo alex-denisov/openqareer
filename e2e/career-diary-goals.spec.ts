@@ -221,7 +221,7 @@ async function navigateDiary(page: Page, projectName: string): Promise<void> {
       .getByRole('button', { name: 'Карьерный дневник' })
       .click();
   }
-  await expect(page.getByRole('heading', { level: 1, name: 'Карьерный дневник' })).toBeVisible();
+  await expect(page.locator('#career-diary-heading')).toBeVisible();
 }
 
 async function openDiary(page: Page, testInfo: TestInfo, state: DiaryHarness): Promise<void> {
