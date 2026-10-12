@@ -1,5 +1,5 @@
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
-import { Funnel } from '@phosphor-icons/react';
+import { CaretDown, Funnel } from '@phosphor-icons/react';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 
 export type VacancyFilterGroup = 'roles' | 'locations' | 'salary' | 'format' | 'sources';
@@ -166,12 +166,15 @@ function VacancyFilterGroupButtons({
           aria-controls="vacancies-filter-popover"
           onClick={() => onSelectGroup(group.id)}
         >
-          {group.id === 'salary' && group.summary ? null : (
-            <span className="vacancies-filter-group-label">{group.label}</span>
-          )}
-          {group.summary ? (
-            <span className="vacancies-filter-group-value">{group.summary}</span>
-          ) : null}
+          <span className="vacancies-filter-group-text">
+            {group.id === 'salary' && group.summary ? null : (
+              <span className="vacancies-filter-group-label">{group.label}</span>
+            )}
+            {group.summary ? (
+              <span className="vacancies-filter-group-value">{group.summary}</span>
+            ) : null}
+          </span>
+          <CaretDown size={16} aria-hidden="true" />
         </button>
       ))}
     </div>
