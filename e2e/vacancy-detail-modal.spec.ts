@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B250 — окно «Подробнее» у вакансии: заголовок и панель «Откликнуться»
@@ -242,7 +243,10 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openInfoModal(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+    timeout: 15_000,
+  });
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   const firstItem = page.locator('.vac-list-item').first();

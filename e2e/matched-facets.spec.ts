@@ -2,23 +2,36 @@ import { mkdirSync } from 'node:fs';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMatchedFacets } from './fixtures/matchedFacets';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 async function openFilters(page: Page) {
-  if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
-    const mobileToggle = page.locator('.vacancies-mobile-filter-toggle');
-    if (await mobileToggle.isVisible()) {
-      await mobileToggle.click();
-    } else {
-      await page.locator('[data-filter-group="locations"]').click();
+  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
+  if (mobile) {
+    if (!(await page.locator('.vacancies-filters.is-mobile-open').isVisible())) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
     }
+    const locationsHeading = page
+      .locator('.vacancies-filters')
+      .getByRole('heading', { name: 'Локации', exact: true })
+      .first();
+    if (!(await locationsHeading.isVisible())) {
+      await page.locator('[data-filter-sheet-group="locations"]').click();
+    }
+  } else if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
+    await page.locator('[data-filter-group="locations"]').click();
   }
   return page.locator('.vacancies-filters');
 }
 
 async function openFilterGroup(page: Page, groupId: string) {
-  const mobileToggle = page.locator('.vacancies-mobile-filter-toggle');
-  if (await mobileToggle.isVisible()) {
-    if (!(await page.locator('.filters-panel.is-expanded').isVisible())) await mobileToggle.click();
+  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
+  if (mobile) {
+    if (!(await page.locator('.vacancies-filters.is-mobile-open').isVisible())) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
+    }
+    const backToOverview = page.getByRole('button', { name: 'Все фильтры', exact: true });
+    if (await backToOverview.isVisible()) await backToOverview.click();
+    await page.locator(`[data-filter-sheet-group="${groupId}"]`).click();
     return;
   }
   const group = page.locator(`[data-filter-group="${groupId}"]`);
@@ -48,15 +61,18 @@ async function applyFacet(
 
 async function applyRemoteOnlyFacet(page: Page, filters: Locator, count: string) {
   await openFilterGroup(page, 'format');
-  const remoteGroup = filters.locator('.field-group').filter({ hasText: 'Формат работы' });
-  await remoteGroup.getByRole('button', { name: /Удалённо/u }).click();
+  await filters
+    .locator('.field-group')
+    .filter({ has: page.getByRole('heading', { name: 'Формат работы', exact: true }) })
+    .getByRole('button', { name: /Удалённо/u })
+    .click();
   await applyFilterDraft(page);
   await expectMatchedCount(page, count);
 }
 
 async function openVacancies(page: Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await page
     .getByRole('button', { name: 'Вакансии', exact: true })
     .filter({ visible: true })

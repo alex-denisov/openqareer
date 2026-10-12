@@ -1,5 +1,5 @@
 import { CaretRight } from '@phosphor-icons/react';
-import { useState, type ReactNode, type Ref } from 'react';
+import { useEffect, useState, type Dispatch, type ReactNode, type Ref, type SetStateAction } from 'react';
 
 import { VacancyAddRoleRow } from './VacancyAddRoleRow';
 import { CareerRoutePremises } from '../cabinet/CareerRoutePremises';
@@ -51,6 +51,18 @@ export function isMobileFilterViewport(): boolean {
   return (
     typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches === true
   );
+}
+
+export function useMobileRoleFocus(
+  focusRole: boolean | undefined,
+  setActiveGroup: Dispatch<SetStateAction<VacancyFilterGroup | null>>,
+  setExpanded: Dispatch<SetStateAction<boolean>>,
+) {
+  useEffect(() => {
+    if (!focusRole || !isMobileFilterViewport()) return;
+    setActiveGroup('roles');
+    setExpanded(true);
+  }, [focusRole, setActiveGroup, setExpanded]);
 }
 
 export function candidateRegionLabel(id: string): string {

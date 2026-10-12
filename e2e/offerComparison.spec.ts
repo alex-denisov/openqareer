@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { candidate } from './fixtures/readabilityWorkspace';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B394 — Сравнение офферов: матрица условий и итоговая компенсация.
@@ -112,13 +113,15 @@ test.describe('B394 offer comparison matrix', () => {
     });
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     // Открываем экран «Отклики»
     const rail = page.locator('aside#career-rail nav');
     const mobile = page.locator('nav.career-mobile-nav');
     const nav = (await rail.isVisible()) ? rail : mobile;
-    await nav.getByRole('button', { name: 'Отклики', exact: true }).click();
+    const responses = nav.getByRole('button', { name: 'Отклики', exact: true });
+    await expect(responses).toBeEnabled({ timeout: 15_000 });
+    await responses.click();
 
     // Доска должна открыться
     await expect(page.locator('.career-responses-board-wrap')).toBeVisible();

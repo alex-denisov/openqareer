@@ -21,6 +21,7 @@ import {
   RoleFilterSection,
   VacanciesFilterPopover,
   VacancyFilterActions,
+  useMobileRoleFocus,
 } from './VacanciesFilterPopover';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
@@ -782,6 +783,7 @@ function VacancyFilterPanel({
   readonly model: ReturnType<typeof useVacancyFilterDraft>;
 }) {
   const [activeGroup, setActiveGroup] = useState<VacancyFilterGroup | null>(null);
+  useMobileRoleFocus(props.focusRole, setActiveGroup, model.setExpanded);
   const panelOpen = model.expanded || activeGroup !== null;
   const closePanel = () => {
     model.setExpanded(false);

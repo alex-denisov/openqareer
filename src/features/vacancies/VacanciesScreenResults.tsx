@@ -27,12 +27,12 @@ interface VacanciesMainBodyProps {
 
 function VacanciesTableHeader() {
   return (
-    <div className="vacancies-table-header" role="row" aria-label="Колонки списка вакансий">
+    <div className="vacancies-table-header" role="group" aria-label="Колонки списка вакансий">
       <div className="vacancies-table-header-cells">
-        <span role="columnheader">Роль</span>
-        <span role="columnheader">Уровень</span>
-        <span role="columnheader">Гео</span>
-        <span role="columnheader">Деньги</span>
+        <span>Роль</span>
+        <span>Уровень</span>
+        <span>Гео</span>
+        <span>Деньги</span>
         <span aria-hidden="true" />
       </div>
       <span className="vacancies-table-header-actions" aria-hidden="true" />

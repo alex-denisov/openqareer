@@ -12,6 +12,7 @@ import type { CareerCommand, CoachResult } from '../src/features/coach/coachApi'
 import { candidateSnapshot } from './fixtures/readabilityWorkspace';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { verifiedCareerDiaryFixture, verifiedDiaryWorkplace } from './fixtures/verifiedCareerDiary';
 
 const DIARY_API = '/api/v1/candidate/career-diary';
 const EVIDENCE = e2eEvidenceDirectory('B458');
@@ -100,18 +101,7 @@ function createHarness(mode: DiaryMode = 'partial'): DiaryHarness {
 function overviewFor(state: DiaryHarness): CareerDiaryOverview {
   return {
     asOf: AS_OF,
-    primaryWorkplace: {
-      id: 'workplace-1',
-      company: 'Пример',
-      title: 'Руководитель команды',
-      startDate: '2026-09-07',
-      endDate: null,
-      sourceExperienceId: null,
-      status: 'active',
-      isPrimary: true,
-      createdAt: '2026-09-07T09:00:00.000Z',
-      updatedAt: '2026-09-07T09:00:00.000Z',
-    },
+    primaryWorkplace: verifiedDiaryWorkplace,
     summary: {
       goalsAchieved: 0,
       goalsAtRisk: 0,
@@ -381,7 +371,7 @@ function resumeView(state: DiaryHarness) {
 }
 
 async function installMocks(page: Page, state: DiaryHarness): Promise<void> {
-  await mockSignedInCabinet(page);
+  await mockSignedInCabinet(page, { careerDiary: verifiedCareerDiaryFixture(AS_OF) });
   await page.route('**/api/v1/candidate/career-diary**', (route) => handleDiaryRoute(route, state));
   await page.route('**/api/v1/coach/turn*', (route) => handleCoachRoute(route, state));
   await page.route('**/api/v1/candidate/career-commands**', (route) =>

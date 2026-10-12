@@ -98,10 +98,14 @@ export function HhConnectModal({
   /** Consecutive polls that could not read the page at all. */
   const unreadablePolls = useRef(0);
 
-  function closeModal() {
+  async function closeModal() {
     sessionOpened.current = false;
     sessionFlow.current = undefined;
-    void closeConnectorSession('hh').catch(() => undefined);
+    try {
+      await closeConnectorSession('hh');
+    } catch {
+      // The candidate can still close the dialog if the native window is unavailable.
+    }
     onClose();
   }
 

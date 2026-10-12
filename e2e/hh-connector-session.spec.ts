@@ -116,6 +116,9 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
 }
 
 async function stubCandidateApi(page: Page): Promise<void> {
+  await page.route('**/api/v1/candidate/**', async (route) => {
+    await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+  });
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: CANDIDATE } });
   });

@@ -12,6 +12,7 @@ import {
 } from '../shared/careerDiary';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
+import { verifiedCareerDiaryFixture, verifiedDiaryWorkplace } from './fixtures/verifiedCareerDiary';
 
 const DIARY_API = '/api/v1/candidate/career-diary';
 const EVIDENCE = e2eEvidenceDirectory('B457');
@@ -23,6 +24,7 @@ interface DiaryHarness {
   measurements: CareerDiaryMeasurement[];
   extraGoals: CareerDiaryGoalSummary[];
   deferSummary: boolean;
+  overviewRequests: number;
   summaryGate: Promise<void>;
   releaseSummary: () => void;
   failGoalSave: boolean;
@@ -66,6 +68,7 @@ function createDiaryHarness(): DiaryHarness {
     ],
     extraGoals: [],
     deferSummary: false,
+    overviewRequests: 0,
     summaryGate,
     releaseSummary,
     failGoalSave: false,
@@ -100,7 +103,7 @@ function overviewFor(state: DiaryHarness): CareerDiaryOverview {
   const goals = goalsFor(state);
   return {
     asOf: '2026-10-10',
-    primaryWorkplace: null,
+    primaryWorkplace: verifiedDiaryWorkplace,
     summary: {
       goalsAchieved: goals.filter((goal) => goal.risk.status === 'achieved').length,
       goalsAtRisk: goals.filter((goal) => goal.risk.status === 'at_risk').length,
@@ -118,7 +121,8 @@ function screenshotFile(testInfo: TestInfo, state: string): string {
 }
 
 async function serveOverview(route: Route, state: DiaryHarness): Promise<void> {
-  if (state.deferSummary) await state.summaryGate;
+  const requestNumber = state.overviewRequests++;
+  if (state.deferSummary && requestNumber > 0) await state.summaryGate;
   await route.fulfill({ json: { data: overviewFor(state) } });
 }
 
@@ -221,7 +225,7 @@ async function navigateDiary(page: Page, projectName: string): Promise<void> {
 }
 
 async function openDiary(page: Page, testInfo: TestInfo, state: DiaryHarness): Promise<void> {
-  await mockSignedInCabinet(page);
+  await mockSignedInCabinet(page, { careerDiary: verifiedCareerDiaryFixture('2026-10-10') });
   await installDiaryApi(page, state);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await navigateDiary(page, testInfo.project.name);

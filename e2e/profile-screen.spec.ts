@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 import type { MatchedVacancyItem } from '../src/features/coach/cabinetTypes';
 import type { ImportedSourceSummary } from '../src/features/coach/coachApi';
 
@@ -475,7 +476,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 async function openProfile(page: Page): Promise<void> {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await page.getByRole('button', { name: 'Профиль', exact: true }).click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 }

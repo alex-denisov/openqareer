@@ -150,13 +150,10 @@ function mockProfileSnapshot(fixture?: MockCareerDiaryFixture) {
   const snapshot = structuredClone(candidateSnapshot);
   const experience = fixture?.profileExperience;
   if (experience && snapshot.resume) {
-    snapshot.resume = {
-      ...snapshot.resume,
-      draft: {
-        ...snapshot.resume.draft,
-        experience: [experience as unknown as ResumeDraft['experience'][number]],
-      },
-    };
+    const draft = snapshot.resume.draft as ResumeDraft;
+    Object.assign(draft, {
+      experience: [experience as unknown as ResumeDraft['experience'][number]],
+    });
   }
   return snapshot;
 }
@@ -375,6 +372,7 @@ interface FixtureReceipt {
 }
 
 export interface MockSignedInCabinetOptions {
+  readonly candidateId?: string;
   readonly careerDiary?: MockCareerDiaryFixture;
   readonly vacancyTotal?: number;
   readonly vacancyFacets?: MatchedVacancyFacets;
@@ -386,6 +384,20 @@ export interface MockSignedInCabinetOptions {
     readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
     readonly executiveStatus?: FixtureExecutiveStatus;
   };
+  readonly automationQueue?: readonly AutomationQueueFixtureItem[];
+  readonly automationQueueBehavior?: {
+    readonly delayMs?: number;
+    readonly errorStatus?: number;
+    readonly totalOverride?: number;
+  };
+  readonly automationSnapshotDelayMs?: number;
+  readonly automation?: {
+    readonly settings?: Partial<AutomationFixtureState['settings']>;
+    readonly runtime?: Partial<AutomationFixtureState['runtime']>;
+  };
+  readonly linkedinDrafts?: readonly Record<string, unknown>[];
+  readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
+  readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
 }
 
 function seedInitialVacancyItems(
@@ -507,24 +519,6 @@ export interface AutomationQueueFixtureItem {
   };
 }
 
-export interface MockSignedInCabinetOptions {
-  readonly candidateId?: string;
-  readonly automationQueue?: readonly AutomationQueueFixtureItem[];
-  readonly automationQueueBehavior?: {
-    readonly delayMs?: number;
-    readonly errorStatus?: number;
-    readonly totalOverride?: number;
-  };
-  readonly automationSnapshotDelayMs?: number;
-  readonly automation?: {
-    readonly settings?: Partial<AutomationFixtureState['settings']>;
-    readonly runtime?: Partial<AutomationFixtureState['runtime']>;
-  };
-  readonly linkedinDrafts?: readonly Record<string, unknown>[];
-  readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
-  readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
-}
-
 const AUTOMATION_CONSENT_TEXT: Readonly<Record<string, string>> = {
   drafts: 'Разрешаю готовить черновики откликов и писем по выбранным мной вакансиям.',
   send_after_approval: 'Разрешаю отправлять каждый отклик только после моего отдельного одобрения.',
@@ -560,7 +554,6 @@ function createAutomationSettings(
   overrides?: Partial<AutomationFixtureState['settings']>,
 ): AutomationFixtureState['settings'] {
   return {
-    candidateId,
     enabled: false,
     mode: 'drafts_only',
     pausedUntil: null,
@@ -1165,7 +1158,11 @@ async function mockLinkedinDraftApi(
     }
     const update = route.request().postDataJSON() as Record<string, unknown>;
     const existing = state.drafts[index];
-    const changed = { ...existing, ...update, updatedAt: new Date().toISOString() };
+    const changed: Record<string, unknown> = {
+      ...existing,
+      ...update,
+      updatedAt: new Date().toISOString(),
+    };
     if (update.text) changed.status = 'draft';
     if (update.status === 'published') {
       changed.publishedAt = changed.updatedAt;
