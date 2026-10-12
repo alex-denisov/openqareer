@@ -1268,3 +1268,92 @@
     display: none;
   }
 }
+
+/* Queue: table on desktop (approved mockup 6), cards on 390. */
+.automation-queue-table {
+  display: none;
+}
+
+@media (min-width: 761px) {
+  .automation-queue-list {
+    display: none;
+  }
+
+  .automation-queue-table {
+    display: table;
+    inline-size: 100%;
+    border-collapse: collapse;
+    color: var(--career-text);
+    font-size: var(--career-text-xs);
+  }
+
+  .automation-queue-table th,
+  .automation-queue-table td {
+    padding: var(--career-space-3) var(--career-space-2);
+    border-block-end: var(--career-border-width) solid var(--career-line);
+    text-align: start;
+    vertical-align: middle;
+  }
+
+  .automation-queue-table thead th {
+    color: var(--career-text-dim);
+    font-weight: 600;
+  }
+
+  .automation-queue-table tbody tr.is-selected {
+    background: var(--career-accent-soft);
+  }
+
+  .automation-queue-table tbody th {
+    font-weight: 400;
+  }
+
+  .automation-queue-table tbody th strong,
+  .automation-queue-table tbody th span,
+  .automation-queue-table td span {
+    display: block;
+  }
+
+  .automation-queue-table tbody th strong {
+    font-size: var(--career-text-sm);
+  }
+
+  .automation-queue-table tbody th span,
+  .automation-queue-table td span {
+    color: var(--career-text-dim);
+  }
+
+  .automation-queue-table .automation-queue-table-check {
+    inline-size: 44px;
+  }
+
+  .automation-queue-status {
+    display: inline-block;
+    padding: var(--career-space-1) var(--career-space-2);
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-sm);
+    white-space: nowrap;
+  }
+
+  .automation-queue-table-actions {
+    display: flex;
+    gap: var(--career-space-2);
+  }
+
+  .automation-queue-table-actions button {
+    inline-size: 32px;
+    block-size: 32px;
+    display: inline-grid;
+    place-items: center;
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .automation-queue-table-actions button:not(:disabled):hover {
+    color: var(--career-text);
+    background: var(--career-surface-raised);
+  }
+}

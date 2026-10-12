@@ -1,6 +1,7 @@
 import { Check, EnvelopeSimple, Prohibit, X } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import type { AutomationQueueAction, AutomationQueueItem } from './automationApi';
+import { AutomationQueueTable } from './AutomationQueueTable';
 import { automationDateLabel, automationPlatformLabel, automationQueueStatusLabel } from './automationFormat';
 
 export interface AutomationQueuePanelProps {
@@ -116,6 +117,7 @@ function QueueRecords({ items, selected, allSelected, busyId, enabled, canApprov
     <div className="automation-select-row"><label className="automation-check-label"><input type="checkbox" checked={allSelected} onChange={onToggleAll} />Выбрать показанные ({items.length})</label>
       {selected.size ? <QueueBulkActions count={selected.size} enabled={enabled} canApprove={canApprove} onBulk={onBulk} /> : null}
     </div>
+    <AutomationQueueTable items={items} selected={selected} allSelected={allSelected} busyId={busyId} enabled={enabled} canApprove={canApprove} onToggleItem={onToggleItem} onToggleAll={onToggleAll} onAction={onAction} onEdit={onEdit} />
     <ul className="automation-queue-list" aria-label="Записи очереди">{items.map((item) => <QueueItemCard key={item.id} item={item} selected={selected.has(item.id)} busy={busyId === item.id} enabled={enabled} canApprove={canApprove} onToggle={() => onToggleItem(item.id)} onAction={(action) => onAction(item, action)} onEdit={() => onEdit(item)} />)}</ul>
   </>;
 }
