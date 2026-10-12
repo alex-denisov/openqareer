@@ -27,12 +27,17 @@ describe('CareerTariffsView (B442)', () => {
     expect(html).toContain('Ворота эксперта: резюме перед рассылкой, интервью, оффер');
     expect(html).toContain('Скрытый рынок и рекрутеры');
 
-    // Platform does itself items
-    expect(html).toContain('Читает источники и считает совпадение');
-    expect(html).toContain('Собирает подборку каждый день');
-    expect(html).toContain('Очередь на одобрение и журнал с квитанциями');
-    expect(html).toContain('Готовит справку о компании к каждым воротам');
-    expect(html).toContain('Заявку рассматривает команда, ответ в течение недели');
+    // The approved Free layout shows included and not included columns. Its
+    // platform automation copy remains available when another tier is active.
+    expect(html).toContain('Чего нет на этом тарифе');
+    const htmlWithPaidTierActive = renderToStaticMarkup(<CareerTariffsView activeTierId="pro" />);
+    expect(htmlWithPaidTierActive).toContain('Читает источники и считает совпадение');
+    expect(htmlWithPaidTierActive).toContain('Собирает подборку каждый день');
+    expect(htmlWithPaidTierActive).toContain('Очередь на одобрение и журнал с квитанциями');
+    expect(htmlWithPaidTierActive).toContain('Готовит справку о компании к каждым воротам');
+    expect(htmlWithPaidTierActive).toContain(
+      'Заявку рассматривает команда, ответ в течение недели',
+    );
   });
 
   it('marks the current level with text «Ваш тариф», not color alone (Criterion 2)', () => {
