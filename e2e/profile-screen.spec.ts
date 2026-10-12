@@ -811,6 +811,12 @@ test.describe('B441 Profile screen from mockup 2', () => {
   });
 });
 
+/** Desktop keeps the preferences form in the collapsed «Релокация» block; 390 shows it open. */
+async function openProfilePreferences(page: Page): Promise<void> {
+  const summary = page.locator('.career-profile-screen-relocation-prefs > summary');
+  if (await summary.count()) await summary.click();
+}
+
 test.describe('B265 Profile screen', () => {
   test('shows the saved reader method beside the source chip', async ({ page }) => {
     await stubSession(page);
@@ -905,6 +911,7 @@ test.describe('B265 Profile screen', () => {
     }
     await expect(page.locator('#sec-courses')).toContainText('Курсы');
     await page.getByRole('tab', { name: 'Резюме', exact: true }).click();
+    await openProfilePreferences(page);
     await expect(page.locator('.career-work-preferences')).toBeVisible();
     await expect(page.locator('.career-profile-screen-completion')).toBeVisible();
     await expect(page.locator('.career-profile-screen-source-chip')).toHaveCount(2);
@@ -982,6 +989,7 @@ test.describe('B265 Profile screen', () => {
     await stubSession(page);
     await openProfile(page);
     await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
+    await openProfilePreferences(page);
     await expect(page.locator('.career-work-preferences')).toBeVisible();
   });
 

@@ -30,6 +30,8 @@ test.describe('B384: Candidate Decision Profile', () => {
     await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 
+    // The preferences form sits in the collapsed «Релокация» block (approved mockup 2)
+    await page.locator('.career-profile-screen-relocation-prefs > summary').click();
     // Verify Decision Profile panel exists in the side rail
     const panel = page.locator('.career-decision-profile');
     await expect(panel).toBeVisible();
