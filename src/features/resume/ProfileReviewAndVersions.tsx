@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Info } from '@phosphor-icons/react';
+import { ArrowRight, Info, Plus, Sparkle } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { CandidateMemory } from '../coach/coachApi';
@@ -9,11 +9,19 @@ import { ResumePrintDocument } from './ResumePrintDocument';
 import { orderUnknowns, previewProjection, selectDocument } from './resumeStudioModel';
 import type { ResumeDraft, ResumeStudioView, ResumeUnknown } from './resumeTypes';
 
-interface ProfileReviewAndVersionsProps {
+export interface ProfileReviewAndVersionsProps {
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
   readonly view?: ResumeStudioView;
   readonly onOpenExpert?: () => void;
+  readonly onFillQuestionnaire?: () => void;
+}
+
+interface TargetedVersion {
+  readonly id: string;
+  readonly name: string;
+  readonly status: string;
+  readonly createdAt: string;
 }
 
 function hasCompleteDates(draft: ResumeDraft): boolean {
@@ -37,16 +45,58 @@ function ReviewIssueList({ issues }: { readonly issues: readonly ResumeUnknown[]
   );
 }
 
+function ReviewActions({
+  onOpenExpert,
+  onFillQuestionnaire,
+}: {
+  readonly onOpenExpert?: () => void;
+  readonly onFillQuestionnaire?: () => void;
+}) {
+  const handleQuestionnaire = () => {
+    if (onFillQuestionnaire) {
+      onFillQuestionnaire();
+    }
+  };
+
+  return (
+    <div className="career-profile-screen-review-actions">
+      {onOpenExpert ? (
+        <button
+          type="button"
+          className="career-primary-button"
+          data-testid="review-fix-with-consultant-btn"
+          aria-label="Исправить вместе с консультантом: Собрать факты с консультантом"
+          onClick={onOpenExpert}
+        >
+          <Sparkle size={16} aria-hidden="true" />
+          <span>Исправить вместе с консультантом</span>
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="career-secondary-button"
+        data-testid="review-fill-questionnaire-btn"
+        onClick={handleQuestionnaire}
+      >
+        <ArrowRight size={16} aria-hidden="true" />
+        <span>Заполнить анкету</span>
+      </button>
+    </div>
+  );
+}
+
 function ResumeReviewCard({
   draft,
   memory,
   staleCount,
   onOpenExpert,
+  onFillQuestionnaire,
 }: {
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
   readonly staleCount: number;
   readonly onOpenExpert?: () => void;
+  readonly onFillQuestionnaire?: () => void;
 }) {
   const projection = useMemo(() => previewProjection(draft, memory), [draft, memory]);
   const document = useMemo(() => selectDocument(projection, 'master'), [projection]);
@@ -73,11 +123,7 @@ function ResumeReviewCard({
           Устаревшие подтверждения: {staleCount}.
         </p>
       ) : null}
-      {onOpenExpert ? (
-        <button type="button" className="career-primary-button" onClick={onOpenExpert}>
-          Собрать факты с консультантом
-        </button>
-      ) : null}
+      <ReviewActions onOpenExpert={onOpenExpert} onFillQuestionnaire={onFillQuestionnaire} />
     </section>
   );
 }
@@ -120,6 +166,106 @@ function dateSummary(draft: ResumeDraft): string {
     : 'Проверьте даты начала и окончания мест работы.';
 }
 
+function TargetedVersionForm({
+  onSubmit,
+  onCancel,
+}: {
+  readonly onSubmit: (name: string) => void;
+  readonly onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const inputEl = event.currentTarget.elements.namedItem(
+      'targeted-version-input',
+    ) as HTMLInputElement | null;
+    const finalName = inputEl?.value?.trim() || name.trim();
+    if (finalName) onSubmit(finalName);
+  };
+  return (
+    <form className="career-profile-screen-version-form" onSubmit={handleSubmit}>
+      <div className="career-profile-screen-form-field">
+        <label htmlFor="targeted-version-input" className="career-field-label">
+          Название вакансии
+        </label>
+        <input
+          id="targeted-version-input"
+          name="targeted-version-input"
+          type="text"
+          className="career-input"
+          data-testid="targeted-version-input"
+          placeholder="Например, Вектор Банк"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          onInput={(event) => setName((event.target as HTMLInputElement).value)}
+        />
+      </div>
+      <div className="career-profile-screen-form-actions">
+        <button
+          type="submit"
+          className="career-primary-button career-btn-sm"
+          data-testid="submit-targeted-version-btn"
+        >
+          Создать
+        </button>
+        <button type="button" className="career-secondary-button career-btn-sm" onClick={onCancel}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function TargetedVersionList({ versions }: { readonly versions: readonly TargetedVersion[] }) {
+  if (!versions.length) {
+    return (
+      <p className="career-profile-screen-quality-note">
+        Сохранённых снимков резюме под вакансию пока нет.
+      </p>
+    );
+  }
+  return (
+    <div className="career-profile-screen-targeted-versions">
+      {versions.map((version) => (
+        <div key={version.id} className="career-profile-screen-versions-row">
+          <div>
+            <strong>Под вакансию «{version.name}»</strong>
+            <p className="career-profile-screen-quality-note">{version.status}</p>
+          </div>
+          <button type="button" className="career-secondary-button career-btn-sm">
+            Открыть
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ResumeVersionsCardHead({
+  isCreating,
+  onStartCreate,
+}: {
+  readonly isCreating: boolean;
+  readonly onStartCreate: () => void;
+}) {
+  return (
+    <div className="career-profile-screen-section-head">
+      <h2 id="sec-documents-title">Резюме и версии</h2>
+      {!isCreating && (
+        <button
+          type="button"
+          className="career-secondary-button career-btn-sm"
+          data-testid="create-targeted-version-btn"
+          onClick={onStartCreate}
+        >
+          <Plus size={16} aria-hidden="true" />
+          <span>Создать версию под вакансию</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ResumeVersionsCard({
   draft,
   memory,
@@ -127,17 +273,34 @@ function ResumeVersionsCard({
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
 }) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [versions, setVersions] = useState<readonly TargetedVersion[]>([]);
   const projection = useMemo(() => previewProjection(draft, memory), [draft, memory]);
   const document = useMemo(() => selectDocument(projection, 'master'), [projection]);
+
+  const handleCreate = (name: string) => {
+    setVersions((prev) => [
+      ...prev,
+      {
+        id: `ver-${Date.now()}`,
+        name,
+        status: 'Черновик ждёт вашего одобрения',
+        createdAt: new Date().toLocaleDateString('ru-RU'),
+      },
+    ]);
+    setIsCreating(false);
+  };
+
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section career-profile-screen-versions"
       id="sec-documents"
       aria-labelledby="sec-documents-title"
     >
-      <div className="career-profile-screen-section-head">
-        <h2 id="sec-documents-title">Резюме и версии</h2>
-      </div>
+      <ResumeVersionsCardHead
+        isCreating={isCreating}
+        onStartCreate={() => setIsCreating(true)}
+      />
       <div className="career-profile-screen-versions-row">
         <div>
           <strong>Мастер-резюме</strong>
@@ -145,9 +308,10 @@ function ResumeVersionsCard({
         </div>
         <ResumePrintAction />
       </div>
-      <p className="career-profile-screen-quality-note">
-        Сохранённых снимков резюме под вакансию пока нет.
-      </p>
+      {isCreating ? (
+        <TargetedVersionForm onSubmit={handleCreate} onCancel={() => setIsCreating(false)} />
+      ) : null}
+      <TargetedVersionList versions={versions} />
       <AtsPlainTextDetails document={document} draft={draft} />
       <ResumePrintDocument document={document} draft={draft} />
     </section>
@@ -174,7 +338,7 @@ function AtsPlainTextDetails({
 }
 
 export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
-  const { draft, memory, view, onOpenExpert } = props;
+  const { draft, memory, view, onOpenExpert, onFillQuestionnaire } = props;
   const staleCount = view?.evidenceFreshness?.stale?.length ?? 0;
   return (
     <>
@@ -184,6 +348,7 @@ export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
           memory={memory}
           staleCount={staleCount}
           onOpenExpert={onOpenExpert}
+          onFillQuestionnaire={onFillQuestionnaire}
         />
         <AtsStatusCard />
       </div>

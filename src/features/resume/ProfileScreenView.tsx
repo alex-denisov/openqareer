@@ -122,6 +122,7 @@ export interface ProfileScreenSurfaceProps {
    *  the read has not landed. */
   readonly connections?: readonly CandidateConnection[];
   readonly onOpenExpert?: () => void;
+  readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
@@ -265,6 +266,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
             memory={memory}
             view={props.view}
             onOpenExpert={props.onOpenExpert}
+            onFillQuestionnaire={props.onFillQuestionnaire}
           />
           <div className="career-profile-screen-layout">
             <div className="career-profile-screen-main-col">
@@ -340,6 +342,7 @@ interface ProfileScreenViewProps {
   readonly onRefreshFacts?: () => Promise<void> | void;
   readonly onOpenConnections?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly tab?: ProfileTab;
   readonly vacancyRequirement?: VacancyProfileRequirementRequest;
@@ -458,6 +461,7 @@ function ProfileScreenSurfaceWithController({
       connections={connections}
       importedSources={props.importedSources}
       onOpenExpert={props.onOpenExpert}
+      onFillQuestionnaire={props.onFillQuestionnaire}
       onTabChange={props.onTabChange}
       tab={props.tab}
       vacancyRequirement={props.vacancyRequirement}
