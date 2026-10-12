@@ -619,6 +619,7 @@
 
 .career-account-trigger,
 .career-quiet-button,
+.career-secondary-button,
 .career-icon-text-button {
   min-height: 44px;
   display: inline-flex;
@@ -642,6 +643,7 @@
 }
 
 .career-quiet-button:not(:disabled):hover,
+.career-secondary-button:not(:disabled):hover,
 .career-icon-text-button:hover {
   color: var(--career-text);
   border-color: var(--career-line-strong);
@@ -17503,4 +17505,75 @@ button.chip {
   margin: 6px 0 0;
   color: var(--career-danger, oklch(72% 0.15 28));
   font-size: var(--career-text-xs);
+}
+
+/* One checkbox and radio for the whole cabinet (approved mockups): the native
+   control renders as a bare light-grey square on the dark surface. */
+.career-shell input[type='checkbox'],
+.career-shell input[type='radio'] {
+  appearance: none;
+  flex: none;
+  box-sizing: border-box;
+  inline-size: 18px;
+  block-size: 18px;
+  min-block-size: 0;
+  padding: 0;
+  margin: 0;
+  border: var(--career-border-width) solid var(--career-text-dim);
+  background: transparent;
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+}
+
+.career-shell input[type='checkbox'] {
+  border-radius: 5px;
+}
+
+.career-shell input[type='radio'] {
+  border-radius: 50%;
+}
+
+.career-shell input[type='checkbox']::after {
+  content: '';
+  inline-size: 10px;
+  block-size: 6px;
+  border-inline-start: 2px solid var(--career-accent-ink);
+  border-block-end: 2px solid var(--career-accent-ink);
+  transform: translateY(-1px) rotate(-45deg) scale(0);
+}
+
+.career-shell input[type='radio']::after {
+  content: '';
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: 50%;
+  background: var(--career-accent-ink);
+  transform: scale(0);
+}
+
+.career-shell input[type='checkbox']:checked,
+.career-shell input[type='radio']:checked {
+  border-color: var(--career-accent);
+  background: var(--career-accent);
+}
+
+.career-shell input[type='checkbox']:checked::after {
+  transform: translateY(-1px) rotate(-45deg) scale(1);
+}
+
+.career-shell input[type='radio']:checked::after {
+  transform: scale(1);
+}
+
+.career-shell input[type='checkbox']:focus-visible,
+.career-shell input[type='radio']:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-shell input[type='checkbox']:disabled,
+.career-shell input[type='radio']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

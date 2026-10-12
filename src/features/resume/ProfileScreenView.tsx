@@ -142,6 +142,7 @@ export interface ProfileScreenSurfaceProps {
    *  the read has not landed. */
   readonly connections?: readonly CandidateConnection[];
   readonly onOpenExpert?: () => void;
+  readonly onOpenRelocation?: () => void;
   readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly suggestions?: readonly InlineSuggestionItem[];
@@ -386,7 +387,11 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 />
               ) : null}
             </div>
-            <ProfileSideRail draft={draft} desktopLayout={desktopProfileLayout} />
+            <ProfileSideRail
+              draft={draft}
+              desktopLayout={desktopProfileLayout}
+              onOpenRelocation={props.onOpenRelocation}
+            />
             {desktopProfileLayout ? <ProfileResumeVersions draft={draft} memory={memory} /> : null}
           </div>
         </div>
@@ -402,6 +407,7 @@ interface ProfileScreenViewProps {
   readonly onRefreshFacts?: () => Promise<void> | void;
   readonly onOpenConnections?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onOpenRelocation?: () => void;
   readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly tab?: ProfileTab;
@@ -521,6 +527,7 @@ function ProfileScreenSurfaceWithController({
       connections={connections}
       importedSources={props.importedSources}
       onOpenExpert={props.onOpenExpert}
+      onOpenRelocation={props.onOpenRelocation}
       onFillQuestionnaire={props.onFillQuestionnaire}
       onTabChange={props.onTabChange}
       tab={props.tab}

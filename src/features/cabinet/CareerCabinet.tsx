@@ -14,6 +14,7 @@ import { TodayScreen, type TodayFunnelContext } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
+import { RelocationScreen } from '../relocation/RelocationScreen';
 import type { ProfileTab } from '../resume/profileTabs';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
@@ -458,6 +459,7 @@ function CabinetSection({
     initialPrompt?: string,
   ) => void;
 }) {
+  const [relocationOpen, setRelocationOpen] = useState(false);
   useEffect(() => {
     if (view === 'career') {
       onNavigate('opportunities');
@@ -494,6 +496,18 @@ function CabinetSection({
   // edit-in-place), not Resume Studio. «Резюме»
   // (`view === 'resume'`) is no longer a reachable rail item but keeps
   // pointing at Resume Studio for anyone with a stored link to it.
+  if (view === 'profile' && relocationOpen) {
+    return (
+      <RelocationScreen
+        onNavigateBack={() => setRelocationOpen(false)}
+        onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenVacancies={() => {
+          setRelocationOpen(false);
+          onNavigate('opportunities');
+        }}
+      />
+    );
+  }
   if (view === 'profile') {
     return (
       <ProfileScreenView
@@ -510,6 +524,7 @@ function CabinetSection({
         tab={profileTab}
         onTabChange={onProfileTabChange}
         onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenRelocation={() => setRelocationOpen(true)}
       />
     );
   }

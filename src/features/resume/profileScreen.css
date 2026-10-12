@@ -692,3 +692,39 @@
     order: 2;
   }
 }
+
+.career-profile-screen-relocation-head {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+}
+
+.career-profile-screen-relocation-head h2 {
+  margin: 0;
+  margin-inline-end: auto;
+}
+
+.career-profile-screen-relocation-note {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-profile-screen-relocation-summary {
+  margin: var(--career-space-3) 0 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-profile-screen-relocation-prefs {
+  margin-block-start: var(--career-space-4);
+}
+
+.career-profile-screen-relocation-prefs > summary {
+  min-block-size: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
