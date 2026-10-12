@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   CaretDown,
   Check,
@@ -27,18 +26,12 @@ export function TariffCard({
   onSelectTier,
   onRequestTier,
 }: TariffCardProps) {
-  const [feedback, setFeedback] = useState<string | null>(null);
   const isActive = level.id === activeTierId;
   const isExec = level.id === 'exec';
 
   const handleAction = () => {
-    if (isExec) {
-      onRequestTier?.(level.id);
-      setFeedback('Заявка принята. Команда ответит в течение недели.');
-    } else {
-      onSelectTier?.(level.id);
-      setFeedback('Оплата ещё не подключена: мы напишем, когда откроется.');
-    }
+    if (isExec) onRequestTier?.(level.id);
+    else onSelectTier?.(level.id);
   };
 
   return (
@@ -53,12 +46,7 @@ export function TariffCard({
         activeTierId={activeTierId}
         onAction={handleAction}
       />
-      <TariffCardBody
-        level={level}
-        isActive={isActive}
-        subscription={subscription}
-        feedback={feedback}
-      />
+      <TariffCardBody level={level} isActive={isActive} subscription={subscription} />
     </details>
   );
 }
@@ -149,22 +137,15 @@ function TariffCardBody({
   level,
   isActive,
   subscription,
-  feedback,
 }: {
   readonly level: TariffLevel;
   readonly isActive: boolean;
   readonly subscription?: TariffSubscriptionInfo;
-  readonly feedback: string | null;
 }) {
   return (
     <div className="career-tariff-body">
       <TariffCardVolumeSection level={level} isActive={isActive} />
-      <TariffCardAutomationSection
-        level={level}
-        isActive={isActive}
-        subscription={subscription}
-        feedback={feedback}
-      />
+      <TariffCardAutomationSection level={level} isActive={isActive} subscription={subscription} />
     </div>
   );
 }
@@ -178,9 +159,7 @@ function TariffCardVolumeSection({
 }) {
   return (
     <div className="career-tariff-section">
-      <h4 className="career-tariff-section-title">
-        {isActive ? 'Что входит' : 'Объём работы'}
-      </h4>
+      <h4 className="career-tariff-section-title">{isActive ? 'Что входит' : 'Объём работы'}</h4>
       <ul className="career-tariff-bullet-list">
         {level.vol.map((item) => (
           <li key={item} className="career-tariff-bullet-item">
@@ -201,12 +180,10 @@ function TariffCardAutomationSection({
   level,
   isActive,
   subscription,
-  feedback,
 }: {
   readonly level: TariffLevel;
   readonly isActive: boolean;
   readonly subscription?: TariffSubscriptionInfo;
-  readonly feedback: string | null;
 }) {
   return (
     <div className="career-tariff-section">
@@ -224,12 +201,6 @@ function TariffCardAutomationSection({
 
       {isActive && level.id === 'pro' && subscription ? (
         <ProSubscriptionBlock subscription={subscription} />
-      ) : null}
-
-      {feedback ? (
-        <p className="career-tariffs-lead" role="status">
-          {feedback}
-        </p>
       ) : null}
     </div>
   );
@@ -262,11 +233,7 @@ function FreeMissingSection() {
   );
 }
 
-function ProSubscriptionBlock({
-  subscription,
-}: {
-  readonly subscription: TariffSubscriptionInfo;
-}) {
+function ProSubscriptionBlock({ subscription }: { readonly subscription: TariffSubscriptionInfo }) {
   return (
     <div className="career-tariff-sub-section">
       <h4 className="career-tariff-section-title">Подписка</h4>

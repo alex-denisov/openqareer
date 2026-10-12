@@ -41,9 +41,7 @@ export function CareerTariffsView({ onOpenCoach }: { onOpenCoach: () => void }) 
                 ) : null}
               </span>
               <strong>{item.price}</strong>
-              <small>
-                {item.time ? `${item.status} · ${item.time}` : item.status}
-              </small>
+              <small>{item.time ? `${item.status} · ${item.time}` : item.status}</small>
             </button>
           ))}
         </div>

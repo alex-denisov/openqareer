@@ -46,9 +46,7 @@ describe('CareerIntelligencePanel next action', () => {
       '2026-08-14T00:00:00.000Z',
     );
 
-    const html = renderToStaticMarkup(
-      <NextAction journey={journey} onNavigate={vi.fn()} />,
-    );
+    const html = renderToStaticMarkup(<NextAction journey={journey} onNavigate={vi.fn()} />);
     const action = journey.reasonedAction;
 
     expect(action).toBeDefined();

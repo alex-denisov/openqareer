@@ -106,6 +106,7 @@ export type VacancySourceId = 'hh' | 'remotive';
 export interface VacancySourceRegistryEntry {
   id: VacancySourceId;
   name: string;
+  category?: string;
   market: string;
   transport: 'official_api' | 'public_api';
   searchCoverage: string;

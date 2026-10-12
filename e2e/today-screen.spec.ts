@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B251 S5 — «Сегодня»: дайджест дня и очередь решений, подключённые вместо
@@ -394,7 +395,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 async function openApp(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await expect(page.locator('.career-today')).toBeVisible();
 }
 

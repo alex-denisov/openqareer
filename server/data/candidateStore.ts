@@ -1,6 +1,7 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type { RoleSkillAssessmentRun } from '../domain/roleSkillAssessment';
+import type { InterviewSession } from '../domain/interviewSimulator';
 import type { StoredWorkPreferenceRun } from './sqliteWorkPreferenceRepository';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { VacancyApplication } from '../../shared/vacancyApplication';
@@ -40,16 +41,22 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import type {
+  RelocationConsentState,
+  RelocationQuestionnaire,
+} from '../../shared/relocationQuestionnaire';
 import type { DownloadedMedia } from '../domain/candidateMedia';
 import type { StoredCandidateMedia } from './sqliteCandidateMediaRepository';
 import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
 import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
 import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
 import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
+import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
 import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
-import type { InterviewSession } from '../domain/interviewSimulator';
 import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import type { SqliteStarStoriesRepository, StoredStarStory } from './sqliteStarStoriesRepository';
+import type { RoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
 import type { CoachProviderResult } from '../providers/coachProvider';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import type {
@@ -109,16 +116,26 @@ export interface CandidateExport extends CandidateSnapshot {
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
   consultantConversations: ConsultantConversationExport[];
+  executiveRequests: StoredExecutiveRequest[];
   /** Выбранная роль с историей решений (B180, срез 2). */
   careerStrategy: CareerStrategy | null;
   /** Ответы на задания «Какие роли мне подходят» (B180, срез 3). */
   workPreferences: StoredWorkPreferenceRun | null;
+  /** Private relocation data is present only while its separate consent is active. */
+  relocationQuestionnaire: RelocationQuestionnaire | null;
+  relocationConsent: RelocationConsentState;
   /** Encrypted role assessment answers, evidence refs and results (B461). */
   roleSkillAssessments: RoleSkillAssessmentRun[];
   /** Candidate-owned reusable STAR stories (B466). */
   starStories: StoredStarStory[];
   /** Current encrypted mock-interview session (B356). */
   interviewSession: InterviewSession | null;
+}
+
+export interface LinkedInLanguageImportSnapshot {
+  readonly capturedAt: string;
+  readonly importedAt: string;
+  readonly languages: readonly ResumeDraft['languages'][number][];
 }
 
 type CandidateDocumentKind =
@@ -389,13 +406,17 @@ export interface CandidateStore {
   /** Повторно используемые STAR-истории кандидата (B466), текст запечатан. */
   readonly starStoriesRepo: SqliteStarStoriesRepository;
   readonly interviewSimulatorRepo: SqliteInterviewSimulatorRepository;
+  readonly roleSkillAssessments: RoleSkillAssessmentRepository;
   /** Трек внутренней рекомендации на отклик (B389), контакт запечатан. */
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   /** Вектор перехода кандидата (B383), гипотеза. */
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  /** Карьерный дневник: кандидатские цели, замеры и разборы (B456). */
+  readonly careerDiaryRepo: SqliteCareerDiaryRepository;
   /** Профиль ограничений кандидата (B384), запечатан. */
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
-  readonly roleSkillAssessments: import('./sqliteRoleSkillAssessmentRepository').RoleSkillAssessmentRepository;
+  /** Separate, encrypted relocation questionnaire and purpose-specific consent. */
+  readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
   /** Joins nested store writes into one SQLite transaction. */
   transaction<T>(operation: () => T): T;
   createCandidate(input: {
@@ -420,6 +441,8 @@ export interface CandidateStore {
   ): void;
   getCoachTurn(candidateId: string, key: string): { status: StoredTurn['status']; result: CoachTurnResult | null } | null;
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot;
+  /** Minimal language facts from the candidate's latest stored LinkedIn import; never calls LinkedIn. */
+  getLinkedInLanguageImport(candidateId: string): LinkedInLanguageImportSnapshot | null;
   getMessages(candidateId: string, stage?: CoachTurnStage): CoachMessage[];
   listConsultantConversations(
     candidateId: string,
@@ -681,6 +704,32 @@ export interface CandidateStore {
   /** B266: a paid-plan request, idempotent per candidate and plan. */
   requestPlan?(candidateId: string, planId: PlanRequestId, note?: string): StoredPlanRequest;
   listPlanRequests?(candidateId: string): StoredPlanRequest[];
+  /** B471: candidate-owned Executive intake, idempotent by client request key. */
+  createExecutiveRequest?(
+    candidateId: string,
+    input: ExecutiveRequestInput,
+    capacity: number,
+  ): {
+    readonly request: StoredExecutiveRequest;
+    readonly created: boolean;
+    readonly replayed: boolean;
+  };
+  listExecutiveRequests?(
+    candidateId: string,
+    query: ExecutiveRequestPageQuery,
+  ): ExecutiveRequestPage<StoredExecutiveRequest>;
+  getExecutiveRequest?(
+    candidateId: string,
+    requestId: string,
+  ): StoredExecutiveRequest | null;
+  listExecutiveRequestQueue?(
+    query: ExecutiveRequestQueueQuery,
+  ): ExecutiveRequestPage<StoredExecutiveRequest & { readonly candidateId: string }>;
+  setExecutiveRequestStatus?(
+    requestId: string,
+    status: ExecutiveRequestStatus,
+    capacity: number,
+  ): StoredExecutiveRequest | null;
 
   getWorkPreferenceRun(candidateId: string): StoredWorkPreferenceRun | null;
 
@@ -757,4 +806,41 @@ export type PlanRequestId = 'consultant' | 'automation';
 export interface StoredPlanRequest {
   readonly planId: PlanRequestId;
   readonly createdAt: string;
+}
+
+export type ExecutiveRequestStatus =
+  | 'submitted'
+  | 'waitlisted'
+  | 'in_review'
+  | 'accepted'
+  | 'declined'
+  | 'completed';
+
+export interface ExecutiveRequestInput {
+  readonly task: string;
+  readonly timeline: string;
+  readonly idempotencyKey: string;
+}
+
+export interface StoredExecutiveRequest {
+  readonly id: string;
+  readonly task: string;
+  readonly timeline: string;
+  readonly status: ExecutiveRequestStatus;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface ExecutiveRequestPageQuery {
+  readonly limit: number;
+  readonly cursor?: string;
+}
+
+export interface ExecutiveRequestQueueQuery extends ExecutiveRequestPageQuery {
+  readonly status?: ExecutiveRequestStatus;
+}
+
+export interface ExecutiveRequestPage<T> {
+  readonly items: readonly T[];
+  readonly nextCursor: string | null;
 }

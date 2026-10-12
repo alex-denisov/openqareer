@@ -1,5 +1,4 @@
 import type { Page, Route } from '@playwright/test';
-import type { InterviewSessionView } from '../../src/features/interview/interviewSimulatorApi';
 import {
   createInterviewSession,
   INTERVIEW_QUESTION_COUNT,
@@ -30,6 +29,11 @@ const ACTIONS: readonly InterviewAction[] = [
   'finish',
 ];
 const now = '2026-10-11T08:00:00.000Z';
+
+type InterviewSessionView = InterviewSession & {
+  readonly currentQuestion: InterviewSession['questions'][number] | null;
+  readonly topicSummary: ReturnType<typeof summarizeInterviewTopics>;
+};
 
 function failure(code: string, message: string, status = 400): InterviewFixtureResponse {
   return { status, error: { code, message } };

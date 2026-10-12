@@ -8,14 +8,13 @@ import {
   AccountAppSettingsSection,
   AccountConsentsSection,
   AccountNotificationsSection,
-  AccountSubscriptionSection,
 } from './AccountDesktopSections';
+import { CandidateBillingAccountSection } from './CandidateBillingAccountSection';
 import { AccountConfirmDialog } from './AccountDialogs';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
 import {
   DEFAULT_APP_SETTINGS,
   DEFAULT_NOTIFICATION_EVENTS,
-  DEFAULT_PAYMENT_HISTORY,
   MANDATORY_NOTIFICATION_EVENTS,
   DEFAULT_ACCOUNT_CONSENTS,
 } from './accountData';
@@ -208,13 +207,7 @@ function AccountTabRouter(props: TabRouterProps) {
   if (props.section === 'app') {
     return <AccountAppSettingsSection settings={DEFAULT_APP_SETTINGS} />;
   }
-  return (
-    <AccountSubscriptionSection
-      isPro={false}
-      payments={DEFAULT_PAYMENT_HISTORY}
-      onOpenTariffs={props.onOpenTariffs}
-    />
-  );
+  return <CandidateBillingAccountSection onOpenTariffs={props.onOpenTariffs} />;
 }
 
 function TimezoneForm({

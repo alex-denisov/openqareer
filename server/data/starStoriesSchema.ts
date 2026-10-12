@@ -1,5 +1,5 @@
 /** B466: one encrypted, reusable STAR story per candidate-owned id. */
-export const MIGRATION_42 = `
+export const MIGRATION_48 = `
 CREATE TABLE IF NOT EXISTS candidate_star_stories (
   id TEXT NOT NULL,
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,

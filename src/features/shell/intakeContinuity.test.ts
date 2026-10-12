@@ -29,9 +29,7 @@ describe('shouldShowIntake', () => {
   });
 
   it('opens the diagnostic for a newly registered candidate without a workspace', () => {
-    expect(
-      shouldShowIntake({ ...anonymousStart, hasCabinetSession: true }),
-    ).toBe(true);
+    expect(shouldShowIntake({ ...anonymousStart, hasCabinetSession: true })).toBe(true);
   });
 
   it('hands the screen over once the career picture exists', () => {
@@ -45,15 +43,11 @@ describe('shouldShowIntake', () => {
   });
 
   it('shows nothing while identity is still being checked', () => {
-    expect(
-      shouldShowIntake({ ...anonymousStart, sessionPending: true }),
-    ).toBe(false);
+    expect(shouldShowIntake({ ...anonymousStart, sessionPending: true })).toBe(false);
   });
 
   it('never takes over another screen', () => {
-    expect(
-      shouldShowIntake({ ...anonymousStart, isTodayView: false }),
-    ).toBe(false);
+    expect(shouldShowIntake({ ...anonymousStart, isTodayView: false })).toBe(false);
   });
 });
 

@@ -8,12 +8,15 @@ import { PlatformLogo } from './PlatformLogo';
 import {
   closeConnectorSession,
   inspectSessionPage,
+  isConnectorSessionOpen,
   openConnectorSession,
   readSessionPage,
   resizeConnectorSession,
   sessionCheckFailure,
+  showConnectorSession,
   type ConnectorSessionStep,
 } from './connectorSession';
+import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
@@ -43,6 +46,7 @@ const LINKEDIN_LOGIN_URL = 'https://www.linkedin.com/login?locale=en_US';
 
 export interface LinkedInConnectModalProps {
   readonly isOpen: boolean;
+  readonly isReconnect?: boolean;
   readonly onClose: () => void;
   readonly onImportSuccess: (
     parsed: ParsedResume,
@@ -57,6 +61,7 @@ export interface LinkedInConnectModalProps {
 // eslint-disable-next-line max-lines-per-function
 export function LinkedInConnectModal({
   isOpen,
+  isReconnect = false,
   onClose,
   onImportSuccess,
   onConnectionFailure,
@@ -114,6 +119,26 @@ export function LinkedInConnectModal({
     return watchConnectorHost('linkedin', host, (layout) => {
       void resizeConnectorSession('linkedin', layout);
     });
+  }, [isOpen, step]);
+
+  useEffect(() => {
+    if (!isOpen || isTauriEnvironment() || step !== 'session_open') return;
+    let cancelled = false;
+    const checkPopup = async () => {
+      if (await isConnectorSessionOpen('linkedin')) return;
+      if (cancelled) return;
+      sessionOpened.current = false;
+      setWaiting(undefined);
+      setStep('idle');
+      setError(
+        'Окно входа LinkedIn закрыто. Браузер не подтвердил вход и профиль не обновлён. Подключите снова, чтобы повторить попытку.',
+      );
+    };
+    const timer = window.setInterval(() => void checkPopup(), SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [isOpen, step]);
 
   useEffect(() => {
@@ -192,6 +217,7 @@ export function LinkedInConnectModal({
       measureLayout: () =>
         sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
       waitForFrame: nextAnimationFrame,
+      isDesktop: isTauriEnvironment(),
       onStep: setStep,
       openSession: openConnectorSession,
     });
@@ -237,6 +263,13 @@ export function LinkedInConnectModal({
     if (result.status !== 'waiting_for_sign_in') {
       unrecognisedPolls.current = 0;
       return undefined;
+    }
+    if (isReconnect && result.stage === 'login') {
+      unrecognisedPolls.current = 0;
+      return {
+        text: 'Сессия LinkedIn истекла. Войдите снова в открытом окне.',
+        stuck: false,
+      };
     }
     unrecognisedPolls.current =
       result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
@@ -324,6 +357,7 @@ export function LinkedInConnectModal({
       title="Подключение LinkedIn"
       icon={<PlatformLogo platform="linkedin" size={26} />}
       wide={isTauriEnvironment() && sessionActive}
+      detail={!isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
         {!sessionActive ? (
@@ -335,6 +369,14 @@ export function LinkedInConnectModal({
           </>
         ) : null}
 
+        {sessionActive ? (
+          <ConnectorSessionToolbar
+            platform="linkedin"
+            onShow={() => showConnectorSession('linkedin')}
+            onCancel={closeModal}
+          />
+        ) : null}
+
         {step === 'idle' ? (
           <button
             type="button"
@@ -342,8 +384,14 @@ export function LinkedInConnectModal({
             onClick={() => void startSession()}
           >
             <ArrowSquareOut size={18} weight="bold" />
-            <span>Открыть окно входа в LinkedIn</span>
+            <span>{error ? 'Подключить снова' : 'Открыть окно входа в LinkedIn'}</span>
           </button>
+        ) : null}
+
+        {sessionActive && !isTauriEnvironment() ? (
+          <p className="career-connector-waiting" role="status">
+            Войдите в LinkedIn в отдельном окне. Веб-версия не может прочитать страницу и не обновит профиль.
+          </p>
         ) : null}
 
         {status ? (

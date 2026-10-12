@@ -317,5 +317,3 @@ describe('CareerTooltip', () => {
     expect(btn2.getAttribute('aria-expanded')).toBe('true');
   });
 });
-
-

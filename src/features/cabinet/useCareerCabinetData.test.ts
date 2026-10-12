@@ -20,7 +20,16 @@ describe('Cabinet Data Ingestion Validation', () => {
   it('accepts valid candidate snapshot with memory array and candidate object', () => {
     const validSnapshot = {
       candidate: { id: 'c-1', dataClass: 'personal', locale: 'ru-RU', createdAt: '2026-08-18' },
-      memory: [{ id: 'm-1', kind: 'fact', domain: 'responsibility', content: 'Lead dev', provenance: 'user', confidence: 'confirmed' }],
+      memory: [
+        {
+          id: 'm-1',
+          kind: 'fact',
+          domain: 'responsibility',
+          content: 'Lead dev',
+          provenance: 'user',
+          confidence: 'confirmed',
+        },
+      ],
     };
     const isValid =
       validSnapshot !== null &&

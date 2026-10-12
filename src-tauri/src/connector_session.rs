@@ -9,7 +9,7 @@
 use crate::linkedin_read_guard::{is_detail_page, LinkedInReadGuardState};
 use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, remove_dir_all, symlink_metadata};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
@@ -254,7 +254,11 @@ pub fn is_allowed_session_url(platform: &str, url: &str) -> bool {
     let Ok(parsed) = Url::parse(url) else {
         return false;
     };
-    if parsed.scheme() != "https" {
+    if parsed.scheme() != "https"
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.port_or_known_default() != Some(443)
+    {
         return false;
     }
     let Some(host) = parsed.host_str() else {
@@ -530,6 +534,19 @@ fn account_store_identifier(key: &str) -> Result<[u8; 16], String> {
     Ok(identifier)
 }
 
+fn candidate_data_directory(app_data_dir: &Path, account_key: &str) -> Result<PathBuf, String> {
+    if !is_valid_account_key(account_key) {
+        return Err("account_key_invalid".to_string());
+    }
+    let root = app_data_dir.join("candidate-sessions");
+    create_private_directory(&root)
+        .map_err(|_| "candidate_session_data_dir_create_failed".to_string())?;
+    let directory = root.join(&account_key[..32]);
+    create_private_directory(&directory)
+        .map_err(|_| "candidate_session_data_dir_create_failed".to_string())?;
+    Ok(directory)
+}
+
 /// Binds candidate sessions to an account. A change of account closes the
 /// previous account's windows so none of them outlives the sign-out.
 pub fn bind_candidate_account(app: &AppHandle, key: Option<String>) -> Result<bool, String> {
@@ -561,14 +578,11 @@ fn candidate_store(app: &AppHandle) -> Result<(PathBuf, [u8; 16]), String> {
         .clone()
         .ok_or_else(|| "account_not_bound".to_string())?;
     let identifier = account_store_identifier(&key)?;
-    let directory = app
+    let app_data_dir = app
         .path()
         .app_data_dir()
-        .map_err(|error| format!("candidate_session_data_dir_unavailable: {error}"))?
-        .join("candidate-sessions")
-        .join(&key[..32]);
-    create_dir_all(&directory)
-        .map_err(|error| format!("candidate_session_data_dir_create_failed: {error}"))?;
+        .map_err(|_| "candidate_session_data_dir_unavailable".to_string())?;
+    let directory = candidate_data_directory(&app_data_dir, &key)?;
     Ok((directory, identifier))
 }
 
@@ -776,6 +790,17 @@ pub fn is_session_window_open(app: &AppHandle, platform: &str) -> bool {
     session_window_label(platform)
         .and_then(|label| app.get_webview(label))
         .is_some()
+}
+
+/// Brings the existing candidate window forward without changing its URL.
+pub fn show_session_window(app: &AppHandle, platform: &str) -> bool {
+    let Some(label) = session_window_label(platform) else {
+        return false;
+    };
+    let Some(window) = app.get_webview_window(label) else {
+        return false;
+    };
+    window.show().and_then(|()| window.set_focus()).is_ok()
 }
 
 pub fn is_managed_session_window_open(
@@ -1420,6 +1445,27 @@ mod tests {
         std::fs::remove_dir_all(path).expect("remove temporary managed profile");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn candidate_session_directories_are_private_to_the_bound_account() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("openqareer-candidate-{}", Uuid::new_v4()));
+        let key = format!("{}", "a".repeat(CANDIDATE_ACCOUNT_KEY_LENGTH));
+        let directory =
+            candidate_data_directory(&root, &key).expect("create candidate session store");
+        assert!(directory.ends_with(&key[..32]));
+        for path in [&root.join("candidate-sessions"), &directory] {
+            let mode = std::fs::metadata(path)
+                .expect("read private directory")
+                .permissions()
+                .mode()
+                & 0o777;
+            assert_eq!(mode, 0o700);
+        }
+        std::fs::remove_dir_all(root).expect("remove temporary candidate session store");
+    }
+
     #[test]
     fn custom_linkedin_data_store_requires_macos_14() {
         assert!(!supports_custom_store_on_macos(13));
@@ -1736,6 +1782,14 @@ https://media.licdn.com/dms/image/c 800w";
         assert!(!is_allowed_session_url(
             "linkedin",
             "https://notlinkedin.com/login"
+        ));
+        assert!(!is_allowed_session_url(
+            "linkedin",
+            "https://attacker@www.linkedin.com/login"
+        ));
+        assert!(!is_allowed_session_url(
+            "hh",
+            "https://hh.ru:8443/account/login"
         ));
         assert!(!is_allowed_session_url("hh", "http://hh.ru/account/login"));
         assert!(!is_allowed_session_url(

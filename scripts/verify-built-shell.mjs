@@ -59,6 +59,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.route('**/api/v1/desktop/macos', async (route) => {
     await route.fulfill({ json: { data: { available: false } } });
   });
+  // Unknown candidate reads remain unavailable in this isolated browser fixture;
+  // they must not imitate an expired session and clear the synthetic identity.
+  await page.route('**/api/v1/candidate/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
+    });
+  });
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/auth'),
     async (route) => {
@@ -123,6 +132,109 @@ async function verifyViewport(browser, baseUrl, viewport) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ data: null }),
+    });
+  });
+  await page.route('**/api/v1/candidate/drafts/topics**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          items: [],
+          total: 0,
+          cadence: {
+            timezone: 'Europe/Moscow',
+            lastPublishedAt: null,
+            nextAllowedAt: null,
+            canPublish: false,
+          },
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/companies**', async (route) => {
+    const requestUrl = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          items: [],
+          total: 0,
+          offset: Number(requestUrl.searchParams.get('offset') ?? 0),
+          limit: 20,
+          sort: requestUrl.searchParams.get('sort') ?? 'default',
+          filter: requestUrl.searchParams.get('filter') ?? 'all',
+          filterCounts: { all: 0, want: 0, contacts: null, recruiter: 0 },
+          linkedin: { status: 'disconnected', importedAt: null, contactsImported: false },
+          searchConsentGranted: false,
+        },
+      }),
+    });
+  });
+  // The shell reads diary access as soon as a candidate session mounts. Keep
+  // this build-only fixture in the honest empty state instead of allowing the
+  // shared local API's no-session 401 to expire the synthetic browser session.
+  await page.route('**/api/v1/candidate/career-diary**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/v1/candidate/career-diary') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            asOf: '2026-10-12',
+            primaryWorkplace: null,
+            summary: {
+              goalsAchieved: 0,
+              goalsAtRisk: 0,
+              goalsTotal: 0,
+              achievementsReadyToAdd: 0,
+              weeklyReviewsTotal: 0,
+              weeklyReviewsInRow: 0,
+            },
+          },
+        }),
+      });
+      return;
+    }
+    if (pathname === '/api/v1/candidate/career-diary/workplaces') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { items: [], nextCursor: null } }),
+      });
+      return;
+    }
+    await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":{"code":"not_found"}}' });
+  });
+  await page.route('**/api/v1/candidate/billing', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          currentPlan: 'basic',
+          subscription: {
+            status: 'active',
+            currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+            nextChargeAt: '2026-11-08T00:00:00.000Z',
+            autoRenew: true,
+          },
+          plans: [
+            { id: 'basic', name: 'Basic', amountKopecks: 399000, currency: 'RUB', interval: 'month' },
+            { id: 'pro', name: 'Pro', amountKopecks: 990000, currency: 'RUB', interval: 'month' },
+            { id: 'max', name: 'Max', amountKopecks: 3990000, currency: 'RUB', interval: 'month' },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/billing/receipts**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [], meta: { nextCursor: null } }),
     });
   });
   await page.route('**/api/v1/candidate/campaign', async (route) => {
@@ -1213,7 +1325,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .first()
     .click();
   await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
-  await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
+  const focusedRoleInput = page.locator('.add-role-input');
+  await focusedRoleInput.waitFor({ state: 'visible' });
+  await page.locator('.add-role-input:focus').waitFor({ state: 'visible', timeout: 15_000 });
+  assert(
+    await focusedRoleInput.evaluate((input) => document.activeElement === input),
+    `${viewport.name}: step «Роль» did not focus the role filter input`,
+  );
   assert(
     (await page.getByRole('heading', { name: 'Поиск', exact: true }).count()) === 0,
     `${viewport.name}: шаг «Роль» снова открыл скрытый экран «Поиск»`,
@@ -1230,15 +1348,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await vacancyRows.count()) === 2,
     `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
   );
-  // Возраст — счётный, без процентов и без выдуманной даты публикации.
-  // На узких экранах (<=900px) колонка возраста скрыта дизайном (career-shell.css),
-  // поэтому там достаточно проверить наличие узла, а не видимость.
-  const vacAge = page.locator('.vac-age', { hasText: '2 дня' }).first();
-  if (viewport.width > 900) {
-    await vacAge.waitFor();
-  } else {
-    await vacAge.waitFor({ state: 'attached' });
-  }
+  // B250 identifies the feed row by its source and last observation date.
+  // The approved screen does not make an age claim beside the row.
+  await page
+    .locator('.vac-sub')
+    .filter({ hasText: 'hh.ru, 10.10' })
+    .first()
+    .waitFor();
   // Фильтр «Свежесть» убран решением владельца (B250, п.4): в базе остаётся
   // только подпись «в базе N дн.» в строке; проверять нечего.
   await page.screenshot({
@@ -1249,6 +1365,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Отклик из карточки (B251 F5, C47, B341): «Откликнуться» ведёт на площадку,
   // запись «applied» ставит только подтверждение «Да, отклик отправлен».
   // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
+  const closeFilterSheet = page
+    .locator('.vacancies-filters.is-expanded')
+    .getByRole('button', { name: 'Свернуть', exact: true });
+  if (await closeFilterSheet.isVisible()) await closeFilterSheet.click();
   const firstRowToggle = vacancyRows.first().locator('button[aria-expanded]').first();
   if ((await firstRowToggle.getAttribute('aria-expanded')) !== 'true') {
     await firstRowToggle.click();

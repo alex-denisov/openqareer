@@ -63,11 +63,15 @@ describe('cabinetJourney on the screens that read it', () => {
       now: '2026-09-02T09:00:00.000Z',
     });
 
-    const ats = renderToStaticMarkup(<AtsReadability journey={journey} onNavigate={() => undefined} />);
+    const ats = renderToStaticMarkup(
+      <AtsReadability journey={journey} onNavigate={() => undefined} />,
+    );
     expect(ats).toContain('проверок по вашему файлу');
     expect(ats).not.toContain('Нужен исходный CV');
 
-    const next = renderToStaticMarkup(<NextAction journey={journey} onNavigate={() => undefined} />);
+    const next = renderToStaticMarkup(
+      <NextAction journey={journey} onNavigate={() => undefined} />,
+    );
     expect(next).toContain('Один шаг на сегодня');
     expect(next).not.toContain('Уточнить основу профиля');
   });

@@ -55,11 +55,7 @@ export class AppErrorBoundary extends Component<Props, State> {
               </details>
             ) : null}
             <div className="career-error-boundary-actions">
-              <button
-                type="button"
-                className="career-button is-primary"
-                onClick={this.handleReset}
-              >
+              <button type="button" className="career-button is-primary" onClick={this.handleReset}>
                 <ArrowClockwise size={16} />
                 Попробовать снова
               </button>

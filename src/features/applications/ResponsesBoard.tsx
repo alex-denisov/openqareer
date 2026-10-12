@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   ArrowClockwise,
   Briefcase,
-  ChartBar,
   DotsThreeVertical,
-  Kanban,
   Scales,
   WarningCircle,
 } from '@phosphor-icons/react';
@@ -19,7 +17,7 @@ import { ArchivedResponsesSection } from './ArchivedResponsesSection';
 import { PipelineAnalyticsView } from './PipelineAnalyticsView';
 import { OfferComparisonMatrix } from './OfferComparisonMatrix';
 import { OfferEditModal } from './OfferEditModal';
-import { CandidateActionPanel } from './CandidateActionPanel';
+import { ResponsesWorkspaceScreen } from './ResponsesWorkspace';
 
 interface Column {
   readonly key: string;
@@ -57,6 +55,7 @@ export function ResponsesBoard({
   initialStageFilter,
   initialArchiveOpen,
   initialTab,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
@@ -64,9 +63,9 @@ export function ResponsesBoard({
   initialStageFilter?: ApplicationStage;
   initialArchiveOpen?: boolean;
   initialTab?: 'board' | 'analytics';
+  onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
-  const [tab, setTab] = useState<'board' | 'analytics'>(initialTab ?? 'board');
   const [stageFilter, setStageFilter] = useStageFilter(initialStageFilter);
 
   if (state.status === 'loading') return <LoadingState />;
@@ -82,39 +81,18 @@ export function ResponsesBoard({
     return <InterviewEmptyState onClear={() => setStageFilter(null)} />;
   }
 
-  if (state.applications.length === 0 && tab === 'board') {
-    return <EmptyBoard state={state} onOpenVacancies={onOpenVacancies} />;
-  }
-
   return (
     <ReadyBoard
       state={state}
       onOpenVacancies={onOpenVacancies}
       stageFilter={stageFilter}
+      onStageFilterChange={setStageFilter}
       initialArchiveOpen={initialArchiveOpen}
-      activeTab={tab}
-      onChangeTab={setTab}
+      initialTab={initialTab}
+      onOpenAutomation={onOpenAutomation}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
-  );
-}
-
-function EmptyBoard({
-  state,
-  onOpenVacancies,
-}: {
-  state: UseApplications;
-  onOpenVacancies: () => void;
-}) {
-  return (
-    <>
-      <CandidateActionPanel
-        applications={state.applications}
-        onRefreshApplications={state.refreshApplications}
-      />
-      <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
-    </>
   );
 }
 
@@ -322,39 +300,6 @@ function useBoardModals() {
   };
 }
 
-function ResponsesViewSwitch({
-  tab,
-  onChange,
-}: {
-  readonly tab: 'board' | 'analytics';
-  readonly onChange: (tab: 'board' | 'analytics') => void;
-}) {
-  return (
-    <div className="view-switch" role="tablist" aria-label="Режим отображения откликов">
-      <button
-        type="button"
-        role="tab"
-        className={tab === 'board' ? 'is-active' : ''}
-        aria-selected={tab === 'board'}
-        onClick={() => onChange('board')}
-      >
-        <Kanban size={16} aria-hidden="true" />
-        <span>Доска</span>
-      </button>
-      <button
-        type="button"
-        role="tab"
-        className={tab === 'analytics' ? 'is-active' : ''}
-        aria-selected={tab === 'analytics'}
-        onClick={() => onChange('analytics')}
-      >
-        <ChartBar size={16} aria-hidden="true" />
-        <span>Аналитика воронки</span>
-      </button>
-    </div>
-  );
-}
-
 interface BoardColumnsAndArchiveProps {
   readonly state: UseApplications;
   readonly visibleColumns: readonly Column[];
@@ -435,10 +380,6 @@ function BoardTabContent({
 
   return (
     <>
-      <CandidateActionPanel
-        applications={state.applications}
-        onRefreshApplications={state.refreshApplications}
-      />
       {stageFilter === 'interview' && onClearFilter ? (
         <FilterNotice onClear={onClearFilter} />
       ) : null}
@@ -465,48 +406,95 @@ function ReadyBoard({
   state,
   onOpenVacancies,
   stageFilter,
+  onStageFilterChange,
   initialArchiveOpen,
-  activeTab,
-  onChangeTab,
+  initialTab,
   onClearFilter,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   stageFilter?: ApplicationStage | null;
+  onStageFilterChange: (stage: ApplicationStage | null) => void;
   initialArchiveOpen?: boolean;
-  activeTab: 'board' | 'analytics';
-  onChangeTab: (tab: 'board' | 'analytics') => void;
+  initialTab?: 'board' | 'analytics';
   onClearFilter?: () => void;
+  onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
-  const visibleColumns = stageFilter
-    ? COLUMNS.filter((column) => column.stages.includes(stageFilter))
-    : COLUMNS;
-
   return (
-    <div className="career-responses-board-wrap">
-      <div className="career-responses-toolbar">
-        <ResponsesViewSwitch tab={activeTab} onChange={onChangeTab} />
-      </div>
-      {activeTab === 'analytics' ? (
-        <PipelineAnalyticsView
-          applications={state.applications}
-          onOpenVacancies={onOpenVacancies}
-          onOpenExpert={onOpenExpert}
-        />
-      ) : (
-        <BoardTabContent
+    <ResponsesWorkspaceScreen
+      state={state}
+      stageFilter={stageFilter}
+      onStageFilterChange={onStageFilterChange}
+      onClearFilter={onClearFilter}
+      onOpenVacancies={onOpenVacancies}
+      onOpenAutomation={onOpenAutomation}
+      onOpenExpert={onOpenExpert}
+      initialTab={initialTab}
+      columnsContent={
+        <BoardColumnsView
           state={state}
-          visibleColumns={visibleColumns}
-          initialArchiveOpen={initialArchiveOpen}
           stageFilter={stageFilter}
+          initialArchiveOpen={initialArchiveOpen}
           onClearFilter={onClearFilter}
           onOpenVacancies={onOpenVacancies}
           onOpenExpert={onOpenExpert}
         />
-      )}
-    </div>
+      }
+      emptyContent={<EmptyState state={state} onOpenVacancies={onOpenVacancies} />}
+      analyticsContent={pipelineAnalyticsContent(state, onOpenVacancies, onOpenExpert)}
+    />
+  );
+}
+
+function pipelineAnalyticsContent(
+  state: UseApplications,
+  onOpenVacancies: () => void,
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
+) {
+  return (
+    <PipelineAnalyticsView
+      applications={state.applications}
+      onOpenVacancies={onOpenVacancies}
+      onOpenExpert={onOpenExpert}
+    />
+  );
+}
+
+function BoardColumnsView({
+  state,
+  stageFilter,
+  initialArchiveOpen,
+  onClearFilter,
+  onOpenVacancies,
+  onOpenExpert,
+}: {
+  readonly state: UseApplications;
+  readonly stageFilter?: ApplicationStage | null;
+  readonly initialArchiveOpen?: boolean;
+  readonly onClearFilter?: () => void;
+  readonly onOpenVacancies: () => void;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
+}) {
+  const visibleColumns = stageFilter
+    ? COLUMNS.filter((column) => column.stages.includes(stageFilter))
+    : COLUMNS;
+  return (
+    <BoardTabContent
+      state={state}
+      visibleColumns={visibleColumns}
+      initialArchiveOpen={initialArchiveOpen}
+      stageFilter={stageFilter}
+      onClearFilter={onClearFilter}
+      onOpenVacancies={onOpenVacancies}
+      onOpenExpert={onOpenExpert}
+    />
   );
 }
 
@@ -631,13 +619,12 @@ function BoardColumn({
   onOpenCompareOffers,
   onOpenOfferEdit,
 }: BoardColumnProps) {
-  const cards = state.applications.filter(
-    (application) =>
-      column.stages.includes(application.stage) &&
-      (application.stage !== 'applied' || isApplicationInDeliveryColumn(application, column.key)),
-  );
+  const cards = applicationsForColumn(state.applications, column);
   return (
-    <section className="career-responses-column" aria-label={column.label}>
+    <section
+      className={`career-responses-column${cards.length === 0 ? ' is-empty' : ''}`}
+      aria-label={column.label}
+    >
       <ColumnHeader label={column.label} count={cards.length} />
       <div className="career-responses-column-body">
         {column.key === 'offer' && cards.length > 0 && onOpenCompareOffers ? (
@@ -667,6 +654,17 @@ function BoardColumn({
         ) : null}
       </div>
     </section>
+  );
+}
+
+function applicationsForColumn(
+  applications: readonly ApplicationView[],
+  column: Column,
+): readonly ApplicationView[] {
+  return applications.filter(
+    (application) =>
+      column.stages.includes(application.stage) &&
+      (application.stage !== 'applied' || isApplicationInDeliveryColumn(application, column.key)),
   );
 }
 

@@ -27,8 +27,8 @@ function TimezoneOptionsList({ selectedTz, deviceTz }: OptionsListProps) {
   const deviceInCommon = COMMON_TIMEZONES.some((i) => i.timezone === deviceTz);
   const showCustom = Boolean(
     selectedTz &&
-      !COMMON_TIMEZONES.some((i) => i.timezone === selectedTz) &&
-      selectedTz !== deviceTz,
+    !COMMON_TIMEZONES.some((i) => i.timezone === selectedTz) &&
+    selectedTz !== deviceTz,
   );
 
   return (

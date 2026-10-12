@@ -11,6 +11,7 @@ import {
   authenticateCandidate,
   csrfError,
   hasSafeMutationOrigin,
+  requireCandidateLlmAccess,
   sendError,
   withDeps,
 } from './helpers';
@@ -257,6 +258,7 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
+  if (!requireCandidateLlmAccess(deps, request, reply, candidate.id)) return undefined;
 
   const parsedKey = z.string().uuid().safeParse(request.headers['idempotency-key']);
   if (!parsedKey.success) {

@@ -9,13 +9,16 @@ import { RouteNoticeLine } from './RouteNoticeLine';
 import {
   closeConnectorSession,
   inspectSessionPage,
+  isConnectorSessionOpen,
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
   resizeConnectorSession,
   sessionCheckFailure,
+  showConnectorSession,
   type ConnectorSessionStep,
 } from './connectorSession';
+import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
@@ -43,6 +46,7 @@ const HH_LOGIN_URL = 'https://hh.ru/account/login';
 
 export interface HhConnectModalProps {
   readonly isOpen: boolean;
+  readonly isReconnect?: boolean;
   readonly onClose: () => void;
   /**
    * The resume the candidate settled on, already read inside their own
@@ -63,6 +67,7 @@ export interface HhConnectModalProps {
 // eslint-disable-next-line max-lines-per-function
 export function HhConnectModal({
   isOpen,
+  isReconnect = false,
   onClose,
   onConnectSuccess,
   onAuthenticatedEmpty,
@@ -93,10 +98,14 @@ export function HhConnectModal({
   /** Consecutive polls that could not read the page at all. */
   const unreadablePolls = useRef(0);
 
-  function closeModal() {
+  async function closeModal() {
     sessionOpened.current = false;
     sessionFlow.current = undefined;
-    void closeConnectorSession('hh').catch(() => undefined);
+    try {
+      await closeConnectorSession('hh');
+    } catch {
+      // The candidate can still close the dialog if the native window is unavailable.
+    }
     onClose();
   }
 
@@ -117,6 +126,26 @@ export function HhConnectModal({
     return watchConnectorHost('hh', host, (layout) => {
       void resizeConnectorSession('hh', layout);
     });
+  }, [isOpen, step]);
+
+  useEffect(() => {
+    if (!isOpen || isTauriEnvironment() || step !== 'session_open') return;
+    let cancelled = false;
+    const checkPopup = async () => {
+      if (await isConnectorSessionOpen('hh')) return;
+      if (cancelled) return;
+      sessionOpened.current = false;
+      setWaiting(undefined);
+      setStep('idle');
+      setError(
+        'Окно входа hh.ru закрыто. Браузер не подтвердил вход и резюме не обновлено. Подключите снова, чтобы повторить попытку.',
+      );
+    };
+    const timer = window.setInterval(() => void checkPopup(), SESSION_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [isOpen, step]);
 
   useEffect(() => {
@@ -183,6 +212,7 @@ export function HhConnectModal({
       measureLayout: () =>
         sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
       waitForFrame: nextAnimationFrame,
+      isDesktop: isTauriEnvironment(),
       onStep: setStep,
       openSession: openConnectorSession,
     });
@@ -233,6 +263,13 @@ export function HhConnectModal({
     if (result.status !== 'waiting_for_sign_in') {
       unrecognisedPolls.current = 0;
       return undefined;
+    }
+    if (isReconnect && result.stage === 'login') {
+      unrecognisedPolls.current = 0;
+      return {
+        text: 'Сессия hh.ru истекла. Войдите снова в открытом окне.',
+        stuck: false,
+      };
     }
     unrecognisedPolls.current =
       result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
@@ -402,6 +439,7 @@ export function HhConnectModal({
       title="Подключение hh.ru"
       icon={<PlatformLogo platform="hh" size={26} />}
       wide={isTauriEnvironment() && sessionActive}
+      detail={!isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
         {sessionActive ? null : (
@@ -419,6 +457,14 @@ export function HhConnectModal({
           </>
         )}
 
+        {sessionActive ? (
+          <ConnectorSessionToolbar
+            platform="hh"
+            onShow={() => showConnectorSession('hh')}
+            onCancel={closeModal}
+          />
+        ) : null}
+
         {step === 'idle' ? (
           <button
             type="button"
@@ -426,7 +472,7 @@ export function HhConnectModal({
             onClick={() => void startSession()}
           >
             <ArrowSquareOut size={18} weight="bold" />
-            <span>Открыть окно входа в hh.ru</span>
+            <span>{error ? 'Подключить снова' : 'Открыть окно входа в hh.ru'}</span>
           </button>
         ) : null}
 
@@ -441,6 +487,12 @@ export function HhConnectModal({
               <SpinnerGap size={16} className="spin" />
             )}
             <span>{status.text}</span>
+          </p>
+        ) : null}
+
+        {sessionActive && !isTauriEnvironment() ? (
+          <p className="career-connector-waiting" role="status">
+            Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит резюме.
           </p>
         ) : null}
 

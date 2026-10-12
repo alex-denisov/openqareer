@@ -27,9 +27,9 @@ import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
-import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
 import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
+import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
 import {
   getSkillQuizById,
   type QuizEvaluationResult,
@@ -59,6 +59,7 @@ interface CareerExpertPanelProps {
   stage?: CoachTurnStage;
   subject?: CoachTurnSubject;
   subjectTitle?: string;
+  initialPrompt?: string;
   initialUser: AuthUser | null;
   loadingSession?: boolean;
   initialSnapshot?: CandidateSnapshot;
@@ -77,6 +78,7 @@ export function CareerExpertPanel({
   stage = 'today',
   subject,
   subjectTitle,
+  initialPrompt,
   initialUser,
   loadingSession = false,
   initialSnapshot,
@@ -96,7 +98,7 @@ export function CareerExpertPanel({
   const [loginOpen, setLoginOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(initialPrompt ?? '');
   const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
   const [voiceDraft, setVoiceDraft] = useState(false);
   const [sending, setSending] = useState(false);
@@ -147,6 +149,10 @@ export function CareerExpertPanel({
     idempotencyKey: string;
     messageId: string;
   }>();
+  useEffect(() => {
+    setContent(initialPrompt ?? '');
+    pendingOperation.current = undefined;
+  }, [initialPrompt]);
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);

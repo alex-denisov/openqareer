@@ -36,9 +36,11 @@ import {
   MIGRATION_39,
 } from '../sqliteSchema';
 import { MIGRATION_40 } from '../consultantHistorySchema';
-import { MIGRATION_41 } from '../roleSkillAssessmentSchema';
-import { MIGRATION_42 } from '../starStoriesSchema';
-import { MIGRATION_43 } from '../interviewSimulatorSchema';
+import { MIGRATION_BILLING } from '../../billing/billingSchema';
+import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequestSchema';
+import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAssessmentSchema';
+import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
+import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimulatorSchema';
 
 const MIGRATIONS = [
   MIGRATION_1,
@@ -80,9 +82,13 @@ const MIGRATIONS = [
   MIGRATION_38,
   MIGRATION_39,
   MIGRATION_40,
-  MIGRATION_41,
-  MIGRATION_42,
-  MIGRATION_43,
+  // B345 сохраняет номер 41; идемпотентная миграция B471 добавляется следом.
+  MIGRATION_BILLING,
+  MIGRATION_EXECUTIVE_REQUEST,
+  // B474 занимает 45/46; миграции линии C идут далее.
+  MIGRATION_ROLE_SKILL_ASSESSMENT,
+  MIGRATION_STAR_STORIES,
+  MIGRATION_INTERVIEW_SIMULATOR,
 ];
 
 export function applyMigrations(

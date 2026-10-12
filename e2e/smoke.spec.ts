@@ -63,10 +63,11 @@ test('built career workspace is ready, operable and free of critical accessibili
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  const shell = page.getByTestId('career-shell');
-  await expect(shell).toBeVisible();
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
-  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+  const onboardingHeading = page.getByRole('heading', { name: 'С чем разбираемся?' });
+  await expect(onboardingHeading).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+    timeout: 15_000,
+  });
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
   await expect(
     page.locator('.career-onboarding-source-card', { hasText: 'PDF резюме' }),

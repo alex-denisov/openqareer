@@ -16,7 +16,7 @@ use connector_session::{
     inspect_session_page_for, is_managed_session_window_open, is_session_window_open,
     open_session_window, read_linkedin_pool_session_cookies, read_session_page,
     reset_session_window, resize_session_window, resize_session_window_for,
-    should_route_through_tunnel, CandidateSessionAccount, PoolSessionCookie,
+    should_route_through_tunnel, show_session_window, CandidateSessionAccount, PoolSessionCookie,
     SessionInspectionReport, SessionLayout, SessionPageReport, SessionWindowReport,
     SessionWindowRequest,
 };
@@ -323,6 +323,11 @@ fn is_connector_session_open(
 }
 
 #[tauri::command]
+fn show_connector_session(app: AppHandle, platform: String) -> bool {
+    show_session_window(&app, &platform)
+}
+
+#[tauri::command]
 fn close_connector_session(app: AppHandle, platform: String, session_key: Option<String>) -> bool {
     if session_key.is_some() {
         close_managed_session_window(&app, &platform, session_key.as_deref())
@@ -466,6 +471,7 @@ fn main() {
             export_pool_session,
             clear_pool_session_profile,
             is_connector_session_open,
+            show_connector_session,
             close_connector_session,
             reset_connector_session,
             resize_connector_session,

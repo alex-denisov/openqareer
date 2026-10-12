@@ -203,8 +203,8 @@ describe('B232 typography scale', () => {
   });
 
   it('declares the 4 px spacing scale', () => {
-    const steps = [1, 2, 3, 4, 5, 6, 7, 8].map(
-      (step) => shellCss.match(new RegExp(`--career-space-${step}:\\s*([^;]+);`))?.[1]?.trim(),
+    const steps = [1, 2, 3, 4, 5, 6, 7, 8].map((step) =>
+      shellCss.match(new RegExp(`--career-space-${step}:\\s*([^;]+);`))?.[1]?.trim(),
     );
     expect(steps).toEqual(['4px', '8px', '12px', '16px', '20px', '24px', '28px', '32px']);
   });
@@ -250,7 +250,9 @@ describe('B440 numeric font discipline', () => {
 
   it('does not apply monospace font family directly to labels containing Russian words', () => {
     expect(shellCss).not.toMatch(/\.vac-comp\s*\{[^}]*font-family:\s*var\(--font-mono/u);
-    expect(shellCss).not.toMatch(/\.career-resume-unknown-mark\s*\{[^}]*font-family:\s*var\(--font-mono/u);
+    expect(shellCss).not.toMatch(
+      /\.career-resume-unknown-mark\s*\{[^}]*font-family:\s*var\(--font-mono/u,
+    );
   });
 
   it('sets the shell rail to the approved fixed width', () => {

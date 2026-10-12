@@ -94,9 +94,7 @@ describe('describeStrategy', () => {
     });
 
     expect(view.reasonLine).toBe('Причина смены: откликов много, разговоров нет');
-    expect(view.history).toEqual([
-      'версия 1 · Product Manager · 1 сентября · Первый выбор роли',
-    ]);
+    expect(view.history).toEqual(['версия 1 · Product Manager · 1 сентября · Первый выбор роли']);
   });
 
   it('роль, названную кандидатом, не приписывает модели', () => {
@@ -134,9 +132,9 @@ describe('strategyChangeNeedsReason', () => {
 
 describe('campaignRoleLine', () => {
   it('кампания идёт по роли из стратегии, а не по свободной строке мастера', () => {
-    expect(
-      campaignRoleLine({ current: version(), history: [] }, 'хочу в продукт'),
-    ).toBe('Роль «Head of Product» · версия 1 от 3 сентября');
+    expect(campaignRoleLine({ current: version(), history: [] }, 'хочу в продукт')).toBe(
+      'Роль «Head of Product» · версия 1 от 3 сентября',
+    );
   });
 
   it('без стратегии остаётся направление мастера — оно честно названо словами', () => {

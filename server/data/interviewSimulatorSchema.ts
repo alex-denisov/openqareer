@@ -1,4 +1,4 @@
-export const MIGRATION_43 = `
+export const MIGRATION_49 = `
 CREATE TABLE IF NOT EXISTS candidate_interview_sessions (
   candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
   id TEXT NOT NULL UNIQUE,

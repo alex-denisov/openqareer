@@ -47,7 +47,8 @@ function DecisionConfidentialBanner() {
     <div className="career-decision-confidential-banner" role="note">
       <ShieldCheck size={16} />
       <span>
-        Конфиденциально: эти данные служат только личным фильтром стратегии и не уходят во внешние выгрузки или к работодателям.
+        Конфиденциально: эти данные служат только личным фильтром стратегии и не уходят во внешние
+        выгрузки или к работодателям.
       </span>
     </div>
   );
@@ -91,7 +92,8 @@ function DecisionSalaryField({
         </select>
       </div>
       <small className="career-decision-hint">
-        Вакансии с известной зарплатой ниже этого порога будут исключены из подборки. Пустые поля не ограничивают подборку.
+        Вакансии с известной зарплатой ниже этого порога будут исключены из подборки. Пустые поля не
+        ограничивают подборку.
       </small>
     </div>
   );
@@ -254,12 +256,7 @@ function DecisionProfileActions({
 }) {
   return (
     <div className="career-decision-actions">
-      <button
-        type="button"
-        className="career-quiet-button"
-        disabled={saving}
-        onClick={onSave}
-      >
+      <button type="button" className="career-quiet-button" disabled={saving} onClick={onSave}>
         {saving ? 'Сохраняем…' : 'Сохранить ограничения'}
       </button>
       {saved ? (
@@ -443,11 +440,7 @@ function TaskRun({
   }
 
   return (
-    <ExcludeStep
-      read={read}
-      saving={saving}
-      onDone={(excluded) => onDone(answers, excluded)}
-    />
+    <ExcludeStep read={read} saving={saving} onDone={(excluded) => onDone(answers, excluded)} />
   );
 }
 

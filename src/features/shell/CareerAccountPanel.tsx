@@ -1,12 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  ArrowRight,
-  CaretRight,
-  Key,
-  ShieldCheck,
-  UserPlus,
-  X,
-} from '@phosphor-icons/react';
+import { ArrowRight, CaretRight, Key, ShieldCheck, UserPlus, X } from '@phosphor-icons/react';
 import {
   changePassword,
   CoachApiError,
@@ -23,10 +16,7 @@ import {
   type AccountSnapshot,
   type AuthUser,
 } from '../coach/coachApi';
-import {
-  AuthenticatedAccount,
-  type AccountSection,
-} from '../account/AuthenticatedAccount';
+import { AuthenticatedAccount, type AccountSection } from '../account/AuthenticatedAccount';
 import { CareerTooltip } from './CareerTooltip';
 import {
   MIN_PASSWORD_LENGTH,
@@ -425,6 +415,7 @@ export function CareerAccountPanel({
             onDeleteAccount={deleteAccount}
             onSignOut={signOut}
             onDataChanged={onDataChanged}
+            onOpenTariffs={tariffsAvailable ? onOpenTariffs : undefined}
           />
         ) : null}
 
@@ -635,8 +626,6 @@ function BuildFreshnessNote() {
     </p>
   );
 }
-
-
 
 function resetTokenFromLocation() {
   if (typeof window === 'undefined' || window.location.pathname !== '/auth/reset-password') {

@@ -150,10 +150,8 @@ function createPartialAssessmentResult(): RoleSkillAssessmentRun {
   const cases = run.cases.map((record, index) => {
     const grade = index === 1 ? 'partial' : 'confirmed';
     const answer = `Пример решения для навыка ${index + 1} с измеримым итогом.`;
-    const evaluation = createAssessmentEvaluation(
-      answer,
-      record.assessmentCase.sourceRefs[0]!.id,
-      grade,
+    const evaluation = mutableAssessmentEvaluation(
+      createAssessmentEvaluation(answer, record.assessmentCase.sourceRefs[0]!.id, grade),
     );
     return { ...record, status: 'answered' as const, answer, evaluation };
   });
@@ -480,10 +478,8 @@ function evaluateAssessmentCase(
   const answer = String(body.answer ?? '');
   const record = run.cases[index]!;
   const grade = index === 2 ? ('partial' as const) : ('confirmed' as const);
-  const evaluation = createAssessmentEvaluation(
-    answer,
-    record.assessmentCase.sourceRefs[0]!.id,
-    grade,
+  const evaluation = mutableAssessmentEvaluation(
+    createAssessmentEvaluation(answer, record.assessmentCase.sourceRefs[0]!.id, grade),
   );
   const cases = run.cases.map((item, itemIndex) =>
     itemIndex === index
@@ -547,6 +543,17 @@ function createAssessmentEvaluation(
       explanation: 'Ответ содержит конкретный пример, действие и наблюдаемый результат.',
       candidateExcerpt: excerpt,
       sourceRefIds: [sourceRefId],
+    })),
+  };
+}
+
+function mutableAssessmentEvaluation(evaluation: RoleSkillEvaluation) {
+  return {
+    candidateAnswer: evaluation.candidateAnswer,
+    grade: evaluation.grade,
+    criteria: evaluation.criteria.map((criterion) => ({
+      ...criterion,
+      sourceRefIds: [...criterion.sourceRefIds],
     })),
   };
 }

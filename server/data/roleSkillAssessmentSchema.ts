@@ -1,5 +1,5 @@
 /** B461: candidate-scoped encrypted role assessment progress and results. */
-export const MIGRATION_41 = `
+export const MIGRATION_47 = `
 CREATE TABLE IF NOT EXISTS role_skill_assessment_runs (
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
   run_id TEXT NOT NULL,

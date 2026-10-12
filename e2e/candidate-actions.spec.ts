@@ -168,6 +168,14 @@ async function mockCandidateActionApi(page: Page): Promise<() => unknown> {
   return () => submitted;
 }
 
+async function openAutomationFromResponses(page: Page): Promise<void> {
+  await page.locator('button[aria-label="Отклики"]:visible').first().click();
+  const navigation = page.getByRole('navigation', { name: 'Разделы откликов' });
+  const automation = navigation.getByRole('button', { name: 'Автоматизация', exact: true });
+  await expect(automation).toBeVisible();
+  await automation.click();
+}
+
 test('candidate reviews and submits a prepared action on desktop and mobile', async ({
   page,
 }, testInfo) => {
@@ -185,7 +193,7 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.locator('button[aria-label="Отклики"]:visible').first().click();
+  await openAutomationFromResponses(page);
   const panel = page.getByRole('region', { name: 'Отправка откликов' });
   await expect(panel).toBeVisible();
   await expect(panel.getByText('Инженер платформы')).toBeVisible();
@@ -200,6 +208,16 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
   await expect(panel).toContainText('Площадка подтвердила 1 действие');
   await expect(panel).toContainText('Доставлено');
   await expect(panel).toHaveAttribute('aria-busy', 'false');
+  await expect(panel.getByRole('button', { name: 'Отправить 0 действий' })).toBeDisabled();
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await page.getByRole('button', { name: 'Назад к откликам', exact: true }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Отклики', exact: true })
+      .click();
+  }
+  await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
   await expect(
     page
       .locator('.career-responses-column[aria-label="Хочу"] .career-responses-card')
@@ -210,7 +228,6 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
       .locator('.career-responses-column[aria-label="Отправлено"] .career-responses-card')
       .filter({ hasText: 'Инженер платформы' }),
   ).toHaveCount(1);
-  await expect(panel.getByRole('button', { name: 'Отправить 0 действий' })).toBeDisabled();
   expect(submitted()).toMatchObject({
     confirmedByCandidate: true,
     actions: [
@@ -236,6 +253,7 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
   if (testInfo.project.name === 'desktop-1440') {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.evaluate(() => window.scrollTo(0, 0));
+    await openAutomationFromResponses(page);
     await expect(panel.getByRole('heading', { name: 'Отправка откликов' })).toBeVisible();
     const desktopOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -263,7 +281,7 @@ test('B413: consent checkbox visual and screenshot 1440 and 390', async ({ page 
   );
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.locator('button[aria-label="Отклики"]:visible').first().click();
+  await openAutomationFromResponses(page);
 
   const consentSection = page.locator('.career-candidate-actions__consent');
   await expect(consentSection).toBeVisible();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * C47 (B251 F5) — the chain a candidate actually walks: vacancy card →
@@ -419,8 +420,10 @@ function stubSession(
 }
 
 async function openVacancies(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Вакансии"]:visible').first().click();
+  await waitForCareerShell(page);
+  const vacancies = page.locator('button[aria-label="Вакансии"]:visible').first();
+  await expect(vacancies).toBeEnabled({ timeout: 15_000 });
+  await vacancies.click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
 }
 

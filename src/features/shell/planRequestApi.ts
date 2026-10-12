@@ -35,7 +35,9 @@ export function usePlanRequests() {
         setStates(Object.fromEntries(stored.map((item) => [item.planId, 'sent' as const])));
         setDates(
           Object.fromEntries(
-            stored.filter((item) => Boolean(item.createdAt)).map((item) => [item.planId, item.createdAt]),
+            stored
+              .filter((item) => Boolean(item.createdAt))
+              .map((item) => [item.planId, item.createdAt]),
           ),
         );
       })

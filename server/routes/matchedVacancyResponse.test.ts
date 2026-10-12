@@ -21,7 +21,15 @@ describe('unconfirmedCandidateMatchResponse', () => {
         offset: 0,
         nextOffset: null,
         pageOffsets: [0],
-        facets: { total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [] },
+        facets: {
+          total: 0, regions: [], remote: 0, levels: [], roles: [], sources: [],
+          sourceGroups: [
+            { id: 'platforms', name: 'Площадки', count: 0 },
+            { id: 'ats', name: 'ATS компаний', count: 0 },
+            { id: 'aggregators', name: 'Агрегаторы', count: 0 },
+            { id: 'channels', name: 'Каналы', count: 0 },
+          ],
+        },
         campaign: campaignMeta(campaign),
       },
     });

@@ -6,6 +6,8 @@ const port = Number(process.env.E2E_PORT ?? 4173);
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // The built shell loads split chunks on first use; two workers keep cold-start UI gates stable.
+  workers: 2,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'line' : 'list',

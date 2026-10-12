@@ -22,12 +22,13 @@ describe('requestVacancyPitch', () => {
       .spyOn(apiClient, 'apiFetch')
       .mockResolvedValue(new Response(JSON.stringify({ data: payload }), { status: 200 }));
 
-    const result = await requestVacancyPitch('v-1', { tone: 'technical' });
+    const requestPayload = { tone: 'technical' as const, excludedEvidenceIds: ['mem-2'] as const };
+    const result = await requestVacancyPitch('v-1', requestPayload);
 
     expect(result).toEqual(payload);
     expect(spy).toHaveBeenCalledWith(
       '/api/v1/candidate/vacancies/v-1/pitch',
-      expect.objectContaining({ method: 'POST', body: JSON.stringify({ tone: 'technical' }) }),
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(requestPayload) }),
     );
   });
 
