@@ -31,6 +31,7 @@ import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantH
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
 import { registerCandidateDocumentRoutes } from './candidateDocumentRoutes';
 import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
+import { resumeStructurerForCandidate, resumeStructurerForRequest } from './resumeLlmAccess';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
 import { normalizeResumeSourceText } from '../../src/features/workspace/resumeSourceText';
 import type { CandidateStore, ResumeReaderProvenance } from '../data/candidateStore';
@@ -322,7 +323,7 @@ const handleParseResume: Handler = async (deps, request) => {
     })
     .parse(request.body);
 
-  const parsed = await readResume(body.text, deps.resumeStructurer);
+  const parsed = await readResume(body.text, resumeStructurerForRequest(deps, request));
   return {
     data: parsed.resume,
     meta: { requestId: request.id, structuredBy: parsed.structuredBy },
@@ -349,7 +350,7 @@ async function importResumeIntoDossier(
   if (replay) {
     return { data: replay, meta: { requestId: request.id, idempotentReplay: true } };
   }
-  const read = await readResume(body.text, deps.resumeStructurer);
+  const read = await readResume(body.text, resumeStructurerForCandidate(deps, candidate.id));
   const plan = planResumeImport(read.resume, {
     idPrefix: newImportMemoryIdPrefix(randomUUID()),
   });

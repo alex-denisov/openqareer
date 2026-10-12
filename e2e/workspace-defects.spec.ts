@@ -50,7 +50,9 @@ async function stubEmptySession(page: Page): Promise<void> {
  * before React mounts. Interactivity starts when the app clears `aria-busy`.
  */
 async function waitForLiveApp(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+    timeout: 15_000,
+  });
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );

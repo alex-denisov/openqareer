@@ -79,8 +79,7 @@ export function RolesMarketPanel({
 
       {!poolComplete && observedCount(markets) > 0 ? (
         <p className="career-cabinet-tag">
-          Пул ещё дочитывается: прочитано {observedCount(markets)} из {poolTotal} — числа
-          вырастут.
+          Пул ещё дочитывается: прочитано {observedCount(markets)} из {poolTotal} — числа вырастут.
         </p>
       ) : null}
 
@@ -113,8 +112,7 @@ function ProposedRoleList({
   if (!roles.length) {
     return (
       <p className="career-home-empty">
-        Роль ещё не названа: нужны подтверждённые факты о вашем опыте, по которым
-        её можно назвать.
+        Роль ещё не названа: нужны подтверждённые факты о вашем опыте, по которым её можно назвать.
       </p>
     );
   }
@@ -164,9 +162,7 @@ function RoleRow({
       <small>{originLabel(role)}</small>
       <ConfirmationLine confirmation={role.confirmation} />
       {role.confirmation.state === 'observed' && role.confirmation.repeatedRequirements.length ? (
-        <small>
-          Повторяются: {role.confirmation.repeatedRequirements.slice(0, 4).join(', ')}
-        </small>
+        <small>Повторяются: {role.confirmation.repeatedRequirements.slice(0, 4).join(', ')}</small>
       ) : null}
       {choice?.onChoose && !isChosen ? (
         <ChooseRoleAction title={role.title} choice={choice} onChoose={choice.onChoose} />
@@ -295,7 +291,9 @@ const SOURCE_NAMES: Record<string, string> = {
   telegram: 'Telegram-каналы',
 };
 
-function sourceSummary(role: { sources: ReadonlyArray<{ source: string; count: number }> }): string {
+function sourceSummary(role: {
+  sources: ReadonlyArray<{ source: string; count: number }>;
+}): string {
   return role.sources
     .slice(0, 3)
     .map((entry) => `${SOURCE_NAMES[entry.source] ?? entry.source} ${entry.count}`)
@@ -344,11 +342,8 @@ function MarketSamples({ markets }: { readonly markets: RoleMarketMap['markets']
           <span>{market.label}</span>
           {market.certainty === 'fact' && market.lastObservedAt ? (
             <span className="career-market-sample-note">
-              <strong>
-                {pluralRu(market.sampleSize, ['вакансия', 'вакансии', 'вакансий'])}
-              </strong>{' '}
-              · наблюдение{' '}
-              {formatDay(market.lastObservedAt)}
+              <strong>{pluralRu(market.sampleSize, ['вакансия', 'вакансии', 'вакансий'])}</strong> ·
+              наблюдение {formatDay(market.lastObservedAt)}
             </span>
           ) : (
             <span className="career-market-sample-note is-unknown">

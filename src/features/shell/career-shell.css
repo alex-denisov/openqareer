@@ -521,7 +521,6 @@
   letter-spacing: 0.02em;
 }
 
-
 .career-topbar-admin {
   min-height: 40px;
   display: inline-flex;
@@ -1308,7 +1307,6 @@
   margin-top: 0;
   padding: 0;
 }
-
 
 .career-connection-panel {
   grid-column: 1 / -1;
@@ -3636,7 +3634,9 @@
   .career-mobile-more-menu {
     position: fixed;
     inset-inline-end: var(--career-space-4);
-    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom)
+    );
     z-index: 40;
     width: min(
       calc(var(--career-rail-width) + var(--career-rail-width) + var(--career-rail-width)),
@@ -4027,11 +4027,19 @@
     position: fixed;
     inset-block-start: auto;
     inset-inline: var(--career-space-4);
-    inset-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom)
+    );
     z-index: 35;
     width: auto;
-    height: calc(100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) - var(--career-space-8));
-    max-height: calc(100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) - var(--career-space-8));
+    height: calc(
+      100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) -
+        var(--career-space-8)
+    );
+    max-height: calc(
+      100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) -
+        var(--career-space-8)
+    );
     border: var(--career-border-width) solid var(--career-line-strong);
     border-radius: var(--career-radius-lg);
     animation: career-sheet-enter var(--career-motion-quick);
@@ -9900,7 +9908,11 @@
     inset: 0 0 auto 0;
     color: #000000;
     background: #ffffff;
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family:
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      sans-serif;
     font-size: var(--career-text-sm);
     line-height: 1.4;
   }
@@ -9915,7 +9927,9 @@
   }
 
   body[data-resume-print-target='targeted'] .career-resume-print:not(.career-resume-print-targeted),
-  body[data-resume-print-target='targeted'] .career-resume-print:not(.career-resume-print-targeted) * {
+  body[data-resume-print-target='targeted']
+    .career-resume-print:not(.career-resume-print-targeted)
+    * {
     display: none !important;
     visibility: hidden !important;
   }
@@ -14328,13 +14342,15 @@ button.chip {
 
 .chip.is-selected::before,
 .chip-btn.is-selected::before {
-  content: "";
+  content: '';
   width: 12px;
   height: 12px;
   flex: none;
   background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3'%3E%3Cpath d='M4 12l5 5 11-11'/%3E%3C/svg%3E") center/contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3'%3E%3Cpath d='M4 12l5 5 11-11'/%3E%3C/svg%3E") center/contain no-repeat;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3'%3E%3Cpath d='M4 12l5 5 11-11'/%3E%3C/svg%3E")
+    center/contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3'%3E%3Cpath d='M4 12l5 5 11-11'/%3E%3C/svg%3E")
+    center/contain no-repeat;
 }
 
 .filters-reset {
@@ -14363,7 +14379,7 @@ button.chip {
   cursor: pointer;
 }
 
-.filters-bar .saved-btn[aria-expanded="true"] {
+.filters-bar .saved-btn[aria-expanded='true'] {
   background: var(--career-surface-raised);
   border-color: var(--career-accent);
 }
@@ -14401,7 +14417,7 @@ button.chip {
   font-weight: 600;
   color: var(--career-text-dim);
   text-transform: uppercase;
-  letter-spacing: .03em;
+  letter-spacing: 0.03em;
   margin: 0 0 var(--career-space-2);
 }
 
@@ -14438,7 +14454,7 @@ button.chip {
 }
 
 .chip-btn[disabled] {
-  opacity: .45;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -14545,7 +14561,6 @@ button.chip {
   outline-offset: 2px;
   color: var(--career-text);
 }
-
 
 .vac-list {
   list-style: none;
@@ -14867,7 +14882,7 @@ button.chip {
   font-weight: 700;
   color: var(--career-text-dim);
   text-transform: uppercase;
-  letter-spacing: .03em;
+  letter-spacing: 0.03em;
   margin: 0 0 var(--career-space-2);
 }
 
@@ -14946,7 +14961,7 @@ button.chip {
 }
 
 .btn[disabled] {
-  opacity: .45;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -15095,7 +15110,12 @@ button.chip {
 .skeleton-row {
   height: 64px;
   border-radius: var(--career-radius-md);
-  background: linear-gradient(90deg, var(--career-surface) 25%, var(--career-surface-raised) 37%, var(--career-surface) 63%);
+  background: linear-gradient(
+    90deg,
+    var(--career-surface) 25%,
+    var(--career-surface-raised) 37%,
+    var(--career-surface) 63%
+  );
   background-size: 400% 100%;
   animation: shimmer 1.6s ease-in-out infinite;
 }
@@ -15387,7 +15407,9 @@ button.chip {
   flex-direction: column;
   gap: var(--career-space-2);
   cursor: pointer;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
 }
 
 .career-responses-card:hover {
@@ -15861,9 +15883,10 @@ button.chip {
   white-space: normal;
   opacity: 0;
   visibility: hidden;
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
-
 
 .career-tooltip-bubble[data-open='true'] {
   display: block;
@@ -16110,17 +16133,39 @@ button.chip {
   transition: width 200ms ease;
 }
 
-.career-pipeline-funnel-fill[data-share='0'] { width: 0%; }
-.career-pipeline-funnel-fill[data-share='10'] { width: 10%; }
-.career-pipeline-funnel-fill[data-share='20'] { width: 20%; }
-.career-pipeline-funnel-fill[data-share='30'] { width: 30%; }
-.career-pipeline-funnel-fill[data-share='40'] { width: 40%; }
-.career-pipeline-funnel-fill[data-share='50'] { width: 50%; }
-.career-pipeline-funnel-fill[data-share='60'] { width: 60%; }
-.career-pipeline-funnel-fill[data-share='70'] { width: 70%; }
-.career-pipeline-funnel-fill[data-share='80'] { width: 80%; }
-.career-pipeline-funnel-fill[data-share='90'] { width: 90%; }
-.career-pipeline-funnel-fill[data-share='100'] { width: 100%; }
+.career-pipeline-funnel-fill[data-share='0'] {
+  width: 0%;
+}
+.career-pipeline-funnel-fill[data-share='10'] {
+  width: 10%;
+}
+.career-pipeline-funnel-fill[data-share='20'] {
+  width: 20%;
+}
+.career-pipeline-funnel-fill[data-share='30'] {
+  width: 30%;
+}
+.career-pipeline-funnel-fill[data-share='40'] {
+  width: 40%;
+}
+.career-pipeline-funnel-fill[data-share='50'] {
+  width: 50%;
+}
+.career-pipeline-funnel-fill[data-share='60'] {
+  width: 60%;
+}
+.career-pipeline-funnel-fill[data-share='70'] {
+  width: 70%;
+}
+.career-pipeline-funnel-fill[data-share='80'] {
+  width: 80%;
+}
+.career-pipeline-funnel-fill[data-share='90'] {
+  width: 90%;
+}
+.career-pipeline-funnel-fill[data-share='100'] {
+  width: 100%;
+}
 
 .career-pipeline-funnel-rates {
   text-align: right;
@@ -16280,7 +16325,6 @@ button.chip {
     grid-template-columns: 1fr;
   }
 }
-
 
 /* B394 · Сравнение офферов: матрица совокупной компенсации и модальное окно условий */
 .career-offer-matrix-dialog {
@@ -16727,7 +16771,9 @@ button.chip {
   justify-content: center;
   margin: 0;
   flex: none;
-  transition: border-color var(--career-motion-fast, 180ms) ease, background-color var(--career-motion-fast, 180ms) ease;
+  transition:
+    border-color var(--career-motion-fast, 180ms) ease,
+    background-color var(--career-motion-fast, 180ms) ease;
   position: relative;
 }
 
@@ -16782,7 +16828,6 @@ button.chip {
 .career-checkbox-label:has(.career-checkbox:checked) .career-checkbox-status {
   color: var(--career-signal-green);
 }
-
 
 .career-account-legal input[type='checkbox'] {
   flex: none;

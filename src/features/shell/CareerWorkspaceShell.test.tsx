@@ -82,6 +82,25 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('С чем разобраться?');
   });
 
+  it('waits for profile work status before rendering the authenticated diary', () => {
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell
+        initialView="diary"
+        session={{
+          username: 'candidate',
+          email: 'candidate@example.com',
+          displayName: 'Кандидат',
+          role: 'candidate',
+          isTest: false,
+          candidateId: 'candidate-diary',
+        }}
+      />,
+    );
+
+    expect(html).toContain('Проверяем место работы из профиля');
+    expect(html).not.toContain('career-diary-page');
+  });
+
   it('locks every workspace section until the diagnostic produced a career picture', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
@@ -525,7 +544,9 @@ describe('CareerWorkspaceShell brand chrome', () => {
       constraints: '',
       urgency: 'active',
     });
-    const html = renderToStaticMarkup(<CareerWorkspaceShell session={candidateSession} workspace={workspace} />);
+    const html = renderToStaticMarkup(
+      <CareerWorkspaceShell session={candidateSession} workspace={workspace} />,
+    );
 
     it('keeps the openqareer mark and removes the contextless expert door', () => {
       expect(html).toContain('career-brand-mark');
@@ -558,7 +579,10 @@ describe('CareerWorkspaceShell brand chrome', () => {
 
     it('styles the administrator link with a class, not a blocked attribute', () => {
       const adminHtml = renderToStaticMarkup(
-        <CareerWorkspaceShell session={{ ...candidateSession, role: 'admin' }} workspace={workspace} />,
+        <CareerWorkspaceShell
+          session={{ ...candidateSession, role: 'admin' }}
+          workspace={workspace}
+        />,
       );
       expect(adminHtml).toContain('Админка');
       expect(adminHtml).toContain('career-rail-admin');
@@ -593,17 +617,25 @@ describe('B440 fixed rail contract', () => {
 
   function shellHtml(initialView: ShellSection = 'today') {
     return renderToStaticMarkup(
-      <CareerWorkspaceShell session={candidateSession} workspace={workspace} initialView={initialView} />,
+      <CareerWorkspaceShell
+        session={candidateSession}
+        workspace={workspace}
+        initialView={initialView}
+      />,
     );
   }
 
-  it('renders four distinct primary section icons on rail and mobile', () => {
+  it('keeps automation inside Responses instead of adding a second rail entry', () => {
     const html = shellHtml();
-    const paths = [...html.matchAll(/<button class="career-nav-button[^]*?<\/button>/gu)].map(
-      (match) => match[0].replace(/[^]*?(<svg[^]*?<\/svg>)[^]*/u, '$1'),
+    const automationHtml = shellHtml('automation');
+    const rail = automationHtml.slice(
+      automationHtml.indexOf('<aside id="career-rail"'),
+      automationHtml.indexOf('</aside>'),
     );
-    expect(paths).toHaveLength(8);
-    expect(new Set(paths).size).toBe(4);
+    expect(html).not.toContain('career-responses-automation-switch');
+    expect(rail).not.toContain('aria-label="Автоматизация"');
+    expect(rail).toMatch(/<button class="career-nav-button is-active"[^>]*aria-label="Отклики"/u);
+    expect(automationHtml).toContain('class="automation-screen"');
   });
 
   it('has no rail expansion state and keeps tariff access on Wallet', () => {

@@ -54,4 +54,34 @@ describe('B338 изолированное чтение фильтров', () => 
     expect(pool.total).toBe(9);
     await act(async () => root.unmount());
   });
+
+  it('возвращает общий пул для клиентских фильтров после очистки серверных условий', async () => {
+    vi.mocked(getMatchedVacancyPage).mockResolvedValue(page(2));
+    let pool!: MatchedPool;
+    function Reader() {
+      pool = useMatchedPool(initial);
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Reader />));
+    await act(async () => pool.setFilters?.(selected));
+    expect(getMatchedVacancyPage).toHaveBeenCalledTimes(1);
+
+    const clientOnly = {
+      roles: [],
+      regions: [],
+      levels: [],
+      sources: [],
+      remoteOnly: false,
+      locationSearch: 'Berlin',
+    };
+    await act(async () => pool.setFilters?.(clientOnly));
+    expect(getMatchedVacancyPage).toHaveBeenCalledTimes(2);
+    expect(pool.loading).toBe(false);
+
+    await act(async () => pool.setFilters?.({ ...clientOnly, locationSearch: 'Amsterdam' }));
+    expect(getMatchedVacancyPage).toHaveBeenCalledTimes(2);
+    expect(pool.loading).toBe(false);
+    await act(async () => root.unmount());
+  });
 });

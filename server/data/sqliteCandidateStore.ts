@@ -12,7 +12,6 @@ import type { ResumeDraft } from '../domain/resumeDraft';
 import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
 import type {
   CandidateCredentials,
-  CandidateExport,
   CandidateIdentity,
   CandidateSnapshot,
   CandidateStore,
@@ -32,30 +31,43 @@ import type {
   NativeSourceReceiptInput,
 } from './candidateStore';
 import { insertPlanRequest, selectPlanRequests } from './store/planRequestStore';
+import {
+  exportExecutiveRequests,
+} from './store/executiveRequestStore';
+import { createSqliteCandidateStoreExecutiveRequestMethods } from './sqliteCandidateStoreExecutiveRequestMethods';
+import { createSqliteCandidateStoreExportMethods } from './sqliteCandidateStoreExportMethods';
 import type { ConnectorActionRecord } from '../connectors/connectorActionQueue';
 import { SealedText } from './sealedText';
-import { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
-import { SqliteMarketRepository } from './sqliteMarketRepository';
-import { SqliteResumeRepository } from './sqliteResumeRepository';
-import { SqliteCandidateMediaRepository, type StoredCandidateMedia } from './sqliteCandidateMediaRepository';
-import { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
-import { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
-import { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
-import { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
-import { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
+import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
+import type { SqliteMarketRepository } from './sqliteMarketRepository';
+import type { SqliteResumeRepository } from './sqliteResumeRepository';
+import type {
+  SqliteCandidateMediaRepository,
+  StoredCandidateMedia,
+} from './sqliteCandidateMediaRepository';
+import type { SqliteProfileRevisionRepository } from './sqliteProfileRevisionRepository';
+import { createProfileRepositories } from './sqliteCandidateStoreProfileRepositories';
+import type { SqliteReferralTrackRepository } from './sqliteReferralTrackRepository';
+import type { SqliteDecisionProfileRepository } from './sqliteDecisionProfileRepository';
+import type { SqliteRelocationQuestionnaireRepository } from './sqliteRelocationQuestionnaireRepository';
+import { createSqliteCandidateStoreLinkedInMethods } from './linkedInLanguageImport';
+import { runSqliteTransaction } from './sqliteTransaction';
+import type { SqliteCareerVectorRepository } from './sqliteCareerVectorRepository';
+import type { SqliteCareerDiaryRepository } from './sqliteCareerDiaryRepository';
+import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
-import { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
+import type { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
-import { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
-import { SqliteDocumentRepository } from './sqliteDocumentRepository';
-import { SqliteVacancyRepository } from './sqliteVacancyRepository';
-import { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
-import {
+import type { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
+import type { SqliteDocumentRepository } from './sqliteDocumentRepository';
+import type { SqliteVacancyRepository } from './sqliteVacancyRepository';
+import type { SqliteCareerStrategyRepository } from './sqliteCareerStrategyRepository';
+import type {
   SqliteWorkPreferenceRepository,
-  type StoredWorkPreferenceRun,
+  StoredWorkPreferenceRun,
 } from './sqliteWorkPreferenceRepository';
-import { SqliteVacancyApplicationRepository } from './sqliteVacancyApplicationRepository';
-import { ApplicationTrackerController } from './store/applicationTrackerController';
+import type { ApplicationTrackerController } from './store/applicationTrackerController';
+import { createSqliteCandidateStoreRepositories } from './sqliteCandidateStoreRepositories';
 import { SqliteNotificationRepository } from './sqliteNotificationRepository';
 import {
   createApplicationTrackerMethods,
@@ -113,7 +125,10 @@ export class SqliteCandidateStore implements CandidateStore {
   readonly starPrepRepo: SqliteStarPrepRepository;
   readonly referralTrackRepo: SqliteReferralTrackRepository;
   readonly careerVectorRepo: SqliteCareerVectorRepository;
+  readonly careerDiaryRepo: SqliteCareerDiaryRepository;
   readonly decisionProfileRepo: SqliteDecisionProfileRepository;
+  readonly relocationQuestionnaireRepo: SqliteRelocationQuestionnaireRepository;
+  declare getLinkedInLanguageImport: CandidateStore['getLinkedInLanguageImport'];
   private readonly database: DatabaseSync;
   private readonly sealedText: SealedText;
   private readonly assessmentsRepository: SqliteAssessmentRepository;
@@ -134,10 +149,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   constructor(options: SqliteStoreOptions) {
     if (options.databasePath !== ':memory:') {
-      mkdirSync(dirname(options.databasePath), {
-        recursive: true,
-        mode: 0o700,
-      });
+      mkdirSync(dirname(options.databasePath), { recursive: true, mode: 0o700 });
     }
     this.database = new DatabaseSync(options.databasePath, {
       timeout: 5_000,
@@ -157,19 +169,52 @@ export class SqliteCandidateStore implements CandidateStore {
       workPreferenceRepository: this.workPreferenceRepository,
       candidateMediaRepository: this.candidateMediaRepository,
       applicationTracker: this.applicationTracker,
-    } = createRepositories(
+    } = createSqliteCandidateStoreRepositories(
       this.database,
       this.sealedText,
       (operation) => this.transaction(operation),
     ));
     this.initializeConversationStores();
     this.notificationRepository = new SqliteNotificationRepository(this.database, this.sealedText);
-    this.profileRevisionRepo = new SqliteProfileRevisionRepository(this.database, this.sealedText);
-    this.starPrepRepo = new SqliteStarPrepRepository(this.database, this.sealedText);
-    this.referralTrackRepo = new SqliteReferralTrackRepository(this.database, this.sealedText);
-    this.careerVectorRepo = new SqliteCareerVectorRepository(this.database, this.sealedText);
-    this.decisionProfileRepo = new SqliteDecisionProfileRepository(this.database, this.sealedText);
+    this.installExportMethods();
+    Object.assign(this, createSqliteCandidateStoreLinkedInMethods({
+      requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+      listConnections: (candidateId) => this.sourceConnections.list(candidateId),
+      readResume: (candidateId) => this.resumeRepository.get(candidateId),
+    }));
+    ({
+      profileRevisionRepo: this.profileRevisionRepo,
+      starPrepRepo: this.starPrepRepo,
+      referralTrackRepo: this.referralTrackRepo,
+      careerVectorRepo: this.careerVectorRepo,
+      careerDiaryRepo: this.careerDiaryRepo,
+      decisionProfileRepo: this.decisionProfileRepo,
+      relocationQuestionnaireRepo: this.relocationQuestionnaireRepo,
+    } = createProfileRepositories(this.database, this.sealedText, (operation) =>
+      this.transaction(operation),
+    ));
     this.careerCommandRepository.recoverInterruptedProcessing(new Date().toISOString());
+  }
+
+  private installExportMethods(): void {
+    Object.assign(
+      this,
+      createSqliteCandidateStoreExportMethods({
+        getSnapshot: (candidateId) => this.getSnapshot(candidateId),
+        sourceConnections: this.sourceConnections,
+        careerStrategyRepository: this.careerStrategyRepository,
+        workPreferenceRepository: this.workPreferenceRepository,
+        documentRepository: this.documentRepository,
+        relocationQuestionnaireRepo: {
+          getProfile: (candidateId) => this.relocationQuestionnaireRepo.getProfile(candidateId),
+          getConsent: (candidateId) => this.relocationQuestionnaireRepo.getConsent(candidateId),
+        },
+        exportConsultantConversations: (candidateId) =>
+          this.exportConsultantConversations(candidateId),
+        exportExecutiveRequests: (candidateId) =>
+          exportExecutiveRequests(this.database, this.sealedText, candidateId),
+      }),
+    );
   }
 
   private initializeConversationStores(): void {
@@ -178,6 +223,15 @@ export class SqliteCandidateStore implements CandidateStore {
     this.conversations = new ConversationController({ database: this.database, sealedText: this.sealedText, documentRepository: this.documentRepository });
     this.sourceConnections = new SourceConnectionController({ database: this.database, sealedText: this.sealedText });
     this.configureDatabase();
+    Object.assign(
+      this,
+      createSqliteCandidateStoreExecutiveRequestMethods({
+        database: this.database,
+        sealedText: this.sealedText,
+        requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+        transaction: (operation) => this.transaction(operation),
+      }),
+    );
     this.consultantHistory = new ConsultantHistoryStore(this.database, this.sealedText);
     this.consultantMethods = createSqliteCandidateStoreConsultantMethods({
       history: this.consultantHistory,
@@ -505,6 +559,12 @@ export class SqliteCandidateStore implements CandidateStore {
   declare deleteDocument: SqliteCandidateStoreDocumentMethods['deleteDocument'];
   declare setDocumentRetention: SqliteCandidateStoreDocumentMethods['setDocumentRetention'];
   declare purgeExpiredDocuments: SqliteCandidateStoreDocumentMethods['purgeExpiredDocuments'];
+  declare exportCandidate: CandidateStore['exportCandidate'];
+  declare createExecutiveRequest: NonNullable<CandidateStore['createExecutiveRequest']>;
+  declare listExecutiveRequests: NonNullable<CandidateStore['listExecutiveRequests']>;
+  declare getExecutiveRequest: NonNullable<CandidateStore['getExecutiveRequest']>;
+  declare listExecutiveRequestQueue: NonNullable<CandidateStore['listExecutiveRequestQueue']>;
+  declare setExecutiveRequestStatus: NonNullable<CandidateStore['setExecutiveRequestStatus']>;
 
   requestPlan: CandidateStore['requestPlan'] = (id, plan, note) => insertPlanRequest(this.database, id, plan, note);
   listPlanRequests: CandidateStore['listPlanRequests'] = (id) => selectPlanRequests(this.database, id);
@@ -696,30 +756,6 @@ export class SqliteCandidateStore implements CandidateStore {
     });
   }
 
-  exportCandidate(candidateId: string): CandidateExport {
-    const snapshot = this.getSnapshot(candidateId);
-    return {
-      ...snapshot,
-      sourceConnections: this.sourceConnections.list(candidateId).map((connection) => ({
-        id: connection.id,
-        platform: connection.platform,
-        accessMode: connection.accessMode,
-        connectedAt: connection.connectedAt,
-        lastImportedAt: connection.lastImportedAt,
-        capturedAt: connection.receipt.capturedAt,
-        factCount: connection.receipt.factCount,
-      })),
-      // Решение о собственной роли — данные кандидата, а не служебная запись.
-      careerStrategy: this.careerStrategyRepository.get(candidateId),
-      workPreferences: this.workPreferenceRepository.get(candidateId),
-      consultantConversations: this.exportConsultantConversations(candidateId),
-      documentContents: snapshot.documents.flatMap((document) => {
-        const stored = this.documentRepository.get(candidateId, document.id);
-        return stored ? [stored] : [];
-      }),
-    };
-  }
-
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {
       this.consultantHistory.deleteAllIndexes(candidateId);
@@ -790,19 +826,7 @@ export class SqliteCandidateStore implements CandidateStore {
   }
 
   transaction<T>(operation: () => T): T {
-    // SQLite has no nested BEGIN. A batch review runs several dossier writes
-    // that each know how to be atomic on their own, so an outer transaction
-    // joins them instead of crashing on the second BEGIN (B166).
-    if (this.database.isTransaction) return operation();
-    this.database.exec('BEGIN IMMEDIATE');
-    try {
-      const result = operation();
-      this.database.exec('COMMIT');
-      return result;
-    } catch (error) {
-      this.database.exec('ROLLBACK');
-      throw error;
-    }
+    return runSqliteTransaction(this.database, operation);
   }
 }
 
@@ -827,48 +851,4 @@ function referencedMediaIds(draft: ResumeDraft): string[] {
     draft.candidate.photoMediaId,
     ...draft.experience.map((role) => role.employerLogoMediaId),
   ].filter((value): value is string => Boolean(value));
-}
-
-interface StoreRepositories {
-  assessmentsRepository: SqliteAssessmentRepository;
-  marketRepository: SqliteMarketRepository;
-  resumeRepository: SqliteResumeRepository;
-  workspaceRepository: SqliteWorkspaceRepository;
-  careerCommandRepository: SqliteCareerCommandRepository;
-  documentRepository: SqliteDocumentRepository;
-  vacancyRepository: SqliteVacancyRepository;
-  careerStrategyRepository: SqliteCareerStrategyRepository;
-  workPreferenceRepository: SqliteWorkPreferenceRepository;
-  candidateMediaRepository: SqliteCandidateMediaRepository;
-  applicationTracker: ApplicationTrackerController;
-}
-
-function createRepositories(
-  database: DatabaseSync,
-  sealedText: SealedText,
-  transaction: <T>(operation: () => T) => T,
-): StoreRepositories {
-  const legacyApplications = new SqliteVacancyApplicationRepository(database, sealedText);
-  const workspaceRepository = new SqliteWorkspaceRepository(database, sealedText);
-  const documentRepository = new SqliteDocumentRepository(database, sealedText);
-  return {
-    applicationTracker: new ApplicationTrackerController(
-      database,
-      sealedText,
-      legacyApplications,
-      workspaceRepository,
-      documentRepository,
-      transaction,
-    ),
-    assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
-    marketRepository: new SqliteMarketRepository(database, sealedText),
-    resumeRepository: new SqliteResumeRepository(database, sealedText),
-    workspaceRepository,
-    careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText, transaction),
-    documentRepository,
-    vacancyRepository: new SqliteVacancyRepository(database, sealedText),
-    careerStrategyRepository: new SqliteCareerStrategyRepository(database, sealedText),
-    workPreferenceRepository: new SqliteWorkPreferenceRepository(database, sealedText),
-    candidateMediaRepository: new SqliteCandidateMediaRepository(database, sealedText),
-  };
 }

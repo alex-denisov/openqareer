@@ -1,13 +1,17 @@
 import { readFileSync } from 'node:fs';
+import { register } from 'node:module';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { CareerTariffsView } from './CareerTariffsView';
+import type { CareerTariffsViewProps } from './CareerTariffsView';
 
-function main() {
+register(new URL('./renderTariffsCssLoader.mjs', import.meta.url), import.meta.url);
+
+async function main() {
+  const { CareerTariffsView } = await import('./CareerTariffsView');
   const input = readFileSync(0, 'utf8');
-  const props = input ? JSON.parse(input) : {};
+  const props: CareerTariffsViewProps = input ? JSON.parse(input) : {};
   const html = renderToStaticMarkup(React.createElement(CareerTariffsView, props));
   process.stdout.write(html);
 }
 
-main();
+await main();

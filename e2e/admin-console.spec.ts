@@ -61,6 +61,9 @@ async function stubSession(page: Page, session: unknown): Promise<void> {
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: session } });
   });
+  await page.route('**/api/v1/candidate/workspace', async (route) => {
+    await route.fulfill({ json: { data: null } });
+  });
 }
 
 async function waitForLiveApp(page: Page): Promise<void> {

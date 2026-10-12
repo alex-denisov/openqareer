@@ -158,6 +158,7 @@ export interface ExecuteBatchInput {
   readonly actions: readonly CandidateActionItem[];
   readonly nowIso?: string;
   readonly clientTimezone?: string;
+  readonly beforeExecute?: () => boolean;
 }
 
 export interface ExecuteBatchResult {
@@ -222,8 +223,16 @@ export class CandidateActionExecutor {
     this.now = options.now ?? (() => new Date());
   }
 
+  findStoredReceipt(candidateId: string, receiptId: string): StoredActionReceipt | null {
+    return this.repository.getReceipt(candidateId, receiptId);
+  }
+
   async executeBatch(input: ExecuteBatchInput): Promise<ExecuteBatchResult> {
     const prepared = await this.prepareBatch(input);
+    this.assertConsent(input.candidateId);
+    if (input.beforeExecute && !input.beforeExecute()) {
+      throw new CandidateConsentRequiredError();
+    }
     this.repository.createBatch(
       prepared.batchId,
       input.candidateId,

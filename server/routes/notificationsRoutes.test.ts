@@ -180,7 +180,7 @@ describe('candidate notification routes', () => {
       headers: { origin: 'http://localhost:3000', 'content-type': 'application/x-www-form-urlencoded' },
       payload: new URLSearchParams({ token }).toString(),
     });
-    expect(applied.statusCode).toBe(200);
+    expect(applied.statusCode, applied.body).toBe(200);
     const preferences = candidateStore.notificationRepository.getPreferences(identity.id);
     expect(preferences.every((item) => !item.email)).toBe(true);
     expect(preferences.find((item) => item.key === 'ev-reply')).toMatchObject({ app: true, telegram: true });

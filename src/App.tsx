@@ -191,14 +191,15 @@ export default function App() {
       const remote = session?.candidateId ? await getCandidateWorkspace() : null;
       if (!isCurrent()) return;
       let workspace: CandidateWorkspace | undefined;
-      if (session?.candidateId) {
-        if (remote || result.status === 'ready') {
-          const { resolveCandidateWorkspace } =
-            await import('./features/workspace/workspaceHydration');
-          workspace = resolveCandidateWorkspace({ local: result, remote });
-        }
-      } else if (result.status === 'ready') {
+      if (result.status === 'ready') {
+        // A valid local copy is authoritative until write-through confirms a
+        // newer server version. Avoid loading the analysis engine just to
+        // return this exact value while the shell is bootstrapping.
         workspace = result.workspace;
+      } else if (session?.candidateId && remote) {
+        const { resolveCandidateWorkspace } =
+          await import('./features/workspace/workspaceHydration');
+        workspace = resolveCandidateWorkspace({ local: result, remote });
       }
       setState({
         session,

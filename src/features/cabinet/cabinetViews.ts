@@ -3,9 +3,4 @@
  * name the type without importing the container it is rendered by.
  */
 export type CareerCabinetView =
-  | 'today'
-  | 'profile'
-  | 'resume'
-  | 'career'
-  | 'opportunities'
-  | 'responses';
+  'today' | 'profile' | 'resume' | 'career' | 'opportunities' | 'responses' | 'diary';

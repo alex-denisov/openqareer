@@ -58,6 +58,7 @@ interface CareerExpertPanelProps {
   stage?: CoachTurnStage;
   subject?: CoachTurnSubject;
   subjectTitle?: string;
+  initialPrompt?: string;
   initialUser: AuthUser | null;
   loadingSession?: boolean;
   initialSnapshot?: CandidateSnapshot;
@@ -75,6 +76,7 @@ export function CareerExpertPanel({
   stage = 'today',
   subject,
   subjectTitle,
+  initialPrompt,
   initialUser,
   loadingSession = false,
   initialSnapshot,
@@ -93,7 +95,7 @@ export function CareerExpertPanel({
   const [loginOpen, setLoginOpen] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(initialPrompt ?? '');
   const [sending, setSending] = useState(false);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
@@ -142,6 +144,10 @@ export function CareerExpertPanel({
     idempotencyKey: string;
     messageId: string;
   }>();
+  useEffect(() => {
+    setContent(initialPrompt ?? '');
+    pendingOperation.current = undefined;
+  }, [initialPrompt]);
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);

@@ -26,6 +26,9 @@ const REGISTERED_CANDIDATE = {
 async function stubAuth(page: Page): Promise<void> {
   let registered = false;
 
+  await page.route('**/api/v1/candidate/**', async (route) => {
+    await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+  });
   await page.route('**/api/v1/auth/register', async (route) => {
     registered = true;
     await route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
@@ -201,6 +204,9 @@ test.describe('B229 desktop session recovery', () => {
         localStorage.setItem('openqareer_session_token', 'desktop-restored-session');
       }
     });
+    await page.route('**/api/v1/candidate/**', (route) =>
+      route.fulfill({ status: 404, json: { error: { code: 'not_found' } } }),
+    );
     await page.route('**/api/v1/candidate/workspace', (route) =>
       route.fulfill({ json: { data: null } }),
     );

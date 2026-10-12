@@ -66,18 +66,16 @@ describe('TimezoneSelect (B332)', () => {
       />,
     );
     // America/Chicago нет в списке, должна быть отдельной опцией вверху
-    expect(html).toMatch(/<option value="America\/Chicago"[^>]*>America\/Chicago \(UTC[-−]\d+\)<\/option>/);
+    expect(html).toMatch(
+      /<option value="America\/Chicago"[^>]*>America\/Chicago \(UTC[-−]\d+\)<\/option>/,
+    );
     // И устройство отмечено
     expect(html).toContain('Москва (UTC+3) — как на этом устройстве');
   });
 
   it('does not duplicate unlisted saved value if it equals device timezone', () => {
     const html = renderToStaticMarkup(
-      <TimezoneSelect
-        name="timezone"
-        defaultValue="Asia/Tokyo"
-        deviceTimezone="Asia/Tokyo"
-      />,
+      <TimezoneSelect name="timezone" defaultValue="Asia/Tokyo" deviceTimezone="Asia/Tokyo" />,
     );
     const tokyoMatches = html.match(/value="Asia\/Tokyo"/g);
     expect(tokyoMatches).toHaveLength(1);

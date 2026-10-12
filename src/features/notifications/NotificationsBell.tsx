@@ -108,8 +108,8 @@ export function NotificationsBell(props: NotificationsBellProps) {
   const popover = useBellPopover(props.onOpenCenter, data.refresh);
   const badge = props.unreadCount > 99 ? '99+' : String(props.unreadCount);
   const label = props.unreadCount > 0
-    ? `Уведомления, ${props.unreadCount} непрочитанных`
-    : 'Уведомления';
+    ? `Центр уведомлений, ${props.unreadCount} непрочитанных`
+    : 'Центр уведомлений';
   return (
     <div className="career-notification-bell-anchor" ref={popover.rootRef}>
       <button

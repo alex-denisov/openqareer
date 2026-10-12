@@ -1,5 +1,5 @@
 /** Notification rows contain source references and state only; no event text or candidate content is copied. */
-export const MIGRATION_43 = `
+export const MIGRATION_45 = `
 CREATE TABLE IF NOT EXISTS candidate_notifications (
   id TEXT PRIMARY KEY,
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,

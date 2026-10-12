@@ -34,7 +34,7 @@ function sampleNotifications(): NotificationFixture[] {
       'notice-1',
       'email_approval',
       'Письмо ждёт одобрения',
-      '2026-10-11T09:00:00.000Z',
+      notificationTimestamp(0, 9),
       null,
       'Открыть письмо',
       '/app?view=profile',
@@ -43,7 +43,7 @@ function sampleNotifications(): NotificationFixture[] {
       'notice-2',
       'post_approval',
       'Пост ждёт одобрения',
-      '2026-10-11T08:00:00.000Z',
+      notificationTimestamp(0, 8),
       null,
       'Открыть пост',
       '/app?view=profile',
@@ -52,7 +52,7 @@ function sampleNotifications(): NotificationFixture[] {
       'notice-3',
       'interview_reminder',
       'Скоро интервью',
-      '2026-10-10T12:00:00.000Z',
+      notificationTimestamp(1, 12),
       null,
       'Напомнить за день',
       '/app?view=responses',
@@ -61,12 +61,19 @@ function sampleNotifications(): NotificationFixture[] {
       'notice-4',
       'employer_reply',
       'Есть ответ работодателя',
-      '2026-10-09T12:00:00.000Z',
+      notificationTimestamp(2, 12),
       '2026-10-10T12:00:00.000Z',
       'Напомнить рекрутеру',
       '/app?view=responses',
     ),
   ];
+}
+
+function notificationTimestamp(daysAgo: number, hour: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(hour, 0, 0, 0);
+  return date.toISOString();
 }
 
 function notification(
@@ -85,7 +92,7 @@ const INTERVIEW_NOTICE = notification(
   'notice-interview',
   'interview_reminder',
   'Скоро интервью',
-  '2026-10-11T09:00:00.000Z',
+  notificationTimestamp(0, 9),
   null,
   'Напомнить за день',
   '/app?view=responses&notificationSource=interview-1',
@@ -305,7 +312,7 @@ test('desktop bell opens the notification center and actions update unread state
   test.skip(testInfo.project.name !== 'desktop-1440', 'desktop flow only');
   await openToday(page);
 
-  const bell = page.getByRole('button', { name: 'Уведомления, 3 непрочитанных' });
+  const bell = page.getByRole('button', { name: 'Центр уведомлений, 3 непрочитанных' });
   await expect(bell).toBeVisible();
   await capture(page, testInfo, 'bell-unread');
   await bell.click();
@@ -333,7 +340,7 @@ test('mobile bell opens a list, then a detail screen with a working back action'
   test.skip(testInfo.project.name !== 'mobile-390', 'mobile flow only');
   await openToday(page);
 
-  const bell = page.getByRole('button', { name: 'Уведомления, 3 непрочитанных' });
+  const bell = page.getByRole('button', { name: 'Центр уведомлений, 3 непрочитанных' });
   await expect(bell).toBeVisible();
   await capture(page, testInfo, 'bell-unread');
   await bell.click();
@@ -353,7 +360,7 @@ test('notification settings opens the account notifications section', async ({
   page,
 }, testInfo) => {
   await openToday(page);
-  await page.getByRole('button', { name: 'Уведомления, 3 непрочитанных' }).click();
+  await page.getByRole('button', { name: 'Центр уведомлений, 3 непрочитанных' }).click();
   if (testInfo.project.name === 'desktop-1440') {
     await page
       .getByRole('dialog', { name: 'Уведомления' })
@@ -367,7 +374,7 @@ test('notification settings opens the account notifications section', async ({
 
 test('empty notifications show the candidate-owned empty state', async ({ page }, testInfo) => {
   await openToday(page, { empty: true });
-  await page.getByRole('button', { name: 'Уведомления' }).click();
+  await page.getByRole('button', { name: 'Центр уведомлений' }).click();
   if (testInfo.project.name === 'desktop-1440') {
     await page.getByRole('link', { name: 'Все уведомления' }).click();
   }
@@ -379,7 +386,7 @@ test('empty notifications show the candidate-owned empty state', async ({ page }
 test('loading and API errors keep recovery actions reachable', async ({ page }, testInfo) => {
   const failGetAt = testInfo.project.name === 'desktop-1440' ? 3 : 2;
   await openToday(page, { failGetAt, delayGetAt: failGetAt });
-  await page.getByRole('button', { name: 'Уведомления, 3 непрочитанных' }).click();
+  await page.getByRole('button', { name: 'Центр уведомлений, 3 непрочитанных' }).click();
   if (testInfo.project.name === 'desktop-1440') {
     await page.getByRole('link', { name: 'Все уведомления' }).click();
   }
@@ -399,14 +406,14 @@ test('partial pages keep prior rows and load more notifications on request', asy
       `notice-many-${index + 1}`,
       'employer_reply',
       `Ответ работодателя ${index + 1}`,
-      index < 10 ? '2026-10-11T09:00:00.000Z' : '2026-10-08T09:00:00.000Z',
+      notificationTimestamp(index < 10 ? 0 : 3, 9),
       null,
       'Напомнить рекрутеру',
       '/app?view=responses',
     ),
   );
   await openToday(page, { items, pageSize: 10, failNextPageOnce: true });
-  await page.getByRole('button', { name: 'Уведомления, 25 непрочитанных' }).click();
+  await page.getByRole('button', { name: 'Центр уведомлений, 25 непрочитанных' }).click();
   if (testInfo.project.name === 'desktop-1440') {
     await page.getByRole('link', { name: 'Все уведомления' }).click();
   }
@@ -425,7 +432,7 @@ test('interview reminder updates the candidate application', async ({ page }, te
   test.skip(testInfo.project.name !== 'desktop-1440', 'reminder action only');
   const reminderApi = createReminderApi();
   await openToday(page, { items: [INTERVIEW_NOTICE], applicationHandler: reminderApi.handler });
-  await page.getByRole('button', { name: 'Уведомления, 1 непрочитанных' }).click();
+  await page.getByRole('button', { name: 'Центр уведомлений, 1 непрочитанных' }).click();
   await page.getByRole('link', { name: 'Все уведомления' }).click();
   await page.getByRole('button', { name: /Скоро интервью/u }).click();
   await page.getByRole('button', { name: 'Напомнить за день' }).click();

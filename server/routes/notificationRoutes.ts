@@ -344,9 +344,13 @@ async function handleUnsubscribePage(request: FastifyRequest, reply: FastifyRepl
 
 async function handleUnsubscribe(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const payload =
+    request.body instanceof URLSearchParams
+      ? { token: request.body.get('token') ?? '' }
+      : request.body;
   const body = z
     .object({ token: z.string().regex(/^[A-Za-z0-9_-]{43}$/u) })
-    .safeParse(request.body);
+    .safeParse(payload);
   if (!body.success)
     return sendError(
       reply,

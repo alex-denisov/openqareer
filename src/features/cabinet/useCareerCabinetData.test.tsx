@@ -114,7 +114,8 @@ function text(host: HTMLElement, name: string): string {
 
 describe('useCareerCabinetData', () => {
   beforeEach(() => {
-    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     sessionStorage.clear();
     vi.clearAllMocks();
     vi.mocked(getResumeStudio).mockRejectedValue(new Error('resume unavailable'));

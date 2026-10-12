@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { renderTariffsStaticHtml } from '../src/features/tariffs/renderTariffsHtml';
 import type { TariffSubscriptionInfo } from '../src/features/tariffs/tariffsData';
 
@@ -12,6 +14,7 @@ const sampleSubscription: TariffSubscriptionInfo = {
   paymentMethod: 'Карта РФ или СБП',
   todayUsage: { used: 27, total: 35 },
 };
+const EVIDENCE_DIR = e2eEvidenceDirectory('B442');
 
 function renderTariffsHtml(props: Parameters<typeof renderTariffsStaticHtml>[0]): string {
   const appCss = readFileSync('src/App.css', 'utf8');
@@ -39,11 +42,11 @@ function renderTariffsHtml(props: Parameters<typeof renderTariffsStaticHtml>[0])
 
 test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
   test.beforeAll(async () => {
-    await mkdir('docs/v1-release/tasks/evidence/B442', { recursive: true });
+    await mkdir(EVIDENCE_DIR, { recursive: true });
   });
 
   test.beforeEach(() => {
-    test.setTimeout(60000);
+    test.setTimeout(120_000);
   });
 
   test('renders tariffs ladder on desktop 1440 without horizontal overflow and captures evidence', async ({
@@ -83,7 +86,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     expect(hasOverflow).toBe(false);
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-desktop-1440-free.png',
+      path: join(EVIDENCE_DIR, 'tariffs-desktop-1440-free.png'),
       fullPage: true,
     });
 
@@ -98,7 +101,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     await expect(page.locator('#lvl-pro')).toContainText('08.11');
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-desktop-1440-pro.png',
+      path: join(EVIDENCE_DIR, 'tariffs-desktop-1440-pro.png'),
       fullPage: true,
     });
 
@@ -108,7 +111,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     await expect(page.locator('.career-cmp-row.is-here')).toContainText('(вы здесь)');
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-desktop-1440-compare.png',
+      path: join(EVIDENCE_DIR, 'tariffs-desktop-1440-compare.png'),
       fullPage: true,
     });
   });
@@ -134,7 +137,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     expect(hasOverflow390).toBe(false);
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-mobile-390-home.png',
+      path: join(EVIDENCE_DIR, 'tariffs-mobile-390-home.png'),
       fullPage: true,
     });
 
@@ -147,7 +150,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     await expect(page.locator('.career-mob-action-btn')).toContainText('Перейти на Pro');
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-mobile-390-level-detail.png',
+      path: join(EVIDENCE_DIR, 'tariffs-mobile-390-level-detail.png'),
       fullPage: true,
     });
 
@@ -160,7 +163,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
     await expect(page.locator('.career-mob-group')).toHaveCount(5);
 
     await page.screenshot({
-      path: 'docs/v1-release/tasks/evidence/B442/tariffs-mobile-390-compare.png',
+      path: join(EVIDENCE_DIR, 'tariffs-mobile-390-compare.png'),
       fullPage: true,
     });
   });

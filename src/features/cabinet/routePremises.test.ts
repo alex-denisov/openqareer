@@ -104,10 +104,7 @@ describe('route premises editor state (B160)', () => {
 
   it('never patches the headline with a blank role', () => {
     expect(
-      routePremisesAccountPatch(
-        { targetRole: '  ', regions: ['ru'], workMode: 'hybrid' },
-        account,
-      ),
+      routePremisesAccountPatch({ targetRole: '  ', regions: ['ru'], workMode: 'hybrid' }, account),
     ).toBeNull();
   });
 });

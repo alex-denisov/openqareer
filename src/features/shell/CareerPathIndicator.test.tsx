@@ -80,12 +80,25 @@ describe('CareerPathIndicator', () => {
       {
         matchedPoolCount: 5,
         confirmedApplications: 0,
-        nearestInterview: { company: 'SuperLongCompanyNameThatExceedsLimit', scheduledAt: '2026-10-01T10:00:00Z' },
+        nearestInterview: {
+          company: 'SuperLongCompanyNameThatExceedsLimit',
+          scheduledAt: '2026-10-01T10:00:00Z',
+        },
       },
       {
         track: [
-          { id: 'career-picture', label: 'Карьерная картина', status: 'active', reason: 'Собираем опыт, предпочтения и ограничения.' },
-          { id: 'role-market', label: 'Роль и рынок', status: 'waiting', reason: 'Сверяем роль со свежей выборкой рынка.' },
+          {
+            id: 'career-picture',
+            label: 'Карьерная картина',
+            status: 'active',
+            reason: 'Собираем опыт, предпочтения и ограничения.',
+          },
+          {
+            id: 'role-market',
+            label: 'Роль и рынок',
+            status: 'waiting',
+            reason: 'Сверяем роль со свежей выборкой рынка.',
+          },
         ],
         matchedPoolCount: 0,
         confirmedApplications: 0,
@@ -107,4 +120,3 @@ describe('CareerPathIndicator', () => {
     expect(interviewStep?.navigationOptions).toEqual({ stage: 'interview' });
   });
 });
-

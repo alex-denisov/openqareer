@@ -1,0 +1,554 @@
+openapi: 3.1.0
+info:
+  title: OpenQareer Career Diary API
+  version: 1.0.0
+  description: >-
+    Additive candidate-owned career diary API under /api/v1. Compatible fields and
+    operations may be added to this version; breaking contract changes require a
+    new versioned route. All diary records are scoped to the authenticated candidate.
+    Cookie-authenticated mutations require an allowed Origin; bearer-authenticated
+    mutations use the bearer token instead of the origin check.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+  - openqareerSession: []
+  - secureOpenqareerSession: []
+tags:
+  - name: Career diary
+paths:
+  /api/v1/candidate/career-diary:
+    get:
+      tags: [Career diary]
+      operationId: getCareerDiaryOverview
+      summary: Get the candidate diary summary
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals:
+    get:
+      tags: [Career diary]
+      operationId: listCareerGoals
+      summary: List goals with cursor pagination
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Career diary]
+      operationId: createCareerGoal
+      summary: Create a goal
+      description: Replaying the same key and payload returns the same resource; reusing a key with a different payload returns 409.
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals/{goalId}:
+    parameters: [{ $ref: '#/components/parameters/goalId' }]
+    get:
+      tags: [Career diary]
+      operationId: getCareerGoal
+      summary: Get a goal and its evaluated risk
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Career diary]
+      operationId: updateCareerGoal
+      summary: Update goal fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GoalPatch' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Career diary]
+      operationId: deleteCareerGoal
+      summary: Delete a goal and its measurement history
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals/{goalId}/primary:
+    put:
+      tags: [Career diary]
+      operationId: setPrimaryCareerGoal
+      summary: Mark a goal as primary
+      parameters: [{ $ref: '#/components/parameters/goalId' }]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals/{goalId}/children:
+    put:
+      tags: [Career diary]
+      operationId: splitCareerGoal
+      summary: Replace the child-goal set for a goal
+      description: The same child-goal set is idempotent. A conflicting replay returns 409.
+      parameters: [{ $ref: '#/components/parameters/goalId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [children]
+              properties:
+                children:
+                  type: array
+                  minItems: 2
+                  maxItems: 10
+                  items: { $ref: '#/components/schemas/GoalInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals/{goalId}/measurements:
+    parameters: [{ $ref: '#/components/parameters/goalId' }]
+    get:
+      tags: [Career diary]
+      operationId: listCareerGoalMeasurements
+      summary: List a goal's measurements with cursor pagination
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Career diary]
+      operationId: recordCareerGoalMeasurement
+      summary: Record a measurement
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MeasurementInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/goals/{goalId}/measurements/{measurementId}:
+    get:
+      tags: [Career diary]
+      operationId: getCareerGoalMeasurement
+      summary: Get a measurement
+      parameters:
+        - { $ref: '#/components/parameters/goalId' }
+        - { $ref: '#/components/parameters/measurementId' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/reviews:
+    get:
+      tags: [Career diary]
+      operationId: listCareerDiaryReviews
+      summary: List weekly reviews with cursor pagination
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/reviews/{weekStart}:
+    parameters: [{ $ref: '#/components/parameters/weekStart' }]
+    get:
+      tags: [Career diary]
+      operationId: getCareerDiaryReview
+      summary: Get a weekly review by its Monday date
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [Career diary]
+      operationId: upsertCareerDiaryReview
+      summary: Create or replace a weekly review
+      description: The Monday weekStart path is the natural key; repeated PUT requests replace the same candidate-owned review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WeeklyReviewInput' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Career diary]
+      operationId: deleteCareerDiaryReview
+      summary: Delete a weekly review
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/achievements:
+    get:
+      tags: [Career diary]
+      operationId: listCareerDiaryAchievements
+      summary: List achievements with cursor pagination
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Career diary]
+      operationId: createCareerDiaryAchievement
+      summary: Save an achievement ready to add
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AchievementInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/achievements/{achievementId}:
+    parameters: [{ $ref: '#/components/parameters/achievementId' }]
+    get:
+      tags: [Career diary]
+      operationId: getCareerDiaryAchievement
+      summary: Get an achievement
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Career diary]
+      operationId: updateCareerDiaryAchievementStatus
+      summary: Mark an achievement ready to add or dismissed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [status]
+              properties:
+                status: { type: string, enum: [ready_to_add, dismissed] }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/workplaces:
+    get:
+      tags: [Career diary]
+      operationId: listCareerDiaryWorkplaces
+      summary: List workplaces with cursor pagination
+      parameters: [{ $ref: '#/components/parameters/limit' }, { $ref: '#/components/parameters/cursor' }]
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+    post:
+      tags: [Career diary]
+      operationId: createCareerDiaryWorkplace
+      summary: Add a workplace
+      parameters: [{ $ref: '#/components/parameters/idempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkplaceInput' }
+      responses:
+        '201': { $ref: '#/components/responses/Created' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/workplaces/{workplaceId}:
+    parameters: [{ $ref: '#/components/parameters/workplaceId' }]
+    get:
+      tags: [Career diary]
+      operationId: getCareerDiaryWorkplace
+      summary: Get a workplace
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    patch:
+      tags: [Career diary]
+      operationId: updateCareerDiaryWorkplace
+      summary: Update workplace fields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/WorkplacePatch' }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/workplaces/{workplaceId}/primary:
+    put:
+      tags: [Career diary]
+      operationId: setPrimaryCareerDiaryWorkplace
+      summary: Set the primary active workplace
+      parameters: [{ $ref: '#/components/parameters/workplaceId' }]
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/workplaces/{workplaceId}/archive:
+    put:
+      tags: [Career diary]
+      operationId: archiveCareerDiaryWorkplace
+      summary: Archive a workplace and set its end date
+      parameters: [{ $ref: '#/components/parameters/workplaceId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [endDate]
+              properties:
+                endDate: { type: string, format: date }
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Candidate access token.
+    openqareerSession:
+      type: apiKey
+      in: cookie
+      name: openqareer_session
+      description: Used when secure cookies are disabled.
+    secureOpenqareerSession:
+      type: apiKey
+      in: cookie
+      name: __Host-openqareer_session
+      description: Used when secure cookies are enabled.
+  parameters:
+    limit:
+      name: limit
+      in: query
+      description: Page size, default 50, maximum 100.
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    cursor:
+      name: cursor
+      in: query
+      description: Opaque cursor returned as nextCursor by the previous page.
+      schema: { type: string, minLength: 1, maxLength: 300 }
+    idempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: UUID. Replaying the same request returns its original resource; a different payload with the same key returns 409.
+      schema: { type: string, format: uuid }
+    goalId:
+      name: goalId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    measurementId:
+      name: measurementId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    achievementId:
+      name: achievementId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    workplaceId:
+      name: workplaceId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    weekStart:
+      name: weekStart
+      in: path
+      required: true
+      description: ISO date for a Monday, used as the candidate-scoped natural key.
+      schema: { type: string, format: date }
+  responses:
+    Success:
+      description: Successful candidate-owned response.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessEnvelope' }
+    Page:
+      description: Cursor-paginated result.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PageEnvelope' }
+    Created:
+      description: Created resource. Location contains its candidate-scoped GET URL.
+      headers:
+        Location:
+          required: true
+          schema: { type: string }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SuccessEnvelope' }
+    Error:
+      description: Standard API error.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+  schemas:
+    SuccessEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: {}
+        meta:
+          type: object
+          required: [requestId]
+          properties:
+            requestId: { type: string }
+    PageEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: object
+          required: [items, nextCursor]
+          properties:
+            items: { type: array, items: {} }
+            nextCursor: { type: [string, 'null'] }
+        meta:
+          type: object
+          required: [requestId]
+          properties:
+            requestId: { type: string }
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId, retryable]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            requestId: { type: string }
+            retryable: { type: boolean }
+            fields: { type: object, additionalProperties: { type: string } }
+            details: { type: object, additionalProperties: true }
+    GoalInput:
+      type: object
+      additionalProperties: false
+      required: [title, type, horizon, startDate, dueDate, unit, baselineValue, targetValue]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 240 }
+        type: { type: string, enum: [operational, team, strategic, development] }
+        horizon: { type: string, enum: [quarter, next_quarter, year] }
+        startDate: { type: string, format: date }
+        dueDate: { type: string, format: date }
+        unit: { type: string, minLength: 1, maxLength: 80 }
+        baselineValue: { type: [number, 'null'] }
+        targetValue: { $ref: '#/components/schemas/DiaryValue' }
+        parentGoalId: { type: [string, 'null'], format: uuid }
+    GoalPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        title: { type: string, minLength: 1, maxLength: 240 }
+        type: { type: string, enum: [operational, team, strategic, development] }
+        horizon: { type: string, enum: [quarter, next_quarter, year] }
+        startDate: { type: string, format: date }
+        dueDate: { type: string, format: date }
+        unit: { type: string, minLength: 1, maxLength: 80 }
+        baselineValue: { type: [number, 'null'] }
+        targetValue: { $ref: '#/components/schemas/DiaryValue' }
+        parentGoalId: { type: [string, 'null'], format: uuid }
+    DiaryValue:
+      oneOf:
+        - { type: number }
+        - { type: boolean }
+        - { type: string, minLength: 1, maxLength: 500 }
+    MeasurementInput:
+      type: object
+      additionalProperties: false
+      required: [value, measuredAt]
+      properties:
+        value: { $ref: '#/components/schemas/DiaryValue' }
+        measuredAt: { type: string, format: date }
+        note: { type: [string, 'null'], maxLength: 2000 }
+    WeeklyReviewInput:
+      type: object
+      additionalProperties: false
+      properties:
+        movedForward: { type: string, maxLength: 4000 }
+        blockers: { type: string, maxLength: 4000 }
+        learning: { type: string, maxLength: 4000 }
+        risks: { type: string, maxLength: 4000 }
+        nextWeek: { type: string, maxLength: 4000 }
+    AchievementInput:
+      type: object
+      additionalProperties: false
+      required: [situation, action, result]
+      properties:
+        situation: { type: string, minLength: 1, maxLength: 3000 }
+        action: { type: string, minLength: 1, maxLength: 3000 }
+        result: { type: string, minLength: 1, maxLength: 3000 }
+    WorkplaceInput:
+      type: object
+      additionalProperties: false
+      required: [company, title, startDate]
+      properties:
+        company: { type: string, minLength: 1, maxLength: 240 }
+        title: { type: string, minLength: 1, maxLength: 240 }
+        startDate: { type: string, format: date }
+        endDate: { type: [string, 'null'], format: date }
+        sourceExperienceId: { type: [string, 'null'], maxLength: 200 }
+    WorkplacePatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        company: { type: string, minLength: 1, maxLength: 240 }
+        title: { type: string, minLength: 1, maxLength: 240 }
+        startDate: { type: string, format: date }
+        endDate: { type: [string, 'null'], format: date }
+        sourceExperienceId: { type: [string, 'null'], maxLength: 200 }

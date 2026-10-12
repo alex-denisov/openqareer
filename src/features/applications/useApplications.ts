@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import type { SkipReasonId } from '../../../shared/skipReasons';
@@ -6,13 +6,15 @@ import {
   createApplication,
   createApplicationInterview,
   createVacancySkip,
-  listApplications,
+  listApplicationsPage,
   patchApplication,
   restoreApplicationFromArchive,
   recordFollowUpSent,
   saveApplicationOffer,
   type ApplicationOfferTerms,
   type ApplicationView,
+  type ApplicationListPageMeta,
+  type ApplicationListQuery,
   type CreateApplicationInput,
 } from './applicationsApi';
 import { CoachApiError } from '../coach/apiClient';
@@ -35,6 +37,12 @@ export interface FailedStageChange {
 export interface UseApplications {
   readonly status: ApplicationsLoadStatus;
   readonly applications: readonly ApplicationView[];
+  readonly pageMeta?: ApplicationListPageMeta;
+  readonly loadPage?: (
+    query: ApplicationListQuery,
+    append?: boolean,
+    keepContent?: boolean,
+  ) => Promise<readonly ApplicationView[]>;
   readonly error?: string;
   /** The load failed because the browser has no connection (offline state). */
   readonly offline: boolean;
@@ -74,6 +82,7 @@ const NO_MATERIAL_FALLBACK = 'Не удалось загрузить откли�
 export function useApplications(): UseApplications {
   const [status, setStatus] = useState<ApplicationsLoadStatus>('loading');
   const [applications, setApplications] = useState<readonly ApplicationView[]>([]);
+  const [pageMeta, setPageMeta] = useState<ApplicationListPageMeta>();
   const [error, setError] = useState<string>();
   const [offline, setOffline] = useState(false);
   const [failedChanges, setFailedChanges] = useState<ReadonlyMap<string, FailedStageChange>>(
@@ -81,16 +90,45 @@ export function useApplications(): UseApplications {
   );
   const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
   const [reloadToken, setReloadToken] = useState(0);
+  const pageQueryRef = useRef<ApplicationListQuery>({
+    stage: ['saved', 'applied', 'responded', 'interview', 'offer'],
+    limit: 20,
+    offset: 0,
+  });
+
+  const loadPage = useCallback(
+    async (query: ApplicationListQuery, append = false, keepContent = false) => {
+      const request = { ...query, limit: 20, offset: query.offset ?? 0 };
+      if (!append) pageQueryRef.current = { ...request, offset: 0 };
+      if (!append && !keepContent) setStatus('loading');
+      setError(undefined);
+      try {
+        const page = await listApplicationsPage(request);
+        setApplications((current) => (append ? [...current, ...page.items] : page.items));
+        setPageMeta(page.meta);
+        setOffline(false);
+        setStatus('ready');
+        return page.items;
+      } catch (reason: unknown) {
+        setError(apiErrorMessage(reason, NO_MATERIAL_FALLBACK));
+        setOffline(reason instanceof CoachApiError && reason.code === 'network_error');
+        setStatus('error');
+        throw reason;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     let active = true;
     setStatus('loading');
     setFailedChanges(new Map());
     setConflicts(new Set());
-    void listApplications()
-      .then((list) => {
+    void listApplicationsPage(pageQueryRef.current)
+      .then((page) => {
         if (!active) return;
-        setApplications(list);
+        setApplications(page.items);
+        setPageMeta(page.meta);
         setStatus('ready');
       })
       .catch((reason: unknown) => {
@@ -107,13 +145,8 @@ export function useApplications(): UseApplications {
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const refreshApplications = useCallback(async () => {
-    const list = await listApplications();
-    setApplications(list);
-    setError(undefined);
-    setOffline(false);
-    setStatus('ready');
-    return list;
-  }, []);
+    return await loadPage(pageQueryRef.current, false, true);
+  }, [loadPage]);
 
   const writeStagePatch = useCallback(
     (
@@ -174,7 +207,9 @@ export function useApplications(): UseApplications {
           ...current,
           stage: 'interview',
           stageChangedAt:
-            current.stage === 'interview' ? current.stageChangedAt : (interview.scheduledAt ?? scheduledAt),
+            current.stage === 'interview'
+              ? current.stageChangedAt
+              : (interview.scheduledAt ?? scheduledAt),
           version: current.version + (current.stage === 'interview' ? 0 : 1),
           nearestInterview: {
             id: interview.id,
@@ -262,6 +297,8 @@ export function useApplications(): UseApplications {
   return {
     status,
     applications,
+    pageMeta,
+    loadPage,
     error,
     offline,
     failedChanges,

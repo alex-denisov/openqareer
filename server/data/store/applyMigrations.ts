@@ -36,6 +36,8 @@ import {
   MIGRATION_39,
 } from '../sqliteSchema';
 import { MIGRATION_40 } from '../consultantHistorySchema';
+import { MIGRATION_BILLING } from '../../billing/billingSchema';
+import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequestSchema';
 
 const MIGRATIONS = [
   MIGRATION_1,
@@ -77,6 +79,9 @@ const MIGRATIONS = [
   MIGRATION_38,
   MIGRATION_39,
   MIGRATION_40,
+  // B345 сохраняет номер 41; идемпотентная миграция B471 добавляется следом.
+  MIGRATION_BILLING,
+  MIGRATION_EXECUTIVE_REQUEST,
 ];
 
 export function applyMigrations(

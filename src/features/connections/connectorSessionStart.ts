@@ -10,6 +10,8 @@ import {
 export interface ConnectorSessionStartDependencies {
   readonly platform: ConnectionPlatform;
   readonly url: string;
+  /** Browser popups must open in the original user gesture, before any await. */
+  readonly isDesktop?: boolean;
   /**
    * Measures the frame the native window has to cover. It can only be read
    * once the session frame is on screen, which is why the step announces
@@ -48,8 +50,11 @@ export async function startConnectorSession(
   dependencies: ConnectorSessionStartDependencies,
 ): Promise<ConnectorSessionStartResult> {
   dependencies.onStep('opening');
-  await dependencies.waitForFrame();
-  const layout = dependencies.measureLayout();
+  let layout: SessionLayout | undefined;
+  if (dependencies.isDesktop !== false) {
+    await dependencies.waitForFrame();
+    layout = dependencies.measureLayout();
+  }
   const open = dependencies.openSession ?? openConnectorSession;
   const result = await open(dependencies.platform, dependencies.url, layout);
   if (!result.opened) {

@@ -137,6 +137,7 @@ async function loadSplitModule(){
     source=source.replaceAll(from,replacement)
   }
   try{sessionStorage.removeItem(RELOAD_KEY)}catch(error){void error}
+  if(statusNode?.isConnected)statusNode.remove();
   const objectUrl=URL.createObjectURL(new Blob([source],{type:"text/javascript"}));
   try{return await import(objectUrl)}finally{URL.revokeObjectURL(objectUrl)}
 }

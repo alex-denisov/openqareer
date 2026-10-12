@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { applySqliteBusyTimeout } from './sqliteBusyTimeout';
-import { MIGRATION_43 } from './notificationSchema';
-import { MIGRATION_44 } from './notificationDeliverySchema';
+import { MIGRATION_45 } from './notificationSchema';
+import { MIGRATION_46 } from './notificationDeliverySchema';
 import type { SealedText } from './sealedText';
 import {
   DEFAULT_NOTIFICATION_PREFERENCES,
@@ -97,8 +97,8 @@ export class SqliteNotificationRepository {
       if (options.databasePath !== ':memory:') this.database.exec('PRAGMA journal_mode = WAL;');
       applySqliteBusyTimeout(this.database);
     }
-    this.database.exec(MIGRATION_43);
-    this.database.exec(MIGRATION_44);
+    this.database.exec(MIGRATION_45);
+    this.database.exec(MIGRATION_46);
     this.deleteExpired();
     this.retentionSweep = setInterval(() => this.deleteExpired(), 60 * 60 * 1_000);
     this.retentionSweep.unref();
@@ -466,6 +466,10 @@ export class SqliteNotificationRepository {
   }
 
   deleteExpired(now = new Date().toISOString()): number {
+    const candidatesTable = this.database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'candidates'")
+      .get();
+    if (!candidatesTable) return 0;
     const removed = Number(this.database
       .prepare('DELETE FROM candidate_notifications WHERE expires_at <= ?')
       .run(now).changes);

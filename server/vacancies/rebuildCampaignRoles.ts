@@ -1,9 +1,11 @@
 import type { RouteDeps } from '../routes/deps';
+import { candidateHasLlmAccess } from '../routes/helpers';
 import { buildCampaignRoleSet, campaignFactsDigest } from './campaignRoleSet';
 
 /** Пересборка меняет только машинную часть кампании. */
 export async function rebuildCampaignRoles(
-  deps: Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel' | 'matchedPoolPrecompute'>,
+  deps: Pick<RouteDeps, 'candidateStore' | 'campaignRoleModel' | 'matchedPoolPrecompute'>
+    & Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
   candidateId: string,
   options: { readonly force?: boolean } = {},
 ): Promise<void> {
@@ -24,7 +26,7 @@ export async function rebuildCampaignRoles(
       snapshot?.resume?.draft.targetRole?.trim() ||
       before.targetDirection,
     dismissed: before.campaign?.dismissed,
-    model: deps.campaignRoleModel,
+    model: candidateHasLlmAccess(deps, candidateId) ? deps.campaignRoleModel : undefined,
   });
   const latest = deps.candidateStore.getCandidateWorkspace(candidateId);
   if (!latest) return;

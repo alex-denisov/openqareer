@@ -44,9 +44,7 @@ function StrategyBody({
   if (loading) return <p className="career-home-empty">Читаем выбранную роль…</p>;
   if (!strategy) {
     return (
-      <p className="career-home-empty">
-        Роль не выбрана. Выберите выше, и подбор пойдёт по ней.
-      </p>
+      <p className="career-home-empty">Роль не выбрана. Выберите выше, и подбор пойдёт по ней.</p>
     );
   }
 

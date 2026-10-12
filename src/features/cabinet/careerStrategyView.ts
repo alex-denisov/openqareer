@@ -70,17 +70,12 @@ function confirmationLine(version: StrategyVersion): string {
 function constraintsLine(version: StrategyVersion): string {
   const regions = version.constraints.regions;
   const markets =
-    regions.length > 0
-      ? `рынки: ${regions.join(', ')}`
-      : 'рынки не названы — кампания их не сузит';
+    regions.length > 0 ? `рынки: ${regions.join(', ')}` : 'рынки не названы — кампания их не сузит';
   const note = version.constraints.note ? ` · ваши ограничения: ${version.constraints.note}` : '';
   return `${markets}${note}`;
 }
 
-function observationWindow(confirmation: {
-  observedFrom?: string;
-  observedTo?: string;
-}): string {
+function observationWindow(confirmation: { observedFrom?: string; observedTo?: string }): string {
   if (!confirmation.observedFrom || !confirmation.observedTo) return 'даты не сохранены';
   const from = formatDay(confirmation.observedFrom);
   const to = formatDay(confirmation.observedTo);
@@ -91,10 +86,7 @@ function observationWindow(confirmation: {
  * Смена роли обнуляет воронку, поэтому причина обязательна — но только смена:
  * первый выбор менять нечего.
  */
-export function strategyChangeNeedsReason(
-  strategy: CareerStrategy | null,
-  title: string,
-): boolean {
+export function strategyChangeNeedsReason(strategy: CareerStrategy | null, title: string): boolean {
   if (!strategy) return false;
   return strategy.current.role.title.trim().toLowerCase() !== title.trim().toLowerCase();
 }
@@ -112,10 +104,7 @@ function formatDay(value: string): string {
  * никто не датировал и не объяснял, а версия несёт и дату, и причину. Пока
  * стратегии нет, строка мастера остаётся — но названа тем, чем является.
  */
-export function campaignRoleLine(
-  strategy: CareerStrategy | null,
-  targetDirection: string,
-): string {
+export function campaignRoleLine(strategy: CareerStrategy | null, targetDirection: string): string {
   if (strategy) {
     const { current } = strategy;
     return `Роль «${current.role.title}» · версия ${current.version} от ${formatDay(

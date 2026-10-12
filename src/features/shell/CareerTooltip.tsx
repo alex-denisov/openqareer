@@ -59,9 +59,10 @@ function calculateCoords(
   if (side === 'right') {
     const railRight = trigger.closest('.career-rail')?.getBoundingClientRect().right;
     const right = (railRight ?? rect.right) + TOOLTIP_MARGIN;
-    const left = right + width <= screenWidth - SCREEN_PADDING
-      ? right
-      : Math.max(SCREEN_PADDING, rect.left - width - TOOLTIP_MARGIN);
+    const left =
+      right + width <= screenWidth - SCREEN_PADDING
+        ? right
+        : Math.max(SCREEN_PADDING, rect.left - width - TOOLTIP_MARGIN);
     const top = Math.max(
       SCREEN_PADDING,
       Math.min(screenHeight - height - SCREEN_PADDING, rect.top + (rect.height - height) / 2),
@@ -69,7 +70,8 @@ function calculateCoords(
     return { top: Math.round(top), left: Math.round(left) };
   }
 
-  const placeAbove = side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
+  const placeAbove =
+    side === 'bottom' ? false : rect.top >= height + TOOLTIP_MARGIN + SCREEN_PADDING;
   const top = placeAbove
     ? Math.max(SCREEN_PADDING, rect.top - height - TOOLTIP_MARGIN)
     : rect.bottom + TOOLTIP_MARGIN;

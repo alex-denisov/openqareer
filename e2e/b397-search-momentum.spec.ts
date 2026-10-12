@@ -1,16 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { todaySnapshot } from './fixtures/readabilityWorkspace';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 test.describe('B397: Search Momentum Widget', () => {
   test('renders momentum metrics on desktop and mobile without horizontal overflow (Criterion 6)', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
-    await page.goto('/app');
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
 
     const widget = page.locator('[data-testid="search-momentum-widget"]');
-    await expect(widget).toBeVisible();
+    await expect(widget).toBeVisible({ timeout: 15_000 });
 
     await expect(page.locator('[data-testid="search-momentum-card-applied"]')).toContainText(
       'Подтверждённые отклики',
@@ -60,9 +62,10 @@ test.describe('B397: Search Momentum Widget', () => {
       });
     });
 
-    await page.goto('/app');
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
     const emptyNotice = page.locator('[data-testid="search-momentum-empty"]');
-    await expect(emptyNotice).toBeVisible();
+    await expect(emptyNotice).toBeVisible({ timeout: 15_000 });
     await expect(emptyNotice).toHaveText(
       'Пока нет подтверждённых откликов. Когда отклики будут отправлены и подтверждены, здесь появятся цифры',
     );

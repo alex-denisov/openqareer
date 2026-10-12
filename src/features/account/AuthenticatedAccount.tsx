@@ -7,15 +7,14 @@ import { MIN_PASSWORD_LENGTH } from '../../../shared/accountValidation';
 import {
   AccountAppSettingsSection,
   AccountConsentsSection,
-  AccountSubscriptionSection,
 } from './AccountDesktopSections';
 import { AccountNotificationsSection } from './AccountNotificationsSection';
+import { CandidateBillingAccountSection } from './CandidateBillingAccountSection';
 import { AccountConfirmDialog } from './AccountDialogs';
 import { AccountConnectionsManager } from '../connections/AccountConnections';
 import { useAccountNotificationSettings } from './useAccountNotificationSettings';
 import {
   DEFAULT_APP_SETTINGS,
-  DEFAULT_PAYMENT_HISTORY,
   MANDATORY_NOTIFICATION_EVENTS,
   DEFAULT_ACCOUNT_CONSENTS,
 } from './accountData';
@@ -67,7 +66,9 @@ export function AuthenticatedAccount(props: AuthenticatedAccountProps) {
     if (!activeConsentDialog) return;
     setConsents((curr) =>
       curr.map((item) =>
-        item.id === activeConsentDialog.id ? { ...item, date: item.date ? '' : '09.10' } : item,
+        item.id === activeConsentDialog.id
+          ? { ...item, date: item.date ? '' : '09.10' }
+          : item,
       ),
     );
     setActiveConsentDialog(null);
@@ -201,13 +202,7 @@ function AccountTabRouter(props: TabRouterProps) {
   if (props.section === 'app') {
     return <AccountAppSettingsSection settings={DEFAULT_APP_SETTINGS} />;
   }
-  return (
-    <AccountSubscriptionSection
-      isPro={false}
-      payments={DEFAULT_PAYMENT_HISTORY}
-      onOpenTariffs={props.onOpenTariffs}
-    />
-  );
+  return <CandidateBillingAccountSection onOpenTariffs={props.onOpenTariffs} />;
 }
 
 function AccountNotificationSettings() {
@@ -464,12 +459,8 @@ function AccountModalsHost(props: ModalsHostProps) {
 
   return (
     <>
-      {props.showLogout ? (
-        <LogoutConfirmDialog onConfirm={handleLogout} onCancel={props.onCloseLogout} />
-      ) : null}
-      {props.showDelete ? (
-        <DeleteConfirmDialog onConfirm={handleDelete} onCancel={props.onCloseDelete} />
-      ) : null}
+      {props.showLogout ? <LogoutConfirmDialog onConfirm={handleLogout} onCancel={props.onCloseLogout} /> : null}
+      {props.showDelete ? <DeleteConfirmDialog onConfirm={handleDelete} onCancel={props.onCloseDelete} /> : null}
       {props.activeConsent ? (
         <AccountConfirmDialog
           title={props.activeConsent.date ? 'Отозвать согласие?' : 'Дать согласие?'}

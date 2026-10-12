@@ -9,10 +9,7 @@ import {
 } from '../coach/coachApi';
 import { getResumeStudio } from '../resume/resumeApi';
 import type { ResumeStudioView } from '../resume/resumeTypes';
-import {
-  readCareerCabinetCache,
-  writeCareerCabinetCache,
-} from './careerCabinetCache';
+import { readCareerCabinetCache, writeCareerCabinetCache } from './careerCabinetCache';
 
 export interface CareerCabinetData {
   account?: AccountSnapshot;
@@ -34,7 +31,8 @@ export function useCareerCabinetData(candidateId: string): CareerCabinetData {
   const refresh = useCallback(async () => {
     const cached = cabinetCache(candidateId);
     setState((current) => {
-      const base = current.candidateId === candidateId ? current : stateFromCache(candidateId, cached);
+      const base =
+        current.candidateId === candidateId ? current : stateFromCache(candidateId, cached);
       return { ...base, loading: !hasProfile(base), error: undefined };
     });
     try {
@@ -156,10 +154,7 @@ function stateFromCache(
   };
 }
 
-function stateForCandidate(
-  current: CareerCabinetState,
-  candidateId: string,
-): CareerCabinetState {
+function stateForCandidate(current: CareerCabinetState, candidateId: string): CareerCabinetState {
   return current.candidateId === candidateId ? current : initialCabinetState(candidateId);
 }
 
@@ -182,8 +177,5 @@ function cabinetStorage(): Storage | undefined {
 }
 
 function cabinetError(reason: unknown): string {
-  return apiErrorMessage(
-    reason,
-    'Не удалось загрузить карьерный кабинет. Повторите запрос.',
-  );
+  return apiErrorMessage(reason, 'Не удалось загрузить карьерный кабинет. Повторите запрос.');
 }

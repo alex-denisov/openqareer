@@ -268,6 +268,15 @@ describe('CareerCabinet composition', () => {
     }
   });
 
+  it('renders the diary screen without the cabinet header or path indicator', () => {
+    const html = renderCabinet('diary');
+
+    expect(html).toContain('career-diary-page');
+    expect(html).toContain('Карьерный дневник');
+    expect(html).not.toContain('Поиск работы с опорой на проверенные факты');
+    expect(html).not.toContain('career-path-indicator');
+  });
+
   it('uses the shared header and never puts a date in it', () => {
     for (const view of ['today', 'profile', 'opportunities', 'responses'] as const) {
       expect(renderCabinet(view)).toContain('career-page-header');

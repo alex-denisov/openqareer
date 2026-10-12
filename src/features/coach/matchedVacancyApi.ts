@@ -67,8 +67,10 @@ export interface MatchedVacancyPage {
   readonly pageOffsets?: readonly number[];
   /** Кампания и гипотезы роли — приходят только с первой страницей (B248). */
   readonly campaign?: CampaignMetaView;
-  /** Целевой уровень кандидата, выведенный сервером (B248) — с первой страницей. */
+  /** Целевой уровень кандидата, выведенный сервером (B248) — с первой страницы. */
   readonly candidateLevel?: string | null;
+  /** Начальные фильтры из источника подборки; отсутствуют — значит чистый экран. */
+  readonly initialFilters?: VacanciesScreenState;
 }
 
 /**
@@ -96,6 +98,7 @@ export async function getMatchedVacancyPage(
       pageOffsets?: unknown;
       campaign?: CampaignMetaView;
       candidateLevel?: string | null;
+      initialFilters?: VacanciesScreenState;
     };
   };
   if (!Array.isArray(envelope.data)) {
@@ -122,6 +125,7 @@ export async function getMatchedVacancyPage(
     ...(envelope.meta?.candidateLevel !== undefined
       ? { candidateLevel: envelope.meta.candidateLevel }
       : {}),
+    ...(envelope.meta?.initialFilters ? { initialFilters: envelope.meta.initialFilters } : {}),
   };
 }
 

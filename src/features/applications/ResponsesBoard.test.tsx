@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesBoard } from './ResponsesBoard';
-import type { ApplicationView } from './applicationsApi';
+import type { ApplicationListPageMeta, ApplicationView } from './applicationsApi';
 import type { UseApplications } from './useApplications';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -470,7 +470,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
   });
 });
 
-describe('ResponsesBoard analytics tab switch (B355)', () => {
+describe('ResponsesBoard view and channel analytics (B450)', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -487,7 +487,7 @@ describe('ResponsesBoard analytics tab switch (B355)', () => {
     container.remove();
   });
 
-  it('позволяет переключаться между доской и аналитикой воронки', () => {
+  it('переключает колонки и таблицу и открывает результативность по каналам', () => {
     const apps = [
       application({ id: 'a1', stage: 'applied' }),
       application({ id: 'a2', stage: 'interview' }),
@@ -497,28 +497,107 @@ describe('ResponsesBoard analytics tab switch (B355)', () => {
       root.render(<ResponsesBoard state={readyState(apps)} onOpenVacancies={() => {}} />);
     });
 
-    const analyticsTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Аналитика воронки'),
+    const tableBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Таблица'),
     );
-    expect(analyticsTabBtn).toBeDefined();
+    expect(tableBtn).toBeDefined();
 
     act(() => {
-      analyticsTabBtn?.click();
+      tableBtn?.click();
     });
 
-    expect(container.textContent).toContain('Аналитика воронки');
+    expect(container.querySelector('.career-responses-table')).not.toBeNull();
+
+    const columnsBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Колонки'),
+    );
+    expect(columnsBtn).toBeDefined();
+
+    act(() => {
+      columnsBtn?.click();
+    });
+
+    expect(container.querySelector('.career-responses-board')).not.toBeNull();
+    const analyticsBtn = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes('Результативность по каналам'),
+    );
+    expect(analyticsBtn).toBeDefined();
+    act(() => analyticsBtn?.click());
     expect(container.textContent).toContain('Сквозная конверсия');
-
-    const boardTabBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Доска'),
-    );
-    expect(boardTabBtn).toBeDefined();
-
-    act(() => {
-      boardTabBtn?.click();
-    });
-
-    expect(container.textContent).toContain('Пробовали отправить');
-    expect(container.textContent).toContain('Интервью');
   });
 });
+
+describe('ResponsesBoard B450 workspace navigation', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it('exposes the funnel, company-wishlist, and offers sections', () => {
+    act(() => {
+      root.render(
+        <ResponsesBoard state={readyState([application({ id: 'a1', stage: 'applied' })])} onOpenVacancies={() => {}} />,
+      );
+    });
+
+    const labels = Array.from(container.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim() ?? '',
+    );
+
+    expect(labels).toEqual(expect.arrayContaining(['Воронка', 'Хочу в компанию', 'Офферы']));
+    expect(labels.some((label) => label.startsWith('Автоматизация'))).toBe(true);
+  });
+
+  it('offers the columns and table views', () => {
+    act(() => {
+      root.render(
+        <ResponsesBoard state={readyState([application({ id: 'a1', stage: 'applied' })])} onOpenVacancies={() => {}} />,
+      );
+    });
+
+    const labels = Array.from(container.querySelectorAll('button')).map((button) =>
+      button.textContent?.trim() ?? '',
+    );
+
+    expect(labels).toEqual(expect.arrayContaining(['Колонки', 'Таблица']));
+  });
+
+  it('applies server filters and requests the next twenty-row page', async () => {
+    const apps = [application({ id: 'a1', stage: 'applied' })];
+    const loadPage = vi.fn(async () => apps);
+    const state = { ...readyState(apps), pageMeta: pageMeta(41), loadPage };
+    act(() => root.render(<ResponsesBoard state={state} onOpenVacancies={() => {}} />));
+
+    const filters = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Фильтры'));
+    act(() => filters?.click());
+    const stage = Array.from(container.querySelectorAll('select')).find((select) => select.parentElement?.textContent?.includes('Этап'));
+    act(() => {
+      if (stage) {
+        stage.value = 'interview';
+        stage.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    });
+    const apply = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Показать 41'));
+    await act(async () => { apply?.click(); await Promise.resolve(); });
+    expect(loadPage).toHaveBeenCalledWith({ stage: ['interview'], limit: 20, offset: 0 });
+
+    const more = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Показать ещё'));
+    await act(async () => { more?.click(); await Promise.resolve(); });
+    expect(loadPage).toHaveBeenLastCalledWith({ stage: ['interview'], limit: 20, offset: 1 }, true);
+  });
+});
+
+function pageMeta(total: number): ApplicationListPageMeta {
+  return { total, offset: 0, limit: 20, stageCounts: { saved: 0, applied: total, responded: 0, interview: 0, offer: 0, rejected: 0, archived: 0 } };
+}

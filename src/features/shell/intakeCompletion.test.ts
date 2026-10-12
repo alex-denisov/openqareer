@@ -77,9 +77,12 @@ describe('createIntakeCompletion', () => {
    */
   it('marks the import as running until it settles, so the cabinet can stop claiming a zero', async () => {
     let release: () => void = () => undefined;
-    const save = vi.fn(() => new Promise<void>((resolve) => {
-      release = resolve;
-    }));
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
     const setImporting = vi.fn();
 
     const complete = createIntakeCompletion({

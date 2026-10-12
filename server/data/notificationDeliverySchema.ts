@@ -1,5 +1,5 @@
 /** Channel delivery state contains opaque references and hashes, never message bodies or raw tokens. */
-export const MIGRATION_44 = `
+export const MIGRATION_46 = `
 CREATE TABLE IF NOT EXISTS candidate_notification_telegram_preferences (
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
   preference_key TEXT NOT NULL CHECK (preference_key IN (

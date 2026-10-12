@@ -38,11 +38,11 @@ describe('how the cabinet addresses the candidate', () => {
   });
 
   it('keeps the login when nothing states a name', () => {
-    expect(
-      cabinetDisplayName({ resume: resumeWithName(null), username: 'candidate.test' }),
-    ).toBe('candidate.test');
-    expect(
-      cabinetDisplayName({ sessionDisplayName: '   ', username: 'candidate.test' }),
-    ).toBe('candidate.test');
+    expect(cabinetDisplayName({ resume: resumeWithName(null), username: 'candidate.test' })).toBe(
+      'candidate.test',
+    );
+    expect(cabinetDisplayName({ sessionDisplayName: '   ', username: 'candidate.test' })).toBe(
+      'candidate.test',
+    );
   });
 });

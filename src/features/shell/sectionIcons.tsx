@@ -35,10 +35,7 @@ export function ProfileIcon({ size = 22, active = false }: SectionIconProps) {
     <svg {...frame(size)}>
       <rect x="3" y="4.6" width="18" height="14.8" rx="2.6" />
       <circle cx="9" cy="10.6" r="2.4" fill={active ? 'currentColor' : 'none'} />
-      <path
-        d="M5.6 16.4c.7-1.9 2-2.8 3.4-2.8s2.7.9 3.4 2.8"
-        strokeLinecap="round"
-      />
+      <path d="M5.6 16.4c.7-1.9 2-2.8 3.4-2.8s2.7.9 3.4 2.8" strokeLinecap="round" />
       <path d="M15 9.6h3.4M15 13.1h3.4" strokeLinecap="round" />
     </svg>
   );
@@ -67,10 +64,7 @@ export function ResumeIcon({ size = 22, active = false }: SectionIconProps) {
 }
 
 /** «Поиск» — the radar that keeps sweeping for a match. */
-export function SearchIcon({
-  size = 22,
-  active = false,
-}: SectionIconProps) {
+export function SearchIcon({ size = 22, active = false }: SectionIconProps) {
   return (
     <svg {...frame(size)}>
       <circle cx="12" cy="12" r="8.4" />
@@ -82,10 +76,7 @@ export function SearchIcon({
         fill={active ? 'currentColor' : 'none'}
         stroke={active ? 'none' : 'currentColor'}
       />
-      <path
-        d="M12 1.9v2.3M12 19.8v2.3M1.9 12h2.3M19.8 12h2.3"
-        strokeLinecap="round"
-      />
+      <path d="M12 1.9v2.3M12 19.8v2.3M1.9 12h2.3M19.8 12h2.3" strokeLinecap="round" />
     </svg>
   );
 }

@@ -36,6 +36,17 @@ function event(idempotencyKey: string, kind: 'employer_reply' | 'email_approval'
 }
 
 describe('SQLite candidate notification repository', () => {
+  it('defers retention cleanup until the candidate table exists', () => {
+    const database = new DatabaseSync(':memory:');
+    const repository = new SqliteNotificationRepository(database);
+    databases.push(database);
+    repositories.push(repository);
+
+    expect(repository.deleteExpired(NOW)).toBe(0);
+    database.exec('CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;');
+    expect(repository.deleteExpired(NOW)).toBe(0);
+  });
+
   it('stores idempotently, paginates within a candidate, and marks events read', () => {
     const repository = createRepository();
     const older = repository.recordEvent('candidate-a', event('older', 'employer_reply', '2026-10-10T10:00:00.000Z'));
