@@ -34,7 +34,26 @@ function WorkPreferencesRailPanel() {
   return <WorkPreferencesPanel state={state} />;
 }
 
-export function ProfileSideRail({ draft }: { readonly draft: ResumeDraft }) {
+export function ProfileSideRail({
+  draft,
+  desktopLayout = false,
+}: {
+  readonly draft: ResumeDraft;
+  readonly desktopLayout?: boolean;
+}) {
+  if (desktopLayout) {
+    return (
+      <section
+        id="sec-relocation"
+        className="career-profile-screen-panel career-profile-screen-relocation"
+        aria-labelledby="career-profile-screen-relocation-title"
+      >
+        <h2 id="career-profile-screen-relocation-title">Релокация</h2>
+        <WorkPreferencesRailPanel />
+      </section>
+    );
+  }
+
   return (
     <aside
       id="sec-relocation"
