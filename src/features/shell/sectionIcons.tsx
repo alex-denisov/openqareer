@@ -136,10 +136,8 @@ export function TodayIcon({ size = 22 }: SectionIconProps) {
 export function ResponsesIcon({ size = 22 }: SectionIconProps) {
   return (
     <svg {...frame(size)}>
-      <rect x="2.6" y="4.4" width="5.4" height="15.2" rx="1.8" />
-      <rect x="9.3" y="4.4" width="5.4" height="15.2" rx="1.8" />
-      <rect x="16" y="4.4" width="5.4" height="15.2" rx="1.8" />
-      <path d="M4.4 8h2M11.1 8h2M17.8 8h2" strokeLinecap="round" />
+      <path d="M21.2 3 10.6 13.6" strokeLinecap="round" />
+      <path d="M21.2 3 14.6 21l-4-7.4L3 9.6 21.2 3Z" strokeLinejoin="round" />
     </svg>
   );
 }

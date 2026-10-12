@@ -9,7 +9,7 @@ import {
   ListChecks,
   X,
 } from '@phosphor-icons/react';
-import { pluralWordRu } from '../../../shared/pluralRu';
+import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { profileCompleteness } from '../resume/profileCompleteness';
@@ -200,7 +200,7 @@ function TodayProfileProgress({
       <div className="career-today-profile-progress-main">
         <p>
           Профиль готов на <strong>{percent} %</strong>:{' '}
-          {pluralWordRu(actions.length, ['действие', 'действия', 'действий'])}
+          {pluralRu(actions.length, ['действие', 'действия', 'действий'])}
         </p>
         <progress
           max={completeness.totalCount}
@@ -381,7 +381,7 @@ function queueDateLabel(value: string | null, kind: TodayQueueItem['kind']): str
     const days = Math.ceil(delta / 86_400_000);
     return days === 0
       ? `${dateLabel}, сегодня`
-      : `${dateLabel}, через ${pluralWordRu(days, ['день', 'дня', 'дней'])}`;
+      : `${dateLabel}, через ${pluralRu(days, ['день', 'дня', 'дней'])}`;
   }
   return `до ${dateLabel}`;
 }
