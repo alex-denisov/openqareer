@@ -37,6 +37,7 @@ import {
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 
 import './vacancies-screen.css';
+import './s10-vis.css';
 
 export interface VacanciesPathIndicator {
   readonly steps: readonly PathStep[];
@@ -174,7 +175,6 @@ function useVacanciesScreenBoard(
   };
 }
 
-
 function useInitialVacancyFilters(
   initialFilters: VacanciesScreenState | undefined,
   setState: (state: VacanciesScreenState) => void,
@@ -242,13 +242,14 @@ export interface ListContentProps {
   readonly companyWantKnownClusterIds?: ReadonlySet<string>;
   readonly companyBusyClusterIds?: ReadonlySet<string>;
   readonly companyContactsCountByClusterId?: ReadonlyMap<string, number | null>;
+  readonly companiesCount?: number;
   readonly onOpenCompanyPath?: (companyName?: string) => void;
+  readonly onOpenCompanyCollection?: () => void;
   readonly onToggleSaved?: (cluster: MatchedVacancyItem['cluster']) => Promise<void>;
   readonly onToggleCompanyWant?: (companyName?: string) => Promise<void>;
   readonly collectionActionError?: string;
   readonly hasMore?: boolean;
   readonly onLoadMore?: () => void;
-  readonly countShownAbove: boolean;
   readonly poolComplete?: boolean;
 }
 
@@ -304,7 +305,13 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
   const { campaign, matched, now: providedNow } = input;
   const now = providedNow ?? new Date().toISOString();
   const [activeCampaign, setActiveCampaign] = useActiveCampaign(campaign);
-  const board = useVacanciesScreenBoard(matched, activeCampaign, now, input.onFiltersChange, input.initialFilters);
+  const board = useVacanciesScreenBoard(
+    matched,
+    activeCampaign,
+    now,
+    input.onFiltersChange,
+    input.initialFilters,
+  );
   const collections = useVacancyCollections(input);
   const actions = useVacancyCampaignActions(activeCampaign, {
     onCampaignUpdated: campaignUpdateHandler(setActiveCampaign, board.setState),
@@ -342,7 +349,6 @@ function useVacanciesScreenState(input: VacanciesScreenProps) {
     resetFilters,
   };
 }
-
 
 function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) {
   board.setState({
@@ -402,10 +408,9 @@ function buildListProps(
       .map((application) => application.clusterId)
       .filter((id): id is string => Boolean(id)),
   );
-  const companyStates = companyRowStates(board.filtered, collections);
   return {
     items: board.visibleItems,
-    total: board.filtered.length,
+    total: screenFilteredCount(input, board.filtered.length, board.state),
     now: screenState.now,
     selectedId: board.selectedId,
     onToggleSelect: board.toggleSelect,
@@ -423,20 +428,22 @@ function buildListProps(
           input.onOpenExpert?.(
             'vacancies',
             { kind: 'vacancy', id: cluster.id },
-            'О вакансии: ' + cluster.canonicalTitle +
+            'О вакансии: ' +
+              cluster.canonicalTitle +
               (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
           )
       : undefined,
     savedClusterIds,
     savedBusyIds: collections.savedBusyIds,
-    ...companyStates,
+    ...companyRowStates(board.filtered, collections),
+    companiesCount: collections.companiesCount,
     onToggleSaved: collections.toggleSaved,
     onToggleCompanyWant: collections.toggleCompanyWant,
     onOpenCompanyPath: screenState.openCompanyPath,
+    onOpenCompanyCollection: () => screenState.chooseTab('companies'),
     collectionActionError: collections.actionError,
     hasMore: board.hasMore,
     onLoadMore: board.loadMore,
-    countShownAbove: Boolean(input.facets),
     poolComplete: input.poolComplete,
   };
 }
@@ -465,7 +472,8 @@ function ResultCount({
 }) {
   const label = input.poolComplete === false ? 'Загружено' : 'Показано';
   const poolTotal = input.facets?.total;
-  const ariaCount = poolTotal === undefined ? `${label} ${shown}` : `${label} ${shown} из ${poolTotal}`;
+  const ariaCount =
+    poolTotal === undefined ? `${label} ${shown}` : `${label} ${shown} из ${poolTotal}`;
   return (
     <div className="vacancies-mobile-results-summary">
       <p className="list-hint" aria-live="polite" aria-label={ariaCount}>
@@ -609,11 +617,7 @@ function OpportunityContent({
 }) {
   if (activeTab === 'selection') {
     return (
-      <VacanciesScreenContent
-        input={input}
-        screenState={screenState}
-        onOpenLetter={onOpenLetter}
-      />
+      <VacanciesScreenContent input={input} screenState={screenState} onOpenLetter={onOpenLetter} />
     );
   }
   if (activeTab === 'saved') {

@@ -148,7 +148,6 @@ export function VacanciesFilterToolbar({
   );
 }
 
-
 function VacancyFilterGroupButtons({
   groups,
   activeGroup,
@@ -167,7 +166,9 @@ function VacancyFilterGroupButtons({
           aria-controls="vacancies-filter-popover"
           onClick={() => onSelectGroup(group.id)}
         >
-          <span className="vacancies-filter-group-label">{group.label}</span>
+          {group.id === 'salary' && group.summary ? null : (
+            <span className="vacancies-filter-group-label">{group.label}</span>
+          )}
           {group.summary ? (
             <span className="vacancies-filter-group-value">{group.summary}</span>
           ) : null}

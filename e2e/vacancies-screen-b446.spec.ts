@@ -224,7 +224,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
     .first();
   await expect(vacancy).toBeVisible({ timeout: 15_000 });
-  const saveButton = vacancy.getByRole('button', { name: 'Сохранить вакансию' });
+  const saveButton = vacancy.getByRole('button', { name: 'Сохранить', exact: true });
   const companyWantButton = vacancy.getByRole('button', { name: 'Хочу в эту компанию' });
   await expect(saveButton).toBeVisible();
   const actionHeights = await vacancy
@@ -237,7 +237,8 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
     fullPage: true,
   });
-  await vacancy.locator('.vac-row').click();
+  const rowTrigger = vacancy.locator('.vacancies-screen-row-trigger');
+  if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
   const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
   await focusWithKeyboard(page, companyPathButton);
   await page.keyboard.press('Enter');

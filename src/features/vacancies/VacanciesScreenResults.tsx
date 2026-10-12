@@ -2,6 +2,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyRow } from './VacancyRow';
 import { VacancyMapView } from './VacancyMapView';
 import type { ListContentProps } from './VacanciesScreen';
+import { Target } from '@phosphor-icons/react';
 import {
   VacanciesEmptyFilterState,
   VacanciesEmptyPoolState,
@@ -33,7 +34,6 @@ function VacanciesTableHeader() {
         <span>Уровень</span>
         <span>Гео</span>
         <span>Деньги</span>
-        <span aria-hidden="true" />
       </div>
       <span className="vacancies-table-header-actions" aria-hidden="true" />
     </div>
@@ -90,15 +90,27 @@ function VacanciesListContent(props: ListContentProps) {
           <VacancyScreenRow key={item.cluster.id} item={item} props={props} />
         ))}
       </ul>
-      {props.hasMore ? (
-        <button type="button" className="companies-people-load-more" onClick={props.onLoadMore}>
-          Показать ещё 20
+      <footer className="vacancies-screen-footer" aria-label="Навигация по подборке вакансий">
+        <p className="vacancies-screen-page-count" aria-live="polite">
+          {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
+          {props.total || props.items.length}
+        </p>
+        <button
+          type="button"
+          className="vacancies-screen-companies-action"
+          onClick={props.onOpenCompanyCollection}
+          disabled={!props.onOpenCompanyCollection}
+        >
+          <Target size={15} aria-hidden="true" />
+          Все компании подборки в «Хочу»
+          {props.companiesCount !== undefined ? ` (${props.companiesCount})` : ''}
         </button>
-      ) : null}
-      <p className="vacancies-screen-page-count" aria-live="polite">
-        {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
-        {props.total || props.items.length}
-      </p>
+        {props.hasMore ? (
+          <button type="button" className="companies-people-load-more" onClick={props.onLoadMore}>
+            Показать ещё 20
+          </button>
+        ) : null}
+      </footer>
     </div>
   );
 }
