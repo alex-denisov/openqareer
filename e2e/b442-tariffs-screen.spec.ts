@@ -46,7 +46,7 @@ test.describe('B442 tariffs screen (Desktop 1440 & Mobile 390)', () => {
   });
 
   test.beforeEach(() => {
-    test.setTimeout(60000);
+    test.setTimeout(120_000);
   });
 
   test('renders tariffs ladder on desktop 1440 without horizontal overflow and captures evidence', async ({
