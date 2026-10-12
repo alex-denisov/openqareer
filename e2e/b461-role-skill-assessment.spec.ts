@@ -1,10 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const evidenceDirectory =
-  '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B461';
+const evidenceDirectory = e2eEvidenceDirectory('B461');
 
 async function openAssessment(page: Page, width: number): Promise<void> {
   await mockSignedInCabinet(page);
@@ -16,11 +16,21 @@ async function openAssessment(page: Page, width: number): Promise<void> {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  const openConsultant = page
-    .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
-    .first();
-  await openConsultant.click();
   const consultant = page.locator('aside.career-expert-panel');
+  if (!(await consultant.isVisible())) {
+    const desktopTrigger = page
+      .locator('.career-desktop-topbar')
+      .getByRole('button', { name: 'Открыть консультанта', exact: true });
+    if (await desktopTrigger.isVisible()) {
+      await desktopTrigger.click();
+    } else {
+      await page
+        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+        .first()
+        .click();
+    }
+  }
+  await expect(consultant).toBeVisible();
   const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();
   await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();

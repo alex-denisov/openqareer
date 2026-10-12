@@ -180,9 +180,11 @@ async function seedWorkspace(page: Page): Promise<void> {
 
 async function openCareer(page: Page): Promise<void> {
   await waitForCareerShell(page);
-  const desktopRole = page.locator('.career-path-desktop').getByRole('button', { name: /^Роль\./ });
-  if (await desktopRole.isVisible()) {
-    await desktopRole.first().click();
+  if ((page.viewportSize()?.width ?? 1440) > 760) {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьера', exact: true })
+      .click();
   } else {
     const mobileRole = page.locator('.career-path-mobile-role');
     if (await mobileRole.isVisible()) {

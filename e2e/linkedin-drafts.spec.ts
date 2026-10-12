@@ -17,6 +17,10 @@ const draft = {
 };
 
 async function openCard(page: Page) {
+  test.skip(
+    test.info().project.name !== 'mobile-390',
+    'Desktop Today uses the approved decision and funnel layout; compact Today keeps LinkedIn drafts.',
+  );
   await seedReadabilityWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });

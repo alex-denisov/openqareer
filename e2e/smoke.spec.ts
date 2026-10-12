@@ -157,11 +157,16 @@ test('candidate confirms one saved command and sees an honest queued state', asy
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  // B169 §8 — no contextless «Эксперт» in the top bar. B248: the old home
-  // screen's consultant fold is gone; the rail's «Консультант» item opens the
-  // drawer once the career picture exists.
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button:has-text("Спросить консультанта"):visible').first().click();
+  const expertPanel = page.getByRole('complementary', { name: /^Консультант · / });
+  if ((page.viewportSize()?.width ?? 1440) >= 1280) {
+    await expect(expertPanel).toBeVisible();
+  } else if (!(await expertPanel.isVisible())) {
+    await page
+      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .first()
+      .click();
+  }
   const dialog = page.getByRole('complementary', { name: /^Консультант · / });
   const expand = dialog.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();

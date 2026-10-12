@@ -242,10 +242,11 @@ async function openLetter(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 15_000 });
   const firstItem = page.locator('.vac-list-item').first();
   await expect(firstItem).toBeVisible();
-  const row = firstItem.locator('.vac-row');
+  const row = firstItem.locator('.vacancies-screen-row-trigger');
   if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
-  await firstItem
-    .locator('.vac-detail')
+  await firstItem.locator('.vac-detail').getByRole('button', { name: 'Полное описание' }).click();
+  await page
+    .locator('.career-modal-card.is-detail')
     .getByRole('button', { name: 'Сопроводительное письмо', exact: true })
     .click();
   await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
@@ -259,7 +260,8 @@ async function reviewWithConsultant(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Попросить правки у консультанта' }).click();
   const panel = page.locator('aside.career-expert-panel');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('header strong')).toHaveText('Консультант · Вакансии');
+  await expect(panel.locator('header strong')).toHaveText('Консультант');
+  await expect(panel.locator('header small')).toContainText('Вакансии');
   await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expect(panel).toBeHidden();
 }

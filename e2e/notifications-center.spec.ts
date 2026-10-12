@@ -2,12 +2,12 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B473';
-const GATE_HTML = '/tmp/B473-dom';
-const DIST_ASSETS =
-  '/Users/alexeydenisov/Projects/openqareer/.claude/worktrees/oq-B473/dist/assets';
+const EVIDENCE = e2eEvidenceDirectory('B473');
+const GATE_HTML = join(process.cwd(), 'test-results', 'evidence', 'B473-dom');
+const DIST_ASSETS = join(process.cwd(), 'dist', 'assets');
 
 interface NotificationFixture {
   readonly id: string;
@@ -322,7 +322,12 @@ test('desktop bell opens the notification center and actions update unread state
   await capture(page, testInfo, 'bell-popover');
   await popover.getByRole('link', { name: 'Все уведомления' }).click();
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Уведомления' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Центр уведомлений' }).getByRole('heading', {
+      level: 1,
+      name: 'Уведомления',
+    }),
+  ).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Сегодня', level: 2 })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Раньше', level: 2 })).toBeVisible();
   await capture(page, testInfo, 'notification-list');
@@ -344,7 +349,12 @@ test('mobile bell opens a list, then a detail screen with a working back action'
   await expect(bell).toBeVisible();
   await capture(page, testInfo, 'bell-unread');
   await bell.click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Уведомления' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Центр уведомлений' }).getByRole('heading', {
+      level: 1,
+      name: 'Уведомления',
+    }),
+  ).toBeVisible();
   await capture(page, testInfo, 'notification-list');
   await page.getByRole('button', { name: /Письмо ждёт одобрения/u }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Уведомление' })).toBeVisible();
@@ -353,7 +363,12 @@ test('mobile bell opens a list, then a detail screen with a working back action'
   ).toBeVisible();
   await capture(page, testInfo, 'notification-detail');
   await page.getByRole('button', { name: 'Назад' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Уведомления' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Центр уведомлений' }).getByRole('heading', {
+      level: 1,
+      name: 'Уведомления',
+    }),
+  ).toBeVisible();
 });
 
 test('notification settings opens the account notifications section', async ({
@@ -378,7 +393,12 @@ test('empty notifications show the candidate-owned empty state', async ({ page }
   if (testInfo.project.name === 'desktop-1440') {
     await page.getByRole('link', { name: 'Все уведомления' }).click();
   }
-  await expect(page.getByRole('heading', { level: 1, name: 'Уведомления' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Центр уведомлений' }).getByRole('heading', {
+      level: 1,
+      name: 'Уведомления',
+    }),
+  ).toBeVisible();
   await expect(page.getByText(/Новых уведомлений нет/u)).toBeVisible();
   await capture(page, testInfo, 'notification-empty');
 });

@@ -40,8 +40,10 @@ async function openAutomation(page: Page) {
   await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await expect(page.locator('.career-automation-topbar-title')).toHaveText('Автоматизация');
-  } else
-    await expect(page.getByRole('heading', { name: 'Автоматизация', exact: true })).toBeVisible();
+  } else {
+    await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Автоматизация');
+    await expect(page.getByRole('tablist', { name: 'Автоматизация' })).toBeVisible();
+  }
 }
 
 async function seedWorkspace(page: Page) {

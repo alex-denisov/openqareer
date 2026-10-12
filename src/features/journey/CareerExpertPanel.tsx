@@ -2,8 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowRight,
+  CaretDoubleRight,
   CaretDown,
   CaretUp,
+  ClockCounterClockwise,
   PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
@@ -30,10 +32,7 @@ import { ConsultantMessage } from './ConsultantMessage';
 import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
 import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
-import {
-  getSkillQuizById,
-  type QuizEvaluationResult,
-} from '../../services/hhSkillQuizzes';
+import { getSkillQuizById, type QuizEvaluationResult } from '../../services/hhSkillQuizzes';
 
 export const STAGE_TITLE: Record<CoachTurnStage, string> = {
   profile: 'Профиль',
@@ -69,6 +68,7 @@ interface CareerExpertPanelProps {
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
   onEscape?: () => void;
+  onStageChange?: (stage: CoachTurnStage) => void;
   onClose: () => void;
 }
 
@@ -88,6 +88,7 @@ export function CareerExpertPanel({
   mobileExpanded = false,
   onToggleMobileExpanded,
   onEscape,
+  onStageChange,
   onClose,
 }: CareerExpertPanelProps) {
   const [user, setUser] = useState<AuthUser | null>(initialUser);
@@ -107,7 +108,9 @@ export function CareerExpertPanel({
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
   const [skillQuizApplying, setSkillQuizApplying] = useState(false);
   const [skillQuizApplyError, setSkillQuizApplyError] = useState<string>();
-  const [appliedSkillQuiz, setAppliedSkillQuiz] = useState<Awaited<ReturnType<typeof applySkillQuizResult>>>();
+  const [stageMenuOpen, setStageMenuOpen] = useState(false);
+  const [appliedSkillQuiz, setAppliedSkillQuiz] =
+    useState<Awaited<ReturnType<typeof applySkillQuizResult>>>();
   const skillQuizApplyInFlight = useRef(false);
   const skillQuizApplyIdempotencyKey = useRef<{ quizId: string; key: string }>();
 
@@ -156,8 +159,21 @@ export function CareerExpertPanel({
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  const stageMenuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEscapeLayer(onEscape ?? onClose);
+  useEscapeLayer(() => setStageMenuOpen(false), stageMenuOpen);
+
+  useEffect(() => {
+    if (!stageMenuOpen) return undefined;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !stageMenuRef.current?.contains(event.target)) {
+        setStageMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    return () => document.removeEventListener('pointerdown', onPointerDown, true);
+  }, [stageMenuOpen]);
 
   useEffect(() => {
     const returnFocusTo =
@@ -302,7 +318,7 @@ export function CareerExpertPanel({
       ref={panel}
       className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}`}
       data-mobile-expanded={mobileExpanded}
-      aria-label={`Консультант · ${STAGE_TITLE[stage]}`}
+      aria-label={`Консультант · ${STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
       <header>
         <div className="career-expert-identity">
@@ -310,13 +326,71 @@ export function CareerExpertPanel({
             <Sparkle size={18} weight="fill" />
           </span>
           <div>
-            <strong>Консультант · {STAGE_TITLE[stage]}</strong>
-            <small>
-              {loadingSession
-                ? 'Проверяем вход и читаем ваш профиль'
-                : subjectTitle ?? (user ? 'Персональный карьерный консультант' : 'Защищённый диалог')}
-            </small>
+            <strong>Консультант</strong>
+            <small>{STAGE_TITLE[stage]}</small>
           </div>
+        </div>
+        <div className="career-expert-panel-controls">
+          <button
+            className="career-expert-history-button"
+            type="button"
+            aria-label="Перейти к истории диалога"
+            disabled={loadingSession || !user}
+            onClick={() =>
+              historyEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
+            }
+          >
+            <ClockCounterClockwise size="1em" aria-hidden="true" />
+          </button>
+          <div className="career-expert-stage-picker" ref={stageMenuRef}>
+            <button
+              className="career-expert-stage-button"
+              type="button"
+              aria-label="Выбрать раздел консультанта"
+              aria-expanded={stageMenuOpen}
+              disabled={!onStageChange}
+              onClick={() => setStageMenuOpen((open) => !open)}
+            >
+              <CaretDown size="1em" aria-hidden="true" />
+            </button>
+            {stageMenuOpen ? (
+              <div
+                className="career-expert-stage-menu"
+                role="group"
+                aria-label="Раздел консультанта"
+              >
+                {(Object.entries(STAGE_TITLE) as [CoachTurnStage, string][]).map(
+                  ([targetStage, label]) => (
+                    <button
+                      key={targetStage}
+                      type="button"
+                      aria-pressed={targetStage === stage}
+                      onClick={() => {
+                        onStageChange?.(targetStage);
+                        setStageMenuOpen(false);
+                      }}
+                    >
+                      {label}
+                    </button>
+                  ),
+                )}
+              </div>
+            ) : null}
+          </div>
+          <button
+            ref={closeButton}
+            className="career-close-button"
+            type="button"
+            onClick={onClose}
+            aria-label="Закрыть карьерного консультанта"
+          >
+            <CaretDoubleRight
+              className="career-expert-close-desktop-icon"
+              size="1em"
+              aria-hidden="true"
+            />
+            <X className="career-expert-close-mobile-icon" size="1em" aria-hidden="true" />
+          </button>
         </div>
         {onToggleMobileExpanded ? (
           <button
@@ -329,15 +403,6 @@ export function CareerExpertPanel({
             {mobileExpanded ? <CaretDown size={20} /> : <CaretUp size={20} />}
           </button>
         ) : null}
-        <button
-          ref={closeButton}
-          className="career-close-button"
-          type="button"
-          onClick={onClose}
-          aria-label="Закрыть карьерного консультанта"
-        >
-          <X size={20} />
-        </button>
       </header>
 
       <div className="career-expert-conversation">
@@ -392,7 +457,8 @@ export function CareerExpertPanel({
             <span>Проверка навыков со стратегом</span>
             <strong>Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn</strong>
             <p>
-              3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с источником и датой. Никаких субъективных оценок.
+              3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с
+              источником и датой. Никаких субъективных оценок.
             </p>
             <button
               type="button"
@@ -567,7 +633,11 @@ function ExpertComposerSkeleton() {
   );
 }
 
-const EXPERT_STARTER_PROMPTS = ['С чего начать?', 'Какие источники можно подключить?', 'Можно без подключений?'];
+const EXPERT_STARTER_PROMPTS = [
+  'С чего начать?',
+  'Какие источники можно подключить?',
+  'Можно без подключений?',
+];
 
 function ExpertStarterChips({ onChoose }: { readonly onChoose: (prompt: string) => void }) {
   return (

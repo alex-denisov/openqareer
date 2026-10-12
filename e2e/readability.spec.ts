@@ -109,7 +109,11 @@ function measure(minFontPx: number): ReadabilityFacts {
       const b = boxes[j].rect;
       const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-      const nested = boxes[i].text.includes(boxes[j].text) || boxes[j].text.includes(boxes[i].text);
+      const nested =
+        boxes[i].element.contains(boxes[j].element) ||
+        boxes[j].element.contains(boxes[i].element) ||
+        boxes[i].text.includes(boxes[j].text) ||
+        boxes[j].text.includes(boxes[i].text);
       const overlayA = boxes[i].element.closest('.vacancies-filters.is-expanded');
       const overlayB = boxes[j].element.closest('.vacancies-filters.is-expanded');
       const intersectionCenter = {
@@ -179,14 +183,11 @@ async function openSection(
   label: (typeof SECTIONS)[number] | 'Отклики',
 ): Promise<void> {
   if (label === 'Роль') {
-    // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
-    // Отклики · Консультант); it opens from the path indicator's «Роль»
-    // step instead (career-consultant-notes.md §2).
-    const desktopRole = page
-      .locator('.career-path-desktop')
-      .getByRole('button', { name: /^Роль\./ });
-    if (await desktopRole.isVisible()) {
-      await desktopRole.first().click();
+    if ((page.viewportSize()?.width ?? 1440) >= 761) {
+      await page
+        .getByRole('navigation', { name: 'Разделы кабинета' })
+        .getByRole('button', { name: 'Карьера', exact: true })
+        .click();
     } else {
       const mobileSummary = page.locator('.career-path-mobile-summary');
       if (await mobileSummary.isVisible()) {
@@ -277,8 +278,8 @@ test.describe('B232 readability gate', () => {
     await waitForCareerShell(page);
 
     const rail = page.locator('aside#career-rail');
-    await expect(rail.locator('.career-nav-button span')).toHaveCount(5);
-    await expect(rail.getByRole('button', { name: 'Автоматизация', exact: true })).toHaveCount(0);
+    await expect(rail.locator('.career-nav-button span')).toHaveCount(7);
+    await expect(rail.getByRole('button', { name: 'Автоматизация', exact: true })).toBeEnabled();
     const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
       nodes.map((node) => ({
         text: node.textContent,
@@ -292,37 +293,23 @@ test.describe('B232 readability gate', () => {
       ]),
     );
     await rail.getByRole('button', { name: 'Вакансии', exact: true }).hover();
-    await expect(rail.getByRole('tooltip')).toContainText('Вакансии');
+    await expect(page.locator('.career-desktop-topbar-hint')).toHaveText('Вакансии');
+    await expect(page.locator('.career-tooltip-bubble[data-open="true"]')).toHaveCount(0);
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Роль', '.vacancies-screen'],
-      ['Подборка', '.vacancies-screen'],
+      ['Карьера', '.vacancies-screen'],
+      ['Вакансии', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
-      ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],
       ['Автоматизация', '.automation-screen'],
     ] as const;
     for (const [label, target] of routes) {
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
       await waitForCareerShell(page);
-      if (label === 'Автоматизация') {
-        await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-        const responsesNavigation = page.getByRole('navigation', {
-          name: 'Разделы откликов',
-        });
-        const automation = responsesNavigation.getByRole('button', {
-          name: 'Автоматизация',
-          exact: true,
-        });
-        await expect(automation).toBeVisible();
-        await automation.click();
-      } else {
-        const routeName = new RegExp(`^${label}(?:\\.|$)`);
-        const routeButton = page.getByRole('button', { name: routeName }).first();
-        await expect(routeButton).toBeVisible();
-        await expect(routeButton).toBeEnabled({ timeout: 15_000 });
-        await routeButton.click();
-      }
+      const routeButton = rail.getByRole('button', { name: label, exact: true });
+      await expect(routeButton).toBeVisible();
+      await expect(routeButton).toBeEnabled({ timeout: 15_000 });
+      await routeButton.click();
       await expect(page.locator(target).first()).toBeVisible();
     }
     expect(unmatched).toEqual([]);
@@ -435,17 +422,18 @@ test.describe('B232 readability gate', () => {
       probe.remove();
       const filled = [...main.querySelectorAll<HTMLElement>('button, a')]
         .filter((element) => getComputedStyle(element).backgroundColor === accentRgb)
+        .filter((element) => element.getClientRects().length > 0)
         .filter((element) => !element.closest('.career-rail, .career-mobile-nav'));
       const outsideQueue = filled
-        .filter((element) => !element.closest('.career-today-item'))
+        .filter((element) => !element.closest('.career-today-queue-desktop-row'))
         .map((element) => element.textContent?.trim().slice(0, 40) ?? '');
-      const perItem = [...main.querySelectorAll('.career-today-item')].map(
+      const perItem = [...main.querySelectorAll('.career-today-queue-desktop-row')].map(
         (item) => filled.filter((element) => item.contains(element)).length,
       );
       return { filled: filled.length, outsideQueue, perItem };
     });
-    expect(composition.filled, JSON.stringify(composition)).toBeGreaterThan(0);
-    expect(composition.outsideQueue, JSON.stringify(composition)).toEqual([]);
+    expect(composition.filled, JSON.stringify(composition)).toBe(1);
+    expect(composition.outsideQueue, JSON.stringify(composition)).toEqual(['Подтвердить факт']);
     expect(Math.max(...composition.perItem), JSON.stringify(composition)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: info.outputPath('Сегодня-composition-1280.png') });
   });
@@ -461,6 +449,19 @@ test.describe('B232 readability gate', () => {
     page,
   }, info) => {
     const unmatched = await mockSignedInCabinet(page);
+    await page.route('**/api/v1/candidate/vacancies/*/detail', async (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'cluster-0',
+            description: 'Подтверждённое описание вакансии для письма.',
+            truncated: false,
+            skills: ['Product discovery'],
+            responsibilities: ['Проверять гипотезы продукта.'],
+          },
+        },
+      }),
+    );
     await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
       await route.fulfill({
         json: {
@@ -479,12 +480,15 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
     await openSection(page, 'Вакансии');
-    if (info.project.name === 'mobile-390') {
-      await page.locator('.vac-list-item').first().locator('.vac-row').click();
-    }
-
+    const firstVacancy = page.locator('.vac-list-item').first();
+    const rowTrigger = firstVacancy.locator('.vacancies-screen-row-trigger');
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
+    await firstVacancy
+      .locator('.vac-detail')
+      .getByRole('button', { name: 'Полное описание' })
+      .click();
     const pitchAction = page
-      .locator('.vacancies-detail-col')
+      .locator('.career-modal-card.is-detail')
       .getByRole('button', { name: 'Сопроводительное письмо', exact: true });
     await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
@@ -510,7 +514,9 @@ test.describe('B232 readability gate', () => {
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
   });
 
   /**
@@ -544,17 +550,14 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-rail-toggle')).toHaveCount(0);
     const today = rail.locator('.career-nav-button').first();
     await today.hover();
-    const tooltip = page.locator('.career-tooltip-bubble[data-open="true"]');
-    await expect(tooltip).toContainText('Сегодня');
-    const tooltipBox = await tooltip.boundingBox();
-    expect(tooltipBox?.x).toBeGreaterThanOrEqual((railBox?.x ?? 0) + (railBox?.width ?? 0));
+    const hint = page.locator('.career-desktop-topbar-hint');
+    await expect(hint).toHaveText('Сегодня');
+    await expect(page.locator('.career-tooltip-bubble[data-open="true"]')).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/C52/rail-fixed-1440.png' });
     await today.focus();
-    await expect(tooltip).toContainText('Сегодня');
-
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C52/path-indicator-1440.png' });
+    await expect(hint).toHaveText('Сегодня');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C52/today-without-path-1440.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -565,7 +568,7 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
   });
 
-  test('capture C73 screenshots: Today keeps the path; B450 Responses and B446 vacancies stay focused', async ({
+  test('capture C73 screenshots: Today drops the old path; B450 Responses and B446 vacancies stay focused', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
@@ -573,12 +576,8 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    // Today screen: 0 active steps
-    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
-    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-today-1440.png' });
+    // The approved desktop Today mockup no longer contains the old path stepper.
+    await expect(page.locator('.career-path')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/C73/screen-today-1440.png' });
 
     // B446's approved vacancies screen owns the page header and filter area.
@@ -593,7 +592,7 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-path')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/C73/screen-responses-1440.png' });
 
-    // 390 viewport
+    // 390 viewport keeps its current path summary.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
@@ -669,8 +668,11 @@ test.describe('B232 readability gate', () => {
     await waitForCareerShell(page);
 
     // Profile screen: languages
-    await page.locator('button[aria-label="Профиль"]:visible').first().click();
-    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
+    await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Профиль');
 
     const languagesHeading = page.getByRole('heading', { name: 'Языки', exact: true });
     await expect(languagesHeading).toBeVisible();
@@ -692,7 +694,9 @@ test.describe('B232 readability gate', () => {
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
     // Tariffs at 390
@@ -703,7 +707,9 @@ test.describe('B232 readability gate', () => {
       .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
       .first();
     await mobileTariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-390.png' });
   });
 

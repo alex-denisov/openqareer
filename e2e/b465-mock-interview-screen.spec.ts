@@ -225,7 +225,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
           url.pathname === '/api/v1/candidate/interview-sessions' && request.method() === 'POST'
         );
       });
-      await page.getByRole('button', { name: 'Начать' }).click();
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
       const request = await startRequest;
       expect(request.postDataJSON()).toMatchObject({
         mode: 'text',
@@ -250,7 +250,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await checkAndCapture(page, `${width}-partial-result`, true);
       await page.getByRole('button', { name: 'Пройти заново' }).click();
       await page.getByRole('radio', { name: /Голосом/u }).check();
-      await page.getByRole('button', { name: 'Начать' }).click();
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
       await expect(page.getByRole('button', { name: 'Начать запись' })).toBeVisible();
       await checkAndCapture(page, `${width}-voice-question`);
       await page.getByRole('button', { name: 'Начать запись' }).click();
@@ -347,11 +347,11 @@ async function completeFailureState(
     ).toBeVisible();
   } else if (state === 'question-loading') {
     await delayQuestionStart(page);
-    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.getByRole('button', { name: 'Начать', exact: true }).click();
     await expect(page.locator('.career-mock-loading-card')).toContainText('Вопрос готовится');
   } else if (state === 'model') {
     await failFirstAnswerForModel(page);
-    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.getByRole('button', { name: 'Начать', exact: true }).click();
     await page
       .getByLabel('Ваш ответ')
       .fill('Автоматизировал проверки и ускорил выпуск обновлений.');
@@ -364,7 +364,7 @@ async function completeFailureState(
     return;
   } else {
     await failStartWithPaywall(page);
-    await page.getByRole('button', { name: 'Начать' }).click();
+    await page.getByRole('button', { name: 'Начать', exact: true }).click();
     await expect(
       page.getByRole('heading', { name: 'Мок-интервью недоступно на текущем тарифе' }),
     ).toBeVisible();
