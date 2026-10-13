@@ -52,10 +52,7 @@ describe('role and market map', () => {
       markets: [],
     });
 
-    expect(map.roles.map((item) => item.title)).toEqual([
-      'Product Manager',
-      'Project Manager',
-    ]);
+    expect(map.roles.map((item) => item.title)).toEqual(['Product Manager', 'Project Manager']);
   });
 
   it('keeps Russia, relocation and worldwide remote as separate routes', () => {
