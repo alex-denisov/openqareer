@@ -229,6 +229,9 @@ test('согласия → очередь → одобрение → журна�
     .locator('.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible')
     .filter({ hasText: 'FinCloud' });
   await expect(row).toBeVisible();
+  const queueChips = page.getByRole('group', { name: 'Сводка очереди' }).filter({ visible: true });
+  await expect(queueChips.getByRole('button', { name: /все/u })).toBeVisible();
+  await expect(queueChips.getByRole('button', { name: /уйдёт сегодня/u })).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'queue-pending', row);
   await row.getByRole('button', { name: 'Одобрить и отправить', exact: true }).click();
   await expect(

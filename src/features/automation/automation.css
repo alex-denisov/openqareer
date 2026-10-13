@@ -1531,3 +1531,32 @@
   font-size: var(--career-text-xs);
   line-height: 1.45;
 }
+
+.automation-queue-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.automation-queue-chip {
+  min-height: var(--career-target-min);
+  padding: var(--career-space-2) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+
+.automation-queue-chip strong {
+  color: var(--career-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-queue-chip[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+  color: var(--career-text);
+}

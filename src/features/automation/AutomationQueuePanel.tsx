@@ -24,15 +24,17 @@ export interface AutomationQueuePanelProps {
 type QueueStatusFilter = '' | 'letter_not_ready' | 'pending_approval' | 'approved' | 'failed';
 type QueuePlatformFilter = '' | 'hh' | 'linkedin';
 type QueueSort = 'send' | 'match';
+type QueueTimingFilter = '' | 'today' | 'later';
 
 export function AutomationQueuePanel(props: AutomationQueuePanelProps) {
   const [status, setStatus] = useState<QueueStatusFilter>('pending_approval');
   const [platform, setPlatform] = useState<QueuePlatformFilter>('');
   const [minimumMatch, setMinimumMatch] = useState('0');
   const [sort, setSort] = useState<QueueSort>('send');
+  const [timing, setTiming] = useState<QueueTimingFilter>('');
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [busyId, setBusyId] = useState('');
-  const visible = useMemo(() => filterAndSort(props.items, status, platform, minimumMatch, sort), [props.items, status, platform, minimumMatch, sort]);
+  const visible = useMemo(() => filterAndSort(props.items, status, platform, minimumMatch, sort, timing), [props.items, status, platform, minimumMatch, sort, timing]);
   const allSelected = visible.length > 0 && visible.every((item) => selected.has(item.id));
 
   function updateFilter(update: () => void) {
@@ -59,6 +61,7 @@ export function AutomationQueuePanel(props: AutomationQueuePanelProps) {
 
   return <section className="automation-panel automation-queue-panel" data-page="queue" aria-labelledby="automation-queue-title">
     <QueueHeader total={props.total} enabled={props.enabled} refreshing={props.refreshing} onRefresh={props.onRefresh} />
+    <QueueSummaryChips items={props.items} total={props.total} status={status} timing={timing} onSelect={(nextStatus, nextTiming) => updateFilter(() => { setStatus(nextStatus); setTiming(nextTiming); })} />
     <QueueFilters status={status} platform={platform} minimumMatch={minimumMatch} sort={sort} onStatus={(value) => updateFilter(() => setStatus(value))} onPlatform={(value) => updateFilter(() => setPlatform(value))} onMinimumMatch={(value) => updateFilter(() => setMinimumMatch(value))} onSort={setSort} />
     {props.notice ? <p className="automation-status" role="status">{props.notice}</p> : null}
     {!props.enabled ? <p className="automation-info-note">Чтобы обновить очередь, сначала включите автоотклики и сохраните согласия.</p> : null}
@@ -93,6 +96,40 @@ function QueueFilters({ status, platform, minimumMatch, sort, onStatus, onPlatfo
     <label>Площадка<select value={platform} onChange={(event) => onPlatform(event.currentTarget.value as QueuePlatformFilter)}><option value="">Все площадки</option><option value="hh">hh.ru</option><option value="linkedin">LinkedIn</option></select></label>
     <label>Совпадение<select value={minimumMatch} onChange={(event) => onMinimumMatch(event.currentTarget.value)}><option value="0">Любое</option><option value="60">От 60 %</option><option value="80">От 80 %</option><option value="90">От 90 %</option></select></label>
     <label>Сортировка<select value={sort} onChange={(event) => onSort(event.currentTarget.value as QueueSort)}><option value="send">По времени</option><option value="match">По совпадению</option></select></label>
+  </div>;
+}
+
+interface QueueChip {
+  readonly key: string;
+  readonly label: string;
+  readonly count: number;
+  readonly status: QueueStatusFilter;
+  readonly timing: QueueTimingFilter;
+}
+
+function queueChips(items: readonly AutomationQueueItem[], total: number): QueueChip[] {
+  const count = (test: (item: AutomationQueueItem) => boolean) => items.filter(test).length;
+  return [
+    { key: 'all', label: 'все', count: total, status: '', timing: '' },
+    { key: 'today', label: 'уйдёт сегодня', count: count((item) => item.status === 'pending_approval' && item.sendTiming === 'today'), status: 'pending_approval', timing: 'today' },
+    { key: 'later', label: 'позже', count: count((item) => item.status === 'pending_approval' && item.sendTiming !== 'today'), status: 'pending_approval', timing: 'later' },
+    { key: 'letter', label: 'письмо не готово', count: count((item) => item.status === 'letter_not_ready'), status: 'letter_not_ready', timing: '' },
+  ];
+}
+
+// Counts other than «все» are taken from the loaded page, so they appear only once the whole queue is loaded.
+function QueueSummaryChips({ items, total, status, timing, onSelect }: {
+  readonly items: readonly AutomationQueueItem[];
+  readonly total: number;
+  readonly status: QueueStatusFilter;
+  readonly timing: QueueTimingFilter;
+  readonly onSelect: (status: QueueStatusFilter, timing: QueueTimingFilter) => void;
+}) {
+  if (total === 0) return null;
+  const complete = items.length >= total;
+  const chips = queueChips(items, total).filter((chip) => chip.key === 'all' || (complete && chip.count > 0));
+  return <div className="automation-queue-chips" role="group" aria-label="Сводка очереди">
+    {chips.map((chip) => <button key={chip.key} type="button" className="automation-queue-chip" aria-pressed={status === chip.status && timing === chip.timing} onClick={() => onSelect(chip.status, chip.timing)}><strong>{chip.count}</strong> {chip.label}</button>)}
   </div>;
 }
 
@@ -162,9 +199,10 @@ function QueueItemActions({ item, busy, enabled, canApprove, onAction, onEdit }:
   </div>;
 }
 
-function filterAndSort(items: readonly AutomationQueueItem[], status: QueueStatusFilter, platform: QueuePlatformFilter, minimumMatch: string, sort: QueueSort): AutomationQueueItem[] {
+function filterAndSort(items: readonly AutomationQueueItem[], status: QueueStatusFilter, platform: QueuePlatformFilter, minimumMatch: string, sort: QueueSort, timing: QueueTimingFilter): AutomationQueueItem[] {
   const threshold = Number(minimumMatch);
   return items.filter((item) => (!status || item.status === status) && (!platform || item.platform === platform))
+    .filter((item) => !timing || (timing === 'today' ? item.sendTiming === 'today' : item.sendTiming !== 'today'))
     .filter((item) => threshold === 0 || (item.requirements.matched / item.requirements.total) * 100 >= threshold)
     .sort((left, right) => sort === 'match'
       ? (right.requirements.matched / right.requirements.total) - (left.requirements.matched / left.requirements.total)
