@@ -1563,6 +1563,15 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
     storageState: { cookies: [], origins: [] },
   });
   const page = await context.newPage();
+  // Everything the fixture does not know answers an empty success, so the account
+  // page that stays open after sign-in does not fall into its error card.
+  await page.route('**/api/v1/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
+    });
+  });
   let authenticated = false;
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/auth'),
@@ -1688,7 +1697,8 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await accountAccess.getByLabel('Email или логин').fill('returning.candidate');
   await accountAccess.getByLabel('Пароль', { exact: true }).fill('returning-candidate-password');
   await accountAccess.getByRole('button', { name: 'Войти в кабинет' }).click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
+  // Sign-in from the account page keeps the account open; the cabinet is one click away.
+  await page.getByRole('main').getByRole('heading', { name: 'Аккаунт' }).first().waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(
