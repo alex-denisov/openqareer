@@ -138,12 +138,15 @@ test('a company without LinkedIn keeps network contacts unknown and opens connec
     fullPage: true,
   });
   await page.getByRole('button', { name: 'Подключить LinkedIn' }).click();
-  const account = page.getByRole('dialog', { name: 'Аккаунт' });
-  await expect(
-    account
-      .getByRole('navigation', { name: 'Настройки аккаунта' })
-      .getByRole('button', { name: 'Подключения' }),
-  ).toHaveAttribute('aria-current', 'page');
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(account.getByRole('heading', { name: 'Подключения' })).toBeVisible();
+  } else {
+    await expect(account.getByRole('tab', { name: /Подключения/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  }
 });
 
 test('the company screen has no page overflow at narrow phone widths', async ({

@@ -17,6 +17,10 @@ export type BuildFreshness =
 
 const SHA_PATTERN = /^[0-9a-f]{7,40}$/;
 
+export function isBuildMarked(buildSha: string): boolean {
+  return SHA_PATTERN.test(buildSha.trim().toLowerCase());
+}
+
 function normalize(value: string): string | null {
   const trimmed = value.trim().toLowerCase();
   return SHA_PATTERN.test(trimmed) ? trimmed : null;

@@ -261,9 +261,11 @@ test('clears the candidate-scoped profile cache after sign-out', async ({ page }
   await page.waitForURL('**/app');
   await expect(page.locator('.career-cabinet')).toBeVisible();
   await page.locator('.career-account-button').click();
-  const accountDialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await expect(accountDialog).toBeVisible();
-  await accountDialog.getByRole('button', { name: 'Выйти', exact: true }).click();
+  const accountScreen = page.locator('.career-account-container');
+  await expect(accountScreen.getByRole('heading', { name: 'Аккаунт' })).toBeVisible();
+  await accountScreen.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+  const confirm = page.getByRole('alertdialog', { name: 'Выйти из аккаунта?' });
+  await confirm.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await expect(page).toHaveURL('/');
 
   const cachedValue = await page.evaluate(

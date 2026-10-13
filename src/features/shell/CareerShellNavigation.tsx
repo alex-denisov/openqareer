@@ -136,7 +136,7 @@ function AccountRailButton({
         className="career-account-button"
         type="button"
         disabled={disabled}
-        onClick={onOpen}
+        onClick={() => onOpen()}
         aria-label="Открыть аккаунт"
       >
         <span className="career-rail-avatar" aria-hidden="true">
@@ -166,7 +166,7 @@ function RailWalletButton({
         disabled={disabled}
         aria-label={disabled ? `Тарифы. ${lockedReason}` : 'Тарифы'}
         aria-current={active ? 'page' : undefined}
-        onClick={onOpen}
+        onClick={() => onOpen()}
       >
         <Wallet size={22} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
       </button>
@@ -377,7 +377,7 @@ function CareerMobileTopbarActions({
         className="career-account-trigger"
         type="button"
         disabled={sessionPending}
-        onClick={onOpenAccount}
+        onClick={() => onOpenAccount()}
         aria-label="Открыть аккаунт"
       >
         <span className="career-rail-avatar" aria-hidden="true">

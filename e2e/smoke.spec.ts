@@ -78,9 +78,10 @@ test('built career workspace is ready, operable and free of critical accessibili
   const accountButton = page.getByRole('button', { name: 'Войти', exact: true });
   await expect(accountButton).toBeEnabled();
   await accountButton.click();
-  await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toHaveCount(0);
+  const accountAccess = page.locator('.career-account-access');
+  await expect(accountAccess.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
+  await accountAccess.getByRole('button', { name: 'Назад' }).click();
+  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,

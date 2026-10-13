@@ -19,6 +19,7 @@ import {
   workspace,
 } from './readabilityWorkspace';
 import type { ResumeDraft } from '../../server/domain/resumeDraft';
+import type { CandidateConnection } from '../../src/features/coach/coachApi';
 
 export interface MockCareerDiaryFixture {
   overview: Record<string, unknown>;
@@ -403,6 +404,7 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
     readonly runtime?: Partial<AutomationFixtureState['runtime']>;
   };
   readonly accountNotificationHandler?: (route: Route, path: string) => Promise<boolean>;
+  readonly accountConnections?: readonly CandidateConnection[];
   readonly notificationHandler?: (route: Route, path: string) => Promise<boolean>;
   readonly applicationHandler?: (route: Route, path: string) => Promise<boolean>;
   readonly linkedinDrafts?: readonly Record<string, unknown>[];
@@ -1257,6 +1259,13 @@ export async function mockSignedInCabinet(
   options: MockSignedInCabinetOptions = {},
 ): Promise<string[]> {
   const unmatched: string[] = [];
+  let accountState = {
+    ...account,
+    profile: { ...account.profile },
+    sessions: account.sessions.map((session) => ({ ...session })),
+  };
+  let pendingEmailChange: { email: string; expiresAt: string; resendAfterSeconds: number } | null =
+    null;
   let billingCurrentPlan: FixtureCurrentPlan = options.billing?.initialPlan ?? 'basic';
   let billingAutoRenew = billingCurrentPlan !== 'free';
   let billingPeriodEnd = '2026-11-08T00:00:00.000Z';
@@ -2116,14 +2125,60 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    const sessionMatch = path.match(/\/account\/sessions\/([0-9a-f]{16})$/u);
+    if (sessionMatch && route.request().method() === 'DELETE') {
+      accountState.sessions = accountState.sessions.filter(
+        (session) => session.id !== sessionMatch[1] || session.current,
+      );
+      return route.fulfill({ status: 204 });
+    }
     if (path.endsWith('/account/sessions') && route.request().method() === 'DELETE') {
-      return route.fulfill({ json: { data: { revoked: 2 } } });
+      const before = accountState.sessions.length;
+      accountState.sessions = accountState.sessions.filter((session) => session.current);
+      return route.fulfill({ json: { data: { revoked: before - accountState.sessions.length } } });
+    }
+    if (path.endsWith('/account/profile') && route.request().method() === 'PATCH') {
+      const patch = route.request().postDataJSON() as Record<string, unknown>;
+      accountState = {
+        ...accountState,
+        ...(typeof patch.displayName === 'string' ? { displayName: patch.displayName } : {}),
+        profile: { ...accountState.profile, ...patch },
+      };
+      return route.fulfill({ json: { data: accountState } });
+    }
+    if (path.endsWith('/account/password') && route.request().method() === 'POST') {
+      return route.fulfill({ json: { data: candidate } });
+    }
+    if (
+      path.endsWith('/account/email-change-requests/current') &&
+      route.request().method() === 'GET'
+    ) {
+      return route.fulfill({ json: { data: pendingEmailChange } });
+    }
+    if (
+      path.endsWith('/account/email-change-requests/current/verification') &&
+      route.request().method() === 'POST'
+    ) {
+      if (pendingEmailChange) accountState = { ...accountState, email: pendingEmailChange.email };
+      pendingEmailChange = null;
+      return route.fulfill({
+        json: { data: { ...candidate, email: accountState.email, emailVerified: true } },
+      });
+    }
+    if (path.endsWith('/account/email-change-requests') && route.request().method() === 'POST') {
+      const input = route.request().postDataJSON() as { email: string };
+      accountState = { ...accountState, email: input.email };
+      return route.fulfill({
+        json: {
+          data: { status: 'updated', ...candidate, email: input.email, emailVerified: true },
+        },
+      });
     }
     if (path.endsWith('/candidate/export')) {
       return route.fulfill({
         json: {
           data: {
-            profile: account.profile,
+            profile: accountState.profile,
             relocationQuestionnaire: relocationProfile,
             relocationConsent,
           },
@@ -2169,7 +2224,7 @@ export async function mockSignedInCabinet(
       });
     }
     if (path.endsWith('/account')) {
-      return route.fulfill({ json: { data: account } });
+      return route.fulfill({ json: { data: accountState } });
     }
     if (
       path.endsWith('/candidate/me/memory') ||
@@ -2251,10 +2306,29 @@ export async function mockSignedInCabinet(
       path.endsWith('/candidate/vacancy-subscriptions') ||
       path.endsWith('/candidate/vacancy-sources') ||
       path.endsWith('/candidate/vacancy-applications') ||
-      path.endsWith('/candidate/connections') ||
       path.endsWith('/candidate/career-commands')
     ) {
       return route.fulfill({ json: { data: [] } });
+    }
+    if (path.endsWith('/candidate/connections')) {
+      return route.fulfill({ json: { data: options.accountConnections ?? [] } });
+    }
+    if (path.endsWith('/me/consents') && route.request().method() === 'GET') {
+      return route.fulfill({ json: { data: { consents: [] } } });
+    }
+    if (path.includes('/me/consents/') && route.request().method() === 'DELETE') {
+      return route.fulfill({ json: { data: { granted: false, revoked: true, consent: null } } });
+    }
+    if (path.includes('/me/consents/') && route.request().method() === 'POST') {
+      return route.fulfill({
+        status: 409,
+        json: {
+          error: {
+            code: 'consent_text_not_approved',
+            message: 'Текст согласия пока не утверждён.',
+          },
+        },
+      });
     }
     if (
       path.endsWith('/candidate/strategy') ||

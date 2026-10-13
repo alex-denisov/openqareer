@@ -21,6 +21,7 @@ import {
   AuthEmailVerificationNotRequiredError,
   AuthEmailVerificationRateLimitError,
   AuthEmailVerificationResendTooSoonError,
+  AuthAccountEmailChangeNotPendingError,
 } from './authErrors';
 
 export interface EmailVerificationAccount {
@@ -55,6 +56,23 @@ interface EmailVerificationRow {
   readonly attempts: number;
   readonly last_sent_at: string | null;
   readonly verified_at: string | null;
+}
+
+interface AccountEmailChangeRow {
+  readonly candidate_id: string;
+  readonly user_id: string;
+  readonly current_email: string | null;
+  readonly new_email: string;
+  readonly code_hash: string;
+  readonly expires_at: string;
+  readonly attempts: number;
+  readonly last_sent_at: string;
+}
+
+export interface PendingAccountEmailChange {
+  readonly email: string;
+  readonly expiresAt: string;
+  readonly resendAfterSeconds: number;
 }
 
 export class EmailVerificationService {
@@ -200,6 +218,108 @@ export class EmailVerificationService {
     return this.delivery(changedAccount, code, now);
   }
 
+  async requestAccountEmailChange(
+    account: EmailVerificationAccount,
+    userId: string,
+    currentEmail: string | null,
+    newEmail: string,
+    clientIp: string,
+    now = Date.now(),
+  ): Promise<PendingAccountEmailChange> {
+    if (!this.required || !this.hashKey || !account.candidateId) {
+      throw new AuthEmailVerificationNotRequiredError();
+    }
+    const previous = this.readAccountEmailChange(account.candidateId);
+    const retryAfter = resendWaitSeconds(previous?.last_sent_at ?? null, now);
+    if (retryAfter > 0) throw new AuthEmailVerificationResendTooSoonError(retryAfter);
+    this.reserve(newEmail, clientIp, now, account.candidateId);
+
+    const code = this.newCode(newEmail);
+    const request: AccountEmailChangeRow = {
+      candidate_id: account.candidateId,
+      user_id: userId,
+      current_email: currentEmail,
+      new_email: newEmail,
+      code_hash: emailVerificationCodeHash(account.candidateId, code, this.requiredHashKey()),
+      expires_at: new Date(now + EMAIL_VERIFICATION_TTL_MS).toISOString(),
+      attempts: 0,
+      last_sent_at: new Date(now).toISOString(),
+    };
+    this.writeAccountEmailChange(request);
+    try {
+      await this.send(this.delivery({ ...account, email: newEmail }, code, now));
+    } catch {
+      this.restoreAccountEmailChange(account.candidateId, previous);
+      throw new AuthEmailVerificationDeliveryError();
+    }
+    return {
+      email: newEmail,
+      expiresAt: request.expires_at,
+      resendAfterSeconds: resendWaitSeconds(request.last_sent_at, now),
+    };
+  }
+
+  pendingAccountEmailChange(
+    candidateId: string,
+    now = Date.now(),
+  ): PendingAccountEmailChange | null {
+    const request = this.readAccountEmailChange(candidateId);
+    if (!request || Date.parse(request.expires_at) <= now) return null;
+    return {
+      email: request.new_email,
+      expiresAt: request.expires_at,
+      resendAfterSeconds: resendWaitSeconds(request.last_sent_at, now),
+    };
+  }
+
+  verifyAccountEmailChange(
+    candidateId: string,
+    code: string,
+    applyEmail: (request: {
+      userId: string;
+      currentEmail: string | null;
+      newEmail: string;
+    }) => void,
+    now = Date.now(),
+  ): string {
+    this.database.exec('BEGIN IMMEDIATE');
+    let committed = false;
+    try {
+      const request = this.readAccountEmailChange(candidateId);
+      if (!request) throw new AuthAccountEmailChangeNotPendingError();
+      if (Date.parse(request.expires_at) <= now) throw new AuthEmailVerificationExpiredError();
+      if (request.attempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS) {
+        throw new AuthEmailVerificationLockedError();
+      }
+      if (!this.matches(candidateId, code, request.code_hash)) {
+        const attempts = request.attempts + 1;
+        this.database
+          .prepare('UPDATE account_email_change_requests SET attempts = ? WHERE candidate_id = ?')
+          .run(attempts, candidateId);
+        this.database.exec('COMMIT');
+        committed = true;
+        if (attempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS) {
+          throw new AuthEmailVerificationLockedError();
+        }
+        throw new AuthEmailVerificationInvalidCodeError();
+      }
+      applyEmail({
+        userId: request.user_id,
+        currentEmail: request.current_email,
+        newEmail: request.new_email,
+      });
+      this.database
+        .prepare('DELETE FROM account_email_change_requests WHERE candidate_id = ?')
+        .run(candidateId);
+      this.database.exec('COMMIT');
+      committed = true;
+      return request.new_email;
+    } catch (error) {
+      if (!committed) this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   invalidateAddressChange(candidateId: string): void {
     this.clearPending(candidateId);
   }
@@ -301,6 +421,53 @@ export class EmailVerificationService {
     return this.database
       .prepare('SELECT candidate_id, code_hash, expires_at, attempts, last_sent_at, verified_at FROM email_verifications WHERE candidate_id = ?')
       .get(candidateId) as EmailVerificationRow | undefined;
+  }
+
+  private readAccountEmailChange(candidateId: string): AccountEmailChangeRow | undefined {
+    return this.database
+      .prepare(
+        `SELECT candidate_id, user_id, current_email, new_email, code_hash, expires_at,
+                attempts, last_sent_at
+         FROM account_email_change_requests WHERE candidate_id = ?`,
+      )
+      .get(candidateId) as AccountEmailChangeRow | undefined;
+  }
+
+  private writeAccountEmailChange(request: AccountEmailChangeRow): void {
+    this.database
+      .prepare(
+        `INSERT INTO account_email_change_requests
+          (candidate_id, user_id, current_email, new_email, code_hash, expires_at, attempts, last_sent_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(candidate_id) DO UPDATE SET
+          user_id = excluded.user_id, current_email = excluded.current_email,
+          new_email = excluded.new_email, code_hash = excluded.code_hash,
+          expires_at = excluded.expires_at, attempts = excluded.attempts,
+          last_sent_at = excluded.last_sent_at`,
+      )
+      .run(
+        request.candidate_id,
+        request.user_id,
+        request.current_email,
+        request.new_email,
+        request.code_hash,
+        request.expires_at,
+        request.attempts,
+        request.last_sent_at,
+      );
+  }
+
+  private restoreAccountEmailChange(
+    candidateId: string,
+    previous: AccountEmailChangeRow | undefined,
+  ): void {
+    if (previous) {
+      this.writeAccountEmailChange(previous);
+      return;
+    }
+    this.database
+      .prepare('DELETE FROM account_email_change_requests WHERE candidate_id = ?')
+      .run(candidateId);
   }
 
   private matches(candidateId: string, code: string, storedHash: string): boolean {

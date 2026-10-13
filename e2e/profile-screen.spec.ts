@@ -588,9 +588,16 @@ test.describe('B441 Profile screen from mockup 2', () => {
 
     const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 фактов/u });
     await sourceButton.click();
-    const account = page.getByRole('dialog', { name: 'Аккаунт' });
-    await expect(account).toBeVisible();
-    await expect(account.getByRole('heading', { name: 'Профили на площадках' })).toBeVisible();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(account.locator('[data-mv="conn"]')).toBeVisible();
+    } else {
+      await expect(account.getByRole('tab', { name: /Подключения/u })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      await expect(account.getByRole('heading', { name: 'Площадки и каналы' })).toBeVisible();
+    }
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-source-management`));
   });
 

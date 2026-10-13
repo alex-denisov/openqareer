@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Route } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B474';
+const EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS-2');
 const PREFERENCE_KEYS = [
   'ev-reply',
   'ev-reminder',
@@ -97,11 +98,13 @@ function createPreferencesHandler() {
 async function openNotifications(page: import('@playwright/test').Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
-  const account = page.getByRole('dialog', { name: 'Аккаунт' });
-  await account
-    .getByRole('navigation', { name: 'Настройки аккаунта' })
-    .getByRole('button', { name: 'Уведомления' })
-    .click();
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await account.getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: 'Уведомления' }).click();
+  } else {
+    await account.getByRole('tab', { name: 'Уведомления' }).click();
+  }
   await expect(account.getByRole('heading', { name: 'Уведомления' })).toBeVisible();
   return account;
 }

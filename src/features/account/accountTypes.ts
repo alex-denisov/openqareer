@@ -16,19 +16,10 @@ export type AccountSection =
 
 export interface AccountDevice {
   readonly id: string;
-  readonly kind: 'desktop' | 'globe';
+  readonly kind: 'desktop' | 'globe' | 'device';
   readonly name: string;
   readonly details: string;
   readonly current: boolean;
-}
-
-export interface AccountConnection {
-  readonly id: 'linkedin' | 'hh' | 'others' | 'email' | 'calendar' | 'telegram';
-  readonly name: string;
-  readonly details: string;
-  readonly status: 'ok' | 'warn' | 'dim';
-  readonly statusLabel: string;
-  readonly manageable?: boolean;
 }
 
 export interface AccountNotificationEvent {
@@ -52,21 +43,19 @@ export interface AccountConsent {
   readonly description: string;
   readonly date: string;
   readonly consequences: string;
+  readonly capability?: 'profile_activity' | 'digital_footprint' | 'actions_on_behalf';
+  readonly status?: 'granted' | 'not-granted' | 'unknown';
+  readonly grantable?: boolean;
+  readonly revokeable?: boolean;
 }
 
 export interface AccountAppSettings {
   readonly version: string;
-  readonly checkDate: string;
-  readonly autoUpdate: boolean;
-  readonly menuBar: boolean;
-  readonly launchAtLogin: boolean;
-}
-
-export interface AccountPaymentItem {
-  readonly date: string;
-  readonly title: string;
-  readonly amount: string;
-  readonly method: string;
+  readonly commitSha?: string;
+  readonly freshnessLine?: string;
+  readonly autoUpdate: boolean | null;
+  readonly menuBar: boolean | null;
+  readonly launchAtLogin: boolean | null;
 }
 
 export type MobileAccountViewId =

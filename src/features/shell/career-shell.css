@@ -188,201 +188,7 @@
   border: 0;
 }
 
-.career-account-panel > header,
-.career-account-panel > header > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
 
-.career-account-panel > header > div > div,
-.career-account-body,
-.career-account-current,
-.career-account-choices,
-.career-account-form,
-.career-account-form label {
-  display: grid;
-  gap: 10px;
-}
-
-.career-account-panel small,
-.career-account-note,
-.career-account-body > p {
-  color: var(--career-text-dim);
-}
-
-.career-account-panel header button {
-  color: var(--career-text-soft);
-  background: transparent;
-}
-
-.career-account-icon {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  color: var(--career-accent);
-  background: var(--career-accent-soft);
-}
-
-.career-account-body {
-  margin-top: 52px;
-}
-
-/* B248 — тариф больше не отдельный пункт рельса: единственный вход в него
-   теперь эта строка вверху панели аккаунта (owner decision 2026-09-23). */
-.career-account-tariffs-button {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--career-space-3);
-  width: 100%;
-  min-height: var(--career-target-min);
-  padding: var(--career-space-3) var(--career-space-4);
-  margin-bottom: var(--career-space-4);
-  border: 1px solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface-soft, oklch(20% 0.02 255 / 0.5));
-  color: var(--career-text);
-  text-align: left;
-}
-
-.career-account-tariffs-button:not(:disabled):hover {
-  border-color: oklch(79% 0.145 255 / 0.4);
-}
-
-.career-account-tariffs-button:disabled {
-  opacity: 0.55;
-}
-
-.career-account-tariffs-button b {
-  display: block;
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-}
-
-.career-account-tariffs-button span span {
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
-}
-
-.career-account-connections {
-  display: grid;
-  gap: 14px;
-  padding: 20px 0;
-  border-top: 1px solid var(--career-line);
-  border-bottom: 1px solid var(--career-line);
-}
-
-.career-account-connections h2,
-.career-account-connections p {
-  margin: 0;
-}
-
-.career-account-connections > div:first-child {
-  display: grid;
-  gap: 6px;
-}
-
-.career-account-connections > div:first-child p,
-.career-account-connection-list article p,
-.career-account-connection-list article small {
-  color: var(--career-text-dim);
-  line-height: 1.5;
-}
-
-.career-account-connection-list {
-  display: grid;
-  gap: 10px;
-}
-
-.career-account-connection-list article {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--career-line);
-  border-radius: 14px;
-  background: var(--career-surface);
-}
-
-/* Scoped to the platform headline: a bare `> div` also caught the connection
-   panel nested in the same card and squeezed its copy, button and consent note
-   into three columns. */
-.career-connection-headline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.career-connection-headline span {
-  border-radius: 999px;
-  padding: 4px 8px;
-  color: var(--career-text-soft);
-  background: var(--career-surface-raised);
-  font-size: var(--career-text-xs);
-  font-weight: 720;
-}
-
-.career-connection-headline span.is-connected {
-  color: var(--career-success);
-  background: var(--career-success-soft);
-}
-
-.career-account-connection-list .career-quiet-button {
-  justify-self: start;
-}
-
-/* The card already carries the surface; the panel inside it only needs rhythm. */
-.career-account-connection-list .career-connection-panel {
-  padding: 0;
-  border: 0;
-  background: none;
-}
-
-.career-danger-button {
-  min-height: 48px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid oklch(72% 0.15 28 / 0.32);
-  border-radius: 12px;
-  color: var(--career-danger);
-  background: var(--career-danger-soft);
-  font-weight: 760;
-}
-
-.career-account-form input {
-  min-height: 48px;
-  border: 1px solid var(--career-line);
-  border-radius: 11px;
-  padding: 0 13px;
-  color: var(--career-text);
-  background: var(--career-surface);
-}
-
-/* Per-field validation (B139). The message sits under its own input so a
-   rejected form points at the field to fix. */
-.career-account-field {
-  gap: 6px;
-}
-
-.career-account-field.has-error input {
-  border-color: var(--career-danger);
-}
-
-.career-account-field-error {
-  color: var(--career-danger);
-  font-size: var(--career-text-xs);
-}
-
-.career-account-panel .career-account-field-hint {
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
-}
 
 .career-brand-mark {
   width: var(--career-target-min);
@@ -4110,6 +3916,10 @@
   padding: 26px 30px 48px;
 }
 
+.career-main:has(.career-account-container) {
+  padding: 0;
+}
+
 .career-cabinet {
   width: min(100%, 1460px);
   margin-inline: auto;
@@ -4205,8 +4015,7 @@
 }
 
 .career-profile-update-state button,
-.career-inline-link,
-.career-account-text-button {
+.career-inline-link {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -4751,168 +4560,6 @@
   gap: 10px;
 }
 
-/* Complete account lifecycle */
-
-.career-account-panel {
-  position: fixed;
-  z-index: 60;
-  top: 0;
-  right: 0;
-  padding: 22px;
-  border-left: 1px solid var(--career-line);
-  background: var(--career-bg);
-  box-shadow: -24px 0 70px rgb(0 0 0 / 0.32);
-  width: min(480px, 100vw);
-  max-height: 100dvh;
-  height: 100dvh;
-  box-sizing: border-box;
-  overflow-y: auto;
-}
-
-.career-account-current {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: var(--career-surface-card, rgba(255, 255, 255, 0.03));
-  border: 1px solid var(--career-line, rgba(255, 255, 255, 0.08));
-  border-radius: 14px;
-}
-
-.career-account-current > div {
-  display: grid;
-  gap: 4px;
-}
-
-/* Тот же аватар, что в рельсе, только крупнее: человек в интерфейсе один. */
-.career-account-avatar {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 13px;
-  color: var(--career-accent-ink);
-  background: linear-gradient(150deg, oklch(82% 0.13 255), oklch(56% 0.16 255));
-  font-size: var(--career-text-sm);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.career-account-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-bottom: 1px solid var(--career-line);
-  margin-top: 8px;
-}
-
-.career-account-tabs button {
-  min-height: 46px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  padding: 0 4px;
-  color: var(--career-text-dim);
-  background: transparent;
-  font-size: var(--career-text-xs);
-  font-weight: 700;
-}
-
-.career-account-tabs button.is-active {
-  border-bottom-color: var(--career-accent);
-  color: var(--career-accent);
-}
-
-.career-account-form h2,
-.career-account-form p {
-  margin: 0;
-}
-
-.career-account-form p {
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  line-height: 1.5;
-}
-
-.career-account-form label > span,
-.career-account-delete-form label > span {
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  font-weight: 700;
-}
-
-.career-account-form select {
-  min-height: 48px;
-  border: 1px solid var(--career-line);
-  border-radius: 11px;
-  padding: 0 13px;
-  color: var(--career-text);
-  background: var(--career-surface);
-}
-
-.career-account-section-stack {
-  display: grid;
-  gap: 16px;
-}
-
-.career-account-session-card,
-.career-account-data-card,
-.career-account-delete-form {
-  display: grid;
-  gap: 9px;
-  border: 1px solid var(--career-line);
-  border-radius: 14px;
-  padding: 16px;
-  background: var(--career-surface);
-}
-
-.career-account-session-card p,
-.career-account-data-card p,
-.career-account-delete-form p {
-  margin: 0;
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
-  line-height: 1.5;
-}
-
-.career-account-session-card button,
-.career-account-data-card button {
-  min-height: 40px;
-  justify-self: start;
-  border: 1px solid var(--career-line);
-  border-radius: 10px;
-  padding: 0 12px;
-  color: var(--career-accent);
-  background: transparent;
-  font-size: var(--career-text-xs);
-  font-weight: 720;
-}
-
-.career-account-delete-form {
-  border-color: oklch(72% 0.15 28 / 0.25);
-  color: var(--career-danger);
-  background: var(--career-danger-soft);
-}
-
-.career-account-delete-form label {
-  display: grid;
-  gap: 7px;
-}
-
-.career-account-signout {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 0;
-  color: var(--career-text-soft);
-  background: transparent;
-}
-
-.career-account-text-button {
-  justify-self: start;
-}
-
 @media (max-width: 1180px) {
   .career-command-center > .career-intelligence-panel {
     grid-column: 1 / -1;
@@ -5011,30 +4658,6 @@
     padding-inline: 16px;
   }
 
-  .career-account-panel {
-    top: auto;
-    bottom: 0;
-    width: 100%;
-    height: min(92dvh, 820px);
-    border-top: 1px solid var(--career-line-strong);
-    border-left: 0;
-    border-radius: 22px 22px 0 0;
-    padding: 18px 16px calc(20px + env(safe-area-inset-bottom));
-    animation: career-sheet-enter 200ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .career-account-body {
-    margin-top: 28px;
-  }
-
-  .career-account-tabs {
-    overflow-x: auto;
-  }
-
-  .career-account-tabs button {
-    min-width: 84px;
-  }
-
   .career-market-create > div {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -5057,8 +4680,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .career-cabinet,
-  .career-account-panel {
+  .career-cabinet {
     animation: none;
   }
 }
@@ -6979,62 +6601,6 @@
   color: var(--career-text-dim);
 }
 
-/* Account drawer: settings only, quiet close control (B148 §10) */
-
-/* A drawer close control is a quiet affordance, not a call to action: the old
-   44px bordered box read as the panel's most important button (B148 §10). It
-   keeps a 44px hit area through padding-free centring plus an invisible
-   ::before, so the smaller look costs no reachability. */
-.career-account-close {
-  position: relative;
-  width: 34px;
-  height: 34px;
-  min-width: 34px;
-  min-height: 34px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  color: var(--career-text-dim);
-  background: var(--career-surface);
-  transition:
-    color 160ms ease,
-    background 160ms ease;
-}
-
-.career-account-close::before {
-  content: '';
-  position: absolute;
-  inset: -5px;
-}
-
-.career-account-close:hover {
-  color: var(--career-text);
-  background: var(--career-surface-raised);
-}
-
-/* Drawer typography: one level quieter than a page, so the section heading does
-   not compete with the page title behind it. */
-.career-account-connections h2,
-.career-account-form h2 {
-  font-size: var(--career-text-md);
-  font-weight: 680;
-  letter-spacing: -0.01em;
-}
-
-.career-account-connections > div:first-child p {
-  font-size: var(--career-text-xs);
-  line-height: 1.45;
-}
-
-.career-account-section-lead {
-  margin: 12px 0 4px;
-  font-size: var(--career-text-xs);
-  line-height: 1.45;
-  color: var(--career-text-dim);
-}
-
 /* Import summary in the wizard (B148 §3) */
 
 .career-import-summary {
@@ -7584,19 +7150,6 @@
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-}
-
-.career-account-version {
-  margin: 18px 0 0;
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
-}
-
-/* B159: отставшая сборка читается как предупреждение, а не как подпись. */
-.career-account-version-stale {
-  margin-top: 6px;
-  color: var(--career-warning);
-  font-weight: 600;
 }
 
 /* ---- «Пульт» · «Главная»: кандидат слева, оценка и разбор справа ------- */
@@ -16746,14 +16299,6 @@ button.chip {
   border-radius: var(--career-radius-sm);
   font-size: var(--career-text-aux);
 }
-.career-account-legal label {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  font-size: var(--career-text-xs);
-  line-height: 1.5;
-}
-
 /* B413: Чекбокс с явным внешним видом вместо нативного маркера Tauri/WebKit */
 .career-checkbox {
   appearance: none;
@@ -16827,21 +16372,4 @@ button.chip {
 
 .career-checkbox-label:has(.career-checkbox:checked) .career-checkbox-status {
   color: var(--career-signal-green);
-}
-
-.career-account-legal input[type='checkbox'] {
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
-}
-
-.career-account-legal a {
-  color: var(--career-accent, #6fb1fb);
-}
-
-.career-account-legal-error {
-  margin: 6px 0 0;
-  color: var(--career-danger, oklch(72% 0.15 28));
-  font-size: var(--career-text-xs);
 }

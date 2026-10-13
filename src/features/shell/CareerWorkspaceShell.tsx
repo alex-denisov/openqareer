@@ -13,9 +13,10 @@ import {
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { TariffsScreen } from './TariffsScreen';
-import { CURRENT_PLAN } from './tariffPackages';
 import { createIntakeCompletion } from './intakeCompletion';
-import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
+import { CareerAccountWorkspace } from '../account/CareerAccountWorkspace';
+import { CareerAccountAccess } from '../account/CareerAccountAccess';
+import type { AccountSection } from '../account/accountTypes';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator, type NavigationOptions } from './pathIndicator';
@@ -118,9 +119,8 @@ export function CareerWorkspaceShell({
   const [expertSheetExpanded, setExpertSheetExpanded] = useState(false);
   const autoOpenedExpert = useRef(sessionPending);
   const [cabinetRevision, setCabinetRevision] = useState(0);
-  const [accountOpen, setAccountOpen] = useState(
-    () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
-  );
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountReturnToIntake, setAccountReturnToIntake] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [selectedNotificationId, setSelectedNotificationId] = useState<string | null>(null);
@@ -179,7 +179,7 @@ export function CareerWorkspaceShell({
   // its account door); an anonymous candidate signs in from the wizard's own
   // top bar instead.
   const onboardingIsFullscreen = intakeVisible;
-  const expertPanelOpen = expertConfig.open && !accountOpen && !onboardingIsFullscreen;
+  const expertPanelOpen = expertConfig.open && !onboardingIsFullscreen;
 
   useEffect(() => {
     if (!sessionPending) {
@@ -193,8 +193,8 @@ export function CareerWorkspaceShell({
   // The page name lives in the navigation and in the tab title; repeating it in
   // the top bar only duplicated the active item.
   useEffect(() => {
-    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : pageNames[activeView]} · openqareer`;
-  }, [activeView, roleSkillAssessmentOpen]);
+    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : accountOpen ? 'Аккаунт' : pageNames[activeView]} · openqareer`;
+  }, [accountOpen, activeView, roleSkillAssessmentOpen]);
 
   const navigationState = {
     careerPictureReady,
@@ -238,6 +238,9 @@ export function CareerWorkspaceShell({
     const target = view === 'career' ? 'opportunities' : view;
     const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
     if (!isNavigable(target)) return;
+    setAccountOpen(false);
+    setAccountSection('security');
+    setAccountReturnToIntake(false);
     if (target !== 'notifications') setSelectedNotificationId(null);
     setActiveView(target);
     setNavigationOptions(targetOptions);
@@ -319,11 +322,19 @@ export function CareerWorkspaceShell({
   const closeAccount = useCallback(() => {
     setAccountOpen(false);
     setAccountSection('security');
+    setAccountReturnToIntake(false);
   }, []);
-  const openAccount = useCallback((section: AccountSection = 'security') => {
+  const openAccount = useCallback((section: AccountSection = 'security', returnToIntake = false) => {
     setExpertSheetExpanded(false);
-    setExpertConfig((previous) => ({ ...previous, open: false }));
+    const shouldOpenDesktopExpert =
+      typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+    setExpertConfig((previous) => ({
+      ...previous,
+      open: previous.open || shouldOpenDesktopExpert,
+      subjectTitle: 'Аккаунт',
+    }));
     setAccountSection(section);
+    setAccountReturnToIntake(returnToIntake);
     setAccountOpen(true);
   }, []);
 
@@ -349,6 +360,15 @@ export function CareerWorkspaceShell({
     },
     [onClearWorkspace, onSessionChange, session?.candidateId],
   );
+  const handleAccountAccessIdentityChange = useCallback(
+    (nextSession: AuthUser | null) => {
+      resetForAccount(nextSession);
+      if (nextSession && nextSession.emailVerified !== false && accountReturnToIntake) {
+        closeAccount();
+      }
+    },
+    [accountReturnToIntake, closeAccount, resetForAccount],
+  );
 
   // A finished diagnostic hands the screen to the cabinet and leaves a clean
   // wizard behind, so clearing the workspace later starts from the first
@@ -369,8 +389,6 @@ export function CareerWorkspaceShell({
     [onSaveWorkspace],
   );
 
-  const planName = CURRENT_PLAN.name;
-
   return (
     <CareerDiaryAccessProvider value={diaryAccess}>
       <div
@@ -387,7 +405,7 @@ export function CareerWorkspaceShell({
         <CareerNavigationRail
           session={session}
           sessionPending={sessionPending}
-          ariaHidden={accountOpen || onboardingIsFullscreen}
+          ariaHidden={onboardingIsFullscreen}
           activeView={activeView}
           isNavigable={isNavigable}
           lockedReason={lockedReason}
@@ -399,7 +417,7 @@ export function CareerWorkspaceShell({
             session={session}
             sessionPending={sessionPending}
             activeView={activeView}
-            ariaHidden={accountOpen || onboardingIsFullscreen}
+            ariaHidden={onboardingIsFullscreen}
             tariffsAvailable={isNavigable('tariffs')}
             tariffsLockedReason={lockedReason('tariffs')}
             onNavigateHome={() => navigate('today')}
@@ -423,7 +441,29 @@ export function CareerWorkspaceShell({
           />
         ) : null}
 
-        <main id="career-main" className="career-main" aria-hidden={accountOpen ? true : undefined}>
+        <main id="career-main" className="career-main">
+          {accountOpen ? (
+            session && session.emailVerified !== false ? (
+              <CareerAccountWorkspace
+                initialUser={session}
+                initialSection={accountSection}
+                onClose={closeAccount}
+                onIdentityChange={resetForAccount}
+                onSessionUpdate={onSessionChange}
+                onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
+                onOpenTariffs={() => {
+                  closeAccount();
+                  navigate('tariffs');
+                }}
+              />
+            ) : (
+              <CareerAccountAccess
+                session={session ?? null}
+                onIdentityChange={handleAccountAccessIdentityChange}
+                onClose={closeAccount}
+              />
+            )
+          ) : (
           <AppErrorBoundary>
             {sessionPending ? (
               <SessionGate
@@ -458,7 +498,7 @@ export function CareerWorkspaceShell({
                 }}
                 hasAccount={Boolean(session)}
                 onStartedChange={setIntakeStarted}
-                onSignIn={openAccount}
+                onSignIn={() => openAccount('security', true)}
               />
             ) : null}
             {roleSkillAssessmentOpen && cabinetSession ? (
@@ -605,6 +645,7 @@ export function CareerWorkspaceShell({
             ) : null}
             {!roleSkillAssessmentOpen && activeView === 'tariffs' ? <TariffsScreen /> : null}
           </AppErrorBoundary>
+          )}
         </main>
 
         <CareerMobileNavigation
@@ -613,7 +654,7 @@ export function CareerWorkspaceShell({
           lockedReason={lockedReason}
           onNavigate={navigate}
           onOpenExpert={() => openExpert()}
-          ariaHidden={accountOpen || onboardingIsFullscreen}
+          ariaHidden={onboardingIsFullscreen}
         />
 
         {activeView !== 'opportunities' &&
@@ -656,32 +697,6 @@ export function CareerWorkspaceShell({
             onEscape={handleExpertEscape}
             onClose={closeExpert}
           />
-        ) : null}
-        {accountOpen ? (
-          <>
-            <button
-              className="career-expert-scrim"
-              type="button"
-              onClick={closeAccount}
-              aria-label="Закрыть аккаунт"
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-            <CareerAccountPanel
-              initialUser={session}
-              initialSection={accountSection}
-              onClose={closeAccount}
-              onIdentityChange={resetForAccount}
-              onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
-              tariffsPlanName={planName}
-              tariffsAvailable={isNavigable('tariffs')}
-              tariffsLockedReason={lockedReason('tariffs')}
-              onOpenTariffs={() => {
-                closeAccount();
-                navigate('tariffs');
-              }}
-            />
-          </>
         ) : null}
       </div>
     </CareerDiaryAccessProvider>

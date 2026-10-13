@@ -1059,4 +1059,4 @@ export { MIGRATION_35 } from './titleParseSchema';
 export { MIGRATION_36 } from './stageCoachSchema';
 export { MIGRATION_38 } from './applicationArchiveSchema';
 
-export { EMAIL_VERIFICATION_CUTOVER_AT, MIGRATION_39 } from './emailVerificationSchema';
+export { EMAIL_VERIFICATION_CUTOVER_AT, MIGRATION_39, MIGRATION_40 } from './emailVerificationSchema';

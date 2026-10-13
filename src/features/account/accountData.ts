@@ -1,85 +1,4 @@
-import type {
-  AccountAppSettings,
-  AccountConnection,
-  AccountConsent,
-  AccountDevice,
-  AccountNotificationEvent,
-  AccountPaymentItem,
-} from './accountTypes';
-
-export const DEFAULT_ACCOUNT_DEVICES: readonly AccountDevice[] = [
-  {
-    id: 'dev-desktop',
-    kind: 'desktop',
-    name: 'Приложение openqareer, этот Mac',
-    details: 'Версия 1.0.0 · последняя активность сейчас · вход 28.09',
-    current: true,
-  },
-  {
-    id: 'dev-chrome',
-    kind: 'globe',
-    name: 'Браузер, Chrome на macOS',
-    details: 'Последняя активность 07.10 09:12 · вход 06.10 · сессия продлевается 30 дней',
-    current: false,
-  },
-  {
-    id: 'dev-safari',
-    kind: 'globe',
-    name: 'Браузер, Safari на iPhone',
-    details: 'Последняя активность 02.10 21:40 · вход 02.10',
-    current: false,
-  },
-];
-
-export const DEFAULT_ACCOUNT_CONNECTIONS: readonly AccountConnection[] = [
-  {
-    id: 'linkedin',
-    name: 'LinkedIn',
-    details: 'Подключено 12.09 · вход сохранён до 10.10 · импортировано 9 из 9 мест работы',
-    status: 'ok',
-    statusLabel: 'Подключено',
-    manageable: true,
-  },
-  {
-    id: 'hh',
-    name: 'hh.ru',
-    details: 'Подключено 07.10 · импортировано 8 из 9 мест работы',
-    status: 'warn',
-    statusLabel: 'Частично',
-    manageable: true,
-  },
-  {
-    id: 'others',
-    name: 'Другие площадки',
-    details:
-      'Подключите площадку, и отклики пойдут и туда. Список площадок и условия открываются при подключении.',
-    status: 'dim',
-    statusLabel: 'Не подключено',
-  },
-  {
-    id: 'email',
-    name: 'Почта',
-    details:
-      'Нужна, чтобы видеть ответы работодателей. Не подключена: ответы вносите вручную.',
-    status: 'dim',
-    statusLabel: 'Не подключено',
-  },
-  {
-    id: 'calendar',
-    name: 'Календарь',
-    details: 'Нужен, чтобы ставить интервью и напоминания. Не подключён.',
-    status: 'dim',
-    statusLabel: 'Не подключено',
-  },
-  {
-    id: 'telegram',
-    name: 'Telegram',
-    details:
-      'Бот @openqareer_bot: напоминания о сроках. Не подключён: напоминания придут в приложение.',
-    status: 'dim',
-    statusLabel: 'Не подключено',
-  },
-];
+import type { AccountConsent, AccountNotificationEvent } from './accountTypes';
 
 export const DEFAULT_NOTIFICATION_EVENTS: readonly AccountNotificationEvent[] = [
   {
@@ -189,7 +108,7 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     index: 0,
     title: 'Автоотклики',
     description: 'Черновики и отправка на hh.ru и в LinkedIn после вашего одобрения',
-    date: '03.10',
+    date: '',
     consequences:
       'Очередь остановится, неотправленные черновики останутся в списке без отправки. Уже отправленные отклики и журнал не удаляются.',
   },
@@ -199,7 +118,7 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     title: 'Цифровой след',
     description:
       'Поиск ваших публичных упоминаний; находки видите только вы, до подтверждения не попадают в профиль',
-    date: '05.10',
+    date: '',
     consequences: 'Поиск упоминаний остановится, найденное останется у вас.',
   },
   {
@@ -207,7 +126,7 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     index: 2,
     title: 'Обработка данных профиля',
     description: 'Хранение и разбор резюме, истории откликов, контактов',
-    date: '12.09',
+    date: '',
     consequences: 'Без неё профиль и подборка работать не смогут.',
   },
   {
@@ -216,7 +135,7 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     title: 'Данные о мобильности',
     description:
       'Гражданство, документы, диплом, семья и сроки для раздела «Страны и релокация»; видите только вы, отзыв удаляет данные и выключает релокацию',
-    date: '08.10',
+    date: '',
     consequences: 'Данные о мобильности будут удалены, релокация отключится.',
   },
   {
@@ -236,21 +155,4 @@ export const DEFAULT_ACCOUNT_CONSENTS: readonly AccountConsent[] = [
     date: '',
     consequences: 'Темы постов будут браться из профиля и ролей.',
   },
-];
-
-export const DEFAULT_APP_SETTINGS: AccountAppSettings = {
-  version: '1.0.0',
-  checkDate: 'сегодня в 09:12',
-  autoUpdate: true,
-  menuBar: true,
-  launchAtLogin: false,
-};
-
-export const DEFAULT_PAYMENT_HISTORY: readonly AccountPaymentItem[] = [
-  { date: '08.10', title: 'Pro, месяц', amount: '9 900 ₽', method: 'Карта РФ' },
-  { date: '08.09', title: 'Pro, месяц', amount: '9 900 ₽', method: 'Карта РФ' },
-  { date: '08.08', title: 'Pro, месяц', amount: '9 900 ₽', method: 'СБП' },
-  { date: '08.07', title: 'Basic, месяц', amount: '3 990 ₽', method: 'СБП' },
-  { date: '08.06', title: 'Basic, месяц', amount: '3 990 ₽', method: 'СБП' },
-  { date: '08.05', title: 'Basic, месяц', amount: '3 990 ₽', method: 'Карта РФ' },
 ];

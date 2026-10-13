@@ -27,10 +27,16 @@ test.describe('B464 browser connector window', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
-    const account = page.getByRole('dialog', { name: 'Аккаунт' });
-    await account.getByRole('button', { name: 'Подключения' }).click();
-    await expect(account.getByRole('button', { name: 'Открыть окно входа hh.ru' })).toBeVisible();
-    await account.getByRole('button', { name: 'Открыть окно входа hh.ru' }).click();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await account.getByRole('button', { name: 'Назад' }).click();
+      await account.getByRole('button', { name: 'Подключения' }).click();
+      await account.getByRole('button', { name: /hh\.ru/u }).click();
+    } else {
+      await account.getByRole('tab', { name: 'Подключения' }).click();
+      await expect(account.getByRole('button', { name: 'Открыть окно входа hh.ru' })).toBeVisible();
+      await account.getByRole('button', { name: 'Открыть окно входа hh.ru' }).click();
+    }
 
     const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
     const popupPromise = page.waitForEvent('popup');
@@ -137,9 +143,13 @@ test.describe('B464 browser connector window', () => {
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
-    const account = page.getByRole('dialog', { name: 'Аккаунт' });
-    await account.getByRole('button', { name: 'Подключения' }).click();
-    await account.getByRole('button', { name: 'Подключить снова hh.ru' }).click();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    await account.getByRole('tab', { name: 'Подключения' }).click();
+    await account.getByRole('button', { name: 'Управлять' }).click();
+    await page
+      .getByRole('dialog', { name: 'hh.ru' })
+      .getByRole('button', { name: 'Повторить импорт' })
+      .click();
 
     const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
     await expect(

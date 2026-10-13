@@ -1,10 +1,12 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import {
   ArrowsClockwise,
   CheckCircle,
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
+import { registerEscapeLayer } from '../shell/escapeLayers';
+import type { CandidateConnection } from '../coach/coachApi';
 
 interface DialogScrimProps {
   readonly children: ReactNode;
@@ -12,8 +14,44 @@ interface DialogScrimProps {
 }
 
 function DialogScrim({ children, onClose }: DialogScrimProps) {
+  const root = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const returnFocusTo = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const dialog = root.current?.querySelector<HTMLElement>('.career-account-dialog');
+    const focusable = () =>
+      Array.from(
+        dialog?.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+    const first = focusable()[0];
+    first?.focus();
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      const firstItem = items[0];
+      const lastItem = items.at(-1);
+      if (!firstItem || !lastItem) return;
+      if (event.shiftKey && document.activeElement === firstItem) {
+        event.preventDefault();
+        lastItem.focus();
+      } else if (!event.shiftKey && document.activeElement === lastItem) {
+        event.preventDefault();
+        firstItem.focus();
+      }
+    };
+    window.addEventListener('keydown', handleTab);
+    const unregisterEscape = registerEscapeLayer(onClose);
+    return () => {
+      window.removeEventListener('keydown', handleTab);
+      unregisterEscape();
+      if (returnFocusTo?.isConnected) returnFocusTo.focus();
+    };
+  }, [onClose]);
+
   return (
-    <div className="career-account-dialog-scrim" role="presentation">
+    <div ref={root} className="career-account-dialog-scrim" role="presentation">
       <button
         type="button"
         className="career-account-dialog-backdrop"
@@ -26,12 +64,42 @@ function DialogScrim({ children, onClose }: DialogScrimProps) {
   );
 }
 
+export function AccountFormDialog({
+  title,
+  titleId,
+  description,
+  onClose,
+  children,
+}: {
+  readonly title: string;
+  readonly titleId: string;
+  readonly description?: string;
+  readonly onClose: () => void;
+  readonly children: ReactNode;
+}) {
+  return (
+    <DialogScrim onClose={onClose}>
+      <div className="career-account-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <div className="career-account-card-header">
+          <h3 id={titleId} className="career-account-card-title">{title}</h3>
+          <button type="button" className="career-btn is-ghost is-icon" onClick={onClose} aria-label="Закрыть">
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+        {description ? <p className="career-account-lead">{description}</p> : null}
+        {children}
+      </div>
+    </DialogScrim>
+  );
+}
+
 interface ConfirmDialogProps {
   readonly title: string;
   readonly description: string;
   readonly confirmLabel: string;
   readonly cancelLabel?: string;
   readonly isDanger?: boolean;
+  readonly busy?: boolean;
   readonly onConfirm: () => void;
   readonly onCancel: () => void;
 }
@@ -42,6 +110,7 @@ export function AccountConfirmDialog({
   confirmLabel,
   cancelLabel = 'Отмена',
   isDanger = false,
+  busy = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -50,6 +119,7 @@ export function AccountConfirmDialog({
       <div
         className="career-account-dialog"
         role="alertdialog"
+        aria-modal="true"
         aria-labelledby="dialog-title"
         aria-describedby="dialog-desc"
       >
@@ -60,12 +130,13 @@ export function AccountConfirmDialog({
           {description}
         </p>
         <div className="career-account-dialog-actions">
-          <button type="button" className="career-btn is-ghost" onClick={onCancel}>
+          <button type="button" className="career-btn is-ghost" disabled={busy} onClick={onCancel}>
             {cancelLabel}
           </button>
           <button
             type="button"
             className={`career-btn ${isDanger ? 'is-danger' : 'is-primary'}`}
+            disabled={busy}
             onClick={onConfirm}
           >
             {confirmLabel}
@@ -77,12 +148,24 @@ export function AccountConfirmDialog({
 }
 
 interface ConnectionModalProps {
+  readonly connection: Extract<CandidateConnection, { status: 'connected' }>;
+  readonly busy: boolean;
   readonly onClose: () => void;
   readonly onDisconnect: () => void;
   readonly onReimport: () => void;
 }
 
-function LinkedInModalContent() {
+function connectionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'дата неизвестна';
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(date);
+}
+
+function LinkedInModalContent({
+  connection,
+}: {
+  readonly connection: Extract<CandidateConnection, { status: 'connected' }>;
+}) {
   return (
     <div className="career-account-rows">
       <div className="career-account-card-title-wrap">
@@ -91,30 +174,29 @@ function LinkedInModalContent() {
           Подключено
         </span>
         <span className="career-account-row-desc">
-          вход сохранён до <span className="career-account-num">10.10</span>
+          вход сохранён в приложении · подключено {connectionDate(connection.connectedAt)}
         </span>
       </div>
       <p className="career-account-row-desc">
-        Импортировано <span className="career-account-num">9 из 9</span> мест работы,{' '}
-        <span className="career-account-num">12.09</span>. Контакты:{' '}
-        <span className="career-account-num">412</span>, импорт{' '}
-        <span className="career-account-num">12.09</span>.
+        Импортировано {connection.factCount} фактов · {connectionDate(connection.lastImportedAt)}.
       </p>
-      <label className="career-account-row">
+      <label className="career-account-row" aria-disabled="true">
         <span className="career-account-row-label">
-          Использовать контакты для маршрутов к компаниям
+          Использовать контакты для маршрутов к компаниям. Настройка пока недоступна.
         </span>
-        <input type="checkbox" defaultChecked />
+        <input type="checkbox" disabled aria-label="Использовать контакты для маршрутов к компаниям" />
       </label>
-      <label className="career-account-row">
-        <span className="career-account-row-label">Готовить черновики постов</span>
-        <input type="checkbox" defaultChecked />
+      <label className="career-account-row" aria-disabled="true">
+        <span className="career-account-row-label">Готовить черновики постов. Настройка пока недоступна.</span>
+        <input type="checkbox" disabled aria-label="Готовить черновики постов" />
       </label>
     </div>
   );
 }
 
 export function AccountLinkedInModal({
+  connection,
+  busy,
   onClose,
   onDisconnect,
   onReimport,
@@ -124,6 +206,7 @@ export function AccountLinkedInModal({
       <div
         className="career-account-dialog"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="li-modal-title"
       >
         <div className="career-account-card-header">
@@ -139,12 +222,12 @@ export function AccountLinkedInModal({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <LinkedInModalContent />
+        <LinkedInModalContent connection={connection} />
         <div className="career-account-dialog-actions">
-          <button type="button" className="career-btn is-danger" onClick={onDisconnect}>
+          <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
             Отключить
           </button>
-          <button type="button" className="career-btn" onClick={onReimport}>
+          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
             <ArrowsClockwise size={16} aria-hidden="true" />
             Импортировать заново
           </button>
@@ -154,7 +237,11 @@ export function AccountLinkedInModal({
   );
 }
 
-function HhModalContent() {
+function HhModalContent({
+  connection,
+}: {
+  readonly connection: Extract<CandidateConnection, { status: 'connected' }>;
+}) {
   return (
     <div className="career-account-rows">
       <div className="career-account-card-title-wrap">
@@ -163,25 +250,27 @@ function HhModalContent() {
           Частично
         </span>
         <span className="career-account-row-desc">
-          подключено <span className="career-account-num">07.10</span>
+          подключено <span className="career-account-num">{connectionDate(connection.connectedAt)}</span>
         </span>
       </div>
       <div className="career-account-row">
         <span className="career-account-row-desc">
-          Импортировано 8 из 9 мест работы: «Практика-Эксперт» не прочитано, площадка не ответила.
+          Импортировано {connection.factCount} фактов · последний импорт {connectionDate(connection.lastImportedAt)}.
         </span>
       </div>
-      <label className="career-account-row">
+      <label className="career-account-row" aria-disabled="true">
         <span className="career-account-row-label">
-          Отправлять отклики через этот аккаунт после одобрения
+          Отправлять отклики через этот аккаунт после одобрения. Настройка пока недоступна.
         </span>
-        <input type="checkbox" defaultChecked />
+        <input type="checkbox" disabled aria-label="Отправлять отклики через этот аккаунт после одобрения" />
       </label>
     </div>
   );
 }
 
 export function AccountHhModal({
+  connection,
+  busy,
   onClose,
   onDisconnect,
   onReimport,
@@ -191,6 +280,7 @@ export function AccountHhModal({
       <div
         className="career-account-dialog"
         role="dialog"
+        aria-modal="true"
         aria-labelledby="hh-modal-title"
       >
         <div className="career-account-card-header">
@@ -206,12 +296,12 @@ export function AccountHhModal({
             <X size={18} aria-hidden="true" />
           </button>
         </div>
-        <HhModalContent />
+        <HhModalContent connection={connection} />
         <div className="career-account-dialog-actions">
-          <button type="button" className="career-btn is-danger" onClick={onDisconnect}>
+          <button type="button" className="career-btn is-danger" disabled={busy} onClick={onDisconnect}>
             Отключить
           </button>
-          <button type="button" className="career-btn" onClick={onReimport}>
+          <button type="button" className="career-btn" disabled={busy} onClick={onReimport}>
             <ArrowsClockwise size={16} aria-hidden="true" />
             Повторить импорт
           </button>

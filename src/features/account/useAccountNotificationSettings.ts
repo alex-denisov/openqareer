@@ -12,9 +12,7 @@ import {
 import { DEFAULT_NOTIFICATION_EVENTS } from './accountData';
 
 export function useAccountNotificationSettings() {
-  const [events, setEvents] = useState<readonly AccountNotificationEvent[]>(
-    DEFAULT_NOTIFICATION_EVENTS,
-  );
+  const [events, setEvents] = useState<readonly AccountNotificationEvent[]>([]);
   const [channelStatus, setChannelStatus] = useState<NotificationChannelStatus | null>(null);
   const [settingsReady, setSettingsReady] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -66,17 +64,17 @@ function useNotificationSettingsRefresh(
         getNotificationPreferences(),
         getNotificationChannelStatus(),
       ]);
-      setEvents((current) =>
-        current.map((event) => {
+      setEvents(
+        DEFAULT_NOTIFICATION_EVENTS.flatMap((event) => {
           const preference = preferences.find((item) => item.key === event.id);
           return preference
-            ? {
+            ? [{
                 ...event,
                 app: preference.app,
                 email: preference.email,
                 telegram: preference.telegram,
-              }
-            : event;
+              }]
+            : [];
         }),
       );
       setChannelStatus(channels);

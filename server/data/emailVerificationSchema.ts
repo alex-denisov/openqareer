@@ -12,3 +12,17 @@ CREATE TABLE IF NOT EXISTS email_verifications (
   verified_at TEXT
 ) STRICT;
 `;
+
+/** S10-VIS-2 — a verified address stays active until the replacement is confirmed. */
+export const MIGRATION_40 = `
+CREATE TABLE IF NOT EXISTS account_email_change_requests (
+  candidate_id TEXT PRIMARY KEY REFERENCES candidates(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  current_email TEXT,
+  new_email TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0 CHECK (attempts BETWEEN 0 AND 5),
+  last_sent_at TEXT NOT NULL
+) STRICT;
+`;

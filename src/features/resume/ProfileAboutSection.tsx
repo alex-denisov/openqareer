@@ -160,10 +160,7 @@ function AboutActionButtons({
   readonly onSuggest: () => void;
 }) {
   return (
-    <div
-      className="career-profile-about-actions"
-      style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}
-    >
+    <div className="career-profile-about-actions">
       <button
         type="button"
         className="career-quiet-button"
