@@ -37,10 +37,9 @@ async function stubAnonymousCareerApi(page: Page): Promise<void> {
 }
 
 test.describe('S11-WIZ: account consent remains available from FirstRun', () => {
-  test('opens registration from the shell and returns to the edited first-run goal', async ({
+  test('opens registration from a FirstRun source and returns to the edited goal', async ({
     page,
-  }, info) => {
-    test.skip(info.project.name !== 'desktop-1440', 'Desktop registration walk only');
+  }) => {
     await stubAnonymousCareerApi(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('first-run-wizard')).toBeVisible();
@@ -48,7 +47,7 @@ test.describe('S11-WIZ: account consent remains available from FirstRun', () => 
     await page.getByTestId('edit-goal-btn').click();
     await page.getByTestId('goal-textarea').fill('Ищу продуктовую роль в Европе.');
     await page.getByTestId('save-goal-btn').click();
-    await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+    await page.getByTestId('source-opt-hh').click();
 
     const access = page.locator('.career-account-access');
     await expect(access).toBeVisible();
@@ -66,5 +65,6 @@ test.describe('S11-WIZ: account consent remains available from FirstRun', () => 
     await expect(page.locator('.first-run-goal-text')).toContainText(
       'Ищу продуктовую роль в Европе.',
     );
+    await expect(page.getByTestId('source-opt-hh')).toContainText('Подключить');
   });
 });

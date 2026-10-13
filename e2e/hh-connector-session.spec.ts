@@ -117,6 +117,12 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
 
 async function stubCandidateApi(page: Page): Promise<void> {
   let hhStatus: 'disconnected' | 'connected' = 'disconnected';
+  await page.route('**/api/v1/account/email-change-requests/current', (route) =>
+    route.fulfill({ json: { data: null } }),
+  );
+  await page.route('**/api/v1/me/consents', (route) =>
+    route.fulfill({ json: { data: { consents: [] } } }),
+  );
   await page.route('**/api/v1/candidate/**', async (route) => {
     await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
@@ -218,8 +224,11 @@ async function openHhDialog(page: Page): Promise<void> {
 
 function accountHhRow(page: Page) {
   return (page.viewportSize()?.width ?? 1440) <= 760
-    ? page.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' })
-    : page.locator('.career-account-row').filter({ hasText: 'hh.ru' });
+    ? page.getByRole('button', { name: /^hh\.ru/ })
+    : page
+        .getByRole('tabpanel', { name: /Подключения/ })
+        .locator('.career-account-row')
+        .filter({ hasText: 'hh.ru' });
 }
 
 test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
@@ -240,7 +249,9 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     // wizard behind the dialog (owner report, 2026-08-26).
     const picker = dialog.getByLabel('Выберите резюме для импорта');
     await expect(picker).toBeVisible();
-    await expect(page.locator('.career-account-screen')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /^(Аккаунт|Подключения)$/ }).last(),
+    ).toBeVisible();
 
     await picker.selectOption({ label: 'Директор по продукту' });
     await dialog.getByRole('button', { name: 'Импортировать выбранное резюме' }).click();
