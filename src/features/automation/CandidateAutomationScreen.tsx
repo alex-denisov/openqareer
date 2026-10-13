@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { apiErrorMessage } from '../coach/apiClient';
 import { AutomationWorkspace } from './AutomationWorkspace';
 import { useAutomationController } from './useAutomationController';
@@ -9,6 +10,7 @@ export interface CandidateAutomationScreenProps {
   readonly onOpenConsultant: () => void;
   readonly onOpenConnections: () => void;
   readonly onOpenTariffs: () => void;
+  readonly manualSend?: ReactNode;
 }
 
 export function CandidateAutomationScreen(props: CandidateAutomationScreenProps) {
@@ -16,7 +18,7 @@ export function CandidateAutomationScreen(props: CandidateAutomationScreenProps)
   const ui = useAutomationController(data);
   if (data.snapshotLoading) return <AutomationLoading />;
   if (!data.snapshot) return <AutomationLoadFailure message={data.snapshotError} onRetry={() => void data.reloadSnapshot().catch((reason: unknown) => data.setSnapshotError(apiErrorMessage(reason, 'Не удалось загрузить настройки автооткликов.')))} />;
-  return <AutomationWorkspace data={data} ui={ui} onOpenConsultant={props.onOpenConsultant} onOpenConnections={props.onOpenConnections} onOpenTariffs={props.onOpenTariffs} />;
+  return <AutomationWorkspace data={data} ui={ui} onOpenConsultant={props.onOpenConsultant} onOpenConnections={props.onOpenConnections} onOpenTariffs={props.onOpenTariffs} manualSend={props.manualSend} />;
 }
 
 function AutomationLoading() {

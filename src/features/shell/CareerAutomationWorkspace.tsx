@@ -12,17 +12,17 @@ export interface CareerAutomationWorkspaceProps {
 export function CareerAutomationWorkspace(props: CareerAutomationWorkspaceProps) {
   const applications = useApplications();
   return (
-    <>
-      <CandidateAutomationScreen
-        candidateId={props.candidateId}
-        onOpenConsultant={props.onOpenConsultant}
-        onOpenConnections={props.onOpenConnections}
-        onOpenTariffs={props.onOpenTariffs}
-      />
-      <CandidateActionPanel
-        applications={applications.applications}
-        onRefreshApplications={applications.refreshApplications}
-      />
-    </>
+    <CandidateAutomationScreen
+      candidateId={props.candidateId}
+      onOpenConsultant={props.onOpenConsultant}
+      onOpenConnections={props.onOpenConnections}
+      onOpenTariffs={props.onOpenTariffs}
+      manualSend={
+        <CandidateActionPanel
+          applications={applications.applications}
+          onRefreshApplications={applications.refreshApplications}
+        />
+      }
+    />
   );
 }

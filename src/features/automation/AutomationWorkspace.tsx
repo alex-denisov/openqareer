@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CaretLeft } from '@phosphor-icons/react';
 import type { KeyboardEvent } from 'react';
 import type { AutomationQueueItem, AutomationQueuePreview } from './automationApi';
@@ -22,6 +23,8 @@ export interface AutomationWorkspaceProps {
   readonly onOpenConsultant: () => void;
   readonly onOpenConnections: () => void;
   readonly onOpenTariffs: () => void;
+  /** Mounted between the approval queue and the mode settings, as in the approved screen. */
+  readonly manualSend?: ReactNode;
 }
 
 export function AutomationWorkspace(props: AutomationWorkspaceProps) {
@@ -212,6 +215,7 @@ function AutomationAutoTab(props: AutomationWorkspaceProps) {
         onOpenConnections={props.onOpenConnections}
       />
       <AutomationQueueSection {...props} snapshot={snapshot} />
+      {props.manualSend}
       <AutomationScheduleSection {...props} snapshot={snapshot} />
       <AutomationRulesSection {...props} snapshot={snapshot} />
       {ui.letter ? <AutomationLetterLayer ui={ui} /> : null}
