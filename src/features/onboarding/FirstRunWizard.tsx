@@ -1,5 +1,4 @@
-import type { ReactElement } from 'react';
-import type { ConsultantTurn } from './firstRunTypes';
+import { useEffect, type ReactElement } from 'react';
 import type { FirstRunData, FirstRunSpecialState, FirstRunStep } from './firstRunTypes';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
 import { FirstRunCitySheet } from './FirstRunCitySheet';
@@ -8,14 +7,13 @@ import { FirstRunConsultant } from './FirstRunConsultant';
 import {
   FirstRunEmptySources,
   FirstRunErrorState,
-  FirstRunPartialSourceBanner,
   FirstRunSessionExpired,
   FirstRunSkeleton,
   FirstRunStaleLoading,
 } from './FirstRunStates';
 import { FirstRunContextCard, FirstRunGoalCard, FirstRunSourceCard } from './FirstRunSteps';
 import { useFirstRunWizardState } from './useFirstRunWizardState';
-
+import { useResumeIngestion } from '../journey/useResumeIngestion';
 import type { IngestedResume, ResumeIngestionState } from '../journey/useResumeIngestion';
 
 export interface FirstRunWizardProps {
@@ -24,6 +22,10 @@ export interface FirstRunWizardProps {
   readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
   readonly onRetry?: () => void;
   readonly onSignIn?: () => void;
+  readonly onStartedChange?: (started: boolean) => void;
+  readonly onOpenConsultant: (prompt?: string) => void;
+  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
+  readonly showConsultantPanel?: boolean;
   readonly isMobile?: boolean;
   readonly hasAccount?: boolean;
   readonly ingestion?: ResumeIngestionState;
@@ -47,36 +49,48 @@ function StepsBar({ step }: { readonly step: FirstRunStep }): ReactElement {
   );
 }
 
+function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstRunWizardState> }) {
+  return (
+    <FirstRunGoalCard
+      goal={state.data.goal}
+      onGoalChange={state.handleGoalChange}
+      isEditing={state.isGoalEditing}
+      onStartEdit={() => state.setIsGoalEditing(true)}
+      onSaveEdit={() => {
+        state.setIsGoalEditing(false);
+        state.setStep('source');
+      }}
+    />
+  );
+}
+
 function WizardMainCards({
   state,
   onComplete,
   ingestionResult,
+  onOpenConsultant,
+  onConnectSource,
 }: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
   readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
   readonly ingestionResult?: IngestedResume;
+  readonly onOpenConsultant: (prompt?: string) => void;
+  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
 }): ReactElement {
   return (
     <>
-      <FirstRunGoalCard
-        goal={state.data.goal}
-        onGoalChange={state.handleGoalChange}
-        isEditing={state.isGoalEditing}
-        onStartEdit={() => state.setIsGoalEditing(true)}
-        onSaveEdit={() => {
-          state.setIsGoalEditing(false);
-          state.setStep('source');
-        }}
-      />
+      <WizardGoalCard state={state} />
       {state.step === 'source' ? (
         <FirstRunSourceCard
           data={state.data}
           uploadedFileName={state.uploadedFile?.name}
           isIngesting={state.isIngesting}
           ingestionError={state.ingestionError}
+          ingestionNotice={state.ingestionNotice}
           onSelectSource={state.handleSelectSource}
+          onConnectSource={onConnectSource}
           onTriggerFileUpload={() => state.setIsSourceMenuOpen(true)}
-          onTriggerConsultant={() => state.setIsMobileChatOpen(true)}
+          onTriggerConsultant={onOpenConsultant}
           onNext={() => state.setStep('context')}
           onSkip={() => state.setIsSkipDialogOpen(true)}
         />
@@ -138,32 +152,50 @@ function getSpecialStateView(
   return null;
 }
 
-function MobileChatModal({
-  isOpen,
-  turns,
-  onSendTurn,
-  onClose,
-}: {
-  readonly isOpen: boolean;
-  readonly turns: readonly ConsultantTurn[];
-  readonly onSendTurn: (text: string, isUser: boolean) => void;
-  readonly onClose: () => void;
-}): ReactElement | null {
-  if (!isOpen) return null;
+interface FirstRunScreenProps {
+  readonly state: ReturnType<typeof useFirstRunWizardState>;
+  readonly specialState: FirstRunSpecialState;
+  readonly isMobile: boolean;
+  readonly hasInternalConsultant: boolean;
+  readonly onComplete?: FirstRunWizardProps['onComplete'];
+  readonly onOpenConsultant: FirstRunWizardProps['onOpenConsultant'];
+  readonly onConnectSource?: FirstRunWizardProps['onConnectSource'];
+  readonly ingestion: ResumeIngestionState;
+}
+
+function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
+  const { state, specialState, isMobile, hasInternalConsultant, onComplete } = props;
   return (
     <div
-      className="first-run-mobile-modal"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Диалог с консультантом"
-      data-testid="first-run-mobile-chat"
+      className={`first-run-screen${isMobile ? ' is-mobile' : ''}`}
+      data-mobile={isMobile}
+      data-testid="first-run-wizard"
     >
-      <FirstRunConsultant
-        turns={turns}
-        onSendTurn={onSendTurn}
-        isMobileChat={true}
-        onBackFromMobileChat={onClose}
-      />
+      <div className={`first-run-container${hasInternalConsultant ? '' : ' is-shell-panel'}`}>
+        <main className="first-run-main">
+          {!isMobile ? (
+            <header className="first-run-desktop-header">
+              <h1>Старт</h1>
+            </header>
+          ) : null}
+          <StepsBar step={state.step} />
+          <p className="first-run-eyebrow">Находка себя</p>
+          {specialState === 'empty-sources' ? (
+            <FirstRunEmptySources onConsultant={props.onOpenConsultant} />
+          ) : null}
+          <WizardMainCards
+            state={state}
+            onComplete={onComplete}
+            ingestionResult={props.ingestion.result}
+            onOpenConsultant={props.onOpenConsultant}
+            onConnectSource={props.onConnectSource}
+          />
+        </main>
+        {hasInternalConsultant ? (
+          <FirstRunConsultant onOpenConsultant={props.onOpenConsultant} />
+        ) : null}
+      </div>
+      <WizardDialogs state={state} ingestion={props.ingestion} />
     </div>
   );
 }
@@ -175,40 +207,32 @@ export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
     onComplete,
     onRetry,
     onSignIn,
+    onStartedChange,
+    onOpenConsultant,
+    onConnectSource,
+    showConsultantPanel = true,
     isMobile = false,
+    hasAccount = false,
     ingestion,
   } = props;
   const state = useFirstRunWizardState(initialStep);
+  const ownedIngestion = useResumeIngestion(hasAccount);
+  const activeIngestion = ingestion ?? ownedIngestion;
+  const hasInternalConsultant = showConsultantPanel && !isMobile;
+  useEffect(() => onStartedChange?.(true), [onStartedChange]);
   const specialView = getSpecialStateView(specialState, onRetry, onSignIn);
   if (specialView) return specialView;
 
   return (
-    <div className="first-run-screen" data-testid="first-run-wizard">
-      <div className="first-run-container">
-        <main className="first-run-main">
-          <StepsBar step={state.step} />
-          <p className="first-run-eyebrow">Находка себя</p>
-          {specialState === 'partial-source' ? <FirstRunPartialSourceBanner /> : null}
-          {specialState === 'empty-sources' ? (
-            <FirstRunEmptySources onConsultant={() => state.setIsMobileChatOpen(true)} />
-          ) : null}
-          <WizardMainCards
-            state={state}
-            onComplete={onComplete}
-            ingestionResult={ingestion?.result}
-          />
-        </main>
-        {!isMobile ? (
-          <FirstRunConsultant turns={state.turns} onSendTurn={state.handleSendTurn} />
-        ) : null}
-      </div>
-      <MobileChatModal
-        isOpen={isMobile && state.isMobileChatOpen}
-        turns={state.turns}
-        onSendTurn={state.handleSendTurn}
-        onClose={() => state.setIsMobileChatOpen(false)}
-      />
-      <WizardDialogs state={state} ingestion={ingestion} />
-    </div>
+    <FirstRunScreen
+      state={state}
+      specialState={specialState}
+      isMobile={isMobile}
+      hasInternalConsultant={hasInternalConsultant}
+      onComplete={onComplete}
+      onOpenConsultant={onOpenConsultant}
+      onConnectSource={onConnectSource}
+      ingestion={activeIngestion}
+    />
   );
 }

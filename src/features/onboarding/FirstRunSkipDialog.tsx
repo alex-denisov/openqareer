@@ -15,7 +15,7 @@ function SkipDialogButtons({
   readonly onConfirm: () => void;
 }): ReactElement {
   return (
-    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+    <div className="first-run-skip-actions">
       <button
         type="button"
         className="first-run-btn-ghost"
@@ -27,7 +27,6 @@ function SkipDialogButtons({
       <button
         type="button"
         className="first-run-btn-primary"
-        style={{ background: 'var(--career-color-danger, #ef4444)' }}
         onClick={onConfirm}
         data-testid="skip-confirm-btn"
       >
@@ -53,19 +52,11 @@ export function FirstRunSkipDialog({
       data-testid="first-run-skip-dialog"
     >
       <div className="first-run-alert">
-        <h2 id="skip-dialog-title" style={{ margin: '0 0 8px', fontSize: 'var(--career-text-base, 16px)' }}>
+        <h2 id="skip-dialog-title" className="first-run-skip-title">
           Пропустить шаг «Источник»?
         </h2>
-        <p
-          id="skip-dialog-desc"
-          style={{
-            margin: '0 0 16px',
-            fontSize: 'var(--career-text-sm, 13px)',
-            color: 'var(--career-color-sub, #475569)',
-            lineHeight: 1.5,
-          }}
-        >
-          Без источника профиль будет пустым, роли подберём только по цели. Подключить источник можно позже в «Аккаунт → Подключения».
+        <p id="skip-dialog-desc" className="first-run-skip-description">
+          Без источника резюме пока не появится в профиле. Можно продолжить с целью и контекстом, а подключить источник позже в «Аккаунт → Подключения».
         </p>
         <SkipDialogButtons onCancel={onCancel} onConfirm={onConfirm} />
       </div>
@@ -90,14 +81,7 @@ export function FirstRunSkippedToast({
       <span>Источник пропущен. Подключить можно в «Аккаунт → Подключения».</span>
       <button
         type="button"
-        style={{
-          background: 'none',
-          border: 'none',
-          color: 'var(--career-color-primary, #38bdf8)',
-          fontWeight: 600,
-          cursor: 'pointer',
-          padding: 0,
-        }}
+        className="first-run-toast-undo"
         onClick={onUndo}
         data-testid="toast-undo-btn"
       >

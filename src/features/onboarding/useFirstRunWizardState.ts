@@ -10,21 +10,12 @@ import {
   skipSourceStep,
 } from './firstRunStorage';
 import type {
-  ConsultantTurn,
   FirstRunCity,
   FirstRunData,
   FirstRunStep,
   SourceType,
   WorkFormat,
 } from './firstRunTypes';
-
-const INITIAL_TURNS: readonly ConsultantTurn[] = [
-  {
-    id: 't-1',
-    text: 'Начнём с источника. Подключите LinkedIn или hh.ru, загрузите резюме или просто расскажите, чем занимаетесь.',
-    isUser: false,
-  },
-];
 
 export interface UploadedFileInfo {
   readonly name: string;
@@ -37,7 +28,6 @@ function useFirstRunDialogState() {
   const [isCitySheetOpen, setIsCitySheetOpen] = useState(false);
   const [isSkipDialogOpen, setIsSkipDialogOpen] = useState(false);
   const [isSkippedToastVisible, setIsSkippedToastVisible] = useState(false);
-  const [isMobileChatOpen, setIsMobileChatOpen] = useState(false);
 
   return {
     isGoalEditing,
@@ -50,65 +40,59 @@ function useFirstRunDialogState() {
     setIsSkipDialogOpen,
     isSkippedToastVisible,
     setIsSkippedToastVisible,
-    isMobileChatOpen,
-    setIsMobileChatOpen,
   };
 }
 
-function useFirstRunFileUpload(
-  setData: React.Dispatch<React.SetStateAction<FirstRunData>>,
-  handleSendTurn: (text: string, isUser: boolean) => void,
-) {
+function uploadStatus(result?: Awaited<ReturnType<ResumeIngestionState['readPdf']>>): string {
+  if (!result) return 'Не удалось прочитать PDF. Проверьте файл или продолжите без него.';
+  if (result.imported) return 'Резюме прочитано и сохранено в профиле.';
+  if (result.storeFailure) return 'Резюме прочитано, но пока не сохранено в профиле.';
+  return 'Резюме прочитано и подготовлено локально; в профиль на сервере оно не сохранено.';
+}
+
+function useFirstRunFileUpload(setData: React.Dispatch<React.SetStateAction<FirstRunData>>) {
   const [uploadedFile, setUploadedFile] = useState<UploadedFileInfo | null>(null);
   const [isIngesting, setIsIngesting] = useState(false);
   const [ingestionError, setIngestionError] = useState<string | null>(null);
+  const [ingestionNotice, setIngestionNotice] = useState<string | null>(null);
 
   const handleFileUpload = async (file: File, ingestion?: ResumeIngestionState) => {
     setIsIngesting(true);
     setIngestionError(null);
+    setIngestionNotice(null);
     setUploadedFile({ name: file.name, size: file.size });
-    setData((p) => ({ ...p, selectedSource: 'file' }));
-    handleSendTurn(`Загружен файл: ${file.name}`, true);
-
+    setData((current) => ({ ...current, selectedSource: 'file' }));
     try {
-      if (ingestion) {
-        await ingestion.readPdf(file);
-        if (ingestion.error) {
-          setIngestionError(ingestion.error);
-        }
-      }
-      handleSendTurn(`Файл «${file.name}» прочитан: опыт готов к формированию профиля.`, false);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Не удалось прочитать файл';
-      setIngestionError(msg);
+      const result = await ingestion?.readPdf(file);
+      if (result) setIngestionNotice(uploadStatus(result));
+      else setIngestionError(uploadStatus());
+    } catch (error) {
+      setIngestionError(
+        error instanceof Error ? error.message : 'Не удалось прочитать PDF. Попробуйте другой файл.',
+      );
     } finally {
       setIsIngesting(false);
     }
   };
 
-  return { uploadedFile, isIngesting, ingestionError, handleFileUpload };
+  return { uploadedFile, isIngesting, ingestionError, ingestionNotice, handleFileUpload };
 }
 
 export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
   const [step, setStep] = useState<FirstRunStep>(initialStep);
   const [data, setData] = useState<FirstRunData>(DEFAULT_FIRST_RUN_DATA);
-  const [turns, setTurns] = useState<readonly ConsultantTurn[]>(INITIAL_TURNS);
   const dialogs = useFirstRunDialogState();
-
-  const handleSendTurn = (text: string, isUser: boolean) =>
-    setTurns((prev) => [...prev, { id: `t-${Date.now()}-${Math.random()}`, text, isUser }]);
-
-  const upload = useFirstRunFileUpload(setData, handleSendTurn);
+  const upload = useFirstRunFileUpload(setData);
 
   const handleConfirmSkip = () => {
-    setData((prev) => skipSourceStep(prev));
+    setData((current) => skipSourceStep(current));
     dialogs.setIsSkipDialogOpen(false);
     dialogs.setIsSkippedToastVisible(true);
     setStep('context');
   };
 
   const handleUndoSkip = () => {
-    setData((prev) => restoreSourceStep(prev, 'linkedin'));
+    setData((current) => restoreSourceStep(current, 'linkedin'));
     dialogs.setIsSkippedToastVisible(false);
     setStep('source');
   };
@@ -119,15 +103,16 @@ export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
     data,
     setData,
     ...dialogs,
-    turns,
-    handleSendTurn,
     handleConfirmSkip,
     handleUndoSkip,
     ...upload,
-    handleSelectSource: (src: SourceType) => setData((p) => ({ ...p, selectedSource: src })),
-    handleSelectCity: (city: FirstRunCity) => setData((p) => selectCity(p, city)),
-    handleGoalChange: (val: string) => setData((p) => setGoal(p, val)),
-    handleFormatChange: (fmt: WorkFormat) => setData((p) => setWorkFormat(p, fmt)),
-    handleRelocationToggle: (rel: boolean) => setData((p) => setRelocationReady(p, rel)),
+    handleSelectSource: (source: SourceType) =>
+      setData((current) => ({ ...current, selectedSource: source })),
+    handleSelectCity: (city: FirstRunCity) => setData((current) => selectCity(current, city)),
+    handleGoalChange: (goal: string) => setData((current) => setGoal(current, goal)),
+    handleFormatChange: (format: WorkFormat) =>
+      setData((current) => setWorkFormat(current, format)),
+    handleRelocationToggle: (ready: boolean) =>
+      setData((current) => setRelocationReady(current, ready)),
   };
 }

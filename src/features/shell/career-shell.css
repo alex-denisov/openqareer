@@ -1,5 +1,6 @@
 .career-shell {
   --career-bg: oklch(13% 0.016 255);
+  --career-font-sans: var(--font-main);
   --career-bg-elevated: oklch(16.5% 0.018 255);
   --career-surface: oklch(19% 0.02 255);
   --career-surface-raised: oklch(23% 0.022 255);
@@ -20,6 +21,15 @@
   --career-radius-sm: 10px;
   --career-radius-md: 16px;
   --career-radius-lg: 24px;
+  --career-radius-pill: 9999px;
+  --career-first-run-content-max: 1440px;
+  --career-first-run-main-max: 820px;
+  --career-first-run-dialog-max: 480px;
+  --career-first-run-alert-max: 400px;
+  --career-first-run-source-icon-size: 40px;
+  --career-first-run-avatar-size: 36px;
+  --career-z-modal: 50;
+  --career-z-toast: 70;
   --career-border-width: 1px;
   /* B232 — одна шкала текста на весь кабинет. Шесть кеглей, пол 13 px:
      аудит 2026-09-20 насчитал 59 значений font-size и 40–55 % текста мельче
@@ -43,6 +53,7 @@
   --career-space-6: 24px;
   --career-space-7: 28px;
   --career-space-8: 32px;
+  --career-space-9: 36px;
   --career-control-min: 24px;
   --career-tooltip-max: 320px;
   --career-shadow-tooltip: 0 8px 24px oklch(10% 0.02 255 / 0.28);
@@ -67,14 +78,6 @@
   background:
     radial-gradient(circle at 90% 0%, oklch(33% 0.055 255 / 0.22), transparent 30rem),
     var(--career-bg);
-}
-
-@media (max-width: 320px) {
-  html:has(.career-shell--onboarding-fullscreen),
-  body:has(.career-shell--onboarding-fullscreen),
-  #root:has(.career-shell--onboarding-fullscreen) {
-    min-width: 0;
-  }
 }
 
 .career-shell *,
@@ -365,6 +368,14 @@
   align-items: center;
 }
 
+.career-mobile-page-title {
+  min-width: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-lg);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
 /* Brand lockup. The sign keeps its gradient on any surface; the wordmark
    swaps to light ink here because the shell is dark. */
 /* Sized and coloured here, never through a style attribute: production serves
@@ -469,26 +480,9 @@
   padding: 28px clamp(24px, 4vw, 56px) 28px;
 }
 
-/* B249: onboarding.html is full-screen — a wordmark top-left, no rail
-   alongside it. The rail, its narrow-screen topbar and the bottom nav all
-   named the same five sections the wizard has not unlocked yet, so they hid
-   nothing and confused the "Сегодня" it was supposedly on. */
-.career-shell--onboarding-fullscreen {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.career-shell--onboarding-fullscreen .career-rail,
-.career-shell--onboarding-fullscreen .career-topbar,
-.career-shell--onboarding-fullscreen .career-mobile-nav {
-  display: none;
-}
-
-/* `.career-main` keeps `grid-column: 2` from the two-column shell. The
-   fullscreen grid above has only one track, so column 2 was an implicit
-   auto-track sized to content — it shoved the wizard to the right and left
-   column 1 empty. Pin it back to the only track that exists here. */
-.career-shell--onboarding-fullscreen .career-main {
-  grid-column: 1;
+.career-main:has(.first-run-screen),
+.career-main-content:has(.first-run-screen) {
+  padding: 0;
 }
 
 /* --- B248 path indicator: Профиль → Роль → Подборка → Отклики → Интервью,
@@ -2788,17 +2782,13 @@
 }
 
 @media (min-width: 761px) {
-  .career-shell:not(.career-shell--onboarding-fullscreen) .career-main {
+  .career-shell .career-main {
     padding: 0;
   }
 
   .career-main-content {
     min-height: 100%;
     padding: var(--career-space-6) var(--career-space-8) var(--career-space-8);
-  }
-
-  .career-shell--onboarding-fullscreen .career-main-content {
-    padding: 0;
   }
 
   .career-desktop-topbar {
@@ -3969,7 +3959,7 @@
 }
 
 @media (max-width: 760px) {
-  .career-shell:not(.career-shell--onboarding-fullscreen) {
+  .career-shell {
     height: 100dvh;
     min-height: 100dvh;
     grid-template-columns: minmax(0, 1fr);
@@ -3979,13 +3969,6 @@
     background:
       radial-gradient(circle at 100% 0%, oklch(33% 0.055 255 / 0.18), transparent 22rem),
       var(--career-bg);
-  }
-
-  .career-shell--onboarding-fullscreen {
-    height: auto;
-    min-height: 100dvh;
-    grid-template-rows: minmax(0, 1fr);
-    overflow: visible;
   }
 
   .career-shell.expert-is-open {
@@ -4033,10 +4016,6 @@
 
   .career-today-skeleton-status {
     max-width: none;
-  }
-
-  .career-shell--onboarding-fullscreen .career-main:has(.career-intake) {
-    padding-inline: var(--career-space-4);
   }
 
   .career-mobile-nav {
@@ -4288,17 +4267,6 @@
 
   .career-intake-actions .career-primary-button {
     margin-left: auto;
-  }
-
-  /* Полноэкранный первый запуск без нижней навигации: панель действий
-     прижата к низу экрана, а не парит над несуществующим меню. */
-  .career-shell--onboarding-fullscreen .career-intake-actions {
-    bottom: 0;
-    padding-block-end: max(14px, env(safe-area-inset-bottom));
-  }
-
-  .career-shell--onboarding-fullscreen .career-intake-error {
-    scroll-margin-block-end: 96px;
   }
 
   .career-next-decision {
@@ -13908,475 +13876,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ============================================================================
-   Onboarding (B249): the redesigned six-step wizard, onboarding.html. Reuses
-   career-intake/career-primary-button/career-quiet-button primitives above;
-   only the layout blocks the old wizard never needed are added here.
-   ============================================================================ */
-
-.career-onboarding-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--career-space-3);
-}
-
-.career-onboarding-brand {
-  display: inline-flex;
-}
-
-.career-onboarding-exits {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
-}
-
-.career-onboarding-dots {
-  display: flex;
-  gap: 8px;
-  margin: 0 0 var(--career-space-3);
-  padding: 0;
-  list-style: none;
-}
-
-.career-onboarding-dots li {
-  flex: 1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--career-line-strong);
-}
-
-.career-onboarding-dots li.is-done {
-  background: var(--career-success);
-}
-
-.career-onboarding-dots li.is-current {
-  background: var(--career-accent);
-}
-
-.career-onboarding-source-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
-  gap: var(--career-space-3);
-  margin: var(--career-space-4) 0;
-}
-
-.career-onboarding-source-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--career-space-2);
-  padding: var(--career-space-4);
-  border-radius: var(--career-radius-md);
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
-  color: inherit;
-  text-align: left;
-}
-
-.career-onboarding-source-card:hover {
-  border-color: var(--career-line-strong);
-  background: var(--career-surface-raised);
-}
-
-.career-onboarding-source-card.is-selected {
-  border-color: var(--career-accent);
-  background: var(--career-accent-soft);
-}
-
-.career-onboarding-source-card span {
-  font-size: var(--career-text-aux);
-  color: var(--career-text-dim);
-}
-
-/* Short windows (1280×680 in verify-intake-fits): step 1 fit with no
-   headroom on macOS fonts and spilled 12–16 px on the Linux CI runner
-   (2026-09-25). Only here do the wizard's vertical gaps tighten; taller
-   screens keep the mockup rhythm. */
 @media (max-height: 720px) {
-  .career-main:has(.career-intake) {
-    padding-block: 16px;
-  }
-
-  .career-onboarding-source-grid {
-    margin-block: var(--career-space-3);
-  }
-
   .career-intake-actions {
-    margin-top: var(--career-space-2);
-    padding-top: var(--career-space-3);
-  }
-}
-
-.career-onboarding-progress-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-4);
-  max-width: 460px;
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-progress-row {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-3);
-  font-size: var(--career-text-sm);
-}
-
-.career-onboarding-progress-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  border: 1.7px solid var(--career-line-strong);
-  flex: none;
-}
-
-.career-onboarding-progress-row.is-done .career-onboarding-progress-mark {
-  border-color: var(--career-success);
-  color: var(--career-success);
-  background: var(--career-success-soft);
-}
-
-.career-onboarding-progress-row.is-active .career-onboarding-progress-mark {
-  border-color: var(--career-accent);
-}
-
-.career-onboarding-progress-row.is-wait {
-  color: var(--career-text-dim);
-}
-
-.career-onboarding-qa-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-5);
-  max-width: 560px;
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-qa-item span {
-  display: block;
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-  margin-bottom: var(--career-space-2);
-}
-
-.career-onboarding-qa-item textarea {
-  width: 100%;
-  background: var(--career-surface);
-  border: 1px solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  padding: var(--career-space-3);
-  color: var(--career-text);
-  font-family: inherit;
-  font-size: var(--career-text-xs);
-  resize: vertical;
-}
-
-.career-onboarding-campaign,
-.career-onboarding-quick-start {
-  display: grid;
-  gap: var(--career-space-5);
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-campaign section,
-.career-onboarding-quick-start {
-  min-width: 0;
-}
-
-.career-onboarding-campaign section > h2 {
-  margin: 0 0 var(--career-space-3);
-  font-size: var(--career-text-md);
-}
-
-.career-onboarding-quick-start > label,
-.career-onboarding-campaign-add-role > label {
-  display: grid;
-  gap: var(--career-space-2);
-  color: var(--career-text);
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-}
-
-.career-onboarding-quick-start input,
-.career-onboarding-campaign-add-role input {
-  width: 100%;
-  padding: var(--career-space-3);
-  border: 1px solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface);
-  color: var(--career-text);
-  font: inherit;
-}
-
-.career-onboarding-campaign .career-onboarding-role-card {
-  cursor: pointer;
-}
-
-.career-onboarding-campaign .career-onboarding-role-evidence {
-  display: grid;
-  gap: var(--career-space-2);
-  color: var(--career-text-dim);
-  font-size: var(--career-text-aux);
-  font-weight: 400;
-}
-
-.career-onboarding-campaign .career-onboarding-role-evidence > span {
-  padding-inline-start: var(--career-space-3);
-  border-inline-start: 1px solid var(--career-line-strong);
-}
-
-.career-onboarding-campaign-add-role {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: var(--career-space-3);
-  max-width: 640px;
-}
-
-.career-onboarding-format-select {
-  display: none;
-  gap: var(--career-space-2);
-  color: var(--career-text);
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-}
-
-.career-onboarding-format-select select {
-  width: 100%;
-  padding: var(--career-space-3);
-  border: 1px solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface);
-  color: var(--career-text);
-  font: inherit;
-}
-
-.career-onboarding-review-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-3);
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-review-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: var(--career-space-4);
-  align-items: center;
-  padding: var(--career-space-4);
-  border: 1px solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface);
-}
-
-.career-onboarding-review-item.is-editing {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.career-onboarding-review-role {
-  font-size: var(--career-text-sm);
-  font-weight: 600;
-  margin-bottom: 2px;
-}
-
-.career-onboarding-review-sub {
-  font-size: var(--career-text-aux);
-  color: var(--career-text-dim);
-}
-
-.career-onboarding-review-edit textarea {
-  width: 100%;
-  margin-top: var(--career-space-2);
-  background: var(--career-surface-raised);
-  border: 1px solid var(--career-line-strong);
-  border-radius: var(--career-radius-sm);
-  padding: var(--career-space-3);
-  color: var(--career-text);
-  font-family: inherit;
-}
-
-.career-onboarding-review-edit-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--career-space-3);
-  margin-top: var(--career-space-3);
-}
-
-.career-onboarding-role-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
-  gap: var(--career-space-4);
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-role-card {
-  text-align: left;
-  border: 1px solid var(--career-line);
-  background: var(--career-surface);
-  border-radius: var(--career-radius-md);
-  padding: var(--career-space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-2);
-  color: inherit;
-}
-
-.career-onboarding-role-card:hover {
-  border-color: var(--career-line-strong);
-}
-
-.career-onboarding-role-card.is-selected {
-  border-color: var(--career-accent);
-  background: var(--career-accent-soft);
-}
-
-.career-onboarding-role-title {
-  font-size: var(--career-text-sm);
-  font-weight: 700;
-}
-
-.career-onboarding-role-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--career-space-2);
-}
-
-.career-onboarding-role-meta .tag {
-  align-self: flex-start;
-}
-
-.career-onboarding-role-count {
-  font-size: var(--career-text-lg);
-  font-weight: 700;
-}
-
-.career-onboarding-role-evidence {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.career-onboarding-geo-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--career-space-2);
-  max-width: 640px;
-}
-
-.career-onboarding-geo-grid .tag {
-  padding: 8px 14px;
-  font-size: var(--career-text-xs);
-  cursor: pointer;
-}
-
-.career-onboarding-geo-grid .tag.is-selected {
-  color: var(--career-accent);
-  border-color: var(--career-accent);
-  background: var(--career-accent-soft);
-}
-
-.career-onboarding-format-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--career-space-2);
-  margin-top: var(--career-space-4);
-}
-
-.career-onboarding-format-row .tag {
-  padding: 8px 14px;
-  font-size: var(--career-text-xs);
-  cursor: pointer;
-}
-
-.career-onboarding-format-row .tag.is-selected {
-  color: var(--career-accent);
-  border-color: var(--career-accent);
-  background: var(--career-accent-soft);
-}
-
-.career-onboarding-done-summary {
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-3);
-  max-width: 480px;
-  margin: var(--career-space-5) 0;
-}
-
-.career-onboarding-done-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: var(--career-text-sm);
-  padding: var(--career-space-3) 0;
-  border-bottom: 1px solid var(--career-line);
-}
-
-@media (max-width: 480px) {
-  .career-onboarding-source-grid,
-  .career-onboarding-role-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 760px) {
-  .career-onboarding[data-step='campaign'] {
-    padding-block-end: calc(var(--career-space-8) * 5);
-  }
-
-  .career-onboarding-campaign {
-    gap: var(--career-space-3);
-    margin-block: var(--career-space-3);
-  }
-
-  .career-onboarding-campaign section > h2 {
-    margin-block-end: var(--career-space-2);
-  }
-
-  .career-onboarding-campaign .career-onboarding-role-grid {
-    gap: var(--career-space-2);
-    margin-block: var(--career-space-2);
-  }
-
-  .career-onboarding-campaign .career-onboarding-role-card {
-    gap: var(--career-space-1);
-    padding: var(--career-space-3);
-  }
-
-  .career-onboarding-campaign-add-role {
-    gap: var(--career-space-2);
-  }
-
-  .career-onboarding-campaign .career-onboarding-format-row .tag {
-    gap: var(--career-space-1);
-    padding-inline: var(--career-space-1);
-    font-size: var(--career-text-aux);
-  }
-
-  .career-onboarding-campaign .career-onboarding-format-row,
-  .career-onboarding-quick-start .career-onboarding-format-row {
-    display: none;
-  }
-
-  .career-onboarding-campaign .career-onboarding-format-select,
-  .career-onboarding-quick-start .career-onboarding-format-select {
-    display: grid;
+    margin-block-start: var(--career-space-2);
+    padding-block-start: var(--career-space-3);
   }
 }
 
 @media (max-width: 320px) {
-  .career-onboarding-top {
-    flex-wrap: wrap;
-    gap: var(--career-space-2);
-  }
-
-  .career-onboarding-exits {
-    margin-inline-start: auto;
-  }
-
   .career-intake-actions {
     flex-direction: column;
     margin-inline: 0;

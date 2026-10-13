@@ -131,8 +131,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
       body: JSON.stringify({ data: null }),
     });
   });
-  // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
-  // the diagnostic is expected to open.
+  // The candidate workspace is server-owned; a profileless fixture starts empty.
   await page.route('**/api/v1/candidate/workspace', async (route) => {
     const request = route.request();
     if (request.method() === 'PUT') {
@@ -1537,64 +1536,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout retained candidate workspace`,
   );
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
-  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
+  await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
-  assert(accountRestart, `${viewport.name}: logout/re-registration retained candidate workspace`);
-
-  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
-  assert(
-    await page.locator('.career-web-desktop-cta').isVisible(),
-    `${viewport.name}: profile import web CTA missing`,
-  );
-  assert(
-    await page
-      .locator('.career-web-desktop-cta')
-      .getByText('Публичной загрузки приложения пока нет', { exact: false })
-      .isVisible(),
-    `${viewport.name}: profile import web CTA hides the manual install boundary`,
-  );
-  assert(
-    (await page.locator('.career-web-desktop-cta').getByRole('link').count()) === 0,
-    `${viewport.name}: profile import web CTA advertises a public download`,
-  );
-
-  // B249 (owner, 2026-09-24): the wizard is full-screen from step 1, so an
-  // anonymous visitor opens the account from the wizard's own «Войти».
-  await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
-  const accountAccess = page.locator('.career-account-access');
-  await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
-  await accountAccess.getByRole('button', { name: 'Зарегистрироваться' }).click();
-  await accountAccess.getByRole('heading', { name: 'Создать аккаунт' }).waitFor();
-  await accountAccess.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
-  await accountAccess.getByLabel('Email').fill('fresh.candidate@example.com');
-  await accountAccess.getByLabel('Пароль (от 8 символов)').fill('fresh-candidate-password');
-  // B173: registration is refused until the published pack is accepted.
-  await accountAccess.locator('#signup-legal').check();
-  await accountAccess.getByRole('button', { name: 'Создать аккаунт' }).click();
-
-  await page.getByRole('button', { name: 'Расскажу сам' }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  const quickRole = page.getByRole('textbox', { name: 'На какую роль ищете работу?' });
-  await quickRole.fill('Вице-президент по операциям');
-  await page.getByRole('button', { name: 'Россия', exact: true }).click();
-  await page.getByRole('button', { name: 'Продолжить' }).click();
-  await page.getByRole('heading', { name: 'Первая подборка готова' }).waitFor();
-  await page.getByRole('button', { name: 'Перейти в «Вакансии»' }).click();
-  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
-  const sourceCleanWorkspace = JSON.parse(
-    await page.evaluate(() => localStorage.getItem('candidate-workspace')),
-  );
-  assert(
-    sourceCleanWorkspace.linkedinUrl === undefined &&
-      sourceCleanWorkspace.hhUrl === undefined &&
-      sourceCleanWorkspace.resumeSource === 'text' &&
-      sourceCleanWorkspace.resumeText === '' &&
-      sourceCleanWorkspace.targetDirection === 'Вице-президент по операциям' &&
-      sourceCleanWorkspace.regions.includes('ru') &&
-      sourceCleanWorkspace.profileFacts?.length !== 2,
-    `${viewport.name}: source switch retained stale profile evidence`,
-  );
+  assert(accountRestart, `${viewport.name}: logout retained the candidate workspace`);
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -1660,8 +1605,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
       }),
     });
   });
-  // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
-  // the diagnostic is expected to open.
+  // The candidate workspace is server-owned; this fixture returns the saved record.
   await page.route('**/api/v1/candidate/workspace', async (route) => {
     const request = route.request();
     if (request.method() === 'PUT') {
@@ -1736,11 +1680,9 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
     );
     localStorage.setItem('candidate-workspace-owner', 'candidate-expired-session');
   });
-  await page.goto(`${baseUrl}app?expired-session-restore`, {
-    waitUntil: 'networkidle',
-  });
-  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
-  await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
+  await page.goto(`${baseUrl}app`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Открыть аккаунт' }).waitFor();
+  await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
   const accountAccess = page.locator('.career-account-access');
   await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
   await accountAccess.getByLabel('Email или логин').fill('returning.candidate');

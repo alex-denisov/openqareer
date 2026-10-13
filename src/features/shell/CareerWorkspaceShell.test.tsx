@@ -123,7 +123,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('aria-label="Сегодня"');
   });
 
-  it('opens the diagnostic wizard for a newly signed-in candidate without a workspace', () => {
+  it('opens FirstRun in the career shell for a newly signed-in candidate without a workspace', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         session={{
@@ -137,7 +137,9 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('С чем разбираемся?');
+    expect(html).toContain('data-testid="first-run-wizard"');
+    expect(html).toContain('Находка себя');
+    expect(html).not.toContain('С чем разбираемся?');
     expect(html).not.toContain('Начать диагностику');
     expect(html).not.toContain('Карьерный кабинет');
   });
@@ -165,7 +167,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Проверяем вход и читаем ваш профиль');
     expect(html).toContain('aria-busy="true"');
     expect(html).not.toContain('Синтетический профиль кандидата');
-    expect(html).not.toContain('С чем разобраться?');
+    expect(html).not.toContain('data-testid="first-run-wizard"');
   });
 
   it('explains a failed session check and offers retry and sign-in', () => {
@@ -220,10 +222,10 @@ describe('CareerWorkspaceShell', () => {
     );
 
     expect(html).toContain('data-testid="career-shell"');
-    // The diagnostic opens on its first question: the welcome screen that used
-    // to stand in front of it, and its «Не заполнен» status board, are gone
-    // (B169 §4). Nothing else about the first-time shell changed.
-    expect(html).toContain('С чем разбираемся?');
+    // The new user starts in FirstRun inside the canonical career shell.
+    expect(html).toContain('data-testid="first-run-wizard"');
+    expect(html).toContain('Находка себя');
+    expect(html).not.toContain('С чем разбираемся?');
     expect(html).not.toContain('Начать диагностику');
     expect(html).not.toContain('Профиль</span><strong>Не заполнен</strong>');
     expect(html).not.toContain('Посмотреть демо');
@@ -233,7 +235,8 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль');
     expect(html).toContain('Вакансии');
     expect(html).toContain('Отклики');
-    expect(html).not.toContain('Консультант');
+    expect(html).toContain('first-run-consultant-sidebar');
+    expect(html).toContain('Консультант');
     expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');
     expect(html).not.toContain('data-testid="workspace-setup"');
@@ -511,13 +514,13 @@ describe('CareerWorkspaceShell', () => {
 });
 
 describe('CareerWorkspaceShell brand chrome', () => {
-  it('wears the real openqareer sign in the rail and the topbar', () => {
+  it('keeps the brand sign in the rail and names the first-run topbar', () => {
     const html = renderToStaticMarkup(<CareerWorkspaceShell />);
 
-    // The brand gradient only exists inside BrandMark, so its presence proves
-    // the drawn sign replaced the stand-in Phosphor icon.
+    // The rail keeps the brand sign while first run uses its page title.
     expect(html).toContain('#0488F4');
-    expect(html).toContain('brand-lockup');
+    expect(html).toContain('career-mobile-page-title');
+    expect(html).toContain('Старт');
   });
 
   it('ships no inline style attribute, which production CSP would drop', () => {

@@ -304,7 +304,7 @@
 }
 
 @media (max-width: 760px) {
-  .career-shell--vacancies:not(.career-shell--onboarding-fullscreen) {
+  .career-shell--vacancies {
     grid-template-rows: minmax(0, 1fr) auto;
   }
 

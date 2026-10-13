@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { FirstRunWizard } from './FirstRunWizard';
+import { FirstRunWizard, type FirstRunWizardProps } from './FirstRunWizard';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
 import { FirstRunCitySheet } from './FirstRunCitySheet';
 import { FirstRunSkipDialog, FirstRunSkippedToast } from './FirstRunSkipDialog';
 
+function renderWizard(
+  props: Omit<FirstRunWizardProps, 'onOpenConsultant'> &
+    Partial<Pick<FirstRunWizardProps, 'onOpenConsultant'>> = {},
+): string {
+  const { onOpenConsultant, ...wizardProps } = props;
+  return renderToStaticMarkup(
+    <FirstRunWizard {...wizardProps} onOpenConsultant={onOpenConsultant ?? (() => undefined)} />,
+  );
+}
+
 describe('FirstRunWizard component tests', () => {
-  it('renders Step 2 (Source) with 4 options and consultant starters', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard initialStep="source" isMobile={false} />);
+  it('renders the source step with all available paths', () => {
+    const html = renderWizard({ initialStep: 'source' });
     expect(html).toContain('Находка себя');
     expect(html).toContain('Цель');
     expect(html).toContain('Источник');
@@ -15,13 +25,12 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('hh.ru');
     expect(html).toContain('Файл резюме');
     expect(html).toContain('Рассказать консультанту');
-    expect(html).toContain('С чего начать?');
-    expect(html).toContain('Что вы читаете в LinkedIn?');
-    expect(html).toContain('Можно без LinkedIn?');
+    expect(html).toContain('Можно подключить LinkedIn или hh.ru');
+    expect(html).toContain('Какие источники можно подключить?');
   });
 
-  it('renders Step 3 (Context) with city selector, work format and relocation', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard initialStep="context" isMobile={false} />);
+  it('renders context with city, work format and relocation', () => {
+    const html = renderWizard({ initialStep: 'context' });
     expect(html).toContain('Контекст');
     expect(html).toContain('Город и формат работы нужны для подбора');
     expect(html).toContain('Москва');
@@ -30,50 +39,50 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Собрать профиль');
   });
 
-  it('renders skeleton special state', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard specialState="skeleton" />);
-    expect(html).toContain('Проверяем вход и читаем ваш профиль');
+  it('renders loading and error states without invented platform progress', () => {
+    expect(renderWizard({ specialState: 'skeleton' })).toContain(
+      'Проверяем вход и читаем ваш профиль',
+    );
+    expect(renderWizard({ specialState: 'stale-loading' })).toContain(
+      'Подготавливаем данные профиля',
+    );
+    expect(renderWizard({ specialState: 'error' })).toContain(
+      'Не удалось войти: сервер не ответил. Данные не потеряны.',
+    );
   });
 
-  it('renders stale-loading special state', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard specialState="stale-loading" />);
-    expect(html).toContain('Читаем LinkedIn: раздел 2 из 5');
-    expect(html).toContain('Подпись называет субъект и шаг, а не «Собираем»');
+  it('shows retry and sign-in only when handlers exist', () => {
+    const error = renderWizard({ specialState: 'error', onRetry: () => undefined });
+    const session = renderWizard({ specialState: 'session-expired', onSignIn: () => undefined });
+    expect(error).toContain('Повторить');
+    expect(session).toContain('Войти');
   });
 
-  it('renders error special state with retry button', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard specialState="error" />);
-    expect(html).toContain('Не удалось войти: сервер не ответил. Данные не потеряны.');
-    expect(html).toContain('Повторить');
+  it('renders an honest empty-source state', () => {
+    const html = renderWizard({ specialState: 'empty-sources' });
+    expect(html).toContain('Источник не выбран. Можно продолжить');
+    expect(html).not.toContain('подключён');
   });
 
-  it('renders session-expired special state with signin button', () => {
-    const html = renderToStaticMarkup(<FirstRunWizard specialState="session-expired" />);
-    expect(html).toContain('Вход устарел. Войдите снова, один раз для всего приложения.');
-    expect(html).toContain('Войти');
-  });
-
-  it('renders empty-sources and partial-source banners', () => {
-    const emptyHtml = renderToStaticMarkup(<FirstRunWizard specialState="empty-sources" />);
-    expect(emptyHtml).toContain('Источник не выбран. Можно рассказать консультанту');
-
-    const partialHtml = renderToStaticMarkup(<FirstRunWizard specialState="partial-source" />);
-    expect(partialHtml).toContain('LinkedIn подключён, hh.ru нет');
-  });
-
-  it('renders FirstRunSourceMenu with 3 mobile upload options', () => {
+  it('renders the three upload choices and a PDF file input', () => {
     const html = renderToStaticMarkup(
-      <FirstRunSourceMenu isOpen={true} onClose={() => {}} onPickFile={() => {}} />,
+      <FirstRunSourceMenu isOpen onClose={() => undefined} onPickFile={() => undefined} />,
     );
     expect(html).toContain('Выбрать в «Файлах»');
     expect(html).toContain('Фото из библиотеки');
     expect(html).toContain('Сканировать документ');
+    expect(html).toContain('accept="application/pdf,.pdf"');
     expect(html).toContain('Отмена');
   });
 
-  it('renders FirstRunCitySheet with popular cities and search input', () => {
+  it('renders the city sheet search and region-aware city list', () => {
     const html = renderToStaticMarkup(
-      <FirstRunCitySheet isOpen={true} selectedCity="Москва" onClose={() => {}} onSelectCity={() => {}} />,
+      <FirstRunCitySheet
+        isOpen
+        selectedCity="Москва"
+        onClose={() => undefined}
+        onSelectCity={() => undefined}
+      />,
     );
     expect(html).toContain('Поиск города');
     expect(html).toContain('Москва');
@@ -81,27 +90,25 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Белград');
   });
 
-  it('renders FirstRunSkipDialog and FirstRunSkippedToast', () => {
-    const dialogHtml = renderToStaticMarkup(
-      <FirstRunSkipDialog isOpen={true} onCancel={() => {}} onConfirm={() => {}} />,
+  it('renders skip confirmation and undo state', () => {
+    const dialog = renderToStaticMarkup(
+      <FirstRunSkipDialog isOpen onCancel={() => undefined} onConfirm={() => undefined} />,
     );
-    expect(dialogHtml).toContain('Пропустить шаг «Источник»?');
-    expect(dialogHtml).toContain('Вернуться');
-    expect(dialogHtml).toContain('Пропустить');
-
-    const toastHtml = renderToStaticMarkup(
-      <FirstRunSkippedToast isVisible={true} onUndo={() => {}} />,
+    const toast = renderToStaticMarkup(
+      <FirstRunSkippedToast isVisible onUndo={() => undefined} />,
     );
-    expect(toastHtml).toContain('Источник пропущен. Подключить можно в «Аккаунт → Подключения».');
-    expect(toastHtml).toContain('Вернуть');
+    expect(dialog).toContain('Пропустить шаг «Источник»?');
+    expect(dialog).toContain('Вернуться');
+    expect(dialog).toContain('Пропустить');
+    expect(toast).toContain('Источник пропущен. Подключить можно в «Аккаунт → Подключения».');
+    expect(toast).toContain('Вернуть');
   });
 
-  it('renders FirstRunWizard on mobile with consultant modal when requested', () => {
-    const html = renderToStaticMarkup(
-      <FirstRunWizard initialStep="source" isMobile={true} />,
-    );
+  it('exposes the mobile layout state supplied by the shell media query', () => {
+    const html = renderWizard({ isMobile: true });
+    expect(html).toContain('data-mobile="true"');
     expect(html).toContain('Шаг 2 из 3');
     expect(html).toContain('Файл резюме');
-    expect(html).toContain('Рассказать консультанту');
+    expect(html).not.toContain('first-run-consultant-sidebar');
   });
 });

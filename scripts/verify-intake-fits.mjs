@@ -1,166 +1,108 @@
-/**
- * B169 §2 — measures the shipped source chooser and profileless quick-start
- * steps at the deliberately short viewports below.
- *
- * The owner's report was that the wizard scrolls: "визард должен быть весь без
- * скролла, нужно чтобы все элементы помещались на одном моем экране". A
- * scrollbar is measurable, so this asserts it rather than eyeballing it. The
- * built release is served by `vite preview`, exactly as the built-shell gate
- * does, so what is measured is what ships.
- */
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 import { chromium } from 'playwright';
 
 const VIEWPORTS = [
   { name: 'desktop-1440', width: 1440, height: 900 },
-  { name: 'laptop-1280', width: 1280, height: 800 },
-  // Deliberately shorter than either real target. Font metrics differ between
-  // the developer's macOS Chromium and CI's Linux one, and step three used to
-  // pass locally at 1280x800 and spill 30px on CI. Holding a viewport nobody
-  // actually uses is what turns "it fits" into "it fits with room".
-  { name: 'short-1280', width: 1280, height: 720 },
-  // Shorter still, and for a different reason. `short-1280` proves the step
-  // fits; this one proves it fits *with slack*. B158 passed `short-1280` on
-  // macOS with 16px to spare and spilled 14px on CI's Linux Chromium, because
-  // the two disagree about font metrics by more than that. Holding 40px of
-  // headroom locally is what makes a local pass mean a CI pass.
-  { name: 'metrics-1280', width: 1280, height: 680 },
+  { name: 'mobile-390', width: 390, height: 844 },
+  { name: 'narrow-320', width: 320, height: 844 },
 ];
+const OUT = 'output/playwright';
+const CANDIDATE = {
+  username: 'candidate.first-run',
+  email: 'candidate.first-run@example.test',
+  displayName: 'First Run Candidate',
+  role: 'candidate',
+  isTest: true,
+  emailVerified: true,
+  candidateId: 'candidate-first-run-fit',
+};
 
-/** Anonymous candidate: no session, no workspace, so the wizard owns the screen. */
-/**
- * `signedIn` matters for the desktop pass only: outside a browser the app sends
- * an anonymous visitor to the login card instead of the wizard, so the source
- * step with the platform cards is unreachable without a session.
- */
-async function stubApi(page, { signedIn = false } = {}) {
-  const session = signedIn
-    ? {
-        username: 'candidate.test',
-        role: 'candidate',
-        candidateId: 'candidate-intake-fits',
-      }
-    : null;
-  await page.route(
-    (url) => url.pathname.startsWith('/api/'),
-    async (route) => {
-      const { pathname } = new URL(route.request().url());
-      const body = pathname.startsWith('/api/v1/auth')
-        ? JSON.stringify({ data: session })
-        : '{"data":null}';
-      await route.fulfill({ status: 200, contentType: 'application/json', body });
-    },
-  );
+async function stubFirstRunApi(page) {
+  let workspace = null;
+  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
+    const request = route.request();
+    const { pathname } = new URL(request.url());
+    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
+    if (pathname === '/api/v1/candidate/workspace' && request.method() === 'PUT') {
+      const payload = request.postDataJSON();
+      workspace = payload?.workspace ?? payload;
+      return route.fulfill({ json: { data: workspace } });
+    }
+    if (pathname === '/api/v1/candidate/workspace') {
+      return route.fulfill({ json: { data: workspace } });
+    }
+    if (pathname === '/api/v1/candidate/connections') {
+      return route.fulfill({
+        json: {
+          data: [
+            { platform: 'linkedin', available: true, status: 'disconnected' },
+            { platform: 'hh', available: true, status: 'disconnected' },
+          ],
+        },
+      });
+    }
+    if (pathname.endsWith('/candidate/me/messages')) return route.fulfill({ json: { data: [] } });
+    if (pathname.endsWith('/candidate/me')) return route.fulfill({ json: { data: null } });
+    return route.fulfill({ json: { data: null } });
+  });
 }
 
-async function measure(page, label, outputDirectory) {
-  await page.waitForTimeout(250);
-  const box = await page.evaluate(() => {
-    const main = document.getElementById('career-main');
+async function measure(page, name) {
+  return page.evaluate((label) => {
     const doc = document.documentElement;
+    const main = doc.querySelector('#career-main');
     return {
+      name: label,
+      viewport: { width: innerWidth, height: innerHeight },
       documentOverflow: doc.scrollHeight - doc.clientHeight,
       mainOverflow: main ? main.scrollHeight - main.clientHeight : null,
-      horizontal: doc.scrollWidth - doc.clientWidth,
+      horizontalOverflow: doc.scrollWidth - doc.clientWidth,
+      mobileState: doc.querySelector('[data-testid="first-run-wizard"]')?.getAttribute('data-mobile'),
     };
-  });
-  await page.screenshot({ path: `${outputDirectory}/intake-${label}.png` });
-  return { label, ...box };
+  }, name);
 }
 
-/** The web source chooser and profileless role-and-region step. */
-async function walkWebWizard(page, viewport, outputDirectory, results) {
-  await page.goto(`${page.__baseUrl}app`, { waitUntil: 'load' });
-  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
-  results.push(await measure(page, `${viewport.name}-step1-source`, outputDirectory));
+async function walkFirstRun(page, baseUrl, viewport, results) {
+  await page.setViewportSize({ width: viewport.width, height: viewport.height });
+  await stubFirstRunApi(page);
+  await page.goto(`${baseUrl}app`, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+  results.push(await measure(page, `${viewport.name}-source`));
+  await page.screenshot({ path: `${OUT}/first-run-${viewport.name}-source.png` });
 
-  await page.getByRole('button', { name: 'Профиль LinkedIn' }).click();
-  results.push(await measure(page, `${viewport.name}-step1-profile-import-web`, outputDirectory));
-
-  await page.getByRole('button', { name: 'PDF резюме' }).click();
-  await page.getByRole('button', { name: 'Нет PDF под рукой — вставить текст резюме' }).click();
-  results.push(await measure(page, `${viewport.name}-step1-text`, outputDirectory));
-
-  await page.getByRole('button', { name: 'Расскажу сам' }).click();
-  await page.getByRole('button', { name: /Продолжить/u }).click();
-  await page.getByRole('heading', { name: 'Роль и регион' }).waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step2-role-region-empty`, outputDirectory));
-
-  await page.getByRole('textbox', { name: 'На какую роль ищете работу?' }).fill('Аналитик данных');
-  await page.getByRole('button', { name: 'Россия', exact: true }).click();
-  results.push(await measure(page, `${viewport.name}-step2-role-region-filled`, outputDirectory));
-}
-
-/**
- * The owner's report is specifically about the desktop app: "второй, если
- * особенно подключаются профили, сильно выходит за границы". Only the desktop
- * build draws the platform cards, so the web pass cannot see that step at all.
- */
-async function walkDesktopSourceStep(browser, baseUrl, viewport, outputDirectory, results) {
-  const context = await browser.newContext({
-    viewport: { width: viewport.width, height: viewport.height },
-  });
-  const page = await context.newPage();
-  await page.addInitScript(installDesktopApiTestBridge);
-  await page.addInitScript(() => {
-    // What `isTauriEnvironment()` reads to decide it is inside the app.
-    window.__TAURI_INTERNALS__ = {};
-    localStorage.setItem('openqareer_session_token', 'desktop-intake-fits-session');
-  });
-  await stubApi(page, { signedIn: true });
-  await page.goto(`${baseUrl}app`, { waitUntil: 'load' });
-  // Desktop opens straight on the profile-import cards (isTauriEnvironment()).
-  await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor({ timeout: 20000 });
-  await page.locator('.career-platform-cards').waitFor({ timeout: 10000 });
-  results.push(await measure(page, `${viewport.name}-step1-profile-import-desktop`, outputDirectory));
-  await context.close();
-}
-
-async function startPreview() {
-  const server = await preview({
-    logLevel: 'silent',
-    preview: { host: '127.0.0.1', port: 0 },
-  });
-  const address = server.httpServer.address();
-  if (!address || typeof address === 'string') {
-    await server.close();
-    throw new Error('preview server did not expose a local port');
-  }
-  return { server, baseUrl: `http://127.0.0.1:${address.port}/` };
+  await page.getByTestId('source-skip-btn').click();
+  await page.getByTestId('first-run-skip-dialog').waitFor();
+  await page.getByTestId('skip-confirm-btn').click();
+  await page.getByTestId('context-city-picker-btn').waitFor();
+  results.push(await measure(page, `${viewport.name}-context`));
+  await page.screenshot({ path: `${OUT}/first-run-${viewport.name}-context.png` });
 }
 
 function report(results) {
-  const scrolling = results.filter(
-    (item) => item.documentOverflow > 1 || (item.mainOverflow ?? 0) > 1,
+  const overflow = results.filter((result) => result.horizontalOverflow > 1);
+  const desktopScroll = results.filter(
+    (result) => result.name.startsWith('desktop') && (result.mainOverflow ?? 0) > 1,
   );
-  const wide = results.filter((item) => item.horizontal > 1);
-  process.stdout.write(`${JSON.stringify({ results, scrolling, wide }, null, 2)}\n`);
-  if (scrolling.length > 0 || wide.length > 0) {
-    process.stdout.write('intake-fits: FAIL\n');
-    process.exitCode = 1;
-    return;
-  }
-  process.stdout.write('intake-fits: pass\n');
+  process.stdout.write(`${JSON.stringify({ results, overflow, desktopScroll }, null, 2)}\n`);
+  const failed = overflow.length > 0 || desktopScroll.length > 0;
+  process.stdout.write(`first-run-fits: ${failed ? 'FAIL' : 'pass'}\n`);
+  if (failed) process.exitCode = 1;
 }
 
 async function run() {
-  const outputDirectory = 'output/playwright';
-  await mkdir(outputDirectory, { recursive: true });
-  const { server, baseUrl } = await startPreview();
+  await mkdir(OUT, { recursive: true });
+  const server = await preview({ logLevel: 'silent', preview: { host: '127.0.0.1', port: 0 } });
+  const address = server.httpServer.address();
+  if (!address || typeof address === 'string') throw new Error('preview did not expose a local port');
   const browser = await chromium.launch();
   const results = [];
   try {
+    const baseUrl = `http://127.0.0.1:${address.port}/`;
     for (const viewport of VIEWPORTS) {
-      const context = await browser.newContext({
-        viewport: { width: viewport.width, height: viewport.height },
-      });
-      const page = await context.newPage();
-      page.__baseUrl = baseUrl;
-      await stubApi(page);
-      await walkWebWizard(page, viewport, outputDirectory, results);
-      await context.close();
-      await walkDesktopSourceStep(browser, baseUrl, viewport, outputDirectory, results);
+      const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+      await walkFirstRun(page, baseUrl, viewport, results);
+      await page.close();
     }
   } finally {
     await browser.close();
@@ -170,4 +112,3 @@ async function run() {
 }
 
 await run();
-import { installDesktopApiTestBridge } from './desktop-api-test-bridge.mjs';

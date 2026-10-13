@@ -58,7 +58,8 @@ test.describe('cabinet survives unexpected null API payloads', () => {
     // has no workspace, so the shell correctly opens the fullscreen
     // diagnostic wizard (rail included) instead of the cabinet — that is the
     // navigable, non-broken state INC-020 asks for here.
-    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+    await expect(page.getByTestId('first-run-wizard')).toBeVisible();
+    await expect(page.getByText('Находка себя')).toBeVisible();
     expect(pageErrors).toEqual([]);
 
     await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');

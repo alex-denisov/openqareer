@@ -8,8 +8,7 @@ export type FirstRunSpecialState =
   | 'stale-loading'
   | 'error'
   | 'session-expired'
-  | 'empty-sources'
-  | 'partial-source';
+  | 'empty-sources';
 
 export type SourceType = 'linkedin' | 'hh' | 'file' | 'talk';
 
@@ -34,12 +33,6 @@ export interface FirstRunData {
   readonly selectedSource: SourceType | null;
   readonly isSourceSkipped: boolean;
   readonly context: FirstRunContext;
-}
-
-export interface ConsultantTurn {
-  readonly id: string;
-  readonly text: string;
-  readonly isUser: boolean;
 }
 
 export const POPULAR_CITIES: readonly FirstRunCity[] = [

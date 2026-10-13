@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react';
 import { Check, MagnifyingGlass } from '@phosphor-icons/react';
-import { filterCities, POPULAR_CITIES, type FirstRunCity } from './firstRunStorage';
+import { filterCities, type FirstRunCity } from './firstRunStorage';
 
 export interface FirstRunCitySheetProps {
   readonly isOpen: boolean;
@@ -31,8 +31,8 @@ function CityListItems({
               data-testid={`city-item-${item.name}`}
             >
               <div>
-                <b style={{ display: 'block', fontSize: 'var(--career-text-sm, 14px)' }}>{item.name}</b>
-                <small style={{ fontSize: 'var(--career-text-xs, 12px)', color: 'var(--career-color-muted, #94a3b8)' }}>
+                <b className="first-run-city-name">{item.name}</b>
+                <small className="first-run-city-detail">
                   {item.country}
                 </small>
               </div>
@@ -56,21 +56,20 @@ function CitySearchHeader({
 }): ReactElement {
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-        <h2 style={{ margin: 0, fontSize: 'var(--career-text-base, 16px)' }}>Город</h2>
+      <div className="first-run-city-header">
+        <h2 className="first-run-city-title">Город</h2>
         <button type="button" className="first-run-btn-ghost" onClick={onClose} data-testid="city-done-btn">
           Готово
         </button>
       </div>
-      <div style={{ position: 'relative', marginBottom: '12px' }}>
+      <div className="first-run-city-search-wrap">
         <MagnifyingGlass
           size={16}
-          style={{ position: 'absolute', left: '12px', top: '12px', color: 'var(--career-color-muted, #94a3b8)' }}
+          className="first-run-city-search-icon"
         />
         <input
           type="search"
-          className="first-run-input"
-          style={{ width: '100%', boxSizing: 'border-box', paddingLeft: '36px' }}
+          className="first-run-input first-run-city-search-input"
           placeholder="Поиск города"
           aria-label="Поиск города"
           value={query}
@@ -92,7 +91,7 @@ export function FirstRunCitySheet({
 
   if (!isOpen) return null;
 
-  const filtered = filterCities(searchQuery, POPULAR_CITIES);
+  const filtered = filterCities(searchQuery);
 
   return (
     <div
@@ -104,7 +103,7 @@ export function FirstRunCitySheet({
     >
       <div className="first-run-sheet">
         <CitySearchHeader query={searchQuery} onQueryChange={setSearchQuery} onClose={onClose} />
-        <p style={{ margin: '0 0 8px', fontSize: 'var(--career-text-xs, 12px)', color: 'var(--career-color-muted, #94a3b8)' }}>
+        <p className="first-run-city-section-label">
           {searchQuery ? 'Результаты поиска' : 'Популярные'}
         </p>
         <CityListItems

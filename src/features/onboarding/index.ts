@@ -10,7 +10,6 @@ export {
   FirstRunErrorState,
   FirstRunSessionExpired,
   FirstRunEmptySources,
-  FirstRunPartialSourceBanner,
 } from './FirstRunStates';
 export {
   filterCities,
@@ -20,7 +19,6 @@ export {
   setGoal,
   setWorkFormat,
   setRelocationReady,
-  getConsultantReply,
   POPULAR_CITIES,
   CITY_DIRECTORY,
   DEFAULT_FIRST_RUN_DATA,
@@ -34,5 +32,4 @@ export type {
   FirstRunSpecialState,
   SourceType,
   WorkFormat,
-  ConsultantTurn,
 } from './firstRunTypes';
