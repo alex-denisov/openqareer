@@ -55,7 +55,10 @@ function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstR
       goal={state.data.goal}
       onGoalChange={state.handleGoalChange}
       isEditing={state.isGoalEditing}
-      onStartEdit={() => state.setIsGoalEditing(true)}
+      onStartEdit={() => {
+        state.setIsGoalEditing(true);
+        state.setStep('goal');
+      }}
       onSaveEdit={() => {
         state.setIsGoalEditing(false);
         state.setStep('source');
@@ -70,12 +73,14 @@ function WizardMainCards({
   ingestionResult,
   onOpenConsultant,
   onConnectSource,
+  isMobile,
 }: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
   readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
   readonly ingestionResult?: IngestedResume;
   readonly onOpenConsultant: (prompt?: string) => void;
   readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
+  readonly isMobile: boolean;
 }): ReactElement {
   return (
     <>
@@ -99,6 +104,9 @@ function WizardMainCards({
         <FirstRunContextCard
           data={state.data}
           onOpenCitySheet={() => state.setIsCitySheetOpen(true)}
+          cityPicker={
+            <WizardCityPicker state={state} isMobile={isMobile} />
+          }
           onFormatChange={state.handleFormatChange}
           onRelocationToggle={state.handleRelocationToggle}
           onSubmit={() => onComplete?.(state.data, ingestionResult)}
@@ -106,6 +114,19 @@ function WizardMainCards({
       ) : null}
     </>
   );
+}
+
+function WizardCityPicker({ state, isMobile }: {
+  readonly state: ReturnType<typeof useFirstRunWizardState>;
+  readonly isMobile: boolean;
+}) {
+  return <FirstRunCitySheet
+    isOpen={state.isCitySheetOpen}
+    isMobile={isMobile}
+    selectedCity={state.data.context.city}
+    onClose={() => state.setIsCitySheetOpen(false)}
+    onSelectCity={state.handleSelectCity}
+  />;
 }
 
 function WizardDialogs({
@@ -124,18 +145,15 @@ function WizardDialogs({
           void state.handleFileUpload(file, ingestion);
         }}
       />
-      <FirstRunCitySheet
-        isOpen={state.isCitySheetOpen}
-        selectedCity={state.data.context.city}
-        onClose={() => state.setIsCitySheetOpen(false)}
-        onSelectCity={state.handleSelectCity}
-      />
       <FirstRunSkipDialog
         isOpen={state.isSkipDialogOpen}
         onCancel={() => state.setIsSkipDialogOpen(false)}
         onConfirm={state.handleConfirmSkip}
       />
-      <FirstRunSkippedToast isVisible={state.isSkippedToastVisible} onUndo={state.handleUndoSkip} />
+      <FirstRunSkippedToast
+        isVisible={state.isSkippedToastVisible && !state.isCitySheetOpen}
+        onUndo={state.handleUndoSkip}
+      />
     </>
   );
 }
@@ -189,6 +207,7 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
             ingestionResult={props.ingestion.result}
             onOpenConsultant={props.onOpenConsultant}
             onConnectSource={props.onConnectSource}
+            isMobile={isMobile}
           />
         </main>
         {hasInternalConsultant ? (

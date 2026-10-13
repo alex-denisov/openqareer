@@ -1,9 +1,10 @@
-import { useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Check, MagnifyingGlass } from '@phosphor-icons/react';
 import { filterCities, type FirstRunCity } from './firstRunStorage';
 
 export interface FirstRunCitySheetProps {
   readonly isOpen: boolean;
+  readonly isMobile?: boolean;
   readonly selectedCity: string;
   readonly onClose: () => void;
   readonly onSelectCity: (city: FirstRunCity) => void;
@@ -81,13 +82,56 @@ function CitySearchHeader({
   );
 }
 
+function useCityDialog(isOpen: boolean, isMobile: boolean, onClose: () => void) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    panelRef.current?.querySelector('input')?.focus();
+    return () => {
+      trigger?.focus();
+    };
+  }, [isOpen]);
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const handleKeyDown = (event: KeyboardEvent) => cityDialogKeyDown(event, panel, isMobile, onClose);
+    panel.addEventListener('keydown', handleKeyDown);
+    return () => panel.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isMobile, onClose]);
+  return panelRef;
+}
+
+function cityDialogKeyDown(event: KeyboardEvent, panel: HTMLElement, isMobile: boolean, onClose: () => void) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    onClose();
+  }
+  if (!isMobile || event.key !== 'Tab') return;
+  const controls = panel.querySelectorAll<HTMLElement>('button, input');
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+
 export function FirstRunCitySheet({
   isOpen,
+  isMobile = false,
   selectedCity,
   onClose,
   onSelectCity,
 }: FirstRunCitySheetProps): ReactElement | null {
   const [searchQuery, setSearchQuery] = useState('');
+  const panelRef = useCityDialog(isOpen, isMobile, onClose);
+  useEffect(() => { if (isOpen) setSearchQuery(''); }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -95,13 +139,14 @@ export function FirstRunCitySheet({
 
   return (
     <div
-      className="first-run-modal-dim"
+      ref={panelRef}
+      className={`first-run-city-layer${isMobile ? ' is-mobile' : ''}`}
       role="dialog"
-      aria-modal="true"
+      aria-modal={isMobile || undefined}
       aria-label="Выбор города"
       data-testid="first-run-city-sheet"
     >
-      <div className="first-run-sheet">
+      <div className="first-run-sheet first-run-city-panel">
         <CitySearchHeader query={searchQuery} onQueryChange={setSearchQuery} onClose={onClose} />
         <p className="first-run-city-section-label">
           {searchQuery ? 'Результаты поиска' : 'Популярные'}
@@ -114,6 +159,9 @@ export function FirstRunCitySheet({
             onClose();
           }}
         />
+        {filtered.length === 0 ? (
+          <p className="first-run-city-section-label" role="status">Город не найден. Проверьте запрос.</p>
+        ) : null}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import {
   Briefcase,
   ChatCircleText,
@@ -333,13 +333,15 @@ function CityField({
   city,
   country,
   onOpenCitySheet,
+  cityPicker,
 }: {
   readonly city: string;
   readonly country: string;
   readonly onOpenCitySheet: () => void;
+  readonly cityPicker?: ReactNode;
 }): ReactElement {
   return (
-    <div className="first-run-field">
+    <div className="first-run-field first-run-city-field">
       <label className="first-run-label" htmlFor="context-city-picker-btn">
         Город
       </label>
@@ -353,18 +355,36 @@ function CityField({
         <span>{city}</span>
         <small className="first-run-city-country">{country}</small>
       </button>
+      {cityPicker}
     </div>
   );
+}
+
+function WorkFormatField({ format, onChange }: {
+  readonly format: WorkFormat;
+  readonly onChange: (format: WorkFormat) => void;
+}) {
+  return <div className="first-run-field">
+    <label className="first-run-label" htmlFor="work-format-select">Формат работы</label>
+    <select id="work-format-select" className="first-run-select" value={format}
+      onChange={(e) => onChange(e.target.value as WorkFormat)} data-testid="context-format-select">
+      <option value="Гибрид">Гибрид</option>
+      <option value="Удалённо">Удалённо</option>
+      <option value="Офис">Офис</option>
+    </select>
+  </div>;
 }
 
 function ContextFormFields({
   data,
   onOpenCitySheet,
+  cityPicker,
   onFormatChange,
   onRelocationToggle,
 }: {
   readonly data: FirstRunData;
   readonly onOpenCitySheet: () => void;
+  readonly cityPicker?: ReactNode;
   readonly onFormatChange: (fmt: WorkFormat) => void;
   readonly onRelocationToggle: (val: boolean) => void;
 }): ReactElement {
@@ -374,23 +394,9 @@ function ContextFormFields({
         city={data.context.city}
         country={data.context.country}
         onOpenCitySheet={onOpenCitySheet}
+        cityPicker={cityPicker}
       />
-      <div className="first-run-field">
-        <label className="first-run-label" htmlFor="work-format-select">
-          Формат работы
-        </label>
-        <select
-          id="work-format-select"
-          className="first-run-select"
-          value={data.context.format}
-          onChange={(e) => onFormatChange(e.target.value as WorkFormat)}
-          data-testid="context-format-select"
-        >
-          <option value="Гибрид">Гибрид</option>
-          <option value="Удалённо">Удалённо</option>
-          <option value="Офис">Офис</option>
-        </select>
-      </div>
+      <WorkFormatField format={data.context.format} onChange={onFormatChange} />
       <div className="first-run-relocation-row">
         <label className="first-run-relocation-label">
           <input
@@ -409,12 +415,14 @@ function ContextFormFields({
 export function FirstRunContextCard({
   data,
   onOpenCitySheet,
+  cityPicker,
   onFormatChange,
   onRelocationToggle,
   onSubmit,
 }: {
   readonly data: FirstRunData;
   readonly onOpenCitySheet: () => void;
+  readonly cityPicker?: ReactNode;
   readonly onFormatChange: (fmt: WorkFormat) => void;
   readonly onRelocationToggle: (val: boolean) => void;
   readonly onSubmit: () => void;
@@ -435,6 +443,7 @@ export function FirstRunContextCard({
       <ContextFormFields
         data={data}
         onOpenCitySheet={onOpenCitySheet}
+        cityPicker={cityPicker}
         onFormatChange={onFormatChange}
         onRelocationToggle={onRelocationToggle}
       />
