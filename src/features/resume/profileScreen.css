@@ -395,20 +395,25 @@
 
   .career-profile-screen-completion {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
-    align-items: center;
-    column-gap: var(--career-space-5);
-    row-gap: var(--career-space-1);
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: var(--career-space-2);
   }
 
   .career-profile-screen-completion > div {
-    grid-column: 1;
-    grid-row: 1;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--career-space-3);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-profile-screen-completion > div strong {
+    color: var(--career-text);
+    font-weight: 600;
   }
 
   .career-profile-screen-completion-progress {
-    grid-column: 2;
-    grid-row: 1 / span 2;
     width: 100%;
     min-width: 0;
     accent-color: var(--career-accent);
@@ -416,8 +421,6 @@
 
   .career-profile-screen-proposed-facts {
     display: block;
-    grid-column: 1;
-    grid-row: 2;
     margin: 0;
     color: var(--career-text-dim);
     font-size: var(--career-text-xs);

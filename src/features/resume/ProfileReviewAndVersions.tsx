@@ -208,10 +208,7 @@ function reviewDescription(block: ReviewBlock): string {
   if (block.description) return block.description;
   const issues = actionableIssues(block);
   if (issues.length) {
-    const firstIssue = issues[0]?.message ?? '';
-    return issues.length === 1
-      ? firstIssue
-      : `${firstIssue} Ещё ${pluralRu(issues.length - 1, ['замечание', 'замечания', 'замечаний'])} в блоке.`;
+    return issues[0]?.message ?? '';
   }
   return block.hasData
     ? 'В этом блоке сейчас нет замечаний.'
