@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { IngestedResume } from '../journey/useResumeIngestion';
 import {
   DEFAULT_FIRST_RUN_DATA,
   filterCities,
@@ -78,7 +79,7 @@ describe('firstRunStorage logic and rules', () => {
       source: 'pdf' as const,
       file: { name: 'cv.pdf', pages: 2 },
       imported: true,
-    };
+    } as unknown as IngestedResume;
     const input = firstRunDataToWorkspaceInput(DEFAULT_FIRST_RUN_DATA, sampleResume);
     expect(input.resumeText).toBe('Резюме разработчика');
     expect(input.resumeFileName).toBe('cv.pdf');

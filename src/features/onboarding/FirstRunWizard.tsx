@@ -1,9 +1,6 @@
 import type { ReactElement } from 'react';
-import type {
-  FirstRunData,
-  FirstRunSpecialState,
-  FirstRunStep,
-} from './firstRunTypes';
+import type { ConsultantTurn } from './firstRunTypes';
+import type { FirstRunData, FirstRunSpecialState, FirstRunStep } from './firstRunTypes';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
 import { FirstRunCitySheet } from './FirstRunCitySheet';
 import { FirstRunSkipDialog, FirstRunSkippedToast } from './FirstRunSkipDialog';
@@ -16,11 +13,7 @@ import {
   FirstRunSkeleton,
   FirstRunStaleLoading,
 } from './FirstRunStates';
-import {
-  FirstRunContextCard,
-  FirstRunGoalCard,
-  FirstRunSourceCard,
-} from './FirstRunSteps';
+import { FirstRunContextCard, FirstRunGoalCard, FirstRunSourceCard } from './FirstRunSteps';
 import { useFirstRunWizardState } from './useFirstRunWizardState';
 
 import type { IngestedResume, ResumeIngestionState } from '../journey/useResumeIngestion';
@@ -128,10 +121,7 @@ function WizardDialogs({
         onCancel={() => state.setIsSkipDialogOpen(false)}
         onConfirm={state.handleConfirmSkip}
       />
-      <FirstRunSkippedToast
-        isVisible={state.isSkippedToastVisible}
-        onUndo={state.handleUndoSkip}
-      />
+      <FirstRunSkippedToast isVisible={state.isSkippedToastVisible} onUndo={state.handleUndoSkip} />
     </>
   );
 }
@@ -155,8 +145,8 @@ function MobileChatModal({
   onClose,
 }: {
   readonly isOpen: boolean;
-  readonly turns: readonly FirstRunConsultantTurn[];
-  readonly onSendTurn: (t: string) => void;
+  readonly turns: readonly ConsultantTurn[];
+  readonly onSendTurn: (text: string, isUser: boolean) => void;
   readonly onClose: () => void;
 }): ReactElement | null {
   if (!isOpen) return null;
