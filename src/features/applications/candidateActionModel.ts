@@ -71,7 +71,7 @@ export function actionStatusLabel(status: 'pending' | 'delivered' | 'attempted' 
   if (status === 'pending') return 'Выполняется';
   if (status === 'delivered') return 'Доставлено';
   if (status === 'attempted') return 'Не подтверждено';
-  return 'Не удалось';
+  return 'Ошибка';
 }
 
 export function formatActionCount(count: number): string {
@@ -96,7 +96,7 @@ export function actionFailureLabel(code?: string | null): string {
     candidate_input_required: 'Площадка запросила ответ, который нужно заполнить вручную.',
     challenge_required: 'Площадка запросила проверку безопасности. Пройдите её вручную.',
     http_403: 'Площадка отказала в действии. Пакет остановлен.',
-    kill_switch_active: 'Действия остановлены переключателем остановки.',
+    kill_switch_active: 'Ручная отправка остановлена. Снимите остановку, чтобы продолжить.',
     letter_required: 'Добавьте и проверьте текст письма.',
     login_required: 'Войдите в свою сессию площадки и повторите позже.',
     platform_unavailable: 'Площадка сейчас недоступна. Повторите попытку позже.',

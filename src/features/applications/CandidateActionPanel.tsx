@@ -1,23 +1,30 @@
-import { CheckCircle, PaperPlaneTilt, StopCircle, WarningCircle } from '@phosphor-icons/react';
-import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
-import type { CandidateActionReceiptView } from './applicationsApi';
 import {
-  actionFailureLabel,
-  actionStatusLabel,
-  formatActionCount,
-  formatActionReset,
-} from './candidateActionModel';
+  CheckCircle,
+  Clock,
+  PaperPlaneTilt,
+  StopCircle,
+  WarningCircle,
+} from '@phosphor-icons/react';
+import { useMemo } from 'react';
+import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
+import type { ApplicationView, CandidateActionReceiptView } from './applicationsApi';
+import { CandidateActionTable } from './CandidateActionTable';
+import { ReceiptTable } from './CandidateActionReceipts';
+import { formatActionCount, formatActionReset } from './candidateActionModel';
 import { useCandidateActionPanel } from './useCandidateActionPanel';
 import './candidate-action.css';
+
+type Panel = ReturnType<typeof useCandidateActionPanel>;
 
 export function CandidateActionPanel({
   applications,
   onRefreshApplications,
 }: {
-  readonly applications: Parameters<typeof useCandidateActionPanel>[0];
+  readonly applications: readonly ApplicationView[];
   readonly onRefreshApplications?: () => void | Promise<unknown>;
 }) {
   const panel = useCandidateActionPanel(applications, onRefreshApplications);
+  const byId = useMemo(() => new Map(applications.map((item) => [item.id, item])), [applications]);
   return (
     <section
       className="career-candidate-actions"
@@ -30,37 +37,41 @@ export function CandidateActionPanel({
       {panel.notice ? <Notice message={panel.notice} success /> : null}
       {!panel.consentGranted ? <ConsentPanel panel={panel} /> : <ActionComposer panel={panel} />}
       {panel.busy ? (
-        <BatchProgress receipts={panel.liveReceipts} total={panel.selectedCount} />
+        <BatchProgress receipts={panel.liveReceipts} total={panel.selectedCount} byId={byId} />
       ) : null}
-      <ReceiptHistory receipts={panel.receipts} />
+      <ReceiptHistory receipts={panel.receipts} byId={byId} />
     </section>
   );
 }
 
-function PanelHeader({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
+function PanelHeader({ panel }: { panel: Panel }) {
   return (
     <header className="career-candidate-actions__header">
-      <div>
-        <h2 id="career-candidate-actions-title">Отправка откликов</h2>
-        <p className="career-candidate-actions__intro">
-          Выберите вакансии и проверьте ссылки и письма.
-        </p>
-        <p className="career-candidate-actions__intro">
-          Отправка начнётся после вашего подтверждения.
-        </p>
+      <div className="career-candidate-actions__title-row">
+        <h2 id="career-candidate-actions-title">Ручная отправка</h2>
+        {panel.consentGranted ? (
+          <span className="career-pill is-good">
+            <CheckCircle aria-hidden="true" />
+            Согласие дано
+          </span>
+        ) : null}
       </div>
       {panel.usage ? (
         <button
           type="button"
-          className={`career-btn career-candidate-actions__kill-switch${panel.usage.killSwitchActive ? ' is-active' : ''}`}
+          className={`career-btn career-btn-secondary career-btn-sm career-candidate-actions__kill-switch${panel.usage.killSwitchActive ? ' is-active' : ''}`}
           onClick={() => void panel.toggleKillSwitch()}
           disabled={panel.loading || panel.consentBusy}
           aria-pressed={panel.usage.killSwitchActive}
         >
-          <StopCircle />
+          <StopCircle aria-hidden="true" />
           {panel.usage.killSwitchActive ? 'Снять остановку' : 'Остановить всё'}
         </button>
       ) : null}
+      <p className="career-candidate-actions__intro">
+        Для вакансий, которые нужно отправить сегодня и не ждать расписания. Остальное идёт через
+        очередь на одобрение. Письма и ссылки проверяете вы: ничего не уходит без «Отправить».
+      </p>
     </header>
   );
 }
@@ -114,17 +125,19 @@ function ConsentPanel({ panel }: { panel: ReturnType<typeof useCandidateActionPa
   );
 }
 
-function ActionComposer({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
+function ActionComposer({ panel }: { panel: Panel }) {
   if (panel.loading || !panel.usage)
     return <p className="career-candidate-actions__muted">Загружаем лимиты и квитанции.</p>;
   return (
     <>
       <ActionUsage panel={panel} />
+      {panel.usage.killSwitchActive ? (
+        <Notice message="Ручная отправка остановлена. Снимите остановку, чтобы продолжить." limit />
+      ) : null}
       {panel.runnerNotConnected ? (
         <Notice message="Исполнитель действий не подключён к сессии на этом устройстве. Действия не запускались." />
       ) : null}
-      <ActionSelectionList panel={panel} />
-      <ResumeBoostOption panel={panel} />
+      <ActionSelection panel={panel} />
       {panel.limitMessage ? <Notice message={panel.limitMessage} limit /> : null}
       {panel.letterMissing ? (
         <Notice
@@ -137,26 +150,41 @@ function ActionComposer({ panel }: { panel: ReturnType<typeof useCandidateAction
   );
 }
 
-function ActionUsage({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
-  const { usage, timezone, resetAt } = panel.usage!;
+function ActionUsage({ panel }: { panel: Panel }) {
+  const { usage, limits, timezone, resetAt } = panel.usage!;
   return (
-    <div className="career-candidate-actions__usage" aria-label="Суточные лимиты действий">
-      <span>
-        hh.ru: {usage.hhAppliesCount}/{panel.usage!.limits.maxHhAppliesPerDay}
+    <div
+      className="career-candidate-actions__usage"
+      role="group"
+      aria-label="Суточные лимиты действий"
+    >
+      <span className="career-candidate-actions__chip">
+        hh.ru{' '}
+        <span className="career-candidate-actions__num">
+          {usage.hhAppliesCount} / {limits.maxHhAppliesPerDay}
+        </span>
       </span>
-      <span>
-        LinkedIn: {usage.linkedinEasyAppliesCount}/
-        {panel.usage!.limits.maxLinkedinEasyAppliesPerDay}
+      <span className="career-candidate-actions__chip">
+        LinkedIn{' '}
+        <span className="career-candidate-actions__num">
+          {usage.linkedinEasyAppliesCount} / {limits.maxLinkedinEasyAppliesPerDay}
+        </span>
       </span>
-      <span>
-        Поднятие резюме: {usage.hhBoostsCount}/{panel.usage!.limits.maxHhBoostsPerDay}
+      <span className="career-candidate-actions__chip">
+        Поднятие резюме{' '}
+        <span className="career-candidate-actions__num">
+          {usage.hhBoostsCount} / {limits.maxHhBoostsPerDay}
+        </span>
       </span>
-      <span>Сброс лимитов: {formatActionReset(resetAt, timezone)}</span>
+      <span className="career-candidate-actions__chip">
+        <Clock aria-hidden="true" />
+        Лимиты сбросятся: {formatActionReset(resetAt, timezone)}
+      </span>
     </div>
   );
 }
 
-function ActionSelectionList({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
+function ActionSelection({ panel }: { panel: Panel }) {
   if (panel.selectableApplications.length === 0) {
     return (
       <div className="career-candidate-actions__notice">
@@ -168,91 +196,19 @@ function ActionSelectionList({ panel }: { panel: ReturnType<typeof useCandidateA
     );
   }
   return (
-    <fieldset className="career-candidate-actions__fieldset">
-      <legend className="career-candidate-actions__muted">Вакансии на этапе «Хочу»</legend>
-      <ul className="career-candidate-actions__list">
-        {panel.selectableApplications.map((item) => (
-          <ActionSelectionItem
-            key={item.application.id}
-            item={item}
-            selected={panel.selectedIds.has(item.application.id)}
-            letter={panel.letters.get(item.application.id) ?? ''}
-            onSelect={(selected) => panel.toggleApplication(item.application.id, selected)}
-            onLetter={(value) => panel.setLetter(item.application.id, value)}
-          />
-        ))}
-      </ul>
-    </fieldset>
+    <CandidateActionTable
+      items={panel.selectableApplications}
+      selectedIds={panel.selectedIds}
+      letters={panel.letters}
+      disabled={panel.busy || Boolean(panel.usage?.killSwitchActive)}
+      onToggle={panel.toggleApplication}
+      onToggleAll={panel.toggleAllApplications}
+      onLetter={panel.setLetter}
+    />
   );
 }
 
-function ActionSelectionItem({
-  item,
-  selected,
-  letter,
-  onSelect,
-  onLetter,
-}: {
-  readonly item: ReturnType<typeof useCandidateActionPanel>['selectableApplications'][number];
-  readonly selected: boolean;
-  readonly letter: string;
-  readonly onSelect: (selected: boolean) => void;
-  readonly onLetter: (value: string) => void;
-}) {
-  const application = item.application;
-  const title = application.vacancy?.title ?? 'Вакансия без названия';
-  const company = application.vacancy?.companyHidden
-    ? 'Компания скрыта'
-    : application.vacancy?.company || 'Компания не указана';
-  const checkboxId = `candidate-action-${application.id}`;
-  return (
-    <li className="career-candidate-actions__item">
-      <div className="career-candidate-actions__select">
-        <input
-          id={checkboxId}
-          type="checkbox"
-          checked={selected}
-          onChange={(event) => onSelect(event.currentTarget.checked)}
-        />
-        <label className="career-candidate-actions__details" htmlFor={checkboxId}>
-          <strong>
-            {title} · {company}
-          </strong>
-          <span>{item.platform === 'hh' ? 'Отклик на hh.ru' : 'Easy Apply в LinkedIn'}</span>
-          <span className="career-candidate-actions__url">{item.targetUrl}</span>
-        </label>
-      </div>
-      {selected ? (
-        <label className="career-candidate-actions__letter">
-          Текст письма или заметки для площадки
-          <textarea
-            value={letter}
-            onChange={(event) => onLetter(event.currentTarget.value)}
-            maxLength={5_000}
-          />
-        </label>
-      ) : null}
-    </li>
-  );
-}
-
-function ResumeBoostOption({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
-  return (
-    <label className="career-candidate-actions__check career-candidate-actions__item">
-      <input
-        type="checkbox"
-        checked={panel.includeResumeBoost}
-        onChange={(event) => panel.setIncludeResumeBoost(event.currentTarget.checked)}
-      />
-      <span>
-        Поднять резюме на hh.ru, если в сессии доступно ровно одно резюме. Если резюме несколько,
-        действие остановится без выбора.
-      </span>
-    </label>
-  );
-}
-
-function ActionConfirmation({ panel }: { panel: ReturnType<typeof useCandidateActionPanel> }) {
+function ActionConfirmation({ panel }: { panel: Panel }) {
   const canSubmit =
     panel.selectedCount > 0 &&
     !panel.loading &&
@@ -264,15 +220,30 @@ function ActionConfirmation({ panel }: { panel: ReturnType<typeof useCandidateAc
     !panel.letterMissing;
   return (
     <div className="career-candidate-actions__footer">
-      <label className="career-candidate-actions__check">
+      <p className="career-candidate-actions__bulk" role="status">
+        Выбрано {panel.selectedCount} из {panel.selectableApplications.length}
+        {panel.includeResumeBoost ? ', поднятие резюме включено' : ''}.
+      </p>
+      <label className="career-checkbox-label">
         <input
           type="checkbox"
+          className="career-checkbox"
           checked={panel.confirmedByCandidate}
           onChange={(event) => panel.setConfirmedByCandidate(event.currentTarget.checked)}
           disabled={panel.selectedCount === 0 || panel.busy}
         />
-        <span>Я проверил письма и ссылки для каждого выбранного действия.</span>
+        <span className="career-checkbox-text">
+          Я проверил письма и ссылки для каждого выбранного действия
+        </span>
       </label>
+      <ActionButtons panel={panel} canSubmit={canSubmit} />
+    </div>
+  );
+}
+
+function ActionButtons({ panel, canSubmit }: { panel: Panel; canSubmit: boolean }) {
+  return (
+    <div className="career-candidate-actions__actions">
       <button
         type="button"
         className={`career-btn ${panel.selectedCount > 0 ? 'career-btn-primary' : 'career-btn-secondary'}`}
@@ -280,8 +251,18 @@ function ActionConfirmation({ panel }: { panel: ReturnType<typeof useCandidateAc
         disabled={!canSubmit}
         aria-busy={panel.busy}
       >
-        <PaperPlaneTilt />
+        <PaperPlaneTilt aria-hidden="true" />
         {panel.busy ? 'Отправляем пакет' : `Отправить ${formatActionCount(panel.selectedCount)}`}
+      </button>
+      <button
+        type="button"
+        className="career-btn"
+        aria-pressed={panel.includeResumeBoost}
+        onClick={() => panel.setIncludeResumeBoost(!panel.includeResumeBoost)}
+        disabled={panel.busy}
+        title="Работает, если в сессии hh.ru доступно ровно одно резюме"
+      >
+        Поднять резюме на hh.ru
       </button>
     </div>
   );
@@ -290,9 +271,11 @@ function ActionConfirmation({ panel }: { panel: ReturnType<typeof useCandidateAc
 function BatchProgress({
   receipts,
   total,
+  byId,
 }: {
   readonly receipts: readonly CandidateActionReceiptView[];
   readonly total: number;
+  readonly byId: ReadonlyMap<string, ApplicationView>;
 }) {
   const processed = receipts.filter((receipt) => receipt.status !== 'pending').length;
   return (
@@ -303,50 +286,36 @@ function BatchProgress({
       aria-busy="true"
     >
       <span>
-        Обработано {processed} из {total}. Пакет остановится при challenge, отказе площадки или
-        включении kill switch.
+        Обработано {processed} из {total}. Пакет остановится при проверке безопасности, отказе
+        площадки или нажатии «Остановить всё».
       </span>
-      <ReceiptList receipts={receipts} />
+      {receipts.length > 0 ? (
+        <ReceiptTable receipts={receipts} applications={byId} caption="Ход отправки" />
+      ) : null}
     </div>
   );
 }
 
-function ReceiptHistory({ receipts }: { receipts: readonly CandidateActionReceiptView[] }) {
+function ReceiptHistory({
+  receipts,
+  byId,
+}: {
+  readonly receipts: readonly CandidateActionReceiptView[];
+  readonly byId: ReadonlyMap<string, ApplicationView>;
+}) {
   if (receipts.length === 0) return null;
   return (
-    <details className="career-candidate-actions__results" open={receipts.length > 0}>
-      <summary>Последние квитанции ({receipts.length})</summary>
-      <ReceiptList receipts={receipts.slice(0, 10)} />
-    </details>
-  );
-}
-
-function ReceiptList({ receipts }: { receipts: readonly CandidateActionReceiptView[] }) {
-  return (
-    <ul className="career-candidate-actions__receipt-list">
-      {receipts.map((receipt) => (
-        <ReceiptItem key={receipt.id} receipt={receipt} />
-      ))}
-    </ul>
-  );
-}
-
-function ReceiptItem({ receipt }: { receipt: CandidateActionReceiptView }) {
-  const status = receipt.status;
-  return (
-    <li className="career-candidate-actions__receipt">
-      <strong>
-        {receipt.platform === 'hh' ? 'hh.ru' : 'LinkedIn'} · {actionKindLabel(receipt.actionKind)}
-      </strong>
-      <span className={`career-candidate-actions__status is-${status}`}>
-        {actionStatusLabel(status)}
-      </span>
-      {receipt.failureCode ? (
-        <span className="career-candidate-actions__reason">
-          {actionFailureLabel(receipt.failureCode)}
-        </span>
-      ) : null}
-    </li>
+    <section
+      className="career-candidate-actions__results"
+      aria-labelledby="career-candidate-receipts"
+    >
+      <h3 id="career-candidate-receipts">Последние квитанции</h3>
+      <ReceiptTable
+        receipts={receipts.slice(0, 10)}
+        applications={byId}
+        caption="Последние квитанции"
+      />
+    </section>
   );
 }
 
@@ -374,10 +343,4 @@ function Notice({
       <p>{message}</p>
     </div>
   );
-}
-
-function actionKindLabel(kind: CandidateActionReceiptView['actionKind']): string {
-  if (kind === 'hh_apply') return 'Отклик';
-  if (kind === 'hh_resume_boost') return 'Поднятие резюме';
-  return 'Easy Apply';
 }

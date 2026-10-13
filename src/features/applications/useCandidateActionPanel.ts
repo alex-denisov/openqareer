@@ -99,6 +99,13 @@ function useActionSelection(
     setConfirmedByCandidate(false);
     setSelectedIds((current) => toggleSetValue(current, applicationId, selected));
   }, []);
+  const toggleAllApplications = useCallback(
+    (selected: boolean) => {
+      setConfirmedByCandidate(false);
+      setSelectedIds(selected ? new Set(selectableApplications.map((item) => item.application.id)) : new Set());
+    },
+    [selectableApplications],
+  );
   const setLetter = useCallback((applicationId: string, value: string) => {
     setConfirmedByCandidate(false);
     setLetters((current) => new Map(current).set(applicationId, value));
@@ -112,6 +119,7 @@ function useActionSelection(
     selectedIds,
     letters,
     toggleApplication,
+    toggleAllApplications,
     setLetter,
     includeResumeBoost,
     setIncludeResumeBoost: toggleResumeBoost,

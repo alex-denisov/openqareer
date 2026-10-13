@@ -104,7 +104,7 @@ async function mount(applications: readonly ApplicationView[] = [application()])
     root?.render(<CandidateActionPanel applications={applications} />);
     await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   });
-  await vi.waitFor(() => expect(container.textContent).toContain('Отправка откликов'));
+  await vi.waitFor(() => expect(container.textContent).toContain('Ручная отправка'));
 }
 
 function setCheckbox(input: HTMLInputElement | undefined, checked: boolean): void {
@@ -246,11 +246,14 @@ describe('CandidateActionPanel', () => {
 
   it('adds the one-resume boost as a real action in the confirmed package', async () => {
     await mount([]);
-    const boost = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
-    expect(boost).not.toBeNull();
+    const boost = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Поднять резюме'),
+    );
+    expect(boost).toBeDefined();
     await act(async () => {
-      setCheckbox(boost ?? undefined, true);
+      boost?.click();
     });
+    expect(boost?.getAttribute('aria-pressed')).toBe('true');
     const confirmation = Array.from(
       container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
     ).at(-1);
