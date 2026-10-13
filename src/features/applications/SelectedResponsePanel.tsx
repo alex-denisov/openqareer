@@ -373,7 +373,7 @@ function Dossier({
       className="career-responses-selected__dossier"
       aria-labelledby="career-responses-dossier-title"
     >
-      <h3 id="career-responses-dossier-title">Досье</h3>
+      <h3 id="career-responses-dossier-title">О компании</h3>
       <p>
         <Buildings aria-hidden="true" />
         <strong>{company}</strong>
@@ -383,7 +383,7 @@ function Dossier({
         Роль: {application.vacancy?.title ?? 'не указана'} · источник:{' '}
         {source ? humanSourceLabel(source) : 'не указан'}
       </p>
-      <small>Показаны сведения из отклика; отдельное проверенное досье не привязано.</small>
+      <small>Показаны сведения из отклика; проверенная карточка компании не привязана.</small>
     </section>
   );
 }

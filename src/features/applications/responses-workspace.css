@@ -58,13 +58,6 @@
   color: var(--career-accent);
 }
 
-.career-responses-selection {
-  justify-content: space-between;
-  flex-wrap: wrap;
-  padding: var(--career-space-3);
-  border-bottom: var(--career-border-width) solid var(--career-line);
-}
-
 .career-responses-table-wrap {
   max-width: 100%;
   overflow-x: auto;
