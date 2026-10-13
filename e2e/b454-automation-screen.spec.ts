@@ -42,11 +42,20 @@ async function openAutomation(page: Page) {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-  const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
-  await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await expect(page.locator('.career-automation-topbar-title')).toHaveText('Автоматизация');
+    await page
+      .getByRole('group', { name: 'Раздел откликов' })
+      .getByRole('button', { name: 'Автоматизация', exact: true })
+      .click();
+    await expect(page.locator('.career-mobile-page-title')).toHaveText('Отклики');
+    await expect(
+      page
+        .getByRole('group', { name: 'Раздел откликов' })
+        .getByRole('button', { name: 'Автоматизация', exact: true }),
+    ).toHaveAttribute('aria-pressed', 'true');
   } else {
+    const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
+    await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
     await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Автоматизация');
     await expect(page.getByRole('tablist', { name: 'Автоматизация' })).toBeVisible();
   }
@@ -409,7 +418,10 @@ test('настройки, правила, согласия, посты и экс
   ).toBeVisible();
 
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
+    await page
+      .locator('.automation-back-row')
+      .getByRole('button', { name: 'Автоматизация', exact: true })
+      .click();
   }
   const rulesShortcut = page.getByRole('button', { name: /Правила отбора/u });
   if (await rulesShortcut.isVisible()) await rulesShortcut.click();
@@ -428,7 +440,10 @@ test('настройки, правила, согласия, посты и экс
   await expect(rules.getByText('Стоп-компаний пока нет.', { exact: true })).toBeVisible();
 
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Автоматизация', exact: true }).click();
+    await page
+      .locator('.automation-back-row')
+      .getByRole('button', { name: 'Автоматизация', exact: true })
+      .click();
   }
   await page
     .getByRole('button', { name: /Согласия/u })

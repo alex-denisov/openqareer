@@ -634,3 +634,44 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* 390 (макет 5): «Воронка» и «Автоматизация» — сегменты одного раздела. */
+.career-responses-segment {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .career-responses-segment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--career-space-1);
+    padding: var(--career-space-1);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-lg);
+    background: var(--career-surface);
+  }
+
+  .career-responses-segment button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--career-space-2);
+    min-height: max(44px, var(--career-target-min));
+    border: 0;
+    border-radius: var(--career-radius-md);
+    background: transparent;
+    color: var(--career-text-soft);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .career-responses-segment button[aria-pressed='true'] {
+    background: var(--career-accent-soft);
+    color: var(--career-text);
+  }
+
+  .career-responses-automation-link {
+    display: none;
+  }
+}

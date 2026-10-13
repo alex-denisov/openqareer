@@ -170,7 +170,10 @@ async function mockCandidateActionApi(page: Page): Promise<() => unknown> {
 
 async function openAutomationFromResponses(page: Page): Promise<void> {
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
-  const navigation = page.getByRole('navigation', { name: 'Разделы откликов' });
+  const navigation =
+    (page.viewportSize()?.width ?? 1440) <= 760
+      ? page.getByRole('group', { name: 'Раздел откликов' })
+      : page.getByRole('navigation', { name: 'Разделы откликов' });
   const automation = navigation.getByRole('button', { name: 'Автоматизация', exact: true });
   await expect(automation).toBeVisible();
   await automation.click();
@@ -210,7 +213,10 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
   await expect(panel).toHaveAttribute('aria-busy', 'false');
   await expect(panel.getByRole('button', { name: 'Отправить 0 действий' })).toBeDisabled();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Назад к откликам', exact: true }).click();
+    await page
+      .getByRole('group', { name: 'Раздел откликов' })
+      .getByRole('button', { name: 'Воронка', exact: true })
+      .click();
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -289,8 +295,8 @@ test('B413: consent checkbox visual and screenshot 1440 and 390', async ({ page 
   const checkbox = consentSection.locator('input.career-checkbox');
   await expect(checkbox).toBeVisible();
 
-  const statusLabel = consentSection.locator('.career-checkbox-status');
-  await expect(statusLabel).toContainText('Согласия нет');
+  await expect(checkbox).not.toBeChecked();
+  await expect(consentSection.locator('.career-checkbox-status')).toHaveCount(0);
 
   await mkdir('output/playwright/B413', { recursive: true });
   const viewportSuffix = testInfo.project.name === 'mobile-390' ? '390' : '1440';

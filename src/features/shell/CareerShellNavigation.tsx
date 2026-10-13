@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   forwardRef,
   useCallback,
@@ -7,7 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import { CaretLeft, DotsThree, GearSix, Sparkle, Wallet, ShieldCheck } from '@phosphor-icons/react';
+import { DotsThree, GearSix, Wallet, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
@@ -266,49 +267,17 @@ interface CareerMobileTopbarProps {
   readonly tariffsAvailable: boolean;
   readonly tariffsLockedReason: string;
   readonly onNavigateHome: () => void;
-  readonly onNavigateResponses: () => void;
   readonly onNavigateTariffs: () => void;
   readonly onOpenAccount: () => void;
   readonly onOpenConsultant: () => void;
+  readonly notificationsSlot?: ReactNode;
 }
 
 export function CareerMobileTopbar(props: CareerMobileTopbarProps) {
-  const { ariaHidden, activeView } = props;
   return (
-    <header className="career-topbar" aria-hidden={ariaHidden || undefined}>
-      {activeView === 'automation' ? (
-        <AutomationMobileTopbar {...props} />
-      ) : (
-        <DefaultMobileTopbar {...props} />
-      )}
+    <header className="career-topbar" aria-hidden={props.ariaHidden || undefined}>
+      <DefaultMobileTopbar {...props} />
     </header>
-  );
-}
-
-function AutomationMobileTopbar({
-  onNavigateResponses,
-  onOpenConsultant,
-}: CareerMobileTopbarProps) {
-  return (
-    <>
-      <button
-        className="career-automation-topbar-back"
-        type="button"
-        aria-label="Назад к откликам"
-        onClick={onNavigateResponses}
-      >
-        <CaretLeft size={22} aria-hidden="true" />
-      </button>
-      <span className="career-automation-topbar-title">Автоматизация</span>
-      <button
-        className="career-automation-topbar-consultant"
-        type="button"
-        aria-label="Открыть консультанта"
-        onClick={onOpenConsultant}
-      >
-        <Sparkle size={22} aria-hidden="true" />
-      </button>
-    </>
   );
 }
 
@@ -321,6 +290,7 @@ function DefaultMobileTopbar({
   onNavigateHome,
   onNavigateTariffs,
   onOpenAccount,
+  notificationsSlot,
 }: CareerMobileTopbarProps) {
   return (
     <>
@@ -341,6 +311,7 @@ function DefaultMobileTopbar({
         sessionPending={sessionPending}
         tariffsAvailable={tariffsAvailable}
         tariffsLockedReason={tariffsLockedReason}
+        notificationsSlot={notificationsSlot}
         onNavigateTariffs={onNavigateTariffs}
         onOpenAccount={onOpenAccount}
       />
@@ -355,6 +326,7 @@ function CareerMobileTopbarActions({
   tariffsLockedReason,
   onNavigateTariffs,
   onOpenAccount,
+  notificationsSlot,
 }: {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
@@ -362,9 +334,11 @@ function CareerMobileTopbarActions({
   readonly tariffsLockedReason: string;
   readonly onNavigateTariffs: () => void;
   readonly onOpenAccount: () => void;
+  readonly notificationsSlot?: ReactNode;
 }) {
   return (
     <div className="career-topbar-actions">
+      {notificationsSlot}
       <button
         className="career-mobile-tariffs"
         type="button"

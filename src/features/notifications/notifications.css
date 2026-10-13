@@ -535,10 +535,8 @@
 }
 
 @media (max-width: 760px) {
-  .career-notification-bell-anchor {
-    top: calc((var(--career-mobile-topbar-height) - var(--career-target-min)) / 2);
-    right: auto;
-    left: calc(var(--career-space-8) + var(--career-space-6));
+  .career-topbar-actions .career-notification-bell-anchor {
+    position: static;
   }
 
   .career-notification-popover {

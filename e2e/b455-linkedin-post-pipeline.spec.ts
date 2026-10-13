@@ -113,8 +113,11 @@ async function openAutomationPosts(page: Page) {
 
 async function enterAutomationFromResponses(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-  const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
-  await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
+  const toAutomation =
+    (page.viewportSize()?.width ?? 1440) <= 760
+      ? page.getByRole('group', { name: 'Раздел откликов' })
+      : page.getByRole('navigation', { name: 'Разделы откликов' });
+  await toAutomation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
 }
 
 function fulfillError(route: Route, status: number, code: string, message: string) {

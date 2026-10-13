@@ -76,16 +76,18 @@ beforeEach(() => {
   vi.spyOn(applicationsApi, 'executeCandidateActionBatch').mockResolvedValue({
     batchId: '00000000-0000-4000-8000-000000000001',
     status: 'completed',
-    receipts: [{
-      id: '00000000-0000-4000-8000-000000000002',
-      batchId: '00000000-0000-4000-8000-000000000001',
-      platform: 'hh',
-      actionKind: 'hh_apply',
-      status: 'delivered',
-      applicationId: 'app-1',
-      failureCode: null,
-      executedAt: '2026-10-01T12:00:00.000Z',
-    }],
+    receipts: [
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        batchId: '00000000-0000-4000-8000-000000000001',
+        platform: 'hh',
+        actionKind: 'hh_apply',
+        status: 'delivered',
+        applicationId: 'app-1',
+        failureCode: null,
+        executedAt: '2026-10-01T12:00:00.000Z',
+      },
+    ],
   });
 });
 
@@ -119,33 +121,48 @@ function setTextarea(textarea: HTMLTextAreaElement | null, value: string): void 
 describe('CandidateActionPanel', () => {
   it('requires review of the selected vacancy, its letter, and candidate confirmation', async () => {
     await mount();
-    const send = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отправить'));
+    const send = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Отправить'),
+    );
     expect(send?.disabled).toBe(true);
 
     const selection = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(selection).not.toBeNull();
-    await act(async () => { setCheckbox(selection ?? undefined, true); });
+    await act(async () => {
+      setCheckbox(selection ?? undefined, true);
+    });
     const letter = container.querySelector<HTMLTextAreaElement>('textarea');
     expect(letter).not.toBeNull();
-    await act(async () => { setTextarea(letter, 'Проверенный текст письма'); });
+    await act(async () => {
+      setTextarea(letter, 'Проверенный текст письма');
+    });
 
-    const confirmation = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
-      .at(-1);
-    await act(async () => { setCheckbox(confirmation, true); });
-    vi.mocked(applicationsApi.listCandidateActionReceipts).mockResolvedValue([{
-      id: '00000000-0000-4000-8000-000000000002',
-      batchId: '00000000-0000-4000-8000-000000000001',
-      platform: 'hh',
-      actionKind: 'hh_apply',
-      status: 'delivered',
-      applicationId: 'app-1',
-      failureCode: null,
-      executedAt: '2026-10-01T12:00:00.000Z',
-    }]);
+    const confirmation = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).at(-1);
+    await act(async () => {
+      setCheckbox(confirmation, true);
+    });
+    vi.mocked(applicationsApi.listCandidateActionReceipts).mockResolvedValue([
+      {
+        id: '00000000-0000-4000-8000-000000000002',
+        batchId: '00000000-0000-4000-8000-000000000001',
+        platform: 'hh',
+        actionKind: 'hh_apply',
+        status: 'delivered',
+        applicationId: 'app-1',
+        failureCode: null,
+        executedAt: '2026-10-01T12:00:00.000Z',
+      },
+    ]);
     expect(send?.disabled).toBe(false);
 
-    await act(async () => { send?.click(); });
-    await vi.waitFor(() => expect(applicationsApi.executeCandidateActionBatch).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      send?.click();
+    });
+    await vi.waitFor(() =>
+      expect(applicationsApi.executeCandidateActionBatch).toHaveBeenCalledTimes(1),
+    );
     await vi.waitFor(() => expect(container.textContent).toContain('Площадка подтвердила'));
     const request = vi.mocked(applicationsApi.executeCandidateActionBatch).mock.calls[0]?.[0];
     expect(request?.confirmedByCandidate).toBe(true);
@@ -159,29 +176,52 @@ describe('CandidateActionPanel', () => {
   });
 
   it('shows the consent terms and does not claim acceptance while the consent text is disabled', async () => {
-    vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({ granted: false, consent: null });
+    vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
+      granted: false,
+      consent: null,
+    });
     await mount();
 
     expect(container.textContent).toContain('Согласие на действия от вашего имени');
     expect(container.textContent).toContain('Принятие отключено');
-    const consentButton = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Дать согласие'));
+    const consentButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Дать согласие'),
+    );
     expect(consentButton?.disabled).toBe(true);
     expect(applicationsApi.grantActionsOnBehalfConsent).not.toHaveBeenCalled();
   });
 
   it('reports the desktop runner boundary without turning a 503 into success', async () => {
     vi.mocked(applicationsApi.executeCandidateActionBatch).mockRejectedValue(
-      new CoachApiError('Исполнитель действий не подключён к сессии на этом устройстве. Действия не запускались.', 'runner_not_connected', false),
+      new CoachApiError(
+        'Исполнитель действий не подключён к сессии на этом устройстве. Действия не запускались.',
+        'runner_not_connected',
+        false,
+      ),
     );
     await mount();
-    const checks = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
-    await act(async () => { setCheckbox(checks[0], true); });
+    const checks = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    );
+    await act(async () => {
+      setCheckbox(checks[0], true);
+    });
     const letter = container.querySelector<HTMLTextAreaElement>('textarea');
-    await act(async () => { setTextarea(letter, 'Проверенное письмо'); });
-    const confirmation = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).at(-1);
-    await act(async () => { setCheckbox(confirmation, true); });
-    const send = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отправить'));
-    await act(async () => { send?.click(); });
+    await act(async () => {
+      setTextarea(letter, 'Проверенное письмо');
+    });
+    const confirmation = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).at(-1);
+    await act(async () => {
+      setCheckbox(confirmation, true);
+    });
+    const send = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Отправить'),
+    );
+    await act(async () => {
+      send?.click();
+    });
     await vi.waitFor(() => expect(container.textContent).toContain('Действия не запускались'));
     expect(container.textContent).not.toContain('Площадка подтвердила');
   });
@@ -191,10 +231,16 @@ describe('CandidateActionPanel', () => {
       .mockResolvedValueOnce(usage)
       .mockResolvedValue({ ...usage, killSwitchActive: true });
     await mount();
-    const stop = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Остановить всё'));
+    const stop = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Остановить всё'),
+    );
     expect(stop).toBeDefined();
-    await act(async () => { stop?.click(); });
-    await vi.waitFor(() => expect(applicationsApi.setCandidateActionKillSwitch).toHaveBeenCalledWith(true));
+    await act(async () => {
+      stop?.click();
+    });
+    await vi.waitFor(() =>
+      expect(applicationsApi.setCandidateActionKillSwitch).toHaveBeenCalledWith(true),
+    );
     expect(container.textContent).toContain('Снять остановку');
   });
 
@@ -202,14 +248,28 @@ describe('CandidateActionPanel', () => {
     await mount([]);
     const boost = container.querySelector<HTMLInputElement>('input[type="checkbox"]');
     expect(boost).not.toBeNull();
-    await act(async () => { setCheckbox(boost ?? undefined, true); });
-    const confirmation = Array.from(container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).at(-1);
-    await act(async () => { setCheckbox(confirmation, true); });
-    const send = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Отправить'));
+    await act(async () => {
+      setCheckbox(boost ?? undefined, true);
+    });
+    const confirmation = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).at(-1);
+    await act(async () => {
+      setCheckbox(confirmation, true);
+    });
+    const send = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Отправить'),
+    );
     expect(send?.disabled).toBe(false);
-    await act(async () => { send?.click(); });
-    await vi.waitFor(() => expect(applicationsApi.executeCandidateActionBatch).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(applicationsApi.executeCandidateActionBatch).mock.calls[0]?.[0].actions[0]).toMatchObject({
+    await act(async () => {
+      send?.click();
+    });
+    await vi.waitFor(() =>
+      expect(applicationsApi.executeCandidateActionBatch).toHaveBeenCalledTimes(1),
+    );
+    expect(
+      vi.mocked(applicationsApi.executeCandidateActionBatch).mock.calls[0]?.[0].actions[0],
+    ).toMatchObject({
       platform: 'hh',
       actionKind: 'hh_resume_boost',
       targetUrl: 'https://hh.ru/applicant/resumes',
@@ -218,7 +278,10 @@ describe('CandidateActionPanel', () => {
 
   describe('B413: чекбокс согласия', () => {
     it('Критерий 1: Чекбокс имеет класс career-checkbox (не нативный маркер)', async () => {
-      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({ granted: false, consent: null });
+      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
+        granted: false,
+        consent: null,
+      });
       await mount();
 
       const checkbox = container.querySelector<HTMLInputElement>('input.career-checkbox');
@@ -227,37 +290,39 @@ describe('CandidateActionPanel', () => {
     });
 
     it('Критерий 2: Зона нажатия и обёртка чекбокса имеют класс career-checkbox-label', async () => {
-      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({ granted: false, consent: null });
+      vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
+        granted: false,
+        consent: null,
+      });
       await mount();
 
-      const label = container.querySelector<HTMLLabelElement>('label.career-candidate-actions__check');
+      const label = container.querySelector<HTMLLabelElement>(
+        'label.career-candidate-actions__consent-check',
+      );
       expect(label).not.toBeNull();
       expect(label?.classList.contains('career-checkbox-label')).toBe(true);
     });
 
-    it('Критерий 3: Текстовая подпись состояния меняется вместе с состоянием («Согласия нет» / «Согласие дано»)', async () => {
+    it('Критерий 3: состояние согласия читается по флажку, отдельной подписи нет', async () => {
       vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
         granted: false,
         consent: { versionId: 'actions_on_behalf-v1.0' },
       });
       await mount();
 
-      const statusEl = container.querySelector('.career-checkbox-status');
-      expect(statusEl).not.toBeNull();
-      expect(statusEl?.textContent).toBe('Согласия нет');
-
+      expect(container.querySelector('.career-checkbox-status')).toBeNull();
       const checkbox = container.querySelector<HTMLInputElement>('input.career-checkbox');
+      expect(checkbox?.checked).toBe(false);
+
       await act(async () => {
         setCheckbox(checkbox ?? undefined, true);
       });
-
-      expect(statusEl?.textContent).toBe('Согласие дано');
+      expect(checkbox?.checked).toBe(true);
 
       await act(async () => {
         setCheckbox(checkbox ?? undefined, false);
       });
-
-      expect(statusEl?.textContent).toBe('Согласия нет');
+      expect(checkbox?.checked).toBe(false);
     });
   });
 });

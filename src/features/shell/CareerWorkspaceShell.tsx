@@ -28,6 +28,7 @@ import {
   CareerNavigationRail,
 } from './CareerShellNavigation';
 import { CareerSessionGate } from './CareerSessionGate';
+import { ResponsesAutomationSwitch } from './ResponsesAutomationSwitch';
 import { DesktopCabinetTopbar } from './DesktopCabinetTopbar';
 import {
   DESKTOP_EXPERT_PREFERENCE_KEY,
@@ -443,30 +444,38 @@ export function CareerWorkspaceShell({
             session={session}
             sessionPending={sessionPending}
             activeView={activeView}
-            title={accountOpen ? 'Аккаунт' : intakeVisible ? 'Старт' : undefined}
+            title={
+              accountOpen
+                ? 'Аккаунт'
+                : intakeVisible
+                  ? 'Старт'
+                  : activeView === 'responses' || activeView === 'automation'
+                    ? 'Отклики'
+                    : undefined
+            }
             tariffsAvailable={isNavigable('tariffs')}
             tariffsLockedReason={lockedReason('tariffs')}
             onNavigateHome={() => navigate('today')}
-            onNavigateResponses={() => navigate('responses')}
             onNavigateTariffs={() => navigate('tariffs')}
             onOpenAccount={openAccount}
             onOpenConsultant={() => openExpert('responses')}
+            notificationsSlot={
+              cabinetSession &&
+              !sessionPending &&
+              !accountOpen &&
+              !intakeVisible &&
+              !expertPanelOpen &&
+              isCompactViewport ? (
+                <NotificationsBell
+                  unreadCount={notificationUnreadCount}
+                  onUnreadCountChange={setNotificationUnreadCount}
+                  onOpenCenter={openNotificationCenter}
+                  onOpenSettings={openNotificationSettings}
+                />
+              ) : null
+            }
           />
         )}
-
-        {cabinetSession &&
-        !sessionPending &&
-        !accountOpen &&
-        !intakeVisible &&
-        !expertPanelOpen &&
-        isCompactViewport ? (
-          <NotificationsBell
-            unreadCount={notificationUnreadCount}
-            onUnreadCountChange={setNotificationUnreadCount}
-            onOpenCenter={openNotificationCenter}
-            onOpenSettings={openNotificationSettings}
-          />
-        ) : null}
 
         <main id="career-main" className="career-main">
           <DesktopCabinetTopbar
@@ -557,6 +566,15 @@ export function CareerWorkspaceShell({
                 {cabinetSession && activeView === 'diary' && diaryAccess.isVisible ? (
                   <CareerDiaryShellControls
                     onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
+                  />
+                ) : null}
+                {cabinetSession &&
+                !intakeVisible &&
+                isCompactViewport &&
+                (activeView === 'responses' || activeView === 'automation') ? (
+                  <ResponsesAutomationSwitch
+                    active={activeView}
+                    onSelect={(segment) => navigate(segment)}
                   />
                 ) : null}
                 {cabinetSession &&

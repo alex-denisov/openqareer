@@ -293,3 +293,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
 }
+
+.career-candidate-actions__consent-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+}
