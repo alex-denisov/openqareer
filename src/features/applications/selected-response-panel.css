@@ -10,6 +10,8 @@
   border-radius: var(--career-radius-sm);
   background: var(--career-surface-raised);
   color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
 }
 
 .career-responses-card-delivery.is-delivered {

@@ -404,6 +404,8 @@
   gap: var(--career-space-1);
   min-inline-size: 0;
   color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .vacancies-screen-cell--role .vac-title,

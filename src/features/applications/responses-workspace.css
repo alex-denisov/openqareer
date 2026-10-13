@@ -603,6 +603,9 @@
   display: grid;
   gap: var(--career-space-2);
 }
+.career-cabinet-view-responses .career-responses-card-interview .career-btn {
+  font-size: var(--career-text-xs);
+}
 .career-cabinet-view-responses .career-responses-card-stage {
   margin: 0;
 }
