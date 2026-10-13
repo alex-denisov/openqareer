@@ -969,7 +969,6 @@
     border-radius: var(--career-radius-lg);
   }
 
-  .automation-auto-content:not([data-subpage='home']) .career-candidate-actions,
   .automation-auto-content[data-subpage='home'] .automation-panel[data-page='queue'],
   .automation-auto-content[data-subpage='home'] .automation-panel[data-page='settings'],
   .automation-auto-content[data-subpage='home'] .automation-panel[data-page='rules'],

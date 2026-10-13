@@ -16,8 +16,8 @@ export interface CandidateAutomationScreenProps {
 export function CandidateAutomationScreen(props: CandidateAutomationScreenProps) {
   const data = useAutomationData(props.candidateId);
   const ui = useAutomationController(data);
-  if (data.snapshotLoading) return <AutomationLoading />;
-  if (!data.snapshot) return <AutomationLoadFailure message={data.snapshotError} onRetry={() => void data.reloadSnapshot().catch((reason: unknown) => data.setSnapshotError(apiErrorMessage(reason, 'Не удалось загрузить настройки автооткликов.')))} />;
+  if (data.snapshotLoading) return <><AutomationLoading />{props.manualSend}</>;
+  if (!data.snapshot) return <><AutomationLoadFailure message={data.snapshotError} onRetry={() => void data.reloadSnapshot().catch((reason: unknown) => data.setSnapshotError(apiErrorMessage(reason, 'Не удалось загрузить настройки автооткликов.')))} />{props.manualSend}</>;
   return <AutomationWorkspace data={data} ui={ui} onOpenConsultant={props.onOpenConsultant} onOpenConnections={props.onOpenConnections} onOpenTariffs={props.onOpenTariffs} manualSend={props.manualSend} />;
 }
 

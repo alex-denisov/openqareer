@@ -312,3 +312,16 @@ test('B413: consent checkbox visual and screenshot 1440 and 390', async ({ page 
     path: `output/playwright/B413/consent-checkbox-${viewportSuffix}.png`,
   });
 });
+
+test('the manual-send stop control stays reachable on every automation tab', async ({ page }) => {
+  await mockSignedInCabinet(page);
+  await mockCandidateActionApi(page);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await openAutomationFromResponses(page);
+  const stop = page.getByRole('button', { name: 'Остановить всё' });
+  await expect(stop).toBeVisible();
+  for (const tab of ['Посты LinkedIn', 'Журнал']) {
+    await page.getByRole('tab', { name: tab, exact: true }).click();
+    await expect(stop).toBeVisible();
+  }
+});

@@ -44,6 +44,8 @@ export function AutomationWorkspace(props: AutomationWorkspaceProps) {
         </p>
       ) : null}
       <AutomationTabContent {...props} />
+      {/* The stop control stays reachable on every tab; on the auto tab it sits inside the page. */}
+      {ui.tab !== 'auto' ? props.manualSend : null}
       <AutomationConsentLayers {...props} />
     </section>
   );
