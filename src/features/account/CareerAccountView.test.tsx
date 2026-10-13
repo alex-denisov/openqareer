@@ -1,99 +1,153 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
-import { CareerAccountView } from './CareerAccountView';
+import { describe, expect, it, vi } from 'vitest';
+import type { AccountSnapshot, AuthUser, CandidateConnection } from '../coach/coachApi';
+import {
+  CareerAccountView,
+  type CareerAccountViewActions,
+  type CareerAccountViewProps,
+} from './CareerAccountView';
 
-describe('CareerAccountView Desktop (B443 Criteria 1-6)', () => {
-  it('renders all sections on desktop including tabs', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="prof" />);
+const user: AuthUser = {
+  username: 'candidate.test',
+  email: 'candidate@example.test',
+  displayName: 'Ирина Кандидат',
+  role: 'candidate',
+  isTest: true,
+  candidateId: 'candidate-1',
+  emailVerified: true,
+};
+
+const account: AccountSnapshot = {
+  username: user.username,
+  email: user.email,
+  displayName: user.displayName,
+  profile: {
+    headline: null,
+    location: null,
+    workMode: null,
+    timezone: 'Europe/Moscow',
+    updatedAt: '2026-10-12T08:00:00.000Z',
+  },
+  sessions: [
+    {
+      id: '0123456789abcdef',
+      current: true,
+      createdAt: '2026-10-10T08:00:00.000Z',
+      lastSeenAt: '2026-10-12T08:00:00.000Z',
+      expiresAt: '2026-11-10T08:00:00.000Z',
+    },
+  ],
+};
+
+const connections: CandidateConnection[] = [
+  {
+    platform: 'linkedin',
+    available: true,
+    capabilities: ['profile_read'],
+    importsCareerHistory: true,
+    status: 'connected',
+    accessMode: 'native_session_snapshot',
+    connectedAt: '2026-10-10T08:00:00.000Z',
+    lastImportedAt: '2026-10-12T08:00:00.000Z',
+    factCount: 12,
+  },
+  {
+    platform: 'hh',
+    available: true,
+    capabilities: ['profile_read', 'resume_read'],
+    importsCareerHistory: true,
+    status: 'disconnected',
+  },
+];
+
+const actions: CareerAccountViewActions = {
+  saveDisplayName: vi.fn(async () => undefined),
+  requestEmailChange: vi.fn(async () => null),
+  verifyEmailChange: vi.fn(async () => undefined),
+  saveTimezone: vi.fn(async () => undefined),
+  changePassword: vi.fn(async () => undefined),
+  terminateSession: vi.fn(async () => undefined),
+  terminateOtherSessions: vi.fn(async () => undefined),
+  exportData: vi.fn(async () => undefined),
+  deleteAccount: vi.fn(async () => undefined),
+  signOut: vi.fn(async () => undefined),
+  refresh: vi.fn(async () => undefined),
+};
+
+function renderAccount(
+  overrides: Partial<CareerAccountViewProps> = {},
+) {
+  return renderToStaticMarkup(
+    <CareerAccountView
+      user={user}
+      account={account}
+      connections={connections}
+      loading={false}
+      busy={false}
+      pendingEmailChange={null}
+      initialSection="prof"
+      isDesktopApp={false}
+      isMobile={false}
+      onClose={() => undefined}
+      onOpenTariffs={() => undefined}
+      actions={actions}
+      {...overrides}
+    />,
+  );
+}
+
+describe('CareerAccountView uses account state and the application shell surface', () => {
+  it('shows the account tabs available in a browser and hides desktop app settings', () => {
+    const html = renderAccount();
     expect(html).toContain('Профиль и вход');
     expect(html).toContain('Подключения');
     expect(html).toContain('Уведомления');
     expect(html).toContain('Согласия и данные');
-    expect(html).toContain('Приложение');
     expect(html).toContain('Подписка и платежи');
+    expect(html).not.toContain('>Приложение</button>');
   });
 
-  it('marks current session device with text «Эта сессия» (Criterion 2)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="prof" />);
-    expect(html).toContain('Входы и устройства');
-    expect(html).toContain('Приложение openqareer, этот Mac');
+  it('uses the account response for identity, time zone, and current sessions', () => {
+    const html = renderAccount();
+    expect(html).toContain('Ирина Кандидат');
+    expect(html).toContain('candidate@example.test');
+    expect(html).toContain('Europe/Moscow');
+    expect(html).toContain('Текущее устройство');
     expect(html).toContain('Эта сессия');
-    expect(html).toContain('Выйти на других устройствах');
+    expect(html).not.toContain('Андрей Лебедев');
   });
 
-  it('marks unconfigured features honestly with «Скоро» (Criterion 5)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="prof" />);
-    expect(html).toContain('Двухфакторная защита');
-    expect(html).toContain('Ключи доступа (passkeys)');
-    expect(html).toContain('Скоро');
+  it('uses imported connection facts and avoids invented provider counters', () => {
+    const html = renderAccount({ initialSection: 'conn' });
+    expect(html).toContain('Импортировано 12 фактов');
+    expect(html).toContain('Подключено');
+    expect(html).not.toContain('412');
+    expect(html).not.toContain('9 из 9');
   });
 
-  it('renders notifications table with Telegram marked as not connected (Criterion 4)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="notif" />);
-    expect(html).toContain('Уведомления');
-    expect(html).toContain('Ответ работодателя');
-    expect(html).toContain('Столбец Telegram недоступен, пока бот не подключён');
+  it('shows unknown consent records honestly when the account API has not loaded', () => {
+    const html = renderAccount({ initialSection: 'cons' });
+    expect(html).toContain('Нет проверенных данных');
+    expect(html).not.toContain('Дано 03.10');
+    expect(html).not.toContain('Дано 05.10');
   });
 
-  it('renders consents with text status and consequences note (Criterion 3)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="cons" />);
-    expect(html).toContain('Согласия');
-    expect(html).toContain('Автоотклики');
-    expect(html).toContain('Цифровой след');
-    expect(html).toContain('Дано 03.10');
-    expect(html).toContain('Отзыв останавливает связанную функцию');
-    expect(html).toContain('Удалить аккаунт');
+  it('shows application settings only in the desktop app', () => {
+    const appHtml = renderAccount({ initialSection: 'app', isDesktopApp: true });
+    const browserHtml = renderAccount({ initialSection: 'app', isDesktopApp: false });
+    expect(appHtml).toContain('Приложение');
+    expect(appHtml).toContain('openqareer 1.0.0');
+    expect(appHtml).toContain('Настройка пока недоступна');
+    expect(appHtml).not.toContain('сборка не помечена');
+    expect(browserHtml).not.toContain('>Приложение</button>');
   });
 
-  it('renders desktop app settings on desktop (Criterion 6)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView initialSection="app" />);
-    expect(html).toContain('Приложение');
-    expect(html).toContain('Автообновление');
-    expect(html).toContain('Значок в строке меню');
-    expect(html).toContain('Запуск при входе в систему');
-  });
-});
-
-describe('CareerAccountView Mobile 390 (B443 Criteria 1 & 6)', () => {
-  it('renders mobile layout without «Приложение» section (Criterion 6)', () => {
-    const html = renderToStaticMarkup(<CareerAccountView isMobile />);
-    expect(html).toContain('data-mv="home"');
-    expect(html).toContain('Профиль и вход');
+  it('uses the approved mobile connections layout and keeps app settings out of it', () => {
+    const html = renderAccount({ isMobile: true, initialMobileView: 'conn' });
+    expect(html).toContain('data-mv="conn"');
     expect(html).toContain('Подключения');
-    expect(html).toContain('Уведомления');
-    expect(html).toContain('Согласия и данные');
-    expect(html).toContain('Подписка и платежи');
-    // On 390, «Приложение» section MUST NOT be present:
+    expect(html).toContain('Импортировано 12 фактов');
     expect(html).not.toContain('data-go="app"');
-    expect(html).not.toContain('Приложение openqareer, автообновление');
-  });
-
-  it('renders mobile devices view with «Эта сессия» text tag (Criterion 2)', () => {
-    const html = renderToStaticMarkup(
-      <CareerAccountView isMobile initialMobileView="dev" />,
-    );
-    expect(html).toContain('data-mv="dev"');
-    expect(html).toContain('Входы и устройства');
-    expect(html).toContain('Эта сессия');
-    expect(html).toContain('Выйти на других устройствах');
-  });
-
-  it('renders mobile consents view with dates (Criterion 3)', () => {
-    const html = renderToStaticMarkup(
-      <CareerAccountView isMobile initialMobileView="cons" />,
-    );
-    expect(html).toContain('data-mv="cons"');
-    expect(html).toContain('Согласия и данные');
-    expect(html).toContain('Автоотклики');
-    expect(html).toContain('Удалить аккаунт');
-  });
-
-  it('renders mobile notifications and detail views (Criterion 4)', () => {
-    const html = renderToStaticMarkup(
-      <CareerAccountView isMobile initialMobileView="notif" />,
-    );
-    expect(html).toContain('data-mv="notif"');
-    expect(html).toContain('Ответ работодателя');
-    expect(html).toContain('Telegram не подключён');
+    expect(html).not.toContain('Приложение openqareer');
   });
 });

@@ -121,7 +121,7 @@ function AccountRailButton({
         className="career-account-button"
         type="button"
         disabled={disabled}
-        onClick={onOpen}
+        onClick={() => onOpen()}
         aria-label="Открыть аккаунт"
         onMouseEnter={() => onNavigationHintChange?.('Настройки')}
         onMouseLeave={() => onNavigationHintChange?.()}
@@ -155,7 +155,7 @@ function RailWalletButton({
         disabled={disabled}
         aria-label={disabled ? `Тарифы. ${lockedReason}` : 'Тарифы'}
         aria-current={active ? 'page' : undefined}
-        onClick={onOpen}
+        onClick={() => onOpen()}
         onMouseEnter={() => onNavigationHintChange?.('Тарифы')}
         onMouseLeave={() => onNavigationHintChange?.()}
         onFocus={() => onNavigationHintChange?.('Тарифы')}
@@ -390,7 +390,7 @@ function CareerMobileTopbarActions({
         className="career-account-trigger"
         type="button"
         disabled={sessionPending}
-        onClick={onOpenAccount}
+        onClick={() => onOpenAccount()}
         aria-label="Открыть аккаунт"
       >
         <span className="career-rail-avatar" aria-hidden="true">

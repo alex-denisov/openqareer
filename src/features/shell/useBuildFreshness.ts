@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { BuildFreshness } from './buildFreshness';
-import { compareBuildToRelease } from './buildFreshness';
+import { compareBuildToRelease, isBuildMarked } from './buildFreshness';
 import { readReleaseSha } from './releaseSha';
 
 /**
@@ -11,6 +11,10 @@ export function useBuildFreshness(buildSha: string): BuildFreshness | null {
   const [state, setState] = useState<BuildFreshness | null>(null);
 
   useEffect(() => {
+    if (!isBuildMarked(buildSha)) {
+      setState(null);
+      return undefined;
+    }
     let cancelled = false;
     void readReleaseSha().then((releaseSha) => {
       if (!cancelled) setState(compareBuildToRelease(buildSha, releaseSha));

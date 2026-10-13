@@ -160,7 +160,11 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     await expect(page.locator('.vacancies-mobile-topbar')).toBeVisible();
     await page.getByRole('button', { name: 'Уведомления' }).click();
     await expect(page.getByRole('heading', { name: 'Уведомления' })).toBeVisible();
-    await page.getByRole('button', { name: 'Закрыть аккаунт' }).click();
+    await page
+      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('button', { name: 'Вакансии' })
+      .click();
+    await expect(shell.getByRole('main').getByRole('heading', { name: 'Вакансии' })).toBeVisible();
     await page.getByRole('button', { name: 'Спросить консультанта' }).click();
     await expect(shell.locator('.career-expert-panel')).toBeVisible();
     await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();

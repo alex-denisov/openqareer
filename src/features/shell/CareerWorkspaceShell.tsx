@@ -13,9 +13,10 @@ import {
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { TariffsScreen } from './TariffsScreen';
-import { CURRENT_PLAN } from './tariffPackages';
 import { createIntakeCompletion } from './intakeCompletion';
-import { CareerAccountPanel, type AccountSection } from './CareerAccountPanel';
+import { CareerAccountWorkspace } from '../account/CareerAccountWorkspace';
+import { CareerAccountAccess } from '../account/CareerAccountAccess';
+import type { AccountSection } from '../account/accountTypes';
 import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator, type NavigationOptions } from './pathIndicator';
@@ -146,9 +147,8 @@ export function CareerWorkspaceShell({
   const autoOpenedExpert = useRef(sessionPending || hasClosedDesktopExpertPreference());
   const [railHint, setRailHint] = useState<string | null>(null);
   const [cabinetRevision, setCabinetRevision] = useState(0);
-  const [accountOpen, setAccountOpen] = useState(
-    () => typeof window !== 'undefined' && window.location.pathname === '/auth/reset-password',
-  );
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [accountReturnToIntake, setAccountReturnToIntake] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [isCompactViewport, setIsCompactViewport] = useState(() =>
@@ -210,7 +210,7 @@ export function CareerWorkspaceShell({
   // its account door); an anonymous candidate signs in from the wizard's own
   // top bar instead.
   const onboardingIsFullscreen = intakeVisible;
-  const expertPanelOpen = expertConfig.open && !accountOpen && !onboardingIsFullscreen;
+  const expertPanelOpen = expertConfig.open && !onboardingIsFullscreen;
 
   useEffect(() => {
     if (!sessionPending) {
@@ -224,8 +224,8 @@ export function CareerWorkspaceShell({
   // The page name lives in the navigation and in the tab title; repeating it in
   // the top bar only duplicated the active item.
   useEffect(() => {
-    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : pageNames[activeView]} · openqareer`;
-  }, [activeView, roleSkillAssessmentOpen]);
+    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : accountOpen ? 'Аккаунт' : pageNames[activeView]} · openqareer`;
+  }, [accountOpen, activeView, roleSkillAssessmentOpen]);
 
   const navigationState = {
     careerPictureReady,
@@ -271,6 +271,9 @@ export function CareerWorkspaceShell({
     const target = view === 'career' ? 'opportunities' : view;
     const targetOptions = view === 'career' ? { ...options, focusRoleFilter: true } : options;
     if (!isNavigable(target)) return;
+    setAccountOpen(false);
+    setAccountSection('security');
+    setAccountReturnToIntake(false);
     if (target !== 'notifications') setSelectedNotificationId(null);
     setActiveView(target);
     setNavigationOptions(targetOptions);
@@ -351,13 +354,24 @@ export function CareerWorkspaceShell({
   const closeAccount = useCallback(() => {
     setAccountOpen(false);
     setAccountSection('security');
+    setAccountReturnToIntake(false);
   }, []);
-  const openAccount = useCallback((section: AccountSection = 'security') => {
-    setExpertSheetExpanded(false);
-    setExpertConfig((previous) => ({ ...previous, open: false }));
-    setAccountSection(section);
-    setAccountOpen(true);
-  }, []);
+  const openAccount = useCallback(
+    (section: AccountSection = 'security', returnToIntake = false) => {
+      setExpertSheetExpanded(false);
+      const shouldOpenDesktopExpert =
+        typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+      setExpertConfig((previous) => ({
+        ...previous,
+        open: previous.open || shouldOpenDesktopExpert,
+        subjectTitle: 'Аккаунт',
+      }));
+      setAccountSection(section);
+      setAccountReturnToIntake(returnToIntake);
+      setAccountOpen(true);
+    },
+    [],
+  );
 
   const openNotificationSettings = useCallback(() => openAccount('notif'), [openAccount]);
   function openNotificationCenter(notificationId?: string) {
@@ -381,6 +395,15 @@ export function CareerWorkspaceShell({
     },
     [onClearWorkspace, onSessionChange, session?.candidateId],
   );
+  const handleAccountAccessIdentityChange = useCallback(
+    (nextSession: AuthUser | null) => {
+      resetForAccount(nextSession);
+      if (nextSession && nextSession.emailVerified !== false && accountReturnToIntake) {
+        closeAccount();
+      }
+    },
+    [accountReturnToIntake, closeAccount, resetForAccount],
+  );
 
   // A finished diagnostic hands the screen to the cabinet and leaves a clean
   // wizard behind, so clearing the workspace later starts from the first
@@ -400,8 +423,6 @@ export function CareerWorkspaceShell({
       }),
     [onSaveWorkspace],
   );
-
-  const planName = CURRENT_PLAN.name;
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
@@ -445,7 +466,7 @@ export function CareerWorkspaceShell({
         <CareerNavigationRail
           session={session}
           sessionPending={sessionPending}
-          ariaHidden={accountOpen || onboardingIsFullscreen}
+          ariaHidden={onboardingIsFullscreen}
           activeView={activeView}
           isNavigable={isNavigable}
           lockedReason={lockedReason}
@@ -461,7 +482,7 @@ export function CareerWorkspaceShell({
             session={session}
             sessionPending={sessionPending}
             activeView={activeView}
-            ariaHidden={accountOpen || onboardingIsFullscreen}
+            ariaHidden={onboardingIsFullscreen}
             tariffsAvailable={isNavigable('tariffs')}
             tariffsLockedReason={lockedReason('tariffs')}
             onNavigateHome={() => navigate('today')}
@@ -486,7 +507,7 @@ export function CareerWorkspaceShell({
           />
         ) : null}
 
-        <main id="career-main" className="career-main" aria-hidden={accountOpen ? true : undefined}>
+        <main id="career-main" className="career-main">
           <DesktopCabinetTopbar
             title={desktopPageTitle}
             railHint={railHint}
@@ -495,195 +516,217 @@ export function CareerWorkspaceShell({
             onOpenConsultant={() => openExpert()}
             session={session}
             sessionPending={sessionPending}
-            ariaHidden={accountOpen}
-            hidden={onboardingIsFullscreen}
+            hidden={onboardingIsFullscreen || accountOpen}
             unreadCount={notificationUnreadCount}
             onUnreadCountChange={setNotificationUnreadCount}
             onOpenCenter={openNotificationCenter}
             onOpenSettings={openNotificationSettings}
           />
           <div className="career-main-content">
-            <AppErrorBoundary>
-              {sessionPending ? (
-                <SessionGate
-                  error={sessionError}
-                  waitIsLong={sessionWaitIsLong}
-                  onRetry={onRetrySession}
-                  onOpenLogin={onOpenLogin}
-                />
-              ) : invalidStorage ? (
-                <div className="career-storage-warning" role="alert">
-                  <div>
-                    <strong>Сохранённый профиль не удалось прочитать</strong>
-                    <p>Удалите повреждённую локальную запись и начните заново.</p>
-                  </div>
-                  <button type="button" onClick={onClearWorkspace}>
-                    Очистить запись
-                  </button>
-                </div>
-              ) : null}
-              {storageError ? (
-                <p className="career-storage-warning" role="alert">
-                  {storageError}
-                </p>
-              ) : null}
-
-              {intakeVisible ? (
-                <OnboardingWizard
-                  key={`intake-${intakeSeed}`}
-                  onComplete={(input) => {
-                    setActiveView('opportunities');
-                    completeIntake(input);
-                  }}
-                  hasAccount={Boolean(session)}
-                  onStartedChange={setIntakeStarted}
-                  onSignIn={openAccount}
-                />
-              ) : null}
-              {roleSkillAssessmentOpen && cabinetSession ? (
-                <RoleSkillAssessmentScreen
-                  session={cabinetSession}
-                  onClose={closeRoleSkillAssessment}
-                  onOpenOpportunities={() => navigate('opportunities')}
-                />
-              ) : null}
-              {cabinetSession && activeView === 'diary' ? <CareerDiaryAccessStatus /> : null}
-              {cabinetSession && activeView === 'diary' && diaryAccess.isVisible ? (
-                <CareerDiaryShellControls
+            {accountOpen ? (
+              session && session.emailVerified !== false ? (
+                <CareerAccountWorkspace
+                  initialUser={session}
+                  initialSection={accountSection}
+                  onClose={closeAccount}
+                  onIdentityChange={resetForAccount}
+                  onSessionUpdate={onSessionChange}
                   onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
+                  onOpenTariffs={() => {
+                    closeAccount();
+                    navigate('tariffs');
+                  }}
                 />
-              ) : null}
-              {cabinetSession &&
-              !intakeVisible &&
-              activeView === 'automation' &&
-              cabinetSession.candidateId ? (
-                <CareerAutomationWorkspace
-                  key={cabinetSession.candidateId}
-                  candidateId={cabinetSession.candidateId}
-                  onOpenConsultant={() => openExpert('responses')}
-                  onOpenConnections={openConnections}
-                  onOpenTariffs={() => navigate('tariffs')}
+              ) : (
+                <CareerAccountAccess
+                  session={session ?? null}
+                  onIdentityChange={handleAccountAccessIdentityChange}
+                  onClose={closeAccount}
                 />
-              ) : null}
-              {cabinetSession &&
-              !intakeVisible &&
-              activeView !== 'tariffs' &&
-              activeView !== 'automation' &&
-              activeView !== 'notifications' &&
-              !roleSkillAssessmentOpen &&
-              (activeView !== 'diary' || diaryAccess.isVisible) ? (
-                <CareerCabinet
-                  key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
-                  view={activeView as CareerCabinetView}
-                  navigationOptions={navigationOptions}
-                  session={cabinetSession}
-                  workspace={visibleWorkspace}
-                  onNavigate={navigate}
-                  onOpenAutomation={() => navigate('automation')}
-                  onOpenTariffs={() => navigate('tariffs')}
-                  onOpenConnections={openConnections}
-                  onOpenNotifications={openNotifications}
-                  onOpenExpert={openExpert}
-                  onUpdateWorkspace={onUpdateWorkspace}
-                />
-              ) : null}
-              {cabinetSession && !intakeVisible && activeView === 'notifications' ? (
-                <NotificationsScreen
-                  key={activeView}
-                  initialSelectedId={selectedNotificationId}
-                  onUnreadCountChange={setNotificationUnreadCount}
-                  onNavigate={navigate}
-                  onOpenSettings={openNotificationSettings}
-                />
-              ) : null}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView !== 'tariffs' ? (
-                <CareerPathIndicator
-                  steps={buildPathIndicator({
-                    track: journey.track,
-                    // The wizard-only workspace has no server pool or recorded
-                    // applications of its own; the cabinet session below is where
-                    // both live once a candidate signs in (B165, B104).
-                    matchedPoolCount: 0,
-                    confirmedApplications: 0,
-                    activeSection: activeView,
-                  })}
-                  onNavigate={navigate}
-                />
-              ) : null}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView === 'today' ? (
-                <TodayJourneyView
-                  workspace={visibleWorkspace}
-                  journey={journey}
-                  onNavigate={navigate}
-                  onOpenExpert={openExpert}
-                  onUpdateWorkspace={onUpdateWorkspace}
-                />
-              ) : null}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView === 'profile' ? (
-                <ProfileJourneyView
-                  workspace={visibleWorkspace}
-                  journey={journey}
-                  onNavigate={navigate}
-                  onOpenExpert={openExpert}
-                  onUpdateWorkspace={onUpdateWorkspace}
-                />
-              ) : null}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView === 'career' ? (
-                <CareerMapView
-                  workspace={visibleWorkspace}
-                  journey={journey}
-                  onNavigate={navigate}
-                  onOpenExpert={openExpert}
-                  onUpdateWorkspace={onUpdateWorkspace}
-                />
-              ) : null}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView === 'opportunities' ? (
-                <OpportunitiesView
-                  workspace={visibleWorkspace}
-                  journey={journey}
-                  onNavigate={navigate}
-                  onOpenExpert={openExpert}
-                  onUpdateWorkspace={onUpdateWorkspace}
-                />
-              ) : null}
-              {/* Трекер откликов читает `/api/v1/candidate/applications` — сессия
+              )
+            ) : (
+              <AppErrorBoundary>
+                {sessionPending ? (
+                  <SessionGate
+                    error={sessionError}
+                    waitIsLong={sessionWaitIsLong}
+                    onRetry={onRetrySession}
+                    onOpenLogin={onOpenLogin}
+                  />
+                ) : invalidStorage ? (
+                  <div className="career-storage-warning" role="alert">
+                    <div>
+                      <strong>Сохранённый профиль не удалось прочитать</strong>
+                      <p>Удалите повреждённую локальную запись и начните заново.</p>
+                    </div>
+                    <button type="button" onClick={onClearWorkspace}>
+                      Очистить запись
+                    </button>
+                  </div>
+                ) : null}
+                {storageError ? (
+                  <p className="career-storage-warning" role="alert">
+                    {storageError}
+                  </p>
+                ) : null}
+
+                {intakeVisible ? (
+                  <OnboardingWizard
+                    key={`intake-${intakeSeed}`}
+                    onComplete={(input) => {
+                      setActiveView('opportunities');
+                      completeIntake(input);
+                    }}
+                    hasAccount={Boolean(session)}
+                    onStartedChange={setIntakeStarted}
+                    onSignIn={() => openAccount('security', true)}
+                  />
+                ) : null}
+                {roleSkillAssessmentOpen && cabinetSession ? (
+                  <RoleSkillAssessmentScreen
+                    session={cabinetSession}
+                    onClose={closeRoleSkillAssessment}
+                    onOpenOpportunities={() => navigate('opportunities')}
+                  />
+                ) : null}
+                {cabinetSession && activeView === 'diary' ? <CareerDiaryAccessStatus /> : null}
+                {cabinetSession && activeView === 'diary' && diaryAccess.isVisible ? (
+                  <CareerDiaryShellControls
+                    onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
+                  />
+                ) : null}
+                {cabinetSession &&
+                !intakeVisible &&
+                activeView === 'automation' &&
+                cabinetSession.candidateId ? (
+                  <CareerAutomationWorkspace
+                    key={cabinetSession.candidateId}
+                    candidateId={cabinetSession.candidateId}
+                    onOpenConsultant={() => openExpert('responses')}
+                    onOpenConnections={openConnections}
+                    onOpenTariffs={() => navigate('tariffs')}
+                  />
+                ) : null}
+                {cabinetSession &&
+                !intakeVisible &&
+                activeView !== 'tariffs' &&
+                activeView !== 'automation' &&
+                activeView !== 'notifications' &&
+                !roleSkillAssessmentOpen &&
+                (activeView !== 'diary' || diaryAccess.isVisible) ? (
+                  <CareerCabinet
+                    key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
+                    view={activeView as CareerCabinetView}
+                    navigationOptions={navigationOptions}
+                    session={cabinetSession}
+                    workspace={visibleWorkspace}
+                    onNavigate={navigate}
+                    onOpenAutomation={() => navigate('automation')}
+                    onOpenTariffs={() => navigate('tariffs')}
+                    onOpenConnections={openConnections}
+                    onOpenNotifications={openNotifications}
+                    onOpenExpert={openExpert}
+                    onUpdateWorkspace={onUpdateWorkspace}
+                  />
+                ) : null}
+                {cabinetSession && !intakeVisible && activeView === 'notifications' ? (
+                  <NotificationsScreen
+                    key={activeView}
+                    initialSelectedId={selectedNotificationId}
+                    onUnreadCountChange={setNotificationUnreadCount}
+                    onNavigate={navigate}
+                    onOpenSettings={openNotificationSettings}
+                  />
+                ) : null}
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView !== 'tariffs' ? (
+                  <CareerPathIndicator
+                    steps={buildPathIndicator({
+                      track: journey.track,
+                      // The wizard-only workspace has no server pool or recorded
+                      // applications of its own; the cabinet session below is where
+                      // both live once a candidate signs in (B165, B104).
+                      matchedPoolCount: 0,
+                      confirmedApplications: 0,
+                      activeSection: activeView,
+                    })}
+                    onNavigate={navigate}
+                  />
+                ) : null}
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView === 'today' ? (
+                  <TodayJourneyView
+                    workspace={visibleWorkspace}
+                    journey={journey}
+                    onNavigate={navigate}
+                    onOpenExpert={openExpert}
+                    onUpdateWorkspace={onUpdateWorkspace}
+                  />
+                ) : null}
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView === 'profile' ? (
+                  <ProfileJourneyView
+                    workspace={visibleWorkspace}
+                    journey={journey}
+                    onNavigate={navigate}
+                    onOpenExpert={openExpert}
+                    onUpdateWorkspace={onUpdateWorkspace}
+                  />
+                ) : null}
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView === 'career' ? (
+                  <CareerMapView
+                    workspace={visibleWorkspace}
+                    journey={journey}
+                    onNavigate={navigate}
+                    onOpenExpert={openExpert}
+                    onUpdateWorkspace={onUpdateWorkspace}
+                  />
+                ) : null}
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView === 'opportunities' ? (
+                  <OpportunitiesView
+                    workspace={visibleWorkspace}
+                    journey={journey}
+                    onNavigate={navigate}
+                    onOpenExpert={openExpert}
+                    onUpdateWorkspace={onUpdateWorkspace}
+                  />
+                ) : null}
+                {/* Трекер откликов читает `/api/v1/candidate/applications` — сессия
               обязательна; до входа в аккаунт кабинет ниже возьмёт этот раздел
               на себя (B251 S3). */}
-              {!roleSkillAssessmentOpen &&
-              !cabinetSession &&
-              visibleWorkspace &&
-              journey &&
-              activeView === 'responses' ? (
-                <div className="career-responses-signin-hint">
-                  <h3>Отклики появятся после входа в аккаунт</h3>
-                  <p>Отклики хранятся на сервере вместе с профилем. Войдите, чтобы открыть их.</p>
-                  <button type="button" onClick={onOpenLogin}>
-                    Войти
-                  </button>
-                </div>
-              ) : null}
-              {!roleSkillAssessmentOpen && activeView === 'tariffs' ? <TariffsScreen /> : null}
-            </AppErrorBoundary>
+                {!roleSkillAssessmentOpen &&
+                !cabinetSession &&
+                visibleWorkspace &&
+                journey &&
+                activeView === 'responses' ? (
+                  <div className="career-responses-signin-hint">
+                    <h3>Отклики появятся после входа в аккаунт</h3>
+                    <p>Отклики хранятся на сервере вместе с профилем. Войдите, чтобы открыть их.</p>
+                    <button type="button" onClick={onOpenLogin}>
+                      Войти
+                    </button>
+                  </div>
+                ) : null}
+                {!roleSkillAssessmentOpen && activeView === 'tariffs' ? <TariffsScreen /> : null}
+              </AppErrorBoundary>
+            )}
           </div>
         </main>
 
@@ -693,7 +736,7 @@ export function CareerWorkspaceShell({
           lockedReason={lockedReason}
           onNavigate={navigate}
           onOpenExpert={() => openExpert()}
-          ariaHidden={accountOpen || onboardingIsFullscreen}
+          ariaHidden={onboardingIsFullscreen}
         />
 
         {activeView !== 'opportunities' &&
@@ -745,32 +788,6 @@ export function CareerWorkspaceShell({
             }
             onClose={closeExpert}
           />
-        ) : null}
-        {accountOpen ? (
-          <>
-            <button
-              className="career-expert-scrim"
-              type="button"
-              onClick={closeAccount}
-              aria-label="Закрыть аккаунт"
-              aria-hidden="true"
-              tabIndex={-1}
-            />
-            <CareerAccountPanel
-              initialUser={session}
-              initialSection={accountSection}
-              onClose={closeAccount}
-              onIdentityChange={resetForAccount}
-              onDataChanged={() => setCabinetRevision((revision) => revision + 1)}
-              tariffsPlanName={planName}
-              tariffsAvailable={isNavigable('tariffs')}
-              tariffsLockedReason={lockedReason('tariffs')}
-              onOpenTariffs={() => {
-                closeAccount();
-                navigate('tariffs');
-              }}
-            />
-          </>
         ) : null}
       </div>
     </CareerDiaryAccessProvider>

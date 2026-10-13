@@ -6,8 +6,8 @@ describe('the version line the pilot reads out loud', () => {
     expect(appVersionLine('1.0.0', '345be7211aa')).toBe('openqareer 1.0.0 · сборка 345be72');
   });
 
-  it('says the build is unmarked instead of inventing one', () => {
-    expect(appVersionLine('1.0.0', '')).toBe('openqareer 1.0.0 · сборка не помечена');
-    expect(appVersionLine('1.0.0', '   ')).toBe('openqareer 1.0.0 · сборка не помечена');
+  it('keeps the installed version visible when no build marker is available', () => {
+    expect(appVersionLine('1.0.0', '')).toBe('openqareer 1.0.0');
+    expect(appVersionLine('1.0.0', '   ')).toBe('openqareer 1.0.0');
   });
 });

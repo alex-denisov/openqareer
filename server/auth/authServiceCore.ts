@@ -22,6 +22,7 @@ import {
   stampContractEnd,
 } from './legalConsentStore';
 import type { LegalConsentRecord, RetentionSweepResult } from './legalConsentStore';
+import { revokeAccountSessionForUser } from './revokeAccountSession';
 import type {
   UserRole,
   AuthPrincipal,
@@ -702,6 +703,20 @@ export class AuthServiceCore implements SessionAuth {
       )
       .run(principal.userId, hashToken(sessionToken));
     return Number(result.changes);
+  }
+
+  revokeAccountSession(
+    sessionToken: string,
+    sessionId: string,
+  ): 'revoked' | 'current' | 'not_found' | null {
+    const principal = this.authenticate(sessionToken);
+    if (!principal) return null;
+    return revokeAccountSessionForUser(
+      this.database,
+      principal.userId,
+      hashToken(sessionToken),
+      sessionId,
+    );
   }
 
   close(): void {

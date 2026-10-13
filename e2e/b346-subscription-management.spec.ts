@@ -19,9 +19,14 @@ test('B346 subscription management is usable on desktop and mobile', async ({ pa
   await expect(accountButton).toBeEnabled();
   await accountButton.click();
 
-  const account = page.getByRole('dialog', { name: 'Аккаунт' });
+  const account = page.getByTestId('career-shell').getByRole('main');
   await expect(account).toBeVisible();
-  await account.getByRole('button', { name: 'Подписка и платежи' }).click();
+  if (isMobile) {
+    await account.locator('[data-mv="prof"]').getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: 'Подписка и платежи' }).click();
+  } else {
+    await account.getByRole('tab', { name: 'Подписка и платежи' }).click();
+  }
   await expect(account.getByText('Следующее списание')).toBeVisible();
   await expect(account.locator('.career-billing-overview')).toContainText(/3\s+990\s+₽/u);
   const receiptHistory = isMobile

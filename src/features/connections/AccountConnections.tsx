@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   CoachApiError,
   disconnectConnection,
@@ -26,16 +26,9 @@ import {
   disconnectAndForgetSession,
 } from './connectionState';
 import { resetConnectorSession } from './connectorSession';
-
-interface AccountConnectionsProps {
-  connections: CandidateConnection[];
-  busyPlatform?: ConnectionPlatform;
-  notice?: string;
-  isDesktop?: boolean;
-  onDisconnect: (platform: ConnectionPlatform) => void;
-  onSessionImport?: (platform: ConnectionPlatform) => void;
-  onDataChanged?: () => void;
-}
+import { AccountConnectionsSection } from '../account/AccountDesktopSections';
+import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
+import { MobileAccountConnections } from '../account/AccountMobileSections';
 
 /**
  * The product has no platform authorisation flow: hh.ru and LinkedIn are read
@@ -44,27 +37,67 @@ interface AccountConnectionsProps {
  * This panel therefore offers session import, never an official-connect
  * button that could only end in "not configured".
  */
-export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: () => void }) {
-  const [connections, setConnections] = useState<CandidateConnection[]>();
+export interface AccountConnectionsManagerProps {
+  readonly initialConnections?: readonly CandidateConnection[];
+  readonly onConnectionsChange?: (connections: CandidateConnection[]) => void;
+  readonly onDataChanged?: () => void;
+  readonly isMobile?: boolean;
+  readonly emailVerified?: boolean;
+  readonly emailAvailable?: boolean;
+  readonly telegramAvailable?: boolean;
+  readonly telegramConnected?: boolean;
+  readonly onOpenNotifications?: () => void;
+  readonly onBackMobile?: () => void;
+}
+
+export function AccountConnectionsManager({
+  initialConnections,
+  onConnectionsChange,
+  onDataChanged,
+  isMobile = false,
+  emailVerified,
+  emailAvailable = false,
+  telegramAvailable = false,
+  telegramConnected = false,
+  onOpenNotifications = () => undefined,
+  onBackMobile = () => undefined,
+}: AccountConnectionsManagerProps) {
+  const [connections, setConnections] = useState<CandidateConnection[]>(
+    () => (initialConnections ? [...initialConnections] : []),
+  );
+  const [connectionsReady, setConnectionsReady] = useState(Boolean(initialConnections));
   const [busyPlatform, setBusyPlatform] = useState<ConnectionPlatform>();
   const [notice, setNotice] = useState<string>();
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
+  const [managePlatform, setManagePlatform] = useState<ConnectionPlatform>();
+  const publishConnections = useCallback((next: CandidateConnection[]) => {
+    setConnections(next);
+    setConnectionsReady(true);
+    onConnectionsChange?.(next);
+  }, [onConnectionsChange]);
 
   useEffect(() => {
     let current = true;
+    if (initialConnections) {
+      setConnections([...initialConnections]);
+      setConnectionsReady(true);
+      return () => {
+        current = false;
+      };
+    }
     void getConnections()
       .then((loaded) => {
-        if (current) setConnections(loaded);
+        if (current) publishConnections(loaded);
       })
       .catch((error) => {
         if (!current) return;
         setNotice(connectionManagementError(error));
-        setConnections([]);
+        publishConnections([]);
       });
     return () => {
       current = false;
     };
-  }, []);
+  }, [initialConnections, publishConnections]);
 
   /**
    * The dialog hands over one resume it has already read inside the
@@ -85,7 +118,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
         sourceUrl,
         capturedAt: new Date().toISOString(),
       });
-      setConnections(persisted.connections);
+      publishConnections(persisted.connections);
       setNotice(
         `Из ${PLATFORM_LABELS.hh} сохранено ${factNoun(persisted.connection.factCount)}.`,
       );
@@ -122,7 +155,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
             sourceUrl,
             capturedAt: new Date().toISOString(),
           });
-      setConnections(persisted.connections);
+      publishConnections(persisted.connections);
       setNotice(
         `Из ${PLATFORM_LABELS.linkedin} сохранено ${factNoun(persisted.connection.factCount)}.`,
       );
@@ -144,10 +177,9 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
         forgetDeviceSession: resetConnectorSession,
         isDesktop: isTauriEnvironment(),
       });
-      setConnections((current) =>
-        current ? applyConnectionDisconnectResult(current, result) : current,
-      );
+      publishConnections(applyConnectionDisconnectResult(connections, result));
       setNotice(connectionDisconnectNotice(result, device));
+      onDataChanged?.();
     } catch (error) {
       setNotice(connectionManagementError(error));
     } finally {
@@ -155,7 +187,7 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
     }
   }
 
-  if (!connections) {
+  if (!connectionsReady) {
     return (
       <section className="career-account-connections" aria-live="polite" aria-busy="true">
         <h2>Подключённые площадки</h2>
@@ -164,16 +196,83 @@ export function AccountConnectionsManager({ onDataChanged }: { onDataChanged?: (
     );
   }
 
+  const managedConnection = connections.find((connection) => connection.platform === managePlatform);
+
+  const connectionContent = isMobile ? (
+    <MobileAccountConnections
+      connections={connections}
+      isLoading={!connectionsReady}
+      notice={notice}
+      emailVerified={emailVerified}
+      emailAvailable={emailAvailable}
+      telegramAvailable={telegramAvailable}
+      telegramConnected={telegramConnected}
+      onBack={onBackMobile}
+      onGoLinkedIn={() =>
+        connections.some((connection) => connection.platform === 'linkedin' && connection.status === 'connected')
+          ? setManagePlatform('linkedin')
+          : setImportPlatform('linkedin')
+      }
+      onGoHh={() =>
+        connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected')
+          ? setManagePlatform('hh')
+          : setImportPlatform('hh')
+      }
+      onOpenNotifications={onOpenNotifications}
+    />
+  ) : (
+    <AccountConnectionsSection
+      connections={connections}
+      isLoading={!connectionsReady}
+      busyPlatform={busyPlatform}
+      notice={notice}
+      emailVerified={emailVerified}
+      emailAvailable={emailAvailable}
+      telegramAvailable={telegramAvailable}
+      telegramConnected={telegramConnected}
+      isDesktopApp={isTauriEnvironment()}
+      onManageLinkedIn={() => setManagePlatform('linkedin')}
+      onManageHh={() => setManagePlatform('hh')}
+      onConnectLinkedIn={() => setImportPlatform('linkedin')}
+      onConnectHh={() => setImportPlatform('hh')}
+      onOpenNotifications={onOpenNotifications}
+      onConnectTelegram={onOpenNotifications}
+    />
+  );
+
   return (
     <>
-      <AccountConnections
-        connections={connections}
-        busyPlatform={busyPlatform}
-        notice={notice}
-        isDesktop={isTauriEnvironment()}
-        onDisconnect={(platform) => void handleDisconnect(platform)}
-        onSessionImport={setImportPlatform}
-      />
+      {connectionContent}
+      {managedConnection?.platform === 'linkedin' && managedConnection.status === 'connected' ? (
+        <AccountLinkedInModal
+          connection={managedConnection}
+          busy={busyPlatform === 'linkedin'}
+          onClose={() => setManagePlatform(undefined)}
+          onDisconnect={() => {
+            setManagePlatform(undefined);
+            void handleDisconnect('linkedin');
+          }}
+          onReimport={() => {
+            setManagePlatform(undefined);
+            setImportPlatform('linkedin');
+          }}
+        />
+      ) : null}
+      {managedConnection?.platform === 'hh' && managedConnection.status === 'connected' ? (
+        <AccountHhModal
+          connection={managedConnection}
+          busy={busyPlatform === 'hh'}
+          onClose={() => setManagePlatform(undefined)}
+          onDisconnect={() => {
+            setManagePlatform(undefined);
+            void handleDisconnect('hh');
+          }}
+          onReimport={() => {
+            setManagePlatform(undefined);
+            setImportPlatform('hh');
+          }}
+        />
+      ) : null}
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
         isReconnect={Boolean(connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected'))}
@@ -333,162 +432,6 @@ export async function persistStructuredLinkedInImport(
   );
   if (!connection) throw new Error('native_connection_not_persisted');
   return { connection, connections };
-}
-
-export function AccountConnections({
-  connections,
-  busyPlatform,
-  notice,
-  isDesktop = false,
-  onDisconnect,
-  onSessionImport,
-}: AccountConnectionsProps) {
-  return (
-    <section className="career-account-connections" aria-labelledby="career-account-connections-title">
-      <div>
-        <h2 id="career-account-connections-title">Профили на площадках</h2>
-        <p>Подключения принадлежат только этому аккаунту. Пароли от площадок в OpenQareer не передаются.</p>
-      </div>
-      <div className="career-account-connection-list">
-        {connections.map((connection) => {
-          const label = PLATFORM_LABELS[connection.platform];
-          return (
-            <article key={connection.platform}>
-              <div className="career-connection-headline">
-                <strong>{label}</strong>
-                <span className={connection.status === 'connected' ? 'is-connected' : undefined}>
-                  {connectionStatusLabel(connection.status)}
-                </span>
-              </div>
-              {connection.status === 'connected' ? (
-                <>
-                  <p>{connectionCopy(connection)}</p>
-                  {onSessionImport ? (
-                    <button
-                      className="career-quiet-button"
-                      type="button"
-                      disabled={busyPlatform === connection.platform}
-                      onClick={() => onSessionImport(connection.platform)}
-                    >
-                      {busyPlatform === connection.platform
-                        ? 'Подключаем…'
-                        : isDesktop
-                          ? `Подключить снова ${label}`
-                          : `Открыть окно входа ${label}`}
-                    </button>
-                  ) : null}
-                  <button
-                    className="career-quiet-button"
-                    type="button"
-                    disabled={busyPlatform === connection.platform}
-                    onClick={() => onDisconnect(connection.platform)}
-                  >
-                    {busyPlatform === connection.platform
-                      ? 'Отключаем…'
-                      : `Отключить ${label}`}
-                  </button>
-                  <small>{disconnectBoundaryCopy(connection)}</small>
-                </>
-              ) : connection.status === 'imported' && !isDesktop ? (
-                <>
-                  <p>{importedWithoutConnectionCopy(connection.importedAt)}</p>
-                  {onSessionImport ? (
-                    <button
-                      className="career-quiet-button"
-                      type="button"
-                      onClick={() => onSessionImport(connection.platform)}
-                    >
-                      {`Открыть окно входа ${label}`}
-                    </button>
-                  ) : null}
-                </>
-              ) : isDesktop ? (
-                <div className="career-connection-panel">
-                  {connection.status === 'imported' ? (
-                    <p>{`Профиль импортирован ${importDate(connection.importedAt)}`}</p>
-                  ) : null}
-                  <button
-                    className="career-primary-button"
-                    type="button"
-                    onClick={() => onSessionImport?.(connection.platform)}
-                  >
-                    {busyPlatform === connection.platform
-                      ? 'Подключаем…'
-                      : `Подключить ${label}`}
-                  </button>
-                </div>
-              ) : (
-                <>
-                  <p>
-                    Войти можно в отдельном окне браузера. Сайт не может проверить
-                    вход или импортировать профиль; для сохранения данных используйте
-                    приложение OpenQareer для компьютера.
-                  </p>
-                  {onSessionImport ? (
-                    <button
-                      className="career-quiet-button"
-                      type="button"
-                      onClick={() => onSessionImport(connection.platform)}
-                    >
-                      {`Открыть окно входа ${label}`}
-                    </button>
-                  ) : null}
-                </>
-              )}
-            </article>
-          );
-        })}
-      </div>
-      {notice ? <p className="career-inline-note" role="status">{notice}</p> : null}
-    </section>
-  );
-}
-
-function connectionStatusLabel(status: CandidateConnection['status']): string {
-  if (status === 'connected') return 'Подключено';
-  if (status === 'imported') return 'Профиль импортирован';
-  return 'Не подключено';
-}
-
-/**
- * A document import without a live session (file upload, or a desktop import
- * whose connection was later removed) is not "Не подключено" — the dossier
- * still carries what the candidate handed over. The state names both facts:
- * when it was imported, and that a live connection would keep it current
- * (B247 S7).
- */
-function importedWithoutConnectionCopy(importedAt: string): string {
-  return `Профиль импортирован ${importDate(importedAt)} · обновить в приложении`;
-}
-
-function importDate(iso: string): string {
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return 'ранее';
-  return parsed.toLocaleDateString('ru-RU', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-function connectionCopy(connection: Extract<CandidateConnection, { status: 'connected' }>): string {
-  if (connection.accessMode === 'native_session_snapshot') {
-    const label = PLATFORM_LABELS[connection.platform];
-    // The server never gets the session, but the desktop app keeps the
-    // sign-in until «Отключить» (B266: the old line said nothing was kept).
-    return `Из ${label} сохранено ${factNoun(connection.factCount)}. Вход в ${label} остаётся только в приложении на этом устройстве и на сервер OpenQareer не передаётся.`;
-  }
-  return connection.platform === 'linkedin'
-    ? 'Профиль прочитан из вашей сессии на площадке; опыт добавлен в раздел «Резюме».'
-    : 'Резюме прочитаны из вашей сессии на площадке; действий от вашего имени не было.';
-}
-
-function disconnectBoundaryCopy(
-  connection: Extract<CandidateConnection, { status: 'connected' }>,
-): string {
-  return connection.accessMode === 'native_session_snapshot'
-    ? 'Связь с площадкой отключится, входы в LinkedIn и hh.ru в приложении будут забыты. Уже добавленные факты останутся в профиле.'
-    : 'Сохранённый доступ и копия профиля будут удалены. Если площадка показывает OpenQareer в своих настройках, отзовите доступ и там.';
 }
 
 function connectionManagementError(error: unknown): string {

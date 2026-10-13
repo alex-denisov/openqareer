@@ -1,6 +1,6 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { CandidateStore } from '../data/candidateStore';
-import { MIGRATION_39 } from '../data/sqliteSchema';
+import { MIGRATION_39, MIGRATION_40 } from '../data/sqliteSchema';
 import {
   AuthUsernameTakenError,
   AuthEmailTakenError,
@@ -8,11 +8,13 @@ import {
   AuthEmailDomainUnreachableError,
   AuthEmailChangeRequiresVerificationError,
   AuthEmailVerificationNotRequiredError,
+  AuthAccountEmailChangeStaleError,
 } from './authErrors';
 import { EmailVerificationService } from './emailVerificationService';
 import type {
   EmailVerificationAccount,
   EmailVerificationStatus,
+  PendingAccountEmailChange,
 } from './emailVerificationService';
 import type {
   EmailVerificationDelivery,
@@ -67,7 +69,16 @@ export {
   AuthEmailDomainUnreachableError,
   AuthEmailChangeRequiresVerificationError,
   AuthEmailVerificationNotRequiredError,
+  AuthAccountEmailChangeStaleError,
 } from './authErrors';
+
+export type AccountEmailChangeRequestResult =
+  | { readonly status: 'pending'; readonly pending: PendingAccountEmailChange }
+  | {
+      readonly status: 'updated';
+      readonly principal: AuthPrincipal;
+      readonly sessionToken: string;
+    };
 
 export interface AuthServiceOptions extends AuthServiceCoreOptions {
   emailVerificationRequired?: boolean;
@@ -92,6 +103,7 @@ export class AuthService extends AuthServiceCore {
       sendEmail: options.onEmailVerification,
     });
     this.database.exec(MIGRATION_39);
+    this.database.exec(MIGRATION_40);
   }
 
   getCandidateEmail(candidateId: string): string | null {
@@ -307,6 +319,73 @@ export class AuthService extends AuthServiceCore {
     const email = canonicalEmailOrThrow(emailInput);
     await this.assertEmailCanBeUsed(email, row.id);
     return this.persistEmailChange(row, email, clientIp);
+  }
+
+  async requestAccountEmailChange(
+    sessionToken: string,
+    emailInput: string,
+    currentPassword: string,
+    clientIp: string,
+  ): Promise<AccountEmailChangeRequestResult | null> {
+    const principal = this.authenticate(sessionToken);
+    if (!principal?.candidate) return null;
+    const row = this.findUserById(principal.userId);
+    if (!row) return null;
+    await this.validateCurrentPassword(row, currentPassword);
+    const email = canonicalEmailOrThrow(emailInput);
+    const previous = row.email ? canonicalEmailOrThrow(row.email) : null;
+    if (email === previous) {
+      const current = this.authenticate(sessionToken);
+      return current ? { status: 'updated', principal: current, sessionToken } : null;
+    }
+    await this.assertEmailCanBeUsed(email, row.id);
+
+    if (!this.emailVerificationRequired) {
+      super.updateAccount(sessionToken, { email });
+      const updated = this.authenticate(sessionToken);
+      return updated ? { status: 'updated', principal: updated, sessionToken } : null;
+    }
+    if (principal.emailVerified === false) throw new AuthEmailVerificationNotRequiredError();
+
+    const pending = await this.emailVerification.requestAccountEmailChange(
+      this.verificationAccount(row),
+      row.id,
+      row.email,
+      email,
+      clientIp,
+    );
+    return { status: 'pending', pending };
+  }
+
+  getPendingAccountEmailChange(sessionToken: string): PendingAccountEmailChange | null {
+    const principal = this.authenticate(sessionToken);
+    if (!principal?.candidate) return null;
+    return this.emailVerification.pendingAccountEmailChange(principal.candidate.id);
+  }
+
+  async verifyAccountEmailChange(
+    sessionToken: string,
+    code: string,
+  ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null> {
+    const principal = this.authenticate(sessionToken);
+    if (!principal?.candidate) return null;
+    this.emailVerification.verifyAccountEmailChange(
+      principal.candidate.id,
+      code,
+      ({ userId, currentEmail, newEmail }) => {
+        const current = this.findUserById(userId);
+        if (!current || current.email !== currentEmail) {
+          throw new AuthAccountEmailChangeStaleError();
+        }
+        const owner = this.findUserByEmail(newEmail);
+        if (owner && owner.id !== userId) throw new AuthEmailTakenError();
+        this.database
+          .prepare('UPDATE users SET email = ?, updated_at = ? WHERE id = ? AND email IS ?')
+          .run(newEmail, new Date().toISOString(), userId, currentEmail);
+      },
+    );
+    const updated = this.authenticate(sessionToken);
+    return updated ? { principal: updated, sessionToken } : null;
   }
 
   private async validateCurrentPassword(row: UserRow, password: string): Promise<void> {

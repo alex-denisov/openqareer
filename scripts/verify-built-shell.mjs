@@ -29,6 +29,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function openHhConnectionManagement(page, viewport) {
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if (viewport.width <= 760) {
+    await account.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' }).click();
+    return;
+  }
+  await account.getByRole('button', { name: 'Управлять' }).click();
+}
+
 async function verifyViewport(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -113,6 +122,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
           sessions: [],
         },
       }),
+    });
+  });
+  await page.route('**/api/v1/account/email-change-requests/current', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
     });
   });
   // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
@@ -206,7 +222,11 @@ async function verifyViewport(browser, baseUrl, viewport) {
       });
       return;
     }
-    await route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":{"code":"not_found"}}' });
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: '{"error":{"code":"not_found"}}',
+    });
   });
   await page.route('**/api/v1/candidate/billing', async (route) => {
     await route.fulfill({
@@ -222,7 +242,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
             autoRenew: true,
           },
           plans: [
-            { id: 'basic', name: 'Basic', amountKopecks: 399000, currency: 'RUB', interval: 'month' },
+            {
+              id: 'basic',
+              name: 'Basic',
+              amountKopecks: 399000,
+              currency: 'RUB',
+              interval: 'month',
+            },
             { id: 'pro', name: 'Pro', amountKopecks: 990000, currency: 'RUB', interval: 'month' },
             { id: 'max', name: 'Max', amountKopecks: 3990000, currency: 'RUB', interval: 'month' },
           ],
@@ -956,6 +982,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  await page.route('**/api/v1/me/consents', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { consents: [] } }),
+    });
+  });
   await page.route('**/api/v1/candidate/search-consent', async (route) => {
     await route.fulfill({
       status: 200,
@@ -1355,9 +1388,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   // B250 identifies the feed row by its source and last observation date.
   // The approved screen does not make an age claim beside the row.
+  const expectedHhDate = new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(Date.now() - 2 * 86_400_000));
   await page
     .locator('.vac-sub')
-    .filter({ hasText: 'hh.ru, 10.10' })
+    .filter({ hasText: `hh.ru, ${expectedHhDate}` })
     .first()
     .waitFor();
   // Фильтр «Свежесть» убран решением владельца (B250, п.4): в базе остаётся
@@ -1425,15 +1462,17 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .first()
     .waitFor();
 
-  // B248 (owner decision 2026-09-23): the rail no longer carries its own
-  // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
-  // the owner's review); everywhere else it opens from the account panel.
+  // B248: narrow screens keep the topbar's «Тарифы» link. Desktop opens it
+  // from the connected Account billing tab.
   const mobileTariffs = page.locator('.career-mobile-tariffs:visible').first();
   if (await mobileTariffs.count()) {
     await mobileTariffs.click();
   } else {
     await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
-    await page.locator('.career-account-tariffs-button').click();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    await account.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+    await account.getByRole('tab', { name: /Подписка и платежи/u }).click();
+    await account.getByRole('button', { name: 'Сменить тариф' }).click();
   }
   if (viewport.width <= 640) {
     await page
@@ -1449,31 +1488,49 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   const catalogBeforeAccount = connectionCatalogRequests;
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
-  await page.getByText('Вы вошли как', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Подключения' }).click();
-  await page.getByRole('heading', { name: 'Профили на площадках' }).waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if (viewport.width <= 760) {
+    await account.getByRole('heading', { name: 'Профиль и вход' }).waitFor();
+    await account.getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: /Подключения/u }).click();
+    await account.getByRole('heading', { name: 'Подключения' }).waitFor();
+  } else {
+    await account.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+    await account.getByRole('tab', { name: /Подключения/u }).click();
+    await account.getByRole('heading', { name: 'Площадки и каналы' }).waitFor();
+  }
+  const hhConnectionEntry =
+    viewport.width <= 760
+      ? account.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' })
+      : account.getByRole('button', { name: 'Управлять' });
+  await hhConnectionEntry.waitFor();
   assert(
     connectionCatalogRequests === catalogBeforeAccount + 1,
     `${viewport.name}: account settings did not load one connection catalog`,
   );
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await openHhConnectionManagement(page, viewport);
+  let hhDialog = page.getByRole('dialog', { name: 'hh.ru' });
+  await hhDialog.getByRole('button', { name: 'Отключить' }).click();
   await page.getByText('Не удалось отключить hh.ru', { exact: false }).waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
-  await page
-    .locator('.career-account-connection-list article')
-    .filter({ hasText: 'hh.ru' })
-    .getByText('Подключено', { exact: true })
-    .waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await openHhConnectionManagement(page, viewport);
+  hhDialog = page.getByRole('dialog', { name: 'hh.ru' });
+  await hhDialog.getByRole('button', { name: 'Отключить' }).click();
   await page.getByText('hh.ru отключён', { exact: false }).waitFor();
   const logoutResponse = page.waitForResponse((res) => res.url().includes('/api/v1/auth/logout'));
-  await page.getByRole('button', { name: 'Выйти' }).click();
+  if (viewport.width <= 760) {
+    await account.getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+  } else {
+    await account.getByRole('tab', { name: 'Профиль и вход' }).click();
+    await account.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+  }
+  const signOutDialog = page.getByRole('alertdialog', { name: 'Выйти из аккаунта?' });
+  await signOutDialog.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await logoutResponse;
   await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
   assert(
-    (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
-    `${viewport.name}: account panel remained open after logout`,
+    (await page.locator('.career-account-container').count()) === 0,
+    `${viewport.name}: account screen remained open after logout`,
   );
   assert(
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null,
@@ -1505,15 +1562,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // B249 (owner, 2026-09-24): the wizard is full-screen from step 1, so an
   // anonymous visitor opens the account from the wizard's own «Войти».
   await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await dialog.waitFor({ state: 'visible' });
-  await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await dialog.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
-  await dialog.getByLabel('Email').fill('fresh.candidate@example.com');
-  await dialog.getByLabel('Пароль').fill('fresh-candidate-password');
+  const accountAccess = page.locator('.career-account-access');
+  await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+  await accountAccess.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await accountAccess.getByRole('heading', { name: 'Создать аккаунт' }).waitFor();
+  await accountAccess.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
+  await accountAccess.getByLabel('Email').fill('fresh.candidate@example.com');
+  await accountAccess.getByLabel('Пароль (от 8 символов)').fill('fresh-candidate-password');
   // B173: registration is refused until the published pack is accepted.
-  await dialog.locator('#account-legal-consent').check();
-  await dialog.getByRole('button', { name: 'Создать и начать' }).click();
+  await accountAccess.locator('#signup-legal').check();
+  await accountAccess.getByRole('button', { name: 'Создать аккаунт' }).click();
 
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
@@ -1683,11 +1741,11 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   });
   await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
   await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
-  const signInDialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await signInDialog.getByRole('button', { name: 'Войти' }).first().click();
-  await signInDialog.getByLabel('Логин').fill('returning.candidate');
-  await signInDialog.getByLabel('Пароль').fill('returning-candidate-password');
-  await signInDialog.getByRole('button', { name: 'Войти' }).last().click();
+  const accountAccess = page.locator('.career-account-access');
+  await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+  await accountAccess.getByLabel('Email или логин').fill('returning.candidate');
+  await accountAccess.getByLabel('Пароль', { exact: true }).fill('returning-candidate-password');
+  await accountAccess.getByRole('button', { name: 'Войти в кабинет' }).click();
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;

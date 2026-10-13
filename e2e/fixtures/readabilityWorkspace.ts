@@ -11,6 +11,7 @@ export const candidate = {
   role: 'candidate',
   isTest: true,
   candidateId: 'candidate-b232',
+  emailVerified: true,
 };
 
 export const account = {
@@ -21,11 +22,12 @@ export const account = {
     headline: 'Руководитель продукта, финтех',
     location: 'Москва',
     workMode: 'remote',
+    timezone: 'Europe/Moscow',
     updatedAt: '2026-09-18T10:00:00.000Z',
   },
   sessions: [
     {
-      id: 'session-current',
+      id: '0123456789abcdef',
       current: true,
       createdAt: '2026-09-18T10:00:00.000Z',
       lastSeenAt: '2026-09-20T10:00:00.000Z',
