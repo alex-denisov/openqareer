@@ -63,7 +63,7 @@ function readyState(applications: readonly ApplicationView[]): UseApplications {
 }
 
 describe('ResponsesBoard columns', () => {
-  it('groups active applications into columns and counts archived cards separately', () => {
+  it('groups saved and sent applications into four columns and keeps closed counts outside them', () => {
     const applications = [
       application({ id: 'a1', stage: 'saved' }),
       application({ id: 'a2', stage: 'applied' }),
@@ -81,20 +81,15 @@ describe('ResponsesBoard columns', () => {
       <ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />,
     );
 
-    ['Хочу', 'Пробовали отправить', 'Отправлено', 'Ответ', 'Интервью', 'Оффер', 'Отказ'].forEach(
-      (label) => {
-        expect(html).toContain(label);
-      },
-    );
-    // The offer column has no cards and shows a zero count.
-    const offerHead = html.indexOf('<h2>Оффер</h2>');
-    expect(html.slice(offerHead, offerHead + 100)).toMatch(/>0</);
-    // Rejected and archived share the sixth column.
-    const closedHead = html.indexOf('<h2>Отказ</h2>');
-    expect(html.slice(closedHead, closedHead + 100)).toMatch(/>1</);
+    ['Отправлено', 'Ответили', 'Интервью', 'Оффер'].forEach((label) => {
+      expect(html).toContain('aria-label="' + label + '"');
+    });
+    expect(html).not.toContain('aria-label="Отказ"');
+    expect(html).toContain('Нужно действие:');
     expect(html).toContain('Архив');
-    expect(html).toContain('Доставка подтверждена: https://jobs.test/receipt');
-    expect(html).toContain('Пробовали отправить. Не хватает квитанции доставки.');
+    expect(html).toContain('Доставка подтверждена');
+    expect(html).not.toContain('https://jobs.test/receipt');
+    expect(html).toContain('Пробовали отправить');
     expect(html).toContain('1');
   });
 
@@ -133,7 +128,7 @@ describe('ResponsesBoard columns', () => {
     const html = renderToStaticMarkup(
       <ResponsesBoard state={readyState([])} onOpenVacancies={() => {}} />,
     );
-    expect(html).toContain('Откликов пока нет');
+    expect(html).toContain('Откликов пока нет за выбранный период');
     expect(html).toContain('Здесь появится карточка каждого отклика');
     expect(html).toContain('Перейти к вакансиям');
     expect(html).toContain('Добавить отклик вручную');
@@ -228,7 +223,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     }),
   ];
 
-  it('открывает меню карточки по клику на тело карточки', () => {
+  it('выбирает отклик по клику на роль и показывает выбранную панель', () => {
     act(() => {
       root.render(<ResponsesBoard state={readyState(applications)} onOpenVacancies={() => {}} />);
     });
@@ -242,7 +237,9 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       roleTitle.click();
     });
 
-    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
+    expect(firstCard.classList.contains('is-selected')).toBe(true);
+    expect(container.textContent).toContain('Выбранный отклик');
+    expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(0);
   });
 
   it('закрывает открытое меню по нажатию Escape', () => {
@@ -251,10 +248,12 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     });
 
     const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
-    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+    const menuButton = firstCard.querySelector(
+      '.career-responses-menu-wrap > button',
+    ) as HTMLButtonElement;
 
     act(() => {
-      roleTitle.click();
+      menuButton.click();
     });
     expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
 
@@ -270,10 +269,12 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     });
 
     const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
-    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
+    const menuButton = firstCard.querySelector(
+      '.career-responses-menu-wrap > button',
+    ) as HTMLButtonElement;
 
     act(() => {
-      roleTitle.click();
+      menuButton.click();
     });
     expect(firstCard.querySelectorAll('.career-responses-card-menu').length).toBe(1);
 
@@ -289,17 +290,21 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     });
 
     const cards = container.querySelectorAll('.career-responses-card');
-    const firstRole = cards[0].querySelector('.career-responses-card-role') as HTMLElement;
-    const secondRole = cards[1].querySelector('.career-responses-card-role') as HTMLElement;
+    const firstMenu = cards[0].querySelector(
+      '.career-responses-menu-wrap > button',
+    ) as HTMLButtonElement;
+    const secondMenu = cards[1].querySelector(
+      '.career-responses-menu-wrap > button',
+    ) as HTMLButtonElement;
 
     act(() => {
-      firstRole.click();
+      firstMenu.click();
     });
     expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(1);
     expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(0);
 
     act(() => {
-      secondRole.click();
+      secondMenu.click();
     });
     expect(cards[0].querySelectorAll('.career-responses-card-menu').length).toBe(0);
     expect(cards[1].querySelectorAll('.career-responses-card-menu').length).toBe(1);
@@ -354,10 +359,10 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       const allHeaders = Array.from(
         container.querySelectorAll('.career-responses-column-head h2'),
       ).map((el) => el.textContent);
-      expect(allHeaders.length).toBe(7);
+      expect(allHeaders).toEqual(['Отправлено', 'Ответили', 'Интервью', 'Оффер']);
     });
 
-    it('показывает пустое состояние «Интервью пока не назначены», если откликов на этапе интервью нет', () => {
+    it('показывает пустое состояние для фильтра интервью и позволяет сбросить фильтр', () => {
       const apps = [
         application({
           id: 'a1',
@@ -376,20 +381,22 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
         );
       });
 
-      expect(container.textContent).toContain('Интервью пока не назначены');
-      const resetBtn = container.querySelector('button') as HTMLButtonElement;
-      expect(resetBtn.textContent).toContain('Открыть все отклики');
+      expect(container.textContent).toContain('Отклики не найдены');
+      const resetBtn = Array.from(container.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('Сбросить фильтры'),
+      ) as HTMLButtonElement;
+      expect(resetBtn.textContent).toContain('Сбросить фильтры');
 
       act(() => {
         resetBtn.click();
       });
 
-      expect(container.textContent).not.toContain('Интервью пока не назначены');
+      expect(container.textContent).not.toContain('Отклики не найдены');
       expect(container.textContent).toContain('Applied Role');
     });
   });
 
-  it('вызывает onOpenExpert с этапом responses и subject отклика при клике «Обсудить с консультантом»', () => {
+  it('вызывает консультанта по выбранному отклику', () => {
     const onOpenExpert = vi.fn();
     act(() => {
       root.render(
@@ -401,15 +408,8 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       );
     });
 
-    const firstCard = container.querySelectorAll('.career-responses-card')[0] as HTMLElement;
-    const roleTitle = firstCard.querySelector('.career-responses-card-role') as HTMLElement;
-
-    act(() => {
-      roleTitle.click();
-    });
-
-    const discussBtn = Array.from(firstCard.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Обсудить с консультантом'),
+    const discussBtn = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Обсудить',
     );
     expect(discussBtn).toBeDefined();
 
@@ -424,7 +424,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
     );
   });
 
-  it('в карточке с этапом interview кнопка Подготовиться открывает модалку с кнопкой Спросить консультанта', () => {
+  it('из выбранного интервью можно открыть подготовку и спросить консультанта', () => {
     const onOpenExpert = vi.fn();
     const interviewApps = [
       application({
@@ -444,8 +444,8 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       );
     });
 
-    const prepBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Подготовиться'),
+    const prepBtn = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Начать мок-интервью'),
     );
     expect(prepBtn).toBeDefined();
 
@@ -453,6 +453,7 @@ describe('ResponsesBoard card menu interactions (B337)', () => {
       prepBtn?.click();
     });
 
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
     const askBtn = Array.from(document.querySelectorAll('button')).find((b) =>
       b.textContent?.includes('Спросить консультанта'),
     );
@@ -487,7 +488,7 @@ describe('ResponsesBoard view and channel analytics (B450)', () => {
     container.remove();
   });
 
-  it('переключает колонки и таблицу и открывает результативность по каналам', () => {
+  it('переключает колонки и таблицу и показывает результативность по каналам', () => {
     const apps = [
       application({ id: 'a1', stage: 'applied' }),
       application({ id: 'a2', stage: 'interview' }),
@@ -518,12 +519,9 @@ describe('ResponsesBoard view and channel analytics (B450)', () => {
     });
 
     expect(container.querySelector('.career-responses-board')).not.toBeNull();
-    const analyticsBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('Результативность по каналам'),
-    );
-    expect(analyticsBtn).toBeDefined();
-    act(() => analyticsBtn?.click());
-    expect(container.textContent).toContain('Сквозная конверсия');
+    expect(container.querySelector('.career-responses-channel-performance')).not.toBeNull();
+    expect(container.textContent).toContain('Результативность по каналам');
+    expect(container.textContent).toContain('Отклики, n');
   });
 });
 
@@ -544,60 +542,101 @@ describe('ResponsesBoard B450 workspace navigation', () => {
     container.remove();
   });
 
-  it('exposes the funnel, company-wishlist, and offers sections', () => {
+  it('exposes the four approved sections and leaves automation in shell navigation', () => {
     act(() => {
       root.render(
-        <ResponsesBoard state={readyState([application({ id: 'a1', stage: 'applied' })])} onOpenVacancies={() => {}} />,
+        <ResponsesBoard
+          state={readyState([application({ id: 'a1', stage: 'applied' })])}
+          onOpenVacancies={() => {}}
+        />,
       );
     });
 
-    const labels = Array.from(container.querySelectorAll('button')).map((button) =>
-      button.textContent?.trim() ?? '',
+    const labels = Array.from(container.querySelectorAll('button')).map(
+      (button) => button.textContent?.trim() ?? '',
     );
 
-    expect(labels).toEqual(expect.arrayContaining(['Воронка', 'Хочу в компанию', 'Офферы']));
-    expect(labels.some((label) => label.startsWith('Автоматизация'))).toBe(true);
+    expect(labels.some((label) => label.startsWith('Воронка'))).toBe(true);
+    expect(labels.some((label) => label.startsWith('Хочу в компанию'))).toBe(true);
+    expect(labels.some((label) => label.startsWith('Подготовка'))).toBe(true);
+    expect(labels.some((label) => label.startsWith('Офферы'))).toBe(true);
+    expect(labels.some((label) => label.startsWith('Автоматизация'))).toBe(false);
   });
 
   it('offers the columns and table views', () => {
     act(() => {
       root.render(
-        <ResponsesBoard state={readyState([application({ id: 'a1', stage: 'applied' })])} onOpenVacancies={() => {}} />,
+        <ResponsesBoard
+          state={readyState([application({ id: 'a1', stage: 'applied' })])}
+          onOpenVacancies={() => {}}
+        />,
       );
     });
 
-    const labels = Array.from(container.querySelectorAll('button')).map((button) =>
-      button.textContent?.trim() ?? '',
+    const labels = Array.from(container.querySelectorAll('button')).map(
+      (button) => button.textContent?.trim() ?? '',
     );
 
     expect(labels).toEqual(expect.arrayContaining(['Колонки', 'Таблица']));
   });
 
-  it('applies server filters and requests the next twenty-row page', async () => {
-    const apps = [application({ id: 'a1', stage: 'applied' })];
-    const loadPage = vi.fn(async () => apps);
-    const state = { ...readyState(apps), pageMeta: pageMeta(41), loadPage };
+  it('filters loaded candidate data by channel and keeps the next step visible', async () => {
+    const apps = [
+      application({
+        id: 'hh-1',
+        stage: 'applied',
+        vacancy: {
+          title: 'Platform Engineer',
+          company: 'Northstar',
+          url: 'https://x',
+          source: 'hh.ru',
+        },
+      }),
+      application({
+        id: 'li-1',
+        stage: 'responded',
+        vacancy: { title: 'Security Lead', company: 'Orion', url: 'https://x', source: 'linkedin' },
+        whoseTurn: 'candidate',
+        followUp: {
+          dueAt: '2026-10-10T00:00:00.000Z',
+          urgency: 'overdue',
+          source: 'standard_schedule',
+          daysSinceContact: 14,
+        },
+      }),
+    ];
+    const state = { ...readyState(apps), pageMeta: pageMeta(2) };
     act(() => root.render(<ResponsesBoard state={state} onOpenVacancies={() => {}} />));
 
-    const filters = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Фильтры'));
-    act(() => filters?.click());
-    const stage = Array.from(container.querySelectorAll('select')).find((select) => select.parentElement?.textContent?.includes('Этап'));
+    const channel = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="Канал отклика"]',
+    );
+    expect(channel).not.toBeNull();
     act(() => {
-      if (stage) {
-        stage.value = 'interview';
-        stage.dispatchEvent(new Event('change', { bubbles: true }));
+      if (channel) {
+        channel.value = 'linkedin';
+        channel.dispatchEvent(new Event('change', { bubbles: true }));
       }
     });
-    const apply = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Показать 41'));
-    await act(async () => { apply?.click(); await Promise.resolve(); });
-    expect(loadPage).toHaveBeenCalledWith({ stage: ['interview'], limit: 20, offset: 0 });
-
-    const more = Array.from(container.querySelectorAll('button')).find((button) => button.textContent?.includes('Показать ещё'));
-    await act(async () => { more?.click(); await Promise.resolve(); });
-    expect(loadPage).toHaveBeenLastCalledWith({ stage: ['interview'], limit: 20, offset: 1 }, true);
+    expect(container.textContent).toContain('Security Lead');
+    expect(container.textContent).not.toContain('Platform Engineer');
+    expect(container.textContent).toContain('Напоминание компании просрочено');
   });
 });
 
 function pageMeta(total: number): ApplicationListPageMeta {
-  return { total, offset: 0, limit: 20, stageCounts: { saved: 0, applied: total, responded: 0, interview: 0, offer: 0, rejected: 0, archived: 0 } };
+  return {
+    total,
+    offset: 0,
+    limit: 20,
+    stageCounts: {
+      saved: 0,
+      applied: total,
+      responded: 0,
+      interview: 0,
+      offer: 0,
+      rejected: 0,
+      archived: 0,
+    },
+  };
 }

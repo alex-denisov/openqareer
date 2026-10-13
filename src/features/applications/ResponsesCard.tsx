@@ -12,15 +12,9 @@ import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { ApplicationView } from './applicationsApi';
-import type { InterviewDebriefSubmitData } from './InterviewDebriefModal';
-import { StarStoriesControl } from '../interview/StarStoriesModal';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
-import {
-  buildSubjectTitle,
-  CardStageBlocks,
-  FollowUpSentControl,
-} from './ResponsesCardStageControls';
+import { buildSubjectTitle, CardStageBlocks } from './ResponsesCardStageControls';
 
 const STAGE_LABEL: Record<ApplicationStage, string> = {
   saved: 'Хочу',
@@ -34,6 +28,8 @@ const STAGE_LABEL: Record<ApplicationStage, string> = {
 
 interface ResponsesCardProps {
   readonly application: ApplicationView;
+  readonly selected?: boolean;
+  readonly onSelect?: () => void;
   readonly failed: boolean;
   readonly conflicted: boolean;
   readonly isMenuOpen?: boolean;
@@ -50,13 +46,10 @@ interface ResponsesCardProps {
     receipt?: DeliveryReceipt | null,
   ) => void;
   readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
-  readonly onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
   readonly onRetry: () => void;
   readonly onRefresh: () => void;
   readonly onSaveNote: (notes: string) => void;
-  readonly onMarkFollowUpSent: () => Promise<void>;
   readonly onSkip: (reasonId: SkipReasonId) => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
 }
 
 /**
@@ -105,20 +98,7 @@ function useCardMenuState(
     };
   }, [menuOpen, closeMenu]);
 
-  const handleCardClick = (event: React.MouseEvent) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('button, a, input, select, textarea, label')) return;
-    toggleMenu();
-  };
-
-  const handleBodyKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      toggleMenu();
-    }
-  };
-
-  return { menuOpen, toggleMenu, closeMenu, cardRef, handleCardClick, handleBodyKeyDown };
+  return { menuOpen, toggleMenu, closeMenu, cardRef };
 }
 
 function CardHeaderContent({
@@ -142,13 +122,13 @@ function CardHeaderContent({
 function CardTopBody({
   vacancy,
   materials,
-  onClick,
-  onKeyDown,
+  selected,
+  onSelect,
 }: {
   vacancy?: ApplicationView['vacancy'];
   materials: ApplicationView['materials'];
-  onClick: (event: React.MouseEvent) => void;
-  onKeyDown: (event: React.KeyboardEvent) => void;
+  selected: boolean;
+  onSelect?: () => void;
 }) {
   const company = vacancy?.companyHidden
     ? 'компания скрыта'
@@ -159,9 +139,15 @@ function CardTopBody({
     <div
       role="button"
       tabIndex={0}
-      className="career-responses-card-body"
-      onClick={onClick}
-      onKeyDown={onKeyDown}
+      aria-pressed={selected}
+      className={`career-responses-card-body${selected ? ' is-selected' : ''}`}
+      onClick={onSelect}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.();
+        }
+      }}
     >
       <CardHeaderContent
         title={vacancy?.title ?? 'Без названия'}
@@ -174,21 +160,24 @@ function CardTopBody({
 
 export function ResponsesCard(props: ResponsesCardProps) {
   const { application, failed, conflicted, isMenuOpen, onToggleMenu, onCloseMenu } = props;
-  const { menuOpen, toggleMenu, closeMenu, cardRef, handleCardClick, handleBodyKeyDown } =
-    useCardMenuState(isMenuOpen, onToggleMenu, onCloseMenu);
+  const { menuOpen, toggleMenu, closeMenu, cardRef } = useCardMenuState(
+    isMenuOpen,
+    onToggleMenu,
+    onCloseMenu,
+  );
   const label = waitingLabelFor(application);
 
   return (
     <article
       ref={cardRef}
-      className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}`}
+      className={`career-responses-card${label.on === 'you' ? ' is-your-turn' : ''}${props.selected ? ' is-selected' : ''}`}
       data-cluster={application.clusterId ?? ''}
     >
       <CardTopBody
         vacancy={application.vacancy}
         materials={application.materials}
-        onClick={handleCardClick}
-        onKeyDown={handleBodyKeyDown}
+        selected={Boolean(props.selected)}
+        onSelect={props.onSelect}
       />
       <CardAlerts
         failed={failed}
@@ -199,11 +188,7 @@ export function ResponsesCard(props: ResponsesCardProps) {
       <CardStageBlocks
         application={application}
         onOpenExpert={props.onOpenExpert}
-        onSaveDebrief={props.onSaveDebrief}
-        onRefresh={props.onRefresh}
-        onOpenOfferEdit={props.onOpenOfferEdit}
       />
-      <StarStoriesControl application={application} onOpenExpert={props.onOpenExpert} />
       <CardFooter
         application={application}
         labelText={label.text}
@@ -217,7 +202,6 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onSaveNote={props.onSaveNote}
         onSkip={props.onSkip}
       />
-      <FollowUpSentControl application={application} onMark={props.onMarkFollowUpSent} />
     </article>
   );
 }

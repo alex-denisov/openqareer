@@ -6,6 +6,7 @@ import {
   createApplication,
   createApplicationInterview,
   createVacancySkip,
+  listApplicationsPool,
   listApplicationsPage,
   patchApplication,
   restoreApplicationFromArchive,
@@ -42,6 +43,10 @@ export interface UseApplications {
     query: ApplicationListQuery,
     append?: boolean,
     keepContent?: boolean,
+  ) => Promise<readonly ApplicationView[]>;
+  readonly loadPool?: (
+    query: ApplicationListQuery,
+    signal?: AbortSignal,
   ) => Promise<readonly ApplicationView[]>;
   readonly error?: string;
   /** The load failed because the browser has no connection (offline state). */
@@ -90,6 +95,7 @@ export function useApplications(): UseApplications {
   );
   const [conflicts, setConflicts] = useState<ReadonlySet<string>>(new Set());
   const [reloadToken, setReloadToken] = useState(0);
+  const poolLoadedRef = useRef(false);
   const pageQueryRef = useRef<ApplicationListQuery>({
     stage: ['saved', 'applied', 'responded', 'interview', 'offer'],
     limit: 20,
@@ -99,7 +105,10 @@ export function useApplications(): UseApplications {
   const loadPage = useCallback(
     async (query: ApplicationListQuery, append = false, keepContent = false) => {
       const request = { ...query, limit: 20, offset: query.offset ?? 0 };
-      if (!append) pageQueryRef.current = { ...request, offset: 0 };
+      if (!append) {
+        pageQueryRef.current = { ...request, offset: 0 };
+        poolLoadedRef.current = false;
+      }
       if (!append && !keepContent) setStatus('loading');
       setError(undefined);
       try {
@@ -119,8 +128,22 @@ export function useApplications(): UseApplications {
     [],
   );
 
+  const loadPool = useCallback(async (query: ApplicationListQuery, signal?: AbortSignal) => {
+    const request = { ...query, stage: [], limit: 100, offset: 0 };
+    pageQueryRef.current = request;
+    setError(undefined);
+    const page = await listApplicationsPool(request, signal);
+    if (signal?.aborted) return [];
+    poolLoadedRef.current = true;
+    setApplications(page.items);
+    setPageMeta(page.meta);
+    setOffline(false);
+    return page.items;
+  }, []);
+
   useEffect(() => {
     let active = true;
+    poolLoadedRef.current = false;
     setStatus('loading');
     setFailedChanges(new Map());
     setConflicts(new Set());
@@ -145,8 +168,9 @@ export function useApplications(): UseApplications {
   const reload = useCallback(() => setReloadToken((token) => token + 1), []);
 
   const refreshApplications = useCallback(async () => {
+    if (poolLoadedRef.current) return await loadPool(pageQueryRef.current);
     return await loadPage(pageQueryRef.current, false, true);
-  }, [loadPage]);
+  }, [loadPage, loadPool]);
 
   const writeStagePatch = useCallback(
     (
@@ -299,6 +323,7 @@ export function useApplications(): UseApplications {
     applications,
     pageMeta,
     loadPage,
+    loadPool,
     error,
     offline,
     failedChanges,

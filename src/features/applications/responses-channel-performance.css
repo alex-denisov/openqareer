@@ -1,0 +1,106 @@
+.career-responses-channel-performance {
+  display: grid;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+  margin-block-start: var(--career-space-4);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-responses-channel-performance h2,
+.career-responses-channel-performance p {
+  margin: 0;
+}
+
+.career-responses-channel-performance header p,
+.career-responses-channel-performance__note {
+  color: var(--career-text-soft);
+}
+
+.career-responses-channel-performance__table-wrap {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+}
+
+.career-responses-channel-performance__mobile {
+  display: none;
+}
+
+.career-responses-channel-performance table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--career-text);
+}
+
+.career-responses-channel-performance th,
+.career-responses-channel-performance td {
+  padding: var(--career-space-2) var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  text-align: start;
+}
+
+.career-responses-channel-performance thead {
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
+}
+
+.career-responses-channel-performance td {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 40rem) {
+  .career-responses-channel-performance {
+    padding: var(--career-space-3);
+  }
+
+  .career-responses-channel-performance__desktop {
+    display: none;
+  }
+
+  .career-responses-channel-performance__mobile {
+    display: grid;
+    gap: var(--career-space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .career-responses-channel-performance__mobile li {
+    display: grid;
+    gap: var(--career-space-2);
+    padding: var(--career-space-3);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface-raised);
+  }
+
+  .career-responses-channel-performance__mobile h3,
+  .career-responses-channel-performance__mobile dl {
+    margin: 0;
+  }
+
+  .career-responses-channel-performance__mobile dl {
+    display: grid;
+    gap: var(--career-space-1);
+  }
+
+  .career-responses-channel-performance__mobile dl div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--career-space-2);
+  }
+
+  .career-responses-channel-performance__mobile dt {
+    color: var(--career-text-soft);
+  }
+
+  .career-responses-channel-performance__mobile dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+  }
+}

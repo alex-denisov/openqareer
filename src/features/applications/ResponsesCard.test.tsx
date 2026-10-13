@@ -49,7 +49,6 @@ describe('ResponsesCard (B414)', () => {
         onRefresh={() => {}}
         onSaveNote={() => {}}
         onSkip={() => {}}
-        onMarkFollowUpSent={async () => {}}
         onChangeStage={() => {}}
         onScheduleInterview={async () => {}}
       />,

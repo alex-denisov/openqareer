@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
-import type { ApplicationStage } from '../../../shared/applicationStage';
-import { APPLICATION_STAGES } from '../../../shared/applicationStage';
+import { DotsThreeVertical } from '@phosphor-icons/react';
+import { deliveryState, type ApplicationStage } from '../../../shared/applicationStage';
 import type {
   ApplicationListPageMeta,
   ApplicationListQuery,
@@ -11,64 +11,43 @@ import {
   previewApplicationBulk,
   type ApplicationBulkAction,
 } from './applicationsApi';
-import type { UseApplications } from './useApplications';
-import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
-import { ResponsesCard } from './ResponsesCard';
+import { humanSourceLabel } from './sourceLabels';
 
 export interface ResponsesApplicationsTableProps {
   readonly applications: readonly ApplicationView[];
-  readonly state: UseApplications;
   readonly selectedIds: ReadonlySet<string>;
   readonly onToggleSelected: (id: string) => void;
   readonly onToggleAll: () => void;
   readonly onSelectAllFiltered: () => void;
+  readonly onClearSelection: () => void;
   readonly allSelectedByFilter: boolean;
+  readonly allowSelectAllFiltered: boolean;
   readonly pageMeta?: ApplicationListPageMeta;
   readonly query: ApplicationListQuery;
-  readonly onOpenAutomation: () => void;
   readonly onBulkComplete: (notice: string) => void;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
+  readonly selectedApplicationId?: string;
+  readonly onSelectApplication: (id: string) => void;
 }
 
 interface ApplicationListProps {
   readonly applications: readonly ApplicationView[];
-  readonly state: UseApplications;
   readonly selectedIds: ReadonlySet<string>;
-  readonly expandedId: string | null;
   readonly onToggleSelected: (id: string) => void;
-  readonly onToggleExpanded: (id: string) => void;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
+  readonly onToggleAll: () => void;
+  readonly selectedApplicationId?: string;
+  readonly onSelectApplication: (id: string) => void;
 }
 
 interface ApplicationRowProps {
   readonly application: ApplicationView;
-  readonly state: UseApplications;
   readonly selected: boolean;
-  readonly expanded: boolean;
+  readonly active: boolean;
   readonly onToggleSelected: () => void;
-  readonly onToggleExpanded: () => void;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
+  readonly onSelectApplication: () => void;
 }
 
 export function ResponsesApplicationsTable(props: ResponsesApplicationsTableProps) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [bulkNotice, setBulkNotice] = useState('');
-  const toggleExpanded = (id: string) => setExpandedId((current) => (current === id ? null : id));
   const handleBulkComplete = (notice: string) => {
     setBulkNotice(notice);
     props.onBulkComplete(notice);
@@ -81,67 +60,35 @@ export function ResponsesApplicationsTable(props: ResponsesApplicationsTableProp
           {bulkNotice}
         </p>
       ) : null}
-      <ApplicationTable
-        applications={props.applications}
-        state={props.state}
-        selectedIds={props.selectedIds}
-        expandedId={expandedId}
-        onToggleSelected={props.onToggleSelected}
-        onToggleExpanded={toggleExpanded}
-        onOpenExpert={props.onOpenExpert}
-        onOpenOfferEdit={props.onOpenOfferEdit}
-      />
-      <MobileApplicationList
-        applications={props.applications}
-        state={props.state}
-        selectedIds={props.selectedIds}
-        expandedId={expandedId}
-        onToggleSelected={props.onToggleSelected}
-        onToggleExpanded={toggleExpanded}
-        onOpenExpert={props.onOpenExpert}
-        onOpenOfferEdit={props.onOpenOfferEdit}
-      />
+      <ApplicationTable {...props} />
+      <MobileApplicationList {...props} />
     </section>
   );
 }
 
 function ApplicationSelectionBar(props: ResponsesApplicationsTableProps) {
+  if (!props.selectedIds.size && !props.allSelectedByFilter) return null;
   return (
     <>
       <div className="career-responses-selection">
-        <label>
-          <input
-            type="checkbox"
-            checked={
-              props.applications.length > 0 && props.selectedIds.size === props.applications.length
-            }
-            onChange={props.onToggleAll}
-          />
-          Выбрать на странице
-        </label>
-        {props.pageMeta ? (
+        <span role="status">
+          {props.allSelectedByFilter
+            ? 'Выбраны все ' + (props.pageMeta?.total ?? 0) + ' по фильтру'
+            : 'Выбрано ' + props.selectedIds.size + ' на странице'}
+        </span>
+        {props.pageMeta && props.allowSelectAllFiltered ? (
           <button type="button" onClick={props.onSelectAllFiltered}>
             {props.allSelectedByFilter
               ? 'Снять выбор по фильтру'
               : 'Выбрать все ' + props.pageMeta.total + ' по фильтру'}
           </button>
         ) : null}
-        {props.allSelectedByFilter ? (
-          <span role="status">Выбраны все {props.pageMeta?.total ?? 0} по фильтру</span>
-        ) : props.selectedIds.size ? (
-          <span role="status">Выбрано {props.selectedIds.size}</span>
-        ) : null}
+        <button type="button" onClick={props.onClearSelection}>
+          Снять выбор
+        </button>
       </div>
       {props.allSelectedByFilter ? (
         <ApplicationBulkActions query={props.query} onComplete={props.onBulkComplete} />
-      ) : null}
-      {props.selectedIds.size > 0 && !props.allSelectedByFilter ? (
-        <div className="career-responses-selection-actions">
-          <span>Действия с отправкой требуют подтверждения.</span>
-          <button type="button" onClick={props.onOpenAutomation}>
-            Одобрить
-          </button>
-        </div>
       ) : null}
     </>
   );
@@ -279,25 +226,34 @@ function ApplicationBulkActions({
 
 function ApplicationTable({
   applications,
-  state,
   selectedIds,
-  expandedId,
   onToggleSelected,
-  onToggleExpanded,
-  onOpenExpert,
-  onOpenOfferEdit,
+  onToggleAll,
+  selectedApplicationId,
+  onSelectApplication,
 }: ApplicationListProps) {
+  const allSelected = applications.length > 0 && selectedIds.size === applications.length;
   return (
     <table className="career-responses-table">
       <thead>
         <tr>
-          <th scope="col">Выбор</th>
-          <th scope="col">Компания</th>
-          <th scope="col">Роль</th>
-          <th scope="col">Этап</th>
-          <th scope="col">Источник</th>
+          <th scope="col" className="career-responses-table__select">
+            <input
+              type="checkbox"
+              aria-label="Выбрать отклики на странице"
+              checked={allSelected}
+              onChange={onToggleAll}
+            />
+          </th>
+          <th scope="col">Компания и роль</th>
+          <th scope="col">Канал</th>
+          <th scope="col">Статус</th>
           <th scope="col">Следующий шаг</th>
-          <th scope="col">Действия</th>
+          <th scope="col">Срок</th>
+          <th scope="col">Отправлено</th>
+          <th scope="col">
+            <span className="career-sr-only">Действия</span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -305,13 +261,10 @@ function ApplicationTable({
           <ApplicationTableRow
             key={application.id}
             application={application}
-            state={state}
             selected={selectedIds.has(application.id)}
-            expanded={expandedId === application.id}
+            active={selectedApplicationId === application.id}
             onToggleSelected={() => onToggleSelected(application.id)}
-            onToggleExpanded={() => onToggleExpanded(application.id)}
-            onOpenExpert={onOpenExpert}
-            onOpenOfferEdit={onOpenOfferEdit}
+            onSelectApplication={() => onSelectApplication(application.id)}
           />
         ))}
       </tbody>
@@ -319,89 +272,96 @@ function ApplicationTable({
   );
 }
 
-function ApplicationTableRow(props: ApplicationRowProps) {
-  return (
-    <>
-      <ApplicationTableCells {...props} />
-      {props.expanded ? (
-        <ApplicationDetailsRow
-          application={props.application}
-          state={props.state}
-          onOpenExpert={props.onOpenExpert}
-          onOpenOfferEdit={props.onOpenOfferEdit}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function ApplicationTableCells({
+function ApplicationTableRow({
   application,
   selected,
+  active,
   onToggleSelected,
-  onToggleExpanded,
-  expanded,
-  state,
+  onSelectApplication,
 }: ApplicationRowProps) {
-  const title = application.vacancy?.title ?? 'Вакансия без названия';
-  const company = application.vacancy?.companyHidden
+  const vacancy = application.vacancy;
+  const company = vacancy?.companyHidden
     ? 'Компания скрыта'
-    : application.vacancy?.company || 'Компания не указана';
+    : vacancy?.company || 'Компания не указана';
+  const delivery = deliveryState(application.stage, application.deliveryReceipt ?? null);
+  const dueAt =
+    application.followUp?.dueAt ??
+    application.followUpDueAt ??
+    application.nearestInterview?.scheduledAt;
   return (
-    <tr>
-      <td>
+    <tr className={active ? 'is-selected' : undefined}>
+      <td className="career-responses-table__select">
         <input
           type="checkbox"
-          aria-label={'Выбрать ' + title + ' · ' + company}
+          aria-label={'Выбрать ' + (vacancy?.title ?? 'Вакансию без названия') + ' · ' + company}
           checked={selected}
           onChange={onToggleSelected}
         />
       </td>
-      <td>{company}</td>
-      <td>{title}</td>
-      <ApplicationStageCell application={application} state={state} />
-      <td>{application.vacancy?.source || 'Источник не указан'}</td>
-      <td>
-        {application.followUpDueAt
-          ? new Date(application.followUpDueAt).toLocaleDateString('ru-RU')
-          : 'Следующий шаг не задан'}
+      <td className="career-responses-table__company-role">
+        <strong>{company}</strong>
+        <span>{vacancy?.title ?? 'Вакансия без названия'}</span>
       </td>
+      <td>{humanSourceLabel(vacancy?.source)}</td>
       <td>
-        <button type="button" aria-expanded={expanded} onClick={onToggleExpanded}>
-          {expanded ? 'Скрыть' : 'Действия'}
-        </button>
+        <ApplicationStatusCell application={application} delivery={delivery} />
       </td>
+      <td>{responseNextStep(application)}</td>
+      <td className="career-numeric">{dueAt ? formatDate(dueAt) : '—'}</td>
+      <td className="career-numeric">{formatDate(application.createdAt)}</td>
+      <ResponseActionCell
+        title={vacancy?.title ?? 'Вакансия без названия'}
+        company={company}
+        active={active}
+        onSelect={onSelectApplication}
+      />
     </tr>
   );
 }
 
-function ApplicationStageCell({
-  application,
-  state,
+function ResponseActionCell({
+  title,
+  company,
+  active,
+  onSelect,
 }: {
-  readonly application: ApplicationView;
-  readonly state: UseApplications;
+  readonly title: string;
+  readonly company: string;
+  readonly active: boolean;
+  readonly onSelect: () => void;
 }) {
   return (
-    <td>
-      <select
-        aria-label={'Этап: ' + (application.vacancy?.title ?? 'Вакансия без названия')}
-        value={application.stage}
-        onChange={(event) =>
-          state.changeStage(
-            application.id,
-            event.currentTarget.value as ApplicationStage,
-            new Date().toISOString(),
-          )
-        }
+    <td className="career-responses-table__action">
+      <button
+        type="button"
+        aria-label={'Открыть отклик: ' + title + ', ' + company}
+        aria-pressed={active}
+        onClick={onSelect}
       >
-        {APPLICATION_STAGES.map((stage) => (
-          <option key={stage} value={stage}>
-            {tableStageLabel(stage)}
-          </option>
-        ))}
-      </select>
+        <DotsThreeVertical aria-hidden="true" />
+      </button>
     </td>
+  );
+}
+
+function ApplicationStatusCell({
+  application,
+  delivery,
+}: {
+  readonly application: ApplicationView;
+  readonly delivery: ReturnType<typeof deliveryState>;
+}) {
+  return (
+    <>
+      <span className={'career-responses-status is-' + application.stage}>
+        {tableStageLabel(application.stage)}
+      </span>
+      {application.stage === 'applied' ? (
+        <small className={'career-responses-status-note is-' + delivery}>
+          {deliveryStateLabel(delivery)}
+        </small>
+      ) : null}
+    </>
   );
 }
 
@@ -412,131 +372,90 @@ function MobileApplicationList(props: ApplicationListProps) {
         <MobileApplicationCard
           key={application.id}
           application={application}
-          state={props.state}
           selected={props.selectedIds.has(application.id)}
-          expanded={props.expandedId === application.id}
+          active={props.selectedApplicationId === application.id}
           onToggleSelected={() => props.onToggleSelected(application.id)}
-          onToggleExpanded={() => props.onToggleExpanded(application.id)}
-          onOpenExpert={props.onOpenExpert}
-          onOpenOfferEdit={props.onOpenOfferEdit}
+          onSelectApplication={() => props.onSelectApplication(application.id)}
         />
       ))}
     </div>
   );
 }
 
-function MobileApplicationCard(props: {
-  readonly application: ApplicationView;
-  readonly state: UseApplications;
-  readonly selected: boolean;
-  readonly expanded: boolean;
-  readonly onToggleSelected: () => void;
-  readonly onToggleExpanded: () => void;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
-}) {
-  const title = props.application.vacancy?.title ?? 'Вакансия без названия';
-  const company = props.application.vacancy?.companyHidden
+function MobileApplicationCard({
+  application,
+  selected,
+  active,
+  onToggleSelected,
+  onSelectApplication,
+}: ApplicationRowProps) {
+  const vacancy = application.vacancy;
+  const company = vacancy?.companyHidden
     ? 'Компания скрыта'
-    : props.application.vacancy?.company || 'Компания не указана';
+    : vacancy?.company || 'Компания не указана';
+  const dueAt =
+    application.followUp?.dueAt ??
+    application.followUpDueAt ??
+    application.nearestInterview?.scheduledAt;
   return (
-    <article className="career-responses-mobile-card">
+    <article className={'career-responses-mobile-card' + (active ? ' is-selected' : '')}>
       <div className="career-responses-mobile-card-head">
         <label>
           <input
             type="checkbox"
-            aria-label={'Выбрать ' + title + ' · ' + company}
-            checked={props.selected}
-            onChange={props.onToggleSelected}
+            aria-label={'Выбрать ' + (vacancy?.title ?? 'Вакансию без названия') + ' · ' + company}
+            checked={selected}
+            onChange={onToggleSelected}
           />
-          <span>{tableStageLabel(props.application.stage)}</span>
+          <span>{tableStageLabel(application.stage)}</span>
         </label>
-        <button type="button" aria-expanded={props.expanded} onClick={props.onToggleExpanded}>
-          {props.expanded ? 'Скрыть' : 'Действия'}
+        <button
+          type="button"
+          aria-label={
+            'Открыть отклик: ' + (vacancy?.title ?? 'Вакансия без названия') + ', ' + company
+          }
+          aria-pressed={active}
+          onClick={onSelectApplication}
+        >
+          <DotsThreeVertical aria-hidden="true" />
         </button>
       </div>
-      <strong>{title}</strong>
-      <span>{company}</span>
+      <strong>{company}</strong>
+      <span>{vacancy?.title ?? 'Вакансия без названия'}</span>
       <p>
-        {props.application.vacancy?.source || 'Источник не указан'} ·{' '}
-        {props.application.followUpDueAt
-          ? new Date(props.application.followUpDueAt).toLocaleDateString('ru-RU')
-          : 'Следующий шаг не задан'}
+        {humanSourceLabel(vacancy?.source)} · {responseNextStep(application)}
       </p>
-      {props.expanded ? <MobileApplicationCardActions {...props} /> : null}
+      <small>{dueAt ? 'Срок: ' + formatDate(dueAt) : 'Срок шага не указан'}</small>
     </article>
   );
 }
 
-function MobileApplicationCardActions({
-  application,
-  state,
-  onOpenExpert,
-  onOpenOfferEdit,
-}: Pick<
-  Parameters<typeof MobileApplicationCard>[0],
-  'application' | 'state' | 'onOpenExpert' | 'onOpenOfferEdit'
->) {
-  return (
-    <ResponsesCard
-      application={application}
-      failed={state.failedChanges.has(application.id)}
-      conflicted={state.conflicts.has(application.id)}
-      onOpenExpert={onOpenExpert}
-      onChangeStage={(stage, occurredAt, receipt) =>
-        state.changeStage(application.id, stage, occurredAt, receipt)
-      }
-      onScheduleInterview={(scheduledAt) => state.scheduleInterview(application.id, scheduledAt)}
-      onRetry={() => state.retryStageChange(application.id)}
-      onRefresh={state.reload}
-      onSaveNote={(notes) => state.saveNote(application.id, notes)}
-      onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
-      onSkip={(reasonId) => void state.skip(application, reasonId)}
-      onOpenOfferEdit={onOpenOfferEdit}
-    />
-  );
+function responseNextStep(application: ApplicationView): string {
+  if (application.nearestInterview?.scheduledAt) return 'Подготовиться к интервью';
+  if (application.followUp?.urgency === 'overdue' || application.followUp?.urgency === 'stale') {
+    return 'Напомнить компании';
+  }
+  if (application.followUp?.urgency === 'due') return 'Напомнить о себе сегодня';
+  if (application.whoseTurn === 'company') return 'Ждём ответа';
+  return 'Выбрать следующий шаг';
 }
 
-function ApplicationDetailsRow({
-  application,
-  state,
-  onOpenExpert,
-  onOpenOfferEdit,
-}: Pick<ApplicationRowProps, 'application' | 'state' | 'onOpenExpert' | 'onOpenOfferEdit'>) {
-  return (
-    <tr>
-      <td colSpan={7}>
-        <ResponsesCard
-          application={application}
-          failed={state.failedChanges.has(application.id)}
-          conflicted={state.conflicts.has(application.id)}
-          onOpenExpert={onOpenExpert}
-          onChangeStage={(stage, occurredAt, receipt) =>
-            state.changeStage(application.id, stage, occurredAt, receipt)
-          }
-          onScheduleInterview={(scheduledAt) =>
-            state.scheduleInterview(application.id, scheduledAt)
-          }
-          onRetry={() => state.retryStageChange(application.id)}
-          onRefresh={state.reload}
-          onSaveNote={(notes) => state.saveNote(application.id, notes)}
-          onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
-          onSkip={(reasonId) => void state.skip(application, reasonId)}
-          onOpenOfferEdit={onOpenOfferEdit}
-        />
-      </td>
-    </tr>
-  );
+function deliveryStateLabel(state: ReturnType<typeof deliveryState>): string {
+  if (state === 'delivered') return 'Доставка подтверждена';
+  if (state === 'failed') return 'Не доставлено';
+  if (state === 'prepared') return 'Черновик';
+  return 'Пробовали отправить';
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleDateString('ru-RU');
 }
 
 function tableStageLabel(stage: ApplicationStage): string {
   const labels: Record<ApplicationStage, string> = {
-    saved: 'Хочу',
-    applied: 'Пробовали отправить',
+    saved: 'Черновик',
+    applied: 'Отправлено',
     responded: 'Ответили',
     interview: 'Интервью',
     offer: 'Оффер',

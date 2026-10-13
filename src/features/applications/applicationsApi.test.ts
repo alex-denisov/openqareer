@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { APPLICATION_STAGES } from '../../../shared/applicationStage';
 import { apiFetch } from '../coach/apiClient';
-import { listApplicationsPage } from './applicationsApi';
+import { listApplicationsPage, listApplicationsPool } from './applicationsApi';
 
 vi.mock('../coach/apiClient', async (importOriginal) => {
   const original = await importOriginal<typeof import('../coach/apiClient')>();
@@ -51,6 +51,42 @@ describe('listApplicationsPage (B450)', () => {
     expect(page.items).toEqual([{ id: 'app-1' }]);
     expect(page.meta.total).toBe(1);
     expect(page.meta.stageCounts.saved).toBe(0);
+  });
+});
+
+describe('listApplicationsPool (S11-RESP)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('loads the candidate-filtered result set in bounded pages for local search and sorting', async () => {
+    const rows = Array.from({ length: 201 }, (_, index) => ({ id: `app-${index + 1}` }));
+    const counts = Object.fromEntries(APPLICATION_STAGES.map((stage) => [stage, 0]));
+    apiFetchMock.mockImplementation(async (input) => {
+      const url = new URL(String(input), 'http://localhost');
+      const offset = Number(url.searchParams.get('offset'));
+      const limit = Number(url.searchParams.get('limit'));
+      return new Response(
+        JSON.stringify({
+          data: rows.slice(offset, offset + limit),
+          meta: { total: rows.length, offset, limit, stageCounts: counts },
+        }),
+        { status: 200 },
+      );
+    });
+
+    const pool = await listApplicationsPool({ channel: ['hh.ru'], from: '2026-10-01' });
+
+    expect(pool.items).toHaveLength(201);
+    expect(pool.meta.total).toBe(201);
+    expect(apiFetchMock).toHaveBeenCalledTimes(3);
+    const offsets = apiFetchMock.mock.calls.map(([input]) =>
+      new URL(String(input), 'http://localhost').searchParams.get('offset'),
+    );
+    expect(offsets).toEqual(['0', '100', '200']);
+    apiFetchMock.mock.calls.forEach(([input]) => {
+      const params = new URL(String(input), 'http://localhost').searchParams;
+      expect(params.get('limit')).toBe('100');
+      expect(params.get('stage')).toBeNull();
+    });
   });
 });
 
