@@ -41,8 +41,8 @@ async function openQueueIfNeeded(page: Page) {
 async function openAutomation(page: Page) {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Отклики', exact: true }).click();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
     await page
       .getByRole('group', { name: 'Раздел откликов' })
       .getByRole('button', { name: 'Автоматизация', exact: true })
@@ -54,8 +54,10 @@ async function openAutomation(page: Page) {
         .getByRole('button', { name: 'Автоматизация', exact: true }),
     ).toHaveAttribute('aria-pressed', 'true');
   } else {
-    const responsesNavigation = page.getByRole('navigation', { name: 'Разделы откликов' });
-    await responsesNavigation.getByRole('button', { name: 'Автоматизация', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Автоматизация', exact: true })
+      .click();
     await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Автоматизация');
     await expect(page.getByRole('tablist', { name: 'Автоматизация' })).toBeVisible();
   }

@@ -169,11 +169,15 @@ async function mockCandidateActionApi(page: Page): Promise<() => unknown> {
 }
 
 async function openAutomationFromResponses(page: Page): Promise<void> {
+  if ((page.viewportSize()?.width ?? 1440) > 760) {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Автоматизация', exact: true })
+      .click();
+    return;
+  }
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
-  const navigation =
-    (page.viewportSize()?.width ?? 1440) <= 760
-      ? page.getByRole('group', { name: 'Раздел откликов' })
-      : page.getByRole('navigation', { name: 'Разделы откликов' });
+  const navigation = page.getByRole('group', { name: 'Раздел откликов' });
   const automation = navigation.getByRole('button', { name: 'Автоматизация', exact: true });
   await expect(automation).toBeVisible();
   await automation.click();
@@ -197,7 +201,7 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openAutomationFromResponses(page);
-  const panel = page.getByRole('region', { name: 'Отправка откликов' });
+  const panel = page.getByRole('region', { name: 'Ручная отправка' });
   await expect(panel).toBeVisible();
   await expect(panel.getByText('Инженер платформы')).toBeVisible();
   await panel.getByRole('checkbox', { name: /Инженер платформы/ }).check();
@@ -205,6 +209,10 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
     .getByLabel('Текст письма или заметки для площадки')
     .fill('Проверенное тестовое письмо.');
   await panel.getByRole('checkbox', { name: /Я проверил письма и ссылки/ }).check();
+  await panel.scrollIntoViewIfNeeded();
+  await panel.screenshot({
+    path: testInfo.outputPath(`manual-send-ready-${testInfo.project.name}.png`),
+  });
   const sendAction = panel.getByRole('button', { name: 'Отправить 1 действие' });
   await sendAction.click();
 
@@ -260,7 +268,7 @@ test('candidate reviews and submits a prepared action on desktop and mobile', as
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.evaluate(() => window.scrollTo(0, 0));
     await openAutomationFromResponses(page);
-    await expect(panel.getByRole('heading', { name: 'Отправка откликов' })).toBeVisible();
+    await expect(panel.getByRole('heading', { name: 'Ручная отправка' })).toBeVisible();
     const desktopOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
