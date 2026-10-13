@@ -88,11 +88,9 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   await captureCareerHarness(page, join(EVIDENCE_DIR, 'shell-1440.html'));
 
   await primaryRail.getByRole('button', { name: 'Карьера', exact: true }).click();
-  await expect(page.locator('.career-shell')).toHaveAttribute('data-shell-view', 'opportunities');
+  await expect(page.locator('.career-shell')).toHaveAttribute('data-shell-view', 'career');
   await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Карьера');
-  await expect(
-    page.getByRole('heading', { name: 'Роль, регион, формат', exact: true }),
-  ).toBeVisible();
+  await expect(page.locator('.career-screen')).toBeVisible();
 
   await primaryRail.getByRole('button', { name: 'Автоматизация', exact: true }).click();
   await expect(

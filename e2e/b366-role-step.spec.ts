@@ -26,6 +26,15 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
       .getByRole('button', { name: 'Карьера', exact: true });
     await careerRailButton.click();
 
+    // Verify it opened Career screen
+    await expect(page.locator('.career-screen')).toBeVisible();
+
+    // Open role vacancies to reach the focused role filter
+    await page
+      .getByRole('button', { name: /Открыть вакансии/ })
+      .first()
+      .click();
+
     // Verify it opened Vacancies screen
     await expect(page.locator('.vacancies-screen')).toBeVisible();
     await expect(page.locator('.vacancies-content')).toBeVisible();
@@ -72,9 +81,7 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
     await page.screenshot({ path: 'output/playwright/B366/role-step-after-390.png' });
   });
 
-  test('the «Карьера» rail entry opens opportunities with the role filter focused', async ({
-    page,
-  }, testInfo) => {
+  test('the «Карьера» rail entry opens career screen', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'desktop only');
     await mockSignedInCabinet(page);
     await seedReadabilityWorkspace(page);
@@ -86,7 +93,7 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
       .getByRole('button', { name: 'Карьера', exact: true })
       .click();
 
-    await expect(page.locator('.vacancies-screen')).toBeVisible();
+    await expect(page.locator('.career-screen')).toBeVisible();
     // SearchCampaign / .career-campaign should not exist in the DOM
     await expect(page.locator('.career-campaign')).toHaveCount(0);
   });

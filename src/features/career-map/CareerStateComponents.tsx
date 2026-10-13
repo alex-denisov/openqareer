@@ -4,14 +4,14 @@ import { ArrowClockwise, ChatCircleText, Clock, User, WarningCircle } from '@pho
 export function CareerLoadingSkeleton(): ReactElement {
   return (
     <div className="career-screen" aria-busy="true" aria-label="Загрузка экрана карьеры">
-      <div className="career-card" style={{ minHeight: '120px' }}>
-        <span className="career-skeleton-line" style={{ width: '40%', height: '24px' }} />
-        <span className="career-skeleton-line" style={{ width: '70%', height: '16px' }} />
+      <div className="career-card career-skeleton-card-sm">
+        <span className="career-skeleton-line career-skeleton-line-title" />
+        <span className="career-skeleton-line career-skeleton-line-text" />
       </div>
-      <div className="career-card" style={{ minHeight: '280px' }}>
-        <span className="career-skeleton-line" style={{ width: '50%', height: '24px' }} />
-        <span className="career-skeleton-line" style={{ width: '100%', height: '60px' }} />
-        <span className="career-skeleton-line" style={{ width: '100%', height: '60px' }} />
+      <div className="career-card career-skeleton-card-lg">
+        <span className="career-skeleton-line career-skeleton-line-heading" />
+        <span className="career-skeleton-line career-skeleton-line-block" />
+        <span className="career-skeleton-line career-skeleton-line-block" />
       </div>
       <p className="career-source-stamp">Позиция, гипотезы и условия грузятся независимо.</p>
     </div>
@@ -51,15 +51,14 @@ export function CareerMarketErrorState({ onRetry }: { onRetry?: () => void }): R
   return (
     <div className="career-note career-note-error" role="alert">
       <WarningCircle size={20} />
-      <div style={{ flex: 1 }}>
-        <p style={{ margin: 0 }}>
+      <div className="career-note-content">
+        <p className="career-note-text">
           Позиция на рынке не загрузилась: каталог не ответил. Гипотезы и условия доступны.
         </p>
       </div>
       <button
         type="button"
-        className="career-btn career-btn-secondary"
-        style={{ minHeight: '36px', padding: '4px 12px' }}
+        className="career-btn career-btn-secondary career-btn-sm"
         onClick={onRetry}
       >
         <ArrowClockwise size={16} />
@@ -73,7 +72,9 @@ export function CareerStaleMarketNote({ dateText }: { dateText: string }): React
   return (
     <div className="career-note" role="status">
       <Clock size={18} />
-      <span>Выборка устарела: рынок обновлён {dateText}, прошло больше 14 дней. Цифры показаны с датой.</span>
+      <span>
+        Выборка устарела: рынок обновлён {dateText}, прошло больше 14 дней. Цифры показаны с датой.
+      </span>
     </div>
   );
 }

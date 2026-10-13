@@ -350,3 +350,149 @@
     justify-content: center;
   }
 }
+
+/* Layout and lists */
+.career-roles-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+}
+
+.career-role-reject-confirm {
+  display: inline-flex;
+  gap: var(--career-space-2);
+  align-items: center;
+}
+
+/* Skeleton sizing */
+.career-skeleton-card-sm {
+  min-block-size: 120px;
+}
+
+.career-skeleton-card-lg {
+  min-block-size: 280px;
+}
+
+.career-skeleton-line-title {
+  inline-size: 40%;
+  block-size: 24px;
+}
+
+.career-skeleton-line-text {
+  inline-size: 70%;
+  block-size: 16px;
+}
+
+.career-skeleton-line-heading {
+  inline-size: 50%;
+  block-size: 24px;
+}
+
+.career-skeleton-line-block {
+  inline-size: 100%;
+  block-size: 60px;
+}
+
+/* Note layout */
+.career-note-content {
+  flex: 1;
+}
+
+.career-note-text {
+  margin: 0;
+}
+
+/* Mobile screen components */
+.career-mobile-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: 44px;
+}
+
+.career-mobile-title {
+  margin: 0;
+  font-size: var(--career-text-lg);
+  font-weight: 600;
+}
+
+.career-back-button {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--career-radius-pill, 9999px);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.career-mobile-bottom-action {
+  margin-top: auto;
+  padding-block: var(--career-space-2);
+}
+
+.career-btn-block {
+  inline-size: 100%;
+}
+
+.career-mobile-save-btn {
+  margin-top: auto;
+}
+
+/* Form controls & checkboxes */
+.career-btn-icon {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  inline-size: 44px;
+  block-size: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.career-btn-sm {
+  min-block-size: 44px;
+  padding: var(--career-space-1) var(--career-space-3);
+}
+
+.career-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  cursor: pointer;
+}
+
+.career-checkbox-text {
+  font-size: var(--career-text-xs);
+}
+
+.career-checkbox-text-sm {
+  font-size: var(--career-text-sm);
+}
+
+.career-format-options {
+  display: flex;
+  gap: var(--career-space-4);
+  flex-wrap: wrap;
+  margin-block: var(--career-space-2);
+}
+
+.career-format-option {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  cursor: pointer;
+}
+
+.career-relocation-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-title {
+  font-weight: 500;
+}

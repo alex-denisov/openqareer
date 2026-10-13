@@ -183,8 +183,10 @@ async function openCareer(page: Page): Promise<void> {
   if ((page.viewportSize()?.width ?? 1440) > 760) {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
-      .getByRole('button', { name: 'Карьера', exact: true })
+      .getByRole('button', { name: 'Вакансии', exact: true })
       .click();
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
+    await page.getByRole('button', { name: /Роли/ }).first().click();
   } else {
     const mobileRole = page.locator('.career-path-mobile-role');
     if (await mobileRole.isVisible()) {

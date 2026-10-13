@@ -52,7 +52,7 @@ function RolesCardsList({
   onNavigateSection: (s: string) => void;
 }): ReactElement {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+    <div className="career-roles-list">
       {roles.map((role, index) => (
         <CareerRoleCard
           key={role.id}
@@ -404,4 +404,3 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
     />
   );
 }
-

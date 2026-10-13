@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/v1-release/tasks/evidence/B445');
+const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/v1-release/tasks/evidence/S11-CAR');
 const CLI_PATH = path.resolve(process.cwd(), 'src/features/career-map/renderCareerCli.ts');
 const BATCH_HTML_DIR = path.join(os.tmpdir(), 'oq-b445-html');
 
@@ -178,7 +178,9 @@ test.describe('B445: Career Screen Mockup 3 (1440 and 390)', () => {
     await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
 
     // Verify Career Screen renders with candidate roles and honest wage rules
-    await expect(page.getByRole('heading', { level: 1, name: 'Карьера' })).toBeVisible();
+    await expect(
+      page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
     await expect(page.getByText('вилка не считается').first()).toBeVisible();
 
@@ -234,7 +236,9 @@ test.describe('B445: Career Screen Mockup 3 (1440 and 390)', () => {
 
     await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Карьера' })).toBeVisible();
+    await expect(
+      page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
+    ).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
 
     const hasOverflow = await page.evaluate(

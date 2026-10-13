@@ -1,7 +1,8 @@
 import type { SearchConditionsDraft, StopCompany } from './careerScreenTypes';
-import { DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
-import type { CandidateDecisionProfile, DecisionWorkFormatId } from '../../../shared/workPreferences';
-
+import type {
+  CandidateDecisionProfile,
+  DecisionWorkFormatId,
+} from '../../../shared/workPreferences';
 
 export function recalculateMatchingStats(conditions: SearchConditionsDraft): {
   matched: number;
@@ -78,8 +79,8 @@ export function applyConditionsEdit(
 }
 
 export function decisionProfileToSearchConditions(
-  profile: CandidateDecisionProfile,
-  stopList: readonly StopCompany[] = DEFAULT_SEARCH_CONDITIONS.stopList,
+  profile: Partial<CandidateDecisionProfile>,
+  stopList: readonly StopCompany[] = [],
 ): SearchConditionsDraft {
   const formats = profile.workFormats ?? [];
   const selectedGeo =
@@ -141,11 +142,16 @@ export function searchConditionsToDecisionProfile(
   };
 }
 
-
 export class CareerConditionsStorage {
-  private committed: SearchConditionsDraft = DEFAULT_SEARCH_CONDITIONS;
-  private draft: SearchConditionsDraft = DEFAULT_SEARCH_CONDITIONS;
+  private committed: SearchConditionsDraft;
+  private draft: SearchConditionsDraft;
   private simulateFailure = false;
+
+  constructor(initial?: SearchConditionsDraft) {
+    const fallback = initial ?? decisionProfileToSearchConditions({});
+    this.committed = fallback;
+    this.draft = fallback;
+  }
 
   public getConditions(): SearchConditionsDraft {
     return this.committed;

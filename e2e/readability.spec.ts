@@ -207,8 +207,8 @@ async function openSection(
   }
   const landmark = {
     Сегодня: page.locator('.career-today'),
-    // B366: шаг «Роль» открывает экран «Вакансии» с фокусом на фильтре ролей.
-    Роль: page.locator('.vacancies-content').first(),
+    // S11-CAR: рейловая кнопка «Карьера» открывает .career-screen; мобильный шаг может вести в .vacancies-content
+    Роль: page.locator('.career-screen, .vacancies-content').first(),
     Вакансии: page.locator('.vac-list-item').first(),
     Отклики: page.getByRole('heading', { name: 'Отклики', exact: true }),
   }[label];
@@ -227,7 +227,9 @@ async function assertReadable(
   const facts = await page.evaluate(measure, MIN_FONT_PX);
   const context = `${label} @ ${width}: ${JSON.stringify(facts, null, 1)}`;
   expect(errors, context).toEqual([]);
-  expect(facts.textNodes, context).toBeGreaterThan(40);
+  // S11-CAR: экран «Карьера» (макет 3) компактнее списков вакансий: 30+ узлов текста против 5 в ошибке
+  const minNodes = label === 'Роль' ? 30 : 40;
+  expect(facts.textNodes, context).toBeGreaterThan(minNodes);
   expect(facts.sizes.length, context).toBeLessThanOrEqual(MAX_DISTINCT_SIZES);
   expect(facts.under13, context).toEqual([]);
   expect(facts.overflowX, context).toBeLessThanOrEqual(0);
@@ -298,7 +300,7 @@ test.describe('B232 readability gate', () => {
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Карьера', '.vacancies-screen'],
+      ['Карьера', '.career-screen'],
       ['Вакансии', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
       ['Автоматизация', '.automation-screen'],

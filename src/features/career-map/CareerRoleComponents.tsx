@@ -128,7 +128,7 @@ function RoleRejectAction({
 
   if (confirmReject) {
     return (
-      <div style={{ display: 'inline-flex', gap: '8px', alignItems: 'center' }}>
+      <div className="career-role-reject-confirm">
         <button
           type="button"
           className="career-btn career-btn-secondary"
