@@ -4,6 +4,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import { profileCompleteness } from './profileCompleteness';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { CandidateMemory } from '../coach/coachApi';
+import { aboutFinding, experienceFinding } from './reviewFindings';
 import { ResumeAtsView } from './ResumeAtsView';
 import { ResumePrintAction } from './ResumePrintAction';
 import { ResumePrintDocument } from './ResumePrintDocument';
@@ -155,12 +156,28 @@ function reviewBlocks(draft: ResumeDraft, issues: readonly ResumeUnknown[]): Rev
   return blocks;
 }
 
+function withFindings(
+  blocks: ReviewBlock[],
+  draft: ResumeDraft,
+  memory: readonly CandidateMemory[],
+): ReviewBlock[] {
+  const findings: Partial<Record<ReviewBlockId, string | undefined>> = {
+    experience: experienceFinding(draft, memory),
+    about: aboutFinding(draft.candidate.about),
+  };
+  return blocks.map((block) => {
+    const description = findings[block.id];
+    return description && !block.description ? { ...block, description } : block;
+  });
+}
+
 function buildReviewBlocks(
   draft: ResumeDraft,
   issues: readonly ResumeUnknown[],
   staleCount: number,
+  memory: readonly CandidateMemory[],
 ): ReviewBlock[] {
-  const blocks = reviewBlocks(draft, issues);
+  const blocks = withFindings(reviewBlocks(draft, issues), draft, memory);
   if (staleCount) {
     blocks.push({
       id: 'confirmations',
@@ -427,7 +444,7 @@ function ResumeReviewCard({
   const projection = useMemo(() => previewProjection(draft, memory), [draft, memory]);
   const document = useMemo(() => selectDocument(projection, 'master'), [projection]);
   const issues = distinctReviewIssues(document.unknowns);
-  const blocks = buildReviewBlocks(draft, issues, staleCount);
+  const blocks = buildReviewBlocks(draft, issues, staleCount, memory);
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-quality-card"
