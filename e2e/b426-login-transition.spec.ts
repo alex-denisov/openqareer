@@ -84,6 +84,7 @@ test('shows no onboarding flash for a server-confirmed completed profile', async
       response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
   );
   const signInStartedAt = Date.now();
+  const browserSignInStartedAt = await page.evaluate(() => performance.now());
   await page.getByRole('button', { name: 'Войти в кабинет' }).click();
   expect((await loginResponse).status()).toBe(200);
   await page.waitForURL('**/app');
@@ -120,8 +121,28 @@ test('shows no onboarding flash for a server-confirmed completed profile', async
   const frames = await page.evaluate(
     () => (window as Window & { __b426Frames?: LoginFrame[] }).__b426Frames ?? [],
   );
+  const startupAssets = await page.evaluate((startedAt) => {
+    const assets = performance
+      .getEntriesByType('resource')
+      .filter(
+        (entry) =>
+          entry.startTime >= startedAt && new URL(entry.name).pathname.startsWith('/assets/'),
+      )
+      .map((entry) => ({
+        path: new URL(entry.name).pathname,
+        startedMs: Math.round(entry.startTime - startedAt),
+        durationMs: Math.round(entry.duration),
+        finishedMs: Math.round(entry.startTime + entry.duration - startedAt),
+      }));
+    return {
+      count: assets.length,
+      lastFinishedMs: Math.max(0, ...assets.map((entry) => entry.finishedMs)),
+      slowest: assets.sort((left, right) => right.durationMs - left.durationMs).slice(0, 10),
+    };
+  }, browserSignInStartedAt);
   const after = {
     loginPageReadyMs,
+    startupAssets,
     initialAssets: {
       files: initialAssets.length,
       jsFiles: initialAssets.filter((asset) => /\.m?js$/u.test(asset.path)).length,

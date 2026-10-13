@@ -32,6 +32,7 @@ test.describe('S11 FirstRun session continuity', () => {
   test('a session restored after two seconds still opens FirstRun', async ({ page }) => {
     await page.addInitScript(installDesktopApiTestBridge);
     await page.addInitScript(() => {
+      Object.assign(window, { __TAURI_INTERNALS__: { invoke: async () => null } });
       localStorage.setItem('openqareer_session_token', 'desktop-restored-session');
     });
     let reads = 0;
@@ -78,7 +79,6 @@ test.describe('S11 FirstRun session continuity', () => {
       releaseOldRead = resolve;
     });
 
-    await page.addInitScript(installDesktopApiTestBridge);
     await page.addInitScript(() => {
       localStorage.setItem('openqareer_session_token', 'desktop-restored-session');
     });
@@ -118,8 +118,10 @@ test.describe('S11 FirstRun session continuity', () => {
     await page.getByRole('button', { name: 'Войти в кабинет' }).click();
     await expect(page).toHaveURL(/\/app$/);
     expect((await workspaceRequest).headers()['authorization']).toBe('Bearer desktop-next-session');
+    const oldResponse = page.waitForResponse((response) => response.url().endsWith('/auth/me'));
     releaseOldRead();
     holdOldRead = false;
+    await oldResponse;
     await expect(page.getByTestId('first-run-wizard')).toBeVisible();
     expect(await page.evaluate(() => localStorage.getItem('openqareer_session_token'))).toBe(
       'desktop-next-session',

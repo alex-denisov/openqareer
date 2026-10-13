@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ResumeIngestionState } from '../journey/useResumeIngestion';
 import {
   DEFAULT_FIRST_RUN_DATA,
@@ -28,6 +28,11 @@ function useFirstRunDialogState() {
   const [isCitySheetOpen, setIsCitySheetOpen] = useState(false);
   const [isSkipDialogOpen, setIsSkipDialogOpen] = useState(false);
   const [isSkippedToastVisible, setIsSkippedToastVisible] = useState(false);
+  useEffect(() => {
+    if (!isSkippedToastVisible) return;
+    const timer = window.setTimeout(() => setIsSkippedToastVisible(false), 5_000);
+    return () => window.clearTimeout(timer);
+  }, [isSkippedToastVisible]);
 
   return {
     isGoalEditing,
@@ -108,7 +113,10 @@ export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
     ...upload,
     handleSelectSource: (source: SourceType) =>
       setData((current) => ({ ...current, selectedSource: source })),
-    handleSelectCity: (city: FirstRunCity) => setData((current) => selectCity(current, city)),
+    handleSelectCity: (city: FirstRunCity) => {
+      setData((current) => selectCity(current, city));
+      dialogs.setIsSkippedToastVisible(false);
+    },
     handleGoalChange: (goal: string) => setData((current) => setGoal(current, goal)),
     handleFormatChange: (format: WorkFormat) =>
       setData((current) => setWorkFormat(current, format)),

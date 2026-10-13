@@ -484,8 +484,8 @@ export function CareerWorkspaceShell({
             onOpenSettings={openNotificationSettings}
           />
           <div className="career-main-content">
-            {intakeVisible ? (
-              <div hidden={accountOpen}>
+            {intakeVisible || (sessionPending && intakeStarted) ? (
+              <div hidden={accountOpen || !intakeVisible}>
                 <FirstRunWizard
                   key={`intake-${intakeSeed}`}
                   onComplete={completeFirstRun}
