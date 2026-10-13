@@ -10,6 +10,7 @@ import type {
   CandidateAutomationQueueStatus,
   CandidateAutomationRules,
 } from '../../../server/domain/candidateAutomation';
+import type { CandidateAutomationDeliveryStats } from '../../../server/candidate/sqliteCandidateAutomationScheduleRepository';
 import type { CandidateAutomationSchedule } from '../../../server/candidate/candidateAutomationScheduler';
 import { apiFetch, readDataObject, throwApiError } from '../coach/apiClient';
 
@@ -18,6 +19,7 @@ export interface CandidateAutomationSnapshot {
   readonly consents: readonly CandidateAutomationConsent[];
   readonly stopCompanies: readonly CandidateAutomationStopCompany[];
   readonly queueCounts: Readonly<Record<CandidateAutomationQueueStatus, number>>;
+  readonly deliveryStats?: CandidateAutomationDeliveryStats;
   readonly schedule: CandidateAutomationSchedule;
   readonly schedulerRuntime: CandidateAutomationRuntime;
   readonly linkedinPublishing: { readonly enabled: false; readonly reason: string };

@@ -180,7 +180,7 @@
 
 .automation-summary-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--career-space-3);
 }
 
@@ -197,6 +197,11 @@
 
 .automation-summary-grid article span {
   color: var(--career-text-soft);
+}
+
+.automation-summary-grid article small {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
 }
 
 .automation-summary-grid article strong {
@@ -261,6 +266,11 @@
   display: grid;
   gap: var(--career-space-1);
   min-width: 0;
+}
+
+.automation-mode-picker label > .career-pill {
+  margin-inline-start: auto;
+  align-self: flex-start;
 }
 
 .automation-mode-picker small,
@@ -996,6 +1006,10 @@
     border-bottom: var(--career-border-width) solid var(--career-line);
     border-radius: 0;
     background: transparent;
+  }
+
+  .automation-summary-grid article small {
+    display: none;
   }
 
   .automation-summary-grid article:last-child {

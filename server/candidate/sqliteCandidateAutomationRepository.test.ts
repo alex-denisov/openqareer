@@ -208,6 +208,45 @@ describe('SqliteCandidateAutomationRepository', () => {
     expect(repository.schedulerRepository.countDailyAttempts('alice', '2026-10-12', 'hh')).toBe(1);
   });
 
+  it("counts today's attempts and the last seven days of delivery errors from the journal", () => {
+    const { repository } = setup();
+    const item = repository.addQueueItem('alice', queuePayload(), 'today', true);
+    const entry = (
+      result: 'delivered' | 'error',
+      occurredAt: string,
+      localDate: string,
+      id: string,
+    ) =>
+      repository.schedulerRepository.appendJournalEntry({
+        candidateId: 'alice',
+        queueItemId: item.id,
+        platform: 'hh',
+        result,
+        receiptStatus: result === 'delivered' ? 'delivered' : 'attempted',
+        attempted: true,
+        localDate,
+        company: 'Acme',
+        occurredAt,
+        receiptId: id,
+        failureCode: result === 'error' ? 'provider_error' : null,
+      });
+    entry('delivered', '2026-10-13T08:00:00.000Z', '2026-10-13', 'r1');
+    entry('error', '2026-10-13T09:00:00.000Z', '2026-10-13', 'r2');
+    entry('delivered', '2026-10-10T09:00:00.000Z', '2026-10-10', 'r3');
+    entry('error', '2026-10-01T09:00:00.000Z', '2026-10-01', 'r4');
+
+    expect(
+      repository.schedulerRepository.deliveryStats(
+        'alice',
+        '2026-10-13',
+        '2026-10-13T12:00:00.000Z',
+      ),
+    ).toEqual({ sentToday: 2, failedWeek: 1, attemptedWeek: 3 });
+    expect(
+      repository.schedulerRepository.deliveryStats('bob', '2026-10-13', '2026-10-13T12:00:00.000Z'),
+    ).toEqual({ sentToday: 0, failedWeek: 0, attemptedWeek: 0 });
+  });
+
   it('reinstalls the idempotent scheduler schema and clears candidate records on deletion', () => {
     const { database, repository } = setup();
     repository.schedulerRepository.saveSchedule('alice', DEFAULT_CANDIDATE_AUTOMATION_SCHEDULE);

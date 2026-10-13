@@ -45,6 +45,12 @@ interface JournalRow {
   failure_code: string | null;
 }
 
+export interface CandidateAutomationDeliveryStats {
+  readonly sentToday: number;
+  readonly failedWeek: number;
+  readonly attemptedWeek: number;
+}
+
 export interface AppendCandidateAutomationJournalInput {
   readonly candidateId: string;
   readonly queueItemId: string;
@@ -346,6 +352,33 @@ export class SqliteCandidateAutomationScheduleRepository {
       )
       .get(candidateId, localDate, platform) as { count: number };
     return row.count;
+  }
+
+  deliveryStats(
+    candidateId: string,
+    localDate: string,
+    now = new Date().toISOString(),
+  ): CandidateAutomationDeliveryStats {
+    const since = new Date(Date.parse(now) - 7 * 86_400_000).toISOString();
+    const week = this.database
+      .prepare(
+        `SELECT COUNT(*) AS attempted,
+      SUM(CASE WHEN result = 'error' THEN 1 ELSE 0 END) AS errors
+      FROM candidate_auto_apply_journal
+      WHERE candidate_id = ? AND occurred_at >= ? AND attempted = 1`,
+      )
+      .get(candidateId, since) as { attempted: number; errors: number | null };
+    const today = this.database
+      .prepare(
+        `SELECT COUNT(*) AS count FROM candidate_auto_apply_journal
+      WHERE candidate_id = ? AND local_date = ? AND attempted = 1`,
+      )
+      .get(candidateId, localDate) as { count: number };
+    return {
+      sentToday: today.count,
+      failedWeek: week.errors ?? 0,
+      attemptedWeek: week.attempted,
+    };
   }
 
   journalCounts(

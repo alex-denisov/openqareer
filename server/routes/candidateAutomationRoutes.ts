@@ -133,12 +133,20 @@ const getAutomationState: Handler = async (deps, request, reply) => {
   return reply.send({ data: stateResponse(deps, candidate.id) });
 };
 
+function deliveryStats(deps: AutomationDeps, candidateId: string) {
+  const repository = deps.automationRepository.schedulerRepository;
+  const now = new Date();
+  const timezone = repository.getSchedule(candidateId).timezone;
+  return repository.deliveryStats(candidateId, formatLocalDate(now, timezone), now.toISOString());
+}
+
 function stateResponse(deps: AutomationDeps, candidateId: string) {
   return {
     settings: deps.automationRepository.getSettings(candidateId),
     consents: deps.automationRepository.listConsents(candidateId),
     stopCompanies: deps.automationRepository.listStopCompanies(candidateId),
     queueCounts: deps.automationRepository.queueCounts(candidateId),
+    deliveryStats: deliveryStats(deps, candidateId),
     schedule: deps.automationRepository.schedulerRepository.getSchedule(candidateId),
     schedulerRuntime: deps.automationRepository.schedulerRepository.getRuntime(candidateId),
     linkedinPublishing: { enabled: false, reason: 'Публикацию в LinkedIn подтверждает и запускает кандидат (PRB-003).' },

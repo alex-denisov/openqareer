@@ -47,7 +47,10 @@ function EnabledHomeView(props: AutomationHomePanelProps) {
       <HomeHeader runtime={schedulerRuntime} />
       <HomeSummary snapshot={props.snapshot} pendingCount={props.pendingCount} />
       <p className="automation-home-note">
-        Одобрение ставит отклик в расписание. Статус доставки появится после квитанции площадки.
+        Одобрение ставит отклик в расписание. Статус доставки появится после квитанции площадки.{' '}
+        {schedulerRuntime.nextSendAt
+          ? `Следующая отправка: ${automationDateLabel(schedulerRuntime.nextSendAt)}.`
+          : 'Следующая отправка не запланирована.'}
       </p>
       <RuntimeNotices runtime={schedulerRuntime} onOpenConnections={props.onOpenConnections} />
       <ModePicker mode={settings.mode} onSetMode={props.onSetMode} />
@@ -93,16 +96,24 @@ function HomeSummary({
   readonly snapshot: CandidateAutomationSnapshot;
   readonly pendingCount: number;
 }) {
+  const stats = snapshot.deliveryStats;
+  const limits = snapshot.schedule.dailyLimits;
   return (
     <div className="automation-summary-grid">
-      <SummaryValue label="Ждут вашего одобрения" value={pendingCount} />
       <SummaryValue
-        label="Следующая отправка"
-        value={
-          snapshot.schedulerRuntime.nextSendAt
-            ? automationDateLabel(snapshot.schedulerRuntime.nextSendAt)
-            : 'Не запланирована'
-        }
+        label="Ждут вашего одобрения"
+        value={pendingCount}
+        note="Отправка только после вашего одобрения"
+      />
+      <SummaryValue
+        label="Отправлено сегодня"
+        value={stats ? `${stats.sentToday} / ${limits.hh + limits.linkedin}` : 'Нет данных'}
+        note={`Лимит в день: hh.ru ${limits.hh} + LinkedIn ${limits.linkedin}`}
+      />
+      <SummaryValue
+        label="Ошибок доставки за 7 дней"
+        value={stats ? stats.failedWeek : 'Нет данных'}
+        note={stats ? `Из ${stats.attemptedWeek} попыток отправки` : undefined}
       />
     </div>
   );
@@ -111,14 +122,17 @@ function HomeSummary({
 function SummaryValue({
   label,
   value,
+  note,
 }: {
   readonly label: string;
   readonly value: string | number;
+  readonly note?: string | undefined;
 }) {
   return (
     <article>
       <span>{label}</span>
       <strong>{value}</strong>
+      {note ? <small>{note}</small> : null}
     </article>
   );
 }
@@ -171,7 +185,8 @@ function ModePicker({
       <ModeOption
         id="drafts"
         label="Только черновики"
-        detail="Отправляете вы сами."
+        detail="Платформа готовит письма и отклики, отправляете вы сами."
+        badge="Минимальный риск"
         value="drafts_only"
         current={mode}
         onSelect={onSetMode}
@@ -179,15 +194,17 @@ function ModePicker({
       <ModeOption
         id="approval"
         label="С одобрением"
-        detail="Каждый отклик подтверждаете отдельно."
+        detail="Отправка только после вашего «Отправить» на каждый отклик."
         value="approval_required"
         current={mode}
         onSelect={onSetMode}
       />
       <ModeOption
         id="automatic"
-        label="Автоматически"
-        detail="Без одобрения пока недоступно: исполнитель не подключён."
+        label="Автоматически по правилам"
+        detail="Отправка без вашего «Отправить», в пределах лимитов."
+        badge="Нужен тариф Pro"
+        badgeTone="is-warn"
         value="automatic"
         current={mode}
         disabled
@@ -204,8 +221,12 @@ function ModeOption({
   value,
   current,
   disabled = false,
+  badge,
+  badgeTone = 'is-muted',
   onSelect,
 }: {
+  readonly badge?: string | undefined;
+  readonly badgeTone?: string | undefined;
   readonly id: string;
   readonly label: string;
   readonly detail: string;
@@ -230,6 +251,11 @@ function ModeOption({
         <strong>{label}</strong>
         <small>{detail}</small>
       </span>
+      {current === value ? (
+        <span className="career-pill is-good">Выбран</span>
+      ) : badge ? (
+        <span className={`career-pill ${badgeTone}`}>{badge}</span>
+      ) : null}
     </label>
   );
 }
