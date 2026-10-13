@@ -1,9 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B250 — окно «Подробнее» у вакансии: заголовок и панель «Откликнуться»
  * закреплены, прокручивается только тело, окно помещается во вьюпорт на
- * 1440 и 390, Esc закрывает и возвращает фокус на кнопку «Подробнее».
+ * 1440 и 390, Esc закрывает и возвращает фокус на кнопку «Полное описание».
  */
 
 const CANDIDATE = {
@@ -242,15 +243,21 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openInfoModal(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+    timeout: 15_000,
+  });
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   const firstItem = page.locator('.vac-list-item').first();
-  if ((await firstItem.locator('.vac-row').getAttribute('aria-expanded')) !== 'true') {
-    await firstItem.locator('.vac-row').click();
+  if (
+    (await firstItem.locator('.vacancies-screen-row-trigger').getAttribute('aria-expanded')) !==
+    'true'
+  ) {
+    await firstItem.locator('.vacancies-screen-row-trigger').click();
   }
   await expect(firstItem.locator('.vac-detail')).toBeVisible();
-  await firstItem.locator('.vac-detail').getByRole('button', { name: 'Подробнее' }).click();
+  await firstItem.locator('.vac-detail').getByRole('button', { name: 'Полное описание' }).click();
   await expect(page.locator('.career-modal-card.is-detail')).toBeVisible();
 }
 
@@ -288,7 +295,7 @@ test.describe('B250 vacancy detail modal', () => {
     await page.keyboard.press('Escape');
     await expect(card).toHaveCount(0);
     await expect(
-      page.locator('.vac-detail').getByRole('button', { name: 'Подробнее' }),
+      page.locator('.vac-detail').getByRole('button', { name: 'Полное описание' }),
     ).toBeFocused();
   });
 

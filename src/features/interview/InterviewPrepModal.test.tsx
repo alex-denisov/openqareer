@@ -69,6 +69,19 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('Ваши вопросы им');
   });
 
+  it('открывает рабочую тренировку из подготовки к интервью', () => {
+    const html = renderToStaticMarkup(
+      <InterviewPrepModal
+        isOpen={true}
+        onClose={vi.fn()}
+        vacancy={sampleVacancy}
+        facts={sampleFacts}
+      />,
+    );
+
+    expect(html).toContain('Начать мок-интервью');
+  });
+
   it('рендерит справку о компании и фокус интервьюера во вкладке overview', () => {
     const html = renderToStaticMarkup(
       <InterviewPrepModal
@@ -96,6 +109,7 @@ describe('InterviewPrepModal', () => {
         vacancy={sampleVacancy}
         facts={sampleFacts}
         initialTab="star"
+        onOpenStarStories={vi.fn()}
       />,
     );
 
@@ -104,6 +118,7 @@ describe('InterviewPrepModal', () => {
     expect(html).toContain('Действие:');
     expect(html).toContain('Результат:');
     expect(html).toContain('Скопировать');
+    expect(html).toContain('Открыть STAR-истории');
     expect(html).toContain('45%');
   });
 

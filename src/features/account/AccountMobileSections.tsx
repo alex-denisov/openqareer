@@ -7,24 +7,28 @@ import {
   ShieldCheck,
   SignIn,
   Trash,
-  TrendUp,
   Wallet,
-  X,
 } from '@phosphor-icons/react';
 import type {
   AccountConsent,
   AccountDevice,
-  AccountNotificationEvent,
-  AccountPaymentItem,
   MobileAccountViewId,
 } from './accountTypes';
+import type { CandidateConnection } from '../coach/coachApi';
+import { initialsFor } from '../shell/accountIdentity';
 
 interface MobileHomeProps {
-  readonly isPro: boolean;
+  readonly displayName: string | null;
+  readonly email: string | null;
+  readonly connectionCount?: string | null;
   readonly onGoView: (view: MobileAccountViewId) => void;
+  readonly onSignOut: () => void;
 }
 
-function MobileHomePrimaryGroup({ onGoView }: Pick<MobileHomeProps, 'onGoView'>) {
+function MobileHomePrimaryGroup({
+  onGoView,
+  connectionCount,
+}: Pick<MobileHomeProps, 'onGoView' | 'connectionCount'>) {
   return (
     <div className="career-account-mobile-group">
       <button
@@ -51,7 +55,7 @@ function MobileHomePrimaryGroup({ onGoView }: Pick<MobileHomeProps, 'onGoView'>)
           <span className="career-account-row-label">Подключения</span>
         </div>
         <div className="career-account-row-right">
-          <span className="career-account-row-desc">2 из 6</span>
+          {connectionCount ? <span className="career-account-row-desc">{connectionCount}</span> : null}
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
@@ -70,7 +74,7 @@ function MobileHomePrimaryGroup({ onGoView }: Pick<MobileHomeProps, 'onGoView'>)
   );
 }
 
-function MobileHomeSecondaryGroup({ isPro, onGoView }: MobileHomeProps) {
+function MobileHomeSecondaryGroup({ onGoView }: Pick<MobileHomeProps, 'onGoView'>) {
   return (
     <div className="career-account-mobile-group">
       <button
@@ -93,25 +97,31 @@ function MobileHomeSecondaryGroup({ isPro, onGoView }: MobileHomeProps) {
           <Wallet size={20} className="career-account-row-icon" />
           <span className="career-account-row-label">Подписка и платежи</span>
         </div>
-        <div className="career-account-row-right">
-          <span className="career-account-row-desc">{isPro ? 'Pro' : 'Free'}</span>
-          <CaretRight size={18} aria-hidden="true" />
-        </div>
+        <CaretRight size={18} aria-hidden="true" />
       </button>
     </div>
   );
 }
 
-function MobileHomeNavGroups({ isPro, onGoView }: MobileHomeProps) {
+function MobileHomeNavGroups({
+  onGoView,
+  connectionCount,
+}: Pick<MobileHomeProps, 'onGoView' | 'connectionCount'>) {
   return (
     <>
-      <MobileHomePrimaryGroup onGoView={onGoView} />
-      <MobileHomeSecondaryGroup isPro={isPro} onGoView={onGoView} />
+      <MobileHomePrimaryGroup onGoView={onGoView} connectionCount={connectionCount} />
+      <MobileHomeSecondaryGroup onGoView={onGoView} />
     </>
   );
 }
 
-export function MobileAccountHome({ isPro, onGoView }: MobileHomeProps) {
+export function MobileAccountHome({
+  displayName,
+  email,
+  connectionCount,
+  onGoView,
+  onSignOut,
+}: MobileHomeProps) {
   return (
     <div className="career-account-mobile-view" data-mv="home">
       <div className="career-account-head">
@@ -123,47 +133,81 @@ export function MobileAccountHome({ isPro, onGoView }: MobileHomeProps) {
         onClick={() => onGoView('prof')}
       >
         <div className="career-account-mobile-user-info">
-          <span className="career-account-mobile-avatar">А</span>
+          <span className="career-account-mobile-avatar" aria-hidden="true">{initialsFor(displayName)}</span>
           <div className="career-account-row-content">
-            <span className="career-account-row-label">Андрей Лебедев</span>
-            <span className="career-account-row-desc">a.lebedev@example.com</span>
+            <span className="career-account-row-label">{displayName || 'Имя не указано'}</span>
+            <span className="career-account-row-desc">{email || 'Почта не указана'}</span>
           </div>
         </div>
         <CaretRight size={18} aria-hidden="true" />
       </button>
-      <MobileHomeNavGroups isPro={isPro} onGoView={onGoView} />
+      <MobileHomeNavGroups onGoView={onGoView} connectionCount={connectionCount} />
+      <button type="button" className="career-btn is-ghost" onClick={onSignOut}>
+        Выйти из аккаунта
+      </button>
     </div>
   );
 }
 
 interface MobileProfileProps {
+  readonly displayName: string | null;
+  readonly email: string | null;
+  readonly emailVerified?: boolean;
+  readonly timezone: string | null;
   readonly onBack: () => void;
   readonly onGoDevices: () => void;
+  readonly onEditName: () => void;
+  readonly onEditEmail: () => void;
+  readonly onChangePassword: () => void;
+  readonly onEditTimezone: () => void;
+  readonly onSignOut: () => void;
 }
 
-function ProfileIdentityGroup() {
+function ProfileIdentityGroup({
+  displayName,
+  email,
+  emailVerified,
+  onEditName,
+  onEditEmail,
+  onChangePassword,
+}: Pick<
+  MobileProfileProps,
+  'displayName' | 'email' | 'emailVerified' | 'onEditName' | 'onEditEmail' | 'onChangePassword'
+>) {
   return (
     <div className="career-account-mobile-group">
-      <div className="career-account-mobile-row">
-        <span className="career-account-row-label">Имя</span>
-        <span className="career-account-row-desc">Андрей Лебедев</span>
-      </div>
-      <div className="career-account-mobile-row">
+      <button type="button" className="career-account-mobile-row" onClick={onEditName}>
+        <div className="career-account-row-content">
+          <span className="career-account-row-label">Имя</span>
+          <span className="career-account-row-desc">{displayName || 'Не указано'}</span>
+        </div>
+        <CaretRight size={18} aria-hidden="true" />
+      </button>
+      <button type="button" className="career-account-mobile-row" onClick={onEditEmail}>
         <div className="career-account-row-content">
           <span className="career-account-row-label">Почта для входа</span>
-          <span className="career-account-row-desc">a.lebedev@example.com</span>
+          <span className="career-account-row-desc">{email || 'Не указана'}</span>
         </div>
-        <span className="career-account-tag is-ok">Подтверждена</span>
-      </div>
-      <div className="career-account-mobile-row">
-        <span className="career-account-row-label">Пароль</span>
-        <span className="career-account-row-desc">Изменён 12.09</span>
-      </div>
+        <div className="career-account-row-right">
+          <span className={`career-account-tag is-${emailVerified === true ? 'ok' : 'dim'}`}>
+            {emailVerified === true ? 'Подтверждена' : emailVerified === false ? 'Не подтверждена' : 'Статус не проверен'}
+          </span>
+          <CaretRight size={18} aria-hidden="true" />
+        </div>
+      </button>
+      <button type="button" className="career-account-mobile-row" onClick={onChangePassword}>
+        <span className="career-account-row-label">Сменить пароль</span>
+        <CaretRight size={18} aria-hidden="true" />
+      </button>
     </div>
   );
 }
 
-function ProfileSecurityGroup({ onGoDevices }: { readonly onGoDevices: () => void }) {
+function ProfileSecurityGroup({
+  timezone,
+  onGoDevices,
+  onEditTimezone,
+}: Pick<MobileProfileProps, 'timezone' | 'onGoDevices' | 'onEditTimezone'>) {
   return (
     <>
       <div className="career-account-mobile-group">
@@ -183,12 +227,13 @@ function ProfileSecurityGroup({ onGoDevices }: { readonly onGoDevices: () => voi
         </div>
       </div>
       <div className="career-account-mobile-group">
-        <div className="career-account-mobile-row">
+        <button type="button" className="career-account-mobile-row" onClick={onEditTimezone}>
           <div className="career-account-row-content">
             <span className="career-account-row-label">Часовой пояс</span>
-            <span className="career-account-row-desc">Москва, UTC+3</span>
+            <span className="career-account-row-desc">{timezone || 'Не указан'}</span>
           </div>
-        </div>
+          <CaretRight size={18} aria-hidden="true" />
+        </button>
         <button type="button" className="career-account-mobile-row" onClick={onGoDevices}>
           <span className="career-account-row-label">Входы и устройства</span>
           <div className="career-account-row-right">
@@ -201,7 +246,19 @@ function ProfileSecurityGroup({ onGoDevices }: { readonly onGoDevices: () => voi
   );
 }
 
-export function MobileAccountProfile({ onBack, onGoDevices }: MobileProfileProps) {
+export function MobileAccountProfile({
+  displayName,
+  email,
+  emailVerified,
+  timezone,
+  onBack,
+  onGoDevices,
+  onEditName,
+  onEditEmail,
+  onChangePassword,
+  onEditTimezone,
+  onSignOut,
+}: MobileProfileProps) {
   return (
     <div className="career-account-mobile-view" data-mv="prof">
       <div className="career-account-mobile-header">
@@ -215,14 +272,23 @@ export function MobileAccountProfile({ onBack, onGoDevices }: MobileProfileProps
         </button>
         <h2 className="career-account-title">Профиль и вход</h2>
       </div>
-      <ProfileIdentityGroup />
-      <ProfileSecurityGroup onGoDevices={onGoDevices} />
+      <ProfileIdentityGroup
+        displayName={displayName}
+        email={email}
+        emailVerified={emailVerified}
+        onEditName={onEditName}
+        onEditEmail={onEditEmail}
+        onChangePassword={onChangePassword}
+      />
+      <ProfileSecurityGroup timezone={timezone} onGoDevices={onGoDevices} onEditTimezone={onEditTimezone} />
+      <button type="button" className="career-btn is-ghost" onClick={onSignOut}>Выйти из аккаунта</button>
     </div>
   );
 }
 
 interface MobileDevicesProps {
   readonly devices: readonly AccountDevice[];
+  readonly busy: boolean;
   readonly onBack: () => void;
   readonly onTerminateDevice: (d: AccountDevice) => void;
   readonly onLogoutOtherDevices: () => void;
@@ -230,9 +296,11 @@ interface MobileDevicesProps {
 
 function MobileDeviceRow({
   device,
+  busy,
   onTerminate,
 }: {
   readonly device: AccountDevice;
+  readonly busy: boolean;
   readonly onTerminate: () => void;
 }) {
   return (
@@ -244,7 +312,7 @@ function MobileDeviceRow({
       {device.current ? (
         <span className="career-account-tag is-ok">Эта сессия</span>
       ) : (
-        <button type="button" className="career-btn is-sm" onClick={onTerminate}>
+        <button type="button" className="career-btn is-sm" disabled={busy} onClick={onTerminate}>
           Завершить
         </button>
       )}
@@ -254,6 +322,7 @@ function MobileDeviceRow({
 
 export function MobileAccountDevices({
   devices,
+  busy,
   onBack,
   onTerminateDevice,
   onLogoutOtherDevices,
@@ -277,6 +346,7 @@ export function MobileAccountDevices({
           <MobileDeviceRow
             key={device.id}
             device={device}
+            busy={busy}
             onTerminate={() => onTerminateDevice(device)}
           />
         ))}
@@ -284,6 +354,7 @@ export function MobileAccountDevices({
       <button
         type="button"
         className="career-account-mobile-danger-btn"
+        disabled={busy || devices.every((device) => device.current)}
         onClick={onLogoutOtherDevices}
       >
         <SignIn size={18} aria-hidden="true" />
@@ -294,82 +365,203 @@ export function MobileAccountDevices({
 }
 
 interface MobileConnectionsProps {
+  readonly connections: readonly CandidateConnection[];
+  readonly isLoading: boolean;
+  readonly notice?: string;
+  readonly emailVerified?: boolean;
+  readonly emailAvailable: boolean;
+  readonly telegramAvailable: boolean;
+  readonly telegramConnected: boolean;
   readonly onBack: () => void;
   readonly onGoLinkedIn: () => void;
   readonly onGoHh: () => void;
+  readonly onOpenNotifications: () => void;
 }
 
 function ConnectedPlatformsGroup({
+  connections,
+  isLoading,
   onGoLinkedIn,
   onGoHh,
-}: Pick<MobileConnectionsProps, 'onGoLinkedIn' | 'onGoHh'>) {
+}: Pick<MobileConnectionsProps, 'connections' | 'isLoading' | 'onGoLinkedIn' | 'onGoHh'>) {
+  const linkedin = connections.find((connection) => connection.platform === 'linkedin');
+  const hh = connections.find((connection) => connection.platform === 'hh');
   return (
     <div className="career-account-mobile-group">
-      <button type="button" className="career-account-mobile-row" onClick={onGoLinkedIn}>
+      <button type="button" className="career-account-mobile-row" disabled={isLoading} onClick={onGoLinkedIn}>
         <div className="career-account-row-content">
           <span className="career-account-row-label">LinkedIn</span>
           <span className="career-account-row-desc">
-            вход сохранён до 10.10 · 9 из 9 мест
+            {mobileConnectionDetails(linkedin, isLoading)}
           </span>
         </div>
         <div className="career-account-row-right">
-          <span className="career-account-tag is-ok">Подключено</span>
+          <span className={`career-account-tag is-${mobileConnectionTag(linkedin, isLoading)}`}>
+            {mobileConnectionStatus(linkedin, isLoading)}
+          </span>
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
-      <button type="button" className="career-account-mobile-row" onClick={onGoHh}>
+      <button type="button" className="career-account-mobile-row" disabled={isLoading} onClick={onGoHh}>
         <div className="career-account-row-content">
           <span className="career-account-row-label">hh.ru</span>
-          <span className="career-account-row-desc">8 из 9 мест работы</span>
+          <span className="career-account-row-desc">{mobileConnectionDetails(hh, isLoading)}</span>
         </div>
         <div className="career-account-row-right">
-          <span className="career-account-tag is-warn">Частично</span>
+          <span className={`career-account-tag is-${mobileConnectionTag(hh, isLoading)}`}>
+            {mobileConnectionStatus(hh, isLoading)}
+          </span>
           <CaretRight size={18} aria-hidden="true" />
         </div>
       </button>
       <div className="career-account-mobile-row">
         <div className="career-account-row-content">
           <span className="career-account-row-label">Другие площадки</span>
-          <span className="career-account-row-desc">открываются при подключении</span>
+          <span className="career-account-row-desc">Подключение пока недоступно.</span>
         </div>
-        <span className="career-account-tag is-dim">Не подключено</span>
+        <span className="career-account-tag is-dim">Недоступно</span>
       </div>
     </div>
   );
 }
 
-function ChannelsGroup() {
+function mobileConnectionDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'дата неизвестна';
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(date);
+}
+
+function mobileConnectionStatus(connection: CandidateConnection | undefined, loading: boolean): string {
+  if (!connection) return loading ? 'Проверяем' : 'Нет данных';
+  if (connection.status === 'connected') return 'Подключено';
+  if (connection.status === 'imported') return 'Профиль импортирован';
+  return connection.available ? 'Не подключено' : 'Недоступно';
+}
+
+function mobileConnectionTag(connection: CandidateConnection | undefined, loading: boolean): 'ok' | 'warn' | 'dim' {
+  if (!connection || connection.status === 'disconnected') return 'dim';
+  if (connection.status === 'imported') return 'warn';
+  return loading ? 'dim' : 'ok';
+}
+
+function mobileConnectionDetails(connection: CandidateConnection | undefined, loading: boolean): string {
+  if (!connection) return loading ? 'Проверяем состояние подключения.' : 'Состояние не удалось загрузить.';
+  if (connection.status === 'connected') {
+    return `Импортировано ${connection.factCount} фактов · ${mobileConnectionDate(connection.lastImportedAt)}`;
+  }
+  if (connection.status === 'imported') {
+    return `Профиль импортирован ${mobileConnectionDate(connection.importedAt)}. Активная сессия не сохранена.`;
+  }
+  return connection.available ? 'Подключите площадку из приложения.' : 'Подключение пока недоступно.';
+}
+
+function ChannelsGroup({
+  emailVerified,
+  emailAvailable,
+  telegramAvailable,
+  telegramConnected,
+  onOpenNotifications,
+}: Pick<
+  MobileConnectionsProps,
+  'emailVerified' | 'emailAvailable' | 'telegramAvailable' | 'telegramConnected' | 'onOpenNotifications'
+>) {
   return (
     <div className="career-account-mobile-group">
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Почта</span>
-          <span className="career-account-row-desc">для ответов работодателей</span>
-        </div>
-        <span className="career-account-tag is-dim">Не подключено</span>
-      </div>
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Календарь</span>
-          <span className="career-account-row-desc">для интервью</span>
-        </div>
-        <span className="career-account-tag is-dim">Не подключено</span>
-      </div>
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Telegram</span>
-          <span className="career-account-row-desc">бот @openqareer_bot</span>
-        </div>
-        <span className="career-account-tag is-dim">Не подключено</span>
-      </div>
+      <EmailChannelRow
+        emailVerified={emailVerified}
+        emailAvailable={emailAvailable}
+        onOpen={onOpenNotifications}
+      />
+      <CalendarChannelRow />
+      <TelegramChannelRow
+        available={telegramAvailable}
+        connected={telegramConnected}
+        onOpen={onOpenNotifications}
+      />
+    </div>
+  );
+}
+
+function EmailChannelRow({
+  emailVerified,
+  emailAvailable,
+  onOpen,
+}: Pick<MobileConnectionsProps, 'emailVerified' | 'emailAvailable'> & { readonly onOpen: () => void }) {
+  const status = emailVerified ? (emailAvailable ? 'Подключено' : 'Недоступно') : 'Не подтверждена';
+  const description = emailVerified
+    ? emailAvailable
+      ? 'Почта для входа подтверждена. Канал уведомлений доступен.'
+      : 'Почта подтверждена, но канал уведомлений недоступен.'
+    : 'Для ответов работодателей нужна подтверждённая почта.';
+  return (
+    <button type="button" className="career-account-mobile-row" onClick={onOpen}>
+      <ChannelRowContent title="Почта" description={description} />
+      <ChannelRowAction status={status} connected={Boolean(emailVerified && emailAvailable)} />
+    </button>
+  );
+}
+
+function CalendarChannelRow() {
+  return (
+    <div className="career-account-mobile-row">
+      <ChannelRowContent title="Календарь" description="Подключение календаря пока недоступно." />
+      <span className="career-account-tag is-dim">Скоро</span>
+    </div>
+  );
+}
+
+function TelegramChannelRow({
+  available,
+  connected,
+  onOpen,
+}: {
+  readonly available: boolean;
+  readonly connected: boolean;
+  readonly onOpen: () => void;
+}) {
+  const description = connected
+    ? 'Бот @openqareer_bot подключён для выбранных уведомлений.'
+    : available
+      ? 'Настройте связь и уведомления в разделе «Уведомления». '
+      : 'Подключение Telegram пока недоступно.';
+  return (
+    <button type="button" className="career-account-mobile-row" onClick={onOpen}>
+      <ChannelRowContent title="Telegram" description={description} />
+      <ChannelRowAction status={connected ? 'Подключено' : 'Не подключено'} connected={connected} />
+    </button>
+  );
+}
+
+function ChannelRowContent({ title, description }: { readonly title: string; readonly description: string }) {
+  return (
+    <div className="career-account-row-content">
+      <span className="career-account-row-label">{title}</span>
+      <span className="career-account-row-desc">{description}</span>
+    </div>
+  );
+}
+
+function ChannelRowAction({ status, connected }: { readonly status: string; readonly connected: boolean }) {
+  return (
+    <div className="career-account-row-right">
+      <span className={`career-account-tag is-${connected ? 'ok' : 'dim'}`}>{status}</span>
+      <CaretRight size={18} aria-hidden="true" />
     </div>
   );
 }
 
 export function MobileAccountConnections({
+  connections,
+  isLoading,
+  notice,
+  emailVerified,
+  emailAvailable,
+  telegramAvailable,
+  telegramConnected,
   onBack,
   onGoLinkedIn,
   onGoHh,
+  onOpenNotifications,
 }: MobileConnectionsProps) {
   return (
     <div className="career-account-mobile-view" data-mv="conn">
@@ -384,338 +576,134 @@ export function MobileAccountConnections({
         </button>
         <h2 className="career-account-title">Подключения</h2>
       </div>
-      <ConnectedPlatformsGroup onGoLinkedIn={onGoLinkedIn} onGoHh={onGoHh} />
-      <ChannelsGroup />
-    </div>
-  );
-}
-
-export function MobileAccountLinkedIn({
-  onBack,
-  onDisconnect,
-}: {
-  readonly onBack: () => void;
-  readonly onDisconnect: () => void;
-}) {
-  return (
-    <div className="career-account-mobile-view" data-mv="li">
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">LinkedIn</h2>
-      </div>
-      <p className="career-account-lead">
-        Импортировано 9 из 9 мест работы. Контактов 412.
-      </p>
-      <div className="career-account-mobile-group">
-        <label htmlFor="li-contacts-chk" className="career-account-mobile-row">
-          <span className="career-account-row-label">Использовать контакты для маршрутов</span>
-          <input id="li-contacts-chk" type="checkbox" defaultChecked />
-        </label>
-        <label htmlFor="li-posts-chk" className="career-account-mobile-row">
-          <span className="career-account-row-label">Готовить черновики постов</span>
-          <input id="li-posts-chk" type="checkbox" defaultChecked />
-        </label>
-      </div>
-      <button
-        type="button"
-        className="career-account-mobile-danger-btn"
-        onClick={onDisconnect}
-      >
-        <X size={18} aria-hidden="true" />
-        Отключить LinkedIn
-      </button>
-    </div>
-  );
-}
-
-export function MobileAccountHh({
-  onBack,
-  onDisconnect,
-}: {
-  readonly onBack: () => void;
-  readonly onDisconnect: () => void;
-}) {
-  return (
-    <div className="career-account-mobile-view" data-mv="hh">
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">hh.ru</h2>
-      </div>
-      <div className="career-account-row">
-        <span className="career-account-row-desc">
-          Импортировано 8 из 9 мест работы.
-        </span>
-      </div>
-      <div className="career-account-mobile-group">
-        <label htmlFor="hh-apply-chk" className="career-account-mobile-row">
-          <span className="career-account-row-label">Отправлять отклики через этот аккаунт</span>
-          <input id="hh-apply-chk" type="checkbox" defaultChecked />
-        </label>
-      </div>
-      <button
-        type="button"
-        className="career-account-mobile-danger-btn"
-        onClick={onDisconnect}
-      >
-        <X size={18} aria-hidden="true" />
-        Отключить hh.ru
-      </button>
-    </div>
-  );
-}
-
-interface MobileNotificationsProps {
-  readonly events: readonly AccountNotificationEvent[];
-  readonly onBack: () => void;
-  readonly onSelectEvent: (index: number) => void;
-}
-
-function MandatoryNotifGroup() {
-  return (
-    <div className="career-account-mobile-group">
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Платежи</span>
-          <span className="career-account-row-desc">
-            Приложение, Почта · письмо до списания, чек
-          </span>
-        </div>
-      </div>
-      <div className="career-account-mobile-row">
-        <div className="career-account-row-content">
-          <span className="career-account-row-label">Безопасность</span>
-          <span className="career-account-row-desc">
-            Приложение, Почта · новый вход, смена пароля
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function MobileAccountNotifications({
-  events,
-  onBack,
-  onSelectEvent,
-}: MobileNotificationsProps) {
-  return (
-    <div className="career-account-mobile-view" data-mv="notif">
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">Уведомления</h2>
-      </div>
-      <p className="career-account-lead">
-        Откройте событие, чтобы выбрать каналы. Важное включено сразу.
-      </p>
-      <div className="career-account-mobile-group">
-        {events.map((e) => (
-          <button
-            key={e.id}
-            type="button"
-            className="career-account-mobile-row"
-            onClick={() => onSelectEvent(e.index)}
-          >
-            <div className="career-account-row-content">
-              <span className="career-account-row-label">{e.title}</span>
-              <span className="career-account-row-desc">Приложение, Почта</span>
-            </div>
-            <CaretRight size={18} aria-hidden="true" />
-          </button>
-        ))}
-      </div>
-      <MandatoryNotifGroup />
-      <div className="career-account-row">
-        <span className="career-account-row-desc">
-          Telegram не подключён. Бот подключается на вкладке «Подключения».
-        </span>
-      </div>
-    </div>
-  );
-}
-
-export function MobileAccountEventDetail({
-  event,
-  onBack,
-}: {
-  readonly event: AccountNotificationEvent;
-  readonly onBack: () => void;
-}) {
-  return (
-    <div className="career-account-mobile-view" data-mv={`ev${event.index}`}>
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">{event.title}</h2>
-      </div>
-      <p className="career-account-lead">{event.timing}</p>
-      <div className="career-account-mobile-group">
-        <label htmlFor={`ev-${event.index}-app`} className="career-account-mobile-row">
-          <span className="career-account-row-label">Приложение</span>
-          <input id={`ev-${event.index}-app`} type="checkbox" defaultChecked={event.app} />
-        </label>
-        <div className="career-account-mobile-row">
-          <div className="career-account-row-content">
-            <span className="career-account-row-label">Telegram</span>
-            <span className="career-account-row-desc">Недоступно без бота</span>
-          </div>
-          <input type="checkbox" disabled aria-label="Telegram" />
-        </div>
-        <label htmlFor={`ev-${event.index}-mail`} className="career-account-mobile-row">
-          <span className="career-account-row-label">Почта</span>
-          <input id={`ev-${event.index}-mail`} type="checkbox" defaultChecked={event.email} />
-        </label>
-      </div>
-      <p className="career-account-row-desc">{event.reason}</p>
+      <ConnectedPlatformsGroup
+        connections={connections}
+        isLoading={isLoading}
+        onGoLinkedIn={onGoLinkedIn}
+        onGoHh={onGoHh}
+      />
+      <ChannelsGroup
+        emailVerified={emailVerified}
+        emailAvailable={emailAvailable}
+        telegramAvailable={telegramAvailable}
+        telegramConnected={telegramConnected}
+        onOpenNotifications={onOpenNotifications}
+      />
+      {notice ? <p className="career-account-row-desc" role="status">{notice}</p> : null}
     </div>
   );
 }
 
 interface MobileConsentsProps {
   readonly consents: readonly AccountConsent[];
+  readonly loading: boolean;
+  readonly busyConsentId?: string | null;
+  readonly statusMessage?: string | null;
   readonly onBack: () => void;
   readonly onToggleConsent: (c: AccountConsent) => void;
+  readonly onExportAll: () => void;
   readonly onDeleteAccount: () => void;
 }
 
 export function MobileAccountConsents({
   consents,
+  loading,
+  busyConsentId,
+  statusMessage,
   onBack,
   onToggleConsent,
+  onExportAll,
   onDeleteAccount,
 }: MobileConsentsProps) {
   return (
     <div className="career-account-mobile-view" data-mv="cons">
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">Согласия и данные</h2>
-      </div>
-      <p className="career-account-lead">Согласия сохраняются с датой.</p>
-      <div className="career-account-mobile-group">
-        {consents.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className="career-account-mobile-row"
-            onClick={() => onToggleConsent(item)}
-          >
-            <div className="career-account-row-content">
-              <span className="career-account-row-label">{item.title}</span>
-              <span className="career-account-row-desc">
-                {item.date ? `дано ${item.date}` : 'не дано'}
-              </span>
-            </div>
-            <input type="checkbox" checked={Boolean(item.date)} readOnly tabIndex={-1} />
-          </button>
-        ))}
-      </div>
-      <button
-        type="button"
-        className="career-account-mobile-danger-btn"
-        onClick={onDeleteAccount}
-      >
-        <Trash size={18} aria-hidden="true" />
-        Удалить аккаунт
-      </button>
+      <MobileSectionHeader title="Согласия и данные" onBack={onBack} />
+      <p className="career-account-lead">Статусы загружаются из настроек аккаунта.</p>
+      {loading ? <p role="status">Загружаем актуальный статус согласий.</p> : null}
+      <MobileConsentRows
+        consents={consents}
+        loading={loading}
+        busyConsentId={busyConsentId}
+        onToggleConsent={onToggleConsent}
+      />
+      {statusMessage ? <p role="status">{statusMessage}</p> : null}
+      <MobileConsentActions onExportAll={onExportAll} onDeleteAccount={onDeleteAccount} />
     </div>
   );
 }
 
-interface MobileSubscriptionProps {
-  readonly isPro: boolean;
-  readonly payments: readonly AccountPaymentItem[];
-  readonly onBack: () => void;
-  readonly onOpenTariffs?: () => void;
+function MobileSectionHeader({ title, onBack }: { readonly title: string; readonly onBack: () => void }) {
+  return (
+    <div className="career-account-mobile-header">
+      <button type="button" className="career-account-mobile-back-btn" onClick={onBack} aria-label="Назад">
+        <CaretLeft size={20} aria-hidden="true" />
+      </button>
+      <h2 className="career-account-title">{title}</h2>
+    </div>
+  );
 }
 
-function MobilePaymentsList({ payments }: { readonly payments: readonly AccountPaymentItem[] }) {
+function MobileConsentRows({
+  consents,
+  loading,
+  busyConsentId,
+  onToggleConsent,
+}: Pick<MobileConsentsProps, 'consents' | 'loading' | 'busyConsentId' | 'onToggleConsent'>) {
   return (
     <div className="career-account-mobile-group">
-      <div className="career-account-mobile-row">
-        <span className="career-account-row-label">История платежей</span>
-        <span className="career-account-row-desc">{payments.length}</span>
-      </div>
-      {payments.map((p) => (
-        <div key={p.date + p.title} className="career-account-mobile-row">
-          <div className="career-account-row-content">
-            <span className="career-account-row-label">{p.title}</span>
-            <span className="career-account-row-desc">{p.date} · {p.method}</span>
-          </div>
-          <span className="career-account-num">{p.amount}</span>
-        </div>
+      {consents.map((item) => (
+        <MobileConsentRow
+          key={item.id}
+          item={item}
+          disabled={Boolean(loading || busyConsentId === item.id)}
+          onToggle={() => onToggleConsent(item)}
+        />
       ))}
     </div>
   );
 }
 
-export function MobileAccountSubscription({
-  isPro,
-  payments,
-  onBack,
-  onOpenTariffs,
-}: MobileSubscriptionProps) {
+function MobileConsentRow({
+  item,
+  disabled,
+  onToggle,
+}: {
+  readonly item: AccountConsent;
+  readonly disabled: boolean;
+  readonly onToggle: () => void;
+}) {
+  const unknown = item.status === 'unknown';
+  const granted = item.status === 'granted';
+  const status = unknown ? 'Нет проверенных данных' : granted ? `Дано ${item.date || 'дата неизвестна'}` : 'Не дано';
   return (
-    <div className="career-account-mobile-view" data-mv="pay">
-      <div className="career-account-mobile-header">
-        <button
-          type="button"
-          className="career-account-mobile-back-btn"
-          onClick={onBack}
-          aria-label="Назад"
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h2 className="career-account-title">Подписка и платежи</h2>
+    <div className="career-account-mobile-row">
+      <div className="career-account-row-content">
+        <span className="career-account-row-label">{item.title}</span>
+        <span className="career-account-row-desc">{status}</span>
       </div>
-      <div className="career-account-mobile-group">
-        <div className="career-account-mobile-row">
-          <span className="career-account-row-label">Тариф</span>
-          <span className="career-account-tag is-ok">{isPro ? 'Pro' : 'Free'}</span>
-        </div>
-      </div>
-      {isPro ? (
-        <MobilePaymentsList payments={payments} />
-      ) : (
-        <div>
-          <button type="button" className="career-btn is-primary" onClick={onOpenTariffs}>
-            <TrendUp size={16} aria-hidden="true" />
-            Выбрать тариф
-          </button>
-        </div>
-      )}
+      <button
+        type="button"
+        className="career-btn is-sm"
+        disabled={disabled || unknown || (granted ? !item.revokeable : !item.grantable)}
+        onClick={onToggle}
+      >
+        {unknown ? 'Недоступно' : granted ? 'Отозвать' : 'Дать согласие'}
+      </button>
     </div>
+  );
+}
+
+function MobileConsentActions({
+  onExportAll,
+  onDeleteAccount,
+}: Pick<MobileConsentsProps, 'onExportAll' | 'onDeleteAccount'>) {
+  return (
+    <>
+      <button type="button" className="career-btn" onClick={onExportAll}>Выгрузить данные</button>
+      <button type="button" className="career-account-mobile-danger-btn" onClick={onDeleteAccount}>
+        <Trash size={18} aria-hidden="true" />
+        Удалить аккаунт
+      </button>
+    </>
   );
 }

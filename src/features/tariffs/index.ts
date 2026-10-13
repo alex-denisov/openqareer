@@ -4,4 +4,5 @@ export * from './TariffCard';
 export * from './TariffComparisonTable';
 export * from './TariffMobileView';
 export * from './CareerTariffsView';
+export * from './BillingManagementPanel';
 export * from './PaywallModal';

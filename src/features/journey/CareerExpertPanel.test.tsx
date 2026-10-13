@@ -156,7 +156,21 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('О вакансии: Senior Backend — BigTech');
   });
 
-  it('uses a dockable complementary panel with starter chips and an unavailable voice control', () => {
+  it('puts goal facts into the consultant message that will be sent to the coach', () => {
+    const prompt = 'Оцените цель «Снизить время релиза»: сейчас 12 дней, цель 8 дней, срок 2026-12-31.';
+    const html = renderToStaticMarkup(
+      <CareerExpertPanel
+        initialPrompt={prompt}
+        initialUser={{ username: 'synthetic', candidateId: 'candidate-b457', role: 'candidate' } as never}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('<textarea');
+    expect(html).toContain(prompt);
+  });
+
+  it('uses a dockable complementary panel with starter chips and an available voice control', () => {
     const html = renderToStaticMarkup(
       <CareerExpertPanel
         initialUser={{ username: 'synthetic', candidateId: 'candidate-b440', role: 'candidate' } as never}
@@ -169,7 +183,7 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('<aside');
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('career-expert-starters');
-    expect(html).toContain('aria-label="Голосовой ввод скоро"');
+    expect(html).toContain('aria-label="Голосовой ввод"');
     expect(html).toContain('career-expert-sheet-toggle');
     expect(html).toContain('aria-expanded="false"');
   });

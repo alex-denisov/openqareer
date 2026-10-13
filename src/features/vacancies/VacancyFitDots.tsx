@@ -1,10 +1,18 @@
 import type { ReactNode } from 'react';
+import { Question } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 
 function WaveIcon() {
   return (
-    <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+    <svg
+      className="icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      aria-hidden="true"
+    >
       <path d="M3 9c3-3 6-3 9 0s6 3 9 0M3 16c3-3 6-3 9 0s6 3 9 0" />
     </svg>
   );
@@ -12,7 +20,14 @@ function WaveIcon() {
 
 function CheckIcon() {
   return (
-    <svg className="icon" viewBox="0 0 256 256" fill="none" stroke="currentColor" strokeWidth="24" aria-hidden="true">
+    <svg
+      className="icon"
+      viewBox="0 0 256 256"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="24"
+      aria-hidden="true"
+    >
       <path d="M216 72 104 184l-56-56" />
     </svg>
   );
@@ -20,7 +35,14 @@ function CheckIcon() {
 
 function DashIcon() {
   return (
-    <svg className="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" aria-hidden="true">
+    <svg
+      className="icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      aria-hidden="true"
+    >
       <path d="M6 12h12" />
     </svg>
   );
@@ -110,9 +132,7 @@ export function LevelFitDot({
   }
   if (levelMatch === 'below' || levelMatch === 'above') {
     const desc =
-      levelMatch === 'below'
-        ? 'Вакансия ниже целевого уровня'
-        : 'Вакансия выше целевого уровня';
+      levelMatch === 'below' ? 'Вакансия ниже целевого уровня' : 'Вакансия выше целевого уровня';
     return (
       <FitDotView
         className="fit-dot is-nearby"
@@ -128,7 +148,7 @@ export function LevelFitDot({
         className="fit-dot is-unknown"
         label="Уровень не распознан"
         tooltip="Уровень не распознан"
-        icon="?"
+        icon={<Question size={14} aria-hidden="true" />}
       />
     );
   }

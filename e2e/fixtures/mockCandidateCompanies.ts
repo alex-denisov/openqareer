@@ -12,8 +12,8 @@ type MutableCompany = {
 };
 let companies: MutableCompany[] = createCompanyFixtures();
 
-function createCompanyFixtures(): MutableCompany[] {
-  return Array.from({ length: 400 }, (_, index) => companyFixture(index));
+function createCompanyFixtures(count = 400): MutableCompany[] {
+  return Array.from({ length: count }, (_, index) => companyFixture(index));
 }
 
 function recruiterFixture(
@@ -176,6 +176,14 @@ function companySeed(index: number) {
       industry: 'Разработка',
       recruiterName: '',
     },
+    {
+      name: 'Revolut',
+      vacancyCount: 1,
+      want: false,
+      location: 'Berlin',
+      industry: 'Финансы',
+      recruiterName: '',
+    },
   ];
   return (
     seeds[index] ?? {
@@ -257,10 +265,17 @@ function detailsFor(company: CandidateCompanyOpportunity, offset: number): Candi
   };
 }
 
-export async function mockCandidateCompanies(page: Page): Promise<void> {
+export interface MockCandidateCompanyOptions {
+  readonly companyCount?: number;
+}
+
+export async function mockCandidateCompanies(
+  page: Page,
+  options: MockCandidateCompanyOptions = {},
+): Promise<void> {
   searchConsentGranted = false;
   wantedSteps.clear();
-  companies = createCompanyFixtures();
+  companies = createCompanyFixtures(options.companyCount ?? 400);
   await page.route('**/api/v1/candidate/companies**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;

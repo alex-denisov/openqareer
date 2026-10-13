@@ -1,0 +1,215 @@
+openapi: 3.1.0
+info:
+  title: OpenQareer account settings
+  version: 1.0.0
+  description: Additive account-settings operations for the versioned candidate API.
+paths:
+  /api/v1/account/sessions/{sessionId}:
+    delete:
+      summary: Revoke one other device session
+      description: The session ID is the 16-character public identifier returned in GET /api/v1/account. The current session cannot be revoked by this operation.
+      security:
+        - sessionCookie: []
+        - sessionCookieSecure: []
+        - sessionBearer: []
+      parameters:
+        - in: path
+          name: sessionId
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{16}$'
+      responses:
+        '204':
+          description: The target device session was revoked.
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '404':
+          description: No active session with this identifier belongs to the caller.
+        '409':
+          description: The selected session is the current session.
+  /api/v1/account/email-change-requests:
+    post:
+      summary: Start or complete an account email change
+      description: Requires the current password. When email verification is enabled, the existing address remains active until the code sent to the new address is confirmed.
+      security:
+        - sessionCookie: []
+        - sessionCookieSecure: []
+        - sessionBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, currentPassword]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  maxLength: 254
+                currentPassword:
+                  type: string
+                  minLength: 1
+                  maxLength: 256
+      responses:
+        '200':
+          description: The address was updated directly where email verification is not required.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdatedEmailResponse'
+        '202':
+          description: A verification code was sent to the new address.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingEmailChangeResponse'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '409':
+          description: The address is already in use or requires verification.
+        '422':
+          description: The address failed validation or domain checks.
+        '429':
+          description: Email verification rate limit reached. A Retry-After header is returned.
+        '503':
+          description: Email delivery is unavailable.
+  /api/v1/account/email-change-requests/current:
+    get:
+      summary: Read the caller's pending email change
+      security:
+        - sessionCookie: []
+        - sessionCookieSecure: []
+        - sessionBearer: []
+      responses:
+        '200':
+          description: The active request, or null when no code is awaiting confirmation.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    oneOf:
+                      - $ref: '#/components/schemas/PendingEmailChangeState'
+                      - type: 'null'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: The current account email is not verified.
+  /api/v1/account/email-change-requests/current/verification:
+    post:
+      summary: Confirm a pending email change
+      security:
+        - sessionCookie: []
+        - sessionCookieSecure: []
+        - sessionBearer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  pattern: '^\d{6}$'
+      responses:
+        '200':
+          description: The new address is verified and now belongs to the account.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UpdatedEmailUser'
+        '400':
+          $ref: '#/components/responses/InvalidRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/OriginRejected'
+        '409':
+          description: No active request exists, the account changed, or the new email is now in use.
+        '410':
+          description: The verification code expired.
+        '422':
+          description: The verification code is incorrect.
+        '429':
+          description: Too many verification attempts.
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: openqareer_session
+    sessionCookieSecure:
+      type: apiKey
+      in: cookie
+      name: __Host-openqareer_session
+    sessionBearer:
+      type: http
+      scheme: bearer
+  schemas:
+    PendingEmailChangeState:
+      type: object
+      required: [email, expiresAt, resendAfterSeconds]
+      properties:
+        email:
+          type: string
+          format: email
+        expiresAt:
+          type: string
+          format: date-time
+        resendAfterSeconds:
+          type: integer
+          minimum: 0
+    PendingEmailChangeResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/PendingEmailChangeState'
+            - type: object
+              required: [status, emailVerificationEmailSent]
+              properties:
+                status:
+                  const: pending
+                emailVerificationEmailSent:
+                  const: true
+    UpdatedEmailResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: '#/components/schemas/UpdatedEmailUser'
+    UpdatedEmailUser:
+      type: object
+      required: [status, email]
+      properties:
+        status:
+          const: updated
+        email:
+          type: string
+          format: email
+  responses:
+    InvalidRequest:
+      description: The request body or path parameter is invalid.
+    Unauthorized:
+      description: A valid candidate session is required.
+    OriginRejected:
+      description: The mutation origin is not allowed.

@@ -17,7 +17,11 @@ import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverag
 import { profileCompleteness } from './profileCompleteness';
 import { patchTopcard } from './profileEditing';
 import type { ResumeDraft, ResumeReaderProvenance } from './resumeTypes';
-import type { CandidateConnection, ImportedSourceSummary } from '../coach/coachApi';
+import type {
+  CandidateConnection,
+  CandidateMemory,
+  ImportedSourceSummary,
+} from '../coach/coachApi';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 
 interface ProfileTopcardProps {
@@ -31,6 +35,7 @@ interface ProfileTopcardProps {
   /** Undefined while the status read has not landed yet (B266 pattern). */
   readonly connections?: readonly CandidateConnection[];
   readonly importedSources?: readonly ImportedSourceSummary[];
+  readonly memory?: readonly CandidateMemory[];
   /** Opens «Аккаунт → Подключения» (C54 п.11) — no chip without it. */
   readonly onOpenConnections?: () => void;
 }
@@ -401,8 +406,17 @@ function ProfileCoverageDetails({ draft }: { readonly draft: ResumeDraft }) {
   );
 }
 
-function ProfileCompletenessSummary({ draft }: { readonly draft: ResumeDraft }) {
+function ProfileCompletenessSummary({
+  draft,
+  memory,
+}: {
+  readonly draft: ResumeDraft;
+  readonly memory: readonly CandidateMemory[];
+}) {
   const completeness = profileCompleteness(draft);
+  const proposedFactCount = memory.filter(
+    (item) => item.kind === 'fact' && item.status === 'proposed',
+  ).length;
   return (
     <div className="career-profile-screen-completion">
       <div>
@@ -418,6 +432,10 @@ function ProfileCompletenessSummary({ draft }: { readonly draft: ResumeDraft }) 
         max={completeness.totalCount}
         aria-label={`Резюме собрано ${completeness.completedCount} из ${completeness.totalCount} блоков`}
       />
+      <p className="career-profile-screen-proposed-facts">
+        {factCountLabel(proposedFactCount)} {proposedFactCount === 1 ? 'ждёт' : 'ждут'}{' '}
+        подтверждения
+      </p>
       {completeness.missingSections.length ? (
         <p>Не заполнено: {completeness.missingSections.join(', ').toLowerCase()}.</p>
       ) : null}
@@ -436,7 +454,7 @@ function TopcardProfileCopy({
 }) {
   const { draft, updatedAt } = props;
   const fullName = draft.candidate.fullName?.trim();
-  const headline = draft.candidate.headline?.trim() ?? draft.targetRole?.trim();
+  const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
   const location = draft.candidate.contact?.location?.trim();
   const hasDetails = Boolean(location || updatedAt || draft.candidate.contact);
   return (
@@ -445,8 +463,23 @@ function TopcardProfileCopy({
         <div className="career-profile-screen-name-row">
           <h1>{fullName || 'Имя не указано'}</h1>
         </div>
-        {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-        <ProfileCompletenessSummary draft={draft} />
+        <div className="career-profile-screen-profile-meta">
+          {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
+          {location ? (
+            <>
+              {headline ? (
+                <span className="career-profile-screen-meta-separator" aria-hidden="true">
+                  ·
+                </span>
+              ) : null}
+              <span className="career-profile-screen-inline-location">
+                <MapPin size={14} aria-hidden="true" />
+                {location}
+              </span>
+            </>
+          ) : null}
+        </div>
+        <ProfileCompletenessSummary draft={draft} memory={props.memory ?? []} />
         {hasDetails ? (
           <ProfileDetailsToggle isOpen={detailsOpen} onToggle={onToggleDetails} />
         ) : null}
@@ -464,7 +497,11 @@ function TopcardProfileCopy({
 export function ProfileTopcard(props: ProfileTopcardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   return (
-    <section className="career-profile-screen-topcard" aria-label="Основные данные профиля">
+    <section
+      id="career-profile-screen-topcard"
+      className="career-profile-screen-topcard"
+      aria-label="Основные данные профиля"
+    >
       <div className="career-profile-screen-id-row">
         <TopcardAvatar draft={props.draft} />
         <TopcardProfileCopy
@@ -519,7 +556,7 @@ function ProfileTopcardDetails({
     <div className={`career-profile-screen-details${isOpen ? ' is-open' : ''}`}>
       <div className="career-profile-screen-id-meta">
         {location ? (
-          <span>
+          <span className="career-profile-screen-detail-location">
             <MapPin size={14} />
             {location}
           </span>

@@ -1,24 +1,87 @@
 import { mkdirSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mockMatchedFacets } from './fixtures/matchedFacets';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 async function openFilters(page: Page) {
-  if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
-    await page.getByRole('button', { name: 'Фильтры и сохранённые запросы' }).click();
+  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
+  if (mobile) {
+    if (!(await page.locator('.vacancies-filters.is-mobile-open').isVisible())) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
+    }
+    const locationsHeading = page
+      .locator('.vacancies-filters')
+      .getByRole('heading', { name: 'Локации', exact: true })
+      .first();
+    if (!(await locationsHeading.isVisible())) {
+      await page.locator('[data-filter-sheet-group="locations"]').click();
+    }
+  } else if (!(await page.locator('.filters-panel.is-expanded').isVisible())) {
+    await page.locator('[data-filter-group="locations"]').click();
   }
   return page.locator('.vacancies-filters');
 }
 
+async function openFilterGroup(page: Page, groupId: string) {
+  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
+  if (mobile) {
+    if (!(await page.locator('.vacancies-filters.is-mobile-open').isVisible())) {
+      await page.locator('.vacancies-mobile-filter-toggle').click();
+    }
+    const backToOverview = page.getByRole('button', { name: 'Все фильтры', exact: true });
+    if (await backToOverview.isVisible()) await backToOverview.click();
+    await page.locator(`[data-filter-sheet-group="${groupId}"]`).click();
+    return;
+  }
+  const group = page.locator(`[data-filter-group="${groupId}"]`);
+  if ((await group.getAttribute('aria-expanded')) !== 'true') await group.click();
+}
+
+async function applyFilterDraft(page: Page) {
+  await page.getByRole('button', { name: 'Применить', exact: true }).click();
+}
+
+async function expectMatchedCount(page: Page, count: string) {
+  await expect(page.locator('.list-hint[aria-live="polite"]')).toHaveAttribute('aria-label', count);
+}
+
+async function applyFacet(
+  page: Page,
+  filters: Locator,
+  group: string,
+  label: RegExp,
+  count?: string,
+) {
+  await openFilterGroup(page, group);
+  await filters.getByRole('button', { name: label }).click();
+  await applyFilterDraft(page);
+  if (count) await expectMatchedCount(page, count);
+}
+
+async function applyRemoteOnlyFacet(page: Page, filters: Locator, count: string) {
+  await openFilterGroup(page, 'format');
+  await filters
+    .locator('.field-group')
+    .filter({ has: page.getByRole('heading', { name: 'Формат работы', exact: true }) })
+    .getByRole('button', { name: /Удалённо/u })
+    .click();
+  await applyFilterDraft(page);
+  await expectMatchedCount(page, count);
+}
+
 async function openVacancies(page: Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await page
     .getByRole('button', { name: 'Вакансии', exact: true })
     .filter({ visible: true })
     .first()
     .click();
-  await expect(page.getByText('Показано 3 из 3', { exact: true })).toBeVisible();
+  await expect(page.locator('.list-hint[aria-live="polite"]')).toHaveAttribute(
+    'aria-label',
+    'Показано 3 из 3',
+  );
 }
 
 test('B338: фильтр перечитывает подборку, сохраняя числа всей выдачи', async ({ page }) => {
@@ -31,33 +94,33 @@ test('B338: фильтр перечитывает подборку, сохран
   const us = filters.getByRole('button', { name: /US.*2/ });
   await expect(us).toHaveAttribute('aria-pressed', 'false');
   await us.click();
-  await expect(page.getByText('Показано 2 из 3', { exact: true })).toBeVisible();
+  await applyFilterDraft(page);
+  await expectMatchedCount(page, 'Показано 2 из 3');
   expect(reads.at(-1)?.searchParams.getAll('region')).toEqual(['us']);
   expect(reads.at(-1)?.searchParams.get('offset') ?? '0').toBe('0');
+  await openFilterGroup(page, 'locations');
   await expect(us).toHaveAttribute('aria-pressed', 'true');
-  await filters.getByRole('button', { name: /Удалённо.*1/ }).click();
-  await expect(page.getByText('Показано 1 из 3', { exact: true })).toBeVisible();
+
+  await applyRemoteOnlyFacet(page, filters, 'Показано 1 из 3');
   expect(reads.at(-1)?.searchParams.get('remote')).toBe('1');
+  await openFilterGroup(page, 'locations');
   await us.click();
-  await filters.getByRole('button', { name: /Удалённо.*1/ }).click();
-  await expect(page.getByText('Показано 3 из 3', { exact: true })).toBeVisible();
-  await filters.getByRole('button', { name: /Руководитель.*2/ }).click();
-  await expect(page.getByText('Показано 2 из 3', { exact: true })).toBeVisible();
+  await applyFilterDraft(page);
+  await applyRemoteOnlyFacet(page, filters, 'Показано 3 из 3');
+
+  await applyFacet(page, filters, 'roles', /Руководитель.*2/, 'Показано 2 из 3');
   expect(reads.at(-1)?.searchParams.getAll('level')).toEqual(['head']);
-  await filters.getByRole('button', { name: /Remotive.*1/ }).click();
-  await expect(page.getByText('Показано 0 из 3', { exact: true })).toBeVisible();
+  await applyFacet(page, filters, 'sources', /Remotive.*1/, 'Показано 0 из 3');
   expect(reads.at(-1)?.searchParams.getAll('source')).toEqual(['remotive']);
-  await filters.getByRole('button', { name: /Руководитель.*2/ }).click();
-  await expect(page.getByText('Показано 1 из 3', { exact: true })).toBeVisible();
-  await filters.getByRole('button', { name: /Remotive.*1/ }).click();
-  await expect(page.getByText('Показано 3 из 3', { exact: true })).toBeVisible();
-  await filters.getByRole('button', { name: /Enterprise Architect.*3/ }).click();
+
+  await applyFacet(page, filters, 'roles', /Руководитель.*2/, 'Показано 1 из 3');
+  await applyFacet(page, filters, 'sources', /Remotive.*1/, 'Показано 3 из 3');
+  await applyFacet(page, filters, 'roles', /Enterprise Architect.*3/);
   await expect
     .poll(() => reads.at(-1)?.searchParams.getAll('role'))
     .toEqual(['Enterprise Architect']);
-  await page.getByRole('button', { name: /Сохранённые поиски/ }).click();
-  await expect(page.getByRole('region', { name: 'Сохранённые запросы' })).toBeVisible();
-  await expect(page.getByText('Показано 3 из 3', { exact: true })).toBeVisible();
+  await expect(page.locator('.filters-bar .saved-btn')).toHaveCount(0);
+  await expect(page.getByRole('tab', { name: /Сохранённые/u })).toBeVisible();
   expect(errors).toEqual([]);
 });
 

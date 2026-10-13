@@ -18,13 +18,14 @@ function commandToSuggestion(command: CareerCommand): InlineSuggestionItem | nul
   }
   const target = command.executionTarget;
   if (!target || !target.section || !target.proposedText) return null;
+  const sourceFromDiary = command.provenance?.evidenceRefs.some((ref) => ref.startsWith('diary:'));
 
   return {
     id: command.commandId,
     commandId: command.commandId,
     section: target.section,
     experienceId: target.experienceId,
-    title: 'Предложение карьерного консультанта',
+    title: sourceFromDiary ? 'Предложение из карьерного дневника' : 'Предложение карьерного консультанта',
     rationale: command.proposal.objective,
     proposedText: target.proposedText,
     currentText: target.currentText ?? target.previousText,

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { VacancyApplications } from './useVacancyApplications';
-import { VacanciesScreen } from './VacanciesScreen';
+import { VacanciesScreen, filterByScreenState } from './VacanciesScreen';
 
 function matchedItem(
   id: string,
@@ -84,9 +84,17 @@ function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) 
     <VacanciesScreen
       matched={[matchedItem('c-1', 'VP Technology Ops')]}
       total={61}
-      facets={{ total: 61, regions: [{ id: 'mena', count: 61 }], remote: 0,
-        levels: [{ level: 'vp', count: 61 }], roles: [{ role: 'VP Technology Ops', count: 34 },
-          { role: 'COO', count: 6 }], sources: [] }}
+      facets={{
+        total: 61,
+        regions: [{ id: 'mena', count: 61 }],
+        remote: 0,
+        levels: [{ level: 'vp', count: 61 }],
+        roles: [
+          { role: 'VP Technology Ops', count: 34 },
+          { role: 'COO', count: 6 },
+        ],
+        sources: [],
+      }}
       campaign={campaign}
       candidateLevel="VP / C-level"
       now="2026-09-24T09:00:00.000Z"
@@ -96,6 +104,64 @@ function render(overrides: Partial<Parameters<typeof VacanciesScreen>[0]> = {}) 
 }
 
 describe('VacanciesScreen (B250)', () => {
+  it('renders the mockup summary above filters from the server pool and current results', () => {
+    const html = render({
+      matched: [
+        matchedItem('c-1', 'VP Technology Ops'),
+        matchedItem('c-2', 'COO'),
+        matchedItem('c-3', 'Head of Engineering'),
+      ],
+      total: 61,
+      poolComplete: true,
+      facets: {
+        total: 61,
+        regions: [],
+        remote: 0,
+        levels: [],
+        roles: [],
+        sources: [],
+        catalogSummary: {
+          roleLevelMatches: 214,
+          catalogTotal: 1_620,
+          observedAt: '2026-10-07T06:12:00.000Z',
+        },
+      },
+    });
+
+    expect(html).toContain('vacancies-search-summary');
+    expect(html).toContain('vacancies-summary-count');
+    expect(html).toContain('214');
+    expect(html).toMatch(/1\s?620/u);
+    expect(html).toContain('Показано');
+    expect(html).toContain('vacancies-summary-reset');
+    expect(html.indexOf('vacancies-search-summary')).toBeLessThan(
+      html.indexOf('vacancies-filter-toolbar'),
+    );
+  });
+
+  it('renders the approved desktop column header and corresponding row fields', () => {
+    const html = render({
+      matched: [matchedItem('c-1', 'Head of Product, Merchant Onboarding')],
+      total: 1,
+      poolComplete: true,
+    });
+
+    expect(html).toContain('vacancies-table-header');
+    for (const label of ['Роль', 'Уровень', 'Гео', 'Деньги']) {
+      expect(html).toContain(label);
+    }
+    expect(html).toContain('vacancies-screen-cell--level');
+    expect(html).toContain('vacancies-screen-cell--geo');
+    expect(html).toContain('vacancies-screen-cell--salary');
+  });
+
+  it('keeps saved vacancies as the collection entry point without the legacy saved-search CTA', () => {
+    const html = render();
+
+    expect(html).toContain('Сохранённые');
+    expect(html).not.toContain('Сохранённые поиски');
+  });
+
   it('shows an archived response instead of an active application mark', () => {
     const applications: VacancyApplications = {
       applications: [],
@@ -120,9 +186,11 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).not.toContain('Показано');
   });
 
-  it('shows the campaign role in the eyebrow and the total in the list hint', () => {
+  it('uses the vacancies title without the campaign eyebrow and keeps the total hint', () => {
     const html = render();
-    expect(html).toContain('Кампания · VP Technology Ops');
+    expect(html).toContain('>Вакансии</h1>');
+    expect(html).not.toContain('Кампания · VP Technology Ops');
+    expect(html).not.toContain('path-strip');
     // B338-2: число стоит одной строкой «Показано N из M» над списком.
     expect(html).toContain('Показано');
     expect(html).not.toContain('показаны совпадающие по роли и уровню');
@@ -156,9 +224,7 @@ describe('VacanciesScreen (B250)', () => {
       ],
     });
 
-    expect(html.indexOf('Server first partial')).toBeLessThan(
-      html.indexOf('Server second target'),
-    );
+    expect(html.indexOf('Server first partial')).toBeLessThan(html.indexOf('Server second target'));
   });
 
   it('defaults to «Все роли кампании» and lists vacancies for every role', () => {
@@ -166,7 +232,7 @@ describe('VacanciesScreen (B250)', () => {
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
     expect(html).not.toContain('Все роли кампании');
-    expect(html).toContain('Фильтры · 0 активных');
+    expect(html).toContain('Фильтры 0');
   });
 
   it('does not render without a campaign or a level', () => {
@@ -174,7 +240,12 @@ describe('VacanciesScreen (B250)', () => {
   });
 
   it('marks counts of zero and five as a hypothesis, but not eight', () => {
-    const empty = render({ campaign: campaignWithCount(0), matched: [], total: 0, facets: undefined });
+    const empty = render({
+      campaign: campaignWithCount(0),
+      matched: [],
+      total: 0,
+      facets: undefined,
+    });
     expect(empty).toContain('По роли VP Technology Ops найдено 0 вакансий');
     expect(empty).toContain('По роли VP Technology Ops пока нет вакансий');
 
@@ -194,12 +265,16 @@ describe('VacanciesScreen (B250)', () => {
   });
 
   it('баннер не предлагает «Расширить географию», когда кандидат сам не выбирал регион', () => {
-    const html = render({ campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'profile' } } });
+    const html = render({
+      campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'profile' } },
+    });
     expect(html).not.toContain('Расширить географию');
   });
 
   it('баннер предлагает «Расширить географию», когда кандидат сам выбрал регион', () => {
-    const html = render({ campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'explicit' } } });
+    const html = render({
+      campaign: { ...campaignWithCount(5), regions: { value: ['Дубай'], origin: 'explicit' } },
+    });
     expect(html).toContain('Расширить географию');
   });
 
@@ -241,5 +316,68 @@ describe('VacanciesScreen (B250)', () => {
       },
     });
     expect(html).not.toContain('Расширить географию');
+  });
+
+  it('uses server counts for the saved vacancies and companies tabs', () => {
+    const html = render({
+      savedVacancies: [
+        {
+          id: 'saved-1',
+          clusterId: 'c-1',
+          stage: 'saved',
+          vacancy: { title: 'VP Technology Ops' },
+        },
+      ],
+      companiesCount: 61,
+    } as never);
+
+    expect(html).toContain('Сохранённые 1');
+    expect(html).toContain('Компании и люди 61');
+  });
+
+
+  it('keeps the mobile map control available without optional facet metadata', () => {
+    const html = render({ facets: undefined });
+    expect(html).toContain('vacancies-mobile-map-action');
+    expect(html).toContain('Карта');
+  });
+  it('filters by salary, explicit location text, and known work format without guessing missing salary', () => {
+    const eligible = {
+      ...matchedItem('eligible', 'VP Engineering'),
+      cluster: {
+        ...matchedItem('eligible', 'VP Engineering').cluster,
+        canonicalLocation: 'Berlin · hybrid',
+        isRemote: false,
+        salary: { from: 140_000, to: 180_000, currency: 'EUR' },
+      },
+    };
+    const missingSalary = matchedItem('missing-salary', 'VP Engineering');
+    const differentLocation = {
+      ...matchedItem('different-location', 'VP Engineering'),
+      cluster: {
+        ...matchedItem('different-location', 'VP Engineering').cluster,
+        canonicalLocation: 'Paris',
+      },
+    };
+    const criteria = {
+      roles: [],
+      regions: [],
+      levels: [],
+      sources: [],
+      remoteOnly: false,
+      salaryMinimum: 130_000,
+      salaryCurrency: 'EUR',
+      includeMissingSalary: false,
+      formats: ['hybrid'],
+      locationSearch: 'Berlin',
+    } as never;
+
+    const filtered = filterByScreenState(
+      [eligible, missingSalary, differentLocation],
+      criteria,
+      '2026-10-10T00:00:00.000Z',
+    );
+
+    expect(filtered.map((item) => item.cluster.id)).toEqual(['eligible']);
   });
 });

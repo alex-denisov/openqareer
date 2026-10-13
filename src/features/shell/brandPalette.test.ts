@@ -17,10 +17,7 @@ const BRAND_HUE = 255;
 const STATE_HUES = [154, 79, 28] as const;
 const ALLOWED = new Set<number>([BRAND_HUE, ...STATE_HUES]);
 
-const STYLESHEETS = [
-  'src/App.css',
-  'src/features/shell/career-shell.css',
-] as const;
+const STYLESHEETS = ['src/App.css', 'src/features/shell/career-shell.css'] as const;
 
 function huesIn(css: string): Map<number, string[]> {
   const found = new Map<number, string[]>();

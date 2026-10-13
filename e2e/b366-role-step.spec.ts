@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { seedReadabilityWorkspace } from './helpers/seedReadabilityWorkspace';
 import * as fs from 'node:fs';
 
-test.describe('B366: Step «Роль» and career redirect', () => {
-  test('clicking step «Роль» opens «Вакансии» with role filter in focus and captures after screenshots', async ({
+test.describe('B366: Career rail entry opens the existing role filter', () => {
+  test('opens «Вакансии» with role filter in focus and captures after screenshots', async ({
     page,
   }, testInfo) => {
     test.skip(
@@ -12,17 +14,17 @@ test.describe('B366: Step «Роль» and career redirect', () => {
     );
     fs.mkdirSync('output/playwright/B366', { recursive: true });
     await mockSignedInCabinet(page);
+    await seedReadabilityWorkspace(page);
 
     // 1440
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
-    const roleStepButton = page
-      .locator('.career-path-desktop')
-      .getByRole('button', { name: /^Роль\./ })
-      .first();
-    await roleStepButton.click();
+    const careerRailButton = page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьера', exact: true });
+    await careerRailButton.click();
 
     // Verify it opened Vacancies screen
     await expect(page.locator('.vacancies-screen')).toBeVisible();
@@ -48,9 +50,9 @@ test.describe('B366: Step «Роль» and career redirect', () => {
     // 390
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
-    // Click step «Роль» on mobile via mobile summary or role button
+    // The compact layout keeps its existing role-step path.
     const mobileRole = page.locator('.career-path-mobile-role');
     if (await mobileRole.isVisible()) {
       await mobileRole.click();
@@ -62,21 +64,27 @@ test.describe('B366: Step «Роль» and career redirect', () => {
     }
 
     await expect(page.locator('.vacancies-screen')).toBeVisible();
-    await expect(page.locator('.add-role-input')).toBeFocused();
+    const mobileRoleInput = page.locator('.add-role-input');
+    if (!(await mobileRoleInput.isVisible())) {
+      await page.locator('[data-filter-sheet-group="roles"]').click();
+    }
+    await expect(mobileRoleInput).toBeFocused();
     await page.screenshot({ path: 'output/playwright/B366/role-step-after-390.png' });
   });
 
-  test('direct navigation to career redirects to opportunities', async ({ page }, testInfo) => {
+  test('the «Карьера» rail entry opens opportunities with the role filter focused', async ({
+    page,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'desktop only');
     await mockSignedInCabinet(page);
+    await seedReadabilityWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
-    const roleStepButton = page
-      .locator('.career-path-desktop')
-      .getByRole('button', { name: /^Роль\./ })
-      .first();
-    await roleStepButton.click();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьера', exact: true })
+      .click();
 
     await expect(page.locator('.vacancies-screen')).toBeVisible();
     // SearchCampaign / .career-campaign should not exist in the DOM

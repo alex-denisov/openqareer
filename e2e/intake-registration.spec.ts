@@ -26,6 +26,9 @@ const REGISTERED_CANDIDATE = {
 async function stubAuth(page: Page): Promise<void> {
   let registered = false;
 
+  await page.route('**/api/v1/candidate/**', async (route) => {
+    await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
+  });
   await page.route('**/api/v1/auth/register', async (route) => {
     registered = true;
     await route.fulfill({ json: { data: REGISTERED_CANDIDATE } });
@@ -66,17 +69,17 @@ async function reachProfileImportSourceStep(page: Page): Promise<void> {
 
 async function registerFromTopBar(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Войти' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await dialog.getByLabel('Как к вам обращаться').fill(REGISTERED_CANDIDATE.displayName);
-  await dialog.getByLabel('Email').fill(REGISTERED_CANDIDATE.email);
-  await dialog.getByLabel('Пароль').fill('diagnostic-passphrase-2026');
+  const access = page.locator('.career-account-access');
+  await expect(access).toBeVisible();
+  await access.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await access.getByLabel('Как к вам обращаться').fill(REGISTERED_CANDIDATE.displayName);
+  await access.getByLabel('Email').fill(REGISTERED_CANDIDATE.email);
+  await access.getByLabel('Пароль (от 8 символов)').fill('diagnostic-passphrase-2026');
   // B173: registration refuses to proceed until the published pack is accepted.
-  await dialog.getByRole('button', { name: 'Создать и начать' }).click();
-  await expect(dialog.getByText('Примите пользовательское соглашение')).toBeVisible();
-  await dialog.locator('#account-legal-consent').check();
-  await dialog.getByRole('button', { name: 'Создать и начать' }).click();
+  await access.getByRole('button', { name: 'Создать аккаунт' }).click();
+  await expect(access.getByText('Примите пользовательское соглашение')).toBeVisible();
+  await access.locator('#signup-legal').check();
+  await access.getByRole('button', { name: 'Создать аккаунт' }).click();
 }
 
 test.describe('B141 diagnostic survives registration', () => {
@@ -92,7 +95,7 @@ test.describe('B141 diagnostic survives registration', () => {
 
     // The account panel closes itself after a successful registration, and the
     // candidate must be looking at the step they left — not at the cabinet.
-    await expect(page.getByRole('dialog', { name: 'Аккаунт' })).toHaveCount(0);
+    await expect(page.locator('.career-account-access')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
@@ -201,6 +204,9 @@ test.describe('B229 desktop session recovery', () => {
         localStorage.setItem('openqareer_session_token', 'desktop-restored-session');
       }
     });
+    await page.route('**/api/v1/candidate/**', (route) =>
+      route.fulfill({ status: 404, json: { error: { code: 'not_found' } } }),
+    );
     await page.route('**/api/v1/candidate/workspace', (route) =>
       route.fulfill({ json: { data: null } }),
     );

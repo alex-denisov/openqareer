@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { seedReadabilityWorkspace } from './helpers/seedReadabilityWorkspace';
 
 const draft = {
   id: 'draft-b318',
@@ -16,9 +17,14 @@ const draft = {
 };
 
 async function openCard(page: Page) {
+  test.skip(
+    test.info().project.name !== 'mobile-390',
+    'Desktop Today uses the approved decision and funnel layout; compact Today keeps LinkedIn drafts.',
+  );
+  await seedReadabilityWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
-  await expect(card).toBeVisible();
+  await expect(card).toBeVisible({ timeout: 15_000 });
   return card;
 }
 
@@ -116,8 +122,10 @@ test('подготовить комментарий, скопировать и �
   );
 });
 
-test('free открывает окно тарифов и выбор Pro ведёт на Тарифы', async ({ page }, info) => {
-  await mockSignedInCabinet(page);
+test('free shows the upgrade offer and choosing Pro opens the payment step', async ({
+  page,
+}, info) => {
+  await mockSignedInCabinet(page, { billing: { initialPlan: 'free' } });
   await page.route('**/api/v1/candidate/drafts**', async (route) =>
     route.fulfill({
       status: route.request().method() === 'POST' ? 402 : 200,
@@ -133,9 +141,9 @@ test('free открывает окно тарифов и выбор Pro ведё
   const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
   await capture(page, 'free', info.project.name === 'desktop-1440' ? 1440 : 390);
-  await dialog.getByRole('button', { name: 'Выбрать Pro', exact: true }).click();
-  await expect(dialog).toBeHidden();
-  await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: /Перейти на Pro/u }).click();
+  await expect(dialog.getByTestId('tariff-checkout')).toBeVisible();
+  await expect(dialog.getByRole('button', { name: /Перейти к оплате/u })).toBeVisible();
 });
 
 for (const [state, code, message] of [

@@ -13,6 +13,7 @@ import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { ApplicationView } from './applicationsApi';
 import type { InterviewDebriefSubmitData } from './InterviewDebriefModal';
+import { StarStoriesControl } from '../interview/StarStoriesModal';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
 import {
@@ -202,6 +203,7 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onRefresh={props.onRefresh}
         onOpenOfferEdit={props.onOpenOfferEdit}
       />
+      <StarStoriesControl application={application} onOpenExpert={props.onOpenExpert} />
       <CardFooter
         application={application}
         labelText={label.text}

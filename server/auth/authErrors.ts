@@ -104,3 +104,17 @@ export class AuthEmailChangeRequiresVerificationError extends Error {
     this.name = 'AuthEmailChangeRequiresVerificationError';
   }
 }
+
+export class AuthAccountEmailChangeNotPendingError extends Error {
+  constructor() {
+    super('no pending email address change');
+    this.name = 'AuthAccountEmailChangeNotPendingError';
+  }
+}
+
+export class AuthAccountEmailChangeStaleError extends Error {
+  constructor() {
+    super('email address changed after this request was created');
+    this.name = 'AuthAccountEmailChangeStaleError';
+  }
+}

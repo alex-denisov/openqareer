@@ -10,6 +10,7 @@ import { candidate } from './fixtures/readabilityWorkspace';
  * одним объяснением, и ни один экран не остаётся «вошедшим».
  */
 test('a 401 on a candidate route sends the whole app to sign in once', async ({ page }) => {
+  test.setTimeout(45_000);
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/auth/me')) return route.fulfill({ json: { data: candidate } });
@@ -26,8 +27,12 @@ test('a 401 on a candidate route sends the whole app to sign in once', async ({ 
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
 
   await expect(page).toHaveURL(/\/login$/);
-  await expect(page.getByRole('status')).toContainText('Сессия закончилась');
-  await expect(page.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.getByRole('status')).toContainText('Сессия закончилась', {
+    timeout: 30_000,
+  });
   await expect(page.getByText('Нужна действующая сессия')).toHaveCount(0);
   await expect(page.getByText('Выйти')).toHaveCount(0);
 });

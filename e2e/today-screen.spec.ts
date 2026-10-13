@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 
 /**
  * B251 S5 — «Сегодня»: дайджест дня и очередь решений, подключённые вместо
@@ -78,6 +82,23 @@ const SNAPSHOT = {
 };
 
 const TODAY_NEXT_INTERVIEW_AT = new Date(Date.now() + 48 * 60 * 60 * 1_000).toISOString();
+const S10_EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
+
+test.beforeAll(() => mkdirSync(S10_EVIDENCE_DIR, { recursive: true }));
+
+async function captureS10Today(page: Page, name: string): Promise<void> {
+  const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
+  const scrollHeight = await page
+    .locator('#career-main')
+    .evaluate((element) => element.scrollHeight);
+  await page.setViewportSize({
+    width: viewport.width,
+    height: Math.max(viewport.height, scrollHeight),
+  });
+  await page.screenshot({ path: join(S10_EVIDENCE_DIR, `${name}.png`), fullPage: true });
+  await captureCareerHarness(page, join(S10_EVIDENCE_DIR, `${name}.html`));
+  await page.setViewportSize(viewport);
+}
 
 const TODAY_SNAPSHOT = {
   digest: {
@@ -293,6 +314,7 @@ async function stubSession(
   page: Page,
   todaySnapshot = TODAY_SNAPSHOT,
   initialLinkedinStatus: LinkedinStopStatusFixture = LINKEDIN_RESUMED_STATUS,
+  omitCandidateMemory = false,
 ): Promise<{ resumeRequest: () => unknown }> {
   let followUpSent = false;
   let linkedinStatus = initialLinkedinStatus;
@@ -301,7 +323,19 @@ async function stubSession(
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
     if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
-    if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
+    if (pathname === '/api/v1/candidate/me') {
+      const snapshot = omitCandidateMemory ? { ...SNAPSHOT, memory: [] } : SNAPSHOT;
+      return route.fulfill({ json: { data: snapshot } });
+    }
+    if (
+      [
+        '/api/v1/candidate/me/memory',
+        '/api/v1/candidate/me/turns',
+        '/api/v1/candidate/me/messages',
+      ].includes(pathname)
+    ) {
+      return route.fulfill({ json: { data: [], meta: { nextOffset: null } } });
+    }
     if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
     if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
     if (pathname === '/api/v1/candidate/workspace') {
@@ -392,80 +426,89 @@ async function seedWorkspace(page: Page): Promise<void> {
   );
 }
 
+async function seedEmptyWorkspace(page: Page): Promise<void> {
+  await page.addInitScript(
+    ({ storageKey, ownerKey, candidateId, workspace }) => {
+      window.localStorage.setItem(storageKey, JSON.stringify(workspace));
+      window.localStorage.setItem(ownerKey, candidateId);
+    },
+    {
+      storageKey: 'candidate-workspace',
+      ownerKey: 'candidate-workspace-owner',
+      candidateId: CANDIDATE.candidateId,
+      workspace: {
+        version: 7,
+        createdAt: '2026-09-01T12:00:00.000Z',
+        updatedAt: '2026-09-01T12:00:00.000Z',
+        resumeText: '',
+        resumeSource: 'text',
+        targetDirection: '',
+        regions: [],
+        currentSituation: 'Пока собираю информацию о подходящей роли.',
+        constraints: '',
+        urgency: 'active',
+        outcomes: [],
+      },
+    },
+  );
+}
+
 async function openApp(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await expect(page.locator('.career-today')).toBeVisible();
 }
 
 test.describe('B251 today screen', () => {
-  test('shows the digest and the queue with the first row marked as the next action', async ({
-    page,
-  }, testInfo) => {
+  test('shows the legacy digest and queue on mobile', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop Today uses the S10 layout.');
     await stubSession(page, PENDING_TODAY_SNAPSHOT);
     await seedWorkspace(page);
     await openApp(page);
 
-    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
-    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
-    const responseStep = page.locator('.career-path-step').nth(3);
-    await expect(responseStep).toHaveAttribute('data-status', 'in-progress');
-    await expect(responseStep).toContainText('3 в работе');
-    const interviewStep = page.locator('.career-path-step').nth(4);
-    await expect(interviewStep).toHaveAttribute('data-status', 'in-progress');
-    await expect(interviewStep).toContainText('HRTx Inc.');
-
-    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
-    await expect(page.locator('.career-today-digest')).toContainText('12');
-    await expect(page.locator('.career-today-digest')).toContainText(
-      'напоминание компании на сегодня',
-    );
-    await expect(page.locator('.career-today-digest')).toContainText('HRTx Inc.');
-
-    const rows = page.locator('.career-today-item');
-    // 1 consultant action + 4 queue items = 5 items
-    await expect(rows).toHaveCount(5);
-    const consultantCard = rows.first();
-    await expect(consultantCard).toHaveClass(/is-first/);
-    await expect(consultantCard).toHaveClass(/career-today-consultant-card/);
-    await expect(consultantCard).toContainText('Консультант · Один шаг на сегодня');
-    await expect(consultantCard).toContainText('Что изменится:');
-    await expect(consultantCard.locator('.career-today-consultant-action')).toBeVisible();
-    await expect(consultantCard.locator('.career-today-consultant-dismiss')).toBeVisible();
-
-    const secondRow = rows.nth(1);
-    await expect(secondRow).not.toHaveClass(/is-first/);
-    await expect(secondRow).toContainText('Peraton');
-    await expect(page.locator('body')).not.toContainText('Следующее действие');
-
-    await expect(page.locator('.career-today-followups')).toContainText(
-      'Напоминания компании по срокам',
-    );
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await expect(page.locator('.career-today-return-banner')).toBeVisible();
     await expect(page.locator('.career-today-since-hint')).toContainText(
       'Genetec запросили доступность на этой неделе',
     );
-    await expect(page.locator('.career-today-since')).toHaveCount(0);
-    await expect(page.locator('.career-today-pending')).toContainText('Считаем вашу подборку');
-    const sentFollowUp = page.locator('.career-today-followups li').filter({ hasText: 'HRTx' });
-    await expect(sentFollowUp.getByRole('button')).toHaveCount(0);
-    await captureCareerHarness(page, testInfo.outputPath('today-screen.html'));
+    await expect(page.locator('.career-today-digest')).toBeVisible();
+    const queue = page.locator('.career-today-queue');
+    await expect(queue.getByRole('listitem')).toHaveCount(5);
+    await expect(queue.locator('.career-today-consultant-card')).toContainText(
+      'Добавим полный источник',
+    );
+    await expect(queue).toContainText('Peraton');
+    await captureS10Today(page, 'today-390-legacy');
+    await captureCareerHarness(page, testInfo.outputPath('today-screen-mobile.html'));
   });
 
   test('marks a follow-up as sent from the day queue and removes it after refresh', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop queue rows route to Responses.');
     await stubSession(page);
     await seedWorkspace(page);
     await openApp(page);
 
-    await page.getByRole('button', { name: 'Отметить отправленным' }).first().click();
-    await expect(page.getByRole('button', { name: 'Отметить отправленным' })).toHaveCount(0);
-    await expect(page.locator('.career-today-followups')).toHaveCount(0);
+    const followUp = page
+      .locator('.career-today-queue')
+      .getByRole('listitem')
+      .filter({ hasText: 'Peraton' });
+    await expect(followUp).toBeVisible();
+    await followUp.click();
+    const markSent = followUp.getByRole('button', { name: 'Отметить отправленным' });
+    await expect(markSent).toBeVisible();
+    await markSent.click();
+    await expect(followUp).toHaveCount(0);
   });
 
   test('B395: shows the LinkedIn stop, then resumes only after a manual candidate action', async ({
     page,
   }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile-390',
+      'The LinkedIn draft card stays in compact Today.',
+    );
     const session = await stubSession(page, TODAY_SNAPSHOT, LINKEDIN_STOP_STATUS);
     await seedWorkspace(page);
     await openApp(page);
@@ -503,7 +546,10 @@ test.describe('B251 today screen', () => {
     });
   });
 
-  test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
+  test('S10-VIS: the new Today layout fits 1440 and 390 without horizontal overflow', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'Captures both target widths once.');
     await stubSession(page);
     await seedWorkspace(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -513,92 +559,76 @@ test.describe('B251 today screen', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(wideOverflow).toBeLessThanOrEqual(0);
-    const wideDigestColumns = await page
-      .locator('.career-today-digest')
-      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-    expect(wideDigestColumns).toBe(4);
-    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
-    await page.screenshot({
-      path: process.env.SHOTS_DIR
-        ? `${process.env.SHOTS_DIR}/today-1440.png`
-        : 'output/playwright/C57/today-1440.png',
-      fullPage: true,
-    });
+    await expect(page.locator('.career-today-desktop')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Следующее решение' })).toContainText(
+      'Добавим полный источник',
+    );
+    await expect(page.getByRole('region', { name: 'Очередь дня' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Воронка за 30 дней' })).toBeVisible();
+    await captureS10Today(page, 'today-1440');
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.career-today')).toBeVisible();
-    await expect(page.locator('.career-path-step').nth(0)).toHaveAttribute('data-state', 'done');
-    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
-
-    const digestColumns = await page
-      .locator('.career-today-digest')
-      .evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-    expect(digestColumns).toBe(2);
-    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await expect(page.locator('.career-today-desktop')).toBeHidden();
+    await expect(page.locator('.career-today-digest')).toBeVisible();
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
-    await page.addStyleTag({
-      content: `.career-mobile-nav { position: static !important; }`,
-    });
-    await page.screenshot({
-      path: process.env.SHOTS_DIR
-        ? `${process.env.SHOTS_DIR}/today-390.png`
-        : 'output/playwright/C57/today-390.png',
-      fullPage: true,
-    });
-
-    void testInfo;
+    await captureS10Today(page, 'today-390');
   });
 
-  test('explains the next step with an honest empty queue', async ({ page }) => {
-    await stubSession(page, EMPTY_TODAY_SNAPSHOT);
-    await seedWorkspace(page);
+  test('keeps an empty mobile queue honest when no consultant action exists', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile-390',
+      'Desktop has a separate decision empty state.',
+    );
+    await stubSession(page, EMPTY_TODAY_SNAPSHOT, LINKEDIN_RESUMED_STATUS, true);
+    await seedEmptyWorkspace(page);
     await openApp(page);
 
-    await expect(page.locator('.career-today-digest')).toContainText('0');
-    await expect(page.locator('.career-today-since')).toHaveCount(0);
-    await expect(page.locator('.career-today-since-hint')).toHaveCount(0);
-    // Consultant proposal is shown initially even with an empty queue
-    await expect(page.locator('.career-today-consultant-card')).toBeVisible();
-    await expect(page.locator('.career-today-empty')).toHaveCount(0);
-
-    // After dismissing the proposal, the honest empty queue message appears
-    await page.locator('.career-today-consultant-dismiss').click();
+    const queue = page.locator('.career-today-queue');
+    await expect(queue).toContainText(/Решений на сегодня нет/u);
     await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
-    await expect(page.locator('.career-today-empty')).toContainText(
-      'Новые вакансии появятся здесь сами.',
-    );
   });
 
-  test('consultant action button navigates to target view without opening drawer', async ({
+  test('an unverified desktop decision opens the consultant without claiming a profile action', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'Checks the S10 desktop decision state.');
+    await stubSession(page, TODAY_SNAPSHOT, LINKEDIN_RESUMED_STATUS, true);
+    await seedEmptyWorkspace(page);
+    await openApp(page);
+
+    const nextDecision = page.getByRole('region', { name: 'Следующее решение' });
+    await expect(nextDecision).toBeVisible();
+    await expect(nextDecision).toContainText('Нет проверенного следующего шага');
+    await expect(nextDecision.getByRole('button', { name: 'Подтвердить факт' })).toHaveCount(0);
+    await nextDecision.getByRole('button', { name: 'Обсудить', exact: true }).click();
+    await expect(page.locator('.career-drawer')).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: /Консультант/u })).toBeVisible();
+  });
+
+  test('S10-VIS: the compact Today screen can open the consultant sheet', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'The desktop consultant is already docked.');
     await stubSession(page);
     await seedWorkspace(page);
     await openApp(page);
 
-    const consultantCard = page.locator('.career-today-consultant-card');
-    await expect(consultantCard).toBeVisible();
-
-    // Click primary action button on consultant card
-    await consultantCard.locator('.career-today-consultant-action').click();
-
-    // Navigates to target section (e.g. Profile)
-    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
-    // Does NOT open the expert panel / chat drawer
-    await expect(page.locator('.career-drawer')).toHaveCount(0);
-    await expect(page.locator('.career-expert-panel')).toHaveCount(0);
-
-    // Return to Today view
-    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
-    // Resolved proposal does not return
-    await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
+    const panel = page.locator('.career-expert-panel');
+    await page.getByRole('button', { name: 'Спросить консультанта' }).click();
+    await expect(page.getByRole('complementary', { name: /Консультант/u })).toBeVisible();
+    await expect(page.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await expect(panel).toHaveAttribute('data-mobile-expanded', 'false');
+    }
   });
 
-  test('displays returning-user banner on second visit, navigates on click and matches 1440/390 (B255)', async ({
+  test('S10-VIS: returning changes appear in one dismissible notice at 1440 and 390 (B255)', async ({
     page,
   }) => {
     let visitCount = 0;
@@ -648,12 +678,12 @@ test.describe('B251 today screen', () => {
     // Visit 1: Desktop 1440
     await page.setViewportSize({ width: 1440, height: 900 });
     await openApp(page);
-    await expect(page.locator('.career-today-return-banner')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Смотреть', exact: true })).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/B255/visit-1-1440.png', fullPage: true });
 
     // Visit 1: Mobile 390
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.career-today-return-banner')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Смотреть', exact: true })).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/B255/visit-1-390.png', fullPage: true });
 
     // Advance to Visit 2
@@ -668,49 +698,27 @@ test.describe('B251 today screen', () => {
     await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
     await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
 
-    // Visit 2: Banner must be visible with all 3 items
-    const banner = page.locator('.career-today-return-banner');
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText('С прошлого визита:');
-    await expect(banner.locator('[data-testid="since-visit-vacancies"]')).toHaveText(
-      '3 новые подходящие вакансии',
-    );
-    await expect(banner.locator('[data-testid="since-visit-applications"]')).toHaveText(
-      '1 отклик ждёт ответа больше 7 дней',
-    );
-    await expect(banner.locator('[data-testid="since-visit-interview"]')).toContainText(
-      'ближайшее интервью',
-    );
-    await page.screenshot({ path: 'output/playwright/B255/visit-2-1440.png', fullPage: true });
+    const notice = page.getByRole('button', { name: 'Смотреть', exact: true });
+    await expect(notice).toBeVisible();
+    const changesStrip = page.locator('.career-today-changes');
+    await expect(changesStrip.getByText(/3 новые вакансии по VP Technology Ops/u)).toBeVisible();
+    await expect(changesStrip.getByText(/1 отклик ждёт ответа больше 7 дней/u)).toBeVisible();
+    await expect(changesStrip.getByText(/HRTx Inc\..*ближайшее интервью/u)).toBeVisible();
+    await expect(page.locator('.career-today-mobile .career-today-return-banner')).toBeHidden();
+    await captureS10Today(page, 'today-changes-1440');
+
+    await page.getByRole('button', { name: 'Закрыть уведомление', exact: true }).click();
+    await expect(page.locator('.career-today-changes')).toHaveCount(0);
 
     // Check responsive layout on 390
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(banner).toBeVisible();
+    await expect(page.locator('.career-today-return-banner')).toBeVisible();
+    await expect(page.locator('.career-today-changes')).toBeHidden();
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
-    await page.screenshot({ path: 'output/playwright/B255/visit-2-390.png', fullPage: true });
-
-    // Test Navigation: click vacancies link in banner
-    await banner.locator('[data-testid="since-visit-vacancies"]').click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Вакансии');
-
-    // Return to Today and click applications link in banner
-    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
-    await expect(banner).toBeVisible();
-
-    await banner.locator('[data-testid="since-visit-applications"]').click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
-
-    // Return to Today and click interview link in banner
-    await page.locator('.career-nav-button:visible').filter({ hasText: 'Сегодня' }).click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Сегодня');
-    await expect(banner).toBeVisible();
-
-    await banner.locator('[data-testid="since-visit-interview"]').click();
-    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
+    await captureS10Today(page, 'today-changes-390');
   });
 
   test('B344 D10: карточка очереди показывает «Компания не указана — Должность» вместо ФИО рекрутёра', async ({

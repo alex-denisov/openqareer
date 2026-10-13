@@ -2,13 +2,12 @@ import AxeBuilder from '@axe-core/playwright';
 import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
- * B160 remainder — «Изменить условия» used to open the «Аккаунт» panel,
- * which holds no role, no regions and no work mode. There was no way in the
- * product to change the premises of the candidate's own route. This spec
- * asserts the editor exists, shows the current answers and writes them to the
- * server the cabinet reads back.
+ * B160 route premises remain editable on desktop. The approved B446 mobile
+ * screen uses a filter-group sheet instead of embedding the desktop premises
+ * editor, so the phone path is checked against those visible controls.
  */
 
 const CANDIDATE = {
@@ -180,10 +179,12 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openCareer(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  const desktopRole = page.locator('.career-path-desktop').getByRole('button', { name: /^Роль\./ });
-  if (await desktopRole.isVisible()) {
-    await desktopRole.first().click();
+  await waitForCareerShell(page);
+  if ((page.viewportSize()?.width ?? 1440) > 760) {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьера', exact: true })
+      .click();
   } else {
     const mobileRole = page.locator('.career-path-mobile-role');
     if (await mobileRole.isVisible()) {
@@ -200,12 +201,22 @@ async function openCareer(page: Page): Promise<void> {
       }
     }
   }
-  // Шаг «Роль» открывает «Вакансии», предпосылки живут в панели фильтров (B366).
-  await expect(page.locator('.career-route-premises')).toBeVisible();
+  await expect(page.locator('.vacancies-screen')).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    const filterSheet = page.locator('.vacancies-filters.is-mobile-open');
+    await expect(filterSheet).toBeVisible();
+    await expect(page.locator('.add-role-input')).toBeVisible();
+    await filterSheet.getByRole('button', { name: 'Все фильтры', exact: true }).click();
+    const overview = page.locator('.vacancies-mobile-filter-overview');
+    await expect(overview).toBeVisible();
+    await expect(overview.locator('[data-filter-sheet-group]')).toHaveCount(5);
+  } else {
+    await expect(page.locator('.career-route-premises')).toBeVisible();
+  }
 }
 
 test.describe('B160 route premises are editable in the cabinet', () => {
-  test('the candidate changes role, regions and work mode where they are shown', async ({
+  test('desktop edits saved route premises and mobile uses the B446 filter groups', async ({
     page,
   }, testInfo) => {
     const captured: Captured = {};
@@ -213,6 +224,30 @@ test.describe('B160 route premises are editable in the cabinet', () => {
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openCareer(page);
+
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await mkdir('output/playwright/C68', { recursive: true });
+      await page.screenshot({ path: 'output/playwright/C68/premises-mobile-390.png' });
+      const overview = page.locator('.vacancies-mobile-filter-overview');
+      await overview.locator('[data-filter-sheet-group="roles"]').click();
+      await expect(page.locator('.add-role-input')).toBeVisible();
+      await page.getByRole('button', { name: 'Все фильтры', exact: true }).click();
+      await page.locator('[data-filter-sheet-group="locations"]').click();
+      await expect(
+        page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Все фильтры', exact: true }).click();
+      await page.locator('[data-filter-sheet-group="format"]').click();
+      await expect(
+        page
+          .locator('.vacancies-filters.is-mobile-open')
+          .getByRole('button', { name: /Удалённо/u }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+      ).toBeLessThanOrEqual(0);
+      return;
+    }
 
     await page.getByRole('button', { name: 'Изменить условия' }).click();
 
@@ -265,11 +300,26 @@ test.describe('B160 route premises are editable in the cabinet', () => {
 
   test('the editor fits the viewport and carries no critical accessibility violation', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page, {});
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openCareer(page);
+    if (testInfo.project.name === 'mobile-390') {
+      const filterSheet = page.locator('.vacancies-filters.is-mobile-open');
+      await expect(filterSheet).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+      const results = await new AxeBuilder({ page }).include('.vacancies-filters').analyze();
+      expect(
+        results.violations.filter((violation) =>
+          ['critical', 'serious'].includes(violation.impact ?? ''),
+        ),
+      ).toEqual([]);
+      return;
+    }
     await page.getByRole('button', { name: 'Изменить условия' }).click();
     await expect(page.locator('.career-route-premises-editor')).toBeVisible();
 

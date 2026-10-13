@@ -51,7 +51,8 @@ function localProfile(overrides: Partial<CandidateDecisionProfile> = {}): Candid
 
 describe('useWorkPreferences decision profile sync (B421)', () => {
   beforeEach(() => {
-    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true;
     window.localStorage.clear();
     window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, 'session-b421-1');
     api.getDecisionProfile.mockReset().mockResolvedValue(null);

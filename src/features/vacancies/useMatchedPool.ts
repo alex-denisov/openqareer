@@ -8,6 +8,7 @@ import { collectMatchedPool, withDeadline } from './vacancyRead';
 
 export interface MatchedPool {
   readonly facets?: MatchedVacancyFacets;
+  readonly initialFilters?: VacanciesScreenState;
   readonly setFilters?: (filters: VacanciesScreenState) => void;
   readonly matched: MatchedVacancyItem[];
   readonly total: number;
@@ -26,6 +27,7 @@ export interface MatchedPool {
 
 interface PoolReaderSetters {
   readonly setFacets: Dispatch<SetStateAction<MatchedVacancyFacets | undefined>>;
+  readonly setInitialFilters: Dispatch<SetStateAction<VacanciesScreenState | undefined>>;
   readonly setMatched: Dispatch<SetStateAction<MatchedVacancyItem[]>>;
   readonly setTotal: Dispatch<SetStateAction<number>>;
   readonly setPoolTotal: Dispatch<SetStateAction<number>>;
@@ -40,11 +42,13 @@ interface PoolReaderSetters {
 /** One cabin-wide read; the owner screen can retry the bounded page sequence. */
 export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const [facets, setFacets] = useState<MatchedVacancyFacets>();
+  const [initialFilters, setInitialFilters] = useState<VacanciesScreenState>();
   const [filters, setFilterState] = useState<VacanciesScreenState>();
   const setFilters = useCallback((value: VacanciesScreenState) => {
-    const active = value.roles.length + value.regions.length + (value.levels?.length ?? 0) +
-      (value.sources?.length ?? 0) + Number(value.remoteOnly);
-    setFilterState((previous) => active || previous ? value : undefined);
+    const hasServerFilters = hasMatchedPoolFilters(value);
+    setFilterState((previous) =>
+      hasServerFilters || hasMatchedPoolFilters(previous) ? value : undefined,
+    );
   }, []);
   const initialPool = filters ? undefined : provided;
   const [matched, setMatched] = useState<MatchedVacancyItem[]>([]);
@@ -60,13 +64,24 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
   const refresh = useCallback(() => setReadAttempt((attempt) => attempt + 1), []);
 
   useMatchedPoolReader(initialPool, readAttempt, filters, {
-    setFacets, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
+    setFacets, setInitialFilters, setMatched, setTotal, setPoolTotal, setLoading, setFailed, setComplete,
     setCampaign, setCandidateLevel, setFailureSourceLabel,
   });
   return initialPool ? { ...initialPool, setFilters } : {
-    facets, setFilters, matched, total, poolTotal, loading, failed, complete,
+    facets, initialFilters, setFilters, matched, total, poolTotal, loading, failed, complete,
     campaign, candidateLevel, failureSourceLabel, refresh,
   };
+}
+
+function hasMatchedPoolFilters(filters: VacanciesScreenState | undefined): boolean {
+  return Boolean(
+    filters &&
+      (filters.roles.length > 0 ||
+        filters.regions.length > 0 ||
+        (filters.levels?.length ?? 0) > 0 ||
+        (filters.sources?.length ?? 0) > 0 ||
+        filters.remoteOnly),
+  );
 }
 
 function useMatchedPoolReader(
@@ -77,6 +92,7 @@ function useMatchedPoolReader(
 ): void {
   const {
     setMatched,
+    setInitialFilters,
     setTotal,
     setPoolTotal,
     setLoading,
@@ -101,6 +117,7 @@ function useMatchedPoolReader(
     readAttempt,
     filters,
     setMatched,
+    setInitialFilters,
     setTotal,
     setPoolTotal,
     setLoading,
@@ -135,6 +152,7 @@ async function loadMatchedPool(
         withDeadline((signal) => getMatchedVacancyPage(offset, signal, filters)).then((page) => {
           if (offset === 0 && isActive()) {
             if (page.facets) setters.setFacets(page.facets);
+            if (page.initialFilters) setters.setInitialFilters(page.initialFilters);
             if (page.campaign) setters.setCampaign(page.campaign);
             if (page.candidateLevel !== undefined) setters.setCandidateLevel(page.candidateLevel);
           }

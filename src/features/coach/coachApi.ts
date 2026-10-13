@@ -511,6 +511,7 @@ export async function getAccount(): Promise<AccountSnapshot> {
  * (B160).
  */
 export async function updateAccountProfile(input: {
+  displayName?: string | null;
   headline?: string;
   workMode?: 'office' | 'hybrid' | 'remote' | 'flexible' | null;
   timezone?: string | null;
@@ -559,6 +560,13 @@ export async function revokeOtherSessions(): Promise<number> {
     method: 'DELETE',
   });
   return (await readDataObject<{ revoked: number }>(response)).revoked;
+}
+
+export async function revokeAccountSession(sessionId: string): Promise<void> {
+  const response = await apiFetch(`/api/v1/account/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) await throwApiError(response);
 }
 
 export async function uploadCandidateDocument(input: {

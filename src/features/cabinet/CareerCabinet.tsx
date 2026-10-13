@@ -10,14 +10,19 @@ import {
 import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
-import { TodayScreen } from '../today/TodayScreen';
+import { TodayScreen, type TodayFunnelContext } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
+import { RelocationScreen } from '../relocation/RelocationScreen';
 import type { ProfileTab } from '../resume/profileTabs';
+import type { ResumeDraft } from '../resume/resumeTypes';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
-import { useVacancyApplications } from '../vacancies/useVacancyApplications';
+import {
+  useVacancyApplications,
+  type VacancyApplications,
+} from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { ResponsesBoard } from '../applications/ResponsesBoard';
@@ -43,6 +48,7 @@ import type {
 } from '../vacancies/vacancyProfileRequirement';
 import type { NavigationOptions } from '../shell/pathIndicator';
 import type { CareerCabinetView } from './cabinetViews';
+import { CareerDiaryPage } from '../diary/CareerDiaryPage';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
@@ -69,9 +75,16 @@ interface CareerCabinetProps {
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
+  onOpenAutomation?: () => void;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenNotifications?: () => void;
+  onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+    initialPrompt?: string,
+  ) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
 
@@ -83,17 +96,19 @@ interface CareerCabinetProps {
  */
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
-export function CareerCabinet({
-  view,
-  navigationOptions,
-  session,
-  workspace,
-  onNavigate,
-  onOpenTariffs,
-  onOpenConnections,
-  onOpenExpert,
-  onUpdateWorkspace,
-}: CareerCabinetProps) {
+export function CareerCabinet(props: CareerCabinetProps) {
+  const {
+    view,
+    navigationOptions,
+    session,
+    workspace,
+    onNavigate,
+    onOpenTariffs,
+    onOpenConnections,
+    onOpenNotifications,
+    onOpenExpert,
+    onUpdateWorkspace,
+  } = props;
   const data = useCareerCabinetData(session.candidateId);
   // Карьерная картина вошедшего кандидата: анкета плюс факты с сервера.
   // Без неё «ATS-читаемость» и «Следующее действие» показывали пустые
@@ -134,6 +149,15 @@ export function CareerCabinet({
   const refreshApplications = applicationsTracker.refreshApplications;
   const addManualCard = applicationsTracker.addManualCard;
   const scheduleInterview = applicationsTracker.scheduleInterview;
+  const recordTrackedConfirmedVacancy = useCallback(
+    async (...args: Parameters<VacancyApplications['recordConfirmed']>) => {
+      await recordConfirmedVacancy(...args);
+      // Карточка отклика нужна только после подтверждённой записи.
+      // Ошибка повторного чтения не отменяет сам факт сохранения.
+      await refreshApplications().catch(() => undefined);
+    },
+    [recordConfirmedVacancy, refreshApplications],
+  );
   const markVacancyAlreadyApplied = useCallback(
     (clusterId: string, vacancy: VacancyApplicationSnapshot) =>
       recordConfirmedVacancy(clusterId, 'applied', vacancy),
@@ -172,24 +196,22 @@ export function CareerCabinet({
   const trackedVacancyApplications = useMemo(
     () => ({
       ...vacancyApplications,
+      recordConfirmed: recordTrackedConfirmedVacancy,
       record: (
-        clusterId: Parameters<typeof vacancyApplications.record>[0],
-        status: Parameters<typeof vacancyApplications.record>[1],
-        vacancy: Parameters<typeof vacancyApplications.record>[2],
+        clusterId: Parameters<VacancyApplications['record']>[0],
+        status: Parameters<VacancyApplications['record']>[1],
+        vacancy: Parameters<VacancyApplications['record']>[2],
       ) => {
         if (status === 'applied') {
           // Запись отклика атомарно создаёт карточку на сервере. Не создаём
           // локальную карточку, пока эта запись не подтверждена.
-          void vacancyApplications
-            .recordConfirmed(clusterId, status, vacancy)
-            .then(() => applicationsTracker.refreshApplications())
-            .catch(() => undefined);
+          void recordTrackedConfirmedVacancy(clusterId, status, vacancy).catch(() => undefined);
           return;
         }
         vacancyApplications.record(clusterId, status, vacancy);
       },
     }),
-    [vacancyApplications, applicationsTracker],
+    [vacancyApplications, recordTrackedConfirmedVacancy],
   );
   const journey = useMemo(
     () =>
@@ -243,6 +265,7 @@ export function CareerCabinet({
   );
   const clearProfileRequirement = useCallback(() => setVacancyProfileRequest(null), []);
   const showsVacanciesScreen = view === 'opportunities';
+  const showsDiaryScreen = view === 'diary';
   // B248 §2 — the same path indicator the anonymous wizard shows
   // (`CareerWorkspaceShell`), wired to the cabinet's own journey, pool and
   // confirmed applications instead of a second read of any of them
@@ -276,7 +299,7 @@ export function CareerCabinet({
             кампании (B248/B250) — общая шапка кабинета здесь дублировала бы
             их дженериковой версией (приёмка B250). Доска-заглушка
             (загрузка/ошибка/пусто) общей шапкой ещё пользуется. */}
-        {!showsVacanciesScreen ? (
+        {!showsVacanciesScreen && !showsDiaryScreen ? (
           <CabinetHeader
             view={view}
             loading={data.loading}
@@ -288,13 +311,13 @@ export function CareerCabinet({
             }
           />
         ) : null}
-        {pathIndicatorSteps && !showsVacanciesScreen && view !== 'profile' ? (
+        {pathIndicatorSteps && !showsVacanciesScreen && !showsDiaryScreen && view !== 'profile' ? (
           <CareerPathIndicator steps={pathIndicatorSteps} onNavigate={onNavigate} />
         ) : null}
         {/* До первого ответа сервера экран не рисует ни имени из сессии, ни
             пустых вкладок: профиль появляется целиком и один раз, а не
             «пустой, потом с данными импорта» (владелец, 2026-09-20). */}
-        {data.loading && !data.snapshot ? (
+        {data.loading && !data.snapshot && !showsDiaryScreen ? (
           <CareerTodaySkeleton showHeading={false} />
         ) : (
           <CabinetSection
@@ -321,7 +344,9 @@ export function CareerCabinet({
             onSavePremises={savePremises}
             onOpenTariffs={onOpenTariffs}
             onOpenConnections={onOpenConnections}
+            onOpenNotifications={onOpenNotifications}
             onOpenExpert={onOpenExpert}
+            onOpenAutomation={props.onOpenAutomation}
           />
         )}
       </div>
@@ -336,11 +361,17 @@ function TodaySection({
   candidateId,
   consultantAction,
   onNavigate,
+  profileDraft,
+  funnelContext,
+  onOpenExpert,
 }: {
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
   onOpenTariffs?: () => void;
+  profileDraft?: ResumeDraft;
+  funnelContext?: TodayFunnelContext;
+  onOpenExpert?: () => void;
 }) {
   const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
   return (
@@ -355,6 +386,9 @@ function TodaySection({
       candidateId={candidateId}
       consultantAction={consultantAction}
       onNavigate={onNavigate}
+      profileDraft={profileDraft}
+      funnelContext={funnelContext}
+      onOpenExpert={onOpenExpert}
     />
   );
 }
@@ -385,6 +419,8 @@ function CabinetSection({
   onSavePremises,
   onOpenTariffs,
   onOpenConnections,
+  onOpenNotifications,
+  onOpenAutomation,
   onOpenExpert,
 }: {
   view: CareerCabinetView;
@@ -414,8 +450,16 @@ function CabinetSection({
   onSavePremises: (draft: RoutePremisesDraft) => Promise<void>;
   onOpenTariffs?: () => void;
   onOpenConnections?: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  onOpenNotifications?: () => void;
+  onOpenAutomation?: () => void;
+  onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+    initialPrompt?: string,
+  ) => void;
 }) {
+  const [relocationOpen, setRelocationOpen] = useState(false);
   useEffect(() => {
     if (view === 'career') {
       onNavigate('opportunities');
@@ -429,6 +473,22 @@ function CabinetSection({
         candidateId={session.candidateId}
         consultantAction={consultantAction}
         onNavigate={onNavigate}
+        profileDraft={data.resume?.draft ?? undefined}
+        funnelContext={{
+          found: pool.facets?.catalogSummary?.roleLevelMatches,
+          catalogObservedAt: pool.facets?.catalogSummary?.observedAt,
+        }}
+        onOpenExpert={
+          onOpenExpert
+            ? () =>
+                onOpenExpert(
+                  'today',
+                  undefined,
+                  consultantAction?.headline,
+                  consultantAction?.rationale,
+                )
+            : undefined
+        }
       />
     );
   }
@@ -436,6 +496,18 @@ function CabinetSection({
   // edit-in-place), not Resume Studio. «Резюме»
   // (`view === 'resume'`) is no longer a reachable rail item but keeps
   // pointing at Resume Studio for anyone with a stored link to it.
+  if (view === 'profile' && relocationOpen) {
+    return (
+      <RelocationScreen
+        onNavigateBack={() => setRelocationOpen(false)}
+        onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenVacancies={() => {
+          setRelocationOpen(false);
+          onNavigate('opportunities');
+        }}
+      />
+    );
+  }
   if (view === 'profile') {
     return (
       <ProfileScreenView
@@ -452,6 +524,7 @@ function CabinetSection({
         tab={profileTab}
         onTabChange={onProfileTabChange}
         onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenRelocation={() => setRelocationOpen(true)}
       />
     );
   }
@@ -466,11 +539,32 @@ function CabinetSection({
     );
   }
 
+  if (view === 'diary') {
+    return (
+      <CareerDiaryPage
+        onOpenConsultant={(goal) => {
+          const latestMeasurement = goal.latestMeasurement
+            ? `Последний замер от ${goal.latestMeasurement.measuredAt}: ${String(goal.latestMeasurement.value)} ${goal.unit} (источник: ${goal.latestMeasurement.source}).`
+            : 'Замеров пока нет.';
+          const initialPrompt = [
+            `Помогите разобрать карьерную цель «${goal.title}».`,
+            `Целевое значение: ${String(goal.targetValue)} ${goal.unit}.`,
+            latestMeasurement,
+            `Срок: ${goal.dueDate}.`,
+            `Статус риска: ${goal.risk.status}. ${goal.risk.explanation}`,
+          ].join(' ');
+          onOpenExpert?.('today', undefined, `По цели: ${goal.title}`, initialPrompt);
+        }}
+      />
+    );
+  }
+
   if (view === 'responses') {
     return (
       <ResponsesBoard
         state={applicationsTracker}
         onOpenVacancies={() => onNavigate('opportunities')}
+        onOpenAutomation={onOpenAutomation}
         initialStageFilter={navigationOptions?.stage}
         initialArchiveOpen={navigationOptions?.openArchive}
         onOpenExpert={onOpenExpert}
@@ -489,6 +583,7 @@ function CabinetSection({
       onOpenResponses={() => onNavigate('responses')}
       onOpenArchive={() => onNavigate('responses', { openArchive: true })}
       onOpenConnections={onOpenConnections}
+      onOpenNotifications={onOpenNotifications}
       onOpenProfile={onOpenProfileRequirement}
       onOpenExpert={onOpenExpert}
       pathIndicator={pathIndicatorSteps ? { steps: pathIndicatorSteps, onNavigate } : undefined}
@@ -598,6 +693,7 @@ const VIEW_TITLE: Record<CareerCabinetView, string> = {
   career: 'Поиск',
   opportunities: 'Вакансии',
   responses: 'Отклики',
+  diary: 'Карьерный дневник',
 };
 
 const VIEW_KICKER: Record<CareerCabinetView, string> = {
@@ -607,6 +703,7 @@ const VIEW_KICKER: Record<CareerCabinetView, string> = {
   career: 'Кампания',
   opportunities: 'Кампания',
   responses: 'Отклики в работе',
+  diary: 'Карьерный дневник',
 };
 
 // Шапка раздела говорит, что человек здесь получит, а не как устроен модуль
@@ -622,6 +719,7 @@ const VIEW_DESCRIPTION: Record<CareerCabinetView, string> = {
     'Все вакансии по вашей роли из наших источников: фильтры, направления поиска и действия по каждой.',
   responses:
     'Весь активный поиск одним взглядом. Переписка, интервью и оффер живут на карточке — не отдельно.',
+  diary: 'Цели, замеры и заметки с источником каждого значения.',
 };
 
 /** Cards still live on the «Отклики» board — everything but rejected/archived (B251 S4). */

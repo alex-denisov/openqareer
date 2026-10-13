@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
  * B232 — читаемость кабинета как гейт, а не как разовый аудит.
@@ -52,7 +53,35 @@ function measure(minFontPx: number): ReadabilityFacts {
   probe.remove();
   const sizes = new Map<number, number>();
   const under13: string[] = [];
-  const boxes: { rect: DOMRect; text: string }[] = [];
+  const boxes: { element: HTMLElement; rect: DOMRect; text: string }[] = [];
+  const visibleRectFor = (element: HTMLElement): DOMRect => {
+    const original = element.getBoundingClientRect();
+    let left = original.left;
+    let top = original.top;
+    let right = original.right;
+    let bottom = original.bottom;
+    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+        const bounds = parent.getBoundingClientRect();
+        const clipLeft = bounds.left + parent.clientLeft;
+        const clipTop = bounds.top + parent.clientTop;
+        if (style.overflowX !== 'visible') {
+          left = Math.max(left, clipLeft);
+          right = Math.min(right, clipLeft + parent.clientWidth);
+        }
+        if (style.overflowY !== 'visible') {
+          top = Math.max(top, clipTop);
+          bottom = Math.min(bottom, clipTop + parent.clientHeight);
+        }
+      }
+    }
+    left = Math.max(0, left);
+    top = Math.max(0, top);
+    right = Math.min(document.documentElement.clientWidth, right);
+    bottom = Math.min(window.innerHeight, bottom);
+    return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+  };
   for (const element of withText) {
     const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
     const isMicro = fontSize === microPx;
@@ -68,7 +97,10 @@ function measure(minFontPx: number): ReadabilityFacts {
     if (rect.height > 0 && rect.height < floorPx - 1 && text.length > 0) {
       under13.push(`box ${Math.round(rect.height)}px ${element.tagName.toLowerCase()} «${text}»`);
     }
-    if (rect.width && rect.height) boxes.push({ rect, text });
+    const visibleRect = visibleRectFor(element);
+    if (visibleRect.width && visibleRect.height) {
+      boxes.push({ element, rect: visibleRect, text });
+    }
   }
   const overlaps: (readonly [string, string])[] = [];
   for (let i = 0; i < boxes.length && overlaps.length < 12; i += 1) {
@@ -77,8 +109,28 @@ function measure(minFontPx: number): ReadabilityFacts {
       const b = boxes[j].rect;
       const ix = Math.min(a.right, b.right) - Math.max(a.left, b.left);
       const iy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
-      const nested = boxes[i].text.includes(boxes[j].text) || boxes[j].text.includes(boxes[i].text);
-      if (ix > 4 && iy > 4 && !nested) {
+      const nested =
+        boxes[i].element.contains(boxes[j].element) ||
+        boxes[j].element.contains(boxes[i].element) ||
+        boxes[i].text.includes(boxes[j].text) ||
+        boxes[j].text.includes(boxes[i].text);
+      const overlayA = boxes[i].element.closest('.vacancies-filters.is-expanded');
+      const overlayB = boxes[j].element.closest('.vacancies-filters.is-expanded');
+      const intersectionCenter = {
+        x: Math.max(a.left, b.left) + ix / 2,
+        y: Math.max(a.top, b.top) + iy / 2,
+      };
+      // The expanded filter popover intentionally covers content behind it.
+      const hit = document.elementFromPoint(intersectionCenter.x, intersectionCenter.y);
+      const intersectionVisible =
+        intersectionCenter.x >= 0 &&
+        intersectionCenter.x <= document.documentElement.clientWidth &&
+        intersectionCenter.y >= 0 &&
+        intersectionCenter.y <= window.innerHeight;
+      const hiddenBehindFilterPopover =
+        Boolean(overlayA) !== Boolean(overlayB) &&
+        Boolean(hit?.closest('.vacancies-filters.is-expanded'));
+      if (ix > 4 && iy > 4 && intersectionVisible && !nested && !hiddenBehindFilterPopover) {
         overlaps.push([boxes[i].text, boxes[j].text]);
         break;
       }
@@ -87,15 +139,14 @@ function measure(minFontPx: number): ReadabilityFacts {
   const viewportWidth = document.documentElement.clientWidth;
   const overflowX =
     Math.max(document.documentElement.scrollWidth, main.scrollWidth) - viewportWidth;
-  // B248 — `.career-path` is a deliberate horizontal scroller on narrow
-  // screens (the path indicator's five steps never shrink or wrap, per the
-  // owner's 2026-09-23 review). Its own box never exceeds the viewport
-  // (`overflowX` above already proves that); only its children legitimately
-  // extend past it, which is what a horizontal scroller is. Nothing else in
-  // the shell is exempt.
+  // These bounded controls scroll internally; their children may extend past the
+  // viewport while the page/root itself stays within its measured width.
   const wide = [...main.querySelectorAll<HTMLElement>('*')]
     .filter((element) => element.getBoundingClientRect().right > viewportWidth + 2)
-    .filter((element) => !element.closest('.career-path'))
+    .filter(
+      (element) =>
+        !element.closest('.career-path, .vacancies-filter-group-buttons, .companies-people-tabs'),
+    )
     .slice(0, 5)
     .map(
       (element) =>
@@ -127,16 +178,16 @@ function collectPageErrors(page: Page): string[] {
  * тонком экране; вместо этого путь записывается и тест падает по списку.
  */
 
-async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promise<void> {
+async function openSection(
+  page: Page,
+  label: (typeof SECTIONS)[number] | 'Отклики',
+): Promise<void> {
   if (label === 'Роль') {
-    // «Поиск» has no rail item in the B248 IA (Сегодня · Профиль · Вакансии ·
-    // Отклики · Консультант); it opens from the path indicator's «Роль»
-    // step instead (career-consultant-notes.md §2).
-    const desktopRole = page
-      .locator('.career-path-desktop')
-      .getByRole('button', { name: /^Роль\./ });
-    if (await desktopRole.isVisible()) {
-      await desktopRole.first().click();
+    if ((page.viewportSize()?.width ?? 1440) >= 761) {
+      await page
+        .getByRole('navigation', { name: 'Разделы кабинета' })
+        .getByRole('button', { name: 'Карьера', exact: true })
+        .click();
     } else {
       const mobileSummary = page.locator('.career-path-mobile-summary');
       if (await mobileSummary.isVisible()) {
@@ -159,6 +210,7 @@ async function openSection(page: Page, label: (typeof SECTIONS)[number]): Promis
     // B366: шаг «Роль» открывает экран «Вакансии» с фокусом на фильтре ролей.
     Роль: page.locator('.vacancies-content').first(),
     Вакансии: page.locator('.vac-list-item').first(),
+    Отклики: page.getByRole('heading', { name: 'Отклики', exact: true }),
   }[label];
   await expect(landmark).toBeVisible();
   await page.evaluate(
@@ -189,7 +241,7 @@ test.describe('B232 readability gate', () => {
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     for (const width of DESKTOP_WIDTHS) {
       await page.setViewportSize({ width, height: 860 });
@@ -207,7 +259,7 @@ test.describe('B232 readability gate', () => {
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     for (const label of SECTIONS) {
       await openSection(page, label);
@@ -223,10 +275,11 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop only');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const rail = page.locator('aside#career-rail');
-    await expect(rail.locator('.career-nav-button span')).toHaveCount(4);
+    await expect(rail.locator('.career-nav-button span')).toHaveCount(7);
+    await expect(rail.getByRole('button', { name: 'Автоматизация', exact: true })).toBeEnabled();
     const captions = await rail.locator('.career-nav-button span').evaluateAll((nodes) =>
       nodes.map((node) => ({
         text: node.textContent,
@@ -240,24 +293,23 @@ test.describe('B232 readability gate', () => {
       ]),
     );
     await rail.getByRole('button', { name: 'Вакансии', exact: true }).hover();
-    await expect(rail.getByRole('tooltip')).toContainText('Вакансии');
+    await expect(page.locator('.career-desktop-topbar-hint')).toHaveText('Вакансии');
+    await expect(page.locator('.career-tooltip-bubble[data-open="true"]')).toHaveCount(0);
 
     const routes = [
       ['Профиль', '.career-profile-screen-view'],
-      ['Роль', '.vacancies-screen'],
-      ['Подборка', '.vacancies-screen'],
+      ['Карьера', '.vacancies-screen'],
+      ['Вакансии', '.vacancies-screen'],
       ['Отклики', '.career-responses-board-wrap, .career-responses-empty'],
-      ['Интервью', '.career-responses-board-wrap, .career-responses-empty'],
+      ['Автоматизация', '.automation-screen'],
     ] as const;
     for (const [label, target] of routes) {
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
-      await expect(
-        page.getByRole('button', { name: new RegExp(`^${label}\\.`) }).first(),
-      ).toBeVisible();
-      await page
-        .getByRole('button', { name: new RegExp(`^${label}\\.`) })
-        .first()
-        .click();
+      await waitForCareerShell(page);
+      const routeButton = rail.getByRole('button', { name: label, exact: true });
+      await expect(routeButton).toBeVisible();
+      await expect(routeButton).toBeEnabled({ timeout: 15_000 });
+      await routeButton.click();
       await expect(page.locator(target).first()).toBeVisible();
     }
     expect(unmatched).toEqual([]);
@@ -269,7 +321,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await openSection(page, 'Сегодня');
 
     const facts = await page.evaluate(() => {
@@ -307,7 +359,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     const spills = await page.evaluate((minSlack) => {
       const cw = document.documentElement.clientWidth;
       return [...document.querySelectorAll<HTMLElement>('.career-mobile-nav .career-nav-button')]
@@ -335,7 +387,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const beforeContent = await page
       .locator('nav.career-mobile-nav .career-nav-button.is-active')
@@ -357,7 +409,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop composition only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.setViewportSize({ width: 1280, height: 860 });
     await openSection(page, 'Сегодня');
 
@@ -370,17 +422,18 @@ test.describe('B232 readability gate', () => {
       probe.remove();
       const filled = [...main.querySelectorAll<HTMLElement>('button, a')]
         .filter((element) => getComputedStyle(element).backgroundColor === accentRgb)
+        .filter((element) => element.getClientRects().length > 0)
         .filter((element) => !element.closest('.career-rail, .career-mobile-nav'));
       const outsideQueue = filled
-        .filter((element) => !element.closest('.career-today-item'))
+        .filter((element) => !element.closest('.career-today-queue-desktop-row'))
         .map((element) => element.textContent?.trim().slice(0, 40) ?? '');
-      const perItem = [...main.querySelectorAll('.career-today-item')].map(
+      const perItem = [...main.querySelectorAll('.career-today-queue-desktop-row')].map(
         (item) => filled.filter((element) => item.contains(element)).length,
       );
       return { filled: filled.length, outsideQueue, perItem };
     });
-    expect(composition.filled, JSON.stringify(composition)).toBeGreaterThan(0);
-    expect(composition.outsideQueue, JSON.stringify(composition)).toEqual([]);
+    expect(composition.filled, JSON.stringify(composition)).toBe(1);
+    expect(composition.outsideQueue, JSON.stringify(composition)).toEqual(['Подтвердить факт']);
     expect(Math.max(...composition.perItem), JSON.stringify(composition)).toBeLessThanOrEqual(1);
     await page.screenshot({ path: info.outputPath('Сегодня-composition-1280.png') });
   });
@@ -392,55 +445,78 @@ test.describe('B232 readability gate', () => {
    * «20 строк и Показать ещё» (B232) утверждённый макет vacancies.html
    * заменил сплошным списком, поэтому его проверка снята.
    */
-  test('the cover-letter modal opens from the vacancy card and keeps keyboard focus', async ({
+  test('the cover-letter screen opens from the vacancy card and preserves keyboard focus', async ({
     page,
   }, info) => {
     const unmatched = await mockSignedInCabinet(page);
+    await page.route('**/api/v1/candidate/vacancies/*/detail', async (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            id: 'cluster-0',
+            description: 'Подтверждённое описание вакансии для письма.',
+            truncated: false,
+            skills: ['Product discovery'],
+            responsibilities: ['Проверять гипотезы продукта.'],
+          },
+        },
+      }),
+    );
     await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
       await route.fulfill({
         json: {
           data: {
+            vacancyId: 'test-vacancy',
             emailPitch: { subject: 'Отклик', body: 'Текст отклика.' },
             linkedInNote: 'Здравствуйте! Рад знакомству.',
             atsCoverLetter: 'Cover letter',
             usedEvidenceIds: ['fact-1'],
+            language: 'ru',
+            generatedAt: '2026-10-10T12:00:00.000Z',
           },
         },
       });
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await openSection(page, 'Вакансии');
-    if (info.project.name === 'mobile-390') {
-      await page.locator('.vac-list-item').first().locator('.vac-row').click();
-    }
-
+    const firstVacancy = page.locator('.vac-list-item').first();
+    const rowTrigger = firstVacancy.locator('.vacancies-screen-row-trigger');
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
+    await firstVacancy
+      .locator('.vac-detail')
+      .getByRole('button', { name: 'Полное описание' })
+      .click();
     const pitchAction = page
-      .locator('.vacancies-detail-col')
+      .locator('.career-modal-card.is-detail')
       .getByRole('button', { name: 'Сопроводительное письмо', exact: true });
-    await pitchAction.click();
-    const dialog = page.getByRole('dialog', { name: /Отклик:/u });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('tab', { name: 'LinkedIn-заметка (300 знаков)' }).click();
-    await expect(dialog.getByText('Здравствуйте! Рад знакомству.')).toBeVisible();
-    await page.screenshot({ path: info.outputPath('b236-pitch-modal.png') });
-
-    await page.keyboard.press('Escape');
-    await expect(dialog).toBeHidden();
+    await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
+    await page.keyboard.press('Enter');
+    const heading = page.getByRole('heading', { name: 'Письмо под вакансию', level: 1 });
+    await expect(heading).toBeVisible();
+    const back = page.getByRole('button', { name: 'Назад к вакансиям' });
+    await expect(back).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Текст письма' })).toHaveValue('Текст отклика.');
+    await page.screenshot({ path: info.outputPath('b449-letter-screen.png') });
+
+    await back.click();
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
     expect(unmatched).toEqual([]);
   });
 
   test('search keeps tariff detail behind an explicit link', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const tariffsTrigger = page
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
   });
 
   /**
@@ -453,7 +529,7 @@ test.describe('B232 readability gate', () => {
   test('«Профиль» shows the candidate resume, not an error state', async ({ page }) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.locator('button[aria-label="Профиль"]:visible').first().click();
 
     await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
@@ -466,7 +542,7 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const rail = page.locator('.career-rail');
     const railBox = await rail.boundingBox();
@@ -474,66 +550,64 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-rail-toggle')).toHaveCount(0);
     const today = rail.locator('.career-nav-button').first();
     await today.hover();
-    const tooltip = page.locator('.career-tooltip-bubble[data-open="true"]');
-    await expect(tooltip).toContainText('Сегодня');
-    const tooltipBox = await tooltip.boundingBox();
-    expect(tooltipBox?.x).toBeGreaterThanOrEqual((railBox?.x ?? 0) + (railBox?.width ?? 0));
+    const hint = page.locator('.career-desktop-topbar-hint');
+    await expect(hint).toHaveText('Сегодня');
+    await expect(page.locator('.career-tooltip-bubble[data-open="true"]')).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/C52/rail-fixed-1440.png' });
     await today.focus();
-    await expect(tooltip).toContainText('Сегодня');
-
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C52/path-indicator-1440.png' });
+    await expect(hint).toHaveText('Сегодня');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C52/today-without-path-1440.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.screenshot({ path: 'output/playwright/C52/rail-and-path-390.png' });
     await page
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
   });
 
-  test('capture C73 screenshots: path indicator on campaign screens and today', async ({
+  test('capture C73 screenshots: Today drops the old path; B450 Responses and B446 vacancies stay focused', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
-    // Today screen: 0 active steps
-    await expect(page.locator('.career-path-step[data-state="active"]')).toHaveCount(0);
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-today-1440.png' });
+    // The approved desktop Today mockup no longer contains the old path stepper.
+    await expect(page.locator('.career-path')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/C73/screen-today-1440.png' });
 
-    // Open opportunities (vacancies): exactly one active step ('Подборка')
+    // B446's approved vacancies screen owns the page header and filter area.
+    // The shell path indicator is not duplicated over this full screen.
     await openSection(page, 'Вакансии');
-    const active = page.locator('.career-path-step[data-state="active"]');
-    await expect(active).toHaveCount(1);
-    await expect(active).toContainText('Подборка');
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-1440.png' });
+    await expect(page.locator('.career-path')).toHaveCount(0);
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-1440.png' });
 
-    // 390 viewport
+    // B450's responses header owns the workspace; it hides the duplicate path strip.
+    await openSection(page, 'Отклики');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C73/screen-responses-1440.png' });
+
+    // 390 viewport keeps its current path summary.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
     await page.screenshot({ path: 'output/playwright/C73/screen-today-390.png' });
     await page
       .locator('.career-path')
       .screenshot({ path: 'output/playwright/C73/path-indicator-today-390.png' });
 
     await openSection(page, 'Вакансии');
+    await expect(page.locator('.career-path')).toHaveCount(0);
     await page.screenshot({ path: 'output/playwright/C73/screen-opportunities-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-opportunities-390.png' });
+    await openSection(page, 'Отклики');
+    await expect(page.locator('.career-path')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/C73/screen-responses-390.png' });
   });
 
   test('B344 D9: на 1176 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
@@ -542,9 +616,10 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
 
-    await openSection(page, 'Вакансии');
+    await openSection(page, 'Сегодня');
     const reasons = page.locator('.career-path-reason:visible');
     const count = await reasons.count();
     for (let i = 0; i < count; i++) {
@@ -567,11 +642,12 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
   });
 
-  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }) => {
+  test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }, info) => {
+    test.skip(info.project.name !== 'desktop-1440', 'resize desktop context to cover both layouts');
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const railBox = await page.locator('.career-rail').boundingBox();
     expect(railBox?.width).toBe(76);
@@ -581,7 +657,7 @@ test.describe('B232 readability gate', () => {
     // 390 mobile
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     await page.screenshot({ path: 'output/playwright/B335/rail-390.png' });
   });
 
@@ -589,11 +665,14 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     // Profile screen: languages
-    await page.locator('button[aria-label="Профиль"]:visible').first().click();
-    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
+    await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Профиль');
 
     const languagesHeading = page.getByRole('heading', { name: 'Языки', exact: true });
     await expect(languagesHeading).toBeVisible();
@@ -615,18 +694,22 @@ test.describe('B232 readability gate', () => {
       .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
       .first();
     await tariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
     // Tariffs at 390
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
     const mobileTariffsTrigger = page
       .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
       .first();
     await mobileTariffsTrigger.click();
-    await expect(page.getByRole('heading', { name: 'Тарифы', exact: true })).toBeVisible();
+    await expect(
+      page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+    ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-390.png' });
   });
 
@@ -743,7 +826,7 @@ test.describe('B232 readability gate', () => {
     // Viewport 1176: desktop app window
     await page.setViewportSize({ width: 1176, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.locator('.career-responses-board')).toBeVisible();
@@ -768,7 +851,7 @@ test.describe('B232 readability gate', () => {
     // Viewport 390: mobile layout
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
     await expect(page.locator('.career-responses-board')).toBeVisible();

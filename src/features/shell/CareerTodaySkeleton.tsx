@@ -4,7 +4,13 @@ export interface CareerTodaySkeletonProps {
   readonly statusRole?: boolean;
 }
 
-function SkeletonLines({ count, width = 'wide' }: { readonly count: number; readonly width?: 'wide' | 'mixed' }) {
+function SkeletonLines({
+  count,
+  width = 'wide',
+}: {
+  readonly count: number;
+  readonly width?: 'wide' | 'mixed';
+}) {
   return (
     <div className="career-today-skeleton-lines" aria-hidden="true">
       {Array.from({ length: count }, (_, index) => (

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -12,6 +13,7 @@ import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
+  candidateHasLlmAccess,
   csrfError,
   hasSafeMutationOrigin,
   sendError,
@@ -26,6 +28,7 @@ const vacancyPitchInputSchema = z
     tone: z.enum(['executive', 'confident', 'technical']).optional(),
     /** Overrides language auto-detected from the vacancy's own text (B266). */
     language: z.enum(['en', 'ru']).optional(),
+    excludedEvidenceIds: z.array(z.string().trim().min(1).max(200)).max(200).optional(),
     /** Saved, candidate-owned cover letter for an application card (B251). */
     applicationId: z.string().trim().min(1).max(200).optional(),
     recipient: z
@@ -47,6 +50,21 @@ const vacancyPitchInputSchema = z
       .optional(),
   })
   .optional();
+const approvedLetterSnapshotSchema = z.object({
+  circle: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  language: z.enum(['en', 'ru']),
+  tone: z.enum(['executive', 'confident', 'technical']),
+  recipient: z.object({
+    id: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1).max(200).optional(),
+    role: z.string().trim().max(200).optional(),
+    company: z.string().trim().max(200).optional(),
+  }).optional(),
+  subject: z.string().trim().max(300).optional(),
+  body: z.string().trim().min(1).max(12000),
+  usedEvidenceIds: z.array(z.string().trim().min(1).max(200)).max(200),
+  includedWorkplaceIds: z.array(z.string().trim().min(1).max(200)).max(100),
+});
 
 /**
  * Раскладка времени письма на составляющие: сборка контекста (снимок
@@ -77,6 +95,7 @@ function toUsableCoverLetterFacts(facts: readonly VacancyPitchInputFact[]) {
 async function writeCoverLetterBody(
   deps: RouteDeps,
   request: FastifyRequest,
+  candidateId: string,
   vacancy: {
     title: string;
     company?: string;
@@ -91,7 +110,7 @@ async function writeCoverLetterBody(
   contextMs: number,
 ): Promise<{ body?: string; stage?: string }> {
   const { coverLetterWriter } = deps;
-  if (!coverLetterWriter) return {};
+  if (!coverLetterWriter || !candidateHasLlmAccess(deps, candidateId)) return {};
   const writing = coverLetterWriter.writeCoverLetter({
     facts: toUsableCoverLetterFacts(facts),
     vacancy: {
@@ -167,18 +186,25 @@ async function writeVacancyPitch(
   vacancy: ReturnType<typeof resolvePitchVacancy> & { title: string },
 ) {
   const contextStart = Date.now();
-  const rankingContext = pitchRankingContext(
-    deps.candidateStore,
-    deps.titleParseStore,
-    candidateId,
-    vacancy.title,
-  );
+  const rankingContext = pitchRankingContext(deps.candidateStore, deps.titleParseStore, candidateId, vacancy.title);
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
-  const facts = snapshot?.memory ?? [];
+  const allFacts = snapshot.memory ?? [];
+  const excludedEvidenceIds = new Set(body?.excludedEvidenceIds ?? []);
+  const facts = allFacts.filter((fact) => !excludedEvidenceIds.has(fact.id));
+  const usableEvidenceIds = new Set(filterUsablePitchFacts(allFacts).map((fact) => fact.id));
+  const candidateWorkplaces = (snapshot.resume?.draft.experience ?? []).map((workplace) => ({
+    id: workplace.id,
+    employer: workplace.employer ?? null,
+    title: workplace.title ?? null,
+    startDate: workplace.startDate ?? null,
+    endDate: workplace.endDate ?? null,
+    current: workplace.current,
+    evidenceIds: [workplace.chronologyMemoryId, ...workplace.bulletMemoryIds].filter((id) => usableEvidenceIds.has(id)),
+  }));
   const tone = body?.tone ?? 'executive';
   const pitch = generateVacancyPitch({
     vacancy,
-    candidateName: snapshot?.resume?.draft?.candidate?.fullName,
+    candidateName: snapshot.resume?.draft?.candidate?.fullName,
     facts,
     tone,
     ...(rankingContext ? { rankingContext } : {}),
@@ -189,6 +215,7 @@ async function writeVacancyPitch(
   const written = await writeCoverLetterBody(
     deps,
     request,
+    candidateId,
     vacancy,
     facts,
     pitch.language,
@@ -196,7 +223,7 @@ async function writeVacancyPitch(
     rankingContext,
     contextMs,
   );
-  return { pitch, written, atsCoverLetter: written.body ?? pitch.atsCoverLetter };
+  return { pitch, written, atsCoverLetter: written.body ?? pitch.atsCoverLetter, candidateWorkplaces };
 }
 
 function saveGeneratedCoverLetter(
@@ -257,6 +284,7 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
     data: {
       ...result.pitch,
       atsCoverLetter: result.atsCoverLetter,
+      candidateWorkplaces: result.candidateWorkplaces,
       bodySource: result.written.body ? ('model' as const) : ('template' as const),
       ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
     },
@@ -264,10 +292,104 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
   };
 };
 
+function invalidLetterSnapshot(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 400, 'invalid_letter_snapshot', 'Проверьте текст письма и повторите одобрение.', false);
+}
+
+function changedLetterEvidence(reply: FastifyReply, request: FastifyRequest) {
+  return sendError(reply, request, 400, 'letter_evidence_changed', 'Факты письма изменились. Подготовьте письмо ещё раз.', false);
+}
+
+const handleApproveVacancyLetter: Handler = async (deps, request, reply) => {
+  const { authService, candidateStore, config, multiSourceEngine } = deps;
+  if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
+  if (!candidate) return undefined;
+  const vacancyId = (request.params as { id: string }).id;
+  const parsed = approvedLetterSnapshotSchema.safeParse(request.body);
+  if (!parsed.success) return invalidLetterSnapshot(reply, request);
+  const cluster = multiSourceEngine.getActiveCluster(vacancyId);
+  if (!cluster) return vacancyNotFoundResponse(reply, request, multiSourceEngine, vacancyId);
+  const evidenceIds = new Set(
+    filterUsablePitchFacts(candidateStore.getSnapshot(candidate.id).memory).map((fact) => fact.id),
+  );
+  if (parsed.data.usedEvidenceIds.some((id) => !evidenceIds.has(id))) {
+    return changedLetterEvidence(reply, request);
+  }
+  const approvedAt = new Date().toISOString();
+  const stored = persistApprovedLetterSnapshot(
+    candidateStore,
+    candidate.id,
+    vacancyId,
+    cluster,
+    parsed.data,
+    approvedAt,
+  );
+  return {
+    data: {
+      applicationId: stored.application.id,
+      documentId: stored.document.id,
+      approvedAt,
+      status: 'approved',
+      sent: false,
+    },
+    meta: { requestId: request.id },
+  };
+};
+
+function persistApprovedLetterSnapshot(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  vacancyId: string,
+  cluster: NonNullable<ReturnType<RouteDeps['multiSourceEngine']['getActiveCluster']>>,
+  input: z.infer<typeof approvedLetterSnapshotSchema>,
+  approvedAt: string,
+) {
+  return candidateStore.transaction(() => {
+    const application = candidateStore.createApplication(candidateId, {
+      clusterId: vacancyId,
+      stage: 'saved',
+      manualVacancy: {
+        title: cluster.canonicalTitle,
+        company: cluster.canonicalCompany,
+        url: cluster.primaryUrl,
+        source: cluster.sources[0]?.sourceName ?? cluster.sources[0]?.sourceType ?? 'Источник не указан',
+      },
+    });
+    const approvalId = randomUUID();
+    const snapshot = {
+      version: 1, approvalId, vacancyId, applicationId: application.id, approvedAt,
+      circle: input.circle, language: input.language, tone: input.tone,
+      recipient: input.recipient ?? null, subject: input.subject ?? null, body: input.body,
+      usedEvidenceIds: input.usedEvidenceIds, includedWorkplaceIds: input.includedWorkplaceIds, sent: false,
+    };
+    const document = candidateStore.saveDocumentAndLinkApplicationMaterial(
+      candidateId,
+      application.id,
+      'cover_letter',
+      {
+        kind: 'cover_letter',
+        source: 'generated',
+        fileName: 'approved-letter-' + approvalId + '.json',
+        mimeType: 'application/json',
+        contentBase64: Buffer.from(JSON.stringify(snapshot), 'utf8').toString('base64'),
+        extractedText: input.body,
+        parseStatus: 'not_applicable',
+      },
+    ).document;
+    return { application, document };
+  });
+}
+
 export function registerVacancyPitchRoutes(app: FastifyInstance, deps: RouteDeps): void {
   app.post(
     '/api/v1/candidate/vacancies/:id/pitch',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
     withDeps(deps, handleGenerateVacancyPitch),
+  );
+  app.post(
+    '/api/v1/candidate/vacancies/:id/letter-approvals',
+    { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    withDeps(deps, handleApproveVacancyLetter),
   );
 }

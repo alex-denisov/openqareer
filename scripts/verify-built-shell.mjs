@@ -29,6 +29,15 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+async function openHhConnectionManagement(page, viewport) {
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if (viewport.width <= 760) {
+    await account.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' }).click();
+    return;
+  }
+  await account.getByRole('button', { name: 'Управлять' }).click();
+}
+
 async function verifyViewport(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -58,6 +67,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // B334: лендинг спрашивает, опубликована ли сборка для macOS.
   await page.route('**/api/v1/desktop/macos', async (route) => {
     await route.fulfill({ json: { data: { available: false } } });
+  });
+  // Unknown candidate reads remain unavailable in this isolated browser fixture;
+  // they must not imitate an expired session and clear the synthetic identity.
+  await page.route('**/api/v1/candidate/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
+    });
   });
   await page.route(
     (url) => url.pathname.startsWith('/api/v1/auth'),
@@ -106,6 +124,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  await page.route('**/api/v1/account/email-change-requests/current', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: null }),
+    });
+  });
   // The candidate's stored wizard answers (INC-024). A fresh walk has none, so
   // the diagnostic is expected to open.
   await page.route('**/api/v1/candidate/workspace', async (route) => {
@@ -123,6 +148,119 @@ async function verifyViewport(browser, baseUrl, viewport) {
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ data: null }),
+    });
+  });
+  await page.route('**/api/v1/candidate/drafts/topics**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          items: [],
+          total: 0,
+          cadence: {
+            timezone: 'Europe/Moscow',
+            lastPublishedAt: null,
+            nextAllowedAt: null,
+            canPublish: false,
+          },
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/companies**', async (route) => {
+    const requestUrl = new URL(route.request().url());
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          items: [],
+          total: 0,
+          offset: Number(requestUrl.searchParams.get('offset') ?? 0),
+          limit: 20,
+          sort: requestUrl.searchParams.get('sort') ?? 'default',
+          filter: requestUrl.searchParams.get('filter') ?? 'all',
+          filterCounts: { all: 0, want: 0, contacts: null, recruiter: 0 },
+          linkedin: { status: 'disconnected', importedAt: null, contactsImported: false },
+          searchConsentGranted: false,
+        },
+      }),
+    });
+  });
+  // The shell reads diary access as soon as a candidate session mounts. Keep
+  // this build-only fixture in the honest empty state instead of allowing the
+  // shared local API's no-session 401 to expire the synthetic browser session.
+  await page.route('**/api/v1/candidate/career-diary**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/v1/candidate/career-diary') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            asOf: '2026-10-12',
+            primaryWorkplace: null,
+            summary: {
+              goalsAchieved: 0,
+              goalsAtRisk: 0,
+              goalsTotal: 0,
+              achievementsReadyToAdd: 0,
+              weeklyReviewsTotal: 0,
+              weeklyReviewsInRow: 0,
+            },
+          },
+        }),
+      });
+      return;
+    }
+    if (pathname === '/api/v1/candidate/career-diary/workplaces') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: { items: [], nextCursor: null } }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 404,
+      contentType: 'application/json',
+      body: '{"error":{"code":"not_found"}}',
+    });
+  });
+  await page.route('**/api/v1/candidate/billing', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        data: {
+          currentPlan: 'basic',
+          subscription: {
+            status: 'active',
+            currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+            nextChargeAt: '2026-11-08T00:00:00.000Z',
+            autoRenew: true,
+          },
+          plans: [
+            {
+              id: 'basic',
+              name: 'Basic',
+              amountKopecks: 399000,
+              currency: 'RUB',
+              interval: 'month',
+            },
+            { id: 'pro', name: 'Pro', amountKopecks: 990000, currency: 'RUB', interval: 'month' },
+            { id: 'max', name: 'Max', amountKopecks: 3990000, currency: 'RUB', interval: 'month' },
+          ],
+        },
+      }),
+    });
+  });
+  await page.route('**/api/v1/candidate/billing/receipts**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: [], meta: { nextCursor: null } }),
     });
   });
   await page.route('**/api/v1/candidate/campaign', async (route) => {
@@ -844,6 +982,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
       }),
     });
   });
+  await page.route('**/api/v1/me/consents', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ data: { consents: [] } }),
+    });
+  });
   await page.route('**/api/v1/candidate/search-consent', async (route) => {
     await route.fulfill({
       status: 200,
@@ -1155,24 +1300,37 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // candidate himself — the dossier with the recommendation and the assessment
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  // B251 S5 — «Сегодня» переехало на TodayScreen: дайджест дня и очередь
-  // решений, а не карточка профиля (`CareerHome`/`CareerProfileSurface`
-  // остались только в своих тестах после B248/B265).
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
+  // B251 S5 / S10-VIS B — desktop Today uses the approved decisions, queue,
+  // and funnel composition. Narrower layouts keep the existing compact composition.
   await page.locator('.career-today').first().waitFor();
-  await page.getByText('Что изменилось с прошлого визита и что решить сегодня.').waitFor();
-  await page.locator('.career-today-digest').waitFor();
+  if (viewport.width >= 1280) {
+    await page.locator('.career-today-desktop').waitFor({ state: 'visible' });
+    for (const section of ['Следующее решение', 'Очередь дня', 'Воронка за 30 дней']) {
+      await page.getByRole('region', { name: section }).waitFor();
+    }
+    assert(
+      (await page.locator('.career-today-desktop .career-today-digest').count()) === 0,
+      `${viewport.name}: legacy Today digest returned to the desktop layout`,
+    );
+  } else {
+    await page.locator('.career-today-mobile').waitFor({ state: 'visible' });
+  }
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({
     path: `output/playwright/b178-home-${viewport.name}.png`,
     fullPage: true,
   });
 
-  // B169 §8 / B248 — «Консультант» is its own rail item now, not a fold
-  // under the home profile card (that fold lived on the now-dead
-  // `CareerHome`).
-  await page.locator('button:has-text("Спросить консультанта"):visible').click();
+  // S10-VIS A2 — the consultant is docked and open on wide desktop layouts;
+  // narrower layouts keep the existing explicit open action.
   const expert = page.getByRole('complementary', { name: /^Консультант · / });
+  if (!(await expert.isVisible())) {
+    await page
+      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .first()
+      .click();
+  }
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {
@@ -1207,17 +1365,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  // B366: шаг «Роль» открывает «Вакансии» с условиями поиска; отдельного экрана кампании нет.
-  await page
-    .getByRole('button', { name: /^Роль\./ })
-    .first()
-    .click();
-  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
-  await page.getByRole('heading', { name: 'Роль, регион, формат' }).waitFor();
-  assert(
-    (await page.getByRole('heading', { name: 'Поиск', exact: true }).count()) === 0,
-    `${viewport.name}: шаг «Роль» снова открыл скрытый экран «Поиск»`,
-  );
+  // S10-VIS A3: desktop keeps the «Карьера» rail entry. Its route and filter
+  // focus are exercised by the B366 end-to-end spec; the removed Today
+  // stepper no longer acts as a second navigation trigger.
+  if (viewport.width >= 1280) {
+    await page
+      .locator('aside#career-rail nav')
+      .getByRole('button', { name: 'Карьера', exact: true })
+      .waitFor({ state: 'visible' });
+  }
 
   // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
   // `VacanciesScreen` (список + детальная карточка), а не старую
@@ -1230,15 +1386,17 @@ async function verifyViewport(browser, baseUrl, viewport) {
     (await vacancyRows.count()) === 2,
     `${viewport.name}: пул вакансий не отрисовался (${await vacancyRows.count()})`,
   );
-  // Возраст — счётный, без процентов и без выдуманной даты публикации.
-  // На узких экранах (<=900px) колонка возраста скрыта дизайном (career-shell.css),
-  // поэтому там достаточно проверить наличие узла, а не видимость.
-  const vacAge = page.locator('.vac-age', { hasText: '2 дня' }).first();
-  if (viewport.width > 900) {
-    await vacAge.waitFor();
-  } else {
-    await vacAge.waitFor({ state: 'attached' });
-  }
+  // B250 identifies the feed row by its source and last observation date.
+  // The approved screen does not make an age claim beside the row.
+  const expectedHhDate = new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(Date.now() - 2 * 86_400_000));
+  await page
+    .locator('.vac-sub')
+    .filter({ hasText: `hh.ru, ${expectedHhDate}` })
+    .first()
+    .waitFor();
   // Фильтр «Свежесть» убран решением владельца (B250, п.4): в базе остаётся
   // только подпись «в базе N дн.» в строке; проверять нечего.
   await page.screenshot({
@@ -1249,6 +1407,10 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // Отклик из карточки (B251 F5, C47, B341): «Откликнуться» ведёт на площадку,
   // запись «applied» ставит только подтверждение «Да, отклик отправлен».
   // На широком экране первая строка раскрыта сразу; на узком — свёрнута.
+  const closeFilterSheet = page
+    .locator('.vacancies-filters.is-expanded')
+    .getByRole('button', { name: 'Свернуть', exact: true });
+  if (await closeFilterSheet.isVisible()) await closeFilterSheet.click();
   const firstRowToggle = vacancyRows.first().locator('button[aria-expanded]').first();
   if ((await firstRowToggle.getAttribute('aria-expanded')) !== 'true') {
     await firstRowToggle.click();
@@ -1300,17 +1462,25 @@ async function verifyViewport(browser, baseUrl, viewport) {
     .first()
     .waitFor();
 
-  // B248 (owner decision 2026-09-23): the rail no longer carries its own
-  // plan card. Narrow screens keep the topbar's «Тарифы» link (point 4 of
-  // the owner's review); everywhere else it opens from the account panel.
+  // B248: narrow screens keep the topbar's «Тарифы» link. Desktop opens it
+  // from the connected Account billing tab.
   const mobileTariffs = page.locator('.career-mobile-tariffs:visible').first();
   if (await mobileTariffs.count()) {
     await mobileTariffs.click();
   } else {
     await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
-    await page.locator('.career-account-tariffs-button').click();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    await account.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+    await account.getByRole('tab', { name: /Подписка и платежи/u }).click();
+    await account.getByRole('button', { name: 'Сменить тариф' }).click();
   }
-  await page.getByRole('heading', { name: 'Тарифы', exact: true }).waitFor();
+  if (viewport.width <= 640) {
+    await page
+      .locator('.career-tariffs-mobile .career-tariffs-title')
+      .waitFor({ state: 'visible' });
+  } else {
+    await page.locator('#tariffs-page-title').waitFor({ state: 'visible' });
+  }
   assert(
     (await page.locator('button[aria-label="Сегодня"]:visible').count()) === 1,
     `${viewport.name}: «Сегодня» disappeared after navigation`,
@@ -1318,31 +1488,49 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   const catalogBeforeAccount = connectionCatalogRequests;
   await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
-  await page.getByText('Вы вошли как', { exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Подключения' }).click();
-  await page.getByRole('heading', { name: 'Профили на площадках' }).waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
+  const account = page.getByTestId('career-shell').getByRole('main');
+  if (viewport.width <= 760) {
+    await account.getByRole('heading', { name: 'Профиль и вход' }).waitFor();
+    await account.getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: /Подключения/u }).click();
+    await account.getByRole('heading', { name: 'Подключения' }).waitFor();
+  } else {
+    await account.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+    await account.getByRole('tab', { name: /Подключения/u }).click();
+    await account.getByRole('heading', { name: 'Площадки и каналы' }).waitFor();
+  }
+  const hhConnectionEntry =
+    viewport.width <= 760
+      ? account.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' })
+      : account.getByRole('button', { name: 'Управлять' });
+  await hhConnectionEntry.waitFor();
   assert(
     connectionCatalogRequests === catalogBeforeAccount + 1,
     `${viewport.name}: account settings did not load one connection catalog`,
   );
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await openHhConnectionManagement(page, viewport);
+  let hhDialog = page.getByRole('dialog', { name: 'hh.ru' });
+  await hhDialog.getByRole('button', { name: 'Отключить' }).click();
   await page.getByText('Не удалось отключить hh.ru', { exact: false }).waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).waitFor();
-  await page
-    .locator('.career-account-connection-list article')
-    .filter({ hasText: 'hh.ru' })
-    .getByText('Подключено', { exact: true })
-    .waitFor();
-  await page.getByRole('button', { name: 'Отключить hh.ru' }).click();
+  await openHhConnectionManagement(page, viewport);
+  hhDialog = page.getByRole('dialog', { name: 'hh.ru' });
+  await hhDialog.getByRole('button', { name: 'Отключить' }).click();
   await page.getByText('hh.ru отключён', { exact: false }).waitFor();
   const logoutResponse = page.waitForResponse((res) => res.url().includes('/api/v1/auth/logout'));
-  await page.getByRole('button', { name: 'Выйти' }).click();
+  if (viewport.width <= 760) {
+    await account.getByRole('button', { name: 'Назад' }).click();
+    await account.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+  } else {
+    await account.getByRole('tab', { name: 'Профиль и вход' }).click();
+    await account.getByRole('button', { name: 'Выйти из аккаунта' }).click();
+  }
+  const signOutDialog = page.getByRole('alertdialog', { name: 'Выйти из аккаунта?' });
+  await signOutDialog.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await logoutResponse;
   await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
   assert(
-    (await page.getByRole('dialog', { name: 'Аккаунт' }).count()) === 0,
-    `${viewport.name}: account panel remained open after logout`,
+    (await page.locator('.career-account-container').count()) === 0,
+    `${viewport.name}: account screen remained open after logout`,
   );
   assert(
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null,
@@ -1374,15 +1562,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // B249 (owner, 2026-09-24): the wizard is full-screen from step 1, so an
   // anonymous visitor opens the account from the wizard's own «Войти».
   await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
-  const dialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await dialog.waitFor({ state: 'visible' });
-  await dialog.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await dialog.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
-  await dialog.getByLabel('Email').fill('fresh.candidate@example.com');
-  await dialog.getByLabel('Пароль').fill('fresh-candidate-password');
+  const accountAccess = page.locator('.career-account-access');
+  await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+  await accountAccess.getByRole('button', { name: 'Зарегистрироваться' }).click();
+  await accountAccess.getByRole('heading', { name: 'Создать аккаунт' }).waitFor();
+  await accountAccess.getByLabel('Как к вам обращаться').fill('Тестовый кандидат');
+  await accountAccess.getByLabel('Email').fill('fresh.candidate@example.com');
+  await accountAccess.getByLabel('Пароль (от 8 символов)').fill('fresh-candidate-password');
   // B173: registration is refused until the published pack is accepted.
-  await dialog.locator('#account-legal-consent').check();
-  await dialog.getByRole('button', { name: 'Создать и начать' }).click();
+  await accountAccess.locator('#signup-legal').check();
+  await accountAccess.getByRole('button', { name: 'Создать аккаунт' }).click();
 
   await page.getByRole('button', { name: 'Расскажу сам' }).click();
   await page.getByRole('button', { name: 'Продолжить' }).click();
@@ -1552,12 +1741,12 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   });
   await page.getByRole('heading', { name: 'С чем разбираемся?' }).waitFor();
   await page.locator('.career-onboarding-top').getByRole('button', { name: 'Войти' }).click();
-  const signInDialog = page.getByRole('dialog', { name: 'Аккаунт' });
-  await signInDialog.getByRole('button', { name: 'Войти' }).first().click();
-  await signInDialog.getByLabel('Логин').fill('returning.candidate');
-  await signInDialog.getByLabel('Пароль').fill('returning-candidate-password');
-  await signInDialog.getByRole('button', { name: 'Войти' }).last().click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  const accountAccess = page.locator('.career-account-access');
+  await accountAccess.getByRole('heading', { name: 'Аккаунт' }).waitFor();
+  await accountAccess.getByLabel('Email или логин').fill('returning.candidate');
+  await accountAccess.getByLabel('Пароль', { exact: true }).fill('returning-candidate-password');
+  await accountAccess.getByRole('button', { name: 'Войти в кабинет' }).click();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(

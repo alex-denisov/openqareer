@@ -260,6 +260,15 @@ describe('server configuration', () => {
     ).toThrow('complete account email configuration is required');
   });
 
+  it('allows public URL for Telegram without enabling account email delivery', () => {
+    const parsed = readServerConfig({
+      ...validEnvironment,
+      OPENQAREER_PUBLIC_URL: 'https://openqareer.com',
+    }, import.meta.url);
+    expect(parsed.publicBaseUrl).toBe('https://openqareer.com');
+    expect(parsed.accountEmail).toBeUndefined();
+  });
+
   it('never reuses an unscoped Resend credential for account email', () => {
     expect(() =>
       readServerConfig(

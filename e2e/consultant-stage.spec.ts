@@ -1,12 +1,15 @@
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { seedReadabilityWorkspace } from './helpers/seedReadabilityWorkspace';
 
 test.describe('B340 stage consultant', () => {
-  test('header outline button and vacancy card discuss button open stage consultant and send stage/subject', async ({
+  test('docked consultant and vacancy discussion use the right stage and subject', async ({
     page,
   }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'desktop only');
     await mockSignedInCabinet(page);
+    await seedReadabilityWorkspace(page);
 
     let sentTurnPayload: {
       stage?: string;
@@ -35,16 +38,12 @@ test.describe('B340 stage consultant', () => {
     // 1. Desktop 1440
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-
-    // Verify header button on Today stage opens Today consultant
-    const headerAskBtn = page.getByRole('button', { name: 'Спросить консультанта' });
-    await expect(headerAskBtn).toBeVisible();
-    await headerAskBtn.click();
+    await waitForCareerShell(page);
 
     const expertPanel = page.locator('aside.career-expert-panel');
     await expect(expertPanel).toBeVisible();
-    await expect(expertPanel.locator('header strong')).toHaveText('Консультант · Сегодня');
+    await expect(expertPanel.locator('header strong')).toHaveText('Консультант');
+    await expect(expertPanel.locator('header small')).toContainText('Сегодня');
     await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
     await expect(expertPanel).not.toBeVisible();
 
@@ -55,24 +54,22 @@ test.describe('B340 stage consultant', () => {
       .click();
     await expect(page.locator('.vac-list-item').first()).toBeVisible();
 
-    // Verify header button on Vacancies stage
-    await expect(headerAskBtn).toBeVisible();
-
-    // Expand the first vacancy row
-    await page.locator('.vac-list-item').first().click();
+    // Expand the first vacancy row in the approved list.
+    const firstVacancy = page.locator('.vac-list-item').first();
+    const rowTrigger = firstVacancy.locator('.vacancies-screen-row-trigger');
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
 
     // Click «Обсудить с консультантом»
-    const discussBtn = page
-      .locator('.vac-list-item')
-      .first()
-      .getByRole('button', { name: 'Обсудить с консультантом' });
+    const discussBtn = firstVacancy
+      .locator('.vacancies-screen-detail-actions')
+      .getByRole('button', { name: 'Обсудить', exact: true });
     await expect(discussBtn).toBeVisible();
     await discussBtn.click();
 
     // Verify panel header, subtitle and static initial replica
     await expect(expertPanel).toBeVisible();
-    await expect(expertPanel.locator('header strong')).toHaveText('Консультант · Вакансии');
-    await expect(expertPanel.locator('header small')).toContainText(/^О вакансии:/);
+    await expect(expertPanel.locator('header strong')).toHaveText('Консультант');
+    await expect(expertPanel.locator('header small')).toContainText('Вакансии');
     await expect(expertPanel.locator('.career-dialogue-turn.is-assistant')).toContainText(
       'Выберите вакансию — сравню её требования с вашим опытом и скажу, где пробелы.',
     );

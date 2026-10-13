@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 const REGISTERED_CANDIDATE = {
   username: 'intelligence.candidate',
@@ -206,7 +207,7 @@ async function stubSession(
 }
 
 async function waitForLiveApp(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+  await waitForCareerShell(page);
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
   );
@@ -242,7 +243,7 @@ async function seedWorkspace(page: Page): Promise<void> {
 }
 
 async function openOpportunities(page: Page): Promise<void> {
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, { timeout: 10_000 });
+  await waitForCareerShell(page);
   // Рельс несёт кнопку «Вакансии»; на мобильном она же в нижней панели.
   // `:visible` выбирает ту, что видна в данном вьюпорте.
   await page.locator('button[aria-label="Вакансии"]:visible').first().click();
@@ -271,8 +272,8 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await expect(vacancy).toContainText('Senior Software Engineer');
     const rowToggle = vacancy.locator('button[aria-expanded]').first();
     if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') await rowToggle.click();
-    const detail = page.locator('.vacancies-detail-panel');
-    await expect(detail).toContainText('Опубликована на hh.ru');
+    const sourceCell = vacancy.locator('.vacancies-screen-cell--salary');
+    await expect(sourceCell).toContainText('hh.ru');
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',

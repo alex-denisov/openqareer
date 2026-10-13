@@ -157,6 +157,12 @@ describe('Coach Stage Routes (B340)', () => {
     expect(response.statusCode).toBe(200);
     const input = getLastInput();
     expect(input?.phase).toBe('market');
+    const notifications = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/notifications',
+      headers,
+    });
+    expect(notifications.json().data.items.map((item: { kind: string }) => item.kind)).toContain('consultant_edits');
   });
 
   it('старый клиент без stage использует выбор фазы по регуляркам', async () => {

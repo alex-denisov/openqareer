@@ -167,9 +167,7 @@ describe('RolesMarketPanel: роль называет модель, пул по�
   });
 
   it('малую выборку показывает числом и не печатает требований', () => {
-    const html = render([
-      { ...notFound, confirmation: { state: 'too-few', sampleSize: 3 } },
-    ]);
+    const html = render([{ ...notFound, confirmation: { state: 'too-few', sampleSize: 3 } }]);
 
     const pending = html.slice(
       html.indexOf('career-roles-pending'),

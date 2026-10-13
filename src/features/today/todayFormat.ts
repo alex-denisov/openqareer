@@ -1,6 +1,13 @@
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
-import type { TodayDigest, TodayFollowUp, TodayNewVacanciesCaption, TodayNextInterview } from './todayApi';
+import type {
+  TodayDigest,
+  TodayFollowUp,
+  TodayNewVacanciesCaption,
+  TodayNextInterview,
+  TodayQueueItem,
+} from './todayApi';
 import { pluralRu } from '../../../shared/pluralRu';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 /**
  * Подписи-обоснования под числом на плитке дайджеста (макет
@@ -27,7 +34,10 @@ function formatWeekdayTime(iso: string, timezone?: string): string {
   return `${weekday}, ${formatHm(iso, timezone)}`;
 }
 
-export function newVacanciesBasis(caption: TodayNewVacanciesCaption | null, timezone?: string): string | null {
+export function newVacanciesBasis(
+  caption: TodayNewVacanciesCaption | null,
+  timezone?: string,
+): string | null {
   if (!caption) return null;
   const campaign = caption.campaignRole ? `кампания ${caption.campaignRole}` : null;
   const updated = caption.updatedAt ? `обновлено в ${formatHm(caption.updatedAt, timezone)}` : null;
@@ -38,13 +48,20 @@ export function followUpBasis(captions: readonly string[]): string | null {
   return captions.length > 0 ? captions.join(' · ') : null;
 }
 
-export function nextInterviewBasis(interview: TodayNextInterview | null, timezone?: string): string | null {
+export function nextInterviewBasis(
+  interview: TodayNextInterview | null,
+  timezone?: string,
+): string | null {
   if (!interview) return null;
   const who = interview.company ?? interview.title;
   return `${who} · раунд ${interview.round} · ${formatWeekdayTime(interview.at, timezone)}`;
 }
 
-export function digestBasis(kind: 'new' | 'followUp' | 'interview', digest: TodayDigest, timezone?: string): string | null {
+export function digestBasis(
+  kind: 'new' | 'followUp' | 'interview',
+  digest: TodayDigest,
+  timezone?: string,
+): string | null {
   if (kind === 'new') return newVacanciesBasis(digest.newVacanciesCaption, timezone);
   if (kind === 'followUp') return followUpBasis(digest.followUpCaptions);
   return nextInterviewBasis(digest.nextInterview, timezone);
@@ -60,22 +77,127 @@ export function followUpStatusLabel(status: TodayFollowUp['status']): string {
   return FOLLOW_UP_STATUS_LABEL[status];
 }
 
+export function consultantTargetView(
+  destination: ReasonedCareerAction['destination'],
+): CareerCabinetView {
+  if (destination === 'career' || destination === 'search') return 'opportunities';
+  return 'profile';
+}
+
+export function queueItemTarget(item: TodayQueueItem): CareerCabinetView {
+  return item.kind === 'new_vacancy' || item.kind === 'shortlist' ? 'opportunities' : 'responses';
+}
+
+export function queueKey(item: TodayQueueItem): string {
+  return item.applicationId ?? item.clusterId ?? item.title;
+}
+
 const RUSSIAN_PATRONYMIC = /^[А-ЯЁ][а-яё]+(?:овна|евна|ична|инична|ович|евич|ич)$/u;
-const RUSSIAN_SURNAME =
-  /^[А-ЯЁ][а-яё]+(?:ов|ова|ев|ева|ин|ина|ын|ына|ский|ская|цкий|цкая|их|ых)$/u;
+const RUSSIAN_SURNAME = /^[А-ЯЁ][а-яё]+(?:ов|ова|ев|ева|ин|ина|ын|ына|ский|ская|цкий|цкая|их|ых)$/u;
 const COMMON_RUSSIAN_GIVEN_NAMES = new Set([
-  'Александр', 'Александра', 'Алексей', 'Алена', 'Алёна', 'Алиса', 'Анастасия', 'Анатолий',
-  'Андрей', 'Анна', 'Антон', 'Артём', 'Артем', 'Артур', 'Борис', 'Вадим', 'Валентин',
-  'Валентина', 'Валерий', 'Валерия', 'Василий', 'Вера', 'Вероника', 'Виктор', 'Виктория',
-  'Виталий', 'Владимир', 'Владислав', 'Всеволод', 'Вячеслав', 'Галина', 'Геннадий', 'Георгий',
-  'Глеб', 'Григорий', 'Дарья', 'Денис', 'Диана', 'Дмитрий', 'Евгений', 'Евгения', 'Егор',
-  'Екатерина', 'Елена', 'Елизавета', 'Жанна', 'Иван', 'Игорь', 'Илья', 'Инна', 'Ирина',
-  'Кирилл', 'Кристина', 'Ксения', 'Лариса', 'Лев', 'Леонид', 'Лидия', 'Любовь', 'Людмила',
-  'Максим', 'Маргарита', 'Марина', 'Мария', 'Матвей', 'Михаил', 'Надежда', 'Наталья',
-  'Наталия', 'Никита', 'Николай', 'Нина', 'Оксана', 'Олег', 'Олеся', 'Ольга', 'Павел',
-  'Петр', 'Пётр', 'Полина', 'Роман', 'Руслан', 'Светлана', 'Святослав', 'Сергей', 'Снежана',
-  'София', 'Софья', 'Станислав', 'Степан', 'Тамара', 'Татьяна', 'Тимофей', 'Тимур', 'Ульяна',
-  'Федор', 'Фёдор', 'Филипп', 'Юлия', 'Юрий', 'Ян', 'Яна', 'Ярослав',
+  'Александр',
+  'Александра',
+  'Алексей',
+  'Алена',
+  'Алёна',
+  'Алиса',
+  'Анастасия',
+  'Анатолий',
+  'Андрей',
+  'Анна',
+  'Антон',
+  'Артём',
+  'Артем',
+  'Артур',
+  'Борис',
+  'Вадим',
+  'Валентин',
+  'Валентина',
+  'Валерий',
+  'Валерия',
+  'Василий',
+  'Вера',
+  'Вероника',
+  'Виктор',
+  'Виктория',
+  'Виталий',
+  'Владимир',
+  'Владислав',
+  'Всеволод',
+  'Вячеслав',
+  'Галина',
+  'Геннадий',
+  'Георгий',
+  'Глеб',
+  'Григорий',
+  'Дарья',
+  'Денис',
+  'Диана',
+  'Дмитрий',
+  'Евгений',
+  'Евгения',
+  'Егор',
+  'Екатерина',
+  'Елена',
+  'Елизавета',
+  'Жанна',
+  'Иван',
+  'Игорь',
+  'Илья',
+  'Инна',
+  'Ирина',
+  'Кирилл',
+  'Кристина',
+  'Ксения',
+  'Лариса',
+  'Лев',
+  'Леонид',
+  'Лидия',
+  'Любовь',
+  'Людмила',
+  'Максим',
+  'Маргарита',
+  'Марина',
+  'Мария',
+  'Матвей',
+  'Михаил',
+  'Надежда',
+  'Наталья',
+  'Наталия',
+  'Никита',
+  'Николай',
+  'Нина',
+  'Оксана',
+  'Олег',
+  'Олеся',
+  'Ольга',
+  'Павел',
+  'Петр',
+  'Пётр',
+  'Полина',
+  'Роман',
+  'Руслан',
+  'Светлана',
+  'Святослав',
+  'Сергей',
+  'Снежана',
+  'София',
+  'Софья',
+  'Станислав',
+  'Степан',
+  'Тамара',
+  'Татьяна',
+  'Тимофей',
+  'Тимур',
+  'Ульяна',
+  'Федор',
+  'Фёдор',
+  'Филипп',
+  'Юлия',
+  'Юрий',
+  'Ян',
+  'Яна',
+  'Ярослав',
 ]);
 
 const COMPANY_MARKERS =

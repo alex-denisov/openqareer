@@ -118,6 +118,10 @@ test.describe('B393 interview debrief and company reminder draft', () => {
   test('completes debriefing, computes deadline and proposes polite company reminder draft on today screen', async ({
     page,
   }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'mobile-390',
+      'Desktop Today rows route to Responses; compact Today retains reminder drafting.',
+    );
     let reminderActive = false;
 
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);

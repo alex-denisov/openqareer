@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
+import { RELOCATION_CONSENT_VERSION } from '../../shared/relocationQuestionnaire';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import { CandidateStoreConflictError } from './store/errors';
 import {
@@ -49,6 +50,57 @@ function nativeResumeImportInput(input: {
 }
 
 describe('SQLite candidate memory', () => {
+  it('returns only language facts tied to the candidate LinkedIn import', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    const memoryId = 'imp6666666666-language-1';
+    store.commitResumeImport(
+      candidate.id,
+      nativeResumeImportInput({
+        platform: 'linkedin',
+        digest: 'f'.repeat(64),
+        memoryId,
+        statement: 'English — full professional proficiency',
+        draft: {
+          ...EMPTY_RESUME_DRAFT,
+          languages: [{
+            id: 'language-1',
+            evidenceMemoryId: memoryId,
+            name: 'English',
+            cefr: 'C1',
+            sourceLabel: 'Full professional proficiency',
+          }],
+        },
+      }),
+    );
+
+    expect(store.getLinkedInLanguageImport(candidate.id)).toMatchObject({
+      capturedAt: '2026-10-05T10:00:00.000Z',
+      languages: [{ name: 'English', cefr: 'C1' }],
+    });
+    expect(store.getLinkedInLanguageImport(createCandidate(store).id)).toBeNull();
+  });
+
+  it('includes relocation data in a candidate export only while its separate consent is active', () => {
+    const store = createStore();
+    const candidate = createCandidate(store);
+    store.relocationQuestionnaireRepo.grantConsent(candidate.id, RELOCATION_CONSENT_VERSION, '2026-10-11T10:00:00.000Z');
+    store.relocationQuestionnaireRepo.putStep(
+      candidate.id,
+      'citizenship_documents',
+      { citizenshipCountryCodes: ['RU'], documents: [] },
+      0,
+      '2026-10-11T10:01:00.000Z',
+    );
+
+    expect(store.exportCandidate(candidate.id).relocationQuestionnaire?.citizenshipDocuments.citizenshipCountryCodes).toEqual(['RU']);
+    store.relocationQuestionnaireRepo.revokeConsent(candidate.id, '2026-10-11T10:02:00.000Z');
+    expect(store.exportCandidate(candidate.id)).toMatchObject({
+      relocationQuestionnaire: null,
+      relocationConsent: { granted: false, status: 'revoked' },
+    });
+  });
+
   it('isolates candidate tokens, messages and memory', () => {
     const store = createStore();
     const candidateA = createCandidate(store);

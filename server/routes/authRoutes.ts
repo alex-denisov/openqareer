@@ -16,7 +16,9 @@ import {
   withDeps,
 } from './helpers';
 import {
+  accountEmailChangeRequestSchema,
   accountProfileSchema,
+  accountSessionIdSchema,
   loginSchema,
   passwordChangeSchema,
   passwordResetRequestSchema,
@@ -37,6 +39,8 @@ import {
   AuthEmailChangeRequiresVerificationError,
 } from '../auth/authService';
 import {
+  AuthAccountEmailChangeNotPendingError,
+  AuthAccountEmailChangeStaleError,
   AuthEmailVerificationDeliveryError,
   AuthEmailVerificationExpiredError,
   AuthEmailVerificationInvalidCodeError,
@@ -187,6 +191,12 @@ async function handleLogin(deps: RouteDeps, request: FastifyRequest, reply: Fast
 }
 
 function verificationFailure(error: unknown, request: FastifyRequest, reply: FastifyReply) {
+  if (error instanceof AuthAccountEmailChangeNotPendingError) {
+    return sendError(reply, request, 409, 'email_change_not_pending', 'Нет ожидающей проверки смены адреса.', false);
+  }
+  if (error instanceof AuthAccountEmailChangeStaleError) {
+    return sendError(reply, request, 409, 'email_change_conflict', 'Данные аккаунта изменились. Запросите новый код.', false);
+  }
   if (error instanceof AuthEmailVerificationInvalidCodeError) {
     return sendError(reply, request, 422, 'email_verification_invalid', error.message, false);
   }
@@ -450,6 +460,148 @@ async function handleRevokeSessions(deps: RouteDeps, request: FastifyRequest, re
   return { data: { revoked }, meta: { requestId: request.id } };
 }
 
+async function handleRevokeAccountSession(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const parsed = accountSessionIdSchema.safeParse(request.params);
+  if (!parsed.success) {
+    return sendError(reply, request, 400, 'invalid_session_id', 'Некорректный идентификатор сессии.', false);
+  }
+  const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  const result = deps.authService.revokeAccountSession?.(sessionToken, parsed.data.sessionId) ?? null;
+  if (result === null) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (result === 'not_found') {
+    return sendError(reply, request, 404, 'session_not_found', 'Сессия не найдена.', false);
+  }
+  if (result === 'current') {
+    return sendError(
+      reply,
+      request,
+      409,
+      'current_session_cannot_be_revoked',
+      'Нельзя завершить сессию, с которой вы сейчас работаете.',
+      false,
+    );
+  }
+  return reply.code(204).send();
+}
+
+async function handleCreateAccountEmailChange(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const parsed = accountEmailChangeRequestSchema.safeParse(request.body);
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
+  const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  try {
+    const result = await deps.authService.requestAccountEmailChange?.(
+      sessionToken,
+      parsed.data.email,
+      parsed.data.currentPassword,
+      request.ip,
+    );
+    if (!result) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+    }
+    if (result.status === 'pending') {
+      return reply.code(202).send({
+        data: {
+          status: result.status,
+          email: result.pending.email,
+          expiresAt: result.pending.expiresAt,
+          resendAfterSeconds: result.pending.resendAfterSeconds,
+          emailVerificationEmailSent: true,
+        },
+        meta: { requestId: request.id },
+      });
+    }
+    setSessionCookie(reply, result.sessionToken, deps.config.secureCookies);
+    return {
+      data: {
+        status: result.status,
+        ...publicPrincipal(result.principal),
+      },
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    const mapped = verificationFailure(error, request, reply);
+    if (mapped) return mapped;
+    throw error;
+  }
+}
+
+async function handleGetPendingAccountEmailChange(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  reply.header('Cache-Control', 'no-store');
+  const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  if (!deps.authService.getPendingAccountEmailChange) {
+    return sendError(reply, request, 503, 'email_change_unavailable', 'Смена адреса временно недоступна.', true);
+  }
+  return {
+    data: deps.authService.getPendingAccountEmailChange(sessionToken),
+    meta: { requestId: request.id },
+  };
+}
+
+async function handleVerifyAccountEmailChange(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
+  const parsed = emailVerificationCodeSchema.safeParse(request.body);
+  if (!parsed.success) return registrationValidationError(request, reply, parsed.error);
+  const sessionToken = extractSessionToken(request, deps.config);
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (!principal) {
+    return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+  }
+  if (!requireVerifiedEmail(request, reply, principal)) return undefined;
+  try {
+    const authenticated = await deps.authService.verifyAccountEmailChange?.(
+      sessionToken,
+      parsed.data.code,
+    );
+    if (!authenticated) {
+      return sendError(reply, request, 401, 'unauthorized', 'Нужна действующая сессия.', false);
+    }
+    setSessionCookie(reply, authenticated.sessionToken, deps.config.secureCookies);
+    return {
+      data: publicPrincipal(authenticated.principal),
+      meta: { requestId: request.id },
+    };
+  } catch (error) {
+    const mapped = verificationFailure(error, request, reply);
+    if (mapped) return mapped;
+    throw error;
+  }
+}
+
 async function handlePasswordResetRequest(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasAllowedOrigin(request, deps.config)) return csrfError(request, reply);
   const body = passwordResetRequestSchema.parse(request.body);
@@ -555,6 +707,7 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
   app.patch('/api/v1/account/profile', withDeps(deps, handleUpdateProfile));
   app.post('/api/v1/account/password', withDeps(deps, handleChangePassword));
   app.delete('/api/v1/account/sessions', withDeps(deps, handleRevokeSessions));
+  registerAccountExtensionRoutes(app, deps);
 
   app.post(
     '/api/v1/auth/password-reset-requests',
@@ -564,6 +717,36 @@ export async function registerAuthRoutes(app: FastifyInstance, deps: RouteDeps):
     '/api/v1/auth/password-resets',
     { config: { rateLimit: { max: 8, timeWindow: '15 minutes' } } },
     withDeps(deps, handlePasswordReset),
+  );
+}
+
+function registerAccountExtensionRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  app.delete(
+    '/api/v1/account/sessions/:sessionId',
+    { config: { rateLimit: { max: 30, timeWindow: '1 hour' } } },
+    withDeps(deps, handleRevokeAccountSession),
+  );
+  app.post(
+    '/api/v1/account/email-change-requests',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 hour',
+          keyGenerator: (request) => emailVerificationRateLimitKey(deps, request),
+        },
+      },
+    },
+    withDeps(deps, handleCreateAccountEmailChange),
+  );
+  app.get(
+    '/api/v1/account/email-change-requests/current',
+    withDeps(deps, handleGetPendingAccountEmailChange),
+  );
+  app.post(
+    '/api/v1/account/email-change-requests/current/verification',
+    { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } },
+    withDeps(deps, handleVerifyAccountEmailChange),
   );
 }
 

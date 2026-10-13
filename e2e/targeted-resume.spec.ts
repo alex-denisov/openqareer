@@ -5,6 +5,7 @@ import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { candidateSnapshot } from './fixtures/readabilityWorkspace';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 test('builds a targeted resume from vacancy requirements and prints only that slice', async ({
   page,
@@ -37,8 +38,16 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
     }),
   );
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+  await waitForCareerShell(page);
+  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+    timeout: 15_000,
+  });
+  await page
+    .getByRole('navigation', {
+      name: (page.viewportSize()?.width ?? 1440) <= 760 ? 'Основная навигация' : 'Разделы кабинета',
+    })
+    .getByRole('button', { name: 'Профиль', exact: true })
+    .click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
   await page.getByText('Открыть ATS Plain Text и подготовить целевой срез').click();
 

@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { SESSION_IDLE_DAYS, type AuthPrincipal, type SessionAuth } from '../auth/authService';
 import type { ServerConfig } from '../config';
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
+import type { RouteDeps } from './deps';
 
 interface ErrorBody {
   error: {
@@ -175,6 +176,26 @@ export function authenticateCandidate(
     return null;
   }
   return candidate;
+}
+
+/** Stop every candidate AI boundary at the server when the stored account is Free. */
+export function candidateHasLlmAccess(
+  deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
+  candidateId: string,
+): boolean {
+  if (deps.config?.billingEnforcement !== true) return true;
+  return deps.billingRepository?.canCandidateUseLlm(candidateId, new Date().toISOString()) ?? false;
+}
+
+export function requireCandidateLlmAccess(
+  deps: Partial<Pick<RouteDeps, 'config' | 'billingRepository'>>,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  candidateId: string,
+): boolean {
+  if (candidateHasLlmAccess(deps, candidateId)) return true;
+  sendError(reply, request, 402, 'paid_plan_required', 'Для этой ИИ-операции нужен платный тариф.', false);
+  return false;
 }
 
 export function requireVerifiedEmail(

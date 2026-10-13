@@ -1,24 +1,31 @@
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { APPLICATION_STAGES } from '../../shared/applicationStage';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin, withDeps } from './helpers';
-import { timezoneOffsetSchema } from './timezoneQuery';
 import { isoDateField } from './isoDateField';
 import { registerApplicationMaterialsRoutes } from './applicationMaterialsRoutes';
 import { registerApplicationInterviewRoutes } from './applicationInterviewRoutes';
 import { registerApplicationOfferRoutes } from './applicationOfferRoutes';
 import { registerDecisionProfileRoutes } from './decisionProfileRoutes';
+import { registerRelocationQuestionnaireRoutes } from './relocationQuestionnaireRoutes';
 import { registerCareerVectorRoutes } from './careerVectorRoutes';
+import { registerCareerDiaryRoutes } from './careerDiaryRoutes';
 import { registerReferralTrackRoutes } from './referralTrackRoutes';
 import { registerStarPrepRoutes } from './starPrepRoutes';
+import { registerStarStoryRoutes } from './starStoryRoutes';
+import { registerInterviewSimulatorRoutes } from './interviewSimulatorRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
+import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
+import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { readTargetLevel } from './vacancyRoleContext';
 import { buildTodaySnapshot, type TodayNewVacancy } from '../domain/todayDigest';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
+import { registerApplicationOperationsRoutes } from './applicationOperationsRoutes';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -111,22 +118,6 @@ const patchApplicationSchema = z.object({
 
 const restoreApplicationSchema = z.object({ expectedVersion: z.number().int().nonnegative() });
 
-const listApplicationsQuerySchema = z.object({ tz: timezoneOffsetSchema });
-
-const handleListApplications: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config } = deps;
-  const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
-  if (!candidate) return undefined;
-  const { tz } = listApplicationsQuerySchema.parse(request.query ?? {});
-  return {
-    data: candidateStore.listApplications(candidate.id, {
-      timezoneOffsetMinutes: tz,
-      archiveStaleDays: config.applicationArchiveStaleDays,
-    }),
-    meta: { requestId: request.id },
-  };
-};
-
 const handleCreateApplication: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -149,14 +140,51 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const applicationId = (request.params as { id: string }).id;
   const body = patchApplicationSchema.parse(request.body);
+  const current = candidateStore.getApplication(candidate.id, applicationId);
   const patched = candidateStore.patchApplication(
     candidate.id,
     applicationId,
     body,
     config.applicationArchiveStaleDays,
   );
+  recordApplicationNotifications(
+    deps, request, candidate.id, applicationId, current?.stage ?? null, patched, body,
+  );
   return { data: patched, meta: { requestId: request.id } };
 };
+
+function recordApplicationNotifications(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  applicationId: string,
+  previousStage: string | null,
+  updated: { readonly stage: string; readonly version: number },
+  input: z.infer<typeof patchApplicationSchema>,
+): void {
+  const createdAt = input.occurredAt ?? new Date().toISOString();
+  if (
+    previousStage !== updated.stage &&
+    ['responded', 'interview', 'offer'].includes(updated.stage)
+  ) {
+    recordNotificationFromSource(deps, request, candidateId, {
+      kind: 'employer_reply',
+      sourceType: 'application',
+      sourceId: applicationId,
+      idempotencyKey: `employer-reply:${applicationId}:${updated.version}`,
+      createdAt,
+    });
+  }
+  if (input.deliveryReceipt?.kind === 'failure_note') {
+    recordNotificationFromSource(deps, request, candidateId, {
+      kind: 'delivery_error',
+      sourceType: 'application',
+      sourceId: applicationId,
+      idempotencyKey: `delivery-error:${applicationId}:${updated.version}`,
+      createdAt,
+    });
+  }
+}
 
 const handleRestoreApplication: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
@@ -253,7 +281,13 @@ async function readTodayMatchedVacancies(
   const matched =
     confirmedSkills.length === 0 && targetRoles.length === 0
       ? []
-      : await readMatchedSnapshot(multiSourceEngine, candidateId, confirmedSkills, targetRoles, targetLevel);
+      : await readMatchedSnapshot(
+          multiSourceEngine,
+          candidateId,
+          confirmedSkills,
+          targetRoles,
+          targetLevel,
+        );
   return {
     matched: matched.filter((item) => !campaign.remoteOnly || item.cluster.isRemote),
     targetRoles,
@@ -285,6 +319,24 @@ function todayNewVacancies(
         }),
       )
     : undefined;
+}
+
+function recordFreshVacancyNotification(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  vacancies: readonly TodayNewVacancy[],
+): void {
+  if (!vacancies.length) return;
+  const sourceId = createHash('sha256')
+    .update(vacancies.map((vacancy) => vacancy.clusterId).sort().join('\0'))
+    .digest('hex');
+  recordNotificationFromSource(deps, request, candidateId, {
+    kind: 'new_vacancies_by_role',
+    sourceType: 'matched_vacancy_batch',
+    sourceId,
+    idempotencyKey: `new-vacancies:${sourceId}`,
+  });
 }
 
 /**
@@ -324,12 +376,13 @@ const handleToday: Handler = async (deps, request, reply) => {
     companyEventsSinceVisit,
     shortlist: newVacancies,
   });
+  recordFreshVacancyNotification(deps, request, candidate.id, freshNewVacancies);
   return { data: snapshot, meta: { requestId: request.id } };
 };
 
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */
 export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get('/api/v1/candidate/applications', withDeps(deps, handleListApplications));
+  registerApplicationOperationsRoutes(app, deps);
   app.post(
     '/api/v1/candidate/applications',
     { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
@@ -361,8 +414,13 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   registerApplicationInterviewRoutes(app, deps);
   registerApplicationOfferRoutes(app, deps);
   registerStarPrepRoutes(app, deps);
+  registerStarStoryRoutes(app, deps);
+  registerInterviewSimulatorRoutes(app, deps);
   registerReferralTrackRoutes(app, deps);
   registerCareerVectorRoutes(app, deps);
+  registerCareerDiaryRoutes(app, deps);
   registerDecisionProfileRoutes(app, deps);
+  registerRelocationQuestionnaireRoutes(app, deps);
   registerVacancySkipRoutes(app, deps);
+  registerCandidateAutomationRoutes(app, deps);
 }

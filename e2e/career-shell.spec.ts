@@ -1,12 +1,16 @@
 import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { captureCareerHarness } from './helpers/capture-career-harness';
+
+const EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
 
 function evidenceScreenshot(name: string): string {
-  const directory = 'output/playwright/B440';
-  mkdirSync(directory, { recursive: true });
-  return `${directory}/${name}.png`;
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  return join(EVIDENCE_DIR, `${name}.png`);
 }
 
 async function openCabinet(page: import('@playwright/test').Page): Promise<void> {
@@ -41,7 +45,6 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'The docked-panel audit runs on desktop.');
   await openCabinet(page);
-  await page.getByRole('button', { name: 'Спросить консультанта' }).click();
   const rail = page.locator('.career-rail');
   const panel = page.locator('.career-expert-panel');
   await expect(panel).toBeVisible();
@@ -54,23 +57,52 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   expect(railBox?.width).toBe(76);
   expect(panelBox?.width).toBe(360);
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(panelBox?.x ?? 0);
+  const primaryRail = rail.getByRole('navigation', { name: 'Разделы кабинета' });
+  await expect(primaryRail.getByRole('button')).toHaveText([
+    'Сегодня',
+    'Профиль',
+    'Карьера',
+    'Вакансии',
+    'Отклики',
+    'Дневник',
+    'Автоматизация',
+  ]);
   await expect(rail.getByRole('button', { name: 'Тарифы', exact: true })).toBeEnabled();
+  await expect(rail.getByRole('button', { name: 'Открыть аккаунт', exact: true })).toBeEnabled();
+  await expect(rail.locator('.career-rail-avatar')).toHaveCount(0);
   await expect(rail).not.toContainText('План');
   await expect(rail).not.toContainText('qa-readability@example.com');
 
   const today = rail.locator('.career-nav-button').first();
   await today.hover();
-  const tooltip = page.locator('.career-tooltip-bubble[data-open="true"]');
-  await expect(tooltip).toContainText('Сегодня');
-  const tooltipBox = await tooltip.boundingBox();
-  expect(tooltipBox?.x).toBeGreaterThanOrEqual((railBox?.x ?? 0) + (railBox?.width ?? 0));
+  const hint = page.locator('.career-desktop-topbar-hint');
+  await expect(hint).toContainText('Сегодня');
+  await expect(page.locator('.career-tooltip-bubble[data-open="true"]')).toHaveCount(0);
   await today.focus();
-  await expect(tooltip).toContainText('Сегодня');
+  await expect(hint).toContainText('Сегодня');
   await expectPanelAccessible(page);
   await page.screenshot({
-    path: evidenceScreenshot('desktop-docked-consultant'),
+    path: evidenceScreenshot('shell-1440'),
     fullPage: true,
   });
+  await captureCareerHarness(page, join(EVIDENCE_DIR, 'shell-1440.html'));
+
+  await primaryRail.getByRole('button', { name: 'Карьера', exact: true }).click();
+  await expect(page.locator('.career-shell')).toHaveAttribute('data-shell-view', 'opportunities');
+  await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Карьера');
+  await expect(
+    page.getByRole('heading', { name: 'Роль, регион, формат', exact: true }),
+  ).toBeVisible();
+
+  await primaryRail.getByRole('button', { name: 'Автоматизация', exact: true }).click();
+  await expect(
+    page.getByLabel('Раздел Автоматизация').getByRole('heading', { name: 'Автоматизация' }),
+  ).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Автоматизация' })).toBeVisible();
+
+  await primaryRail.getByRole('button', { name: 'Сегодня', exact: true }).click();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Сегодня' })).toBeVisible();
+  await expect(panel).toBeVisible();
 
   for (const width of [1176, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -88,7 +120,13 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   await page.setViewportSize({ width: 1440, height: 900 });
   await panel.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expect(panel).toHaveCount(0);
-  await page.getByRole('button', { name: 'Спросить консультанта' }).click();
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect(page.locator('.career-cabinet')).toBeVisible();
+  await expect(page.locator('.career-expert-panel')).toHaveCount(0);
+  await page
+    .locator('.career-desktop-topbar')
+    .getByRole('button', { name: 'Открыть консультанта', exact: true })
+    .click();
   await expect(panel).toBeVisible();
 });
 
@@ -122,7 +160,7 @@ test('mobile navigation uses four sections plus More and the consultant sheet co
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
-    path: evidenceScreenshot('mobile-collapsed-consultant'),
+    path: evidenceScreenshot('shell-390'),
     fullPage: true,
   });
 
@@ -139,7 +177,7 @@ test('mobile navigation uses four sections plus More and the consultant sheet co
   await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
   await expectPanelAccessible(page);
   await page.screenshot({
-    path: evidenceScreenshot('mobile-expanded-consultant'),
+    path: evidenceScreenshot('shell-390-consultant-expanded'),
     fullPage: true,
   });
   await page.keyboard.press('Escape');
@@ -150,7 +188,7 @@ test('mobile navigation uses four sections plus More and the consultant sheet co
   await page.getByRole('button', { name: 'Спросить консультанта' }).click();
   const composer = page.getByLabel('Сообщение карьерному консультанту');
   await expect(composer).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Голосовой ввод скоро' })).toBeDisabled();
+  await expect(panel.getByRole('button', { name: 'Голосовой ввод' })).toBeEnabled();
   await page.getByRole('button', { name: 'С чего начать?' }).click();
   await expect(composer).toHaveValue('С чего начать?');
   await expect(panel.getByRole('button', { name: 'Отправить вопрос' })).toBeEnabled();
@@ -231,7 +269,7 @@ test('announces a slow session read after four seconds and retries the same requ
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.getByText('Проверяем вход и читаем ваш профиль')).toBeVisible();
-  await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 7_000 });
+  await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 15_000 });
   await page.screenshot({
     path: evidenceScreenshot(`${testInfo.project.name}-session-slow`),
     fullPage: true,

@@ -4,7 +4,7 @@ import type { CareerTariffsViewProps } from './CareerTariffsView';
 const cache = new Map<string, string>();
 
 export function renderTariffsStaticHtml(props: CareerTariffsViewProps): string {
-  const key = JSON.stringify(props);
+  const key = JSON.stringify({ ...props, initialView: props.initialView ?? 'home' });
   const cached = cache.get(key);
   if (cached) return cached;
 

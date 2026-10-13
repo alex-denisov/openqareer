@@ -165,6 +165,12 @@ describe('POST /api/v1/candidate/resume/import', () => {
       promptRevision: 'resume-structuring-v1',
       readAt: expect.any(String),
     });
+    const notifications = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/notifications',
+      headers: { authorization },
+    });
+    expect(notifications.json().data.items.map((item: { kind: string }) => item.kind)).toContain('import_completed');
 
     const snapshot = await app.inject({
       method: 'GET',

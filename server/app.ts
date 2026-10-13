@@ -59,12 +59,20 @@ import {
 import { SqliteTitleParseStore } from './vacancies/titleParse/sqliteTitleParseStore';
 import { SqliteCandidateCompanyWantsRepository } from './data/sqliteCandidateCompanyWantsRepository';
 import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes';
+import type { RobokassaGateway } from './billing/robokassaGateway';
+import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
+import { registerBillingRoutes } from './billing/billingRoutes';
+import { createRobokassaGateway } from './billing/robokassaProtocol';
+import { runDueBillingRenewals } from './billing/renewalRunner';
+import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
 interface BuildAppOptions {
   config: ServerConfig;
   coachProvider: CoachProvider;
   candidateStore: CandidateStore;
   authService: SessionAuth;
+  robokassaGateway?: RobokassaGateway;
+  billingRepository?: SqliteBillingRepository;
   serveStatic?: boolean;
   searchVacancies?: (input: { text: string; perPage?: number }) => Promise<HhVacancySample>;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;
@@ -161,11 +169,31 @@ function loggerOptions(
   return {
     level: config.logLevel,
     redact: {
-      paths: ['req.headers.authorization', 'req.headers.cookie'],
-      censor: '[REDACTED]',
+      paths: ['req.headers.authorization', 'req.headers.cookie', 'req.url'],
+      censor: (value, path) =>
+        path.join('.') === 'req.url' ? redactRequestUrlForLogs(value) : '[REDACTED]',
     },
     ...(logDestination ? { stream: logDestination } : {}),
   };
+}
+
+export function redactRequestUrlForLogs(value: unknown): string {
+  if (typeof value !== 'string') return '[REDACTED]';
+  try {
+    const url = new URL(value, 'http://localhost');
+    for (const key of [...url.searchParams.keys()]) {
+      const normalized = key.toLowerCase();
+      if (
+        ['token', 'code', 'secret', 'password'].includes(normalized) ||
+        normalized.endsWith('_token')
+      ) {
+        url.searchParams.set(key, '[REDACTED]');
+      }
+    }
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return '[REDACTED]';
+  }
 }
 
 async function createFastifyBase(
@@ -187,6 +215,7 @@ async function createFastifyBase(
     global: false,
     keyGenerator: (request) => request.ip,
   });
+  registerBillingFormParser(app);
 
   app.addHook('onRequest', async (request, reply) => {
     const origin = request.headers.origin;
@@ -229,6 +258,14 @@ async function createFastifyBase(
   return app;
 }
 
+function registerBillingFormParser(app: FastifyInstance): void {
+  app.addContentTypeParser(
+    'application/x-www-form-urlencoded',
+    { parseAs: 'string' },
+    (_request, body, done) => done(null, new URLSearchParams(body.toString())),
+  );
+}
+
 async function registerApiRoutes(
   app: FastifyInstance,
   deps: CandidateDraftRouteDeps,
@@ -251,6 +288,7 @@ async function registerApiRoutes(
   registerCapabilityConsentRoutes(app, deps);
   registerCandidateActionRoutes(app, deps);
   registerCandidateDraftRoutes(app, deps);
+  registerBillingRoutes(app, deps);
 }
 
 /** Аутентификация части реализаций читает кандидатов из того же хранилища. */
@@ -331,6 +369,7 @@ function assembleRouteDeps(
     candidateStore,
     uploadStaging: createUploadStaging(),
     coachProvider,
+    ...createBillingRouteDependencies(options, config),
     importProfile,
     resumeStructurer,
     roleNamer,
@@ -341,6 +380,7 @@ function assembleRouteDeps(
     ...(options.candidateActionExecutor
       ? { candidateActionExecutor: options.candidateActionExecutor }
       : {}),
+    ...(options.billingRepository ? { billingRepository: options.billingRepository } : {}),
     ...(linkedinPool ? { linkedinPool } : {}),
     ...(options.linkedinRemoteLogin ? { linkedinRemoteLogin: options.linkedinRemoteLogin } : {}),
     roleNamingFailures: new RoleNamingFailureLog(),
@@ -351,6 +391,61 @@ function assembleRouteDeps(
     ...(matchedPoolPrecompute ? { matchedPoolPrecompute } : {}),
     ...services,
   };
+}
+
+function createBillingRouteDependencies(
+  options: BuildAppOptions,
+  config: ServerConfig,
+): Pick<RouteDeps, 'robokassaGateway' | 'billingRepository'> {
+  const robokassaGateway = options.robokassaGateway
+    ?? (config.robokassa?.recurringApproved ? createRobokassaGateway(config.robokassa) : undefined);
+  const billingRepository = options.billingRepository
+    ?? (config.databasePath === ':memory:'
+      ? undefined
+      : new SqliteBillingRepository({ databasePath: config.databasePath }));
+  return {
+    ...(robokassaGateway ? { robokassaGateway } : {}),
+    ...(billingRepository ? { billingRepository } : {}),
+  };
+}
+
+function registerBillingRenewalScheduler(
+  app: FastifyInstance,
+  config: ServerConfig,
+  deps: Pick<RouteDeps, 'billingRepository' | 'robokassaGateway'>,
+): () => void {
+  const repository = deps.billingRepository;
+  const gateway = deps.robokassaGateway;
+  if (config.billingEnforcement !== true || !config.robokassa?.recurringApproved || !repository || !gateway) {
+    return () => undefined;
+  }
+  let timer: NodeJS.Timeout | undefined;
+  let inFlight = false;
+  const run = async () => {
+    if (inFlight) return;
+    inFlight = true;
+    try {
+      const result = await runDueBillingRenewals({
+        repository,
+        gateway,
+        emailVerificationRequired: config.emailVerificationRequired,
+        ...(config.accountEmail
+          ? { sendReminder: (reminder) => sendBillingRenewalReminder(config.accountEmail!, reminder) }
+          : {}),
+      });
+      if (Object.values(result).some((count) => count > 0)) app.log.info(result, 'billing_renewal_run_completed');
+    } catch (error) {
+      app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'billing_renewal_run_failed');
+    } finally {
+      inFlight = false;
+    }
+  };
+  app.addHook('onReady', async () => {
+    void run();
+    timer = setInterval(() => void run(), 60_000);
+    timer.unref();
+  });
+  return () => { if (timer) clearInterval(timer); };
 }
 
 function createCandidateDraftDeps(
@@ -400,11 +495,16 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   });
   const deps = assembleRouteDeps(options, services);
   const app = await createFastifyBase(config, logDestination);
+  const stopBillingScheduler = registerBillingRenewalScheduler(app, config, deps);
   app.addHook('onClose', () => {
+    stopBillingScheduler();
     services.titleParseStore.close();
     deps.capabilityConsentStore?.close();
     if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
     if (!options.candidateDraftRepository) deps.candidateDraftRepository.close();
+    if (!options.billingRepository && config.databasePath !== ':memory:') {
+      deps.billingRepository?.close();
+    }
   });
   await registerApiRoutes(app, deps);
   registerErrorHandler(app);

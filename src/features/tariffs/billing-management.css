@@ -1,0 +1,310 @@
+.career-billing-management {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-billing-page-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-3);
+  padding: var(--career-space-5);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+}
+
+.career-billing-page-state h2,
+.career-billing-page-state p {
+  margin: 0;
+}
+
+.career-billing-page-state h2 {
+  color: var(--career-text);
+  font-size: var(--career-text-lg);
+}
+
+.career-billing-page-state .career-btn {
+  min-block-size: var(--career-target-min);
+}
+
+.career-billing-overview,
+.career-billing-history {
+  min-inline-size: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-billing-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: var(--career-space-4) var(--career-space-6);
+  padding: var(--career-space-4);
+}
+
+.career-billing-overview-main {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.career-billing-eyebrow {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-billing-title {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-lg);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.career-billing-status {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-billing-status.is-warning {
+  color: var(--career-warning);
+}
+
+.career-billing-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-3) var(--career-space-5);
+  margin: 0;
+}
+
+.career-billing-fact {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+  margin: 0;
+}
+
+.career-billing-fact dt {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.career-billing-fact dd {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.career-billing-action {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-2);
+}
+
+.career-billing-action,
+.career-billing-action .career-btn,
+.career-billing-load-more {
+  width: 100%;
+}
+
+.career-billing-error,
+.career-billing-success {
+  margin: 0;
+  font-size: var(--career-text-sm);
+  line-height: 1.45;
+}
+
+.career-billing-error {
+  color: var(--career-danger);
+}
+
+.career-billing-success {
+  color: var(--career-success);
+}
+
+.career-billing-icon {
+  flex: none;
+  inline-size: var(--career-text-md);
+  block-size: var(--career-text-md);
+}
+
+.career-billing-spinner {
+  animation: career-billing-spin var(--career-motion-skeleton) infinite;
+}
+
+@keyframes career-billing-spin {
+  to { transform: rotate(1turn); }
+}
+
+.career-billing-history {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+}
+
+.career-billing-history-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.career-billing-history-heading > div {
+  display: grid;
+  gap: var(--career-space-1);
+}
+
+.career-billing-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-billing-history-state {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  line-height: 1.5;
+}
+
+.career-billing-history-state p {
+  margin: 0;
+}
+
+.career-billing-table-wrap {
+  display: none;
+  min-inline-size: 0;
+}
+
+.career-billing-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-billing-table th,
+.career-billing-table td {
+  padding: var(--career-space-3) var(--career-space-2);
+  border-bottom: var(--career-border-width) solid var(--career-line);
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.career-billing-table thead th {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.career-billing-table tbody th {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-billing-table tbody tr:last-child th,
+.career-billing-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.career-billing-receipt-link {
+  color: var(--career-accent);
+  text-decoration: underline;
+  text-underline-offset: var(--career-space-1);
+}
+
+.career-billing-receipt-link:hover {
+  color: var(--career-text);
+}
+
+.career-billing-receipt-link:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-billing-fiscal-number {
+  display: block;
+  margin-block-start: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  overflow-wrap: anywhere;
+}
+
+.career-billing-receipt-cards {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-billing-receipt-card {
+  min-inline-size: 0;
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-billing-receipt-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-3);
+  margin: 0;
+}
+
+.career-billing-load-more {
+  justify-self: start;
+  min-block-size: var(--career-target-min);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-billing-spinner {
+    animation: none;
+  }
+}
+
+/* KIT breakpoint.md: 768px, the established tablet-to-phone transition. */
+@media (min-width: 48rem) {
+  .career-billing-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: var(--career-space-5);
+  }
+
+  .career-billing-history {
+    padding: var(--career-space-5);
+  }
+
+  .career-billing-table-wrap {
+    display: block;
+  }
+
+  .career-billing-receipt-cards {
+    display: none;
+  }
+
+  .career-billing-action,
+  .career-billing-action .career-btn {
+    width: auto;
+  }
+}

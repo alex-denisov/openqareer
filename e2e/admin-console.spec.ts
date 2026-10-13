@@ -61,6 +61,9 @@ async function stubSession(page: Page, session: unknown): Promise<void> {
   await page.route('**/api/v1/auth/me', async (route) => {
     await route.fulfill({ json: { data: session } });
   });
+  await page.route('**/api/v1/candidate/workspace', async (route) => {
+    await route.fulfill({ json: { data: null } });
+  });
 }
 
 async function waitForLiveApp(page: Page): Promise<void> {
@@ -186,7 +189,7 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/users*', async (route) => {
       await route.fulfill({ json: { data: DIRECTORY } });
     });
-    await page.route('**/api/v1/admin/vacancy-sources?offset=*', async (route) => {
+    await page.route('**/api/v1/admin/vacancy-sources**', async (route) => {
       await route.fulfill({
         json: {
           data: {
@@ -213,6 +216,9 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/vacancy-sources/source-test/sync', async (route) => {
       await route.fulfill({ status: 202, json: { data: { queued: true } } });
     });
+    await page.route('**/api/v1/admin/hh-crawl-filter', (route) =>
+      route.fulfill({ json: { data: null } }),
+    );
 
     await page.goto('/admin', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);

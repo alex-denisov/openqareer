@@ -1,0 +1,348 @@
+openapi: 3.1.0
+info:
+  title: OpenQareer billing API
+  version: 1.0.0
+  description: Candidate subscription billing through Robokassa. Plans are priced on the server.
+servers:
+  - url: /
+paths:
+  /api/v1/candidate/billing:
+    get:
+      summary: Read the current tariff and renewal state
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: Current tariff; a missing subscription means Free.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillingSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/candidate/billing/checkouts:
+    post:
+      summary: Create an idempotent checkout for a paid monthly tariff
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId, autoRenew]
+              properties:
+                planId:
+                  type: string
+                  enum: [basic, pro, max]
+                autoRenew:
+                  type: boolean
+      responses:
+        '201':
+          description: New checkout was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '200':
+          description: Idempotent replay of the existing checkout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          description: Checkout rate limit exceeded.
+          headers:
+            Retry-After:
+              schema: { type: integer }
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/candidate/billing/checkouts/{invoiceId}:
+    get:
+      summary: Read one checkout owned by the authenticated candidate
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      parameters:
+        - name: invoiceId
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Pending or confirmed payment state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/candidate/billing/subscription/cancel-renewal:
+    post:
+      summary: Turn off future recurring charges without shortening the paid term
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: Auto-renewal is disabled; current access remains through currentPeriodEndsAt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/candidate/billing/receipts:
+    get:
+      summary: List the authenticated candidate's paid invoices
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        '200':
+          description: Candidate-scoped payment history. receiptUrl is null unless the provider supplies a verified link.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptListResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/billing/robokassa/result:
+    get:
+      summary: Robokassa ResultURL callback when the merchant is configured for GET
+      parameters:
+        - name: InvId
+          in: query
+          required: true
+          schema: { type: string }
+        - name: OutSum
+          in: query
+          required: true
+          schema: { type: string }
+        - name: SignatureValue
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Plain-text OK{InvId} for a verified or duplicate notification.
+          content:
+            text/plain:
+              schema: { type: string, example: OK731 }
+        '400':
+          description: Invalid callback payload.
+          content:
+            text/plain:
+              schema: { type: string }
+        '403':
+          description: Signature verification failed.
+          content:
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: Invoice is not known.
+          content:
+            text/plain:
+              schema: { type: string }
+        '409':
+          description: Amount mismatch or invoice is not payable.
+          content:
+            text/plain:
+              schema: { type: string }
+    post:
+      summary: Robokassa server-to-server payment notification
+      description: The handler verifies the password-2 signature and amount. Browser redirects never grant a tariff.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [InvId, OutSum, SignatureValue]
+              properties:
+                InvId: { type: string, pattern: '^[1-9][0-9]{0,11}$' }
+                OutSum: { type: string }
+                SignatureValue: { type: string }
+                PaymentMethod: { type: string }
+      responses:
+        '200':
+          description: Plain-text OK{InvId}, acknowledging a verified or duplicate notification.
+          content:
+            text/plain:
+              schema: { type: string, example: OK731 }
+        '400':
+          description: Invalid callback payload.
+          content:
+            text/plain:
+              schema: { type: string }
+        '403':
+          description: Signature verification failed.
+          content:
+            text/plain:
+              schema: { type: string }
+        '404':
+          description: Invoice is not known.
+          content:
+            text/plain:
+              schema: { type: string }
+        '409':
+          description: Amount mismatch or invoice is not payable.
+          content:
+            text/plain:
+              schema: { type: string }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: openqareer_session
+    bearerSession:
+      type: http
+      scheme: bearer
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+  responses:
+    Error:
+      description: API error.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message, requestId, retryable]
+                properties:
+                  code: { type: string }
+                  message: { type: string }
+                  requestId: { type: string }
+                  retryable: { type: boolean }
+  schemas:
+    BillingPlan:
+      type: object
+      required: [id, name, amountKopecks, currency, interval]
+      properties:
+        id: { type: string, enum: [basic, pro, max] }
+        name: { type: string }
+        amountKopecks: { type: integer }
+        currency: { type: string, const: RUB }
+        interval: { type: string, const: month }
+    BillingSummaryResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [currentPlan, subscription, plans]
+          properties:
+            currentPlan: { type: string, enum: [free, basic, pro, max] }
+            subscription:
+              oneOf:
+                - type: 'null'
+                - type: object
+                  required: [status, currentPeriodEndsAt, nextChargeAt, autoRenew]
+                  properties:
+                    status: { type: string, enum: [active, past_due, canceled, expired] }
+                    currentPeriodEndsAt: { type: string, format: date-time }
+                    nextChargeAt: { type: [string, 'null'], format: date-time }
+                    autoRenew: { type: boolean }
+            plans:
+              type: array
+              items: { $ref: '#/components/schemas/BillingPlan' }
+    CheckoutResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [invoiceId, planId, amountKopecks, currency, status, autoRenew, paymentUrl, createdAt]
+          properties:
+            invoiceId: { type: integer }
+            planId: { type: string, enum: [basic, pro, max] }
+            amountKopecks: { type: integer }
+            currency: { type: string, const: RUB }
+            status: { type: string, enum: [pending, processing, paid, failed] }
+            autoRenew: { type: boolean }
+            paymentUrl: { type: [string, 'null'], format: uri }
+            createdAt: { type: string, format: date-time }
+    SubscriptionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [planId, status, currentPeriodEndsAt, nextChargeAt, autoRenew, cancellationEventId]
+          properties:
+            planId: { type: string, enum: [basic, pro, max] }
+            status: { type: string, enum: [active, past_due, canceled, expired] }
+            currentPeriodEndsAt: { type: string, format: date-time }
+            nextChargeAt: { type: 'null' }
+            autoRenew: { type: boolean, const: false }
+            cancellationEventId: { type: [string, 'null'], format: uuid }
+    ReceiptListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [invoiceId, planId, amountKopecks, currency, paidAt, paymentMethod, receiptUrl, receiptStatus, fiscalDocumentNumber, fiscalDate]
+            properties:
+              invoiceId: { type: integer }
+              planId: { type: string, enum: [basic, pro, max] }
+              amountKopecks: { type: integer }
+              currency: { type: string, const: RUB }
+              paidAt: { type: [string, 'null'], format: date-time }
+              paymentMethod: { type: [string, 'null'] }
+              receiptUrl: { type: [string, 'null'], format: uri }
+              receiptStatus: { type: [string, 'null'] }
+              fiscalDocumentNumber: { type: [string, 'null'] }
+              fiscalDate: { type: [string, 'null'], format: date-time }
+        meta:
+          type: object
+          required: [requestId, nextCursor]
+          properties:
+            requestId: { type: string }
+            nextCursor: { type: [string, 'null'] }

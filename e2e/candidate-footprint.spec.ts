@@ -7,6 +7,7 @@ import type {
   FootprintAdapterId,
 } from '../shared/candidateFootprint';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 const SOURCE_AVAILABILITY: Readonly<Record<FootprintAdapterId, boolean>> = {
   sherlock: true,
@@ -131,8 +132,10 @@ async function openFootprint(
   await mockSignedInCabinet(page);
   await page.route('**/api/v1/candidate/footprint**', routeFootprint);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  await page.locator('button[aria-label="Профиль"]:visible').first().click();
+  await waitForCareerShell(page);
+  const profile = page.locator('button[aria-label="Профиль"]:visible').first();
+  await expect(profile).toBeEnabled({ timeout: 15_000 });
+  await profile.click();
   await page
     .locator('.career-profile-screen-tabs')
     .getByRole('tab', { name: /^Цифровой след/ })

@@ -30,7 +30,11 @@ test('syncs a legacy decision profile once after sign-in', async ({ page }) => {
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+  const profileNavigation =
+    (page.viewportSize()?.width ?? 1440) <= 760
+      ? page.getByRole('navigation', { name: 'Основная навигация' })
+      : page.getByRole('navigation', { name: 'Разделы кабинета' });
+  await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('openqareer.decision-profile.v1:synced')))

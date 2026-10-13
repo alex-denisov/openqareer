@@ -70,7 +70,6 @@ export interface PathIndicatorInput {
   readonly focusRoleFilter?: boolean;
 }
 
-
 const NO_JOURNEY_REASON = 'Нет данных';
 const NO_INTERVIEW_DATA_REASON = 'Не назначено';
 
@@ -79,14 +78,16 @@ export function compactReason(rawReason: string | undefined): string {
   if (!rawReason) return 'Нет данных';
   if (rawReason.length <= 14) return rawReason;
   if (rawReason.startsWith('Собираем')) return 'Собираем';
-  if (rawReason.startsWith('Опорные факты') || rawReason.startsWith('Ролевая гипотеза')) return 'Готово';
+  if (rawReason.startsWith('Опорные факты') || rawReason.startsWith('Ролевая гипотеза'))
+    return 'Готово';
   if (rawReason.startsWith('Сверяем') || rawReason.startsWith('Проверяем')) return 'Проверяем';
   if (rawReason.startsWith('Ждёт')) return 'Ждёт опыта';
   if (rawReason.startsWith('Резюме не') || rawReason.startsWith('Нет данных')) return 'Нет данных';
   if (rawReason.startsWith('Роль не')) return 'Не выбрана';
   if (rawReason.startsWith('Кампания вернула')) return 'Готово';
   if (rawReason.startsWith('Кампания не') || rawReason.includes('пул по роли')) return 'Пул пуст';
-  if (rawReason.startsWith('Есть подтверждённый') || rawReason.startsWith('Есть отклик')) return 'Есть отклик';
+  if (rawReason.startsWith('Есть подтверждённый') || rawReason.startsWith('Есть отклик'))
+    return 'Есть отклик';
   if (rawReason.startsWith('Откликов нет')) return 'Нет откликов';
   if (rawReason.startsWith('Интервью не')) return 'Не назначено';
   return rawReason.slice(0, 14).trim();
@@ -266,7 +267,6 @@ export function buildPathIndicator(input: PathIndicatorInput): readonly PathStep
     isCurrent: currentStepId !== null && step.id === currentStepId,
   }));
 }
-
 
 const SEQUENTIAL_STEPS: ReadonlySet<string> = new Set(['profile', 'role', 'shortlist']);
 

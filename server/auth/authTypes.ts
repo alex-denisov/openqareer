@@ -166,7 +166,33 @@ export interface SessionAuth {
   verifyEmail?(sessionToken: string, code: string): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   resendEmailVerification?(sessionToken: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
   changeUnverifiedEmail?(sessionToken: string, email: string, currentPassword: string, clientIp: string): Promise<{ principal: AuthPrincipal; emailVerificationEmailSent: boolean } | null>;
+  requestAccountEmailChange?(
+    sessionToken: string,
+    email: string,
+    currentPassword: string,
+    clientIp: string,
+  ): Promise<
+    | {
+        status: 'pending';
+        pending: { email: string; expiresAt: string; resendAfterSeconds: number };
+      }
+    | { status: 'updated'; principal: AuthPrincipal; sessionToken: string }
+    | null
+  >;
+  getPendingAccountEmailChange?(
+    sessionToken: string,
+  ): { email: string; expiresAt: string; resendAfterSeconds: number } | null;
+  verifyAccountEmailChange?(
+    sessionToken: string,
+    code: string,
+  ): Promise<{ principal: AuthPrincipal; sessionToken: string } | null>;
   getAccount?(sessionToken: string): AccountSnapshot | null;
+  revokeAccountSession?(
+    sessionToken: string,
+    sessionId: string,
+  ): 'revoked' | 'current' | 'not_found' | null;
+  /** Server-only recipient lookup for queued candidate email delivery. */
+  getCandidateEmail?(candidateId: string): string | null;
   /** B173: proof of which published documents the account accepted, and when. */
   recordLegalConsent?(input: {
     userId: string;

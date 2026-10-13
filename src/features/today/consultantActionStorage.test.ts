@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import {
   clearConsultantActionResolution,
+  deferConsultantActionUntilTomorrow,
   isConsultantActionResolved,
   resolveConsultantAction,
 } from './consultantActionStorage';
@@ -41,6 +42,25 @@ describe('consultantActionStorage (C57)', () => {
   it('marks action as resolved when dismissed', () => {
     resolveConsultantAction('candidate-test-1', mockAction, 'dismissed');
     expect(isConsultantActionResolved('candidate-test-1', mockAction)).toBe(true);
+  });
+
+  it('keeps a postponed action hidden until the next local day, then shows it again', () => {
+    const now = new Date(2026, 9, 12, 10, 0, 0, 0);
+    const tomorrow = new Date(now);
+    tomorrow.setHours(24, 0, 0, 0);
+    deferConsultantActionUntilTomorrow('candidate-test-1', mockAction, undefined, now);
+
+    expect(
+      isConsultantActionResolved(
+        'candidate-test-1',
+        mockAction,
+        undefined,
+        new Date(tomorrow.getTime() - 1),
+      ),
+    ).toBe(true);
+    expect(isConsultantActionResolved('candidate-test-1', mockAction, undefined, tomorrow)).toBe(
+      false,
+    );
   });
 
   it('clears resolution', () => {

@@ -68,6 +68,10 @@ export const accountProfileSchema = z
     message: 'at least one profile field is required',
   });
 
+export const accountSessionIdSchema = z.object({
+  sessionId: z.string().regex(/^[0-9a-f]{16}$/u, 'Некорректный идентификатор сессии.'),
+});
+
 export const passwordChangeSchema = z
   .object({
     currentPassword: z.string().min(1).max(256),
@@ -92,6 +96,11 @@ export const emailVerificationCodeSchema = z.object({
 });
 
 export const changeUnverifiedEmailSchema = z.object({
+  email: fieldGovernedBy(getEmailError, true),
+  currentPassword: z.string().min(1).max(256),
+});
+
+export const accountEmailChangeRequestSchema = z.object({
   email: fieldGovernedBy(getEmailError, true),
   currentPassword: z.string().min(1).max(256),
 });

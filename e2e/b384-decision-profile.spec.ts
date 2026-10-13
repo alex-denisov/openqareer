@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 test.describe('B384: Candidate Decision Profile', () => {
   test.beforeAll(() => {
@@ -16,12 +17,21 @@ test.describe('B384: Candidate Decision Profile', () => {
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+      timeout: 15_000,
+    });
 
     // Open Profile screen via rail button
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    const profileNavigation =
+      (page.viewportSize()?.width ?? 1440) <= 760
+        ? page.getByRole('navigation', { name: 'Основная навигация' })
+        : page.getByRole('navigation', { name: 'Разделы кабинета' });
+    await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 
+    // The preferences form sits in the collapsed «Релокация» block (approved mockup 2)
+    await page.locator('.career-profile-screen-relocation-prefs > summary').click();
     // Verify Decision Profile panel exists in the side rail
     const panel = page.locator('.career-decision-profile');
     await expect(panel).toBeVisible();
@@ -102,7 +112,10 @@ test.describe('B384: Candidate Decision Profile', () => {
       fullPage: true,
     });
 
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
     await page.screenshot({
       path: 'output/playwright/B384/decision-profile-1176.png',
@@ -119,7 +132,10 @@ test.describe('B384: Candidate Decision Profile', () => {
     });
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+      timeout: 15_000,
+    });
 
     // Open Vacancies screen
     await page.getByRole('button', { name: 'Вакансии', exact: true }).first().click();
@@ -139,9 +155,15 @@ test.describe('B384: Candidate Decision Profile', () => {
 
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
+    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
+      timeout: 15_000,
+    });
 
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 
     // Verify no horizontal overflow on mobile
