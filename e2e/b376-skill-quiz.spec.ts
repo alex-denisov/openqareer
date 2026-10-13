@@ -1,5 +1,6 @@
 import { mkdir } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 test.describe('B376 skill quiz dialogue & verification', () => {
@@ -43,7 +44,7 @@ test.describe('B376 skill quiz dialogue & verification', () => {
     for (const vp of viewports) {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
-      await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+      await waitForCareerShell(page);
 
       // Navigate to Profile
       if (vp.width <= 640) {
@@ -58,15 +59,22 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       await expect(page.locator('#sec-skills')).toBeVisible();
 
       // Open consultant
-      const askBtn = page
-        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
-        .first();
-      await expect(askBtn).toBeVisible();
-      await askBtn.click();
-
       const expertPanel = page.locator('aside.career-expert-panel');
+      if (!(await expertPanel.isVisible())) {
+        const desktopTrigger = page
+          .locator('.career-desktop-topbar')
+          .getByRole('button', { name: 'Открыть консультанта', exact: true });
+        if (await desktopTrigger.isVisible()) {
+          await desktopTrigger.click();
+        } else {
+          await page
+            .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+            .first()
+            .click();
+        }
+      }
       await expect(expertPanel).toBeVisible();
-      await expect(expertPanel.locator('header strong')).toContainText('Профиль');
+      await expect(expertPanel.locator('header small')).toContainText('Профиль');
 
       // На 390 лист открывается свёрнутым (два положения): разворачиваем.
       const expand = expertPanel.getByRole('button', { name: 'Развернуть консультанта' });

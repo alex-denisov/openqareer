@@ -10,14 +10,19 @@ import {
 import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
-import { TodayScreen } from '../today/TodayScreen';
+import { TodayScreen, type TodayFunnelContext } from '../today/TodayScreen';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
+import { RelocationScreen } from '../relocation/RelocationScreen';
 import type { ProfileTab } from '../resume/profileTabs';
+import type { ResumeDraft } from '../resume/resumeTypes';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
-import { useVacancyApplications } from '../vacancies/useVacancyApplications';
+import {
+  useVacancyApplications,
+  type VacancyApplications,
+} from '../vacancies/useVacancyApplications';
 import { useApplications } from '../applications/useApplications';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { ResponsesBoard } from '../applications/ResponsesBoard';
@@ -144,6 +149,15 @@ export function CareerCabinet(props: CareerCabinetProps) {
   const refreshApplications = applicationsTracker.refreshApplications;
   const addManualCard = applicationsTracker.addManualCard;
   const scheduleInterview = applicationsTracker.scheduleInterview;
+  const recordTrackedConfirmedVacancy = useCallback(
+    async (...args: Parameters<VacancyApplications['recordConfirmed']>) => {
+      await recordConfirmedVacancy(...args);
+      // Карточка отклика нужна только после подтверждённой записи.
+      // Ошибка повторного чтения не отменяет сам факт сохранения.
+      await refreshApplications().catch(() => undefined);
+    },
+    [recordConfirmedVacancy, refreshApplications],
+  );
   const markVacancyAlreadyApplied = useCallback(
     (clusterId: string, vacancy: VacancyApplicationSnapshot) =>
       recordConfirmedVacancy(clusterId, 'applied', vacancy),
@@ -182,24 +196,22 @@ export function CareerCabinet(props: CareerCabinetProps) {
   const trackedVacancyApplications = useMemo(
     () => ({
       ...vacancyApplications,
+      recordConfirmed: recordTrackedConfirmedVacancy,
       record: (
-        clusterId: Parameters<typeof vacancyApplications.record>[0],
-        status: Parameters<typeof vacancyApplications.record>[1],
-        vacancy: Parameters<typeof vacancyApplications.record>[2],
+        clusterId: Parameters<VacancyApplications['record']>[0],
+        status: Parameters<VacancyApplications['record']>[1],
+        vacancy: Parameters<VacancyApplications['record']>[2],
       ) => {
         if (status === 'applied') {
           // Запись отклика атомарно создаёт карточку на сервере. Не создаём
           // локальную карточку, пока эта запись не подтверждена.
-          void vacancyApplications
-            .recordConfirmed(clusterId, status, vacancy)
-            .then(() => applicationsTracker.refreshApplications())
-            .catch(() => undefined);
+          void recordTrackedConfirmedVacancy(clusterId, status, vacancy).catch(() => undefined);
           return;
         }
         vacancyApplications.record(clusterId, status, vacancy);
       },
     }),
-    [vacancyApplications, applicationsTracker],
+    [vacancyApplications, recordTrackedConfirmedVacancy],
   );
   const journey = useMemo(
     () =>
@@ -349,11 +361,17 @@ function TodaySection({
   candidateId,
   consultantAction,
   onNavigate,
+  profileDraft,
+  funnelContext,
+  onOpenExpert,
 }: {
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
   onOpenTariffs?: () => void;
+  profileDraft?: ResumeDraft;
+  funnelContext?: TodayFunnelContext;
+  onOpenExpert?: () => void;
 }) {
   const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
   return (
@@ -368,6 +386,9 @@ function TodaySection({
       candidateId={candidateId}
       consultantAction={consultantAction}
       onNavigate={onNavigate}
+      profileDraft={profileDraft}
+      funnelContext={funnelContext}
+      onOpenExpert={onOpenExpert}
     />
   );
 }
@@ -438,6 +459,7 @@ function CabinetSection({
     initialPrompt?: string,
   ) => void;
 }) {
+  const [relocationOpen, setRelocationOpen] = useState(false);
   useEffect(() => {
     if (view === 'career') {
       onNavigate('opportunities');
@@ -451,6 +473,22 @@ function CabinetSection({
         candidateId={session.candidateId}
         consultantAction={consultantAction}
         onNavigate={onNavigate}
+        profileDraft={data.resume?.draft ?? undefined}
+        funnelContext={{
+          found: pool.facets?.catalogSummary?.roleLevelMatches,
+          catalogObservedAt: pool.facets?.catalogSummary?.observedAt,
+        }}
+        onOpenExpert={
+          onOpenExpert
+            ? () =>
+                onOpenExpert(
+                  'today',
+                  undefined,
+                  consultantAction?.headline,
+                  consultantAction?.rationale,
+                )
+            : undefined
+        }
       />
     );
   }
@@ -458,6 +496,18 @@ function CabinetSection({
   // edit-in-place), not Resume Studio. «Резюме»
   // (`view === 'resume'`) is no longer a reachable rail item but keeps
   // pointing at Resume Studio for anyone with a stored link to it.
+  if (view === 'profile' && relocationOpen) {
+    return (
+      <RelocationScreen
+        onNavigateBack={() => setRelocationOpen(false)}
+        onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenVacancies={() => {
+          setRelocationOpen(false);
+          onNavigate('opportunities');
+        }}
+      />
+    );
+  }
   if (view === 'profile') {
     return (
       <ProfileScreenView
@@ -474,6 +524,7 @@ function CabinetSection({
         tab={profileTab}
         onTabChange={onProfileTabChange}
         onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenRelocation={() => setRelocationOpen(true)}
       />
     );
   }

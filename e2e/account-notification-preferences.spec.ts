@@ -1,8 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Route } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B474';
+const EVIDENCE_DIR = e2eEvidenceDirectory('B474');
 const PREFERENCE_KEYS = [
   'ev-reply',
   'ev-reminder',

@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { Locator } from '@playwright/test';
 import { candidate } from './fixtures/readabilityWorkspace';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 interface PendingCandidate {
   readonly username: string;
@@ -139,6 +140,7 @@ test('keeps a new account outside the cabinet until the email code is confirmed'
   await page.getByRole('textbox', { name: 'Код из письма' }).fill('123456');
   await page.getByRole('button', { name: 'Подтвердить адрес' }).click();
   await page.waitForURL('**/app');
+  await waitForCareerShell(page);
   await expect(page.locator('.career-cabinet')).toBeVisible();
   await expect(page.locator('.career-intake')).toHaveCount(0);
   expect(candidateReads).toBeGreaterThan(1);

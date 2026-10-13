@@ -2,6 +2,7 @@ import { vacancyAge } from './vacancyFilters';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
+import { CircleNotch, Star, Target } from '@phosphor-icons/react';
 
 export function vacancySnapshot(
   cluster: MatchedVacancyItem['cluster'],
@@ -55,6 +56,7 @@ export function VacancyRowMeta({
 }
 
 export interface VacancyCollectionActionProps {
+  readonly compact?: boolean;
   readonly isSaved?: boolean;
   readonly saveBusy?: boolean;
   readonly onToggleSaved?: () => void | Promise<void>;
@@ -64,39 +66,81 @@ export interface VacancyCollectionActionProps {
   readonly onToggleCompanyWant?: () => void | Promise<void>;
 }
 
+function SavedVacancyAction({ props }: { readonly props: VacancyCollectionActionProps }) {
+  const label = props.saveBusy
+    ? 'Сохраняем вакансию…'
+    : props.isSaved
+      ? 'Убрать из сохранённых'
+      : 'Сохранить вакансию';
+  const compactLabel = props.isSaved ? 'Убрать из сохранённых' : 'Сохранить';
+  return (
+    <button
+      type="button"
+      className={`career-vacancy-action${props.compact ? ' vacancies-icon-action' : ''}`}
+      aria-label={props.compact ? compactLabel : undefined}
+      title={
+        props.saveBusy ? label : props.isSaved ? 'Убрать из сохранённых' : 'Сохранить вакансию'
+      }
+      aria-pressed={Boolean(props.isSaved)}
+      aria-busy={Boolean(props.saveBusy)}
+      disabled={props.saveBusy}
+      onClick={() => void props.onToggleSaved?.()}
+    >
+      {props.compact ? (
+        props.saveBusy ? (
+          <CircleNotch size={18} className="vacancies-icon-action-spinner" aria-hidden="true" />
+        ) : (
+          <Star size={18} weight={props.isSaved ? 'fill' : 'regular'} aria-hidden="true" />
+        )
+      ) : (
+        label
+      )}
+    </button>
+  );
+}
+
+function WantCompanyAction({ props }: { readonly props: VacancyCollectionActionProps }) {
+  const label = props.companyWantBusy
+    ? 'Обновляем список «Хочу»…'
+    : props.isCompanyWanted
+      ? 'Убрать из «Хочу»'
+      : 'Хочу в эту компанию';
+  return (
+    <button
+      type="button"
+      className={`career-vacancy-action${props.compact ? ' vacancies-icon-action' : ''}`}
+      aria-label={label}
+      title={label}
+      aria-pressed={props.companyWantKnown ? Boolean(props.isCompanyWanted) : undefined}
+      aria-busy={props.companyWantBusy}
+      disabled={props.companyWantBusy}
+      onClick={() => void props.onToggleCompanyWant?.()}
+    >
+      {props.compact ? (
+        props.companyWantBusy ? (
+          <CircleNotch size={18} className="vacancies-icon-action-spinner" aria-hidden="true" />
+        ) : (
+          <Target
+            size={18}
+            weight={props.isCompanyWanted ? 'fill' : 'regular'}
+            aria-hidden="true"
+          />
+        )
+      ) : (
+        label
+      )}
+    </button>
+  );
+}
+
 export function VacancyCollectionActions(props: VacancyCollectionActionProps) {
   if (!props.onToggleSaved && !props.onToggleCompanyWant) return null;
-  const savedLabel = props.saveBusy
-    ? 'Сохраняем…'
-    : props.isSaved ? 'Убрать из сохранённых' : 'Сохранить вакансию';
-  const companyLabel = props.companyWantBusy
-    ? 'Обновляем…'
-    : props.isCompanyWanted ? 'Убрать из «Хочу»' : 'Хочу в эту компанию';
   return (
-    <div className="career-vacancy-actions vacancy-collection-actions">
-      {props.onToggleSaved ? (
-        <button
-          type="button"
-          className="career-vacancy-action"
-          aria-pressed={Boolean(props.isSaved)}
-          disabled={props.saveBusy}
-          onClick={() => void props.onToggleSaved?.()}
-        >
-          {savedLabel}
-        </button>
-      ) : null}
-      {props.onToggleCompanyWant ? (
-        <button
-          type="button"
-          className="career-vacancy-action"
-          aria-pressed={props.companyWantKnown ? Boolean(props.isCompanyWanted) : undefined}
-          aria-busy={props.companyWantBusy}
-          disabled={props.companyWantBusy}
-          onClick={() => void props.onToggleCompanyWant?.()}
-        >
-          {companyLabel}
-        </button>
-      ) : null}
+    <div
+      className={`career-vacancy-actions vacancy-collection-actions${props.compact ? ' is-compact' : ''}`}
+    >
+      {props.onToggleSaved ? <SavedVacancyAction props={props} /> : null}
+      {props.onToggleCompanyWant ? <WantCompanyAction props={props} /> : null}
     </div>
   );
 }
@@ -108,11 +152,12 @@ export function CompanyPathButton({
   readonly count: number | null | undefined;
   readonly onOpen: () => void;
 }) {
-  const label = count === undefined
-    ? 'Путь к компании'
-    : count === null
-      ? 'Путь к компании · контакты неизвестны'
-      : `Путь к компании · ${count} ${pluralRu(count, ['контакт', 'контакта', 'контактов'])}`;
+  const label =
+    count === undefined
+      ? 'Путь к компании'
+      : count === null
+        ? 'Путь к компании · контакты неизвестны'
+        : `Путь к компании · ${count} ${pluralRu(count, ['контакт', 'контакта', 'контактов'])}`;
   return (
     <div className="career-vacancy-actions vacancy-collection-actions">
       <button type="button" className="career-vacancy-action" onClick={onOpen}>

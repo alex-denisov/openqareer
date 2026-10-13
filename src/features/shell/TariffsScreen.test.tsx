@@ -200,15 +200,16 @@ describe('TariffsScreen billing management', () => {
     expect(desktop.textContent).not.toContain('Показать предыдущие платежи');
   });
 
-  it('shows Free and an empty history without offering cancellation', async () => {
+  it('shows Free without placing subscription history outside the current tier', async () => {
     vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(freeSummary);
     vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
     vi.spyOn(billingApi, 'cancelCandidateBillingRenewal').mockResolvedValue(canceledSubscription);
     await mount();
     const desktop = container.querySelector('.career-tariffs-desktop') as HTMLElement;
 
-    expect(desktop.textContent).toContain('Списаний пока нет');
-    expect(desktop.textContent).toContain('Оплаченных платежей пока нет');
+    expect(desktop.textContent).toContain('Free');
+    expect(desktop.textContent).not.toContain('Списаний пока нет');
+    expect(desktop.textContent).not.toContain('Оплаченных платежей пока нет');
     expect(
       [...desktop.querySelectorAll('button')].some((button) =>
         button.textContent?.includes('Отключить автопродление'),

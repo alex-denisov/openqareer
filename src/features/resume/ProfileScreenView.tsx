@@ -25,7 +25,7 @@ import { useConsultantSuggestions } from './useConsultantSuggestions';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
-import { ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import { ProfileResumeVersions, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
 import './profileScreen.css';
 
 const ANCHORS: readonly { id: string; label: string }[] = [
@@ -102,6 +102,26 @@ function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): b
   );
 }
 
+function useDesktopProfileLayout(): boolean {
+  const [desktopLayout, setDesktopLayout] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(min-width: 1280px)').matches,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const query = window.matchMedia('(min-width: 1280px)');
+    const update = () => setDesktopLayout(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  return desktopLayout;
+}
+
 export interface ProfileScreenSurfaceProps {
   readonly candidateId: string;
   readonly view?: ResumeStudioView;
@@ -122,6 +142,7 @@ export interface ProfileScreenSurfaceProps {
    *  the read has not landed. */
   readonly connections?: readonly CandidateConnection[];
   readonly onOpenExpert?: () => void;
+  readonly onOpenRelocation?: () => void;
   readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly suggestions?: readonly InlineSuggestionItem[];
@@ -146,6 +167,7 @@ export interface ProfileScreenSurfaceProps {
  */
 // eslint-disable-next-line max-lines-per-function
 export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
+  const desktopProfileLayout = useDesktopProfileLayout();
   const {
     candidateId,
     draft,
@@ -212,6 +234,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           saving={saving}
           connections={connections}
           onOpenConnections={onOpenConnections}
+          memory={memory}
         />
       </div>
       {saveError ? (
@@ -234,6 +257,31 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
         >
           <div className="career-profile-screen-panel career-profile-screen-skill-tab">
             <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
+            {desktopProfileLayout ? (
+              <>
+                <ProfileCoursesSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                  importedLabel={importedSource?.label}
+                />
+                <ProfileCertificatesSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+                <ProfileRecommendationsSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+                <ProfileAchievementsSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+              </>
+            ) : null}
             {props.onOpenExpert ? (
               <button type="button" className="career-quiet-button" onClick={props.onOpenExpert}>
                 <ListChecks size={16} aria-hidden="true" />
@@ -267,8 +315,12 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
             view={props.view}
             onOpenExpert={props.onOpenExpert}
             onFillQuestionnaire={props.onFillQuestionnaire}
+            onTabChange={props.onTabChange}
+            desktopLayout={desktopProfileLayout}
           />
-          <div className="career-profile-screen-layout">
+          <div
+            className={`career-profile-screen-layout${desktopProfileLayout ? ' is-single-column' : ''}`}
+          >
             <div className="career-profile-screen-main-col">
               <ProfileAboutSection
                 draft={draft}
@@ -300,34 +352,47 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onSectionSave={onSectionSave}
               />
               <ProfileProjectsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-              <ProfileCoursesSection
-                draft={draft}
-                saving={saving}
-                onSectionSave={onSectionSave}
-                importedLabel={importedSource?.label}
-              />
-              <ProfileCertificatesSection
-                draft={draft}
-                saving={saving}
-                onSectionSave={onSectionSave}
-              />
+              {!desktopProfileLayout ? (
+                <ProfileCoursesSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                  importedLabel={importedSource?.label}
+                />
+              ) : null}
+              {!desktopProfileLayout ? (
+                <ProfileCertificatesSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+              ) : null}
               <ProfileLanguagesSection
                 draft={draft}
                 saving={saving}
                 onSectionSave={onSectionSave}
               />
-              <ProfileRecommendationsSection
-                draft={draft}
-                saving={saving}
-                onSectionSave={onSectionSave}
-              />
-              <ProfileAchievementsSection
-                draft={draft}
-                saving={saving}
-                onSectionSave={onSectionSave}
-              />
+              {!desktopProfileLayout ? (
+                <ProfileRecommendationsSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+              ) : null}
+              {!desktopProfileLayout ? (
+                <ProfileAchievementsSection
+                  draft={draft}
+                  saving={saving}
+                  onSectionSave={onSectionSave}
+                />
+              ) : null}
             </div>
-            <ProfileSideRail draft={draft} />
+            <ProfileSideRail
+              draft={draft}
+              desktopLayout={desktopProfileLayout}
+              onOpenRelocation={props.onOpenRelocation}
+            />
+            {desktopProfileLayout ? <ProfileResumeVersions draft={draft} memory={memory} /> : null}
           </div>
         </div>
       )}
@@ -342,6 +407,7 @@ interface ProfileScreenViewProps {
   readonly onRefreshFacts?: () => Promise<void> | void;
   readonly onOpenConnections?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onOpenRelocation?: () => void;
   readonly onFillQuestionnaire?: () => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly tab?: ProfileTab;
@@ -461,6 +527,7 @@ function ProfileScreenSurfaceWithController({
       connections={connections}
       importedSources={props.importedSources}
       onOpenExpert={props.onOpenExpert}
+      onOpenRelocation={props.onOpenRelocation}
       onFillQuestionnaire={props.onFillQuestionnaire}
       onTabChange={props.onTabChange}
       tab={props.tab}

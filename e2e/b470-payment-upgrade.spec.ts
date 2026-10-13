@@ -3,10 +3,89 @@ import { join } from 'node:path';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('B470');
+const S10_EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
 
-test.beforeAll(() => mkdirSync(EVIDENCE_DIR, { recursive: true }));
+test.beforeAll(() => {
+  mkdirSync(EVIDENCE_DIR, { recursive: true });
+  mkdirSync(S10_EVIDENCE_DIR, { recursive: true });
+});
+
+test('S10-VIS: actual tariff page keeps every listed price and locates current-plan billing and history', async ({
+  page,
+}, testInfo) => {
+  const isMobile = testInfo.project.name === 'mobile-390';
+  await page.setViewportSize(isMobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+  await page.route('**/health', (route) => route.fulfill({ status: 200, body: 'fixture' }));
+  const unmatched = await mockSignedInCabinet(page, { billing: { initialPlan: 'basic' } });
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await openTariffs(page);
+
+  const tariffView = page.locator(
+    isMobile ? '.career-tariffs-mobile:visible' : '.career-tariffs-desktop:visible',
+  );
+  await expect(tariffView).toBeVisible();
+  if (isMobile) {
+    await expect(tariffView.locator('.career-mob-row')).toHaveCount(5);
+    await expect(tariffView).toContainText('Basic');
+    await expect(tariffView).toContainText('3 990 ₽');
+    await expect(tariffView).toContainText('Ваш тариф');
+    await captureS10Tariffs(page, 'tariffs-390');
+  } else {
+    const prices = [
+      ['#lvl-free', '0 ₽'],
+      ['#lvl-go', '3 990 ₽'],
+      ['#lvl-pro', '9 900 ₽'],
+      ['#lvl-max', '39 900 ₽'],
+      ['#lvl-exec', '150–300 тыс. ₽'],
+    ] as const;
+    for (const [selector, price] of prices) {
+      await expect(tariffView.locator(selector)).toContainText(price);
+    }
+    const currentTier = tariffView.locator('#lvl-go');
+    await expect(currentTier).toContainText('Basic');
+    await expect(currentTier).toContainText('Ваш тариф');
+    expect(
+      await currentTier
+        .locator('summary')
+        .evaluate((summary) => summary.parentElement?.hasAttribute('open') ?? false),
+    ).toBe(true);
+    await expect(
+      currentTier.getByRole('heading', { name: 'Что входит', exact: true }),
+    ).toBeVisible();
+    await expect(
+      currentTier.getByRole('heading', { name: 'Чего нет на этом тарифе', exact: true }),
+    ).toBeVisible();
+    await captureS10Tariffs(page, 'tariffs-1440');
+
+    const billingInsideTier = await currentTier
+      .getByText('Следующее списание', { exact: true })
+      .count();
+    const historyInsideTier = await currentTier
+      .getByText('История платежей', { exact: true })
+      .count();
+    if (billingInsideTier && historyInsideTier) {
+      await expect(currentTier.getByText('Следующее списание', { exact: true })).toBeVisible();
+      await expect(currentTier.getByText('История платежей', { exact: true })).toBeVisible();
+    } else {
+      await expect(tariffView.getByText('Следующее списание', { exact: true })).toHaveCount(0);
+      await expect(tariffView.getByText('История платежей', { exact: true })).toHaveCount(0);
+      const accountButton = page
+        .locator('.career-account-button:visible, .career-account-trigger:visible')
+        .first();
+      await expect(accountButton).toBeVisible();
+      await accountButton.click();
+      const account = page.getByRole('dialog', { name: 'Аккаунт' });
+      await expect(account).toBeVisible();
+      await account.getByRole('button', { name: 'Подписка и платежи' }).click();
+      await expect(account.getByText('Следующее списание', { exact: true })).toBeVisible();
+      await expect(account.getByText('История платежей', { exact: true })).toBeVisible();
+    }
+  }
+  expect(unmatched).toEqual([]);
+});
 
 test('B470: Basic/Pro checkout follows verified invoice status on desktop and mobile', async ({
   page,
@@ -24,7 +103,11 @@ test('B470: Basic/Pro checkout follows verified invoice status on desktop and mo
   const tariffView = page.locator(
     isMobile ? '.career-tariffs-mobile:visible' : '.career-tariffs-desktop:visible',
   );
-  await expect(tariffView.getByText(/Оплаченных платежей пока нет/u)).toBeVisible();
+  if (isMobile) {
+    await expect(tariffView.getByText(/Оплаченных платежей пока нет/u)).toBeVisible();
+  } else {
+    await expect(tariffView.getByText(/Оплаченных платежей пока нет/u)).toHaveCount(0);
+  }
   await capture(page, 'billing-empty', viewport);
   for (const id of ['#lvl-go', '#lvl-pro', '#lvl-max', '#lvl-exec']) {
     await expect(page.locator(id)).toHaveCount(1);
@@ -227,6 +310,24 @@ async function capture(
     path: join(EVIDENCE_DIR, state + '-' + viewport + '.png'),
     fullPage: true,
   });
+}
+
+async function captureS10Tariffs(
+  page: import('@playwright/test').Page,
+  name: string,
+): Promise<void> {
+  const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
+  const scrollHeight = await page.locator('#career-main').evaluate((main) => main.scrollHeight);
+  await page.setViewportSize({
+    width: viewport.width,
+    height: Math.max(viewport.height, scrollHeight),
+  });
+  await page.screenshot({
+    path: join(S10_EVIDENCE_DIR, `${name}.png`),
+    fullPage: true,
+  });
+  await captureCareerHarness(page, join(S10_EVIDENCE_DIR, `${name}.html`));
+  await page.setViewportSize(viewport);
 }
 
 async function expectConsentLayout(dialog: Locator, name: RegExp, viewport: string): Promise<void> {

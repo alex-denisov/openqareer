@@ -2,6 +2,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { writeFile } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 interface VoiceTestControl {
   starts: number;
@@ -94,7 +95,15 @@ async function openConsultant(page: Page) {
     });
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Спросить консультанта' }).click();
+  await waitForCareerShell(page);
+  const expertPanel = page.locator('aside.career-expert-panel');
+  if ((page.viewportSize()?.width ?? 1440) <= 760 && !(await expertPanel.isVisible())) {
+    await page
+      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .first()
+      .click();
+  }
+  await expect(expertPanel).toBeVisible();
   await expect(page.locator('#career-expert-input')).toBeVisible();
   return {
     getSentTurn: () => sentTurn,

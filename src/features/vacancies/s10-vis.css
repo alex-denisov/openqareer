@@ -1,0 +1,486 @@
+.vacancies-screen-card {
+  min-inline-size: 0;
+  overflow: hidden;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-bg-elevated);
+}
+
+.vacancies-screen-card.is-expanded {
+  border-color: var(--career-accent);
+}
+
+.vacancies-screen-row-item {
+  display: block;
+  min-inline-size: 0;
+}
+
+.vacancies-screen-row-shell.vac-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: var(--career-space-2);
+  inline-size: 100%;
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  color: var(--career-text);
+  background: transparent;
+  text-align: start;
+  cursor: auto;
+}
+
+.vacancies-screen-row-shell.vac-row:hover,
+.vacancies-screen-row-shell.vac-row.is-selected {
+  border: 0;
+  background: var(--career-bg-elevated);
+}
+
+.vacancies-screen-row-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: var(--career-space-4);
+  border: 0;
+  border-radius: 0;
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.vacancies-screen-row-trigger:hover {
+  background: var(--career-surface);
+}
+
+.vacancies-screen-row-trigger:focus-visible,
+.vacancies-screen-expand-action:focus-visible,
+.vacancies-screen-card button:focus-visible,
+.vacancies-screen-footer button:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: 0;
+  box-shadow: 0 0 0 var(--career-space-1) var(--career-accent-soft);
+}
+
+.vacancies-screen-row-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding-inline-end: var(--career-space-4);
+}
+
+.vacancies-screen-row-actions .career-vacancy-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--career-space-1);
+  grid-column: auto;
+}
+
+.vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action,
+.vacancies-screen-expand-action {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  padding: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: transparent;
+  cursor: pointer;
+  transition:
+    color var(--career-motion-quick),
+    border-color var(--career-motion-quick),
+    background var(--career-motion-quick);
+}
+
+.vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action:hover,
+.vacancies-screen-expand-action:hover {
+  border-color: var(--career-line-strong);
+  color: var(--career-text);
+  background: var(--career-surface);
+}
+
+.vacancies-screen-row-actions
+  .vacancy-collection-actions
+  > .career-vacancy-action[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action:active,
+.vacancies-screen-expand-action:active {
+  transform: translateY(var(--career-border-width));
+}
+
+.vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action:disabled,
+.vacancies-screen-expand-action:disabled {
+  color: var(--career-text-dim);
+  cursor: not-allowed;
+}
+
+.vacancies-icon-action-spinner {
+  animation: vacancies-screen-spin var(--career-motion-quick) infinite;
+}
+
+@keyframes vacancies-screen-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.vacancies-screen-expand-action .vac-chevron {
+  inline-size: var(--career-text-md);
+  block-size: var(--career-text-md);
+  color: currentColor;
+}
+
+.vacancies-table-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--career-space-2);
+  padding-inline: var(--career-space-4);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.vacancies-table-header-cells {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(0, 0.8fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  align-items: end;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.vacancies-table-header-actions {
+  inline-size: calc(
+    var(--career-target-min) + var(--career-target-min) + var(--career-target-min) +
+      var(--career-space-1) + var(--career-space-1) + var(--career-space-4)
+  );
+}
+
+.vacancies-screen-cell--level .fit-dot,
+.vacancies-screen-cell--geo .fit-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+.vacancies-screen-fit-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  white-space: nowrap;
+}
+
+.vacancies-screen-fit-status .fit-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--career-control-min);
+  block-size: var(--career-control-min);
+  flex: none;
+}
+
+.vacancies-screen-fit-status .fit-dot.is-yes {
+  color: var(--career-success);
+}
+
+.vacancies-screen-fit-status .fit-dot.is-no,
+.vacancies-screen-fit-status .fit-dot.is-nearby {
+  color: var(--career-warning);
+}
+
+.vacancies-screen-cell {
+  overflow-wrap: anywhere;
+}
+
+.vacancies-screen-detail.vac-detail {
+  display: grid;
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: var(--career-space-4);
+  border: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+  background: var(--career-bg-elevated);
+}
+
+.vacancies-screen-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--career-space-8);
+  min-inline-size: 0;
+}
+
+.vacancies-screen-requirements,
+.vacancies-screen-description {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.vacancies-screen-requirements h3,
+.vacancies-screen-description h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.vacancies-screen-skill-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  inline-size: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vacancies-screen-skill-chip,
+.vacancies-screen-skill-chip button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  min-block-size: var(--career-control-min);
+  max-inline-size: 100%;
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid currentColor;
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-xs);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.vacancies-screen-skill-chip.is-confirmed {
+  border-color: var(--career-success);
+  color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.vacancies-screen-skill-chip.is-unconfirmed {
+  border: 0;
+  padding: 0;
+  color: var(--career-warning);
+  background: transparent;
+}
+
+.vacancies-screen-skill-chip button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  max-inline-size: 100%;
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-warning);
+  border-radius: var(--career-radius-sm);
+  color: inherit;
+  background: var(--career-warning-soft);
+  font: inherit;
+  font-size: var(--career-text-xs);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.vacancies-screen-skill-chip button:hover {
+  background: var(--career-warning-soft);
+  border-color: var(--career-warning);
+  color: var(--career-text);
+}
+
+.vacancies-screen-skill-chip button:focus-visible {
+  outline: var(--career-border-width) solid currentColor;
+  outline-offset: var(--career-border-width);
+}
+
+.vacancies-screen-requirements-note,
+.vacancies-screen-no-requirements,
+.vacancies-screen-description-copy,
+.vacancies-screen-description-empty {
+  max-inline-size: 100%;
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.vacancies-screen-description-copy {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--career-text-soft);
+}
+
+.vacancies-screen-full-description {
+  min-block-size: var(--career-target-min);
+  margin-block-start: var(--career-space-1);
+}
+
+.vacancies-screen-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding-block-start: var(--career-space-2);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.vacancies-screen-detail-actions .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  max-inline-size: 100%;
+}
+
+.vacancies-screen-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--career-space-3);
+  margin-block-start: var(--career-space-2);
+}
+
+.vacancies-screen-page-count {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.vacancies-screen-companies-action,
+.vacancies-screen-footer .companies-people-load-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  min-inline-size: 0;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.vacancies-screen-companies-action:hover,
+.vacancies-screen-footer .companies-people-load-more:hover {
+  border-color: var(--career-accent);
+  background: var(--career-surface);
+}
+
+.vacancies-screen-footer button:disabled {
+  color: var(--career-text-dim);
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .vacancies-table-header {
+    display: none;
+  }
+
+  .vacancies-screen-row-shell.vac-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--career-space-2);
+    padding: var(--career-space-3);
+  }
+
+  .vacancies-screen-row-trigger {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--career-space-2) var(--career-space-3);
+    min-block-size: 0;
+    padding: 0;
+  }
+
+  .vacancies-screen-cell--role {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .vacancies-screen-cell--level {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .vacancies-screen-cell--geo {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .vacancies-screen-cell--salary {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+
+  .vacancies-screen-cell--level::before,
+  .vacancies-screen-cell--geo::before,
+  .vacancies-screen-cell--salary::before {
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    content: attr(data-label);
+  }
+
+  .vacancies-screen-row-actions {
+    justify-content: flex-end;
+    padding: 0;
+  }
+
+  .vacancies-screen-detail-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--career-space-4);
+  }
+
+  .vacancies-screen-detail-actions {
+    align-items: stretch;
+  }
+
+  .vacancies-screen-detail-actions .action-btn {
+    flex: 1 1 auto;
+  }
+
+  .vacancies-screen-footer {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: stretch;
+  }
+
+  .vacancies-screen-footer .vacancies-screen-page-count {
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vacancies-screen-row-actions .career-vacancy-actions > .career-vacancy-action,
+  .vacancies-screen-expand-action {
+    transition: none;
+  }
+
+  .vacancies-icon-action-spinner {
+    animation: none;
+  }
+}

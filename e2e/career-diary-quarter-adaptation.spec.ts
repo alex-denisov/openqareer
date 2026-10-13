@@ -131,7 +131,7 @@ async function openDiary(
       .getByRole('button', { name: 'Карьерный дневник' })
       .click();
   }
-  await expect(page.getByRole('heading', { level: 1, name: 'Карьерный дневник' })).toBeVisible();
+  await expect(page.locator('#career-diary-heading')).toBeVisible();
   return unmatched;
 }
 
@@ -281,7 +281,7 @@ test('launches an offer-stage plan, manages tasks, and asks the ordinary consult
   await capture(page, testInfo, 'adaptation-plan-closed');
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Назад к дневнику' }).click();
-    await expect(page.getByRole('heading', { level: 1, name: 'Карьерный дневник' })).toBeVisible();
+    await expect(page.locator('#career-diary-heading')).toBeVisible();
   }
 });
 

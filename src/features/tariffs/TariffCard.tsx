@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   CaretDown,
   Check,
@@ -7,13 +8,19 @@ import {
   Sparkle,
   TrendUp,
 } from '@phosphor-icons/react';
-import type { TariffLevel, TariffSubscriptionInfo, TariffTierId } from './tariffsData';
+import {
+  COMPARISON_STEPS,
+  type TariffLevel,
+  type TariffSubscriptionInfo,
+  type TariffTierId,
+} from './tariffsData';
 
 interface TariffCardProps {
   readonly level: TariffLevel;
   readonly activeTierId: TariffTierId;
   readonly defaultOpen?: boolean;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingPanel?: ReactNode;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }
@@ -23,6 +30,7 @@ export function TariffCard({
   activeTierId,
   defaultOpen,
   subscription,
+  billingPanel,
   onSelectTier,
   onRequestTier,
 }: TariffCardProps) {
@@ -46,7 +54,12 @@ export function TariffCard({
         activeTierId={activeTierId}
         onAction={handleAction}
       />
-      <TariffCardBody level={level} isActive={isActive} subscription={subscription} />
+      <TariffCardBody
+        level={level}
+        isActive={isActive}
+        subscription={subscription}
+        billingPanel={billingPanel}
+      />
     </details>
   );
 }
@@ -82,8 +95,11 @@ function TariffCardSummary({
         ) : (
           <TariffActionButton level={level} activeTierId={activeTierId} onAction={onAction} />
         )}
-        <span className="career-tariff-chevron" aria-hidden="true">
-          <CaretDown size={18} />
+        <span className="career-tariff-expand">
+          <span className="career-tariff-expand-label">Что входит</span>
+          <span className="career-tariff-chevron" aria-hidden="true">
+            <CaretDown size={18} />
+          </span>
         </span>
       </div>
     </summary>
@@ -137,15 +153,25 @@ function TariffCardBody({
   level,
   isActive,
   subscription,
+  billingPanel,
 }: {
   readonly level: TariffLevel;
   readonly isActive: boolean;
   readonly subscription?: TariffSubscriptionInfo;
+  readonly billingPanel?: ReactNode;
 }) {
   return (
     <div className="career-tariff-body">
-      <TariffCardVolumeSection level={level} isActive={isActive} />
-      <TariffCardAutomationSection level={level} isActive={isActive} subscription={subscription} />
+      {isActive ? (
+        <TariffCardCurrentIncluded level={level} subscription={subscription} />
+      ) : (
+        <TariffCardVolumeSection level={level} isActive={false} />
+      )}
+      {isActive ? (
+        <TariffCardCurrentDetails level={level} billingPanel={billingPanel} />
+      ) : (
+        <TariffCardAutomationSection level={level} />
+      )}
     </div>
   );
 }
@@ -153,38 +179,63 @@ function TariffCardBody({
 function TariffCardVolumeSection({
   level,
   isActive,
+  includeAutomation = false,
 }: {
   readonly level: TariffLevel;
   readonly isActive: boolean;
+  readonly includeAutomation?: boolean;
 }) {
+  const items = [
+    ...level.vol.map((text) => ({ text, automation: false })),
+    ...(includeAutomation ? level.auto.map((text) => ({ text, automation: true })) : []),
+  ];
   return (
     <div className="career-tariff-section">
       <h4 className="career-tariff-section-title">{isActive ? 'Что входит' : 'Объём работы'}</h4>
       <ul className="career-tariff-bullet-list">
-        {level.vol.map((item) => (
-          <li key={item} className="career-tariff-bullet-item">
-            <span className="career-tariff-bullet-icon" aria-hidden="true">
-              <Check size={16} weight="bold" />
+        {items.map(({ text, automation }) => (
+          <li key={text} className="career-tariff-bullet-item">
+            <span
+              className={`career-tariff-bullet-icon${automation ? ' is-sparkle' : ''}`}
+              aria-hidden="true"
+            >
+              {automation ? <Sparkle size={16} weight="fill" /> : <Check size={16} weight="bold" />}
             </span>
-            <span>{item}</span>
+            <span>{text}</span>
           </li>
         ))}
       </ul>
-
-      {isActive && level.id === 'free' ? <FreeMissingSection /> : null}
     </div>
   );
 }
 
-function TariffCardAutomationSection({
+function TariffCardBillingSection({ billingPanel }: { readonly billingPanel: ReactNode }) {
+  return (
+    <div className="career-tariff-section career-tariff-billing-section">
+      <h4 className="career-tariff-section-title">Подписка</h4>
+      {billingPanel}
+    </div>
+  );
+}
+
+function TariffCardCurrentIncluded({
   level,
-  isActive,
   subscription,
 }: {
   readonly level: TariffLevel;
-  readonly isActive: boolean;
   readonly subscription?: TariffSubscriptionInfo;
 }) {
+  return (
+    <div className="career-tariff-current-included">
+      <TariffCardVolumeSection level={level} isActive includeAutomation={level.id !== 'free'} />
+      {level.id === 'pro' && subscription ? (
+        <ProSubscriptionBlock subscription={subscription} />
+      ) : null}
+    </div>
+  );
+}
+
+function TariffCardAutomationSection({ level }: { readonly level: TariffLevel }) {
   return (
     <div className="career-tariff-section">
       <h4 className="career-tariff-section-title">Платформа делает сама</h4>
@@ -198,10 +249,6 @@ function TariffCardAutomationSection({
           </li>
         ))}
       </ul>
-
-      {isActive && level.id === 'pro' && subscription ? (
-        <ProSubscriptionBlock subscription={subscription} />
-      ) : null}
     </div>
   );
 }
@@ -212,12 +259,26 @@ const MISSING_ON_FREE = [
   'Эксперт на резюме, интервью и оффер: с Max',
 ] as const;
 
-function FreeMissingSection() {
+const TIER_RANK: Record<TariffTierId, number> = {
+  free: 0,
+  go: 1,
+  pro: 2,
+  max: 3,
+  exec: 4,
+};
+
+function TariffCardMissingSection({ level }: { readonly level: TariffLevel }) {
+  const missing =
+    level.id === 'free'
+      ? MISSING_ON_FREE
+      : COMPARISON_STEPS.filter((step) => step.tierIndex > TIER_RANK[level.id]).map(
+          (step) => step.title,
+        );
   return (
-    <div className="career-tariff-sub-section">
+    <div className="career-tariff-section">
       <h4 className="career-tariff-section-title">Чего нет на этом тарифе</h4>
       <ul className="career-tariff-bullet-list">
-        {MISSING_ON_FREE.map((item) => (
+        {missing.map((item) => (
           <li key={item} className="career-tariff-bullet-item">
             <span className="career-tariff-bullet-icon is-off" aria-hidden="true">
               <Minus size={16} />
@@ -225,10 +286,34 @@ function FreeMissingSection() {
             <span>{item}</span>
           </li>
         ))}
+        {missing.length === 0 ? (
+          <li className="career-tariff-bullet-item">
+            <span>Более высокого уровня в линейке нет.</span>
+          </li>
+        ) : null}
       </ul>
-      <p className="career-tariffs-lead career-tariffs-note">
-        Бесплатно без срока, карта не нужна. Перейти на любой тариф можно в любой момент.
-      </p>
+      {level.id === 'free' ? (
+        <p className="career-tariffs-lead career-tariffs-note">
+          Бесплатно без срока, карта не нужна. Перейти на любой тариф можно в любой момент.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function TariffCardCurrentDetails({
+  level,
+  billingPanel,
+}: {
+  readonly level: TariffLevel;
+  readonly billingPanel?: ReactNode;
+}) {
+  return (
+    <div className="career-tariff-current-details">
+      <TariffCardMissingSection level={level} />
+      {level.id !== 'free' && billingPanel ? (
+        <TariffCardBillingSection billingPanel={billingPanel} />
+      ) : null}
     </div>
   );
 }

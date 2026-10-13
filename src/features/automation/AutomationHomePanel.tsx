@@ -58,6 +58,7 @@ function EnabledHomeView(props: AutomationHomePanelProps) {
       />
       <HomeActions
         paused={paused}
+        onOpenConsent={props.onOpenConsent}
         onPause={props.onPause}
         onResume={props.onResume}
         onDisable={props.onDisable}
@@ -278,12 +279,14 @@ function HomeShortcuts({
 
 function HomeActions({
   paused,
+  onOpenConsent,
   onPause,
   onResume,
   onDisable,
   onOpenQueue,
 }: {
   readonly paused: boolean;
+  readonly onOpenConsent: () => void;
   readonly onPause: () => void;
   readonly onResume: () => void;
   readonly onDisable: () => void;
@@ -292,6 +295,14 @@ function HomeActions({
   return (
     <>
       <div className="automation-home-actions">
+        <button
+          className="career-btn career-btn-secondary automation-consent-open"
+          type="button"
+          onClick={onOpenConsent}
+        >
+          <ShieldCheck size={18} aria-hidden="true" />
+          Согласия и режим
+        </button>
         {paused ? (
           <button className="career-btn career-btn-secondary" type="button" onClick={onResume}>
             Снять паузу

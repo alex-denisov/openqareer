@@ -23,9 +23,15 @@ test.describe('B384: Candidate Decision Profile', () => {
     });
 
     // Open Profile screen via rail button
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    const profileNavigation =
+      (page.viewportSize()?.width ?? 1440) <= 760
+        ? page.getByRole('navigation', { name: 'Основная навигация' })
+        : page.getByRole('navigation', { name: 'Разделы кабинета' });
+    await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 
+    // The preferences form sits in the collapsed «Релокация» block (approved mockup 2)
+    await page.locator('.career-profile-screen-relocation-prefs > summary').click();
     // Verify Decision Profile panel exists in the side rail
     const panel = page.locator('.career-decision-profile');
     await expect(panel).toBeVisible();
@@ -106,7 +112,10 @@ test.describe('B384: Candidate Decision Profile', () => {
       fullPage: true,
     });
 
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
     await page.screenshot({
       path: 'output/playwright/B384/decision-profile-1176.png',
@@ -151,7 +160,10 @@ test.describe('B384: Candidate Decision Profile', () => {
       timeout: 15_000,
     });
 
-    await page.getByRole('button', { name: 'Профиль', exact: true }).click();
+    await page
+      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('button', { name: 'Профиль', exact: true })
+      .click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
 
     // Verify no horizontal overflow on mobile

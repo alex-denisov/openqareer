@@ -272,8 +272,8 @@ test.describe('B156 truthful market intelligence boundary', () => {
     await expect(vacancy).toContainText('Senior Software Engineer');
     const rowToggle = vacancy.locator('button[aria-expanded]').first();
     if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') await rowToggle.click();
-    const detail = page.locator('.vacancies-detail-panel');
-    await expect(detail).toContainText('Опубликована на hh.ru');
+    const sourceCell = vacancy.locator('.vacancies-screen-cell--salary');
+    await expect(sourceCell).toContainText('hh.ru');
 
     for (const fabricatedOutcome of [
       'Авто-поднятие резюме',

@@ -1,19 +1,21 @@
 import { mkdir } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
+import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+
+const EVIDENCE_DIR = e2eEvidenceDirectory('B476');
 
 test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
   test.beforeAll(async () => {
-    await mkdir('/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B476', {
-      recursive: true,
-    });
+    await mkdir(EVIDENCE_DIR, { recursive: true });
     await mkdir('output/playwright/B476', { recursive: true });
   });
 
   test('profile screen renders and activates all B476 actions', async ({ page }, testInfo) => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await waitForCareerShell(page);
 
     const isMobile = testInfo.project.name === 'mobile-390';
     if (isMobile) {
@@ -40,7 +42,7 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
 
     const prefix = isMobile ? '390' : '1440';
     await page.screenshot({
-      path: `/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B476/b476-profile-${prefix}.png`,
+      path: `${EVIDENCE_DIR}/b476-profile-${prefix}.png`,
       fullPage: false,
     });
 
@@ -55,7 +57,7 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
     await expect(page.getByText('Черновик ждёт вашего одобрения')).toBeVisible();
 
     await page.screenshot({
-      path: `/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B476/b476-profile-version-created-${prefix}.png`,
+      path: `${EVIDENCE_DIR}/b476-profile-version-created-${prefix}.png`,
       fullPage: false,
     });
 
@@ -70,7 +72,7 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
     await expect(page.locator('textarea#about-edit-input')).toBeVisible();
 
     await page.screenshot({
-      path: `/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B476/b476-profile-about-edit-${prefix}.png`,
+      path: `${EVIDENCE_DIR}/b476-profile-about-edit-${prefix}.png`,
       fullPage: false,
     });
   });

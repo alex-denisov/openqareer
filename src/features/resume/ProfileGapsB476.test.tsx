@@ -38,7 +38,9 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
     const root = createRoot(container);
     act(() => root.render(<ProfileAboutSection draft={MOCK_DRAFT} onSectionSave={onSave} />));
 
-    const editBtn = container.querySelector('[data-testid="about-edit-text-btn"]') as HTMLButtonElement;
+    const editBtn = container.querySelector(
+      '[data-testid="about-edit-text-btn"]',
+    ) as HTMLButtonElement;
     expect(editBtn).not.toBeNull();
     expect(editBtn.textContent).toContain('Изменить текст');
 
@@ -70,7 +72,7 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
     container.remove();
   });
 
-  it('ProfileReviewAndVersions renders "Исправить вместе с консультантом" and "Заполнить анкету"', () => {
+  it('ProfileReviewAndVersions renders "Собрать факты с консультантом" and "Заполнить анкету"', () => {
     const onOpenExpert = vi.fn();
     const onFillQuestionnaire = vi.fn();
     const container = document.createElement('div');
@@ -91,7 +93,7 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
       '[data-testid="review-fix-with-consultant-btn"]',
     ) as HTMLButtonElement;
     expect(fixBtn).not.toBeNull();
-    expect(fixBtn.textContent).toContain('Исправить вместе с консультантом');
+    expect(fixBtn.textContent).toContain('Собрать факты с консультантом');
     act(() => fixBtn.click());
     expect(onOpenExpert).toHaveBeenCalled();
 

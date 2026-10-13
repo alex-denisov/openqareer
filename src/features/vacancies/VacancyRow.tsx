@@ -21,6 +21,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { extractVacancyRequirements, LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import { VacancyInterviewForm } from './VacancyInterviewForm';
+import { useVacancyRowApplied } from './useVacancyRowApplied';
 import {
   CompanyPathButton,
   NotAppliedActions,
@@ -28,6 +29,11 @@ import {
   VacancyMoreActions,
   vacancySnapshot,
 } from './VacancyRowElements';
+import {
+  VacancyScreenDetailActions,
+  VacancyScreenFullDescriptionButton,
+  VacancyScreenRequirementChips,
+} from './VacancyScreenDetails';
 
 export interface VacancyRowProps {
   readonly layout?: 'default' | 'screen';
@@ -114,7 +120,6 @@ function VacancyRowSummary({
     </button>
   );
 }
-
 
 function MissingPointItem({
   point,
@@ -393,46 +398,24 @@ function useVacancyRowInterview(
   };
 }
 
-function useVacancyRowApplied(
-  cluster: MatchedVacancyItem['cluster'],
-  onMarkAlreadyApplied?: VacancyRowProps['onMarkAlreadyApplied'],
-) {
-  const [savingApplied, setSavingApplied] = useState(false);
-  const [appliedError, setAppliedError] = useState<string>();
-
-  const handleConfirmAlreadyApplied = async () => {
-    if (!onMarkAlreadyApplied) return;
-    setSavingApplied(true);
-    setAppliedError(undefined);
-    try {
-      await onMarkAlreadyApplied(cluster.id, vacancySnapshot(cluster));
-    } catch {
-      setAppliedError('Не удалось сохранить отклик. Состояние не изменено.');
-    } finally {
-      setSavingApplied(false);
-    }
-  };
-
-  return {
-    savingApplied,
-    appliedError,
-    handleConfirmAlreadyApplied,
-  };
-}
-
 function useVacancyRowState({
   item,
   now,
   applications,
   archivedApplicationClusterIds,
   onMarkAlreadyApplied,
+  onOpenLetter,
   onScheduleInterview,
 }: VacancyRowProps) {
   const { cluster } = item;
   const [infoOpen, setInfoOpen] = useState(false);
   const [pitchOpen, setPitchOpen] = useState(false);
   const interviewState = useVacancyRowInterview(cluster, onScheduleInterview);
-  const appliedState = useVacancyRowApplied(cluster, onMarkAlreadyApplied);
+  const appliedState = useVacancyRowApplied(
+    cluster,
+    onMarkAlreadyApplied,
+    applications?.recordConfirmed,
+  );
   const application = applications?.byCluster.get(cluster.id);
   const applicationArchived = archivedApplicationClusterIds?.has(cluster.id) ?? false;
 
@@ -442,10 +425,6 @@ function useVacancyRowState({
     void openExternalLink(cluster.primaryUrl);
     setExternalOpened(true);
   };
-  const handleConfirmSent = () => {
-    applications?.record(cluster.id, 'applied', vacancySnapshot(cluster));
-  };
-
   return {
     age: vacancyAge(cluster, now),
     trust: vacancyTrustSignals(cluster, now),
@@ -457,9 +436,11 @@ function useVacancyRowState({
     setPitchOpen,
     interviewState,
     appliedState,
+    savingApplied: appliedState.savingApplied,
+    handleOpenLetter: onOpenLetter ? () => onOpenLetter(cluster) : undefined,
     handleApplyExternal,
     externalOpened,
-    handleConfirmSent,
+    handleConfirmSent: appliedState.handleConfirmSent,
   };
 }
 
@@ -499,12 +480,23 @@ interface DetailProps {
 function DetailInterviewSection({
   appliedError,
   interviewState,
+  onScheduleInterview,
 }: {
   readonly appliedError?: string;
   readonly interviewState: ReturnType<typeof useVacancyRowInterview>;
+  readonly onScheduleInterview?: () => void;
 }) {
   return (
     <>
+      {onScheduleInterview ? (
+        <button
+          type="button"
+          className="btn btn-secondary action-btn vacancies-screen-schedule-interview"
+          onClick={onScheduleInterview}
+        >
+          Назначили интервью
+        </button>
+      ) : null}
       {appliedError ? (
         <p className="vacancies-interview-error" role="alert">
           {appliedError}
@@ -528,12 +520,14 @@ function DetailInterviewSection({
 function externalApplyProps(rowState: {
   readonly externalOpened: boolean;
   readonly handleApplyExternal: () => void;
-  readonly handleConfirmSent: () => void;
+  readonly handleConfirmSent: () => void | Promise<void>;
+  readonly savingApplied: boolean;
 }) {
   return {
     externalOpened: rowState.externalOpened,
     onApplyExternal: rowState.handleApplyExternal,
     onConfirmSent: rowState.handleConfirmSent,
+    savingApplied: rowState.savingApplied,
   };
 }
 
@@ -583,7 +577,6 @@ function buildActionButtonsProps(
   return {
     alreadyApplied: rowState.alreadyApplied,
     applicationArchived: rowState.applicationArchived,
-    savingApplied: appliedState.savingApplied,
     onOpenResponses: rowProps.onOpenResponses,
     onOpenArchive: rowProps.onOpenArchive,
     onToggleSchedule: rowProps.onScheduleInterview
@@ -637,6 +630,102 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   );
 }
 
+function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
+  return (
+    <div
+      id={`vacancy-details-${cluster.id}`}
+      className="vac-detail vacancies-detail-panel vacancies-screen-detail"
+    >
+      <DetailTrustAlert trust={rowState.trust} />
+      <div className="vacancies-screen-detail-grid">
+        <VacancyScreenRequirementChips
+          cluster={cluster}
+          explanation={explanation}
+          onAddToProfile={rowProps.onAddToProfile}
+        />
+        <section
+          className="vacancies-screen-description"
+          aria-labelledby={`vacancy-description-${cluster.id}`}
+        >
+          <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
+          {cluster.descriptionSummary.trim() ? (
+            <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
+          ) : (
+            <p className="vacancies-screen-description-empty">
+              Краткое описание пока недоступно. Полный текст можно проверить на площадке.
+            </p>
+          )}
+          <VacancyScreenFullDescriptionButton onOpen={() => rowState.setInfoOpen(true)} />
+        </section>
+      </div>
+      <VacancyScreenDetailActions cluster={cluster} rowProps={rowProps} rowState={rowState} />
+      <DetailInterviewSection
+        appliedError={rowState.appliedState.appliedError}
+        interviewState={rowState.interviewState}
+        onScheduleInterview={
+          rowState.alreadyApplied && rowProps.onScheduleInterview
+            ? () => rowState.interviewState.setScheduleOpen(true)
+            : undefined
+        }
+      />
+    </div>
+  );
+}
+
+function VacancyScreenRow(
+  props: VacancyRowProps & { readonly rowState: ReturnType<typeof useVacancyRowState> },
+) {
+  const { item, isSelected, onSelect, rowState } = props;
+  const { cluster } = item;
+  const companyAction = cluster.canonicalCompany ? props.onToggleCompanyWant : undefined;
+  const appliedClass = rowState.alreadyApplied
+    ? rowState.applicationArchived
+      ? ' is-archived'
+      : ' is-applied'
+    : '';
+
+  return (
+    <div
+      className={`vac-row vacancies-screen-row-shell${isSelected ? ' is-selected' : ''}${appliedClass}`}
+    >
+      <button
+        type="button"
+        className="vacancies-screen-row-trigger"
+        aria-expanded={isSelected}
+        aria-controls={`vacancy-details-${cluster.id}`}
+        onClick={onSelect}
+      >
+        <VacancyScreenRowCells
+          item={item}
+          applicationArchived={rowState.applicationArchived}
+          alreadyApplied={rowState.alreadyApplied}
+        />
+      </button>
+      <div className="vacancies-screen-row-actions">
+        <VacancyCollectionActions {...props} compact onToggleCompanyWant={companyAction} />
+        <button
+          type="button"
+          className="vacancies-screen-expand-action"
+          aria-label={`${isSelected ? 'Свернуть' : 'Раскрыть'} вакансию`}
+          aria-expanded={isSelected}
+          aria-controls={`vacancy-details-${cluster.id}`}
+          onClick={onSelect}
+        >
+          <ScreenVacancyRowChevron isSelected={isSelected} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function afterInfoClose(closeInfo: () => void, openLetter?: () => void) {
+  if (!openLetter) return undefined;
+  return () => {
+    closeInfo();
+    openLetter();
+  };
+}
+
 function VacancyRowModals({
   cluster,
   rowState,
@@ -650,6 +739,7 @@ function VacancyRowModals({
         isOpen={rowState.infoOpen}
         onClose={() => rowState.setInfoOpen(false)}
         cluster={cluster}
+        onOpenLetter={afterInfoClose(() => rowState.setInfoOpen(false), rowState.handleOpenLetter)}
       />
       {rowState.pitchOpen ? (
         <VacancyPitchModal
@@ -686,10 +776,29 @@ export function VacancyRow(props: VacancyRowProps) {
   const { cluster, explanation } = item;
   const rowState = useVacancyRowState(props);
 
+  if (layout === 'screen') {
+    return (
+      <li className="vac-list-item vacancies-screen-row-item">
+        <div className={`vacancies-screen-card${isSelected ? ' is-expanded' : ''}`}>
+          <VacancyScreenRow {...props} rowState={rowState} />
+          {isSelected ? (
+            <VacancyScreenDetail
+              cluster={cluster}
+              explanation={explanation}
+              rowProps={props}
+              rowState={rowState}
+            />
+          ) : null}
+        </div>
+        <VacancyRowModals cluster={cluster} rowState={rowState} />
+      </li>
+    );
+  }
+
   return (
-    <li className={`vac-list-item${layout === 'screen' ? ' vacancies-screen-row-item' : ''}`}>
+    <li className="vac-list-item">
       <VacancyRowSummary
-        layout={layout}
+        layout="default"
         cluster={cluster}
         explanation={explanation}
         isSelected={isSelected}

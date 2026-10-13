@@ -160,10 +160,7 @@ function AboutActionButtons({
   readonly onSuggest: () => void;
 }) {
   return (
-    <div
-      className="career-profile-about-actions"
-      style={{ display: 'flex', gap: '8px', marginTop: '12px', flexWrap: 'wrap' }}
-    >
+    <div className="career-profile-about-actions">
       <button
         type="button"
         className="career-quiet-button"
@@ -253,8 +250,8 @@ function useProfileAboutHandlers({
   return { handleAccept, handleDismiss };
 }
 
-export function ProfileAboutSection(props: ProfileAboutSectionProps) {
-  const { draft, saving, onSectionSave, suggestions, onRevertSuggestion } = props;
+function useProfileAboutView(props: ProfileAboutSectionProps) {
+  const { draft, onSectionSave, suggestions } = props;
   const [editing, setEditing] = useState(false);
   const about = draft.candidate.about?.trim();
   const { allSuggestions, handleSuggest, dismissLocal } = useProfileAboutSuggestions({
@@ -269,6 +266,13 @@ export function ProfileAboutSection(props: ProfileAboutSectionProps) {
     onDismissSuggestion: props.onDismissSuggestion,
     dismissLocal,
   });
+  return { editing, setEditing, about, allSuggestions, handleSuggest, handleAccept, handleDismiss };
+}
+
+export function ProfileAboutSection(props: ProfileAboutSectionProps) {
+  const { draft, saving, onSectionSave, onRevertSuggestion } = props;
+  const { editing, setEditing, about, allSuggestions, handleSuggest, handleAccept, handleDismiss } =
+    useProfileAboutView(props);
 
   return (
     <section
@@ -287,10 +291,15 @@ export function ProfileAboutSection(props: ProfileAboutSectionProps) {
         about={about}
         draft={draft}
         saving={saving}
-        onSectionSave={(next) => { onSectionSave(next); setEditing(false); }}
+        onSectionSave={(next) => {
+          onSectionSave(next);
+          setEditing(false);
+        }}
         onCancel={() => setEditing(false)}
       />
-      {!editing ? <AboutActionButtons onEdit={() => setEditing(true)} onSuggest={handleSuggest} /> : null}
+      {!editing ? (
+        <AboutActionButtons onEdit={() => setEditing(true)} onSuggest={handleSuggest} />
+      ) : null}
       <AboutSuggestionsList
         draft={draft}
         suggestions={allSuggestions}

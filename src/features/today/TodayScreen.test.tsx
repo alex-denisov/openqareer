@@ -1,7 +1,10 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { consultantTargetView, queueItemTarget, TodayScreen } from './TodayScreen';
-import { clearConsultantActionResolution, resolveConsultantAction } from './consultantActionStorage';
+import {
+  clearConsultantActionResolution,
+  resolveConsultantAction,
+} from './consultantActionStorage';
 import type { TodaySnapshot } from './todayApi';
 
 const snapshot: TodaySnapshot = {
@@ -50,7 +53,12 @@ const snapshot: TodaySnapshot = {
   ],
   followUps: [
     { applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' },
-    { applicationId: 'app-2', company: 'Genetec', title: 'Enterprise Architect', status: 'overdue' },
+    {
+      applicationId: 'app-2',
+      company: 'Genetec',
+      title: 'Enterprise Architect',
+      status: 'overdue',
+    },
   ],
   sinceLastVisit: {
     since: '2026-09-23T09:00:00.000Z',
@@ -72,9 +80,15 @@ function renderTodayScreen(props: Partial<Parameters<typeof TodayScreen>[0]> = {
   );
 }
 
+function mobileTodayMarkup(html: string): string {
+  const start = html.indexOf('<div class="career-today-mobile">');
+  const end = html.indexOf('<div class="career-today-desktop">', start);
+  return start >= 0 && end > start ? html.slice(start, end) : html;
+}
+
 describe('TodayScreen (B251 S5)', () => {
   it('shows the digest counters with a basis caption under each number', () => {
-    const html = renderTodayScreen();
+    const html = mobileTodayMarkup(renderTodayScreen());
 
     expect(html).toContain('3</span>');
     expect(html).toContain('напоминание компании на сегодня');
@@ -87,16 +101,18 @@ describe('TodayScreen (B251 S5)', () => {
     expect(html).toContain('Peraton — 6 дней тишины');
     expect(html).toContain('HRTx Inc. · раунд 2');
 
-    const htmlMultiple = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        digest: {
-          ...snapshot.digest,
-          followUpsDueToday: 5,
-          followUpsOverdue: 5,
+    const htmlMultiple = mobileTodayMarkup(
+      renderTodayScreen({
+        snapshot: {
+          ...snapshot,
+          digest: {
+            ...snapshot.digest,
+            followUpsDueToday: 5,
+            followUpsOverdue: 5,
+          },
         },
-      },
-    });
+      }),
+    );
     expect(htmlMultiple).toContain('напоминаний компании на сегодня');
     expect(htmlMultiple).toContain('напоминаний просрочено');
   });
@@ -257,14 +273,29 @@ describe('TodayScreen (B251 S5)', () => {
     };
 
     it('оставляет единственную акцентную кнопку консультанта при наличии интервью', () => {
-      const html = renderTodayScreen({
-        consultantAction: { ...mockAction, label: 'Проверить факты' },
-        snapshot: { ...snapshot, queue: [...snapshot.queue, {
-          kind: 'interview', applicationId: 'interview-one', title: 'Product Lead',
-          company: 'Компания', eyebrow: 'Интервью', dueAt: null, fit: null,
-        }] },
-      });
-      const accentButtons = html.match(/<button[^>]*class="[^"]*career-btn-primary[^"]*"[^>]*>[\s\S]*?<\/button>/gu) ?? [];
+      const html = mobileTodayMarkup(
+        renderTodayScreen({
+          consultantAction: { ...mockAction, label: 'Проверить факты' },
+          snapshot: {
+            ...snapshot,
+            queue: [
+              ...snapshot.queue,
+              {
+                kind: 'interview',
+                applicationId: 'interview-one',
+                title: 'Product Lead',
+                company: 'Компания',
+                eyebrow: 'Интервью',
+                dueAt: null,
+                fit: null,
+              },
+            ],
+          },
+        }),
+      );
+      const accentButtons =
+        html.match(/<button[^>]*class="[^"]*career-btn-primary[^"]*"[^>]*>[\s\S]*?<\/button>/gu) ??
+        [];
       expect(accentButtons).toHaveLength(1);
       expect(accentButtons[0]).toContain('Проверить факты');
       expect(html).toContain('Подготовиться');
@@ -286,15 +317,17 @@ describe('TodayScreen (B251 S5)', () => {
     });
 
     it('показывает карточку консультанта в пустой очереди вместо заглушки «Решений на сегодня нет»', () => {
-      const html = renderTodayScreen({
-        snapshot: {
-          ...snapshot,
-          queue: [],
-          followUps: [],
-          sinceLastVisit: { since: null, items: [] },
-        },
-        consultantAction: mockAction,
-      });
+      const html = mobileTodayMarkup(
+        renderTodayScreen({
+          snapshot: {
+            ...snapshot,
+            queue: [],
+            followUps: [],
+            sinceLastVisit: { since: null, items: [] },
+          },
+          consultantAction: mockAction,
+        }),
+      );
 
       expect(html).toContain('career-today-consultant-card');
       expect(html).toContain('Добавим полный источник');
@@ -326,7 +359,6 @@ describe('TodayScreen (B251 S5)', () => {
     });
   });
 });
-
 
 describe('queueItemTarget (B331: «Открыть» was a button without a handler)', () => {
   it('opens vacancies for a vacancy card and responses for an application card', () => {

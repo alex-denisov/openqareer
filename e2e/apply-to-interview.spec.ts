@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 /**
@@ -18,6 +19,8 @@ const CANDIDATE = {
   isTest: false,
   candidateId: 'candidate-c47',
 };
+
+test.beforeAll(() => mkdirSync('output/playwright', { recursive: true }));
 
 const ACCOUNT = {
   username: CANDIDATE.username,
@@ -431,30 +434,25 @@ async function openVacancies(page: Page): Promise<void> {
 async function openFirstVacancy(page: Page): Promise<void> {
   const firstItem = page.locator('.vac-list-item').first();
   await expect(firstItem).toBeVisible();
-  if (await firstItem.locator('.vacancies-detail-col').isVisible()) return;
-  await firstItem.locator('.vac-row').click();
-  await expect(firstItem.locator('.vacancies-detail-col')).toBeVisible();
+  if (await firstItem.locator('.vac-detail').isVisible()) return;
+  await firstItem.locator('.vacancies-screen-row-trigger').click();
+  await expect(firstItem.locator('.vac-detail')).toBeVisible();
 }
 
 async function openResponses(page: Page): Promise<void> {
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
 }
 
-async function walkChain(page: Page): Promise<void> {
+async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openVacancies(page);
   await openFirstVacancy(page);
 
-  const applyButton = page
-    .locator('.vacancies-detail-col')
-    .getByRole('button', { name: 'Откликнуться' });
+  const detailActions = page.locator('.vacancies-screen-detail-actions');
+  const applyButton = detailActions.getByRole('button', { name: 'Откликнуться' });
   await applyButton.click();
   // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
-  await expect(page.locator('.vacancies-detail-col')).not.toContainText('Отклик отмечен');
-  await page
-    .locator('.vacancies-detail-col')
-    .getByRole('button', { name: 'Да, отклик отправлен' })
-    .click();
-  await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+  await expect(page.locator('.vac-detail')).not.toContainText('Отклик отмечен');
+  await detailActions.getByRole('button', { name: 'Да, отклик отправлен' }).click();
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });
   await expect(goToResponses).toBeVisible();
   await goToResponses.click();
@@ -467,47 +465,56 @@ async function walkChain(page: Page): Promise<void> {
   await card.getByLabel('Действия с карточкой').click();
   await card.locator('.career-responses-stage-control select').first().selectOption('interview');
   await card.locator('input[type="date"]').fill('2026-09-30');
+  const viewport = page.viewportSize()?.width ?? 0;
+  if (captureEvidence) {
+    await page.screenshot({ path: `output/playwright/c70-interview-assignment-${viewport}.png` });
+  }
   await card.getByRole('button', { name: 'Сохранить этап' }).click();
 
   const prepButton = card.getByRole('button', { name: 'Подготовиться' });
   await expect(prepButton).toBeVisible();
   await prepButton.click();
   await expect(page.getByRole('dialog')).toContainText('Genetec');
+  if (captureEvidence) {
+    await page.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
+  }
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 
   await page.locator('button[aria-label="Сегодня"]:visible').first().click();
   await expect(page.locator('.career-today')).toBeVisible();
-  const todayPrep = page.getByRole('button', { name: 'Подготовиться' });
-  await expect(todayPrep).toBeVisible();
-  await todayPrep.click();
+  if (viewport >= 1024) {
+    // Desktop queue rows navigate to the response tracker, where the actual
+    // interview preparation action lives.
+    await page.locator('.career-today-queue-desktop-row').filter({ hasText: 'Genetec' }).click();
+    const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
+    await expect(todayCard.getByRole('button', { name: 'Подготовиться' })).toBeVisible();
+    await todayCard.getByRole('button', { name: 'Подготовиться' }).click();
+  } else {
+    const todayPrep = page.getByRole('button', { name: 'Подготовиться' });
+    await expect(todayPrep).toBeVisible();
+    await todayPrep.click();
+  }
   await expect(page.getByRole('dialog')).toContainText('Genetec');
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 }
 
 async function walkManualAppliedChain(page: Page): Promise<void> {
-  const viewport = page.viewportSize()?.width ?? 0;
-  await openVacancies(page);
-  await openFirstVacancy(page);
-  await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
-  await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
-
-  await page.getByRole('button', { name: 'Назначили интервью' }).click();
-  await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
-  await page.screenshot({ path: `output/playwright/c70-interview-assignment-${viewport}.png` });
-  await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
-
-  const preparation = page.getByRole('dialog');
-  await expect(preparation).toContainText('Genetec');
-  await preparation.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
+  await walkChain(page, true);
 }
 
 async function walkExistingAppliedVacancyToPrep(page: Page): Promise<void> {
   await openVacancies(page);
   await openFirstVacancy(page);
-  await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+  await expect(
+    page.locator('.vacancies-screen-detail-actions').getByRole('button', {
+      name: 'Перейти в «Отклики»',
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Назначили интервью' })).toBeVisible();
   await page.getByRole('button', { name: 'Назначили интервью' }).click();
   await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
   await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
+
   await expect(page.getByRole('dialog')).toContainText('Genetec');
 }
 
@@ -608,11 +615,19 @@ test.describe('C47 apply-to-interview chain', () => {
     await openVacancies(page);
     await openFirstVacancy(page);
 
-    await page.getByRole('button', { name: 'Я уже откликнулся' }).click();
+    await page
+      .locator('.vacancies-screen-detail-actions')
+      .getByRole('button', { name: 'Откликнуться' })
+      .click();
+    await page.getByRole('button', { name: 'Да, отклик отправлен' }).click();
 
     await expect(page.locator('.vacancies-interview-error')).toContainText('Состояние не изменено');
-    await expect(page.locator('.vacancies-detail-col')).not.toContainText('Отклик отмечен');
-    await expect(page.getByRole('button', { name: 'Я уже откликнулся' })).toBeVisible();
+    await expect(
+      page.locator('.vacancies-screen-detail-actions').getByRole('button', {
+        name: 'Перейти в «Отклики»',
+      }),
+    ).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Да, отклик отправлен' })).toBeVisible();
   });
 
   test('keeps the applied stage and does not open prep when interview scheduling fails', async ({
@@ -642,7 +657,11 @@ test.describe('C47 apply-to-interview chain', () => {
 
     await expect(page.locator('.vacancies-interview-error')).toContainText('Этап не изменён');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.locator('.vacancies-detail-col')).toContainText('Отклик отмечен');
+    await expect(
+      page.locator('.vacancies-screen-detail-actions').getByRole('button', {
+        name: 'Перейти в «Отклики»',
+      }),
+    ).toBeVisible();
   });
 
   test('adds a manual response from the empty tracker', async ({ page }) => {

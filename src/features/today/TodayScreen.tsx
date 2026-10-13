@@ -3,30 +3,34 @@ import { LinkedinDraftCard } from './LinkedinDraftCard';
 import { SearchMomentum } from './SearchMomentum';
 import { ExecutiveOnboardingCard } from '../onboarding/ExecutiveOnboardingCard';
 import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
-import { pluralRu, pluralWordRu } from '../../../shared/pluralRu';
+import { pluralRu } from '../../../shared/pluralRu';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { CompanyReminderModal } from './CompanyReminderModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
-import { isConsultantActionResolved, resolveConsultantAction } from './consultantActionStorage';
-import type {
-  TodayDigest,
-  TodayFollowUp,
-  TodayQueueItem,
-  TodaySinceLastVisit,
-  TodaySnapshot,
-} from './todayApi';
-import { formatTodaySalary } from './todayCompensation';
 import {
-  buildReturningDigestItems,
+  deferConsultantActionUntilTomorrow,
+  isConsultantActionResolved,
+  resolveConsultantAction,
+} from './consultantActionStorage';
+import type { TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
+import { formatTodaySalary } from './todayCompensation';
+import { TodayDesktopContent, type TodayFunnelContext } from './TodayDesktop';
+import { TodayDigestRow, TodayReturnBanner } from './TodayMobileHeader';
+export type { TodayFunnelContext } from './TodayDesktop';
+import {
   companyInitials,
-  digestBasis,
+  consultantTargetView,
   followUpStatusLabel,
   formatQueueTitle,
+  queueItemTarget,
+  queueKey,
 } from './todayFormat';
+export { consultantTargetView, queueItemTarget } from './todayFormat';
 import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
+import type { ResumeDraft } from '../resume/resumeTypes';
 
 const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
 
@@ -34,13 +38,6 @@ const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
  * Маршрутизация действия консультанта в разделы кабинета.
  * Read-only действия открывают соответствующий раздел без создания фоновых команд.
  */
-export function consultantTargetView(
-  destination: ReasonedCareerAction['destination'],
-): CareerCabinetView {
-  if (destination === 'career' || destination === 'search') return 'opportunities';
-  return 'profile';
-}
-
 /**
  * «Сегодня» (B251 S5): дайджест дня, очередь решений, follow-up по срокам и
  * дайджест «с прошлого визита» — по макету `B248/today.html`. Первая строка
@@ -58,7 +55,10 @@ export interface TodayScreenProps {
   readonly markingFollowUpIds?: ReadonlySet<string>;
   readonly candidateId?: string;
   readonly consultantAction?: ReasonedCareerAction;
+  readonly profileDraft?: ResumeDraft;
+  readonly funnelContext?: TodayFunnelContext;
   readonly onOpenTariffs?: () => void;
+  readonly onOpenExpert?: () => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }
 
@@ -66,10 +66,12 @@ function useTodayConsultantAction({
   candidateId,
   consultantAction,
   onNavigate,
+  onOpenExpert,
 }: {
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
+  onOpenExpert?: () => void;
 }) {
   const [resolvedActionKey, setResolvedActionKey] = useState<string | null>(null);
   const currentActionKey = consultantAction?.headline ?? null;
@@ -81,6 +83,10 @@ function useTodayConsultantAction({
 
   const onAccept = () => {
     if (!consultantAction) return;
+    if (consultantAction.destination === 'coach') {
+      onOpenExpert?.();
+      return;
+    }
     resolveConsultantAction(candidateId, consultantAction, 'accepted');
     setResolvedActionKey(consultantAction.headline);
     onNavigate?.(consultantTargetView(consultantAction.destination));
@@ -92,7 +98,13 @@ function useTodayConsultantAction({
     setResolvedActionKey(consultantAction.headline);
   };
 
-  return { activeAction, onAccept, onDismiss };
+  const onPostpone = () => {
+    if (!consultantAction) return;
+    deferConsultantActionUntilTomorrow(candidateId, consultantAction);
+    setResolvedActionKey(consultantAction.headline);
+  };
+
+  return { activeAction, onAccept, onDismiss, onPostpone };
 }
 
 export function TodayScreen({
@@ -104,13 +116,17 @@ export function TodayScreen({
   markingFollowUpIds = NO_PENDING_FOLLOW_UPS,
   candidateId,
   consultantAction,
+  profileDraft,
+  funnelContext,
   onNavigate,
   onOpenTariffs,
+  onOpenExpert,
 }: TodayScreenProps) {
-  const { activeAction, onAccept, onDismiss } = useTodayConsultantAction({
+  const { activeAction, onAccept, onDismiss, onPostpone } = useTodayConsultantAction({
     candidateId,
     consultantAction,
     onNavigate,
+    onOpenExpert,
   });
 
   if (failed) return <TodayError onRetry={onRetry} />;
@@ -124,25 +140,51 @@ export function TodayScreen({
       activeAction={activeAction}
       onAccept={onAccept}
       onDismiss={onDismiss}
+      onPostpone={onPostpone}
       onMarkFollowUpSent={onMarkFollowUpSent}
       markingFollowUpIds={markingFollowUpIds}
       onNavigate={onNavigate}
+      onOpenExpert={onOpenExpert}
+      profileDraft={profileDraft}
+      funnelContext={funnelContext}
     />
   );
 }
 
 interface TodayContentProps {
   readonly snapshot: TodaySnapshot;
+  readonly profileDraft?: ResumeDraft;
+  readonly funnelContext?: TodayFunnelContext;
+  readonly onOpenExpert?: () => void;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onDismiss: () => void;
+  readonly onPostpone: () => void;
   readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
   readonly markingFollowUpIds: ReadonlySet<string>;
   readonly onOpenTariffs?: () => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }
 
-function TodayContent({
+function TodayContent(props: TodayContentProps) {
+  return (
+    <div className="career-today">
+      <TodayMobileContent {...props} />
+      <TodayDesktopContent
+        snapshot={props.snapshot}
+        profileDraft={props.profileDraft}
+        funnelContext={props.funnelContext}
+        activeAction={props.activeAction}
+        onAccept={props.onAccept}
+        onDiscuss={props.onOpenExpert}
+        onPostpone={props.onPostpone}
+        onNavigate={props.onNavigate}
+      />
+    </div>
+  );
+}
+
+function TodayMobileContent({
   snapshot,
   activeAction,
   onAccept,
@@ -151,17 +193,22 @@ function TodayContent({
   markingFollowUpIds,
   onNavigate,
   onOpenTariffs,
-}: TodayContentProps) {
-  const { digest, queue, followUps, sinceLastVisit, vacanciesPending } = snapshot;
+}: Pick<
+  TodayContentProps,
+  | 'snapshot'
+  | 'activeAction'
+  | 'onAccept'
+  | 'onDismiss'
+  | 'onMarkFollowUpSent'
+  | 'markingFollowUpIds'
+  | 'onNavigate'
+  | 'onOpenTariffs'
+>) {
+  const { queue, followUps, sinceLastVisit } = snapshot;
   return (
-    <div className="career-today">
-      <TodayReturnBanner sinceLastVisit={sinceLastVisit} digest={digest} onNavigate={onNavigate} />
-      <p className="career-today-subtitle">
-        Что изменилось с прошлого визита и что решить сегодня.
-      </p>
-      <CareerDiaryShortcut onNavigate={onNavigate} />
-      {vacanciesPending ? <TodayPendingNotice /> : null}
-      <TodayDigestRow digest={digest} />
+    <div className="career-today-mobile">
+      <TodayMobileIntro snapshot={snapshot} onNavigate={onNavigate} />
+      <TodayDigestRow digest={snapshot.digest} />
       <SearchMomentum momentum={snapshot.momentum} onNavigate={onNavigate} />
       <div className="career-today-panels">
         <TodayQueue
@@ -174,16 +221,57 @@ function TodayContent({
           onDismissConsultant={onDismiss}
           onNavigate={onNavigate}
         />
-        <div className="career-today-side">
-          <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
-          <TodayFollowUps
-            followUps={followUps}
-            onMarkFollowUpSent={onMarkFollowUpSent}
-            markingFollowUpIds={markingFollowUpIds}
-          />
-        </div>
+        <TodayMobileSidebar
+          followUps={followUps}
+          onMarkFollowUpSent={onMarkFollowUpSent}
+          markingFollowUpIds={markingFollowUpIds}
+          onOpenTariffs={onOpenTariffs}
+        />
       </div>
       <ExecutiveOnboardingCard />
+    </div>
+  );
+}
+
+function TodayMobileIntro({
+  snapshot,
+  onNavigate,
+}: Pick<TodayContentProps, 'snapshot' | 'onNavigate'>) {
+  return (
+    <>
+      <TodayReturnBanner
+        sinceLastVisit={snapshot.sinceLastVisit}
+        digest={snapshot.digest}
+        onNavigate={onNavigate}
+      />
+      <p className="career-today-subtitle">
+        Что изменилось с прошлого визита и что решить сегодня.
+      </p>
+      <CareerDiaryShortcut onNavigate={onNavigate} />
+      {snapshot.vacanciesPending ? <TodayPendingNotice /> : null}
+    </>
+  );
+}
+
+function TodayMobileSidebar({
+  followUps,
+  onMarkFollowUpSent,
+  markingFollowUpIds,
+  onOpenTariffs,
+}: {
+  readonly followUps: readonly TodayFollowUp[];
+  readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
+  readonly markingFollowUpIds: ReadonlySet<string>;
+  readonly onOpenTariffs?: () => void;
+}) {
+  return (
+    <div className="career-today-side">
+      <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
+      <TodayFollowUps
+        followUps={followUps}
+        onMarkFollowUpSent={onMarkFollowUpSent}
+        markingFollowUpIds={markingFollowUpIds}
+      />
     </div>
   );
 }
@@ -223,123 +311,6 @@ function CareerDiaryShortcut({
   );
 }
 
-function TodayReturnBanner({
-  sinceLastVisit,
-  digest,
-  onNavigate,
-}: {
-  readonly sinceLastVisit: TodaySinceLastVisit;
-  readonly digest: TodayDigest;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  const newVacanciesCount = sinceLastVisit.newVacanciesCount ?? digest.newVacancies;
-  const applicationsWaitingOver7Days =
-    sinceLastVisit.applicationsWaitingOver7Days ?? digest.applicationsWaitingOver7Days ?? 0;
-  const nearestInterview = sinceLastVisit.nearestInterview ?? digest.nextInterview;
-
-  const items = buildReturningDigestItems({
-    since: sinceLastVisit.since,
-    newVacanciesCount,
-    applicationsWaitingOver7Days,
-    nearestInterview,
-  });
-
-  if (items.length === 0) return null;
-
-  return (
-    <div className="career-today-return-banner" data-testid="career-today-return-banner">
-      <span className="career-today-return-prefix">С прошлого визита: </span>
-      {items.map((item, index) => (
-        <span key={item.id} className="career-today-return-segment">
-          {index > 0 ? (
-            <span className="career-today-return-separator" aria-hidden="true">
-              {' · '}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className="career-today-return-link"
-            data-testid={`since-visit-${item.id}`}
-            onClick={() => onNavigate?.(item.targetView)}
-          >
-            {item.label}
-          </button>
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function TodayDigestRow({ digest }: { digest: TodayDigest }) {
-  return (
-    <div className="career-today-digest">
-      <DigestCard
-        value={digest.newVacancies}
-        label={pluralRu(digest.newVacancies, [
-          'новая релевантная вакансия с прошлого визита',
-          'новые релевантные вакансии с прошлого визита',
-          'новых релевантных вакансий с прошлого визита',
-        ])}
-        basis={digestBasis('new', digest)}
-      />
-      <DigestCard
-        value={digest.followUpsDueToday}
-        label={pluralWordRu(digest.followUpsDueToday, [
-          'напоминание компании на сегодня',
-          'напоминания компании на сегодня',
-          'напоминаний компании на сегодня',
-        ])}
-        basis={digestBasis('followUp', digest)}
-        attention={digest.followUpsDueToday > 0}
-      />
-      <DigestCard
-        value={digest.followUpsOverdue}
-        label={pluralWordRu(digest.followUpsOverdue, [
-          'напоминание просрочено',
-          'напоминания просрочено',
-          'напоминаний просрочено',
-        ])}
-        basis={null}
-        attention={digest.followUpsOverdue > 0}
-      />
-      <DigestCard
-        value={digest.interviewsAhead}
-        label={pluralRu(digest.interviewsAhead, [
-          'интервью впереди, нужна подготовка',
-          'интервью впереди, нужна подготовка',
-          'интервью впереди, нужна подготовка',
-        ])}
-        basis={digestBasis('interview', digest)}
-      />
-    </div>
-  );
-}
-
-function DigestCard({
-  value,
-  label,
-  basis,
-  attention = false,
-}: {
-  value: number;
-  label: string;
-  basis: string | null;
-  attention?: boolean;
-}) {
-  return (
-    <div className={`career-today-digest-card${attention ? ' is-attention' : ''}`}>
-      <span className="career-today-digest-number">{value}</span>
-      <span className="career-today-digest-label">{label}</span>
-      {basis ? <span className="career-today-digest-basis">{basis}</span> : null}
-    </div>
-  );
-}
-
-/**
- * Только факты, которых ещё нет цифрой в KPI-плитках выше (B248/design п.5,
- * C55): счётчик новых вакансий уже показан плиткой «новая релевантная
- * вакансия…», второй раз тем же числом — не строка-подсказка, а шум.
- */
 function sinceHintOf(items: readonly string[]) {
   const extra = items.filter((item) => !/вакан/u.test(item));
   if (extra.length === 0) return null;
@@ -573,11 +544,6 @@ function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title
   return content;
 }
 
-/** Where «Открыть» on a queue card leads (B331: the button had no handler). */
-export function queueItemTarget(item: TodayQueueItem): CareerCabinetView {
-  return item.kind === 'new_vacancy' || item.kind === 'shortlist' ? 'opportunities' : 'responses';
-}
-
 function FollowUpQueueAction({
   item,
   isSaving,
@@ -779,10 +745,6 @@ function queueKindLabel(item: TodayQueueItem): string {
   if (item.kind === 'follow_up') return 'Напоминание компании';
   if (item.kind === 'interview') return 'Интервью';
   return 'Ваш ход';
-}
-
-function queueKey(item: TodayQueueItem): string {
-  return item.applicationId ?? item.clusterId ?? item.title;
 }
 
 function TodayPendingNotice() {

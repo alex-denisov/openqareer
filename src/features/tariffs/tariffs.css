@@ -39,6 +39,20 @@
   line-height: 1.45;
 }
 
+.career-tariffs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+}
+
+.career-tariffs-panel .career-tariffs-title {
+  font-size: var(--career-text-md);
+}
+
 /* Desktop ladder cards / details list */
 .career-tariffs-ladder {
   display: flex;
@@ -47,16 +61,21 @@
 }
 
 .career-tariff-card {
-  border: 1px solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-md);
   background: var(--career-surface);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease;
   overflow: hidden;
 }
 
 .career-tariff-card.is-active {
   border-color: var(--career-accent);
-  box-shadow: 0 0 0 1px var(--career-accent);
+}
+
+.career-tariff-card.is-active > .career-tariff-summary {
+  background: var(--career-accent-soft);
 }
 
 .career-tariff-summary {
@@ -73,6 +92,11 @@
 
 .career-tariff-summary::-webkit-details-marker {
   display: none;
+}
+
+.career-tariff-summary:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: calc(var(--career-space-1) * -1);
 }
 
 .career-tariff-meta {
@@ -143,23 +167,47 @@
   transition: transform 180ms ease;
 }
 
+.career-tariff-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  white-space: nowrap;
+}
+
 .career-tariff-card[open] .career-tariff-chevron {
   transform: rotate(180deg);
 }
 
 .career-tariff-body {
-  border-top: 1px solid var(--career-line);
+  border-top: var(--career-border-width) solid var(--career-line);
   padding: var(--career-space-5);
-  background: var(--career-accent-soft);
+  background: var(--career-surface);
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--career-space-6);
+}
+
+.career-tariff-current-details {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-tariff-current-included {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
 }
 
 .career-tariff-section {
   display: flex;
   flex-direction: column;
   gap: var(--career-space-2);
+  min-inline-size: 0;
 }
 
 .career-tariff-section-title {

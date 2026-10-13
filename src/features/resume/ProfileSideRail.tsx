@@ -34,7 +34,43 @@ function WorkPreferencesRailPanel() {
   return <WorkPreferencesPanel state={state} />;
 }
 
-export function ProfileSideRail({ draft }: { readonly draft: ResumeDraft }) {
+export function ProfileSideRail({
+  draft,
+  desktopLayout = false,
+  onOpenRelocation,
+}: {
+  readonly draft: ResumeDraft;
+  readonly desktopLayout?: boolean;
+  readonly onOpenRelocation?: () => void;
+}) {
+  if (desktopLayout) {
+    return (
+      <section
+        id="sec-relocation"
+        className="career-profile-screen-panel career-profile-screen-relocation"
+        aria-labelledby="career-profile-screen-relocation-title"
+      >
+        <div className="career-profile-screen-relocation-head">
+          <h2 id="career-profile-screen-relocation-title">Релокация</h2>
+          <span className="career-profile-screen-relocation-note">Видите только вы</span>
+          {onOpenRelocation ? (
+            <button type="button" className="career-quiet-button" onClick={onOpenRelocation}>
+              <span>Открыть</span>
+            </button>
+          ) : null}
+        </div>
+        <p className="career-profile-screen-relocation-summary">
+          Страны, сравнение, экономика и ваши данные для переезда собраны в разделе «Страны и
+          релокация». Здесь только вход в него.
+        </p>
+        <details className="career-profile-screen-relocation-prefs">
+          <summary>Ограничения и предпочтения для подбора</summary>
+          <WorkPreferencesRailPanel />
+        </details>
+      </section>
+    );
+  }
+
   return (
     <aside
       id="sec-relocation"

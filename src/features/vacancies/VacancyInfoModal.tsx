@@ -1,4 +1,4 @@
-import { Info } from '@phosphor-icons/react';
+import { FileText, Info } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
@@ -11,6 +11,7 @@ interface VacancyInfoModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly cluster: MatchedVacancyItem['cluster'];
+  readonly onOpenLetter?: () => void;
 }
 
 /**
@@ -20,7 +21,12 @@ interface VacancyInfoModalProps {
  * goes through `openExternalLink` (system browser on desktop, new tab on
  * web) instead of a dead anchor.
  */
-export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalProps) {
+export function VacancyInfoModal({
+  isOpen,
+  onClose,
+  cluster,
+  onOpenLetter,
+}: VacancyInfoModalProps) {
   const detail = useVacancyDetail(cluster.id, isOpen);
   return (
     <ImportModalShell
@@ -31,7 +37,7 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
       icon={<Info size={18} aria-hidden="true" />}
       detail
     >
-      <VacancyInfoContent cluster={cluster} detail={detail} />
+      <VacancyInfoContent cluster={cluster} detail={detail} onOpenLetter={onOpenLetter} />
       <VacancyInfoFooter primaryUrl={cluster.primaryUrl} />
     </ImportModalShell>
   );
@@ -42,9 +48,11 @@ export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalP
 function VacancyInfoContent({
   cluster,
   detail,
+  onOpenLetter,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly detail: VacancyDetailState;
+  readonly onOpenLetter?: () => void;
 }) {
   const sources = vacancySourceLabels(cluster.sources);
   const skills =
@@ -76,6 +84,16 @@ function VacancyInfoContent({
           vacancyPayload={recruiterEnrichPayload(cluster)}
         />
       </div>
+      {onOpenLetter ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary vacancies-info-letter"
+          onClick={onOpenLetter}
+        >
+          <FileText size={16} aria-hidden="true" />
+          Сопроводительное письмо
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -129,9 +147,15 @@ function VacancyDescription({
 }
 
 function DescriptionBlocks({ text }: { readonly text: string }) {
-  const paragraphs = text.split(/\n{2,}/u).map((part) => part.trim()).filter(Boolean);
+  const paragraphs = text
+    .split(/\n{2,}/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
   return paragraphs.map((paragraph, index) => {
-    const lines = paragraph.split('\n').map((line) => line.trim()).filter(Boolean);
+    const lines = paragraph
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean);
     const list = lines.every((line) => /^[-*]\s+/u.test(line));
     if (list) {
       return (

@@ -1,10 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const evidenceDirectory =
-  '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B466';
+const evidenceDirectory = e2eEvidenceDirectory('B466');
 
 const interviewApplication = {
   id: 'application-star-1',

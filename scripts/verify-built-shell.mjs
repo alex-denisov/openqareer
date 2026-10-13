@@ -1267,24 +1267,37 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // candidate himself — the dossier with the recommendation and the assessment
   // beside it — while the strategist dialogue stays in the «Эксперт» drawer and
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
-  // B251 S5 — «Сегодня» переехало на TodayScreen: дайджест дня и очередь
-  // решений, а не карточка профиля (`CareerHome`/`CareerProfileSurface`
-  // остались только в своих тестах после B248/B265).
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
+  // B251 S5 / S10-VIS B — desktop Today uses the approved decisions, queue,
+  // and funnel composition. Narrower layouts keep the existing compact composition.
   await page.locator('.career-today').first().waitFor();
-  await page.getByText('Что изменилось с прошлого визита и что решить сегодня.').waitFor();
-  await page.locator('.career-today-digest').waitFor();
+  if (viewport.width >= 1280) {
+    await page.locator('.career-today-desktop').waitFor({ state: 'visible' });
+    for (const section of ['Следующее решение', 'Очередь дня', 'Воронка за 30 дней']) {
+      await page.getByRole('region', { name: section }).waitFor();
+    }
+    assert(
+      (await page.locator('.career-today-desktop .career-today-digest').count()) === 0,
+      `${viewport.name}: legacy Today digest returned to the desktop layout`,
+    );
+  } else {
+    await page.locator('.career-today-mobile').waitFor({ state: 'visible' });
+  }
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({
     path: `output/playwright/b178-home-${viewport.name}.png`,
     fullPage: true,
   });
 
-  // B169 §8 / B248 — «Консультант» is its own rail item now, not a fold
-  // under the home profile card (that fold lived on the now-dead
-  // `CareerHome`).
-  await page.locator('button:has-text("Спросить консультанта"):visible').click();
+  // S10-VIS A2 — the consultant is docked and open on wide desktop layouts;
+  // narrower layouts keep the existing explicit open action.
   const expert = page.getByRole('complementary', { name: /^Консультант · / });
+  if (!(await expert.isVisible())) {
+    await page
+      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .first()
+      .click();
+  }
   await expert.waitFor({ state: 'visible' });
   await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {
@@ -1319,23 +1332,15 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
   await expert.waitFor({ state: 'hidden' });
 
-  // B366: шаг «Роль» открывает «Вакансии» с условиями поиска; отдельного экрана кампании нет.
-  await page
-    .getByRole('button', { name: /^Роль\./ })
-    .first()
-    .click();
-  await page.getByRole('heading', { name: 'Вакансии', exact: true }).waitFor();
-  const focusedRoleInput = page.locator('.add-role-input');
-  await focusedRoleInput.waitFor({ state: 'visible' });
-  await page.locator('.add-role-input:focus').waitFor({ state: 'visible', timeout: 15_000 });
-  assert(
-    await focusedRoleInput.evaluate((input) => document.activeElement === input),
-    `${viewport.name}: step «Роль» did not focus the role filter input`,
-  );
-  assert(
-    (await page.getByRole('heading', { name: 'Поиск', exact: true }).count()) === 0,
-    `${viewport.name}: шаг «Роль» снова открыл скрытый экран «Поиск»`,
-  );
+  // S10-VIS A3: desktop keeps the «Карьера» rail entry. Its route and filter
+  // focus are exercised by the B366 end-to-end spec; the removed Today
+  // stepper no longer acts as a second navigation trigger.
+  if (viewport.width >= 1280) {
+    await page
+      .locator('aside#career-rail nav')
+      .getByRole('button', { name: 'Карьера', exact: true })
+      .waitFor({ state: 'visible' });
+  }
 
   // «Вакансии» держат собранный пул (B248/B250): непустой пул рисует
   // `VacanciesScreen` (список + детальная карточка), а не старую
@@ -1430,7 +1435,13 @@ async function verifyViewport(browser, baseUrl, viewport) {
     await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
     await page.locator('.career-account-tariffs-button').click();
   }
-  await page.getByRole('heading', { name: 'Тарифы', exact: true }).waitFor();
+  if (viewport.width <= 640) {
+    await page
+      .locator('.career-tariffs-mobile .career-tariffs-title')
+      .waitFor({ state: 'visible' });
+  } else {
+    await page.locator('#tariffs-page-title').waitFor({ state: 'visible' });
+  }
   assert(
     (await page.locator('button[aria-label="Сегодня"]:visible').count()) === 1,
     `${viewport.name}: «Сегодня» disappeared after navigation`,
@@ -1677,7 +1688,7 @@ async function verifyExpiredSessionRestore(browser, baseUrl) {
   await signInDialog.getByLabel('Логин').fill('returning.candidate');
   await signInDialog.getByLabel('Пароль').fill('returning-candidate-password');
   await signInDialog.getByRole('button', { name: 'Войти' }).last().click();
-  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
   const matchingOwnerRestored =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) !== null;
   assert(

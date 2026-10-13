@@ -40,7 +40,9 @@ function VacancyScreenRoleCell({
       : null;
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--role" data-label="Роль">
-      <span className="vac-title">{item.cluster.canonicalTitle}</span>
+      <span className="vac-title" role="heading" aria-level={3}>
+        {item.cluster.canonicalTitle}
+      </span>
       <span className="vac-sub">
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
@@ -55,21 +57,38 @@ function VacancyScreenRoleCell({
 }
 
 function VacancyScreenLevelCell({ item }: { readonly item: MatchedVacancyItem }) {
+  const fitLabel =
+    item.explanation.levelMatch === 'match'
+      ? 'совпадает'
+      : item.explanation.levelMatch === 'unknown'
+        ? 'не указано'
+        : 'не совпадает';
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--level" data-label="Уровень">
       <span>{vacancyLevelLabel(item.cluster.canonicalTitle)}</span>
-      <LevelFitDot levelMatch={item.explanation.levelMatch} />
+      <span className="vacancies-screen-fit-status">
+        <span aria-hidden="true">
+          <LevelFitDot levelMatch={item.explanation.levelMatch} />
+        </span>
+        <span>{fitLabel}</span>
+      </span>
     </span>
   );
 }
 
 function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
+  const fitLabel = item.explanation.outsideGeography ? 'не совпадает' : 'совпадает';
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--geo" data-label="Гео">
       <span>
         {item.cluster.canonicalLocation ?? (item.cluster.isRemote ? 'Удалённо' : 'Не указано')}
       </span>
-      <GeoFitDot outsideGeo={item.explanation.outsideGeography} />
+      <span className="vacancies-screen-fit-status">
+        <span aria-hidden="true">
+          <GeoFitDot outsideGeo={item.explanation.outsideGeography} />
+        </span>
+        <span>{fitLabel}</span>
+      </span>
     </span>
   );
 }

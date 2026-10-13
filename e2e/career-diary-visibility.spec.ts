@@ -138,11 +138,11 @@ test('hides the diary entry points when the profile has no current work', async 
       .click();
     await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toHaveCount(0);
   } else {
-    await expect(
-      page
-        .getByRole('navigation', { name: 'Разделы кабинета' })
-        .getByRole('button', { name: 'Карьерный дневник' }),
-    ).toHaveCount(0);
+    const diaryButton = page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' });
+    await expect(diaryButton).toBeDisabled();
+    await expect(diaryButton).toHaveAttribute('aria-label', /В профиле нет текущего места работы/u);
   }
   await capture(page, testInfo, 'not-working-hidden');
 });
@@ -155,8 +155,15 @@ test('creates the first diary from the current profile experience', async ({ pag
       profileExperience: currentExperience({ startDate: '2026-10-01' }),
     }),
   );
-  await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
-  await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
   await page.getByRole('button', { name: 'Создать дневник' }).click();
   await page.getByLabel('Дата начала').fill('2026-10-01');
   await capture(page, testInfo, 'create-diary-from-profile');
@@ -171,11 +178,15 @@ test('shows loading and error status before offering the diary link', async ({
 }, testInfo) => {
   const state = diaryFixture({ profileExperience: currentExperience() });
   await mockSignedInCabinet(page, { careerDiary: state });
+  let releaseFailure!: () => void;
+  const failureGate = new Promise<void>((resolve) => {
+    releaseFailure = resolve;
+  });
   let failedOnce = false;
   await page.route('**/api/v1/candidate/career-diary', async (route) => {
     if (!failedOnce) {
       failedOnce = true;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await failureGate;
       await route.fulfill({
         status: 503,
         json: { error: { message: 'Сервис дневника временно недоступен.' } },
@@ -185,21 +196,50 @@ test('shows loading and error status before offering the diary link', async ({
     await route.fallback();
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByText('Проверяем статус места работы…')).toBeVisible();
+  if (testInfo.project.name === 'desktop-1440') {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
+  await expect(
+    page.getByText(
+      testInfo.project.name === 'mobile-390'
+        ? 'Проверяем статус места работы…'
+        : 'Проверяем место работы из профиля…',
+    ),
+  ).toBeVisible({ timeout: 15_000 });
   await capture(page, testInfo, 'availability-loading');
+  releaseFailure();
   await expect(
     page.getByRole('alert').filter({ hasText: 'Сервис дневника временно недоступен.' }),
   ).toBeVisible();
   await capture(page, testInfo, 'availability-error');
   await page.getByRole('button', { name: 'Повторить' }).click();
-  await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+  } else {
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Разделы кабинета' })
+        .getByRole('button', { name: 'Карьерный дневник' }),
+    ).toBeEnabled();
+  }
 });
 
 test('opens the diary from Today and the desktop rail or mobile More menu', async ({
   page,
 }, testInfo) => {
   await openToday(page, diaryFixture({ profileExperience: currentExperience() }));
-  await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+  } else {
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Разделы кабинета' })
+        .getByRole('button', { name: 'Карьерный дневник' }),
+    ).toBeEnabled();
+  }
   if (testInfo.project.name === 'mobile-390') {
     await page
       .getByRole('navigation', { name: 'Основная навигация' })
@@ -215,8 +255,15 @@ test('opens the diary from Today and the desktop rail or mobile More menu', asyn
     ).toBeVisible();
   }
   await capture(page, testInfo, 'diary-entry-today');
-  await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Карьерный дневник' })).toBeVisible();
+  if (testInfo.project.name === 'mobile-390') {
+    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
+  await expect(page.locator('#career-diary-heading')).toBeVisible();
   await capture(page, testInfo, 'diary-active');
 });
 
@@ -227,7 +274,14 @@ test('offers an explicit choice when the linked profile role changed', async ({
     profileExperience: currentExperience({ title: 'VP Engineering' }),
   });
   await openToday(page, state);
-  await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  if (testInfo.project.name === 'mobile-390') {
+    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
   const dialog = page.getByRole('dialog', { name: 'Роль в профиле изменилась' });
   await expect(dialog).toBeVisible();
   await capture(page, testInfo, 'profile-role-changed');
@@ -242,7 +296,14 @@ test('starts a separate diary with the actual role start date', async ({ page },
     profileExperience: currentExperience({ title: 'VP Engineering' }),
   });
   await openToday(page, state);
-  await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  if (testInfo.project.name === 'mobile-390') {
+    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
   await page.getByLabel('Начать новый дневник').check();
   await page.getByLabel('Дата выхода на новую роль').fill('2026-12-20');
   await capture(page, testInfo, 'start-new-diary-choice');
@@ -271,7 +332,14 @@ test('switches the primary workplace using the saved profile places', async ({
       profileExperience: currentExperience(),
     }),
   );
-  await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  if (testInfo.project.name === 'mobile-390') {
+    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+  } else {
+    await page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' })
+      .click();
+  }
   await page.getByRole('button', { name: 'Сменить основное место' }).click();
   const dialog = page.getByRole('dialog', { name: 'Какое место основное?' });
   await expect(dialog.getByRole('radio')).toHaveCount(6);

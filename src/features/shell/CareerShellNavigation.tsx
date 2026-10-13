@@ -4,59 +4,21 @@ import {
   useEffect,
   useRef,
   useState,
-  type ReactElement,
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import {
-  CaretLeft,
-  DotsThree,
-  Notebook,
-  Sparkle,
-  Wallet,
-  ShieldCheck,
-} from '@phosphor-icons/react';
+import { CaretLeft, DotsThree, GearSix, Sparkle, Wallet, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
+import { primaryNavigation, railNavigation, type SectionIcon } from './desktopNavigationItems';
 import { useEscapeLayer } from './escapeLayers';
 import type { ShellSection } from './shellNavigation';
-import {
-  ProfileIcon,
-  ResponsesIcon,
-  TodayIcon,
-  VacanciesIcon,
-  type SectionIconProps,
-} from './sectionIcons';
 import { initialsFor } from './accountIdentity';
-
-type SectionIcon = (props: SectionIconProps) => ReactElement;
-function DiaryIcon({ size = 22, active = false }: SectionIconProps) {
-  return <Notebook size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
-}
-
-type PrimaryTarget = Extract<
-  ShellSection,
-  'today' | 'profile' | 'opportunities' | 'responses' | 'diary'
->;
-
-interface PrimaryNavigationItem {
-  readonly key: PrimaryTarget;
-  readonly label: string;
-  readonly icon: SectionIcon;
-  readonly target: PrimaryTarget;
-}
-
-const primaryNavigation: readonly PrimaryNavigationItem[] = [
-  { key: 'today', label: 'Сегодня', icon: TodayIcon, target: 'today' },
-  { key: 'profile', label: 'Профиль', icon: ProfileIcon, target: 'profile' },
-  { key: 'opportunities', label: 'Вакансии', icon: VacanciesIcon, target: 'opportunities' },
-  { key: 'responses', label: 'Отклики', icon: ResponsesIcon, target: 'responses' },
-  { key: 'diary', label: 'Карьерный дневник', icon: DiaryIcon, target: 'diary' },
-];
 
 export interface NavigationButtonProps {
   readonly label: string;
+  readonly ariaLabel?: string;
   readonly icon: SectionIcon;
   readonly active: boolean;
   readonly disabled?: boolean;
@@ -68,7 +30,16 @@ export const NavigationButton = forwardRef<
   HTMLButtonElement,
   NavigationButtonProps & TooltipTriggerProps
 >(function NavigationButton(
-  { label, icon: ItemIcon, active, disabled = false, lockedReason, onClick, ...tooltipProps },
+  {
+    label,
+    ariaLabel,
+    icon: ItemIcon,
+    active,
+    disabled = false,
+    lockedReason,
+    onClick,
+    ...tooltipProps
+  },
   ref,
 ) {
   return (
@@ -79,7 +50,9 @@ export const NavigationButton = forwardRef<
       disabled={disabled}
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      aria-label={disabled && lockedReason ? `${label}. ${lockedReason}` : label}
+      aria-label={
+        disabled && lockedReason ? `${ariaLabel ?? label}. ${lockedReason}` : (ariaLabel ?? label)
+      }
       {...tooltipProps}
     >
       <ItemIcon size={22} active={active} />
@@ -95,24 +68,37 @@ interface NavigationStateProps {
   readonly onNavigate: (view: ShellSection) => void;
 }
 
-function RailItems(props: NavigationStateProps) {
-  const visibleItems = primaryNavigation.filter(
-    (item) => item.key !== 'diary' || props.isNavigable('diary'),
-  );
+function RailItems(
+  props: NavigationStateProps & {
+    readonly isCareerActive?: boolean;
+    readonly onNavigationHintChange?: (hint?: string) => void;
+  },
+) {
+  const visibleItems = railNavigation;
   return (
     <nav aria-label="Разделы кабинета">
       {visibleItems.map((item) => (
-        <CareerTooltip key={item.key} side="right" content={item.label}>
+        <CareerTooltip key={item.key} side="right" content={item.label} disabled>
           <NavigationButton
             label={item.label}
+            ariaLabel={item.ariaLabel}
             icon={item.icon}
             active={
-              props.activeView === item.target ||
-              (props.activeView === 'automation' && item.target === 'responses')
+              (item.target === 'career' && props.isCareerActive === true) ||
+              (item.target === 'opportunities' &&
+                props.isCareerActive !== true &&
+                props.activeView === 'opportunities') ||
+              (item.target !== 'career' &&
+                item.target !== 'opportunities' &&
+                props.activeView === item.target)
             }
             disabled={!props.isNavigable(item.target)}
             lockedReason={props.lockedReason(item.target)}
             onClick={() => props.onNavigate(item.target)}
+            onMouseEnter={() => props.onNavigationHintChange?.(item.label)}
+            onMouseLeave={() => props.onNavigationHintChange?.()}
+            onFocus={() => props.onNavigationHintChange?.(item.label)}
+            onBlur={() => props.onNavigationHintChange?.()}
           />
         </CareerTooltip>
       ))}
@@ -121,27 +107,28 @@ function RailItems(props: NavigationStateProps) {
 }
 
 function AccountRailButton({
-  session,
   disabled,
   onOpen,
+  onNavigationHintChange,
 }: {
-  readonly session?: AuthUser | null;
   readonly disabled: boolean;
   readonly onOpen: () => void;
+  readonly onNavigationHintChange?: (hint?: string) => void;
 }) {
-  const displayName = session?.displayName ?? session?.username ?? null;
   return (
-    <CareerTooltip side="right" content="Аккаунт">
+    <CareerTooltip side="right" content="Настройки" disabled>
       <button
         className="career-account-button"
         type="button"
         disabled={disabled}
         onClick={onOpen}
         aria-label="Открыть аккаунт"
+        onMouseEnter={() => onNavigationHintChange?.('Настройки')}
+        onMouseLeave={() => onNavigationHintChange?.()}
+        onFocus={() => onNavigationHintChange?.('Настройки')}
+        onBlur={() => onNavigationHintChange?.()}
       >
-        <span className="career-rail-avatar" aria-hidden="true">
-          {initialsFor(displayName)}
-        </span>
+        <GearSix size="1em" aria-hidden="true" />
       </button>
     </CareerTooltip>
   );
@@ -152,14 +139,16 @@ function RailWalletButton({
   disabled,
   lockedReason,
   onOpen,
+  onNavigationHintChange,
 }: {
   readonly active: boolean;
   readonly disabled: boolean;
   readonly lockedReason: string;
   readonly onOpen: () => void;
+  readonly onNavigationHintChange?: (hint?: string) => void;
 }) {
   return (
-    <CareerTooltip side="right" content={disabled ? `Тарифы. ${lockedReason}` : 'Тарифы'}>
+    <CareerTooltip side="right" content={disabled ? `Тарифы. ${lockedReason}` : 'Тарифы'} disabled>
       <button
         type="button"
         className={`career-rail-wallet${active ? ' is-active' : ''}`}
@@ -167,6 +156,10 @@ function RailWalletButton({
         aria-label={disabled ? `Тарифы. ${lockedReason}` : 'Тарифы'}
         aria-current={active ? 'page' : undefined}
         onClick={onOpen}
+        onMouseEnter={() => onNavigationHintChange?.('Тарифы')}
+        onMouseLeave={() => onNavigationHintChange?.()}
+        onFocus={() => onNavigationHintChange?.('Тарифы')}
+        onBlur={() => onNavigationHintChange?.()}
       >
         <Wallet size={22} weight={active ? 'fill' : 'regular'} aria-hidden="true" />
       </button>
@@ -183,11 +176,15 @@ export function CareerNavigationRail({
   lockedReason,
   onNavigate,
   onOpenAccount,
+  isCareerActive,
+  onNavigationHintChange,
 }: NavigationStateProps & {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
   readonly ariaHidden?: boolean;
   readonly onOpenAccount: () => void;
+  readonly isCareerActive?: boolean;
+  readonly onNavigationHintChange?: (hint?: string) => void;
 }) {
   return (
     <aside
@@ -196,19 +193,14 @@ export function CareerNavigationRail({
       aria-label="Основная навигация"
       aria-hidden={ariaHidden || undefined}
     >
-      <button
-        className="career-brand-mark"
-        type="button"
-        onClick={() => onNavigate('today')}
-        aria-label="openqareer, главная"
-      >
-        <BrandMark variant="mark" size={30} />
-      </button>
+      <RailBrandButton onNavigate={onNavigate} />
       <RailItems
         activeView={activeView}
         isNavigable={isNavigable}
         lockedReason={lockedReason}
         onNavigate={onNavigate}
+        isCareerActive={isCareerActive}
+        onNavigationHintChange={onNavigationHintChange}
       />
       <CareerRailBottom
         session={session}
@@ -218,8 +210,22 @@ export function CareerNavigationRail({
         lockedReason={lockedReason}
         onNavigate={onNavigate}
         onOpenAccount={onOpenAccount}
+        onNavigationHintChange={onNavigationHintChange}
       />
     </aside>
+  );
+}
+
+function RailBrandButton({ onNavigate }: Pick<NavigationStateProps, 'onNavigate'>) {
+  return (
+    <button
+      className="career-brand-mark"
+      type="button"
+      onClick={() => onNavigate('today')}
+      aria-label="openqareer, главная"
+    >
+      <BrandMark variant="mark" size={30} />
+    </button>
   );
 }
 
@@ -231,10 +237,12 @@ function CareerRailBottom({
   lockedReason,
   onNavigate,
   onOpenAccount,
+  onNavigationHintChange,
 }: NavigationStateProps & {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
   readonly onOpenAccount: () => void;
+  readonly onNavigationHintChange?: (hint?: string) => void;
 }) {
   return (
     <div className="career-rail-bottom">
@@ -250,8 +258,13 @@ function CareerRailBottom({
         disabled={!isNavigable('tariffs')}
         lockedReason={lockedReason('tariffs')}
         onOpen={() => onNavigate('tariffs')}
+        onNavigationHintChange={onNavigationHintChange}
       />
-      <AccountRailButton session={session} disabled={sessionPending} onOpen={onOpenAccount} />
+      <AccountRailButton
+        disabled={sessionPending}
+        onOpen={onOpenAccount}
+        onNavigationHintChange={onNavigationHintChange}
+      />
     </div>
   );
 }

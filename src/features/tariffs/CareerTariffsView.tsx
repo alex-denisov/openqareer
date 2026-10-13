@@ -111,19 +111,21 @@ function TariffsViewFrame(props: TariffsViewFrameProps) {
 function TariffsDesktopView(props: TariffsViewFrameProps) {
   return (
     <div className="career-tariffs-desktop">
-      <TariffsDesktopHeader onToggleCompare={props.onCompare} />
-      {props.billingPanel}
-      <div className="career-tariffs-ladder">
-        {TARIFF_LEVELS.map((level) => (
-          <TariffCard
-            key={level.id}
-            level={level}
-            activeTierId={props.activeTier}
-            subscription={props.subscription}
-            onSelectTier={props.onSelectTier}
-            onRequestTier={props.onRequestTier}
-          />
-        ))}
+      <div className="career-tariffs-panel">
+        <TariffsDesktopHeader activeTier={props.activeTier} onToggleCompare={props.onCompare} />
+        <div className="career-tariffs-ladder">
+          {TARIFF_LEVELS.map((level) => (
+            <TariffCard
+              key={level.id}
+              level={level}
+              activeTierId={props.activeTier}
+              subscription={props.subscription}
+              billingPanel={props.billingPanel}
+              onSelectTier={props.onSelectTier}
+              onRequestTier={props.onRequestTier}
+            />
+          ))}
+        </div>
       </div>
       <TariffComparisonTable defaultOpen={props.compareOpen} />
     </div>
@@ -169,7 +171,13 @@ function tierForPlan(plan: CandidateBillingSummary['currentPlan']): TariffTierId
   return plan === 'basic' ? 'go' : plan;
 }
 
-function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: () => void }) {
+function TariffsDesktopHeader({
+  activeTier,
+  onToggleCompare,
+}: {
+  readonly activeTier: TariffTierId;
+  readonly onToggleCompare: () => void;
+}) {
   return (
     <div className="career-tariffs-head">
       <div className="career-tariffs-head-row">
@@ -182,8 +190,9 @@ function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: (
         </button>
       </div>
       <p className="career-tariffs-lead">
-        Оплата проходит через Robokassa. Тариф включится после подтверждения платежа; автопродление
-        можно отменить в аккаунте.
+        {activeTier === 'free'
+          ? 'Месячная подписка, автопродление, отмена в 1 клик. Перейти можно на любой тариф, а не только на следующий. Оплата ещё не включена: напишем, когда откроется.'
+          : 'Понижение вступает в силу со следующего периода, повышение сразу с доплатой за остаток месяца.'}
       </p>
     </div>
   );

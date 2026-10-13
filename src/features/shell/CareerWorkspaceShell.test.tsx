@@ -625,7 +625,7 @@ describe('B440 fixed rail contract', () => {
     );
   }
 
-  it('keeps automation inside Responses instead of adding a second rail entry', () => {
+  it('routes the dedicated Automation rail entry to the existing automation workspace', () => {
     const html = shellHtml();
     const automationHtml = shellHtml('automation');
     const rail = automationHtml.slice(
@@ -633,8 +633,14 @@ describe('B440 fixed rail contract', () => {
       automationHtml.indexOf('</aside>'),
     );
     expect(html).not.toContain('career-responses-automation-switch');
-    expect(rail).not.toContain('aria-label="Автоматизация"');
-    expect(rail).toMatch(/<button class="career-nav-button is-active"[^>]*aria-label="Отклики"/u);
+    expect(rail).toMatch(
+      /<button class="career-nav-button(?: is-active)?"[^>]*aria-label="Отклики"/u,
+    );
+    expect(rail.match(/aria-label="Автоматизация"/gu)).toHaveLength(1);
+    expect(rail).toMatch(
+      /<button class="career-nav-button is-active"[^>]*aria-label="Автоматизация"/u,
+    );
+    expect(automationHtml).toContain('data-shell-view="automation"');
     expect(automationHtml).toContain('class="automation-screen"');
   });
 

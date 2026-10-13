@@ -189,7 +189,7 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/users*', async (route) => {
       await route.fulfill({ json: { data: DIRECTORY } });
     });
-    await page.route('**/api/v1/admin/vacancy-sources?offset=*', async (route) => {
+    await page.route('**/api/v1/admin/vacancy-sources**', async (route) => {
       await route.fulfill({
         json: {
           data: {
@@ -216,6 +216,9 @@ test.describe('B089 administrator console', () => {
     await page.route('**/api/v1/admin/vacancy-sources/source-test/sync', async (route) => {
       await route.fulfill({ status: 202, json: { data: { queued: true } } });
     });
+    await page.route('**/api/v1/admin/hh-crawl-filter', (route) =>
+      route.fulfill({ json: { data: null } }),
+    );
 
     await page.goto('/admin', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
