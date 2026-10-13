@@ -200,7 +200,7 @@ function actionableIssues(block: ReviewBlock): readonly ResumeUnknown[] {
 
 function reviewStatus(block: ReviewBlock): string {
   const count = block.issueCount ?? actionableIssues(block).length;
-  if (count) return `${count} ${pluralRu(count, ['замечание', 'замечания', 'замечаний'])}`;
+  if (count) return pluralRu(count, ['замечание', 'замечания', 'замечаний']);
   return block.hasData ? 'Замечаний нет' : 'Неизвестно';
 }
 

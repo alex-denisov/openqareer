@@ -619,6 +619,9 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(reviewRows.first()).toBeVisible();
     for (const row of await reviewRows.all()) {
       await expect(row.locator('.career-profile-screen-review-badge')).toBeVisible();
+      await expect(row.locator('.career-profile-screen-review-badge')).not.toHaveText(
+        /^(\d+) \1 /u,
+      );
     }
     await expect(
       review.getByRole('button', { name: /Собрать факты с консультантом/u }),
