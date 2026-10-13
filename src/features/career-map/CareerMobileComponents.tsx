@@ -1,7 +1,7 @@
 import { useState, type ReactElement } from 'react';
 import {
-  ArrowLeft,
   Briefcase,
+  CaretLeft,
   ChatCircleText,
   CheckCircle,
   ListChecks,
@@ -18,19 +18,18 @@ export function MobileHeader({
   onBack?: () => void;
 }): ReactElement {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px' }}>
+    <div className="career-mobile-header">
       {onBack ? (
         <button
           type="button"
-          className="career-btn career-btn-ghost"
-          style={{ minHeight: '44px', minWidth: '44px', borderRadius: '50%' }}
+          className="career-btn career-btn-ghost career-back-button"
           aria-label="Назад"
           onClick={onBack}
         >
-          <ArrowLeft size={20} />
+          <CaretLeft size={20} />
         </button>
       ) : null}
-      <h2 style={{ margin: 0, fontSize: 'var(--career-text-lg)' }}>{title}</h2>
+      <h2 className="career-mobile-title">{title}</h2>
     </div>
   );
 }
@@ -63,11 +62,10 @@ function MobileRoleBottomCta({
 }): ReactElement | null {
   if (role.nextAction.action === 'fill_with_consultant') {
     return (
-      <div style={{ marginTop: 'auto', paddingBlock: '8px' }}>
+      <div className="career-mobile-bottom-action">
         <button
           type="button"
-          className="career-btn career-btn-primary"
-          style={{ width: '100%' }}
+          className="career-btn career-btn-primary career-btn-block"
           onClick={() => onConsultant(role.id)}
         >
           <ChatCircleText size={18} />
@@ -78,11 +76,10 @@ function MobileRoleBottomCta({
   }
   if (role.nextAction.action === 'check_skills') {
     return (
-      <div style={{ marginTop: 'auto', paddingBlock: '8px' }}>
+      <div className="career-mobile-bottom-action">
         <button
           type="button"
-          className="career-btn career-btn-primary"
-          style={{ width: '100%' }}
+          className="career-btn career-btn-primary career-btn-block"
           onClick={() => onCheckSkills(role.id)}
         >
           <ListChecks size={18} />
@@ -164,15 +161,13 @@ function MobileSalaryCard({
         value={val}
         onChange={(e) => onValChange(e.target.value)}
       />
-      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+      <label className="career-checkbox-label">
         <input
           type="checkbox"
           checked={showNoWage}
           onChange={(e) => onShowNoWageChange(e.target.checked)}
         />
-        <span style={{ fontSize: 'var(--career-text-sm)' }}>
-          Показывать вакансии без зарплаты
-        </span>
+        <span className="career-checkbox-text-sm">Показывать вакансии без зарплаты</span>
       </label>
       <p className="career-role-meta">
         Для вакансий без зарплаты платформа покажет оценку рынка с пометкой «оценка».
@@ -210,8 +205,7 @@ export function MobileConditionSalaryView({
       />
       <button
         type="button"
-        className="career-btn career-btn-primary"
-        style={{ width: '100%', marginTop: 'auto' }}
+        className="career-btn career-btn-primary career-btn-block career-mobile-save-btn"
         onClick={handleSave}
       >
         Сохранить

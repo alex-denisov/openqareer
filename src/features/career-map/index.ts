@@ -20,4 +20,3 @@ export type {
   SearchConditionsDraft,
   CareerPushView,
 } from './careerScreenTypes';
-export { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';

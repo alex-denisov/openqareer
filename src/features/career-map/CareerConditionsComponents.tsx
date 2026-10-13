@@ -26,8 +26,7 @@ function SalaryActionButtons({
     <>
       <button
         type="button"
-        className="career-btn career-btn-primary"
-        style={{ minHeight: '44px', minWidth: '44px' }}
+        className="career-btn career-btn-primary career-btn-icon"
         aria-label="Сохранить"
         onClick={onSave}
       >
@@ -35,8 +34,7 @@ function SalaryActionButtons({
       </button>
       <button
         type="button"
-        className="career-btn career-btn-ghost"
-        style={{ minHeight: '44px', minWidth: '44px' }}
+        className="career-btn career-btn-ghost career-btn-icon"
         aria-label="Отменить"
         onClick={onCancel}
       >
@@ -81,13 +79,13 @@ export function CareerInlineSalaryEditor({
         />
         <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+      <label className="career-checkbox-label">
         <input
           type="checkbox"
           checked={showNoWage}
           onChange={(e) => setShowNoWage(e.target.checked)}
         />
-        <span style={{ fontSize: 'var(--career-text-xs)' }}>Показывать вакансии без зарплаты</span>
+        <span className="career-checkbox-text">Показывать вакансии без зарплаты</span>
       </label>
       {errorMessage ? (
         <div className="career-note career-note-error" role="alert">
@@ -99,11 +97,7 @@ export function CareerInlineSalaryEditor({
   );
 }
 
-function StopListItemsList({
-  items,
-}: {
-  items: SearchConditionsDraft['stopList'];
-}): ReactElement {
+function StopListItemsList({ items }: { items: SearchConditionsDraft['stopList'] }): ReactElement {
   return (
     <ul className="career-check-list">
       {items.map((c) => (
@@ -186,18 +180,18 @@ export function CareerInlineFormatEditor({
   return (
     <div className="career-inline-edit" aria-label="Редактирование формата">
       <h4 className="career-section-subhead">Формат работы</h4>
-      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', margin: '8px 0' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+      <div className="career-format-options">
+        <label className="career-format-option">
           <input type="checkbox" checked={office} onChange={(e) => setOffice(e.target.checked)} />
-          <span style={{ fontSize: 'var(--career-text-xs)' }}>Офис</span>
+          <span className="career-checkbox-text">Офис</span>
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+        <label className="career-format-option">
           <input type="checkbox" checked={hybrid} onChange={(e) => setHybrid(e.target.checked)} />
-          <span style={{ fontSize: 'var(--career-text-xs)' }}>Гибрид</span>
+          <span className="career-checkbox-text">Гибрид</span>
         </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+        <label className="career-format-option">
           <input type="checkbox" checked={remote} onChange={(e) => setRemote(e.target.checked)} />
-          <span style={{ fontSize: 'var(--career-text-xs)' }}>Удалённо</span>
+          <span className="career-checkbox-text">Удалённо</span>
         </label>
       </div>
       <div className="career-inline-row">
@@ -227,7 +221,10 @@ export function CareerInlineGeoEditor({
   const [val, setVal] = useState(initialSelected.join(', '));
 
   const handleSave = () => {
-    const list = val.split(',').map((s) => s.trim()).filter(Boolean);
+    const list = val
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
     onSave(list.length ? list : initialSelected);
   };
 
@@ -305,16 +302,15 @@ function RelocationBox({
   return (
     <div className="career-relocation-box">
       <div className="career-relocation-head">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="career-relocation-title-group">
           <Globe size={18} />
-          <span style={{ fontWeight: 500 }}>Страны и релокация</span>
+          <span className="career-relocation-title">Страны и релокация</span>
           <span className="career-badge">{isRelocationEnabled ? 'Включено' : 'Не включено'}</span>
         </div>
         {!isRelocationEnabled ? (
           <button
             type="button"
-            className="career-btn career-btn-secondary"
-            style={{ minHeight: '36px', padding: '4px 12px' }}
+            className="career-btn career-btn-secondary career-btn-sm"
             onClick={onEnableRelocation}
           >
             Включить релокацию

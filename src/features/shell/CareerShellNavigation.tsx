@@ -70,7 +70,6 @@ interface NavigationStateProps {
 
 function RailItems(
   props: NavigationStateProps & {
-    readonly isCareerActive?: boolean;
     readonly onNavigationHintChange?: (hint?: string) => void;
   },
 ) {
@@ -83,15 +82,7 @@ function RailItems(
             label={item.label}
             ariaLabel={item.ariaLabel}
             icon={item.icon}
-            active={
-              (item.target === 'career' && props.isCareerActive === true) ||
-              (item.target === 'opportunities' &&
-                props.isCareerActive !== true &&
-                props.activeView === 'opportunities') ||
-              (item.target !== 'career' &&
-                item.target !== 'opportunities' &&
-                props.activeView === item.target)
-            }
+            active={item.target === props.activeView}
             disabled={!props.isNavigable(item.target)}
             lockedReason={props.lockedReason(item.target)}
             onClick={() => props.onNavigate(item.target)}
@@ -176,14 +167,12 @@ export function CareerNavigationRail({
   lockedReason,
   onNavigate,
   onOpenAccount,
-  isCareerActive,
   onNavigationHintChange,
 }: NavigationStateProps & {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
   readonly ariaHidden?: boolean;
   readonly onOpenAccount: () => void;
-  readonly isCareerActive?: boolean;
   readonly onNavigationHintChange?: (hint?: string) => void;
 }) {
   return (
@@ -199,7 +188,6 @@ export function CareerNavigationRail({
         isNavigable={isNavigable}
         lockedReason={lockedReason}
         onNavigate={onNavigate}
-        isCareerActive={isCareerActive}
         onNavigationHintChange={onNavigationHintChange}
       />
       <CareerRailBottom
@@ -710,8 +698,8 @@ function CareerMobileMoreMenu({
   return (
     <MoreMenu
       activeView={activeView}
-      isCareerEnabled={isNavigable('opportunities')}
-      careerLockedReason={lockedReason('opportunities')}
+      isCareerEnabled={isNavigable('career')}
+      careerLockedReason={lockedReason('career')}
       isDiaryEnabled={isNavigable('diary')}
       onNavigate={onNavigate}
       onOpenExpert={onOpenExpert}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import {
@@ -460,11 +460,6 @@ function CabinetSection({
   ) => void;
 }) {
   const [relocationOpen, setRelocationOpen] = useState(false);
-  useEffect(() => {
-    if (view === 'career') {
-      onNavigate('opportunities');
-    }
-  }, [view, onNavigate]);
 
   if (view === 'today') {
     return (
@@ -594,10 +589,9 @@ function CabinetSection({
       })}
       premisesLoading={data.loading}
       onSavePremises={onSavePremises}
-      focusRoleFilter={
-        view === 'career' ||
-        Boolean(navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role')
-      }
+      focusRoleFilter={Boolean(
+        navigationOptions?.focusRoleFilter || navigationOptions?.focusFilter === 'role',
+      )}
     />
   );
 }
