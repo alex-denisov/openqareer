@@ -13247,18 +13247,27 @@
     grid-template-columns: 1fr;
   }
   .career-profile-screen-id-row {
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: var(--career-space-4);
   }
   .career-profile-screen-id-row > .career-profile-screen-edit-trigger {
     grid-column: 1 / -1;
+    justify-self: start;
+    font-size: var(--career-text-sm);
   }
   .career-profile-screen-avatar {
-    width: 64px;
-    height: 64px;
-    font-size: var(--career-text-lg);
+    width: 48px;
+    height: 48px;
+    font-size: var(--career-text-md);
   }
   .career-profile-screen-name-row h1 {
-    font-size: var(--career-text-xl);
+    font-size: var(--career-text-lg);
+  }
+  .career-profile-screen-headline {
+    font-size: var(--career-text-sm);
+  }
+  .career-profile-screen-id-row .career-quiet-button {
+    font-size: var(--career-text-sm);
   }
   /* B294: чипы переносятся, а не прячутся за скрытой прокруткой. */
   .career-profile-screen-status-row {
