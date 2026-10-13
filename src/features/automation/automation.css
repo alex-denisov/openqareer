@@ -1380,3 +1380,154 @@
     background-repeat: no-repeat;
   }
 }
+
+/* Макет 6: «Настройка режима» — таблица площадок и карточки поведения отправки. */
+.automation-platform-block,
+.automation-behavior-block {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.automation-platform-block h3,
+.automation-behavior-block h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.automation-platform-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  font-size: var(--career-text-xs);
+}
+
+.automation-platform-table th,
+.automation-platform-table td {
+  padding: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  text-align: start;
+  vertical-align: top;
+}
+
+.automation-platform-table thead th {
+  color: var(--career-text-dim);
+  font-weight: 600;
+}
+
+.automation-platform-table tbody th {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.automation-platform-table tbody tr:last-child > * {
+  border-block-end: 0;
+}
+
+.automation-platform-table label {
+  display: grid;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+}
+
+.automation-platform-table td p {
+  margin: var(--career-space-2) 0 0;
+  color: var(--career-text-dim);
+}
+
+.automation-window-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 12rem));
+  gap: var(--career-space-3);
+}
+
+.automation-behavior-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--career-space-3);
+}
+
+.automation-behavior-card {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-2);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.automation-behavior-card h4 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.automation-behavior-card > p {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+
+.automation-behavior-fields {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.automation-behavior-card .automation-quiet-windows {
+  margin-block-start: 0;
+}
+
+.automation-behavior-card .automation-quiet-windows > div {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-2);
+}
+
+.automation-behavior-card .automation-quiet-windows input {
+  min-inline-size: 0;
+  padding-inline: var(--career-space-2);
+}
+
+@media (max-width: 1100px) {
+  .automation-behavior-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .automation-platform-table thead {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .automation-platform-table,
+  .automation-platform-table tbody,
+  .automation-platform-table tr,
+  .automation-platform-table th,
+  .automation-platform-table td {
+    display: block;
+  }
+
+  .automation-platform-table td::before {
+    content: attr(data-label);
+    display: block;
+    margin-block-end: var(--career-space-1);
+    color: var(--career-text-dim);
+  }
+
+  .automation-window-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.automation-settings-hint {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}

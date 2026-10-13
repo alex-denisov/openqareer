@@ -129,12 +129,26 @@ async function captureAutomationState(
   await mkdir(EVIDENCE_DIR, { recursive: true });
   if (target) {
     await target.waitFor({ state: 'visible' });
-    await target.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    if (!process.env.ACCEPT_FULL) {
+      await target.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+    }
+  }
+  const viewport = page.viewportSize();
+  const fullHeight = process.env.ACCEPT_FULL && viewport;
+  if (fullHeight) {
+    const scrollHeight = await page
+      .locator('.career-main')
+      .evaluate((element) => element.scrollHeight);
+    await page.setViewportSize({
+      width: viewport.width,
+      height: Math.max(viewport.height, scrollHeight),
+    });
   }
   await page.screenshot({
     path: join(EVIDENCE_DIR, `${state}-${projectName}.png`),
     fullPage: false,
   });
+  if (fullHeight && viewport) await page.setViewportSize(viewport);
 }
 
 async function captureAutomationHarness(page: Page, projectName: string) {

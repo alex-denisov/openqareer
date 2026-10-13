@@ -25,25 +25,36 @@ export function AutomationSchedulePanel(props: AutomationSchedulePanelProps) {
   </section>;
 }
 
+type ScheduleUpdate = (
+  change: (current: CandidateAutomationSchedule) => CandidateAutomationSchedule,
+) => void;
+
 function SchedulePlatforms({ schedule, update, onOpenConnections }: {
   readonly schedule: CandidateAutomationSchedule;
-  readonly update: (change: (current: CandidateAutomationSchedule) => CandidateAutomationSchedule) => void;
+  readonly update: ScheduleUpdate;
   readonly onOpenConnections: () => void;
 }) {
-  return <div className="automation-schedule-platforms">
-    <PlatformFields platform="hh" label="hh.ru" limit={schedule.dailyLimits.hh} window={schedule.sendWindows.hh} timezone={schedule.timezone} update={update} />
-    <PlatformFields platform="linkedin" label="LinkedIn" limit={schedule.dailyLimits.linkedin} window={schedule.sendWindows.linkedin} timezone={schedule.timezone} update={update} />
+  return <section className="automation-platform-block" aria-labelledby="automation-platforms-title">
+    <h3 id="automation-platforms-title">Площадки</h3>
+    <table className="automation-platform-table">
+      <thead><tr><th scope="col">Площадка</th><th scope="col">В день</th><th scope="col">Окно отправки</th></tr></thead>
+      <tbody>
+        <PlatformRow platform="hh" label="hh.ru" days="Пн–Пт" limit={schedule.dailyLimits.hh} window={schedule.sendWindows.hh} timezone={schedule.timezone} update={update} />
+        <PlatformRow platform="linkedin" label="LinkedIn" days="Пн–Чт" limit={schedule.dailyLimits.linkedin} window={schedule.sendWindows.linkedin} timezone={schedule.timezone} update={update} />
+      </tbody>
+    </table>
     <button className="automation-link-button" type="button" onClick={onOpenConnections}>Проверить подключение LinkedIn</button>
-  </div>;
+  </section>;
 }
 
-function PlatformFields({ platform, label, limit, window, timezone, update }: {
+function PlatformRow({ platform, label, days, limit, window, timezone, update }: {
   readonly platform: 'hh' | 'linkedin';
   readonly label: string;
+  readonly days: string;
   readonly limit: number;
   readonly window: CandidateAutomationSchedule['sendWindows']['hh'];
   readonly timezone: string;
-  readonly update: (change: (current: CandidateAutomationSchedule) => CandidateAutomationSchedule) => void;
+  readonly update: ScheduleUpdate;
 }) {
   const maximum = platform === 'hh' ? 15 : 10;
   function updateLimit(value: number) {
@@ -52,29 +63,49 @@ function PlatformFields({ platform, label, limit, window, timezone, update }: {
   function updateTime(field: 'start' | 'end', value: string) {
     update((current) => ({ ...current, sendWindows: { ...current.sendWindows, [platform]: { ...current.sendWindows[platform], [field]: value } } }));
   }
-  return <fieldset>
-    <legend>{label}</legend>
-    <label>Лимит в день<input type="number" min={1} max={maximum} value={limit} onChange={(event) => updateLimit(Number(event.currentTarget.value))} /></label>
-    <label>Начало окна<input type="time" value={window.start} onChange={(event) => updateTime('start', event.currentTarget.value)} /></label>
-    <label>Конец окна<input type="time" value={window.end} onChange={(event) => updateTime('end', event.currentTarget.value)} /></label>
-    <p>{platform === 'hh' ? 'Пн–Пт' : 'Пн–Чт'} · время {timezone}</p>
-  </fieldset>;
+  return <tr>
+    <th scope="row">{label}</th>
+    <td data-label="В день"><label>Лимит в день<input type="number" min={1} max={maximum} value={limit} onChange={(event) => updateLimit(Number(event.currentTarget.value))} /></label></td>
+    <td data-label="Окно отправки">
+      <div className="automation-window-fields">
+        <label>Начало окна<input type="time" value={window.start} onChange={(event) => updateTime('start', event.currentTarget.value)} /></label>
+        <label>Конец окна<input type="time" value={window.end} onChange={(event) => updateTime('end', event.currentTarget.value)} /></label>
+      </div>
+      <p>{days} · время {timezone}</p>
+    </td>
+  </tr>;
 }
 
 function ScheduleSafetyFields({ schedule, update }: {
   readonly schedule: CandidateAutomationSchedule;
-  readonly update: (change: (current: CandidateAutomationSchedule) => CandidateAutomationSchedule) => void;
+  readonly update: ScheduleUpdate;
 }) {
-  return <fieldset className="automation-schedule-behavior"><legend>Паузы и безопасность</legend>
-    <div className="automation-settings-grid">
-      <NumberField label="Минимальная пауза, минут" min={2} max={9} value={schedule.minPauseMinutes} onChange={(value) => update((current) => ({ ...current, minPauseMinutes: value }))} />
-      <NumberField label="Максимальная пауза, минут" min={2} max={9} value={schedule.maxPauseMinutes} onChange={(value) => update((current) => ({ ...current, maxPauseMinutes: value }))} />
-      <NumberField label="Перерыв после откликов" min={1} max={20} value={schedule.breakAfterSent} onChange={(value) => update((current) => ({ ...current, breakAfterSent: value }))} />
-      <NumberField label="Длительность перерыва, минут" min={30} max={240} value={schedule.breakMinutes} onChange={(value) => update((current) => ({ ...current, breakMinutes: value }))} />
+  return <section className="automation-behavior-block" aria-labelledby="automation-behavior-title">
+    <h3 id="automation-behavior-title">Поведение отправки, общее для всех площадок</h3>
+    <div className="automation-behavior-grid">
+      <article className="automation-behavior-card">
+        <h4>Пауза между откликами</h4>
+        <p>Интервал выбирается случайно между минимумом и максимумом.</p>
+        <div className="automation-behavior-fields">
+          <NumberField label="Минимальная пауза, минут" min={2} max={9} value={schedule.minPauseMinutes} onChange={(value) => update((current) => ({ ...current, minPauseMinutes: value }))} />
+          <NumberField label="Максимальная пауза, минут" min={2} max={9} value={schedule.maxPauseMinutes} onChange={(value) => update((current) => ({ ...current, maxPauseMinutes: value }))} />
+        </div>
+      </article>
+      <article className="automation-behavior-card">
+        <h4>Окна тишины</h4>
+        <p>В эти часы платформа ничего не отправляет.</p>
+        <QuietWindowFields schedule={schedule} update={update} />
+      </article>
+      <article className="automation-behavior-card">
+        <h4>Паузы поведения</h4>
+        <p>После первой ошибки отправка останавливается до проверки.</p>
+        <div className="automation-behavior-fields">
+          <NumberField label="Перерыв после откликов" min={1} max={20} value={schedule.breakAfterSent} onChange={(value) => update((current) => ({ ...current, breakAfterSent: value }))} />
+          <NumberField label="Длительность перерыва, минут" min={30} max={240} value={schedule.breakMinutes} onChange={(value) => update((current) => ({ ...current, breakMinutes: value }))} />
+        </div>
+      </article>
     </div>
-    <QuietWindowFields schedule={schedule} update={update} />
-    <p>После первой ошибки отправка останавливается до проверки.</p>
-  </fieldset>;
+  </section>;
 }
 
 function NumberField({ label, min, max, value, onChange }: {
@@ -91,7 +122,7 @@ function QuietWindowFields({ schedule, update }: {
   readonly schedule: CandidateAutomationSchedule;
   readonly update: (change: (current: CandidateAutomationSchedule) => CandidateAutomationSchedule) => void;
 }) {
-  return <div className="automation-quiet-windows"><strong>Окна тишины</strong>
+  return <div className="automation-quiet-windows">
     {schedule.quietWindows.map((window, index) => <div key={`${window.start}-${index}`}>
       <TimeField label="С" value={window.start} onChange={(value) => updateQuietWindow(update, index, 'start', value)} />
       <TimeField label="До" value={window.end} onChange={(value) => updateQuietWindow(update, index, 'end', value)} />
@@ -108,7 +139,7 @@ function updateQuietWindow(update: (change: (current: CandidateAutomationSchedul
 }
 
 function MaterialsNote() {
-  return <section className="automation-materials-note" aria-labelledby="automation-materials-title"><h3 id="automation-materials-title">Материалы отклика</h3><p>Состав материалов берётся из документов, привязанных к вакансии. Отдельных настроек тона и длины сейчас нет; письмо можно править в очереди до одобрения.</p></section>;
+  return <p className="automation-settings-hint">Состав материалов берётся из документов, привязанных к вакансии; письмо можно править в очереди до одобрения.</p>;
 }
 
 function runtimeStatusLabel(status: CandidateAutomationRuntime['status']): string {
