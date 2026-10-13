@@ -19,7 +19,10 @@ export function OpportunityTabs({
   const tabs: Array<{ id: OpportunityTab; label: string }> = [
     { id: 'selection', label: `Подборка ${totalVacancies}` },
     { id: 'saved', label: `Сохранённые ${savedCount}` },
-    { id: 'companies', label: companiesCount === undefined ? 'Компании и люди' : `Компании и люди ${companiesCount}` },
+    {
+      id: 'companies',
+      label: companiesCount === undefined ? 'Компании и люди' : `Компании и люди ${companiesCount}`,
+    },
   ];
   return (
     <div className="companies-people-tabs" role="tablist" aria-label="Разделы вакансий">
@@ -28,11 +31,15 @@ export function OpportunityTabs({
           type="button"
           role="tab"
           aria-selected={active === tab.id}
+          aria-label={tab.label}
           className="companies-people-tab"
           key={tab.id}
           onClick={() => onSelect(tab.id)}
         >
-          {tab.label}
+          <span className="opportunity-tab-label-desktop">{tab.label}</span>
+          <span className="opportunity-tab-label-mobile">
+            {tab.id === 'companies' ? 'Компании' : tab.id === 'saved' ? 'Сохранённые' : 'Подборка'}
+          </span>
         </button>
       ))}
     </div>

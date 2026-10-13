@@ -27,6 +27,31 @@ function snapshotLabel(value?: string): string | undefined {
   }).format(parsed);
 }
 
+function summaryHeadline(
+  poolTotal: number,
+  catalogSummary: MatchedVacancyFacets['catalogSummary'],
+): string {
+  if (catalogSummary?.catalogTotal === undefined) {
+    return countLabel(poolTotal) + ' вакансий в подборке по роли и уровню.';
+  }
+  return (
+    countLabel(catalogSummary.roleLevelMatches) +
+    ' из ' +
+    countLabel(catalogSummary.catalogTotal) +
+    ' вакансий каталога подходят по роли и уровню.'
+  );
+}
+
+function catalogProvenance(
+  catalogSummary: MatchedVacancyFacets['catalogSummary'],
+  asOf?: string,
+): string {
+  if (catalogSummary?.catalogTotal === undefined) {
+    return 'Размер каталога и дата обновления неизвестны.';
+  }
+  return asOf ? 'Каталог на ' + asOf : 'Дата каталога неизвестна.';
+}
+
 export function VacanciesScreenSummary({
   poolTotal,
   filteredTotal,
@@ -36,12 +61,9 @@ export function VacanciesScreenSummary({
   catalogSummary,
   onReset,
 }: VacanciesScreenSummaryProps) {
-  const catalogCount = catalogSummary?.roleLevelMatches ?? poolTotal;
-  const catalogTotal = catalogSummary?.catalogTotal;
+  const catalogCount =
+    catalogSummary?.catalogTotal !== undefined ? catalogSummary.roleLevelMatches : poolTotal;
   const asOf = snapshotLabel(catalogSummary?.observedAt);
-  const headline = catalogTotal
-    ? `${countLabel(catalogCount)} из ${countLabel(catalogTotal)} вакансий каталога подходят по роли и уровню.`
-    : `${countLabel(poolTotal)} вакансий в подборке по роли и уровню.`;
   const shownLabel = poolComplete ? 'Показано' : 'Загружено';
 
   return (
@@ -50,10 +72,12 @@ export function VacanciesScreenSummary({
         {countLabel(catalogCount)}
       </span>
       <p className="vacancies-summary-copy">
-        <span>{headline}</span>
+        <span>{summaryHeadline(poolTotal, catalogSummary)}</span>
         <span>
           {shownLabel} {countLabel(shownCount)} из {countLabel(filteredTotal)} с вашими условиями
-          {asOf ? ` · каталог на ${asOf}` : ''}
+        </span>
+        <span className="vacancies-summary-provenance">
+          {catalogProvenance(catalogSummary, asOf)}
         </span>
       </p>
       <button

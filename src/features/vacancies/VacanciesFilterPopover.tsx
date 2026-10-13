@@ -1,5 +1,12 @@
 import { CaretRight } from '@phosphor-icons/react';
-import { useEffect, useState, type Dispatch, type ReactNode, type Ref, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type Ref,
+  type SetStateAction,
+} from 'react';
 
 import { VacancyAddRoleRow } from './VacancyAddRoleRow';
 import { CareerRoutePremises } from '../cabinet/CareerRoutePremises';
@@ -16,6 +23,7 @@ import type { VacanciesScreenFiltersProps } from './VacanciesScreenFilters';
 
 export interface VacanciesFilterPopoverProps {
   readonly title: string;
+  readonly activeGroup?: VacancyFilterGroup | null;
   readonly open: boolean;
   readonly mobileOpen: boolean;
   readonly onClose: () => void;
@@ -24,6 +32,7 @@ export interface VacanciesFilterPopoverProps {
 
 export function VacanciesFilterPopover({
   title,
+  activeGroup,
   open,
   mobileOpen,
   onClose,
@@ -34,6 +43,7 @@ export function VacanciesFilterPopover({
       id="vacancies-filter-popover"
       className={`filters-panel vacancies-filters${open ? ' is-expanded' : ''}${mobileOpen ? ' is-mobile-open' : ''}`}
       aria-label="Фильтры"
+      data-active-group={activeGroup ?? 'all'}
       hidden={!open}
     >
       <div className="filters-panel-head">

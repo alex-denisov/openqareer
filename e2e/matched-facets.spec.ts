@@ -29,9 +29,6 @@ async function openFilterGroup(page: Page, groupId: string) {
     if (!(await page.locator('.vacancies-filters.is-mobile-open').isVisible())) {
       await page.locator('.vacancies-mobile-filter-toggle').click();
     }
-    const backToOverview = page.getByRole('button', { name: 'Все фильтры', exact: true });
-    if (await backToOverview.isVisible()) await backToOverview.click();
-    await page.locator(`[data-filter-sheet-group="${groupId}"]`).click();
     return;
   }
   const group = page.locator(`[data-filter-group="${groupId}"]`);
@@ -39,7 +36,10 @@ async function openFilterGroup(page: Page, groupId: string) {
 }
 
 async function applyFilterDraft(page: Page) {
-  await page.getByRole('button', { name: 'Применить', exact: true }).click();
+  const name = await page.evaluate(() =>
+    window.matchMedia('(max-width: 760px)').matches ? 'Показать результаты' : 'Применить',
+  );
+  await page.getByRole('button', { name, exact: true }).click();
 }
 
 async function expectMatchedCount(page: Page, count: string) {
@@ -54,6 +54,10 @@ async function applyFacet(
   count?: string,
 ) {
   await openFilterGroup(page, group);
+  if (group === 'roles') {
+    const levels = filters.locator('.vacancies-level-filter');
+    if ((await levels.getAttribute('open')) === null) await levels.locator('summary').click();
+  }
   await filters.getByRole('button', { name: label }).click();
   await applyFilterDraft(page);
   if (count) await expectMatchedCount(page, count);

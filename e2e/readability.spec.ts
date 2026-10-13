@@ -182,8 +182,16 @@ async function openSection(
   page: Page,
   label: (typeof SECTIONS)[number] | 'Отклики',
 ): Promise<void> {
+  const mobileViewport = (page.viewportSize()?.width ?? 1440) <= 760;
+  if (
+    label === 'Вакансии' &&
+    mobileViewport &&
+    (await page.locator('.vacancies-filters.is-mobile-open').isVisible())
+  ) {
+    await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
+  }
   if (label === 'Роль') {
-    if ((page.viewportSize()?.width ?? 1440) >= 761) {
+    if (!mobileViewport) {
       await page
         .getByRole('navigation', { name: 'Разделы кабинета' })
         .getByRole('button', { name: 'Карьера', exact: true })
@@ -207,8 +215,10 @@ async function openSection(
   }
   const landmark = {
     Сегодня: page.locator('.career-today'),
-    // S11-CAR: рейловая кнопка «Карьера» открывает .career-screen; мобильный шаг может вести в .vacancies-content
-    Роль: page.locator('.career-screen, .vacancies-content').first(),
+    // Mobile role entry opens the focused role-filter screen in the vacancies route.
+    Роль: mobileViewport
+      ? page.locator('.vacancies-filters.is-mobile-open')
+      : page.locator('.career-screen, .vacancies-content').first(),
     Вакансии: page.locator('.vac-list-item').first(),
     Отклики: page.getByRole('heading', { name: 'Отклики', exact: true }),
   }[label];

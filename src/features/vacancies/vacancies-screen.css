@@ -43,7 +43,7 @@
 }
 
 .career-shell--vacancies .career-main {
-  padding: var(--career-space-6) var(--career-space-8);
+  padding: 0;
 }
 
 .career-shell--vacancies .career-page-header-kicker,
@@ -93,6 +93,11 @@
   color: var(--career-text-soft);
 }
 
+.vacancies-summary-provenance {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
 .vacancies-summary-reset {
   min-block-size: var(--career-target-min);
   padding-inline: var(--career-space-3);
@@ -116,6 +121,10 @@
   align-items: center;
   gap: var(--career-space-4);
   min-inline-size: 0;
+}
+
+.opportunity-tab-label-mobile {
+  display: none;
 }
 
 .vacancies-tabs-row .companies-people-tabs {
@@ -218,6 +227,134 @@
   overflow: auto;
   background: var(--career-bg-elevated);
   box-shadow: var(--career-shadow-tooltip);
+}
+
+@media (min-width: 761px) {
+  .career-shell--vacancies
+    .vacancies-filters[data-active-group]:not([data-active-group='all'])
+    .filters-panel-head {
+    display: none;
+  }
+}
+
+.vacancies-filters[data-active-group='roles'] {
+  width: min(100%, calc(var(--career-target-min) * 8));
+}
+
+.vacancies-filters[data-active-group='locations'] {
+  width: min(100%, calc(var(--career-target-min) * 12 + var(--career-space-4)));
+}
+
+.vacancies-filters[data-active-group='salary'],
+.vacancies-filters[data-active-group='format'] {
+  width: min(100%, calc(var(--career-target-min) * 8));
+}
+
+.vacancies-filters[data-active-group='sources'] {
+  width: min(100%, calc(var(--career-target-min) * 10));
+}
+
+.vacancies-filters[data-active-group='roles'] .chip-row {
+  display: grid;
+  gap: 0;
+}
+
+.vacancies-filters[data-active-group='roles'] .vacancy-facet-chip {
+  justify-content: flex-start;
+  inline-size: 100%;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-2);
+  border: 0;
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+  background: transparent;
+  text-align: start;
+}
+
+.vacancies-filters[data-active-group='roles'] .vacancy-facet-chip:hover,
+.vacancies-filters[data-active-group='roles'] .vacancy-facet-chip[aria-pressed='true'] {
+  background: var(--career-surface-soft);
+}
+
+.vacancies-level-filter,
+.vacancies-custom-role-filter {
+  min-inline-size: 0;
+}
+
+.vacancies-level-filter > summary,
+.vacancies-custom-role-filter > summary {
+  min-block-size: var(--career-target-min);
+  display: flex;
+  align-items: center;
+  padding-inline: var(--career-space-2);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vacancies-level-filter > summary:focus-visible,
+.vacancies-custom-role-filter > summary:focus-visible {
+  outline: var(--career-border-width) solid var(--career-focus);
+  outline-offset: var(--career-border-width);
+}
+
+.vacancy-facet-chip-indicator {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--career-space-6);
+  block-size: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-accent-ink);
+  background: transparent;
+}
+
+.vacancy-facet-chip[aria-pressed='true'] .vacancy-facet-chip-indicator {
+  border-color: var(--career-accent);
+  background: var(--career-accent);
+}
+
+.vacancy-facet-chip-check {
+  inline-size: var(--career-text-xs);
+  block-size: var(--career-text-xs);
+}
+
+.vacancy-facet-chip-copy {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.vacancies-filters[data-active-group='roles'] .career-route-premises {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.vacancies-filters[data-active-group='roles'] .career-route-premises > header {
+  justify-content: flex-end;
+  padding: 0;
+}
+
+.vacancies-filters[data-active-group='roles'] .career-route-premises > header > div,
+.vacancies-filters[data-active-group='roles'] .career-route-premises > dl,
+.vacancies-filters[data-active-group='roles'] .career-route-premises > p {
+  display: none;
+}
+
+.vacancies-filters[data-active-group='roles'] .career-route-premises > header button {
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-2);
+  border: 0;
+  color: var(--career-accent);
+  background: transparent;
 }
 
 .vacancies-table-header {
@@ -330,12 +467,16 @@
     grid-row: 2;
   }
 
+  .career-shell--vacancies .career-notification-bell-anchor {
+    display: none;
+  }
+
   .career-shell--vacancies .vacancies-mobile-topbar {
     position: sticky;
     inset-block-start: 0;
     z-index: 25;
     display: grid;
-    grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: var(--career-space-2);
     min-block-size: var(--career-mobile-topbar-height);
@@ -350,7 +491,13 @@
     font-size: var(--career-text-lg);
     font-weight: 600;
     line-height: 1.25;
-    text-align: center;
+    text-align: start;
+  }
+
+  .vacancies-mobile-header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-1);
   }
 
   .vacancies-mobile-topbar button {
@@ -363,6 +510,26 @@
     color: var(--career-text-soft);
     background: transparent;
     cursor: pointer;
+  }
+
+  .vacancies-mobile-header-actions button {
+    font-size: var(--career-text-lg);
+  }
+
+  .vacancies-mobile-topbar-icon {
+    inline-size: 1em;
+    block-size: 1em;
+  }
+
+  .vacancies-mobile-topbar button:hover {
+    color: var(--career-accent);
+    background: var(--career-surface-soft);
+  }
+
+  .vacancies-mobile-topbar button:focus-visible {
+    outline: var(--career-border-width) solid var(--career-focus);
+    outline-offset: 0;
+    box-shadow: 0 0 0 var(--career-space-1) var(--career-accent-soft);
   }
 
   .vacancies-screen {
@@ -380,11 +547,23 @@
 
   .vacancies-tabs-row .companies-people-tabs {
     flex: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     width: 100%;
   }
 
   .vacancies-tabs-row .companies-people-tab {
-    flex: 0 0 auto;
+    min-inline-size: 0;
+    padding-inline: var(--career-space-2);
+    white-space: nowrap;
+  }
+
+  .opportunity-tab-label-desktop {
+    display: none;
+  }
+
+  .opportunity-tab-label-mobile {
+    display: inline;
   }
 
   .vacancies-tabs-row .view-switch {
@@ -400,6 +579,34 @@
   }
 
   .vacancies-search-summary {
+    display: none;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-tabs-row,
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-content,
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-saved-panel,
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .companies-and-people,
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
+    .vacancies-mobile-results-summary {
+    display: none;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-filter-section {
+    order: 0;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-search-summary {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    padding-block-end: var(--career-space-2);
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-count {
+    font-size: var(--career-text-2xl);
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-reset {
     display: none;
   }
 
@@ -605,20 +812,64 @@
   }
 
   .vacancies-filters.filters-panel.is-mobile-open {
-    position: fixed;
-    inset-block-start: calc(var(--career-mobile-topbar-height) + var(--career-space-2));
-    inset-inline: var(--career-space-3);
-    inset-block-end: calc(
-      var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom)
-    );
-    z-index: 60;
-    width: auto;
-    max-block-size: calc(
-      100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) -
-        var(--career-space-8)
-    );
+    position: static;
+    inset: auto;
+    z-index: auto;
+    width: 100%;
+    max-block-size: none;
     margin: 0;
-    overflow-y: auto;
-    border-radius: var(--career-radius-lg);
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .vacancies-filters.is-mobile-open .filters-panel-head {
+    padding-block: var(--career-space-2);
+    border: 0;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
+    .filters-bar.vacancies-filter-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-mobile-filter-toggle {
+    display: none;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-mobile-filter-chips {
+    grid-column: 1;
+  }
+
+  .vacancies-filters.is-mobile-open .vacancies-filter-back {
+    margin-block-end: var(--career-space-2);
+  }
+
+  .vacancies-filters.is-mobile-open .field-group,
+  .vacancies-filters.is-mobile-open .vacancy-source-group {
+    display: grid;
+    gap: var(--career-space-2);
+    padding-block: var(--career-space-3);
+    border-block-end: var(--career-border-width) solid var(--career-line);
+  }
+
+  .vacancies-filters.is-mobile-open .vacancy-source-filter .chip-row {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+
+  .vacancies-filters.is-mobile-open .vacancy-source-filter .vacancy-facet-chip {
+    justify-content: space-between;
+    min-block-size: var(--career-target-min);
+    text-align: start;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
+    .vacancies-filter-actions.is-mobile {
+    position: sticky;
+    inset-block-end: 0;
   }
 }

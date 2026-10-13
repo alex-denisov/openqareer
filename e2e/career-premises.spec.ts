@@ -209,9 +209,10 @@ async function openCareer(page: Page): Promise<void> {
     await expect(filterSheet).toBeVisible();
     await expect(page.locator('.add-role-input')).toBeVisible();
     await filterSheet.getByRole('button', { name: 'Все фильтры', exact: true }).click();
-    const overview = page.locator('.vacancies-mobile-filter-overview');
-    await expect(overview).toBeVisible();
-    await expect(overview.locator('[data-filter-sheet-group]')).toHaveCount(5);
+    await expect(
+      filterSheet.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
+    ).toBeVisible();
+    await expect(filterSheet.locator('.vacancy-format-filter')).toBeVisible();
   } else {
     await expect(page.locator('.career-route-premises')).toBeVisible();
   }
@@ -230,21 +231,12 @@ test.describe('B160 route premises are editable in the cabinet', () => {
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
       await mkdir('output/playwright/C68', { recursive: true });
       await page.screenshot({ path: 'output/playwright/C68/premises-mobile-390.png' });
-      const overview = page.locator('.vacancies-mobile-filter-overview');
-      await overview.locator('[data-filter-sheet-group="roles"]').click();
+      const filterSheet = page.locator('.vacancies-filters.is-mobile-open');
       await expect(page.locator('.add-role-input')).toBeVisible();
-      await page.getByRole('button', { name: 'Все фильтры', exact: true }).click();
-      await page.locator('[data-filter-sheet-group="locations"]').click();
       await expect(
-        page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
+        filterSheet.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
       ).toBeVisible();
-      await page.getByRole('button', { name: 'Все фильтры', exact: true }).click();
-      await page.locator('[data-filter-sheet-group="format"]').click();
-      await expect(
-        page
-          .locator('.vacancies-filters.is-mobile-open')
-          .getByRole('button', { name: /Удалённо/u }),
-      ).toBeVisible();
+      await expect(filterSheet.locator('.vacancy-format-filter')).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
       ).toBeLessThanOrEqual(0);

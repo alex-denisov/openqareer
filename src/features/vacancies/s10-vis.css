@@ -90,28 +90,25 @@
   inline-size: var(--career-target-min);
   min-block-size: var(--career-target-min);
   padding: 0;
-  border: var(--career-border-width) solid var(--career-line);
+  border: 0;
   border-radius: var(--career-radius-sm);
   color: var(--career-text-soft);
   background: transparent;
   cursor: pointer;
   transition:
     color var(--career-motion-quick),
-    border-color var(--career-motion-quick),
     background var(--career-motion-quick);
 }
 
 .vacancies-screen-row-actions .vacancy-collection-actions > .career-vacancy-action:hover,
 .vacancies-screen-expand-action:hover {
-  border-color: var(--career-line-strong);
   color: var(--career-text);
-  background: var(--career-surface);
+  background: var(--career-surface-soft);
 }
 
 .vacancies-screen-row-actions
   .vacancy-collection-actions
   > .career-vacancy-action[aria-pressed='true'] {
-  border-color: var(--career-accent);
   color: var(--career-accent);
   background: var(--career-accent-soft);
 }
@@ -201,6 +198,12 @@
 .vacancies-screen-fit-status .fit-dot.is-no,
 .vacancies-screen-fit-status .fit-dot.is-nearby {
   color: var(--career-warning);
+}
+
+.vacancies-screen-fit-status .fit-dot-icon {
+  inline-size: var(--career-text-xs);
+  block-size: var(--career-text-xs);
+  flex: none;
 }
 
 .vacancies-screen-cell {
@@ -406,8 +409,8 @@
   }
 
   .vacancies-screen-row-shell.vac-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--career-space-2);
+    position: relative;
+    display: block;
     padding: var(--career-space-3);
   }
 
@@ -415,7 +418,7 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: var(--career-space-2) var(--career-space-3);
     min-block-size: 0;
-    padding: 0;
+    padding: 0 var(--career-target-min) 0 0;
   }
 
   .vacancies-screen-cell--role {
@@ -441,14 +444,23 @@
   .vacancies-screen-cell--level::before,
   .vacancies-screen-cell--geo::before,
   .vacancies-screen-cell--salary::before {
-    color: var(--career-text-dim);
-    font-size: var(--career-text-xs);
-    content: attr(data-label);
+    display: none;
+    content: none;
   }
 
   .vacancies-screen-row-actions {
-    justify-content: flex-end;
+    position: absolute;
+    inset-block-start: var(--career-space-3);
+    inset-inline-end: var(--career-space-3);
+    justify-content: center;
     padding: 0;
+  }
+
+  .vacancies-screen-row-actions
+    .vacancy-collection-actions
+    > .career-vacancy-action[data-vacancy-action='want-company'],
+  .vacancies-screen-expand-action {
+    display: none;
   }
 
   .vacancies-screen-detail-grid {
@@ -470,7 +482,15 @@
   }
 
   .vacancies-screen-footer .vacancies-screen-page-count {
-    text-align: center;
+    text-align: start;
+  }
+
+  .vacancies-screen-companies-action {
+    display: none;
+  }
+
+  .vacancies-screen-footer .companies-people-load-more {
+    inline-size: 100%;
   }
 }
 

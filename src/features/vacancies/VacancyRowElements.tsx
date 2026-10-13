@@ -77,6 +77,7 @@ function SavedVacancyAction({ props }: { readonly props: VacancyCollectionAction
     <button
       type="button"
       className={`career-vacancy-action${props.compact ? ' vacancies-icon-action' : ''}`}
+      data-vacancy-action="save"
       aria-label={props.compact ? compactLabel : undefined}
       title={
         props.saveBusy ? label : props.isSaved ? 'Убрать из сохранённых' : 'Сохранить вакансию'
@@ -109,6 +110,7 @@ function WantCompanyAction({ props }: { readonly props: VacancyCollectionActionP
     <button
       type="button"
       className={`career-vacancy-action${props.compact ? ' vacancies-icon-action' : ''}`}
+      data-vacancy-action="want-company"
       aria-label={label}
       title={label}
       aria-pressed={props.companyWantKnown ? Boolean(props.isCompanyWanted) : undefined}

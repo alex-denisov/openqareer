@@ -139,6 +139,26 @@ describe('VacanciesScreen (B250)', () => {
     );
   });
 
+  it('states that catalog scope and freshness are unknown when the API omits them', () => {
+    const html = render({
+      matched: [matchedItem('c-1', 'VP Technology Ops')],
+      total: 1,
+      poolComplete: true,
+      facets: {
+        total: 1,
+        regions: [],
+        remote: 0,
+        levels: [],
+        roles: [],
+        sources: [],
+      },
+    });
+
+    expect(html).toContain('Размер каталога и дата обновления неизвестны.');
+    expect(html).not.toContain('1 620');
+    expect(html).not.toContain('каталог на');
+  });
+
   it('renders the approved desktop column header and corresponding row fields', () => {
     const html = render({
       matched: [matchedItem('c-1', 'Head of Product, Merchant Onboarding')],
@@ -334,7 +354,6 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('Сохранённые 1');
     expect(html).toContain('Компании и люди 61');
   });
-
 
   it('keeps the mobile map control available without optional facet metadata', () => {
     const html = render({ facets: undefined });
