@@ -172,6 +172,13 @@
   cursor: pointer;
 }
 
+.vacancies-filter-group-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
 .vacancies-filter-group-label {
   color: var(--career-text-soft);
 }
