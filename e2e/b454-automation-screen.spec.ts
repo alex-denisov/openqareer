@@ -430,13 +430,16 @@ test('настройки, правила, согласия, посты и экс
   const rules = page.locator('[data-page="rules"]');
   await expect(rules).toBeVisible();
   await captureAutomationState(page, testInfo.project.name, 'rules', rules);
+  await rules.getByRole('button', { name: 'Изменить' }).first().click();
   await rules.locator('#automation-target-roles').fill('Руководитель продукта');
   await rules.getByRole('button', { name: 'Сохранить правила', exact: true }).click();
   await expect(
     page.getByRole('status').filter({ hasText: 'Правила отбора сохранены.' }),
   ).toBeVisible();
-  await rules.getByLabel('Компания').fill('FinCloud');
   await rules.getByRole('button', { name: 'Добавить', exact: true }).click();
+  await rules.getByLabel('Компания').fill('FinCloud');
+  await rules.getByRole('button', { name: 'Добавить в список', exact: true }).click();
+  await rules.getByRole('button', { name: 'Управлять', exact: true }).click();
   await expect(rules.locator('.automation-stop-list')).toContainText('FinCloud');
   await rules.getByRole('button', { name: 'Убрать FinCloud из стоп-компаний' }).click();
   await expect(rules.getByText('Стоп-компаний пока нет.', { exact: true })).toBeVisible();

@@ -1,0 +1,123 @@
+.automation-rules-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-3);
+  padding: var(--career-space-5);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.automation-rules-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.automation-rules-card__head h2 {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+
+.automation-rules-card__hint {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.automation-rules-card__rows {
+  display: grid;
+  margin: 0;
+}
+
+.automation-rule-row {
+  display: grid;
+  grid-template-columns: minmax(0, 14rem) minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--career-space-2) var(--career-space-4);
+  padding-block: var(--career-space-3);
+  border-top: var(--career-border-width) solid var(--career-line);
+}
+
+.automation-rule-row dt,
+.automation-rule-row dd {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  min-inline-size: 0;
+}
+
+.automation-rule-row dt strong {
+  font-size: var(--career-text-sm);
+}
+
+.automation-rule-row dt small,
+.automation-rule-value {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.automation-rule-value {
+  color: var(--career-text);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-rule-row__action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  justify-content: flex-end;
+}
+
+.automation-rule-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.automation-rule-chips li {
+  padding: var(--career-space-1) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-xs);
+}
+
+.automation-rule-chips li.is-empty {
+  color: var(--career-text-soft);
+  border-style: dashed;
+}
+
+.automation-rule-editor {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.automation-rule-platforms {
+  display: flex;
+  gap: var(--career-space-4);
+}
+
+@media (max-width: 720px) {
+  .automation-rules-card {
+    padding: var(--career-space-4);
+  }
+
+  .automation-rule-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .automation-rule-row__action {
+    justify-content: flex-start;
+  }
+}
