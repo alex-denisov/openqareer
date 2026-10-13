@@ -123,13 +123,13 @@ test.describe('B394 offer comparison matrix', () => {
     await expect(responses).toBeEnabled({ timeout: 15_000 });
     await responses.click();
 
-    // Доска должна открыться
-    await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
-
-    // Колонка «Оффер» должна содержать 2 карточки и кнопку сравнения
-    const compareBtn = page.getByTestId('compare-offers-btn');
-    await expect(compareBtn).toBeVisible();
-    await expect(compareBtn).toContainText('Сравнить офферы (2)');
+    // Офферы лежат на своей вкладке раздела «Отклики»
+    await page
+      .getByRole('navigation', { name: 'Разделы откликов' })
+      .getByRole('tab', { name: /Офферы/u })
+      .click();
+    const compareBtn = page.getByRole('button', { name: 'Сравнить офферы', exact: true });
+    await expect(compareBtn).toBeEnabled();
 
     // Кликаем кнопку открытия матрицы
     await compareBtn.click();

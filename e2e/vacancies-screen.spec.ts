@@ -569,7 +569,7 @@ test.describe('B250 vacancies screen', () => {
     const openArchive = page.getByRole('button', { name: 'Открыть архив' });
     await openArchive.click();
 
-    await expect(page.locator('.career-responses-board')).toBeVisible();
+    await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
     const archiveToggle = page.getByRole('button', { name: 'Архив · 1' });
     await expect(archiveToggle).toHaveAttribute('aria-expanded', 'true');
     await expect(archiveToggle).toBeFocused();

@@ -828,8 +828,8 @@ test.describe('B450 responses workspace', () => {
     await expect(selected).toContainText('Компания 900');
     await expect(selected).toContainText('Материалы');
     await expect(selected).toContainText('Доставка');
-    await expect(selected).toContainText('Досье');
-    await expect(selected).toContainText('отдельное проверенное досье не привязано');
+    await expect(selected).toContainText('О компании');
+    await expect(selected).toContainText('проверенная карточка компании не привязана');
     await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-1440.png') });
     await page.setViewportSize({ width: 390, height: 844 });
     await hideConsultantForEvidence(page);

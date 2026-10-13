@@ -92,7 +92,10 @@ async function openPreparation(page: Page, width: number): Promise<void> {
 }
 
 async function startSimulator(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
+  await page
+    .getByRole('dialog', { name: /Интервью/u })
+    .getByRole('button', { name: 'Начать мок-интервью' })
+    .click();
   await expect(
     page.getByRole('heading', { level: 1, name: 'Мок-интервью', exact: true }),
   ).toBeVisible();
@@ -434,7 +437,10 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
         .locator('.career-responses-card')
         .filter({ hasText: interviewApplication.vacancy.title });
       await card.getByRole('button', { name: 'Подготовиться' }).click();
-      await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
+      await page
+        .getByRole('dialog', { name: /Интервью/u })
+        .getByRole('button', { name: 'Начать мок-интервью' })
+        .click();
       await expect(page.locator('.career-mock-source-panel')).toContainText('18 всего');
       await checkAndCapture(page, `${width}-many-stories`, true);
     } finally {

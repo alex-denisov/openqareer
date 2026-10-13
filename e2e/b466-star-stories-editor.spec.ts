@@ -51,7 +51,12 @@ async function openStories(page: Page, width: number): Promise<void> {
     .locator('.career-responses-card')
     .filter({ hasText: 'Руководитель инженерной команды' });
   await expect(card).toBeVisible();
-  await card.getByRole('button', { name: 'Открыть STAR-истории' }).click();
+  await card.click();
+  await page
+    .getByRole('button', { name: 'Открыть STAR-истории' })
+    .filter({ visible: true })
+    .first()
+    .click();
   const dialog = page.getByRole('dialog', { name: 'STAR-истории' });
   await expect(dialog).toBeVisible();
   const background = await dialog.evaluate((element) => getComputedStyle(element).backgroundColor);
@@ -104,10 +109,18 @@ async function expectNoOverflow(page: Page): Promise<void> {
 async function editConfirmedStory(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Добавить историю' }).click();
   await page.getByLabel('Название истории').fill('Сокращение цикла релиза');
-  await page.getByLabel('Ситуация').fill('Команда выпускала обновления раз в две недели.');
-  await page.getByLabel('Задача').fill('Ускорить поставку и сохранить качество.');
-  await page.getByLabel('Действие').fill('Автоматизировал выкладку и упростил проверку.');
-  await page.getByLabel('Результат').fill('Сократил цикл релиза с 14 до 3 дней.');
+  await page
+    .getByRole('textbox', { name: 'Ситуация', exact: true })
+    .fill('Команда выпускала обновления раз в две недели.');
+  await page
+    .getByRole('textbox', { name: 'Задача', exact: true })
+    .fill('Ускорить поставку и сохранить качество.');
+  await page
+    .getByRole('textbox', { name: 'Действие', exact: true })
+    .fill('Автоматизировал выкладку и упростил проверку.');
+  await page
+    .getByRole('textbox', { name: 'Результат', exact: true })
+    .fill('Сократил цикл релиза с 14 до 3 дней.');
   await expect(page.getByRole('alert')).toContainText('Числа в результате');
   await expect(page.getByRole('button', { name: 'Сохранить историю' })).toBeDisabled();
   await page
@@ -143,17 +156,27 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
         'Сократил цикл релиза с 14 до 3 дней.',
       );
       await page.getByRole('button', { name: 'Править STAR-историю' }).click();
-      await page.getByLabel('Действие').fill('Настроил автоматическую выкладку и проверки.');
+      await page
+        .getByRole('textbox', { name: 'Действие', exact: true })
+        .fill('Настроил автоматическую выкладку и проверки.');
       await capture(page, `${width}-star-stories-editor`);
       await page.getByRole('button', { name: 'Сохранить историю' }).click();
       await expect(page.getByRole('button', { name: 'Добавить историю' })).toBeVisible();
       await expect(page.getByText('Настроил автоматическую выкладку и проверки.')).toBeVisible();
       await page.getByRole('button', { name: 'Добавить историю' }).click();
       await page.getByLabel('Название истории').fill('Восстановление сервиса');
-      await page.getByLabel('Ситуация').fill('Сервис стал недоступен.');
-      await page.getByLabel('Задача').fill('Вернуть работу ключевого потока.');
-      await page.getByLabel('Действие').fill('Собрал дежурную команду и устранил причину сбоя.');
-      await page.getByLabel('Результат').fill('Сервис снова работает.');
+      await page
+        .getByRole('textbox', { name: 'Ситуация', exact: true })
+        .fill('Сервис стал недоступен.');
+      await page
+        .getByRole('textbox', { name: 'Задача', exact: true })
+        .fill('Вернуть работу ключевого потока.');
+      await page
+        .getByRole('textbox', { name: 'Действие', exact: true })
+        .fill('Собрал дежурную команду и устранил причину сбоя.');
+      await page
+        .getByRole('textbox', { name: 'Результат', exact: true })
+        .fill('Сервис снова работает.');
       await page.getByRole('button', { name: 'Сохранить историю' }).click();
       await expect(page.getByRole('button', { name: 'Добавить историю' })).toBeVisible();
       await expect(page.getByText('Не подтверждено')).toBeVisible();

@@ -844,19 +844,14 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-responses-board')).toBeVisible();
     await expect(page.locator('.career-responses-card')).toHaveCount(4);
 
-    const colSaved = page.locator('.career-responses-column[aria-label="Хочу"]');
-    const colApplied = page.locator('.career-responses-column[aria-label="Пробовали отправить"]');
-    const colResponded = page.locator('.career-responses-column[aria-label="Ответ"]');
-    const colInterview = page.locator('.career-responses-column[aria-label="Интервью"]');
-    await expect(colSaved).toBeVisible();
-    await expect(colApplied).toBeVisible();
-    await expect(colResponded).toBeVisible();
-    await expect(colInterview).toBeVisible();
+    for (const label of ['Отправлено', 'Ответили', 'Интервью', 'Оффер']) {
+      await expect(page.locator(`.career-responses-column[aria-label="${label}"]`)).toBeVisible();
+    }
 
     await page.screenshot({ path: 'output/playwright/B337/board-1176.png' });
 
     // Open card menu by clicking card body
-    await page.locator('.career-responses-card-body').first().click();
+    await page.getByRole('button', { name: 'Действия с карточкой' }).first().click();
     await expect(page.locator('.career-responses-card-menu')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B337/card-menu-1176.png' });
 

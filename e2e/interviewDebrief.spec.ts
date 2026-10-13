@@ -204,15 +204,15 @@ test.describe('B393 interview debrief and company reminder draft', () => {
     const nav = (await rail.isVisible()) ? rail : mobile;
     await nav.getByRole('button', { name: 'Отклики', exact: true }).click();
 
-    // 2. Находим карточку отклика на этапе «Интервью»
+    // 2. Дебрифинг живёт на вкладке «Подготовка» раздела «Отклики»
     await expect(page.locator('.career-responses-board-wrap')).toBeVisible();
-    const interviewCard = page
-      .locator('.career-responses-card')
-      .filter({ hasText: 'Яндекс Cloud' });
-    await expect(interviewCard).toBeVisible();
+    await page
+      .getByRole('navigation', { name: 'Разделы откликов' })
+      .getByRole('tab', { name: /Подготовка/u })
+      .click();
 
-    // 3. На карточке видна кнопка «Дебрифинг» рядом с «Подготовиться»
-    const debriefBtn = interviewCard.getByRole('button', { name: 'Дебрифинг' });
+    // 3. Кнопка «Дебрифинг» видна у интервью
+    const debriefBtn = page.getByRole('button', { name: 'Дебрифинг' }).first();
     await expect(debriefBtn).toBeVisible();
     await debriefBtn.click();
 
