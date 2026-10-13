@@ -117,6 +117,31 @@ export async function listApplicationsPage(
   return parseApplicationListPage(response, query);
 }
 
+export async function listApplicationsPool(
+  query: ApplicationListQuery = {},
+  signal?: AbortSignal,
+): Promise<ApplicationListPage> {
+  const pageSize = 100;
+  const firstPage = await listApplicationsPage(
+    { ...query, stage: [], limit: pageSize, offset: 0 },
+    signal,
+  );
+  if (firstPage.items.length >= firstPage.meta.total) return firstPage;
+  const offsets = Array.from(
+    { length: Math.ceil((firstPage.meta.total - firstPage.items.length) / pageSize) },
+    (_, index) => firstPage.meta.offset + firstPage.items.length + index * pageSize,
+  );
+  const pages = await Promise.all(
+    offsets.map((offset) =>
+      listApplicationsPage({ ...query, stage: [], limit: pageSize, offset }, signal),
+    ),
+  );
+  return {
+    items: [...firstPage.items, ...pages.flatMap((page) => page.items)],
+    meta: firstPage.meta,
+  };
+}
+
 function applicationQueryParams(query: ApplicationListQuery): URLSearchParams {
   const params = new URLSearchParams({
     tz: String(localTimezoneOffsetMinutes()),

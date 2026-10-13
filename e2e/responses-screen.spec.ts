@@ -281,6 +281,8 @@ async function stubSession(page: Page): Promise<void> {
     if (pathname === '/api/v1/candidate/me') return route.fulfill({ json: { data: SNAPSHOT } });
     if (pathname === '/api/v1/account') return route.fulfill({ json: { data: ACCOUNT } });
     if (pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: [] } });
+    if (pathname === '/api/v1/candidate/me/messages')
+      return route.fulfill({ json: { data: [], meta: { nextOffset: null } } });
     if (pathname === '/api/v1/candidate/workspace')
       return route.fulfill({ json: { data: WORKSPACE_INPUT } });
     if (pathname === '/api/v1/candidate/applications') {
@@ -295,15 +297,22 @@ async function openResponses(page: Page): Promise<void> {
   await page.locator('button[aria-label="Отклики"]:visible').first().click();
 }
 
+async function hideConsultantForEvidence(page: Page): Promise<void> {
+  const closeButton = page.getByRole('button', { name: 'Закрыть карьерного консультанта' });
+  if (await closeButton.isVisible()) await closeButton.click();
+}
+
 test.describe('B251 responses screen', () => {
-  test('keeps applications without a receipt out of «Отправлено»', async ({ page }) => {
+  test('shows the four pipeline stages and keeps receipt status on sent cards', async ({
+    page,
+  }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
     const columns = page.locator('.career-responses-column');
-    await expect(columns).toHaveCount(7);
+    await expect(columns).toHaveCount(4);
 
     const columnCount = async (label: string) =>
       page
@@ -313,24 +322,27 @@ test.describe('B251 responses screen', () => {
         .locator('.career-responses-column-count')
         .innerText();
 
-    await expect.poll(() => columnCount('Хочу')).toBe('2');
-    await expect.poll(() => columnCount('Пробовали отправить')).toBe('3');
-    const deliveredCards = page
+    await expect.poll(() => columnCount('Отправлено')).toBe('5');
+    await page
+      .locator('.career-responses-column[aria-label="Отправлено"]')
+      .getByRole('button', { name: 'Показать ещё 20' })
+      .click();
+    const sentCards = page
       .locator('.career-responses-column')
       .filter({ has: page.getByRole('heading', { name: 'Отправлено', exact: true }) })
       .locator('.career-responses-card');
-    await expect(deliveredCards).toHaveCount(0);
-    await expect(page.getByRole('region', { name: 'Пробовали отправить' })).toContainText(
-      'Не хватает квитанции доставки',
+    await expect(sentCards).toHaveCount(5);
+    await expect(
+      sentCards.filter({ hasText: 'Enterprise Architect, Senior Advisor' }),
+    ).toContainText('Пробовали отправить');
+    await expect(sentCards.filter({ hasText: 'Cloud & Infra Solution Architect' })).toContainText(
+      'Черновик, не отправлено',
     );
-    await expect.poll(() => columnCount('Ответ')).toBe('1');
+    await expect.poll(() => columnCount('Ответили')).toBe('1');
     await expect.poll(() => columnCount('Интервью')).toBe('1');
-    const offerCards = page
-      .locator('.career-responses-column')
-      .filter({ has: page.getByRole('heading', { name: 'Оффер', exact: true }) })
-      .locator('.career-responses-card');
-    await expect(offerCards).toHaveCount(0);
-    await expect.poll(() => columnCount('Отказ')).toBe('1');
+    await expect(
+      page.locator('.career-responses-column[aria-label="Оффер"] .career-responses-column-count'),
+    ).toHaveText('0');
     await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
   });
 
@@ -440,9 +452,7 @@ test.describe('B251 responses screen', () => {
 
     await expect(page.getByRole('button', { name: 'Архив · 2' })).toBeVisible();
     await expect(
-      page.locator(
-        '.career-responses-column[aria-label="Пробовали отправить"] .career-responses-card',
-      ),
+      page.locator('.career-responses-column[aria-label="Отправлено"] .career-responses-card'),
     ).toContainText('Role moved by candidate');
   });
 
@@ -453,6 +463,10 @@ test.describe('B251 responses screen', () => {
     await openResponses(page);
 
     const board = page.locator('.career-responses-board');
+    await page
+      .locator('.career-responses-column[aria-label="Отправлено"]')
+      .getByRole('button', { name: 'Показать ещё 20' })
+      .click();
     await expect(board).toContainText('Enterprise Architect, Senior Advisor');
     await expect(board).toContainText('Peraton');
     await expect(board).toContainText('компания скрыта');
@@ -512,13 +526,13 @@ test.describe('B251 responses screen', () => {
 
     await conflict.getByRole('button', { name: 'Обновить карточку' }).click();
     const updatedCard = page
-      .locator('.career-responses-column[aria-label="Ответ"] .career-responses-card')
+      .locator('.career-responses-column[aria-label="Ответили"] .career-responses-card')
       .filter({ hasText: 'Cloud & Infra Solution Architect' });
     await expect(updatedCard).toBeVisible();
     await expect(updatedCard.getByRole('alert')).toHaveCount(0);
   });
 
-  test('marks a sent follow-up from the response card and refreshes its deadline', async ({
+  test('marks a sent follow-up from the selected response panel and refreshes its deadline', async ({
     page,
   }) => {
     await stubSession(page);
@@ -544,9 +558,14 @@ test.describe('B251 responses screen', () => {
     await openResponses(page);
 
     const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
-    await card.getByRole('button', { name: 'Напоминание отправлено' }).click();
-    await expect(card.getByRole('button', { name: 'Напоминание отправлено' })).toHaveCount(0);
-    await expect(card).toContainText('Отправлен · рано для напоминания компании');
+    await card.locator('.career-responses-card-body').click();
+    const selectedPanel = page.locator('.career-responses-selected');
+    await expect(selectedPanel).toBeVisible();
+    await selectedPanel.getByRole('button', { name: 'Напоминание отправлено' }).click();
+    await expect(selectedPanel.getByRole('button', { name: 'Напоминание отправлено' })).toHaveCount(
+      0,
+    );
+    await expect(selectedPanel).toContainText('Отправлен · рано для напоминания компании');
   });
 
   test('the screen fits 1440 and 390 with no horizontal overflow', async ({ page }, testInfo) => {
@@ -657,7 +676,7 @@ test.describe('B251 responses screen', () => {
     await expect(page.locator('.career-path')).toHaveCount(0);
   });
 
-  test('B450: переключение колонок и таблицы открывает результативность по каналам', async ({
+  test('B450: columns, table and channel performance use the same response cohort', async ({
     page,
   }, testInfo) => {
     await stubSession(page);
@@ -680,10 +699,21 @@ test.describe('B251 responses screen', () => {
     await page.screenshot({ path: testInfo.outputPath('b450-table-1440.png'), fullPage: true });
     await page.getByRole('button', { name: 'Колонки', exact: true }).click();
     await expect(page.locator('.career-responses-board')).toBeVisible();
-    await page.getByRole('button', { name: 'Результативность по каналам' }).click();
-    await expect(page.locator('.career-pipeline-analytics')).toBeVisible();
-    await expect(page.locator('.career-pipeline-sources-table')).toBeVisible();
+    const channelSection = page.locator('.career-responses-channel-performance');
+    await expect(channelSection).toBeVisible();
+    await expect(channelSection).toContainText('выборка 7');
+    await expect(channelSection.locator('tbody tr')).toHaveCount(2);
+    await expect(channelSection).toContainText('Ввод вручную');
     await page.screenshot({ path: testInfo.outputPath('b450-channels-1440.png'), fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await hideConsultantForEvidence(page);
+    await channelSection.scrollIntoViewIfNeeded();
+    await channelSection.screenshot({ path: testInfo.outputPath('b450-channels-390.png') });
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath('b450-channels-harness.html'),
+      '.career-responses-channel-performance',
+    );
   });
 
   test('B414: единое оформление select доказательства доставки и этапа', async ({ page }) => {

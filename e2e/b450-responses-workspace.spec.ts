@@ -1,4 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { createMockInterviewSimulatorFixture } from './fixtures/mockInterviewSimulator';
+import { captureCareerHarness } from './helpers/capture-career-harness';
 
 type RecordValue = Record<string, unknown>;
 type ApplicationRecord = RecordValue & { id: string; stage: string; vacancy: RecordValue | null };
@@ -81,6 +83,42 @@ const snapshot = {
   vacancySubscriptions: [],
 };
 
+const starStoriesSnapshot = {
+  facts: [
+    {
+      id: 'evidence-1',
+      statement: 'Сократил время закрытия вакансий на 30%',
+      domain: 'result',
+      createdAt: '2026-09-15T10:00:00.000Z',
+    },
+  ],
+  stories: [
+    {
+      id: 'story-crisis',
+      version: 1,
+      title: 'Кризис в команде: уход ведущего инженера',
+      fields: {
+        situation: 'Ведущий инженер ушёл перед релизом.',
+        task: 'Сохранить дату выпуска и распределить работу.',
+        action: 'Пересобрал план и провёл ежедневные короткие разборы.',
+        result: 'Сократил время закрытия вакансий на 30%.',
+      },
+      sourceFactIds: ['evidence-1'],
+      confidence: 'confirmed',
+      sourceFacts: [
+        {
+          id: 'evidence-1',
+          statement: 'Сократил время закрытия вакансий на 30%',
+          domain: 'result',
+          createdAt: '2026-09-15T10:00:00.000Z',
+        },
+      ],
+      createdAt: '2026-09-20T10:00:00.000Z',
+      updatedAt: '2026-09-20T10:00:00.000Z',
+    },
+  ],
+};
+
 function offerTerms(baseSalary: number) {
   return {
     baseSalary,
@@ -96,8 +134,10 @@ function offerTerms(baseSalary: number) {
   };
 }
 
-function makeApplication(id: number, stage = 'applied'): ApplicationRecord {
+function makeApplication(id: number, stage = 'applied', needsAction = false): ApplicationRecord {
   const isOffer = stage === 'offer';
+  const isInterview = stage === 'interview';
+  const source = id % 3 === 0 ? 'LinkedIn' : id % 3 === 1 ? 'hh.ru' : 'Indeed';
   return {
     id: 'application-' + id,
     candidateId: candidate.candidateId,
@@ -112,22 +152,43 @@ function makeApplication(id: number, stage = 'applied'): ApplicationRecord {
       title: 'Руководитель платформы ' + id,
       company: 'Компания ' + id,
       companyHidden: false,
-      source: 'hh.ru',
+      source,
       url: null,
       location: 'Москва',
     },
     notes: null,
-    followUpDueAt: null,
-    stageChangedAt: '2026-09-20T10:00:00.000Z',
+    followUpDueAt: needsAction ? '2026-10-10T10:00:00.000Z' : null,
+    stageChangedAt: '2026-10-01T10:00:00.000Z',
     version: 1,
-    createdAt: '2026-09-15T10:00:00.000Z',
-    updatedAt: '2026-09-20T10:00:00.000Z',
-    followUp: null,
-    whoseTurn: 'company',
-    materials: { coverLetter: true, resume: true },
-    nearestInterview: null,
+    createdAt: '2026-09-20T10:00:00.000Z',
+    updatedAt: '2026-10-01T10:00:00.000Z',
+    followUp: needsAction
+      ? {
+          dueAt: '2026-10-10T10:00:00.000Z',
+          urgency: 'overdue',
+          source: 'standard_schedule',
+          daysSinceContact: 14,
+        }
+      : null,
+    whoseTurn: needsAction || isInterview ? 'candidate' : 'company',
+    materials: { coverLetter: id % 5 !== 0, resume: true },
+    nearestInterview: isInterview
+      ? {
+          id: 'interview-' + id,
+          scheduledAt: '2026-10-15T10:00:00.000Z',
+          prepStatus: 'none',
+          round: 1,
+        }
+      : null,
     archiveStaleDays: 30,
-    deliveryReceipt: null,
+    deliveryReceipt:
+      stage !== 'applied'
+        ? null
+        : id % 4 === 0
+          ? { kind: 'failure_note', value: 'Сайт не подтвердил отправку' }
+          : id % 4 === 1
+            ? { kind: 'confirmation_url', value: 'https://jobs.test/receipts/' + id }
+            : null,
     offer: isOffer
       ? { terms: offerTerms(400000 + id * 10000), sourceLabel: 'Сохранено кандидатом' }
       : null,
@@ -135,9 +196,27 @@ function makeApplication(id: number, stage = 'applied'): ApplicationRecord {
 }
 
 function createApplications(): ApplicationRecord[] {
-  return Array.from({ length: 1000 }, (_, index) =>
-    makeApplication(index + 1, index < 2 ? 'offer' : 'applied'),
-  );
+  const firstPage = [
+    ...Array.from({ length: 10 }, () => 'applied'),
+    ...Array.from({ length: 5 }, () => 'responded'),
+    ...Array.from({ length: 4 }, () => 'interview'),
+    'offer',
+  ];
+  const stages = [
+    ...firstPage,
+    ...Array.from({ length: 836 }, () => 'applied'),
+    ...Array.from({ length: 93 }, () => 'responded'),
+    ...Array.from({ length: 18 }, () => 'interview'),
+    'offer',
+    ...Array.from({ length: 16 }, () => 'rejected'),
+    ...Array.from({ length: 16 }, () => 'archived'),
+  ];
+  let actionableApplications = 0;
+  return stages.map((stage, index) => {
+    const needsAction = stage === 'applied' && actionableApplications < 14;
+    if (needsAction) actionableApplications += 1;
+    return makeApplication(index + 1, stage, needsAction);
+  });
 }
 
 function createCompanies() {
@@ -222,15 +301,14 @@ async function handleApplicationRoute(
     calls.applicationQueries.push(url.href);
     const stages = url.searchParams.getAll('stage');
     const channels = url.searchParams.getAll('channel');
-    const filtered = applications.filter(
-      (item) =>
-        (!stages.length || stages.includes(item.stage)) &&
-        (!channels.length || channels.includes(String(item.vacancy?.source ?? ''))),
-    );
+    const from = url.searchParams.get('from') ?? '';
+    const to = url.searchParams.get('to') ?? '';
+    const cohort = filterMockApplications(applications, { channel: channels, from, to });
+    const filtered = filterMockApplications(cohort, { stage: stages });
     const offset = Number(url.searchParams.get('offset') ?? 0);
     const limit = Number(url.searchParams.get('limit') ?? 20);
     const items = filtered.slice(offset, offset + limit);
-    const stageCounts = applications.reduce<Record<string, number>>(
+    const stageCounts = cohort.reduce<Record<string, number>>(
       (counts, item) => ({ ...counts, [item.stage]: (counts[item.stage] ?? 0) + 1 }),
       {},
     );
@@ -251,15 +329,25 @@ async function handleApplicationRoute(
     return true;
   }
   if (path.endsWith('/applications/bulk/preview') && method === 'POST') {
-    calls.applicationBulkPreview = request.postDataJSON() as RecordValue;
-    await fulfill(route, { affectedCount: applications.length, operationId: 'b450-preview' });
+    const body = request.postDataJSON() as RecordValue;
+    const filters = body.filters as RecordValue;
+    const action = body.action as RecordValue;
+    const matches = filterMockApplications(applications, filters);
+    const affectedCount =
+      action.type === 'retry'
+        ? matches.filter((item) => item.deliveryReceipt?.kind === 'failure_note').length
+        : matches.length;
+    calls.applicationBulkPreview = { ...body, affectedCount };
+    await fulfill(route, { affectedCount, operationId: 'b450-preview' });
     return true;
   }
   if (path.endsWith('/applications/bulk') && method === 'POST') {
-    calls.applicationBulkExecute = request.postDataJSON() as RecordValue;
+    const body = request.postDataJSON() as RecordValue;
+    calls.applicationBulkExecute = body;
+    const confirmCount = typeof body.confirmCount === 'number' ? body.confirmCount : 0;
     calls.applicationBulkResponse = {
       state: 'prepared',
-      preparedCount: applications.length,
+      preparedCount: confirmCount,
       sentCount: 0,
     };
     await fulfill(route, calls.applicationBulkResponse);
@@ -308,6 +396,25 @@ async function handleApplicationRoute(
     return true;
   }
   return false;
+}
+
+function filterMockApplications(
+  applications: readonly ApplicationRecord[],
+  filters: RecordValue,
+): ApplicationRecord[] {
+  const stages = Array.isArray(filters.stage) ? filters.stage.map(String) : [];
+  const channels = Array.isArray(filters.channel) ? filters.channel.map(String) : [];
+  const from = typeof filters.from === 'string' ? filters.from : '';
+  const to = typeof filters.to === 'string' ? filters.to : '';
+  return applications.filter((item) => {
+    const date = String(item.createdAt).slice(0, 10);
+    return (
+      (!stages.length || stages.includes(item.stage)) &&
+      (!channels.length || channels.includes(String(item.vacancy?.source ?? ''))) &&
+      (!from || date >= from) &&
+      (!to || date <= to)
+    );
+  });
 }
 
 async function handleCompanyRoute(
@@ -370,6 +477,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
   };
   const applications = createApplications();
   const companies = createCompanies();
+  const interviewFixture = createMockInterviewSimulatorFixture();
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -380,6 +488,34 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
     if (path === '/api/v1/account') return fulfill(route, account);
     if (path === '/api/v1/candidate/connections') return fulfill(route, []);
     if (path === '/api/v1/candidate/workspace') return fulfill(route, null);
+    if (path === '/api/v1/candidate/star-stories' && request.method() === 'GET')
+      return fulfill(route, starStoriesSnapshot);
+    if (path.startsWith('/api/v1/candidate/interview-sessions')) {
+      const response = interviewFixture.handle(
+        path,
+        request.method(),
+        request.method() === 'POST' ? (request.postDataJSON() as Record<string, unknown>) : {},
+      );
+      if (response && 'error' in response) {
+        return route.fulfill({
+          status: response.status ?? 400,
+          json: { error: response.error },
+        });
+      }
+      if (response) {
+        return route.fulfill({
+          status: response.status ?? 200,
+          json: { data: response.data },
+        });
+      }
+    }
+    if (path === '/api/v1/candidate/me/messages') {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [], meta: { nextOffset: null } }),
+      });
+    }
     if (await handleApplicationRoute(route, calls, applications)) return;
     if (await handleCompanyRoute(route, calls, companies)) return;
     await fulfill(route, null);
@@ -441,8 +577,17 @@ async function openResponses(page: Page) {
   ).toBeVisible();
 }
 
+async function hideConsultantForEvidence(page: Page): Promise<void> {
+  const closeButton = page.getByRole('button', { name: 'Закрыть карьерного консультанта' });
+  if (await closeButton.isVisible()) await closeButton.click();
+}
+
+async function waitForResponsesPool(page: Page) {
+  await expect(page.locator('.career-responses-pool-status')).toHaveCount(0);
+}
+
 test.describe('B450 responses workspace', () => {
-  test('1 000 откликов загружаются страницами, а массовый повтор только готовит очередь', async ({
+  test('таблица загружается страницами, а массовый повтор только готовит очередь', async ({
     page,
   }, testInfo) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -450,12 +595,11 @@ test.describe('B450 responses workspace', () => {
     await seedWorkspace(page);
     await page.addInitScript(() => performance.mark('b450-load-start'));
     await openResponses(page);
-    const tableButton = page.getByRole('button', { name: 'Таблица', exact: true });
-    await tableButton.click();
-    await expect(tableButton).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('.career-responses-table')).toBeVisible();
-    const rows = page.locator('.career-responses-table tbody tr');
-    await expect(rows).toHaveCount(20);
+    await expect(page.locator('.career-responses-column[aria-label="Отправлено"]')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Колонки', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     const firstPageMs = await page.evaluate(
       () =>
         performance.now() - (performance.getEntriesByName('b450-load-start')[0]?.startTime ?? 0),
@@ -465,24 +609,44 @@ test.describe('B450 responses workspace', () => {
       contentType: 'text/plain',
     });
     expect(firstPageMs).toBeLessThan(10000);
+    await waitForResponsesPool(page);
+    await page.screenshot({
+      path: testInfo.outputPath('b450-board-after-1440.png'),
+      fullPage: true,
+    });
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath('b450-board-harness.html'),
+      '.career-responses-board-wrap',
+    );
+    const tableButton = page.getByRole('button', { name: 'Таблица', exact: true });
+    await tableButton.click();
+    await expect(tableButton).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.career-responses-table')).toBeVisible();
+    const rows = page.locator('.career-responses-table tbody tr');
+    await expect(rows).toHaveCount(20);
     await page.screenshot({ path: testInfo.outputPath('b450-table-1440.png'), fullPage: true });
     await page.getByRole('button', { name: 'Показать ещё' }).click();
     await expect(rows).toHaveCount(40);
-    await page.getByRole('button', { name: 'Выбрать все 1000 по фильтру' }).click();
+    await page.getByRole('checkbox', { name: 'Выбрать отклики на странице' }).check();
+    await page.getByRole('button', { name: 'Выбрать все 968 по фильтру' }).click();
     await page.getByRole('combobox', { name: 'Действие' }).selectOption('retry');
     await page.getByRole('button', { name: 'Проверить', exact: true }).click();
-    await page.getByRole('button', { name: 'Подтвердить 1000' }).click();
+    const confirm = page.getByRole('button', { name: /Подтвердить \d+/ });
+    const confirmCount = Number((await confirm.textContent())?.match(/\d+/)?.[0] ?? 0);
+    expect(confirmCount).toBeGreaterThan(0);
+    await confirm.click();
     await expect(page.locator('.career-responses-table-wrap [role="status"]')).toContainText(
-      'В очередь подготовлено 1000; отправлено 0.',
+      'В очередь подготовлено ' + confirmCount + '; отправлено 0.',
     );
     expect(calls.applicationBulkPreview).toMatchObject({ action: { type: 'retry' } });
     expect(calls.applicationBulkExecute).toMatchObject({
       action: { type: 'retry' },
-      confirmCount: 1000,
+      confirmCount,
     });
     expect(calls.applicationBulkResponse).toMatchObject({
       state: 'prepared',
-      preparedCount: 1000,
+      preparedCount: confirmCount,
       sentCount: 0,
     });
     expect(calls.outboundRetryPaths).toEqual([]);
@@ -493,7 +657,8 @@ test.describe('B450 responses workspace', () => {
     await installMocks(page);
     await seedWorkspace(page);
     await openResponses(page);
-    await expect(page.locator('.career-responses-column[aria-label="Хочу"]')).toBeHidden();
+    await waitForResponsesPool(page);
+    await expect(page.locator('.career-responses-column[aria-label="Отправлено"]')).toBeVisible();
     await expect(
       page.locator('.career-responses-column .career-responses-card').first(),
     ).toBeInViewport();
@@ -501,7 +666,10 @@ test.describe('B450 responses workspace', () => {
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
-    await page.screenshot({ path: testInfo.outputPath('b450-home-390.png'), fullPage: true });
+    await page.screenshot({
+      path: testInfo.outputPath('b450-board-after-390.png'),
+      fullPage: true,
+    });
   });
 
   test('компании сохраняют желание, следующий шаг, поиск пути и пакетное действие', async ({
@@ -555,7 +723,10 @@ test.describe('B450 responses workspace', () => {
     await page.getByRole('tab', { name: 'Офферы' }).click();
     await expect(page.getByRole('button', { name: 'Сравнить офферы' })).toBeEnabled();
     await page.getByRole('button', { name: 'Добавить оффер' }).click();
-    await page.getByLabel('Компания').fill('Polar Systems');
+    await page
+      .locator('form.career-responses-add-offer')
+      .getByRole('textbox', { name: 'Компания' })
+      .fill('Polar Systems');
     await page
       .locator('form.career-responses-add-offer')
       .getByRole('textbox', { name: 'Роль' })
@@ -579,5 +750,129 @@ test.describe('B450 responses workspace', () => {
         : comparison.locator('.career-offer-matrix-company').filter({ hasText: 'Polar Systems' });
     await expect(companyLabel).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('b450-offers.png'), fullPage: false });
+  });
+
+  test('пустая история консультанта не вызывает ошибку разбора ответа', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await expect(page.getByText('Консультант', { exact: true })).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath('b450-consultant-before-1440.png'),
+      fullPage: true,
+    });
+    await expect(page.getByText(/Ответ сервиса не разобран/)).toHaveCount(0);
+  });
+
+  test('экран показывает вкладку подготовки и строку фильтров из макета 5', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Разделы откликов' })
+        .getByRole('tab', { name: 'Подготовка' }),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Колонки', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(
+      page.getByRole('searchbox', { name: 'Компания, роль или площадка' }),
+    ).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Период откликов' })).toHaveValue('30');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Разделы откликов' })
+        .getByRole('button', { name: 'Автоматизация' }),
+    ).toHaveCount(0);
+    await page.screenshot({
+      path: testInfo.outputPath('b450-layout-after-1440.png'),
+      fullPage: true,
+    });
+  });
+
+  test('поиск находит запись за пределами первой страницы и показывает её реальные статусы', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+
+    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).fill('Компания 900');
+    await page.getByRole('button', { name: 'Таблица', exact: true }).click();
+    const rows = page.locator('.career-responses-table tbody tr');
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('LinkedIn');
+    await page.getByRole('combobox', { name: 'Канал отклика' }).selectOption('hh.ru');
+    await waitForResponsesPool(page);
+    await expect(page.getByRole('heading', { name: 'Отклики не найдены' })).toBeVisible();
+
+    await page.getByRole('combobox', { name: 'Канал отклика' }).selectOption('LinkedIn');
+    await waitForResponsesPool(page);
+    const matchingRow = page
+      .locator('.career-responses-table tbody tr')
+      .filter({ hasText: 'Компания 900' });
+    await expect(matchingRow).toHaveCount(1);
+    await matchingRow.getByRole('button', { name: /Открыть отклик/ }).click();
+    const selected = page.locator('.career-responses-selected');
+    await expect(selected).toContainText('Компания 900');
+    await expect(selected).toContainText('Материалы');
+    await expect(selected).toContainText('Доставка');
+    await expect(selected).toContainText('Досье');
+    await expect(selected).toContainText('отдельное проверенное досье не привязано');
+    await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-1440.png') });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await hideConsultantForEvidence(page);
+    await selected.screenshot({ path: testInfo.outputPath('b450-selected-response-390.png') });
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth),
+    ).toBeLessThanOrEqual(0);
+    await selected.getByRole('button', { name: 'Открыть STAR-истории' }).click();
+    await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toContainText(
+      'Кризис в команде: уход ведущего инженера',
+    );
+  });
+
+  test('вкладка подготовки подключает STAR-истории и существующий поток мок-интервью', async ({
+    page,
+  }, testInfo) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.getByRole('tab', { name: 'Подготовка' }).click();
+    await page.screenshot({ path: testInfo.outputPath('b450-preparation.png'), fullPage: true });
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath('b450-preparation-harness.html'),
+      '.career-responses-preparation',
+    );
+
+    await expect(page.getByRole('heading', { name: 'STAR на фактах профиля' })).toBeVisible();
+    await expect(page.getByText('Кризис в команде: уход ведущего инженера')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Интервью и материалы' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Начать мок-интервью' })).toBeVisible();
+    await page.getByRole('button', { name: 'Начать мок-интервью' }).click();
+
+    const preparationDialog = page.getByRole('dialog', { name: /Интервью:/ });
+    await expect(
+      preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }),
+    ).toBeVisible();
+    await preparationDialog.getByRole('button', { name: 'Начать мок-интервью' }).click();
+    const simulator = page.getByRole('dialog', { name: 'Мок-интервью' });
+    await expect(simulator).toBeVisible();
+    await simulator.getByRole('button', { name: 'Начать', exact: true }).click();
+    const activeSession = page.getByRole('dialog', { name: 'Вопрос' });
+    await expect(activeSession.getByRole('heading', { name: /Вопрос 1 из/ })).toBeVisible();
   });
 });

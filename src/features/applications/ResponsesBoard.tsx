@@ -1,22 +1,13 @@
 import { useEffect, useState } from 'react';
-import {
-  ArrowClockwise,
-  Briefcase,
-  DotsThreeVertical,
-  Scales,
-  WarningCircle,
-} from '@phosphor-icons/react';
+import { ArrowClockwise, Briefcase, WarningCircle } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
-import { deliveryState } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { UseApplications } from './useApplications';
+import { isResponseNeedingAction } from './responsesFiltering';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
-import { PipelineAnalyticsView } from './PipelineAnalyticsView';
-import { OfferComparisonMatrix } from './OfferComparisonMatrix';
-import { OfferEditModal } from './OfferEditModal';
 import { ResponsesWorkspaceScreen } from './ResponsesWorkspace';
 
 interface Column {
@@ -26,13 +17,10 @@ interface Column {
 }
 
 const COLUMNS: readonly Column[] = [
-  { key: 'saved', label: 'Хочу', stages: ['saved'] },
-  { key: 'attempted', label: 'Пробовали отправить', stages: ['applied'] },
-  { key: 'delivered', label: 'Отправлено', stages: ['applied'] },
-  { key: 'responded', label: 'Ответ', stages: ['responded'] },
+  { key: 'sent', label: 'Отправлено', stages: ['saved', 'applied'] },
+  { key: 'responded', label: 'Ответили', stages: ['responded'] },
   { key: 'interview', label: 'Интервью', stages: ['interview'] },
   { key: 'offer', label: 'Оффер', stages: ['offer'] },
-  { key: 'closed', label: 'Отказ', stages: ['rejected'] },
 ];
 
 function useStageFilter(initial?: ApplicationStage) {
@@ -55,7 +43,6 @@ export function ResponsesBoard({
   initialStageFilter,
   initialArchiveOpen,
   initialTab,
-  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
@@ -75,12 +62,6 @@ export function ResponsesBoard({
     );
   }
 
-  const interviewApplications = state.applications.filter((app) => app.stage === 'interview');
-
-  if (stageFilter === 'interview' && interviewApplications.length === 0) {
-    return <InterviewEmptyState onClear={() => setStageFilter(null)} />;
-  }
-
   return (
     <ReadyBoard
       state={state}
@@ -89,7 +70,6 @@ export function ResponsesBoard({
       onStageFilterChange={setStageFilter}
       initialArchiveOpen={initialArchiveOpen}
       initialTab={initialTab}
-      onOpenAutomation={onOpenAutomation}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
@@ -117,10 +97,10 @@ function EmptyState({
   return (
     <>
       <div className="career-responses-empty">
-        <h3>Откликов пока нет</h3>
+        <h3>Откликов пока нет за выбранный период</h3>
         <p>Здесь появится карточка каждого отклика с материалами и следующим шагом.</p>
         <p className="career-responses-empty-step">
-          Откликнитесь на вакансию из подборки, чтобы начать.
+          Выберите другой период. Откликнитесь на вакансию из подборки.
         </p>
         <div className="career-responses-empty-actions">
           <button
@@ -149,23 +129,6 @@ function EmptyState({
         />
       ) : null}
     </>
-  );
-}
-
-function InterviewEmptyState({ onClear }: { onClear: () => void }) {
-  return (
-    <div className="career-responses-empty" role="status">
-      <h3>Интервью пока не назначены</h3>
-      <div className="career-responses-empty-actions">
-        <button
-          type="button"
-          className="career-btn career-btn-secondary career-btn-sm"
-          onClick={onClear}
-        >
-          Открыть все отклики
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -204,25 +167,29 @@ function FilterNotice({ onClear }: { onClear: () => void }) {
 function BoardColumnsList({
   columns,
   state,
+  applications,
+  selectedId,
+  onSelectApplication,
+  visibleCounts,
+  onLoadMore,
+  onSwitchToTable,
   activeMenuCardId,
   onToggleMenu,
   onCloseMenu,
-  onOpenVacancies,
-  onAddManual,
   onOpenExpert,
-  onOpenCompareOffers,
-  onOpenOfferEdit,
 }: {
   columns: readonly Column[];
   state: UseApplications;
+  applications: readonly ApplicationView[];
+  selectedId?: string;
+  onSelectApplication: (id: string) => void;
+  visibleCounts: Readonly<Record<string, number>>;
+  onLoadMore: (column: string) => void;
+  onSwitchToTable: () => void;
   activeMenuCardId: string | null;
   onToggleMenu: (cardId: string) => void;
   onCloseMenu: () => void;
-  onOpenVacancies: () => void;
-  onAddManual: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onOpenCompareOffers?: () => void;
-  onOpenOfferEdit?: (applicationId: string) => void;
 }) {
   return (
     <div className="career-responses-board">
@@ -231,119 +198,72 @@ function BoardColumnsList({
           key={column.key}
           column={column}
           state={state}
+          applications={applications}
+          selectedId={selectedId}
+          onSelectApplication={onSelectApplication}
+          visibleCount={visibleCounts[column.key] ?? 4}
+          onLoadMore={() => onLoadMore(column.key)}
+          onSwitchToTable={onSwitchToTable}
           activeMenuCardId={activeMenuCardId}
           onToggleMenu={onToggleMenu}
           onCloseMenu={onCloseMenu}
-          onOpenVacancies={column.key === 'saved' ? onOpenVacancies : undefined}
-          onAddManual={column.key === 'saved' ? onAddManual : undefined}
           onOpenExpert={onOpenExpert}
-          onOpenCompareOffers={onOpenCompareOffers}
-          onOpenOfferEdit={onOpenOfferEdit}
         />
       ))}
     </div>
   );
 }
 
-function BoardModals({
-  state,
-  modals,
-}: {
-  readonly state: UseApplications;
-  readonly modals: ReturnType<typeof useBoardModals>;
-}) {
-  const editingOfferApp = modals.editingOfferId
-    ? (state.applications.find((application) => application.id === modals.editingOfferId) ?? null)
-    : null;
-
-  return (
-    <>
-      {modals.addingManual ? (
-        <ManualCardFormDialog state={state} onCancel={modals.closeManual} />
-      ) : null}
-      {modals.comparingOffers ? (
-        <OfferComparisonMatrix
-          applications={state.applications.filter(
-            (application) => application.stage === 'offer' || application.offer !== null,
-          )}
-          onClose={modals.closeCompare}
-          onEditOffer={modals.openEditOffer}
-        />
-      ) : null}
-      {editingOfferApp ? (
-        <OfferEditModal
-          application={editingOfferApp}
-          isOpen={true}
-          onClose={modals.closeEditOffer}
-          onSave={state.saveOffer}
-        />
-      ) : null}
-    </>
-  );
-}
-
-function useBoardModals() {
-  const [addingManual, setAddingManual] = useState(false);
-  const [comparingOffers, setComparingOffers] = useState(false);
-  const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
-
-  return {
-    addingManual,
-    comparingOffers,
-    editingOfferId,
-    openManual: () => setAddingManual(true),
-    closeManual: () => setAddingManual(false),
-    openCompare: () => setComparingOffers(true),
-    closeCompare: () => setComparingOffers(false),
-    openEditOffer: (id: string) => setEditingOfferId(id),
-    closeEditOffer: () => setEditingOfferId(null),
-  };
-}
-
 interface BoardColumnsAndArchiveProps {
   readonly state: UseApplications;
+  readonly applications: readonly ApplicationView[];
   readonly visibleColumns: readonly Column[];
   readonly initialArchiveOpen?: boolean;
+  readonly selectedId?: string;
+  readonly onSelectApplication: (id: string) => void;
+  readonly visibleCounts: Readonly<Record<string, number>>;
+  readonly onLoadMore: (column: string) => void;
+  readonly onSwitchToTable: () => void;
   readonly activeMenuCardId: string | null;
   readonly onToggleMenu: (id: string) => void;
   readonly onCloseMenu: () => void;
-  readonly onOpenVacancies: () => void;
-  readonly onAddManual: () => void;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
     subjectTitle?: string,
   ) => void;
-  readonly onOpenCompareOffers: () => void;
-  readonly onOpenOfferEdit: (applicationId: string) => void;
 }
 
 function BoardColumnsAndArchive({
   state,
+  applications,
   visibleColumns,
   initialArchiveOpen,
+  selectedId,
+  onSelectApplication,
+  visibleCounts,
+  onLoadMore,
+  onSwitchToTable,
   activeMenuCardId,
   onToggleMenu,
   onCloseMenu,
-  onOpenVacancies,
-  onAddManual,
   onOpenExpert,
-  onOpenCompareOffers,
-  onOpenOfferEdit,
 }: BoardColumnsAndArchiveProps) {
   return (
     <>
       <BoardColumnsList
         columns={visibleColumns}
         state={state}
+        applications={applications}
+        selectedId={selectedId}
+        onSelectApplication={onSelectApplication}
+        visibleCounts={visibleCounts}
+        onLoadMore={onLoadMore}
+        onSwitchToTable={onSwitchToTable}
         activeMenuCardId={activeMenuCardId}
         onToggleMenu={onToggleMenu}
         onCloseMenu={onCloseMenu}
-        onOpenVacancies={onOpenVacancies}
-        onAddManual={onAddManual}
         onOpenExpert={onOpenExpert}
-        onOpenCompareOffers={onOpenCompareOffers}
-        onOpenOfferEdit={onOpenOfferEdit}
       />
       <ArchivedResponsesSection
         applications={state.applications.filter((a) => a.stage === 'archived')}
@@ -354,50 +274,57 @@ function BoardColumnsAndArchive({
   );
 }
 
-function BoardTabContent({
-  state,
-  visibleColumns,
-  initialArchiveOpen,
-  stageFilter,
-  onClearFilter,
-  onOpenVacancies,
-  onOpenExpert,
-}: {
-  readonly state: UseApplications;
-  readonly visibleColumns: readonly Column[];
-  readonly initialArchiveOpen?: boolean;
+type BoardTabContentProps = Omit<
+  BoardColumnsAndArchiveProps,
+  'activeMenuCardId' | 'onToggleMenu' | 'onCloseMenu'
+> & {
   readonly stageFilter?: ApplicationStage | null;
   readonly onClearFilter?: () => void;
-  readonly onOpenVacancies: () => void;
-  readonly onOpenExpert?: (
-    stage: CoachTurnStage,
-    subject?: CoachTurnSubject,
-    subjectTitle?: string,
-  ) => void;
-}) {
-  const modals = useBoardModals();
-  const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
+};
 
+function BoardTabContent(props: BoardTabContentProps) {
+  const [activeMenuCardId, setActiveMenuCardId] = useState<string | null>(null);
+  return (
+    <BoardTabColumnsContent
+      props={props}
+      activeMenuCardId={activeMenuCardId}
+      onToggleMenu={(id) => setActiveMenuCardId((current) => (current === id ? null : id))}
+      onCloseMenu={() => setActiveMenuCardId(null)}
+    />
+  );
+}
+
+function BoardTabColumnsContent({
+  props,
+  activeMenuCardId,
+  onToggleMenu,
+  onCloseMenu,
+}: {
+  readonly props: BoardTabContentProps;
+  readonly activeMenuCardId: string | null;
+  readonly onToggleMenu: (id: string) => void;
+  readonly onCloseMenu: () => void;
+}) {
   return (
     <>
-      {stageFilter === 'interview' && onClearFilter ? (
-        <FilterNotice onClear={onClearFilter} />
+      {props.stageFilter === 'interview' && props.onClearFilter ? (
+        <FilterNotice onClear={props.onClearFilter} />
       ) : null}
-      <Legend />
       <BoardColumnsAndArchive
-        state={state}
-        visibleColumns={visibleColumns}
-        initialArchiveOpen={initialArchiveOpen}
+        state={props.state}
+        applications={props.applications}
+        visibleColumns={props.visibleColumns}
+        initialArchiveOpen={props.initialArchiveOpen}
+        selectedId={props.selectedId}
+        onSelectApplication={props.onSelectApplication}
+        visibleCounts={props.visibleCounts}
+        onLoadMore={props.onLoadMore}
+        onSwitchToTable={props.onSwitchToTable}
         activeMenuCardId={activeMenuCardId}
-        onToggleMenu={(id) => setActiveMenuCardId((cur) => (cur === id ? null : id))}
-        onCloseMenu={() => setActiveMenuCardId(null)}
-        onOpenVacancies={onOpenVacancies}
-        onAddManual={modals.openManual}
-        onOpenExpert={onOpenExpert}
-        onOpenCompareOffers={modals.openCompare}
-        onOpenOfferEdit={modals.openEditOffer}
+        onToggleMenu={onToggleMenu}
+        onCloseMenu={onCloseMenu}
+        onOpenExpert={props.onOpenExpert}
       />
-      <BoardModals state={state} modals={modals} />
     </>
   );
 }
@@ -410,7 +337,6 @@ function ReadyBoard({
   initialArchiveOpen,
   initialTab,
   onClearFilter,
-  onOpenAutomation,
   onOpenExpert,
 }: {
   state: UseApplications;
@@ -420,7 +346,6 @@ function ReadyBoard({
   initialArchiveOpen?: boolean;
   initialTab?: 'board' | 'analytics';
   onClearFilter?: () => void;
-  onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
 }) {
   return (
@@ -430,52 +355,72 @@ function ReadyBoard({
       onStageFilterChange={onStageFilterChange}
       onClearFilter={onClearFilter}
       onOpenVacancies={onOpenVacancies}
-      onOpenAutomation={onOpenAutomation}
       onOpenExpert={onOpenExpert}
       initialTab={initialTab}
-      columnsContent={
+      columnsContent={(input) => (
         <BoardColumnsView
+          {...input}
           state={state}
           stageFilter={stageFilter}
           initialArchiveOpen={initialArchiveOpen}
-          onClearFilter={onClearFilter}
-          onOpenVacancies={onOpenVacancies}
           onOpenExpert={onOpenExpert}
         />
+      )}
+      emptyContent={
+        <ReadyBoardEmptyContent
+          state={state}
+          onOpenVacancies={onOpenVacancies}
+          initialArchiveOpen={initialArchiveOpen}
+        />
       }
-      emptyContent={<EmptyState state={state} onOpenVacancies={onOpenVacancies} />}
-      analyticsContent={pipelineAnalyticsContent(state, onOpenVacancies, onOpenExpert)}
     />
   );
 }
 
-function pipelineAnalyticsContent(
-  state: UseApplications,
-  onOpenVacancies: () => void,
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
-) {
+function ReadyBoardEmptyContent({
+  state,
+  onOpenVacancies,
+  initialArchiveOpen,
+}: {
+  readonly state: UseApplications;
+  readonly onOpenVacancies: () => void;
+  readonly initialArchiveOpen?: boolean;
+}) {
   return (
-    <PipelineAnalyticsView
-      applications={state.applications}
-      onOpenVacancies={onOpenVacancies}
-      onOpenExpert={onOpenExpert}
-    />
+    <>
+      <EmptyState state={state} onOpenVacancies={onOpenVacancies} />
+      <ArchivedResponsesSection
+        applications={state.applications.filter((application) => application.stage === 'archived')}
+        initiallyOpen={initialArchiveOpen}
+        onRestore={state.restoreFromArchive}
+      />
+    </>
   );
 }
 
 function BoardColumnsView({
+  applications,
+  selectedId,
+  onSelectApplication,
+  visibleCounts,
+  onLoadMore,
+  onSwitchToTable,
   state,
   stageFilter,
   initialArchiveOpen,
   onClearFilter,
-  onOpenVacancies,
   onOpenExpert,
 }: {
+  readonly applications: readonly ApplicationView[];
+  readonly selectedId?: string;
+  readonly onSelectApplication: (id: string) => void;
+  readonly visibleCounts: Readonly<Record<string, number>>;
+  readonly onLoadMore: (column: string) => void;
+  readonly onSwitchToTable: () => void;
   readonly state: UseApplications;
   readonly stageFilter?: ApplicationStage | null;
   readonly initialArchiveOpen?: boolean;
-  readonly onClearFilter?: () => void;
-  readonly onOpenVacancies: () => void;
+  readonly onClearFilter: () => void;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -488,62 +433,52 @@ function BoardColumnsView({
   return (
     <BoardTabContent
       state={state}
+      applications={applications}
       visibleColumns={visibleColumns}
       initialArchiveOpen={initialArchiveOpen}
+      selectedId={selectedId}
+      onSelectApplication={onSelectApplication}
+      visibleCounts={visibleCounts}
+      onLoadMore={onLoadMore}
+      onSwitchToTable={onSwitchToTable}
       stageFilter={stageFilter}
       onClearFilter={onClearFilter}
-      onOpenVacancies={onOpenVacancies}
       onOpenExpert={onOpenExpert}
     />
-  );
-}
-
-function ManualCardFormDialog({
-  state,
-  onCancel,
-}: {
-  readonly state: UseApplications;
-  readonly onCancel: () => void;
-}) {
-  return (
-    <ManualCardForm
-      onCancel={onCancel}
-      onSubmit={async (input) => {
-        await state.addManualCard(input);
-        onCancel();
-      }}
-    />
-  );
-}
-
-function Legend() {
-  return (
-    <div className="career-responses-legend">
-      <span className="is-on-you">ждём вашего действия</span>
-      <span className="is-on-them">ждём ответа компании</span>
-      <span>материалы на карточке</span>
-    </div>
   );
 }
 
 interface BoardColumnProps {
   column: Column;
   state: UseApplications;
+  applications: readonly ApplicationView[];
+  selectedId?: string;
+  onSelectApplication: (id: string) => void;
+  visibleCount: number;
+  onLoadMore: () => void;
+  onSwitchToTable: () => void;
   activeMenuCardId: string | null;
   onToggleMenu: (cardId: string) => void;
   onCloseMenu: () => void;
-  onOpenVacancies?: () => void;
-  onAddManual?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onOpenCompareOffers?: () => void;
-  onOpenOfferEdit?: (applicationId: string) => void;
 }
 
-function ColumnHeader({ label, count }: { label: string; count: number }) {
+function ColumnHeader({
+  label,
+  count,
+  needsActionCount,
+}: {
+  label: string;
+  count: number;
+  needsActionCount: number;
+}) {
   return (
     <header className="career-responses-column-head">
-      <h2>{label}</h2>
-      <span className="career-responses-column-count">{count}</span>
+      <div>
+        <h2>{label}</h2>
+        <span className="career-responses-column-count">{count.toLocaleString('ru-RU')}</span>
+      </div>
+      <p>Нужно действие: {needsActionCount.toLocaleString('ru-RU')}</p>
     </header>
   );
 }
@@ -551,23 +486,27 @@ function ColumnHeader({ label, count }: { label: string; count: number }) {
 function ColumnCardItem({
   application,
   state,
+  selected,
+  onSelectApplication,
   isMenuOpen,
   onToggleMenu,
   onCloseMenu,
   onOpenExpert,
-  onOpenOfferEdit,
 }: {
   application: ApplicationView;
   state: UseApplications;
+  selected: boolean;
+  onSelectApplication: (id: string) => void;
   isMenuOpen: boolean;
   onToggleMenu: (id: string) => void;
   onCloseMenu: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-  onOpenOfferEdit?: (applicationId: string) => void;
 }) {
   return (
     <ResponsesCard
       application={application}
+      selected={selected}
+      onSelect={() => onSelectApplication(application.id)}
       failed={state.failedChanges.has(application.id)}
       conflicted={state.conflicts.has(application.id)}
       isMenuOpen={isMenuOpen}
@@ -581,79 +520,133 @@ function ColumnCardItem({
       onRetry={() => state.retryStageChange(application.id)}
       onRefresh={state.reload}
       onSaveNote={(notes) => state.saveNote(application.id, notes)}
-      onMarkFollowUpSent={() => state.markFollowUpSent(application.id)}
       onSkip={(reasonId) => void state.skip(application, reasonId)}
-      onOpenOfferEdit={onOpenOfferEdit}
     />
-  );
-}
-
-function CompareOffersButton({
-  count,
-  onOpen,
-}: {
-  readonly count: number;
-  readonly onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className="career-responses-compare-btn"
-      data-testid="compare-offers-btn"
-      onClick={onOpen}
-    >
-      <Scales size={14} /> Сравнить офферы {count > 1 ? `(${count})` : ''}
-    </button>
   );
 }
 
 function BoardColumn({
   column,
   state,
+  applications,
+  selectedId,
+  onSelectApplication,
+  visibleCount,
+  onLoadMore,
+  onSwitchToTable,
   activeMenuCardId,
   onToggleMenu,
   onCloseMenu,
-  onOpenVacancies,
-  onAddManual,
   onOpenExpert,
-  onOpenCompareOffers,
-  onOpenOfferEdit,
 }: BoardColumnProps) {
-  const cards = applicationsForColumn(state.applications, column);
+  const allCards = applicationsForColumn(applications, column);
+  const cards = allCards.slice(0, visibleCount);
+  const needsActionCount = allCards.filter(isResponseNeedingAction).length;
   return (
     <section
-      className={`career-responses-column${cards.length === 0 ? ' is-empty' : ''}`}
+      className={`career-responses-column${allCards.length === 0 ? ' is-empty' : ''}`}
       aria-label={column.label}
     >
-      <ColumnHeader label={column.label} count={cards.length} />
-      <div className="career-responses-column-body">
-        {column.key === 'offer' && cards.length > 0 && onOpenCompareOffers ? (
-          <CompareOffersButton count={cards.length} onOpen={onOpenCompareOffers} />
-        ) : null}
-        {cards.map((application) => (
-          <ColumnCardItem
-            key={application.id}
-            application={application}
-            state={state}
-            isMenuOpen={activeMenuCardId === application.id}
-            onToggleMenu={onToggleMenu}
-            onCloseMenu={onCloseMenu}
-            onOpenExpert={onOpenExpert}
-            onOpenOfferEdit={onOpenOfferEdit}
-          />
-        ))}
-        {column.key === 'offer' && cards.length === 0 ? <OfferPlaceholder /> : null}
-        {onOpenVacancies ? (
-          <AddCardControl
-            menuOpen={activeMenuCardId === 'add-manual'}
-            onToggleMenu={() => onToggleMenu('add-manual')}
-            onCloseMenu={onCloseMenu}
-            onOpenVacancies={onOpenVacancies}
-            onAddManual={onAddManual}
-          />
-        ) : null}
-      </div>
+      <ColumnHeader
+        label={column.label}
+        count={allCards.length}
+        needsActionCount={needsActionCount}
+      />
+      <BoardColumnContent
+        column={column}
+        state={state}
+        cards={cards}
+        totalCount={allCards.length}
+        selectedId={selectedId}
+        onSelectApplication={onSelectApplication}
+        onLoadMore={onLoadMore}
+        onSwitchToTable={onSwitchToTable}
+        activeMenuCardId={activeMenuCardId}
+        onToggleMenu={onToggleMenu}
+        onCloseMenu={onCloseMenu}
+        onOpenExpert={onOpenExpert}
+      />
     </section>
+  );
+}
+
+interface BoardColumnContentProps {
+  readonly column: Column;
+  readonly state: UseApplications;
+  readonly cards: readonly ApplicationView[];
+  readonly totalCount: number;
+  readonly selectedId?: string;
+  readonly onSelectApplication: (id: string) => void;
+  readonly onLoadMore: () => void;
+  readonly onSwitchToTable: () => void;
+  readonly activeMenuCardId: string | null;
+  readonly onToggleMenu: (id: string) => void;
+  readonly onCloseMenu: () => void;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
+}
+
+function BoardColumnContent({
+  column,
+  state,
+  cards,
+  totalCount,
+  selectedId,
+  onSelectApplication,
+  onLoadMore,
+  onSwitchToTable,
+  activeMenuCardId,
+  onToggleMenu,
+  onCloseMenu,
+  onOpenExpert,
+}: BoardColumnContentProps) {
+  return (
+    <div className="career-responses-column-body">
+      {cards.map((application) => (
+        <ColumnCardItem
+          key={application.id}
+          application={application}
+          state={state}
+          selected={selectedId === application.id}
+          onSelectApplication={onSelectApplication}
+          isMenuOpen={activeMenuCardId === application.id}
+          onToggleMenu={onToggleMenu}
+          onCloseMenu={onCloseMenu}
+          onOpenExpert={onOpenExpert}
+        />
+      ))}
+      {totalCount > cards.length ? (
+        <button type="button" className="career-responses-column-more" onClick={onLoadMore}>
+          Показать ещё 20
+        </button>
+      ) : null}
+      {column.key === 'offer' && totalCount === 0 ? <OfferPlaceholder /> : null}
+      <ColumnFooter shown={cards.length} total={totalCount} onSwitchToTable={onSwitchToTable} />
+    </div>
+  );
+}
+
+function ColumnFooter({
+  shown,
+  total,
+  onSwitchToTable,
+}: {
+  readonly shown: number;
+  readonly total: number;
+  readonly onSwitchToTable: () => void;
+}) {
+  return (
+    <footer className="career-responses-column-footer">
+      <span>
+        Показано {shown.toLocaleString('ru-RU')} из {total.toLocaleString('ru-RU')}
+      </span>
+      <button type="button" onClick={onSwitchToTable}>
+        В таблицу
+      </button>
+    </footer>
   );
 }
 
@@ -661,64 +654,13 @@ function applicationsForColumn(
   applications: readonly ApplicationView[],
   column: Column,
 ): readonly ApplicationView[] {
-  return applications.filter(
-    (application) =>
-      column.stages.includes(application.stage) &&
-      (application.stage !== 'applied' || isApplicationInDeliveryColumn(application, column.key)),
-  );
-}
-
-function isApplicationInDeliveryColumn(application: ApplicationView, columnKey: string): boolean {
-  const state = deliveryState(application.stage, application.deliveryReceipt ?? null);
-  return columnKey === 'attempted' ? state !== 'delivered' : state === 'delivered';
+  return applications.filter((application) => column.stages.includes(application.stage));
 }
 
 function OfferPlaceholder() {
   return (
     <div className="career-responses-offer-placeholder">
       Пока пусто. Здесь появится оффер, когда компания его пришлёт — с дедлайном ответа.
-    </div>
-  );
-}
-
-function AddCardControl({
-  menuOpen,
-  onToggleMenu,
-  onCloseMenu,
-  onOpenVacancies,
-  onAddManual,
-}: {
-  menuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-  onOpenVacancies: () => void;
-  onAddManual?: () => void;
-}) {
-  return (
-    <div className="career-responses-add-card-row">
-      <button type="button" className="career-responses-add-card" onClick={onOpenVacancies}>
-        <Briefcase size={14} /> Добавить из «Вакансии»
-      </button>
-      {onAddManual ? (
-        <div className="career-responses-menu-wrap">
-          <button type="button" aria-label="Ещё способы добавить карточку" onClick={onToggleMenu}>
-            <DotsThreeVertical size={18} />
-          </button>
-          {menuOpen ? (
-            <div className="career-responses-card-menu">
-              <button
-                type="button"
-                onClick={() => {
-                  onCloseMenu();
-                  onAddManual();
-                }}
-              >
-                Добавить вручную
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

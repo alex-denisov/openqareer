@@ -1,0 +1,114 @@
+.career-responses-preparation {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-responses-preparation > section {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.career-responses-preparation header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+}
+
+.career-responses-preparation h2,
+.career-responses-preparation p {
+  margin: 0;
+}
+
+.career-responses-preparation header p,
+.career-responses-preparation small {
+  color: var(--career-text-soft);
+}
+
+.career-responses-preparation__story-list,
+.career-responses-preparation__materials ul {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-responses-preparation__story-list li {
+  display: grid;
+  gap: var(--career-space-1);
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-responses-preparation__story-list span,
+.career-responses-preparation__story-list small {
+  color: var(--career-text-soft);
+}
+
+.career-responses-preparation__interviews label {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: min(100%, 24rem);
+  color: var(--career-text-soft);
+}
+
+.career-responses-preparation__interviews select {
+  min-block-size: max(44px, var(--career-target-min));
+  min-inline-size: 0;
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  color: var(--career-text);
+  font: inherit;
+}
+
+.career-responses-preparation__materials {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-responses-preparation__materials li,
+.career-responses-preparation__interview-date {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-responses-preparation__error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+  color: var(--career-danger);
+}
+
+.career-responses-preparation__error button {
+  min-block-size: max(44px, var(--career-target-min));
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  color: var(--career-text);
+  font: inherit;
+  cursor: pointer;
+}
+
+@media (max-width: 40rem) {
+  .career-responses-preparation > section {
+    padding: var(--career-space-3);
+  }
+
+  .career-responses-preparation header {
+    display: grid;
+  }
+}

@@ -10,71 +10,85 @@ import {
   type ApplicationView,
 } from './applicationsApi';
 import { InterviewDebriefModal, type InterviewDebriefSubmitData } from './InterviewDebriefModal';
-import { calculateOfferCompensation } from './offerCompensation';
 
 export function DeliveryStatus({ receipt }: { receipt: DeliveryReceipt | null }) {
   const state = deliveryState('applied', receipt);
   const label =
     state === 'failed'
-      ? 'Попытка не удалась. Доставка не подтверждена.'
+      ? 'Не доставлено'
       : state === 'attempted'
-        ? 'Пробовали отправить. Не хватает квитанции доставки.'
-        : `Доставка подтверждена: ${receipt?.value ?? ''}`;
+        ? 'Пробовали отправить'
+        : state === 'delivered'
+          ? 'Доставка подтверждена'
+          : 'Черновик, не отправлено';
   return (
-    <p className="career-responses-card-failed" role="status">
-      {label}
+    <p className={`career-responses-card-delivery is-${state}`} role="status">
+      <span>{label}</span>
+      {receipt && state === 'delivered' ? <small>Квитанция сохранена</small> : null}
+      {receipt?.kind === 'failure_note' ? <small>{receipt.value}</small> : null}
     </p>
   );
 }
 
-/** «Подготовиться» from a card already in the interview stage (B251 F5) opens
- * the same prep material «Сегодня» offers — no separate prep screen exists
- * yet (`docs/v1-release/tasks/codex/C47-b251-interview-path-from-card.md`). */
 export function PrepareInterviewControl({
   application,
   onOpenExpert,
 }: {
-  application: ApplicationView;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
+  readonly application: ApplicationView;
+  readonly onOpenExpert?: (
+    stage: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+  ) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [starStoriesOpen, setStarStoriesOpen] = useState(false);
-  const handleAskConsultant = buildInterviewPrepExpertHandler(application, onOpenExpert);
-
+  const [storiesOpen, setStoriesOpen] = useState(false);
+  const askConsultant = buildInterviewPrepExpertHandler(application, onOpenExpert);
   return (
     <>
-      <div className="career-responses-prep-action">
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-sm"
-          onClick={() => setOpen(true)}
-        >
-          Подготовиться
-        </button>
-        <InterviewPrepModal
-          isOpen={open}
-          onClose={() => setOpen(false)}
-          vacancy={{
-            id: application.id,
-            title: application.vacancy?.title ?? 'Без названия',
-            company: application.vacancy?.companyHidden
-              ? undefined
-              : (application.vacancy?.company ?? undefined),
-          }}
-          onAskConsultant={handleAskConsultant}
-          onOpenStarStories={() => {
-            setOpen(false);
-            setStarStoriesOpen(true);
-          }}
-        />
-      </div>
+      <button
+        type="button"
+        className="career-btn career-btn-secondary career-btn-sm"
+        onClick={() => setOpen(true)}
+      >
+        Подготовиться
+      </button>
+      <InterviewPrepModal
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        vacancy={{
+          id: application.id,
+          title: application.vacancy?.title ?? 'Без названия',
+          company: application.vacancy?.companyHidden
+            ? undefined
+            : (application.vacancy?.company ?? undefined),
+        }}
+        onAskConsultant={askConsultant}
+        onOpenStarStories={() => {
+          setOpen(false);
+          setStoriesOpen(true);
+        }}
+      />
       <StarStoriesModal
-        isOpen={starStoriesOpen}
-        onClose={() => setStarStoriesOpen(false)}
-        onAskConsultant={handleAskConsultant}
+        isOpen={storiesOpen}
+        onClose={() => setStoriesOpen(false)}
+        onAskConsultant={askConsultant}
       />
     </>
   );
+}
+
+function buildInterviewPrepExpertHandler(
+  application: ApplicationView,
+  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void,
+): (() => void) | undefined {
+  if (!onOpenExpert) return undefined;
+  return () =>
+    onOpenExpert(
+      'interviews',
+      { kind: 'application', id: application.id },
+      buildSubjectTitle(application.vacancy),
+    );
 }
 
 async function saveDebriefForApplication(
@@ -179,79 +193,16 @@ export function FollowUpSentControl({
   );
 }
 
-export function OfferCardControl({
-  application,
-  onOpenOfferEdit,
-}: {
-  application: ApplicationView;
-  onOpenOfferEdit?: (applicationId: string) => void;
-}) {
-  const terms = application.offer?.terms;
-  const breakdown = terms ? calculateOfferCompensation(terms) : null;
-  const currencySymbol =
-    breakdown?.currency === 'RUB'
-      ? '₽'
-      : breakdown?.currency === 'USD'
-        ? '$'
-        : breakdown?.currency === 'EUR'
-          ? '€'
-          : (breakdown?.currency ?? '');
-
-  return (
-    <div className="career-responses-offer-action">
-      {breakdown ? (
-        <div className="career-responses-card-offer-preview">
-          <span className="career-numeric">
-            {new Intl.NumberFormat('ru-RU').format(breakdown.monthlyAverage)} {currencySymbol}/мес.
-          </span>
-          <span className="career-offer-source-badge">{breakdown.sourceLabel}</span>
-        </div>
-      ) : null}
-      {onOpenOfferEdit ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary career-btn-sm"
-          onClick={() => onOpenOfferEdit(application.id)}
-        >
-          {application.offer ? 'Условия оффера' : 'Заполнить оффер'}
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
 export function buildSubjectTitle(vacancy?: ApplicationView['vacancy']): string {
   const title = vacancy?.title ?? 'Без названия';
   const company = vacancy?.companyHidden ? '' : (vacancy?.company ?? '');
   return `О вакансии: ${title}${company ? ` — ${company}` : ''}`;
 }
 
-type InterviewExpertHandler = (
-  stage: CoachTurnStage,
-  subject?: CoachTurnSubject,
-  subjectTitle?: string,
-) => void;
-
-function buildInterviewPrepExpertHandler(
-  application: ApplicationView,
-  onOpenExpert?: InterviewExpertHandler,
-): (() => void) | undefined {
-  if (!onOpenExpert) return undefined;
-  return () =>
-    onOpenExpert(
-      'interviews',
-      { kind: 'application', id: application.id },
-      buildSubjectTitle(application.vacancy),
-    );
-}
-
-/** Блоки карточки, зависящие от этапа: доставка, интервью, оффер. */
+/** Компактная подпись статуса на лицевой стороне карточки. */
 export function CardStageBlocks({
   application,
   onOpenExpert,
-  onSaveDebrief,
-  onRefresh,
-  onOpenOfferEdit,
 }: {
   readonly application: ApplicationView;
   readonly onOpenExpert?: (
@@ -259,27 +210,36 @@ export function CardStageBlocks({
     subject?: CoachTurnSubject,
     subjectTitle?: string,
   ) => void;
-  readonly onSaveDebrief?: (data: InterviewDebriefSubmitData) => Promise<void>;
-  readonly onRefresh: () => void;
-  readonly onOpenOfferEdit?: (applicationId: string) => void;
 }) {
   if (application.stage === 'applied') {
     return <DeliveryStatus receipt={application.deliveryReceipt ?? null} />;
   }
   if (application.stage === 'interview') {
+    const date = application.nearestInterview?.scheduledAt;
     return (
-      <div className="career-responses-interview-actions">
+      <div className="career-responses-card-interview">
+        <p className="career-responses-card-stage">
+          {date ? `Интервью ${formatInterviewDate(date)}` : 'Интервью назначено'}
+        </p>
         <PrepareInterviewControl application={application} onOpenExpert={onOpenExpert} />
-        <InterviewDebriefControl
-          application={application}
-          onSaveDebrief={onSaveDebrief}
-          onRefresh={onRefresh}
-        />
       </div>
     );
   }
-  if (application.stage === 'offer') {
-    return <OfferCardControl application={application} onOpenOfferEdit={onOpenOfferEdit} />;
-  }
+  if (application.stage === 'offer')
+    return <p className="career-responses-card-stage">Оффер получен</p>;
+  if (application.stage === 'saved')
+    return <p className="career-responses-card-stage">Черновик, не отправлено</p>;
   return null;
+}
+
+function formatInterviewDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? 'дата не указана'
+    : date.toLocaleString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
 }
