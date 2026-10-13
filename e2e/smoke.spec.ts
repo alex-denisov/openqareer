@@ -63,25 +63,21 @@ test('built career workspace is ready, operable and free of critical accessibili
   });
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  const onboardingHeading = page.getByRole('heading', { name: 'С чем разбираемся?' });
-  await expect(onboardingHeading).toBeVisible({ timeout: 15_000 });
+  const firstRun = page.getByTestId('first-run-wizard');
+  await expect(firstRun).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/, {
     timeout: 15_000,
   });
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
-  await expect(
-    page.locator('.career-onboarding-source-card', { hasText: 'PDF резюме' }),
-  ).toBeEnabled();
+  await expect(page.getByTestId('source-opt-file')).toBeEnabled();
 
-  // B249 (owner, 2026-09-24): onboarding is full-screen from step 1, so an
-  // anonymous visitor reaches the account from the wizard's own top bar.
-  const accountButton = page.getByRole('button', { name: 'Войти', exact: true });
+  const accountButton = page.getByRole('button', { name: 'Открыть аккаунт' });
   await expect(accountButton).toBeEnabled();
   await accountButton.click();
   const accountAccess = page.locator('.career-account-access');
   await expect(accountAccess.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
   await accountAccess.getByRole('button', { name: 'Назад' }).click();
-  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+  await expect(firstRun).toBeVisible();
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,

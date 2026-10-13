@@ -60,14 +60,19 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     await page.setContent(html, { waitUntil: 'load' });
 
     await expect(page.locator('.career-app-update-banner')).toBeVisible();
-    await expect(page.locator('.career-app-update-text strong')).toHaveText('Доступна версия 1.0.1');
+    await expect(page.locator('.career-app-update-text strong')).toHaveText(
+      'Доступна версия 1.0.1',
+    );
     await expect(page.getByTestId('app-update-install-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-enable-auto-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-whats-new-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-later-btn')).toBeVisible();
 
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-available.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-available.png`,
+      fullPage: true,
+    });
   });
 
   test('renders ready to restart banner and captures evidence', async ({ page }, testInfo) => {
@@ -82,7 +87,9 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     await page.setContent(html, { waitUntil: 'load' });
 
     await expect(page.locator('.career-app-update-banner')).toBeVisible();
-    await expect(page.locator('.career-app-update-text strong')).toHaveText('Версия 1.0.1 загружена');
+    await expect(page.locator('.career-app-update-text strong')).toHaveText(
+      'Версия 1.0.1 загружена',
+    );
     await expect(page.getByTestId('app-update-restart-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-next-launch-btn')).toBeVisible();
 
@@ -107,7 +114,10 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     await expect(page.getByTestId('app-update-close-btn')).toBeVisible();
 
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-updated.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-updated.png`,
+      fullPage: true,
+    });
   });
 
   test('renders offline notice and captures evidence', async ({ page }, testInfo) => {
@@ -121,9 +131,14 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-note')).toContainText('Не удалось проверить обновления: нет связи');
+    await expect(page.locator('.career-app-update-note')).toContainText(
+      'Не удалось проверить обновления: нет связи',
+    );
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-offline.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-offline.png`,
+      fullPage: true,
+    });
   });
 
   test('renders busy sending notice and captures evidence', async ({ page }, testInfo) => {
@@ -137,9 +152,14 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-note')).toContainText('Перезапуск отложен: сейчас отправляется отклик на hh.ru');
+    await expect(page.locator('.career-app-update-note')).toContainText(
+      'Перезапуск отложен: сейчас отправляется отклик на hh.ru',
+    );
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-busy-sending.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-busy-sending.png`,
+      fullPage: true,
+    });
   });
 
   test('renders idle up-to-date notice and captures evidence', async ({ page }, testInfo) => {
@@ -153,7 +173,9 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-note')).toContainText('Установлена последняя версия 1.0.1');
+    await expect(page.locator('.career-app-update-note')).toContainText(
+      'Установлена последняя версия 1.0.1',
+    );
     await verifyNoHorizontalOverflow(page);
     await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-idle.png`, fullPage: true });
   });
@@ -175,10 +197,15 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     await expect(page.locator('.career-app-update-log li')).toHaveCount(4);
 
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-whats-new.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-whats-new.png`,
+      fullPage: true,
+    });
   });
 
-  test('renders downloading modal with progress and captures evidence', async ({ page }, testInfo) => {
+  test('renders downloading modal with progress and captures evidence', async ({
+    page,
+  }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'B469 is desktop only');
     await page.setViewportSize({ width: 1440, height: 900 });
 
@@ -189,13 +216,18 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-modal-title')).toHaveText('Загружаем версию 1.0.1');
+    await expect(page.locator('.career-app-update-modal-title')).toHaveText(
+      'Загружаем версию 1.0.1',
+    );
     await expect(page.getByTestId('app-update-cancel-download-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-minimize-btn')).toBeVisible();
     await expect(page.locator('.career-app-update-progress-row strong')).toHaveText('64 %');
 
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-downloading.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-downloading.png`,
+      fullPage: true,
+    });
   });
 
   test('renders error modal and captures evidence', async ({ page }, testInfo) => {
@@ -209,7 +241,9 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-modal-title')).toHaveText('Не удалось загрузить обновление');
+    await expect(page.locator('.career-app-update-modal-title')).toHaveText(
+      'Не удалось загрузить обновление',
+    );
     await expect(page.getByTestId('app-update-retry-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-error-later-btn')).toBeVisible();
 
@@ -228,10 +262,15 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     });
     await page.setContent(html, { waitUntil: 'load' });
 
-    await expect(page.locator('.career-app-update-modal-title')).toHaveText('Нужно обновить приложение');
+    await expect(page.locator('.career-app-update-modal-title')).toHaveText(
+      'Нужно обновить приложение',
+    );
     await expect(page.getByTestId('app-update-force-restart-btn')).toBeVisible();
 
     await verifyNoHorizontalOverflow(page);
-    await page.screenshot({ path: `${EVIDENCE_DIR}/b469-desktop-1440-required.png`, fullPage: true });
+    await page.screenshot({
+      path: `${EVIDENCE_DIR}/b469-desktop-1440-required.png`,
+      fullPage: true,
+    });
   });
 });

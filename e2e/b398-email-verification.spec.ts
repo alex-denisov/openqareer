@@ -142,6 +142,6 @@ test('keeps a new account outside the cabinet until the email code is confirmed'
   await page.waitForURL('**/app');
   await waitForCareerShell(page);
   await expect(page.locator('.career-cabinet')).toBeVisible();
-  await expect(page.locator('.career-intake')).toHaveCount(0);
+  await expect(page.getByTestId('first-run-wizard')).toHaveCount(0);
   expect(candidateReads).toBeGreaterThan(1);
 });

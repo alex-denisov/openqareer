@@ -39,7 +39,7 @@ export interface ResumeIngestionState {
   readonly busy: boolean;
   readonly error?: string;
   readonly notice?: string;
-  readonly readPdf: (file: File) => Promise<void>;
+  readonly readPdf: (file: File) => Promise<IngestedResume | undefined>;
   readonly acceptParsed: (
     parsed: ParsedResume,
     source: ResumeSource,
@@ -152,22 +152,22 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
   );
 
   const readPdf = useCallback(
-    async (file: File) => {
+    async (file: File): Promise<IngestedResume | undefined> => {
       setBusy(true);
       setError(undefined);
       setNotice(undefined);
       try {
         const extracted = await extractPdfResume(file);
-        await ingest(extracted.text, 'pdf', parseResumeContent(extracted.text), {
+        return await ingest(extracted.text, 'pdf', parseResumeContent(extracted.text), {
           name: extracted.fileName,
           pages: extracted.pageCount,
         });
       } catch (reason) {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : 'Прочитать PDF не удалось. Можно продолжить без файла.',
-        );
+        const message = reason instanceof Error
+          ? reason.message
+          : 'Прочитать PDF не удалось. Можно продолжить без файла.';
+        setError(message);
+        return undefined;
       } finally {
         setBusy(false);
       }

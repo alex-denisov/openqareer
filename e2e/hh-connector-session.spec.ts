@@ -116,6 +116,7 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
 }
 
 async function stubCandidateApi(page: Page): Promise<void> {
+  let hhStatus: 'disconnected' | 'connected' = 'disconnected';
   await page.route('**/api/v1/candidate/**', async (route) => {
     await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
@@ -123,9 +124,45 @@ async function stubCandidateApi(page: Page): Promise<void> {
     await route.fulfill({ json: { data: CANDIDATE } });
   });
   await page.route('**/api/v1/candidate/connections', async (route) => {
-    await route.fulfill({ json: { data: [] } });
+    const hh = {
+      platform: 'hh',
+      available: true,
+      capabilities: ['resume_read'],
+      importsCareerHistory: true,
+      status: hhStatus,
+      ...(hhStatus === 'connected'
+        ? {
+            accessMode: 'native_session_snapshot',
+            connectedAt: new Date().toISOString(),
+            lastImportedAt: new Date().toISOString(),
+            factCount: 4,
+          }
+        : {}),
+    };
+    const linkedin = {
+      platform: 'linkedin',
+      available: true,
+      capabilities: ['profile_read'],
+      importsCareerHistory: true,
+      status: 'disconnected',
+    };
+    await route.fulfill({ json: { data: [linkedin, hh] } });
+  });
+  await page.route('**/api/v1/account', async (route) => {
+    await route.fulfill({
+      json: {
+        data: {
+          username: CANDIDATE.username,
+          email: CANDIDATE.email,
+          displayName: CANDIDATE.displayName,
+          profile: { headline: '', location: '', workMode: 'hybrid' },
+          sessions: [],
+        },
+      },
+    });
   });
   await page.route('**/api/v1/candidate/resume/import', async (route) => {
+    hhStatus = 'connected';
     const now = new Date().toISOString();
     await route.fulfill({
       json: {
@@ -168,15 +205,21 @@ async function stubCandidateApi(page: Page): Promise<void> {
 async function openHhDialog(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  // B249: the wizard's first (and now only fullscreen) step is the source
-  // grid — "Резюме на hh.ru" lands straight on the platform-cards screen,
-  // there is no separate "Что уже есть?" / "Импорт профиля" hop any more.
-  await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
-  await page.getByRole('button', { name: 'Резюме на hh.ru' }).click();
-  await page
-    .locator('.career-platform-card', { hasText: 'hh.ru' })
-    .getByRole('button', { name: 'Подключить' })
-    .click();
+  await expect(page.getByTestId('first-run-wizard')).toBeVisible();
+  await page.getByTestId('source-opt-hh').click();
+  const connectionRow = accountHhRow(page);
+  await expect(connectionRow).toContainText('Не подключено');
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await connectionRow.click();
+  } else {
+    await connectionRow.getByRole('button', { name: 'Подключить' }).click();
+  }
+}
+
+function accountHhRow(page: Page) {
+  return (page.viewportSize()?.width ?? 1440) <= 760
+    ? page.locator('.career-account-mobile-row').filter({ hasText: 'hh.ru' })
+    : page.locator('.career-account-row').filter({ hasText: 'hh.ru' });
 }
 
 test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
@@ -197,9 +240,7 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     // wizard behind the dialog (owner report, 2026-08-26).
     const picker = dialog.getByLabel('Выберите резюме для импорта');
     await expect(picker).toBeVisible();
-    await expect(
-      page.locator('.career-source-step').getByText('Импортировать выбранное резюме'),
-    ).toHaveCount(0);
+    await expect(page.locator('.career-account-screen')).toBeVisible();
 
     await picker.selectOption({ label: 'Директор по продукту' });
     await dialog.getByRole('button', { name: 'Импортировать выбранное резюме' }).click();
@@ -207,9 +248,11 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     // The dialog closes only once the profile really holds the resume, and the
     // sign-in window goes with it.
     await expect(dialog).toHaveCount(0);
-    const card = page.locator('.career-platform-card', { hasText: 'hh.ru' });
-    await expect(card.getByText('Подключено', { exact: true })).toBeVisible();
-    await expect(card.getByRole('button', { name: 'Отключить' })).toBeVisible();
+    const row = accountHhRow(page);
+    await expect(row.getByText('Подключено', { exact: true })).toBeVisible();
+    if ((page.viewportSize()?.width ?? 1440) > 760) {
+      await expect(row.getByRole('button', { name: 'Управлять' })).toBeVisible();
+    }
 
     const calls = await page.evaluate(
       () => (window as unknown as { __connectorCalls: string[] }).__connectorCalls,
@@ -246,11 +289,7 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     await dialog.getByRole('button', { name: 'Импортировать выбранное резюме' }).click();
 
     await expect(dialog).toHaveCount(0);
-    await expect(
-      page
-        .locator('.career-platform-card', { hasText: 'hh.ru' })
-        .getByText('Подключено', { exact: true }),
-    ).toBeVisible();
+    await expect(accountHhRow(page).getByText('Подключено', { exact: true })).toBeVisible();
     // No dead end, and no sentence blaming the resume for a missing window.
     await expect(page.getByText('Импортировать выбранное резюме не удалось')).toHaveCount(0);
   });

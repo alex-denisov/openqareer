@@ -42,26 +42,26 @@ export function firstRunDataToWorkspaceInput(
   data: FirstRunData,
   result?: IngestedResume,
 ): WorkspaceInput {
-  const resumeSource =
-    data.selectedSource === 'file'
-      ? (result?.source ?? 'pdf')
-      : data.selectedSource === 'hh'
-      ? 'hh-pdf'
-      : data.selectedSource === 'linkedin'
-      ? 'linkedin-pdf'
-      : 'text';
-
   return {
     careerGoal: 'choose-role',
     resumeText: result?.text ?? '',
-    resumeSource,
+    resumeSource: result?.source ?? 'text',
     resumeFileName: result?.file?.name,
     resumePageCount: result?.file?.pages,
-    targetDirection: '',
-    regions: data.context.region ? [data.context.region] : ['ru'],
+    targetDirection: result?.parsed.targetRole ?? '',
+    regions: data.context.region ? [data.context.region] : [],
     currentSituation: data.goal,
-    constraints: [data.context.format, data.context.city].filter(Boolean).join(', '),
+    constraints: [
+      data.context.format,
+      data.context.city,
+      data.context.isRelocationReady ? 'Готов к релокации' : '',
+    ]
+      .filter(Boolean)
+      .join(', '),
     urgency: 'active',
+    resumeDraft: result?.draft,
+    parsedResume: result?.parsed,
+    resumeImported: result?.imported,
   };
 }
 
@@ -100,18 +100,4 @@ export function setRelocationReady(data: FirstRunData, isRelocationReady: boolea
     ...data,
     context: { ...data.context, isRelocationReady },
   };
-}
-
-export function getConsultantReply(question: string): string {
-  const q = question.toLowerCase();
-  if (q.includes('с чего начать')) {
-    return 'Начнём с источника. Подключите LinkedIn или hh.ru, загрузите резюме или просто расскажите, чем занимаетесь.';
-  }
-  if (q.includes('можно без linkedin')) {
-    return 'Да, можно подключить hh.ru, загрузить файл резюме (PDF или DOCX) или просто рассказать о своём опыте здесь в диалоге.';
-  }
-  if (q.includes('что вы читаете в linkedin') || q.includes('linkedin')) {
-    return 'Читаем только выбранные разделы: места работы, образование, навыки, языки, проекты, курсы, контакты. Никаких личных сообщений или публикаций без вашего одобрения.';
-  }
-  return 'Расскажите подробнее о вашем опыте: сколько лет в управлении, какие команды вели и в какую компанию хотите попасть?';
 }

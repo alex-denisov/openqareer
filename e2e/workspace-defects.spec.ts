@@ -58,11 +58,6 @@ async function waitForLiveApp(page: Page): Promise<void> {
   );
 }
 
-/** B249 — step 1 of onboarding.html is a grid of source cards. */
-function sourceCard(page: Page, title: string) {
-  return page.locator('.career-onboarding-source-card', { hasText: title });
-}
-
 test.describe('B140 workspace shell and intake defects', () => {
   test('a fast session check never flashes the session gate', async ({ page }) => {
     await watchForSessionGate(page);
@@ -74,7 +69,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await sessionResolved;
     await waitForLiveApp(page);
-    await expect(page.getByRole('heading', { name: 'С чем разбираемся?' })).toBeVisible();
+    await expect(page.getByTestId('first-run-wizard')).toBeVisible();
 
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
@@ -108,59 +103,18 @@ test.describe('B140 workspace shell and intake defects', () => {
     await waitForLiveApp(page);
 
     await expect(page.locator('.career-topbar .career-page-name')).toHaveCount(0);
-    await expect(page).toHaveTitle(/Сегодня/);
+    await expect(page).toHaveTitle(/Старт/);
   });
 
-  // B249 — the old context step (legends, side-by-side controls) is gone;
-  // the wizard's layout fit is guarded by verify-intake-fits and the platform
-  // cards on web by verify-wizard-source-step.
-  test('on web a platform card explains the desktop boundary without a link', async ({ page }) => {
+  test('a platform action opens account access without claiming a connection', async ({ page }) => {
     await stubEmptySession(page);
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
-    await sourceCard(page, 'Профиль LinkedIn').click();
-    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
-
-    const error = page.locator('.career-intake-error');
-    await expect(error).toContainText('приложении для компьютера');
-    await expect(error.getByRole('link')).toHaveCount(0);
-  });
-
-  test('the intake never names a button that is not on screen', async ({ page }) => {
-    await stubEmptySession(page);
-
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await waitForLiveApp(page);
-    await sourceCard(page, 'Профиль LinkedIn').click();
-    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
-
-    const error = page.locator('.career-intake-error');
-    await expect(error).toBeVisible();
-    const quoted = (await error.innerText()).match(/«([^»]+)»/gu) ?? [];
-    expect(quoted.length).toBeGreaterThan(0);
-    for (const mention of quoted) {
-      const name = mention.slice(1, -1);
-      await expect(
-        page.locator('.career-onboarding').getByText(name, { exact: true }).locator('visible=true'),
-        `the error names «${name}», so it must be on screen`,
-      ).toHaveCount(1);
-    }
-  });
-
-  test('quick fallbacks switch the intake source without error', async ({ page }) => {
-    await stubEmptySession(page);
-
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await waitForLiveApp(page);
-    await sourceCard(page, 'Профиль LinkedIn').click();
-    await sourceCard(page, 'PDF резюме').click();
-    await sourceCard(page, 'Расскажу сам').click();
-    await page.getByRole('button', { name: 'Продолжить', exact: true }).click();
-
-    await expect(page.locator('.career-intake-error')).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Роль и регион' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'На какую роль ищете работу?' })).toBeVisible();
-    await expect(page.getByRole('group', { name: 'Где рассматриваете работу' })).toBeVisible();
+    await expect(page.getByTestId('first-run-wizard')).toBeVisible();
+    await page.getByTestId('source-opt-linkedin').click();
+    await expect(page.locator('.career-account-access')).toBeVisible();
+    await expect(page.getByTestId('first-run-wizard')).toBeHidden();
+    await expect(page.getByText('Подключено', { exact: true })).toHaveCount(0);
   });
 });

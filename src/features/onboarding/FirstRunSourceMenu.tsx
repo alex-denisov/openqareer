@@ -1,4 +1,4 @@
-import { useRef, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type ReactElement } from 'react';
 import { FolderOpen, Image, Scan } from '@phosphor-icons/react';
 
 export interface FirstRunSourceMenuProps {
@@ -8,29 +8,33 @@ export interface FirstRunSourceMenuProps {
 }
 
 const MENU_OPTIONS = [
-  { testId: 'pick-files-btn', Icon: FolderOpen, label: 'Выбрать в «Файлах»' },
-  { testId: 'pick-photo-btn', Icon: Image, label: 'Фото из библиотеки' },
-  { testId: 'scan-doc-btn', Icon: Scan, label: 'Сканировать документ' },
+  { kind: 'file', testId: 'pick-files-btn', Icon: FolderOpen, label: 'Выбрать в «Файлах»' },
+  { kind: 'photo', testId: 'pick-photo-btn', Icon: Image, label: 'Фото из библиотеки' },
+  { kind: 'scan', testId: 'scan-doc-btn', Icon: Scan, label: 'Сканировать документ' },
 ] as const;
+
+type UnavailableAction = 'photo' | 'scan';
 
 function SourceMenuActions({
   onPick,
+  onUnavailable,
   onClose,
 }: {
   readonly onPick: () => void;
+  readonly onUnavailable: (action: UnavailableAction) => void;
   readonly onClose: () => void;
 }): ReactElement {
   return (
     <>
-      {MENU_OPTIONS.map(({ testId, Icon, label }) => (
+      {MENU_OPTIONS.map(({ kind, testId, Icon, label }) => (
         <button
           key={testId}
           type="button"
           className="first-run-pick-btn"
           data-testid={testId}
-          onClick={onPick}
+          onClick={() => (kind === 'file' ? onPick() : onUnavailable(kind))}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span className="first-run-source-menu-action-label">
             <Icon size={18} />
             {label}
           </span>
@@ -38,8 +42,7 @@ function SourceMenuActions({
       ))}
       <button
         type="button"
-        className="first-run-btn-ghost"
-        style={{ width: '100%', marginTop: '8px' }}
+        className="first-run-btn-ghost first-run-source-menu-cancel"
         onClick={onClose}
       >
         Отмена
@@ -48,47 +51,70 @@ function SourceMenuActions({
   );
 }
 
+function unavailableActionCopy(action: UnavailableAction): string {
+  return action === 'photo'
+    ? 'Загрузка фотографий пока недоступна. Выберите PDF-резюме.'
+    : 'Сканирование пока недоступно. Выберите PDF-резюме.';
+}
+
+function handleSelectedFile(
+  event: ChangeEvent<HTMLInputElement>,
+  onPickFile: (file: File) => void,
+  onClose: () => void,
+): void {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  onPickFile(file);
+  onClose();
+}
+
 export function FirstRunSourceMenu({
   isOpen,
   onClose,
   onPickFile,
 }: FirstRunSourceMenuProps): ReactElement | null {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [unavailableAction, setUnavailableAction] = useState<UnavailableAction | null>(null);
+  useEffect(() => {
+    if (isOpen) setUnavailableAction(null);
+  }, [isOpen]);
 
   if (!isOpen) return null;
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onPickFile(file);
-      onClose();
-    }
-  };
 
   return (
     <div
       className="first-run-modal-dim"
       role="dialog"
       aria-modal="true"
-      aria-label="Выбор файла резюме"
+      aria-label="Выбор PDF-резюме"
       data-testid="first-run-source-menu"
     >
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.docx,image/*"
-        style={{ display: 'none' }}
+        accept="application/pdf,.pdf"
+        className="first-run-native-file-input"
         data-testid="native-file-input"
-        onChange={handleFileChange}
+        onChange={(event) => handleSelectedFile(event, onPickFile, onClose)}
       />
-      <div className="first-run-sheet" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        <div style={{ marginBottom: '8px' }}>
-          <b style={{ fontSize: 'var(--career-text-sm, 14px)' }}>Загрузить резюме</b>
-          <p style={{ margin: '4px 0 0', fontSize: 'var(--career-text-xs, 12px)', color: 'var(--career-color-sub, #64748b)' }}>
-            PDF или DOCX, до 10 МБ
-          </p>
+      <div className="first-run-sheet first-run-source-menu-sheet">
+        <div className="first-run-source-menu-heading">
+          <b>Загрузить резюме</b>
+          <p>PDF до 20 МБ</p>
         </div>
-        <SourceMenuActions onPick={() => fileInputRef.current?.click()} onClose={onClose} />
+        {unavailableAction ? (
+          <p className="first-run-source-menu-notice" role="status">
+            {unavailableActionCopy(unavailableAction)}
+          </p>
+        ) : null}
+        <SourceMenuActions
+          onPick={() => {
+            setUnavailableAction(null);
+            fileInputRef.current?.click();
+          }}
+          onUnavailable={setUnavailableAction}
+          onClose={onClose}
+        />
       </div>
     </div>
   );

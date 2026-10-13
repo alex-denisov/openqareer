@@ -3,7 +3,7 @@ import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachA
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CaretUp, Sparkle } from '@phosphor-icons/react';
 import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
-import { OnboardingWizard } from '../journey/OnboardingWizard';
+import { FirstRunWizard, firstRunDataToWorkspaceInput } from '../onboarding';
 import {
   CareerMapView,
   OpportunitiesView,
@@ -21,13 +21,24 @@ import { AppErrorBoundary } from './AppErrorBoundary';
 import { CareerPathIndicator } from './CareerPathIndicator';
 import { buildPathIndicator, type NavigationOptions } from './pathIndicator';
 import { keepsIntakeAcrossIdentityChange, shouldShowIntake } from './intakeContinuity';
-import { isSectionNavigable, sectionLockReason, type ShellSection } from './shellNavigation';
+import { isSectionNavigable, sectionLockReason } from './shellNavigation';
 import {
   CareerMobileNavigation,
   CareerMobileTopbar,
   CareerNavigationRail,
 } from './CareerShellNavigation';
-import { CareerTodaySkeleton } from './CareerTodaySkeleton';
+import { CareerSessionGate } from './CareerSessionGate';
+import { DesktopCabinetTopbar } from './DesktopCabinetTopbar';
+import {
+  DESKTOP_EXPERT_PREFERENCE_KEY,
+  hasClosedDesktopExpertPreference,
+  initialExpertPanelOpen,
+  matchesMedia,
+  pageNames,
+  SESSION_GATE_DELAY_MS,
+  stageForView,
+  type ShellView,
+} from './CareerWorkspaceShellHelpers';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
 import { useCareerDiaryShellAccess } from './useCareerDiaryShellAccess';
@@ -35,16 +46,6 @@ import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { NotificationsScreen } from '../notifications/NotificationsScreen';
 import { RoleSkillAssessmentScreen } from '../skills/RoleSkillAssessmentScreen';
-
-type ShellView = ShellSection;
-
-/** Раздел, в котором консультант открывается без явного этапа. */
-function stageForView(view: ShellView): CoachTurnStage {
-  if (view === 'profile') return 'profile';
-  if (view === 'opportunities') return 'vacancies';
-  if (view === 'responses' || view === 'automation') return 'responses';
-  return 'today';
-}
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
@@ -61,56 +62,6 @@ interface CareerWorkspaceShellProps {
   onSessionChange?: (session: AuthUser | null) => void;
   /** Deep-links the shell straight to a section, e.g. a «Тарифы» link. */
   initialView?: ShellView;
-}
-
-/**
- * «Резюме» has no rail item in the B248 mockup either; the master resume
- * stays reachable from «Портфолио» on «Сегодня» (B179).
- */
-const pageNames: Record<ShellView, string> = {
-  today: 'Сегодня',
-  profile: 'Профиль',
-  resume: 'Резюме',
-  career: 'Карьера',
-  opportunities: 'Вакансии',
-  responses: 'Отклики',
-  notifications: 'Уведомления',
-  automation: 'Автоматизация',
-  diary: 'Карьерный дневник',
-  tariffs: 'Тарифы',
-};
-
-const SESSION_GATE_DELAY_MS = 4_000;
-const DESKTOP_EXPERT_PREFERENCE_KEY = 'openqareer.desktop-expert-panel';
-
-function readDesktopExpertPreference(): 'open' | 'closed' | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const value = window.localStorage.getItem(DESKTOP_EXPERT_PREFERENCE_KEY);
-    return value === 'open' || value === 'closed' ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function matchesMedia(query: string): boolean {
-  return (
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia(query).matches
-  );
-}
-
-function hasClosedDesktopExpertPreference(): boolean {
-  return matchesMedia('(min-width: 1280px)') && readDesktopExpertPreference() === 'closed';
-}
-
-function initialExpertPanelOpen(sessionPending: boolean, initialView: ShellView): boolean {
-  if (typeof window === 'undefined') return false;
-  const desktop = matchesMedia('(min-width: 1280px)');
-  if (desktop && readDesktopExpertPreference() === 'closed') return false;
-  if (sessionPending) return true;
-  return desktop || (initialView === 'opportunities' && matchesMedia('(min-width: 761px)'));
 }
 
 export function CareerWorkspaceShell({
@@ -205,12 +156,8 @@ export function CareerWorkspaceShell({
     setExpertConfig((current) => ({ ...current, open: true }));
   }, [intakeVisible, session?.candidateId, visibleWorkspace]);
 
-  // onboarding.html is full-screen from its first step (owner decision
-  // 2026-09-24, replacing the B141 exception that kept the rail on step 1 for
-  // its account door); an anonymous candidate signs in from the wizard's own
-  // top bar instead.
-  const onboardingIsFullscreen = intakeVisible;
-  const expertPanelOpen = expertConfig.open && !onboardingIsFullscreen;
+  const expertPanelOpen =
+    !accountOpen && (intakeVisible ? expertSheetExpanded : expertConfig.open);
 
   useEffect(() => {
     if (!sessionPending) {
@@ -224,8 +171,15 @@ export function CareerWorkspaceShell({
   // The page name lives in the navigation and in the tab title; repeating it in
   // the top bar only duplicated the active item.
   useEffect(() => {
-    document.title = `${roleSkillAssessmentOpen ? 'Проверка навыков' : accountOpen ? 'Аккаунт' : pageNames[activeView]} · openqareer`;
-  }, [accountOpen, activeView, roleSkillAssessmentOpen]);
+    const title = intakeVisible
+      ? 'Старт'
+      : roleSkillAssessmentOpen
+        ? 'Проверка навыков'
+        : accountOpen
+          ? 'Аккаунт'
+          : pageNames[activeView];
+    document.title = `${title} · openqareer`;
+  }, [accountOpen, activeView, intakeVisible, roleSkillAssessmentOpen]);
 
   const navigationState = {
     careerPictureReady,
@@ -326,6 +280,14 @@ export function CareerWorkspaceShell({
     setExpertConfig((prev) => ({ ...prev, open: false }));
   }, []);
 
+  const openIntakeConsultant = useCallback(
+    (prompt?: string) => {
+      openExpert('today', undefined, 'Старт', prompt);
+      setExpertSheetExpanded(true);
+    },
+    [openExpert],
+  );
+
   const openRoleSkillAssessment = useCallback(() => {
     setExpertConfig((previous) => ({ ...previous, open: false }));
     setExpertSheetExpanded(false);
@@ -336,10 +298,6 @@ export function CareerWorkspaceShell({
     setRoleSkillAssessmentOpen(false);
     window.requestAnimationFrame(() => document.getElementById('career-main')?.focus());
   }, []);
-
-  useEffect(() => {
-    if (onboardingIsFullscreen && expertConfig.open) closeExpert();
-  }, [closeExpert, expertConfig.open, onboardingIsFullscreen]);
 
   const handleExpertEscape = useCallback(() => {
     const onPhone =
@@ -424,6 +382,14 @@ export function CareerWorkspaceShell({
     [onSaveWorkspace],
   );
 
+  const completeFirstRun = useCallback(
+    (data: Parameters<typeof firstRunDataToWorkspaceInput>[0], result?: Parameters<typeof firstRunDataToWorkspaceInput>[1]) => {
+      setActiveView('opportunities');
+      completeIntake(firstRunDataToWorkspaceInput(data, result));
+    },
+    [completeIntake],
+  );
+
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
     const media = window.matchMedia('(max-width: 760px)');
@@ -432,11 +398,13 @@ export function CareerWorkspaceShell({
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
-  const desktopPageTitle = roleSkillAssessmentOpen
-    ? 'Проверка навыков'
-    : activeView === 'opportunities' && navigationOptions?.focusRoleFilter
-      ? 'Карьера'
-      : pageNames[activeView];
+  const desktopPageTitle = intakeVisible
+    ? 'Старт'
+    : roleSkillAssessmentOpen
+      ? 'Проверка навыков'
+      : activeView === 'opportunities' && navigationOptions?.focusRoleFilter
+        ? 'Карьера'
+        : pageNames[activeView];
 
   useEffect(() => {
     if (!matchesMedia('(min-width: 1280px)')) return;
@@ -455,7 +423,7 @@ export function CareerWorkspaceShell({
       <div
         className={`career-shell ${expertPanelOpen ? 'expert-is-open' : ''} ${
           activeView === 'opportunities' ? 'career-shell--vacancies' : ''
-        } ${onboardingIsFullscreen ? 'career-shell--onboarding-fullscreen' : ''}`}
+        }`}
         data-testid="career-shell"
         data-shell-view={activeView}
       >
@@ -466,7 +434,6 @@ export function CareerWorkspaceShell({
         <CareerNavigationRail
           session={session}
           sessionPending={sessionPending}
-          ariaHidden={onboardingIsFullscreen}
           activeView={activeView}
           isNavigable={isNavigable}
           lockedReason={lockedReason}
@@ -482,7 +449,7 @@ export function CareerWorkspaceShell({
             session={session}
             sessionPending={sessionPending}
             activeView={activeView}
-            ariaHidden={onboardingIsFullscreen}
+            title={accountOpen ? 'Аккаунт' : intakeVisible ? 'Старт' : undefined}
             tariffsAvailable={isNavigable('tariffs')}
             tariffsLockedReason={lockedReason('tariffs')}
             onNavigateHome={() => navigate('today')}
@@ -496,7 +463,7 @@ export function CareerWorkspaceShell({
         {cabinetSession &&
         !sessionPending &&
         !accountOpen &&
-        !onboardingIsFullscreen &&
+        !intakeVisible &&
         !expertPanelOpen &&
         isCompactViewport ? (
           <NotificationsBell
@@ -516,13 +483,28 @@ export function CareerWorkspaceShell({
             onOpenConsultant={() => openExpert()}
             session={session}
             sessionPending={sessionPending}
-            hidden={onboardingIsFullscreen || accountOpen}
+            hidden={accountOpen || intakeVisible}
             unreadCount={notificationUnreadCount}
             onUnreadCountChange={setNotificationUnreadCount}
             onOpenCenter={openNotificationCenter}
             onOpenSettings={openNotificationSettings}
           />
           <div className="career-main-content">
+            {intakeVisible ? (
+              <div hidden={accountOpen}>
+                <FirstRunWizard
+                  key={`intake-${intakeSeed}`}
+                  onComplete={completeFirstRun}
+                  hasAccount={Boolean(session)}
+                  onStartedChange={setIntakeStarted}
+                  isMobile={isCompactViewport}
+                  showConsultantPanel={!expertPanelOpen}
+                  onSignIn={() => openAccount('security', true)}
+                  onConnectSource={() => openAccount('connections', true)}
+                  onOpenConsultant={openIntakeConsultant}
+                />
+              </div>
+            ) : null}
             {accountOpen ? (
               session && session.emailVerified !== false ? (
                 <CareerAccountWorkspace
@@ -547,7 +529,7 @@ export function CareerWorkspaceShell({
             ) : (
               <AppErrorBoundary>
                 {sessionPending ? (
-                  <SessionGate
+                  <CareerSessionGate
                     error={sessionError}
                     waitIsLong={sessionWaitIsLong}
                     onRetry={onRetrySession}
@@ -570,18 +552,6 @@ export function CareerWorkspaceShell({
                   </p>
                 ) : null}
 
-                {intakeVisible ? (
-                  <OnboardingWizard
-                    key={`intake-${intakeSeed}`}
-                    onComplete={(input) => {
-                      setActiveView('opportunities');
-                      completeIntake(input);
-                    }}
-                    hasAccount={Boolean(session)}
-                    onStartedChange={setIntakeStarted}
-                    onSignIn={() => openAccount('security', true)}
-                  />
-                ) : null}
                 {roleSkillAssessmentOpen && cabinetSession ? (
                   <RoleSkillAssessmentScreen
                     session={cabinetSession}
@@ -735,20 +705,21 @@ export function CareerWorkspaceShell({
           isNavigable={isNavigable}
           lockedReason={lockedReason}
           onNavigate={navigate}
-          onOpenExpert={() => openExpert()}
-          ariaHidden={onboardingIsFullscreen}
+          onOpenExpert={() =>
+            intakeVisible ? openIntakeConsultant() : openExpert()
+          }
         />
 
         {activeView !== 'opportunities' &&
         !expertPanelOpen &&
         !accountOpen &&
-        !onboardingIsFullscreen &&
+        (!intakeVisible || isCompactViewport) &&
         !roleSkillAssessmentOpen &&
         activeView !== 'automation' ? (
           <button
             className="career-expert-peek"
             type="button"
-            onClick={() => openExpert()}
+            onClick={() => (intakeVisible ? openIntakeConsultant() : openExpert())}
             aria-label="Открыть консультанта"
           >
             <span className="career-expert-peek-icon">
@@ -791,118 +762,5 @@ export function CareerWorkspaceShell({
         ) : null}
       </div>
     </CareerDiaryAccessProvider>
-  );
-}
-
-interface DesktopCabinetTopbarProps {
-  readonly title: string;
-  readonly railHint: string | null;
-  readonly showNotifications: boolean;
-  readonly showConsultantButton: boolean;
-  readonly onOpenConsultant: () => void;
-  readonly session?: AuthUser | null;
-  readonly sessionPending: boolean;
-  readonly ariaHidden?: boolean;
-  readonly hidden?: boolean;
-  readonly unreadCount: number;
-  readonly onUnreadCountChange: (count: number) => void;
-  readonly onOpenCenter: (notificationId?: string) => void;
-  readonly onOpenSettings: () => void;
-}
-
-function DesktopCabinetTopbar({
-  title,
-  railHint,
-  showNotifications,
-  showConsultantButton,
-  onOpenConsultant,
-  session,
-  sessionPending,
-  ariaHidden,
-  hidden,
-  unreadCount,
-  onUnreadCountChange,
-  onOpenCenter,
-  onOpenSettings,
-}: DesktopCabinetTopbarProps) {
-  if (hidden) return null;
-  return (
-    <header
-      className="career-desktop-topbar"
-      aria-hidden={ariaHidden || undefined}
-      aria-label={`Раздел ${title}`}
-    >
-      <h1>{title}</h1>
-      {railHint ? (
-        <span className="career-desktop-topbar-hint" role="status" aria-live="polite">
-          {railHint}
-        </span>
-      ) : null}
-      <div className="career-desktop-topbar-actions">
-        {showConsultantButton ? (
-          <button
-            className="career-notification-bell career-desktop-expert-trigger"
-            type="button"
-            aria-label="Открыть консультанта"
-            onClick={onOpenConsultant}
-          >
-            <Sparkle size={22} aria-hidden="true" />
-          </button>
-        ) : null}
-        {showNotifications && session?.candidateId && !sessionPending ? (
-          <NotificationsBell
-            unreadCount={unreadCount}
-            onUnreadCountChange={onUnreadCountChange}
-            onOpenCenter={onOpenCenter}
-            onOpenSettings={onOpenSettings}
-          />
-        ) : null}
-      </div>
-    </header>
-  );
-}
-
-function SessionGate({
-  error,
-  waitIsLong,
-  onRetry,
-  onOpenLogin,
-}: {
-  error?: string;
-  waitIsLong: boolean;
-  onRetry: () => void;
-  onOpenLogin: () => void;
-}) {
-  return (
-    <section className="career-session-gate" aria-live="polite" aria-busy={!error}>
-      {error ? (
-        <div className="career-session-error" role="alert">
-          <strong>Ошибка: сервер не ответил.</strong>
-          <p>{error}</p>
-          <div className="career-session-gate-actions">
-            <button className="career-primary-button" type="button" onClick={onRetry}>
-              Повторить
-            </button>
-            <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
-              Открыть вход
-            </button>
-          </div>
-        </div>
-      ) : (
-        <>
-          <CareerTodaySkeleton />
-          {waitIsLong ? (
-            <div className="career-session-gate-actions">
-              <p className="career-session-gate-note" role="status">
-                Загрузка дольше обычного.
-              </p>
-              <button className="career-primary-button" type="button" onClick={onRetry}>
-                Повторить
-              </button>
-            </div>
-          ) : null}
-        </>
-      )}
-    </section>
   );
 }

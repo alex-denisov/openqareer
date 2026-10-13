@@ -273,6 +273,7 @@ interface CareerMobileTopbarProps {
   readonly session?: AuthUser | null;
   readonly sessionPending: boolean;
   readonly activeView: ShellSection;
+  readonly title?: string;
   readonly ariaHidden?: boolean;
   readonly tariffsAvailable: boolean;
   readonly tariffsLockedReason: string;
@@ -326,6 +327,7 @@ function AutomationMobileTopbar({
 function DefaultMobileTopbar({
   session,
   sessionPending,
+  title,
   tariffsAvailable,
   tariffsLockedReason,
   onNavigateHome,
@@ -334,14 +336,18 @@ function DefaultMobileTopbar({
 }: CareerMobileTopbarProps) {
   return (
     <>
-      <button
-        className="career-wordmark"
-        type="button"
-        onClick={onNavigateHome}
-        aria-label="openqareer, главная"
-      >
-        <BrandMark variant="mark" size={26} />
-      </button>
+      {title ? (
+        <span className="career-mobile-page-title">{title}</span>
+      ) : (
+        <button
+          className="career-wordmark"
+          type="button"
+          onClick={onNavigateHome}
+          aria-label="openqareer, главная"
+        >
+          <BrandMark variant="mark" size={26} />
+        </button>
+      )}
       <CareerMobileTopbarActions
         session={session}
         sessionPending={sessionPending}

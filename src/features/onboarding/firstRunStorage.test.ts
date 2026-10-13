@@ -82,10 +82,38 @@ describe('firstRunStorage logic and rules', () => {
     } as unknown as IngestedResume;
     const input = firstRunDataToWorkspaceInput(DEFAULT_FIRST_RUN_DATA, sampleResume);
     expect(input.resumeText).toBe('Резюме разработчика');
+    expect(input.resumeSource).toBe('pdf');
+    expect(input.resumeDraft).toEqual(sampleResume.draft);
+    expect(input.parsedResume).toEqual(sampleResume.parsed);
+    expect(input.resumeImported).toBe(true);
     expect(input.resumeFileName).toBe('cv.pdf');
     expect(input.resumePageCount).toBe(2);
     expect(input.regions).toEqual(['ru']);
     expect(input.constraints).toContain('Москва');
     expect(input.constraints).toContain('Гибрид');
+  });
+
+  it('does not claim a connected platform is an imported resume', () => {
+    const input = firstRunDataToWorkspaceInput(DEFAULT_FIRST_RUN_DATA);
+    expect(input.resumeSource).toBe('text');
+    expect(input.resumeText).toBe('');
+    expect(input.resumeImported).toBeUndefined();
+  });
+
+  it('keeps the selected city region and relocation preference in workspace input', () => {
+    const data = {
+      ...DEFAULT_FIRST_RUN_DATA,
+      context: {
+        ...DEFAULT_FIRST_RUN_DATA.context,
+        city: 'Белград',
+        country: 'Сербия',
+        region: 'eu' as const,
+        isRelocationReady: true,
+      },
+    };
+    const input = firstRunDataToWorkspaceInput(data);
+    expect(input.regions).toEqual(['eu']);
+    expect(input.constraints).toContain('Белград');
+    expect(input.constraints).toContain('Готов к релокации');
   });
 });

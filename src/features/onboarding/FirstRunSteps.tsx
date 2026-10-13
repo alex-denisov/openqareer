@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import {
   Briefcase,
   ChatCircleText,
@@ -29,8 +29,7 @@ function GoalEditForm({
       />
       <button
         type="button"
-        className="first-run-btn-primary"
-        style={{ alignSelf: 'flex-start', marginTop: '8px' }}
+        className="first-run-btn-ghost first-run-btn-save-goal"
         onClick={onSave}
         data-testid="save-goal-btn"
       >
@@ -71,7 +70,7 @@ export function FirstRunGoalCard({
             onClick={onStartEdit}
             data-testid="edit-goal-btn"
           >
-            <PencilSimple size={14} style={{ marginRight: '4px' }} />
+            <PencilSimple size={14} className="first-run-edit-icon" />
             Изменить
           </button>
         ) : null}
@@ -79,7 +78,7 @@ export function FirstRunGoalCard({
       {isEditing ? (
         <GoalEditForm goal={goal} onGoalChange={onGoalChange} onSave={onSaveEdit} />
       ) : (
-        <p style={{ margin: 0, fontSize: 'var(--career-text-sm, 14px)', lineHeight: 1.5 }}>{goal}</p>
+        <p className="first-run-goal-text">{goal}</p>
       )}
     </article>
   );
@@ -111,6 +110,7 @@ export function SourceOptionRow({
     <button
       type="button"
       className={`first-run-source-opt ${isPicked ? 'is-picked' : ''}`}
+      aria-pressed={isPicked}
       onClick={onPick}
       data-testid={`source-opt-${type}`}
     >
@@ -120,13 +120,12 @@ export function SourceOptionRow({
         <p>{desc}</p>
       </div>
       <span
-        className={isPicked ? 'first-run-btn-primary' : 'first-run-btn-ghost'}
-        style={{ padding: '6px 14px', pointerEvents: 'none' }}
+        className={`first-run-source-action-label${isPicked ? ' is-selected' : ''}`}
       >
         {btnText}
       </span>
-      <span style={{ width: '20px', display: 'flex', justifyContent: 'center' }}>
-        {isPicked ? <Check size={18} color="var(--career-color-primary, #0284c7)" /> : null}
+      <span className="first-run-source-check">
+        {isPicked ? <Check size={18} /> : null}
       </span>
     </button>
   );
@@ -136,25 +135,25 @@ const SOURCE_ITEMS = [
   {
     type: 'linkedin' as const,
     title: 'LinkedIn',
-    desc: 'Места работы, образование, навыки, языки, проекты, курсы, контакты',
+    desc: 'Разделы профиля станут доступны после подключения аккаунта',
     btnText: 'Подключить',
   },
   {
     type: 'hh' as const,
     title: 'hh.ru',
-    desc: 'Резюме с hh.ru: места работы, навыки, образование',
+    desc: 'Резюме станет доступно после подключения аккаунта',
     btnText: 'Подключить',
   },
   {
     type: 'file' as const,
     title: 'Файл резюме',
-    desc: 'PDF или DOCX, до 10 МБ',
+    desc: 'PDF, до 20 МБ',
     btnText: 'Загрузить',
   },
   {
     type: 'talk' as const,
     title: 'Рассказать консультанту',
-    desc: 'Без подключений: ответите на вопросы, профиль соберём из ответов',
+    desc: 'Можно обсудить цель и следующие шаги без подключения источника',
     btnText: 'Начать',
   },
 ] as const;
@@ -162,11 +161,13 @@ const SOURCE_ITEMS = [
 function SourceGridList({
   data,
   onSelectSource,
+  onConnectSource,
   onTriggerFileUpload,
   onTriggerConsultant,
 }: {
   readonly data: FirstRunData;
   readonly onSelectSource: (s: SourceType) => void;
+  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
   readonly onTriggerFileUpload: () => void;
   readonly onTriggerConsultant: () => void;
 }): ReactElement {
@@ -182,6 +183,9 @@ function SourceGridList({
           isPicked={data.selectedSource === item.type}
           onPick={() => {
             onSelectSource(item.type);
+            if (item.type === 'linkedin' || item.type === 'hh') {
+              onConnectSource?.(item.type);
+            }
             if (item.type === 'file') onTriggerFileUpload();
             if (item.type === 'talk') onTriggerConsultant();
           }}
@@ -204,11 +208,11 @@ function SourceCardActions({
     <div className="first-run-actions">
       <button
         type="button"
-        className="first-run-btn-primary"
+        className="first-run-btn-ghost"
         onClick={onNext}
         data-testid="source-next-btn"
       >
-        {source === 'linkedin' ? 'Подключить LinkedIn' : 'Далее'}
+        {source === 'linkedin' || source === 'hh' ? 'Продолжить без подключения' : 'Продолжить'}
       </button>
       <button
         type="button"
@@ -226,40 +230,52 @@ interface FirstRunUploadStatusProps {
   readonly uploadedFileName?: string;
   readonly isIngesting?: boolean;
   readonly ingestionError?: string | null;
+  readonly ingestionNotice?: string | null;
 }
-
-const UPLOAD_BADGE_STYLE: CSSProperties = {
-  marginTop: '12px',
-  padding: '8px 12px',
-  background: 'var(--career-color-primary-surface, #f0f9ff)',
-  borderRadius: '8px',
-  fontSize: 'var(--career-text-sm, 13px)',
-};
 
 function FirstRunUploadStatus({
   uploadedFileName,
   isIngesting,
   ingestionError,
+  ingestionNotice,
 }: FirstRunUploadStatusProps): ReactElement | null {
-  if (!uploadedFileName && !isIngesting && !ingestionError) return null;
+  if (!uploadedFileName && !isIngesting && !ingestionError && !ingestionNotice) return null;
   return (
     <>
       {uploadedFileName ? (
-        <div className="first-run-uploaded-file-badge" data-testid="uploaded-file-info" style={UPLOAD_BADGE_STYLE}>
+        <div className="first-run-uploaded-file-badge" data-testid="uploaded-file-info">
           <span>Файл резюме: <b>{uploadedFileName}</b></span>
         </div>
       ) : null}
       {isIngesting ? (
-        <p style={{ marginTop: '8px', fontSize: 'var(--career-text-sm, 13px)', color: 'var(--career-color-primary, #0284c7)' }}>
+        <p className="first-run-upload-status is-loading" role="status">
           Обрабатываем файл резюме...
         </p>
       ) : null}
       {ingestionError ? (
-        <p style={{ marginTop: '8px', fontSize: 'var(--career-text-sm, 13px)', color: 'var(--career-color-error, #ef4444)' }}>
+        <p className="first-run-upload-status is-error" role="alert">
           {ingestionError}
         </p>
       ) : null}
+      {ingestionNotice ? (
+        <p className="first-run-upload-status" role="status">
+          {ingestionNotice}
+        </p>
+      ) : null}
     </>
+  );
+}
+
+function SourceCardHeader(): ReactElement {
+  return (
+    <div className="first-run-stage-head">
+      <div className="first-run-stage-title-wrap">
+        <span className="first-run-stage-badge">2</span>
+        <h2 id="source-title" className="first-run-stage-title">
+          Источник
+        </h2>
+      </div>
+    </div>
   );
 }
 
@@ -268,7 +284,9 @@ export function FirstRunSourceCard({
   uploadedFileName,
   isIngesting,
   ingestionError,
+  ingestionNotice,
   onSelectSource,
+  onConnectSource,
   onTriggerFileUpload,
   onTriggerConsultant,
   onNext,
@@ -278,7 +296,9 @@ export function FirstRunSourceCard({
   readonly uploadedFileName?: string;
   readonly isIngesting?: boolean;
   readonly ingestionError?: string | null;
+  readonly ingestionNotice?: string | null;
   readonly onSelectSource: (s: SourceType) => void;
+  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
   readonly onTriggerFileUpload: () => void;
   readonly onTriggerConsultant: () => void;
   readonly onNext: () => void;
@@ -286,17 +306,11 @@ export function FirstRunSourceCard({
 }): ReactElement {
   return (
     <article className="first-run-stage-card is-active" aria-labelledby="source-title">
-      <div className="first-run-stage-head">
-        <div className="first-run-stage-title-wrap">
-          <span className="first-run-stage-badge">2</span>
-          <h2 id="source-title" className="first-run-stage-title">
-            Источник
-          </h2>
-        </div>
-      </div>
+      <SourceCardHeader />
       <SourceGridList
         data={data}
         onSelectSource={onSelectSource}
+        onConnectSource={onConnectSource}
         onTriggerFileUpload={onTriggerFileUpload}
         onTriggerConsultant={onTriggerConsultant}
       />
@@ -304,6 +318,7 @@ export function FirstRunSourceCard({
         uploadedFileName={uploadedFileName}
         isIngesting={isIngesting}
         ingestionError={ingestionError}
+        ingestionNotice={ingestionNotice}
       />
       <SourceCardActions
         source={data.selectedSource}
@@ -336,7 +351,7 @@ function CityField({
         data-testid="context-city-picker-btn"
       >
         <span>{city}</span>
-        <small style={{ color: 'var(--career-color-muted, #94a3b8)' }}>{country}</small>
+        <small className="first-run-city-country">{country}</small>
       </button>
     </div>
   );
@@ -376,8 +391,8 @@ function ContextFormFields({
           <option value="Офис">Офис</option>
         </select>
       </div>
-      <div style={{ marginTop: '12px' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: 'var(--career-text-sm, 14px)' }}>
+      <div className="first-run-relocation-row">
+        <label className="first-run-relocation-label">
           <input
             type="checkbox"
             checked={data.context.isRelocationReady}
@@ -414,7 +429,7 @@ export function FirstRunContextCard({
           </h2>
         </div>
       </div>
-      <p style={{ margin: '0 0 16px', fontSize: 'var(--career-text-sm, 13px)', color: 'var(--career-color-sub, #64748b)' }}>
+      <p className="first-run-context-description">
         Город и формат работы нужны для подбора. Позже их можно поменять в профиле.
       </p>
       <ContextFormFields
