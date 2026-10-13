@@ -84,6 +84,40 @@
   color: var(--career-accent);
 }
 
+/* Макет 5: вкладки раздела — строка с подчёркиванием активной, без коробок. */
+.career-responses-workspace-nav {
+  padding-block: 0;
+}
+
+.career-responses-workspace-tabs {
+  gap: var(--career-space-5);
+}
+
+.career-responses-workspace-tabs button {
+  position: relative;
+  padding-inline: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+
+.career-responses-workspace-tabs button.is-active {
+  border-color: transparent;
+  background: transparent;
+  color: var(--career-text);
+}
+
+.career-responses-workspace-tabs button.is-active::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: calc(var(--career-border-width) * -1);
+  block-size: 2px;
+  background: var(--career-accent);
+}
+
 .career-responses-view-switch {
   justify-content: flex-end;
   margin-block: var(--career-space-3);
