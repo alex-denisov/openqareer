@@ -148,6 +148,36 @@ export function VacanciesFilterToolbar({
   );
 }
 
+export function VacanciesFilterToolbarFromState({
+  state,
+  expanded,
+  activeGroup,
+  onToggle,
+  onSelectGroup,
+}: {
+  readonly state: VacanciesScreenState;
+  readonly expanded: boolean;
+  readonly activeGroup: VacancyFilterGroup | null;
+  readonly onToggle: () => void;
+  readonly onSelectGroup: (group: VacancyFilterGroup) => void;
+}) {
+  const groups = VACANCY_FILTER_GROUPS.map((group) => ({
+    ...group,
+    active: filterGroupIsActive(state, group.id),
+    summary: summarizeVacancyFilterGroup(state, group.id),
+  }));
+  return (
+    <VacanciesFilterToolbar
+      groups={groups}
+      expanded={expanded}
+      activeGroup={activeGroup}
+      activeCount={groups.filter((group) => group.active).length}
+      onToggle={onToggle}
+      onSelectGroup={onSelectGroup}
+    />
+  );
+}
+
 function VacancyFilterGroupButtons({
   groups,
   activeGroup,

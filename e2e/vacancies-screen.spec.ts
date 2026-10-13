@@ -469,12 +469,17 @@ async function openFilterGroup(
   const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
   const popover = page.locator('#vacancies-filter-popover');
   if (mobile) {
-    const backToOverview = page.getByRole('button', { name: 'Все фильтры', exact: true });
-    if (await backToOverview.isVisible()) await backToOverview.click();
     if (!(await popover.isVisible())) {
       await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
     }
-    await page.locator(`[data-filter-sheet-group="${group}"]`).click();
+    const groupSelectors = {
+      roles: '[data-filter-facet="roles"]',
+      locations: '.vacancy-location-filter',
+      salary: '.vacancy-salary-filter',
+      format: '.vacancy-format-filter',
+      sources: '.vacancy-source-filter',
+    } as const;
+    await expect(popover.locator(groupSelectors[group]).first()).toBeVisible();
   } else {
     await page.locator(`[data-filter-group="${group}"]`).click();
   }
@@ -600,6 +605,7 @@ test.describe('B250 vacancies screen', () => {
     const filters = await openFilterGroup(page, 'roles');
     await expect(filters.getByRole('button', { name: 'Enterprise Architect · 34' })).toBeVisible();
     await expect(filters.getByRole('button', { name: 'Cloud Architect · 6' })).toBeVisible();
+    await filters.getByText('Фильтр по уровню', { exact: true }).click();
     await expect(filters.getByRole('button', { name: 'VP · 30' })).toBeVisible();
 
     await openFilterGroup(page, 'format');
@@ -690,9 +696,13 @@ test.describe('B250 vacancies screen', () => {
       await expect(filters).toBeVisible();
       await filters.click();
       const sheet = page.locator('.vacancies-filters.is-mobile-open');
-      for (const summary of ['Head, Director', 'Москва +46', 'от 450 тыс. ₽', 'Гибрид, удалённо']) {
-        await expect(sheet).toContainText(summary);
-      }
+      await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('Head, Director');
+      await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('Москва +46');
+      await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('от 450 тыс. ₽');
+      await expect(sheet.locator('.vacancy-location-filter')).toBeVisible();
+      await expect(sheet.locator('.vacancy-salary-filter')).toBeVisible();
+      await expect(sheet.locator('.vacancy-format-filter')).toBeVisible();
+      await expect(sheet.locator('.vacancy-source-filter')).toBeVisible();
       await expect(sheet.getByRole('button', { name: 'Сбросить', exact: true })).toBeVisible();
       await sheet.getByRole('button', { name: 'Показать результаты', exact: true }).click();
     } else {
@@ -725,19 +735,24 @@ test.describe('B250 vacancies screen', () => {
     await expect(row).toBeVisible();
     await expect(row).toContainText(/совпадает|не совпадает/u);
     await expect(row.getByRole('button', { name: 'Сохранить', exact: true })).toBeVisible();
-    await expect(
-      row.getByRole('button', { name: 'Хочу в эту компанию', exact: true }),
-    ).toBeVisible();
+    const wantCompany = row.getByRole('button', { name: 'Хочу в эту компанию', exact: true });
     const expand = row.getByRole('button', { name: /(?:Раскрыть|Свернуть) вакансию/u });
-    await expect(expand).toBeVisible();
+    if (isMobile) {
+      await expect(wantCompany).toBeHidden();
+      await expect(expand).toBeHidden();
+    } else {
+      await expect(wantCompany).toBeVisible();
+      await expect(expand).toBeVisible();
+    }
     await expect(row.getByRole('button', { name: 'Сохранить вакансию', exact: true })).toHaveCount(
       0,
     );
     await captureS10Vacancies(page, `vacancies-${width}`);
 
-    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await expand.click();
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
     const detail = firstItem.locator('.vac-detail');
     await expect(detail).toBeVisible();
+    await expect(detail.getByRole('button', { name: 'Хочу в эту компанию' })).toBeVisible();
     await expect(detail.getByRole('heading', { name: 'Требования к навыкам' })).toBeVisible();
     await expect(detail).toContainText('Из описания вакансии и тегов источника');
     await expect(detail.getByRole('heading', { name: 'Описание', exact: true })).toBeVisible();
@@ -788,10 +803,12 @@ test.describe('B250 vacancies screen', () => {
     const actionBoxes = await firstItem
       .locator('.career-vacancy-actions button, .vacancies-detail-actions button')
       .evaluateAll((buttons) =>
-        buttons.map((button) => {
-          const box = button.getBoundingClientRect();
-          return { left: box.left, right: box.right };
-        }),
+        buttons
+          .map((button) => {
+            const box = button.getBoundingClientRect();
+            return { left: box.left, right: box.right, width: box.width, height: box.height };
+          })
+          .filter((box) => box.width > 0 && box.height > 0),
       );
     expect(firstItemBox).not.toBeNull();
     expect(
@@ -799,6 +816,7 @@ test.describe('B250 vacancies screen', () => {
         (box) =>
           box.left >= firstItemBox!.x - 1 && box.right <= firstItemBox!.x + firstItemBox!.width + 1,
       ),
+      JSON.stringify({ firstItemBox, actionBoxes }),
     ).toBe(true);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -1587,6 +1605,7 @@ test.describe('B250 vacancies screen', () => {
     await openVacancies(page);
 
     const filters = await openFilterGroup(page, 'roles');
+    await filters.getByText('Добавить свою роль', { exact: true }).click();
 
     // Verify limit note and disabled inputs
     const limitNote = filters.locator('.role-limit-note');
@@ -1639,7 +1658,11 @@ test.describe('B250 vacancies screen', () => {
       fullPage: true,
     });
     // Close filters panel from inside the popover.
-    await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
+    if (isMobile) {
+      await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
+    } else {
+      await page.locator('[data-filter-group="roles"]').click();
+    }
     await expect(page.locator('.filters-panel.is-expanded')).not.toBeVisible();
 
     // 3. map-view
@@ -1795,11 +1818,16 @@ test.describe('B250 vacancies screen', () => {
 
     // (a) Проверка группы фильтра «Уровень»
     const filtersPanel = await openFilterGroup(page, 'roles');
+    await filtersPanel.getByText('Фильтр по уровню', { exact: true }).click();
     await expect(filtersPanel.locator('.level-note')).toHaveText(
       'Уровень берётся из опыта в профиле',
     );
     await expect(filtersPanel.getByText('изменить в профиле')).not.toBeVisible();
-    await filtersPanel.getByRole('button', { name: 'Свернуть', exact: true }).click();
+    if (await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches)) {
+      await filtersPanel.getByRole('button', { name: 'Свернуть', exact: true }).click();
+    } else {
+      await page.locator('[data-filter-group="roles"]').click();
+    }
 
     // (б) Разбор вакансии: уровень отделен от навыков
     const vacancyItem = await setRowExpanded(page, 0, true);

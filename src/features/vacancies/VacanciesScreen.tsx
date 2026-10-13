@@ -1,6 +1,6 @@
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Check, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
+import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
@@ -583,21 +583,28 @@ function VacanciesScreenHeader({ input }: { readonly input: VacanciesScreenProps
   return (
     <>
       <header className="vacancies-mobile-topbar" aria-label="Навигация по вакансиям">
-        {input.onOpenNotifications ? (
-          <button type="button" aria-label="Уведомления" onClick={input.onOpenNotifications}>
-            <Bell size={20} aria-hidden="true" />
-          </button>
-        ) : null}
         <h1>Вакансии</h1>
-        {input.onOpenExpert ? (
-          <button
-            type="button"
-            aria-label="Спросить консультанта"
-            onClick={() => input.onOpenExpert?.('vacancies')}
-          >
-            <Sparkle size={20} aria-hidden="true" />
-          </button>
-        ) : null}
+        <div className="vacancies-mobile-header-actions">
+          {input.onOpenConnections ? (
+            <button type="button" aria-label="Подключения" onClick={input.onOpenConnections}>
+              <GearSix className="vacancies-mobile-topbar-icon" aria-hidden="true" />
+            </button>
+          ) : null}
+          {input.onOpenNotifications ? (
+            <button type="button" aria-label="Уведомления" onClick={input.onOpenNotifications}>
+              <Bell className="vacancies-mobile-topbar-icon" aria-hidden="true" />
+            </button>
+          ) : null}
+          {input.onOpenExpert ? (
+            <button
+              type="button"
+              aria-label="Спросить консультанта"
+              onClick={() => input.onOpenExpert?.('vacancies')}
+            >
+              <Sparkle className="vacancies-mobile-topbar-icon" aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
       </header>
       <PageHeader kicker="" title="Вакансии" description="" />
     </>

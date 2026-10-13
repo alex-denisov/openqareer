@@ -3,9 +3,10 @@ import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-async function openVacancies(page: Page) {
-  await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+async function navigateToVacancies(page: Page) {
+  const navigation = page.getByRole('button', { name: 'Вакансии', exact: true });
+  await expect(navigation).toBeVisible({ timeout: 15_000 });
+  await navigation.click();
   await page.mouse.move(1, 1);
   await page.mouse.click(1, 1);
   await page.evaluate(() => {
@@ -14,6 +15,11 @@ async function openVacancies(page: Page) {
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   await expect(page.getByRole('tab', { name: /Подборка/u })).toBeVisible();
   await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
+}
+
+async function openVacancies(page: Page) {
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await navigateToVacancies(page);
 }
 
 async function measureResponsiveWidths(page: Page, testInfo: TestInfo) {
@@ -34,7 +40,10 @@ async function measureResponsiveWidths(page: Page, testInfo: TestInfo) {
           Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) - actual;
         const actions = [
           ...document.querySelectorAll<HTMLElement>('.vacancy-collection-actions button'),
-        ];
+        ].filter((button) => {
+          const rect = button.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
         const bounds = actions.map((button) => button.getBoundingClientRect());
         return {
           requested,
@@ -184,21 +193,15 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   });
   if (testInfo.project.name === 'mobile-390') {
     const mobileSheet = page.locator('.vacancies-filters.is-mobile-open');
-    await expect(mobileSheet.getByText(/условия поиска/iu)).toHaveCount(0);
-    await expect(mobileSheet.getByRole('button', { name: /изменить условия/iu })).toHaveCount(0);
-    const expectedSheetRows = [
-      ['roles', 'Head, Director'],
-      ['locations', 'Москва +46'],
-      ['salary', 'от 450 тыс. ₽'],
-      ['format', 'Гибрид, удалённо'],
-      ['sources', 'hh.ru, LinkedIn'],
-    ] as const;
-    await expect(mobileSheet.locator('[data-filter-sheet-group]')).toHaveCount(5);
-    for (const [group, summary] of expectedSheetRows) {
-      await expect(mobileSheet.locator(`[data-filter-sheet-group="${group}"]`)).toContainText(
-        summary,
-      );
-    }
+    await expect(
+      mobileSheet.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
+    ).toBeVisible();
+    await expect(
+      mobileSheet.locator('.vacancy-salary-filter input[type="number"]').first(),
+    ).toHaveValue('450000');
+    await expect(mobileSheet.locator('.vacancy-format-filter')).toBeVisible();
+    await expect(mobileSheet.locator('.vacancy-source-filter')).toBeVisible();
+    await expect(mobileSheet.locator('[data-filter-sheet-group]')).toHaveCount(0);
     await expect(mobileSheet.getByRole('button', { name: 'Сбросить' })).toBeVisible();
     await expect(mobileSheet.getByRole('button', { name: 'Показать результаты' })).toBeVisible();
   }
@@ -206,7 +209,6 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     await page.locator('.vacancies-summary-reset').click();
   } else {
     await page.locator('.vacancies-sheet-reset').click();
-    await page.locator('[data-filter-sheet-group="locations"]').click();
   }
 
   const locationSearch = page.getByRole('searchbox', {
@@ -216,7 +218,11 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   const screenError = page.locator('.career-error-boundary-details code');
   if (await screenError.count())
     throw new Error((await screenError.textContent()) ?? 'Unknown screen error');
-  await page.getByRole('button', { name: 'Применить' }).click();
+  await page
+    .getByRole('button', {
+      name: testInfo.project.name === 'mobile-390' ? 'Показать результаты' : 'Применить',
+    })
+    .click();
   await expect(page.locator('.vacancies-filters')).toBeHidden();
   await page.screenshot({
     path: `output/playwright/B446/B446-filtered-${viewportSuffix}.png`,
@@ -226,22 +232,35 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   const vacancy = page
     .locator('.vac-list-item')
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
+    .filter({ hasText: 'Revolut' })
     .first();
   await expect(vacancy).toBeVisible({ timeout: 15_000 });
   const saveButton = vacancy.getByRole('button', { name: 'Сохранить', exact: true });
-  const companyWantButton = vacancy.getByRole('button', { name: 'Хочу в эту компанию' });
   await expect(saveButton).toBeVisible();
   const actionHeights = await vacancy
     .locator('.career-vacancy-actions button')
-    .evaluateAll((buttons) => buttons.map((button) => button.getBoundingClientRect().height));
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((button) => button.getClientRects().length > 0)
+        .map((button) => button.getBoundingClientRect().height),
+    );
   expect(actionHeights.every((height) => height >= 44)).toBe(true);
+  const rowTrigger = vacancy.locator('.vacancies-screen-row-trigger');
+  if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
+  const companyWantButton = vacancy
+    .locator('.vacancies-screen-detail-actions')
+    .getByRole('button', { name: 'Хочу в эту компанию' });
+  await expect(companyWantButton).toBeVisible();
   await companyWantButton.click();
-  await expect(vacancy.getByRole('button', { name: 'Убрать из «Хочу»' })).toBeVisible();
+  await expect(
+    vacancy.locator('.vacancies-screen-detail-actions').getByRole('button', {
+      name: 'Убрать из «Хочу»',
+    }),
+  ).toBeVisible();
   await page.screenshot({
     path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
     fullPage: true,
   });
-  const rowTrigger = vacancy.locator('.vacancies-screen-row-trigger');
   if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
   const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
   await focusWithKeyboard(page, companyPathButton);
@@ -273,25 +292,37 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     fullPage: true,
   });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await openVacancies(page);
+  await navigateToVacancies(page);
   await openFilters(page);
   if (testInfo.project.name === 'desktop-1440') {
     await page.locator('.vacancies-summary-reset').click();
   } else {
     await page.locator('.vacancies-sheet-reset').click();
-    await page.locator('[data-filter-sheet-group="locations"]').click();
   }
   await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Berlin');
-  await page.getByRole('button', { name: 'Применить' }).click();
+  await page
+    .getByRole('button', {
+      name: testInfo.project.name === 'mobile-390' ? 'Показать результаты' : 'Применить',
+    })
+    .click();
   const reloadedVacancy = page
     .locator('.vac-list-item')
     .filter({ hasText: 'Product Lead, Merchant Onboarding' })
+    .filter({ hasText: 'Revolut' })
     .first();
   await expect(reloadedVacancy).toBeVisible({ timeout: 15_000 });
-  const removeCompanyWant = reloadedVacancy.getByRole('button', { name: 'Убрать из «Хочу»' });
+  const reloadedRowTrigger = reloadedVacancy.locator('.vacancies-screen-row-trigger');
+  if ((await reloadedRowTrigger.getAttribute('aria-expanded')) !== 'true')
+    await reloadedRowTrigger.click();
+  const removeCompanyWant = reloadedVacancy
+    .locator('.vacancies-screen-detail-actions')
+    .getByRole('button', { name: 'Убрать из «Хочу»' });
   await expect(removeCompanyWant).toBeVisible();
   await removeCompanyWant.click();
-  await expect(reloadedVacancy.getByRole('button', { name: 'Хочу в эту компанию' })).toBeVisible();
+  const restoredWantAction = reloadedVacancy
+    .locator('.vacancies-screen-detail-actions')
+    .getByRole('button', { name: 'Хочу в эту компанию' });
+  await expect(restoredWantAction).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Сохранённые 19' })).toBeVisible();
   await page.getByRole('tab', { name: 'Сохранённые 19' }).click();
   await expect(
