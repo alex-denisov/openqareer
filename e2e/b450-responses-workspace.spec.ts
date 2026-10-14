@@ -320,11 +320,52 @@ async function handleApplicationRoute(
   route: Route,
   calls: CapturedCalls,
   applications: ApplicationRecord[],
+  labels: Array<{ id: string; name: string; createdAt: string }>,
 ): Promise<boolean> {
   const request = route.request();
   const url = new URL(request.url());
   const method = request.method();
   const path = url.pathname;
+  if (path === '/api/v1/candidate/application-labels' && method === 'GET') {
+    await fulfill(route, labels);
+    return true;
+  }
+  if (path === '/api/v1/candidate/application-labels' && method === 'POST') {
+    const body = request.postDataJSON() as RecordValue;
+    const name = String(body.name ?? '').trim();
+    const label = labels.find(
+      (item) => item.name.toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU'),
+    ) ?? { id: `label-${labels.length + 1}`, name, createdAt: '2026-10-14T10:00:00.000Z' };
+    if (!labels.some((item) => item.id === label.id)) labels.push(label);
+    await fulfill(route, label);
+    return true;
+  }
+  const labelPrefix = '/api/v1/candidate/applications/';
+  const labelParts = path.startsWith(labelPrefix)
+    ? path.slice(labelPrefix.length).split('/labels/')
+    : [];
+  if (labelParts.length === 2 && (method === 'PUT' || method === 'DELETE')) {
+    const application = applications.find(
+      (item) => item.id === decodeURIComponent(labelParts[0] ?? ''),
+    );
+    const label = labels.find((item) => item.id === decodeURIComponent(labelParts[1] ?? ''));
+    if (application && label) {
+      const current = Array.isArray(application.labels)
+        ? (application.labels as Array<{ id: string; name: string; createdAt: string }>)
+        : [];
+      application.labels =
+        method === 'PUT'
+          ? current.some((item) => item.id === label.id)
+            ? current
+            : [...current, label]
+          : current.filter((item) => item.id !== label.id);
+    }
+    await fulfill(route, {
+      changed: Boolean(application && label),
+      ...(method === 'PUT' && label ? { label } : {}),
+    });
+    return true;
+  }
   if (path === '/api/v1/candidate/applications' && method === 'GET') {
     calls.applicationQueries.push(url.href);
     const stages = url.searchParams.getAll('stage');
@@ -512,6 +553,7 @@ async function installMocks(
   };
   const applications = createApplications();
   const companies = createCompanies(options.companyCount ?? 2);
+  const labels: Array<{ id: string; name: string; createdAt: string }> = [];
   const interviewFixture = createMockInterviewSimulatorFixture();
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -551,7 +593,7 @@ async function installMocks(
         body: JSON.stringify({ data: [], meta: { nextOffset: null } }),
       });
     }
-    if (await handleApplicationRoute(route, calls, applications)) return;
+    if (await handleApplicationRoute(route, calls, applications, labels)) return;
     if (await handleCompanyRoute(route, calls, companies)) return;
     await fulfill(route, null);
   });
@@ -816,6 +858,39 @@ test.describe('B450 responses workspace', () => {
     expect(new URL(calls.companyPageQueries.at(-1) ?? '').searchParams.get('search')).toBe(
       'Компания 25',
     );
+  });
+
+  test('application card menu exports a response and creates a persistent label', async ({
+    page,
+  }, testInfo) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+
+    const firstCard = page.locator('.career-responses-card').first();
+    const title = await firstCard.locator('.career-responses-card-role').innerText();
+    await firstCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    const menu = page.locator('.career-responses-card-menu').first();
+    const downloadPromise = page.waitForEvent('download');
+    await menu.getByRole('button', { name: 'Экспорт' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/response-application-\d+\.csv/u);
+    await menu.getByRole('button', { name: 'Добавить метку' }).click();
+    await menu.getByLabel('Название метки').fill('Контакт');
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath('b450-label-menu-harness.html'),
+      '.career-responses-label-editor',
+    );
+    await menu.getByRole('button', { name: 'Создать метку' }).click();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    const reloadedCard = page.locator('.career-responses-card').filter({ hasText: title }).first();
+    await reloadedCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    await expect(page.locator('.career-responses-card-menu').first()).toContainText('Контакт');
   });
 
   test('оффер сохраняет состав компенсации и открывается в сравнении', async ({

@@ -1,4 +1,4 @@
-import type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
+import type { ApplicationView as StoredApplicationView } from '../../../server/domain/applicationDerivedFields';
 import {
   APPLICATION_STAGES,
   type ApplicationStage,
@@ -20,7 +20,15 @@ import {
   throwApiError,
 } from '../coach/apiClient';
 
-export type { ApplicationView } from '../../../server/domain/applicationDerivedFields';
+export interface ApplicationLabelView {
+  readonly id: string;
+  readonly name: string;
+  readonly createdAt: string;
+}
+
+export type ApplicationView = StoredApplicationView & {
+  readonly labels?: readonly ApplicationLabelView[];
+};
 
 /** `code` on a `CoachApiError` thrown by `patchApplication` (server/routes/runtime.ts). */
 export const APPLICATION_VERSION_CONFLICT_CODE = 'application_version_conflict';
@@ -52,6 +60,37 @@ export interface PatchApplicationInput {
 /** Minutes east of UTC, the shape `?tz=` and `shared/followUpPolicy` expect. */
 export function localTimezoneOffsetMinutes(): number {
   return -new Date().getTimezoneOffset();
+}
+
+
+export async function listApplicationLabels(signal?: AbortSignal): Promise<ApplicationLabelView[]> {
+  const response = await apiFetch('/api/v1/candidate/application-labels', { signal });
+  return readDataArray<ApplicationLabelView>(response);
+}
+
+export async function createApplicationLabel(name: string): Promise<ApplicationLabelView> {
+  const response = await apiFetch('/api/v1/candidate/application-labels', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return readDataObject<ApplicationLabelView>(response);
+}
+
+export async function assignApplicationLabel(applicationId: string, labelId: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/labels/${encodeURIComponent(labelId)}`,
+    { method: 'PUT' },
+  );
+  await readDataObject<{ changed: boolean; label: ApplicationLabelView }>(response);
+}
+
+export async function removeApplicationLabel(applicationId: string, labelId: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/applications/${encodeURIComponent(applicationId)}/labels/${encodeURIComponent(labelId)}`,
+    { method: 'DELETE' },
+  );
+  await readDataObject<{ changed: boolean }>(response);
 }
 
 export async function listApplications(signal?: AbortSignal): Promise<ApplicationView[]> {

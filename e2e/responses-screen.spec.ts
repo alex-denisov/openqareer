@@ -64,6 +64,8 @@ const WORKSPACE_INPUT = {
   urgency: 'active' as const,
 };
 
+const RECENT_APPLICATION_DATE = new Date().toISOString();
+
 function application(overrides: Record<string, unknown>) {
   return {
     id: overrides.id,
@@ -77,10 +79,10 @@ function application(overrides: Record<string, unknown>) {
     vacancy: null,
     notes: null,
     followUpDueAt: null,
-    stageChangedAt: '2026-09-20T10:00:00.000Z',
+    stageChangedAt: RECENT_APPLICATION_DATE,
     version: 1,
-    createdAt: '2026-09-15T10:00:00.000Z',
-    updatedAt: '2026-09-20T10:00:00.000Z',
+    createdAt: RECENT_APPLICATION_DATE,
+    updatedAt: RECENT_APPLICATION_DATE,
     followUp: null,
     whoseTurn: 'company',
     materials: { coverLetter: true, resume: true },
