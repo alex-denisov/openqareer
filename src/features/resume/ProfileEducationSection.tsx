@@ -82,6 +82,7 @@ function EducationRow({
   readonly onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const years = [entry.startDate, entry.endDate].filter(Boolean).join(' — ');
   if (editing) {
     return (
       <EducationEditForm
@@ -99,13 +100,12 @@ function EducationRow({
     <div className="career-profile-screen-edu-item">
       <div className="career-profile-screen-position-title-row">
         <b>{entry.institution || 'Учебное заведение не указано'}</b>
+        {years ? <span className="career-profile-screen-edu-years">{years}</span> : null}
         <SectionPencilButton label="Изменить образование" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить образование" onClick={onRemove} />
       </div>
       <div className="career-profile-screen-edu-meta">
-        {[entry.qualification, [entry.startDate, entry.endDate].filter(Boolean).join(' — ')]
-          .filter(Boolean)
-          .join(' · ')}
+        {entry.qualification}
       </div>
       {entry.description ? <p>{entry.description}</p> : null}
     </div>

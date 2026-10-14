@@ -777,3 +777,85 @@
 .career-profile-screen-import-live-list .is-done svg {
   color: var(--career-success);
 }
+
+/* B430 экран 2, 1440: секции плотными строками — название, подпись, годы справа, правка. */
+@media (min-width: 1024px) {
+  .career-profile-screen-view .career-profile-screen-company-logo {
+    display: none;
+  }
+
+  .career-profile-screen-view .career-profile-screen-position {
+    padding-left: 0;
+  }
+
+  .career-profile-screen-view .career-profile-screen-company-head {
+    margin-bottom: var(--career-space-2);
+  }
+
+  .career-profile-screen-view .career-profile-screen-edu-item {
+    display: grid;
+    gap: var(--career-space-1);
+    padding-block: var(--career-space-3);
+  }
+
+  .career-profile-screen-view .career-profile-screen-edu-item + .career-profile-screen-edu-item {
+    margin-top: 0;
+    padding-top: var(--career-space-3);
+  }
+
+  .career-profile-screen-view .career-profile-screen-edu-years {
+    margin-inline-start: auto;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .career-profile-screen-view .career-profile-screen-edu-item p {
+    display: -webkit-box;
+    margin: 0;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-profile-screen-view .career-profile-screen-tile-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .career-profile-screen-view .career-profile-screen-tile {
+    padding: var(--career-space-3) 0;
+    border: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .career-profile-screen-view .career-profile-screen-tile:first-child {
+    border-block-start: 0;
+  }
+}
+
+@media (min-width: 1024px) {
+  .career-profile-screen-view .career-profile-screen-position-title-row {
+    align-items: center;
+  }
+
+  .career-profile-screen-view .career-profile-screen-position-title-row .career-profile-screen-position-dates {
+    margin-inline-start: auto;
+    font-size: var(--career-text-xs);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .career-profile-screen-view .career-profile-screen-position-tags {
+    align-items: center;
+  }
+
+  .career-profile-screen-view .career-profile-screen-tile-head {
+    flex-wrap: nowrap;
+  }
+}

@@ -112,6 +112,9 @@ function PositionSummary({
     <div className="career-profile-screen-position">
       <div className="career-profile-screen-position-title-row">
         <b>{entry.title || 'Должность не указана'}</b>
+        {periodLabel(entry) ? (
+          <span className="career-profile-screen-position-dates">{periodLabel(entry)}</span>
+        ) : null}
         <SectionPencilButton
           label={`Редактировать место целиком: ${entry.employer || 'работодатель не указан'}`}
           onClick={onEdit}
@@ -150,6 +153,9 @@ function PositionEvidenceBadge({
       >
         {confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}
       </span>
+      {entry.location ? (
+        <span className="career-profile-screen-company-span">{entry.location}</span>
+      ) : null}
       {entry.employmentType ? (
         <span className="career-profile-screen-tag">{entry.employmentType}</span>
       ) : null}
@@ -169,12 +175,6 @@ function PositionDetails({
 }) {
   return (
     <>
-      {periodLabel(entry) ? (
-        <div className="career-profile-screen-position-dates">{periodLabel(entry)}</div>
-      ) : null}
-      {entry.location ? (
-        <div className="career-profile-screen-company-span">{entry.location}</div>
-      ) : null}
       {bullets.length ? (
         <ul className="career-profile-screen-position-bullets">
           {bullets.map((bullet) => (
