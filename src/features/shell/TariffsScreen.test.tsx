@@ -124,6 +124,27 @@ describe('TariffsScreen billing management', () => {
     expect(desktop.textContent).not.toContain('Следующее списание');
   });
 
+  it('schedules a return to Free from the tariff card through server cancellation', async () => {
+    vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(basicSummary);
+    vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
+    const cancel = vi
+      .spyOn(billingApi, 'cancelCandidateBillingRenewal')
+      .mockResolvedValue(canceledSubscription);
+    await mount();
+    const desktop = container.querySelector('.career-tariffs-desktop') as HTMLElement;
+    const button = [...desktop.querySelectorAll('button')].find((item) =>
+      item.textContent?.includes('Вернуться на Free'),
+    ) as HTMLButtonElement;
+
+    await act(async () => button.click());
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(desktop.textContent).toContain('Автопродление отключено');
+    expect(desktop.textContent).toContain('Доступ действует до 8 ноября');
+  });
+
+
+
   it('opens payment-method recovery for a past-due subscription with renewal enabled', async () => {
     vi.spyOn(coachApi, 'getSession').mockResolvedValue({
       username: 'qa.candidate',

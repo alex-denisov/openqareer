@@ -55,6 +55,9 @@ function ReadyTariffsScreen({
       billingPanel={panel}
       externalUpgradeContext={actions.paymentMethodContext}
       onCloseExternalUpgrade={actions.closePaymentMethodUpdate}
+      onSelectTier={(tierId) => {
+        if (tierId === 'free') void actions.cancelRenewal();
+      }}
       onSummaryChanged={billing.applySummary}
     />
   );
