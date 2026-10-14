@@ -859,3 +859,25 @@
     flex-wrap: nowrap;
   }
 }
+
+/* Узкая колонка (окно приложения): дата и годы под названием, кнопки правки остаются рядом с ним. */
+@media (min-width: 1024px) {
+  .career-profile-screen-view .career-profile-screen-position,
+  .career-profile-screen-view .career-profile-screen-edu-item {
+    container-type: inline-size;
+  }
+
+  .career-profile-screen-view .career-profile-screen-position-title-row b {
+    flex: 1 1 10rem;
+    min-inline-size: 0;
+  }
+
+  @container (max-width: 34rem) {
+    .career-profile-screen-position-title-row .career-profile-screen-position-dates,
+    .career-profile-screen-edu-years {
+      order: 3;
+      flex-basis: 100%;
+      margin-inline-start: 0;
+    }
+  }
+}
