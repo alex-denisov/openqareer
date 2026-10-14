@@ -383,7 +383,7 @@ export function ModelErrorState({
         Повторите этот шаг, когда сервис будет доступен.
       </p>
       <button className="career-primary-button" type="button" disabled={busy} onClick={onRetry}>
-        {busy ? 'Повторяем…' : 'Повторить'}
+        {busy ? 'Повторяем…' : 'Повторить шаг'}
       </button>
       <span className="career-role-assessment-meta">Действие: {run.modelError?.action}</span>
     </section>

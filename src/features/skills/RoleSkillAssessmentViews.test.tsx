@@ -1,12 +1,11 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
+import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAssessment';
 import {
   InsufficientRequirementsState,
   LoadingState,
   NoRoleState,
   ProgressTrack,
-  RoleChangedState,
-  SkillOverview,
   SourceErrorState,
   StartState,
   TooFewVacanciesState,
@@ -53,7 +52,7 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
 
   it('renders loading, error and edge states with honest non-invented messaging', () => {
     const loading = renderToStaticMarkup(<LoadingState />);
-    const noRole = renderToStaticMarkup(<NoRoleState onClose={() => undefined} />);
+    const noRole = renderToStaticMarkup(<NoRoleState onOpenOpportunities={() => undefined} />);
     const tooFew = renderToStaticMarkup(
       <TooFewVacanciesState
         current={{
@@ -76,14 +75,7 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
         onOpenOpportunities={() => undefined}
       />,
     );
-    const sourceErr = renderToStaticMarkup(
-      <SourceErrorState
-        roleTitle="CTO"
-        busy={false}
-        onRetry={() => undefined}
-        onOpenOpportunities={() => undefined}
-      />,
-    );
+    const sourceErr = renderToStaticMarkup(<SourceErrorState onRetry={() => undefined} />);
 
     expect(loading).toContain('Загружаем требования');
     expect(noRole).toContain('Сначала выберите роль');
@@ -93,32 +85,49 @@ describe('RoleSkillAssessmentViews (AUD-11 / B462)', () => {
   });
 
   it('renders ModelErrorState with honest retry and explanation', () => {
+    const mockRun: RoleSkillAssessmentRun = {
+      id: '00000000-0000-4000-8000-000000000001',
+      revision: 1,
+      roleTitle: 'CTO',
+      roleVersion: 1,
+      status: 'model_error',
+      consentedAt: '2026-10-14T00:00:00.000Z',
+      startedAt: '2026-10-14T00:00:00.000Z',
+      updatedAt: '2026-10-14T00:00:00.000Z',
+      completedAt: null,
+      sampleSize: 15,
+      evidenceObservedAt: '2026-10-14T00:00:00.000Z',
+      dialogueQuestions: ['Вопрос 1', 'Вопрос 2', 'Вопрос 3'],
+      dialogueEntries: [],
+      currentDialogueIndex: 0,
+      suggestions: [],
+      cases: [],
+      skills: Array.from({ length: 5 }, (_, index) => ({
+        id: `skill-${index}`,
+        name: `Навык ${index}`,
+        isKeySkill: index < 2,
+        grade: 'not_confirmed',
+        explanation: 'Навык ещё не проверен.',
+        caseId: null,
+        sourceRefs: [],
+      })),
+      currentCaseIndex: 0,
+      readiness: { ready: false, confirmedCount: 0, missingKeySkillIds: ['skill-0', 'skill-1'] },
+      modelError: { action: 'evaluation', code: 'model_timeout', caseId: 'case-1' },
+      lastRequest: null,
+    };
+
     const html = renderToStaticMarkup(
       <ModelErrorState
         busy={false}
         onRetry={() => undefined}
-        run={{
-          id: 'run-1',
-          role: 'CTO',
-          status: 'cases',
-          skills: [],
-          questions: [],
-          cases: [],
-          suggestions: [],
-          appliedSuggestions: [],
-          currentQuestionIndex: 0,
-          currentCaseIndex: 0,
-          dialogueHistory: [],
-          overallResult: null,
-          startedAt: '2026-10-14',
-          completedAt: null,
-          modelError: { action: 'evaluate_case', message: 'timeout' },
-        }}
+        run={mockRun}
       />,
     );
 
     expect(html).toContain('Модель не завершила проверку');
     expect(html).toContain('Ответ не оценён: модель не ответила');
     expect(html).toContain('Повторить');
+    expect(html).toContain('evaluation');
   });
 });
