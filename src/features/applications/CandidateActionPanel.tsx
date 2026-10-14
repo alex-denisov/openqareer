@@ -44,6 +44,13 @@ export function CandidateActionPanel({
   );
 }
 
+function formatConsentDate(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return ` ${date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}`;
+}
+
 function PanelHeader({ panel }: { panel: Panel }) {
   return (
     <header className="career-candidate-actions__header">
@@ -52,7 +59,7 @@ function PanelHeader({ panel }: { panel: Panel }) {
         {panel.consentGranted ? (
           <span className="career-pill is-good">
             <CheckCircle aria-hidden="true" />
-            Согласие дано
+            Согласие дано{formatConsentDate(panel.consentGrantedAt)}
           </span>
         ) : null}
       </div>

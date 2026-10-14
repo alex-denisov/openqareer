@@ -4,7 +4,9 @@ import type {
   CandidateAutomationRules,
 } from '../../../server/domain/candidateAutomation';
 import type { CandidateAutomationStopCompany } from '../../../server/candidate/sqliteCandidateAutomationRepository';
+import { loadDecisionProfile } from '../../../shared/workPreferences';
 import { AutomationStopCompanies } from './AutomationStopCompanies';
+import { summarizeSearchGeography } from './searchConditionsSummary';
 import './automation-rules.css';
 
 export interface AutomationRulesPanelProps {
@@ -214,9 +216,10 @@ function RolesRow(props: {
 }
 
 function GeographyRow() {
+  const summary = summarizeSearchGeography(loadDecisionProfile());
   return (
     <RowShell title="География и формат" hint="Задаются в разделе «Карьера», условия поиска">
-      <span className="automation-rule-value">Берём из условий поиска</span>
+      <span className="automation-rule-value">{summary ?? 'Не заданы в условиях поиска'}</span>
     </RowShell>
   );
 }

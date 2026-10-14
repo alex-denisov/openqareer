@@ -59,6 +59,7 @@ function useActionPanelData() {
   const [usage, setUsage] = useState<CandidateActionUsageView>();
   const [receipts, setReceipts] = useState<readonly CandidateActionReceiptView[]>([]);
   const [consentGranted, setConsentGranted] = useState(false);
+  const [consentGrantedAt, setConsentGrantedAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
   const reload = useCallback(async (signal?: AbortSignal) => {
     const [nextUsage, nextReceipts, nextConsent] = await Promise.all([
@@ -69,6 +70,7 @@ function useActionPanelData() {
     setUsage(nextUsage);
     setReceipts(nextReceipts);
     setConsentGranted(nextConsent.granted);
+    setConsentGrantedAt(nextConsent.consent?.grantedAt ?? null);
   }, []);
   useEffect(() => {
     const controller = new AbortController();
@@ -77,7 +79,7 @@ function useActionPanelData() {
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, [reload]);
-  return { loading, usage, setUsage, receipts, setReceipts, consentGranted, setConsentGranted, loadError, reload };
+  return { loading, usage, setUsage, receipts, setReceipts, consentGranted, setConsentGranted, consentGrantedAt, loadError, reload };
 }
 
 function useActionSelection(

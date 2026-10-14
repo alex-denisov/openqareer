@@ -529,13 +529,16 @@ export async function setCandidateActionKillSwitch(active: boolean): Promise<voi
 
 export async function getActionsOnBehalfConsent(signal?: AbortSignal): Promise<{
   readonly granted: boolean;
-  readonly consent: { readonly versionId: string } | null;
+  readonly consent: { readonly versionId: string; readonly grantedAt?: string } | null;
 }> {
   const response = await apiFetch(
     '/api/v1/me/consents/actions_on_behalf',
     signal ? { signal } : {},
   );
-  return readDataObject<{ granted: boolean; consent: { versionId: string } | null }>(response);
+  return readDataObject<{
+    granted: boolean;
+    consent: { versionId: string; grantedAt?: string } | null;
+  }>(response);
 }
 
 export async function grantActionsOnBehalfConsent(versionId: string): Promise<void> {
