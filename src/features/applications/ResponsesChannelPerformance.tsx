@@ -16,6 +16,7 @@ export function ResponsesChannelPerformance({
   const period = formatPeriod(query, applications);
   return (
     <section
+      id="career-responses-channel-performance"
       className="career-responses-channel-performance"
       aria-labelledby="responses-channel-title"
     >

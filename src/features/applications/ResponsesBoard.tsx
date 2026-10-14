@@ -40,6 +40,7 @@ function useStageFilter(initial?: ApplicationStage) {
 export function ResponsesBoard({
   state,
   onOpenVacancies,
+  onOpenAutomation,
   initialStageFilter,
   initialArchiveOpen,
   initialTab,
@@ -66,6 +67,7 @@ export function ResponsesBoard({
     <ReadyBoard
       state={state}
       onOpenVacancies={onOpenVacancies}
+      onOpenAutomation={onOpenAutomation}
       stageFilter={stageFilter}
       onStageFilterChange={setStageFilter}
       initialArchiveOpen={initialArchiveOpen}
@@ -332,6 +334,7 @@ function BoardTabColumnsContent({
 function ReadyBoard({
   state,
   onOpenVacancies,
+  onOpenAutomation,
   stageFilter,
   onStageFilterChange,
   initialArchiveOpen,
@@ -341,6 +344,7 @@ function ReadyBoard({
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
+  onOpenAutomation?: () => void;
   stageFilter?: ApplicationStage | null;
   onStageFilterChange: (stage: ApplicationStage | null) => void;
   initialArchiveOpen?: boolean;
@@ -355,6 +359,7 @@ function ReadyBoard({
       onStageFilterChange={onStageFilterChange}
       onClearFilter={onClearFilter}
       onOpenVacancies={onOpenVacancies}
+      onOpenAutomation={onOpenAutomation}
       onOpenExpert={onOpenExpert}
       initialTab={initialTab}
       columnsContent={(input) => (

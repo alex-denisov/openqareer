@@ -1,4 +1,13 @@
-import { useEffect, useState } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type SetStateAction,
+} from 'react';
+import { MagnifyingGlass, SlidersHorizontal } from '@phosphor-icons/react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
 import { getCandidateCompanyPage } from '../vacancies/candidateCompaniesApi';
@@ -27,10 +36,12 @@ export function ResponsesWorkspaceNavigation({
   return (
     <nav className="career-responses-workspace-nav" aria-label="Разделы откликов">
       <div className="career-responses-workspace-tabs" role="tablist" aria-label="Отклики">
-        {tabs.map((tab) => (
+        {tabs.map((tab, index) => (
           <WorkspaceTabButton
             key={tab.key}
             tab={tab}
+            tabs={tabs}
+            index={index}
             active={section === tab.key}
             onChange={onChange}
           />
@@ -69,20 +80,41 @@ function buildWorkspaceTabs(
 
 function WorkspaceTabButton({
   tab,
+  tabs,
+  index,
   active,
   onChange,
 }: {
   readonly tab: WorkspaceTab;
+  readonly tabs: readonly WorkspaceTab[];
+  readonly index: number;
   readonly active: boolean;
   readonly onChange: (section: ResponsesWorkspaceSection) => void;
 }) {
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLButtonElement>) {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index + tabs.length - 1) % tabs.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = tabs.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const nextTab = tabs[nextIndex];
+    onChange(nextTab.key);
+    document.getElementById('career-responses-tab-' + nextTab.key)?.focus();
+  }
+
   return (
     <button
+      id={'career-responses-tab-' + tab.key}
       type="button"
       role="tab"
       aria-label={tab.label}
       aria-selected={active}
+      aria-controls={'career-responses-tab-panel-' + tab.key}
+      tabIndex={active ? 0 : -1}
       className={active ? 'is-active' : ''}
+      onKeyDown={handleKeyDown}
       onClick={() => onChange(tab.key)}
     >
       <span className="career-responses-tab-label-desktop">{tab.label}</span>
@@ -248,9 +280,180 @@ export function ResponsesFilterControls(props: ResponsesFilterControlsProps) {
         <ChannelFilter query={props.query} channels={channels} onChange={props.onQueryChange} />
         <PeriodFilter value={props.period} onChange={props.onPeriodChange} />
         <SortFilter value={props.sortMode} onChange={props.onSortChange} />
+        <MobileFilterDialog props={props} channels={channels} />
       </div>
       <ResponsesViewSwitch view={props.view} onChange={props.onViewChange} />
     </div>
+  );
+}
+
+interface MobileFilterDraft {
+  readonly channel: string;
+  readonly period: ResponsesPeriod;
+  readonly sortMode: ResponsesSortMode;
+}
+
+function createMobileFilterDraft(props: ResponsesFilterControlsProps): MobileFilterDraft {
+  return {
+    channel: props.query.channel?.[0] ?? '',
+    period: props.period,
+    sortMode: props.sortMode,
+  };
+}
+
+function trapDialogTab(
+  event: ReactKeyboardEvent<HTMLDialogElement>,
+  dialog: HTMLDialogElement | null,
+) {
+  if (event.key !== 'Tab' || !dialog) return;
+  const focusable = Array.from(
+    dialog.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), select:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const activeIndex = focusable.indexOf(document.activeElement as HTMLElement);
+  if (activeIndex < 0 || (event.shiftKey && activeIndex === 0)) {
+    event.preventDefault();
+    focusable[event.shiftKey ? focusable.length - 1 : 0]?.focus();
+  } else if (!event.shiftKey && activeIndex === focusable.length - 1) {
+    event.preventDefault();
+    focusable[0]?.focus();
+  }
+}
+
+function useMobileFilterDialog(props: ResponsesFilterControlsProps) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [draft, setDraft] = useState(() => createMobileFilterDraft(props));
+  const open = () => {
+    setDraft(createMobileFilterDraft(props));
+    dialogRef.current?.showModal();
+    setIsOpen(true);
+  };
+  const close = () => dialogRef.current?.close();
+  const handleClose = () => {
+    setIsOpen(false);
+    window.requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  const handleTabTrap = (event: ReactKeyboardEvent<HTMLDialogElement>) => {
+    trapDialogTab(event, dialogRef.current);
+  };
+  const apply = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    props.onQueryChange({ channel: draft.channel ? [draft.channel] : [], offset: 0 });
+    props.onPeriodChange(draft.period);
+    props.onSortChange(draft.sortMode);
+    close();
+  };
+  return {
+    triggerRef,
+    dialogRef,
+    isOpen,
+    draft,
+    setDraft,
+    open,
+    close,
+    handleClose,
+    handleTabTrap,
+    apply,
+  };
+}
+
+function MobileFilterDialog({
+  props,
+  channels,
+}: {
+  readonly props: ResponsesFilterControlsProps;
+  readonly channels: readonly string[];
+}) {
+  const state = useMobileFilterDialog(props);
+  return (
+    <>
+      <button
+        ref={state.triggerRef}
+        type="button"
+        className="career-responses-filters-trigger"
+        aria-haspopup="dialog"
+        aria-expanded={state.isOpen}
+        aria-controls="career-responses-filter-dialog"
+        onClick={state.open}
+      >
+        <SlidersHorizontal aria-hidden="true" />
+        <span>Фильтры</span>
+      </button>
+      <dialog
+        ref={state.dialogRef}
+        id="career-responses-filter-dialog"
+        className="career-responses-filter-dialog"
+        aria-labelledby="career-responses-filter-title"
+        aria-modal="true"
+        onClose={state.handleClose}
+        onKeyDown={state.handleTabTrap}
+      >
+        <form onSubmit={state.apply}>
+          <h2 id="career-responses-filter-title">Фильтры</h2>
+          <MobileFilterFields draft={state.draft} setDraft={state.setDraft} channels={channels} />
+          <MobileFilterActions onCancel={state.close} />
+        </form>
+      </dialog>
+    </>
+  );
+}
+
+function MobileFilterFields({
+  draft,
+  setDraft,
+  channels,
+}: {
+  readonly draft: MobileFilterDraft;
+  readonly setDraft: Dispatch<SetStateAction<MobileFilterDraft>>;
+  readonly channels: readonly string[];
+}) {
+  return (
+    <div className="career-responses-filter-fields">
+      <div className="career-responses-filter-field">
+        <label htmlFor="career-responses-filter-channel">Канал</label>
+        <ChannelFilter
+          id="career-responses-filter-channel"
+          query={{ channel: draft.channel ? [draft.channel] : [] }}
+          channels={channels}
+          onChange={(query) =>
+            setDraft((current) => ({ ...current, channel: query.channel?.[0] ?? '' }))
+          }
+        />
+      </div>
+      <div className="career-responses-filter-field">
+        <label htmlFor="career-responses-filter-period">Период</label>
+        <PeriodFilter
+          id="career-responses-filter-period"
+          value={draft.period}
+          onChange={(period) => setDraft((current) => ({ ...current, period }))}
+        />
+      </div>
+      <div className="career-responses-filter-field">
+        <label htmlFor="career-responses-filter-sort">Сортировка</label>
+        <SortFilter
+          id="career-responses-filter-sort"
+          value={draft.sortMode}
+          onChange={(sortMode) => setDraft((current) => ({ ...current, sortMode }))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MobileFilterActions({ onCancel }: { readonly onCancel: () => void }) {
+  return (
+    <footer className="career-responses-filter-actions">
+      <button type="button" className="career-btn career-btn-secondary" onClick={onCancel}>
+        Отмена
+      </button>
+      <button type="submit" className="career-btn career-btn-primary">
+        Применить
+      </button>
+    </footer>
   );
 }
 
@@ -262,28 +465,43 @@ function SearchFilter({
   readonly onChange: (value: string) => void;
 }) {
   return (
-    <input
-      type="search"
-      aria-label="Компания, роль или площадка"
-      placeholder="Компания, роль или площадка"
-      value={value}
-      onChange={(event) => onChange(event.currentTarget.value)}
-    />
+    <div className="career-responses-search">
+      <MagnifyingGlass aria-hidden="true" />
+      <input
+        className="career-responses-search-desktop"
+        type="search"
+        aria-label="Компания, роль или площадка"
+        placeholder="Компания, роль или площадка"
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+      <input
+        className="career-responses-search-mobile"
+        type="search"
+        aria-label="Компания или роль"
+        placeholder="Компания или роль"
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      />
+    </div>
   );
 }
 
 function ChannelFilter({
+  id,
   query,
   channels,
   onChange,
 }: {
+  readonly id?: string;
   readonly query: ApplicationListQuery;
   readonly channels: readonly string[];
   readonly onChange: (query: ApplicationListQuery) => void;
 }) {
   return (
     <select
-      aria-label="Канал отклика"
+      id={id}
+      aria-label={id ? undefined : 'Канал отклика'}
       value={query.channel?.[0] ?? ''}
       onChange={(event) =>
         onChange({
@@ -303,15 +521,18 @@ function ChannelFilter({
 }
 
 function PeriodFilter({
+  id,
   value,
   onChange,
 }: {
+  readonly id?: string;
   readonly value: ResponsesPeriod;
   readonly onChange: (period: ResponsesPeriod) => void;
 }) {
   return (
     <select
-      aria-label="Период откликов"
+      id={id}
+      aria-label={id ? undefined : 'Период откликов'}
       value={value}
       onChange={(event) => onChange(event.currentTarget.value as ResponsesPeriod)}
     >
@@ -324,15 +545,18 @@ function PeriodFilter({
 }
 
 function SortFilter({
+  id,
   value,
   onChange,
 }: {
+  readonly id?: string;
   readonly value: ResponsesSortMode;
   readonly onChange: (mode: ResponsesSortMode) => void;
 }) {
   return (
     <select
-      aria-label="Сортировка откликов"
+      id={id}
+      aria-label={id ? undefined : 'Сортировка откликов'}
       value={value}
       onChange={(event) => onChange(event.currentTarget.value as ResponsesSortMode)}
     >

@@ -2,7 +2,11 @@ import type { ReactNode } from 'react';
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationListPageMeta, ApplicationView } from './applicationsApi';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
-import { ResponsesApplicationsTable } from './ResponsesApplicationsTable';
+import { ResponsesApplicationsTable, ResponsesMobileFeed } from './ResponsesApplicationsTable';
+import {
+  ResponsesAutomationLink,
+  usePendingAutomationApprovalCount,
+} from './ResponsesAutomationLink';
 import { ResponsesOffersPanel } from './ResponsesOffersPanel';
 import { CompanyWantsPanel } from './ResponsesCompanyWants';
 import { ResponsesPreparationPanel } from './ResponsesPreparationPanel';
@@ -12,11 +16,13 @@ import {
   ResponsesFunnelSummary,
   ResponsesFilterControls,
   ResponsesWorkspaceNavigation,
+  type ResponsesWorkspaceSection,
 } from './ResponsesWorkspaceControls';
 import type { UseApplications } from './useApplications';
 import { OPEN_APPLICATION_STAGES, useWorkspaceController } from './responsesWorkspaceController';
 import type { WorkspaceController } from './responsesWorkspaceController';
 import './responses-workspace.css';
+import './responses-mobile.css';
 
 export interface ResponsesColumnsContentInput {
   readonly applications: readonly ApplicationView[];
@@ -34,6 +40,7 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onStageFilterChange: (stage: ApplicationStage | null) => void;
   readonly onClearFilter?: () => void;
   readonly onOpenVacancies: () => void;
+  readonly onOpenAutomation?: () => void;
   readonly initialTab?: 'board' | 'analytics';
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
@@ -44,12 +51,44 @@ export interface ResponsesWorkspaceScreenProps {
   readonly emptyContent: ReactNode;
 }
 
+function WorkspacePanelContent({
+  section,
+  props,
+  workspace,
+  tableView,
+}: {
+  readonly section: ResponsesWorkspaceSection;
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+  readonly tableView: ReactNode;
+}) {
+  switch (section) {
+    case 'funnel':
+      return <FunnelWorkspace props={props} workspace={workspace} tableView={tableView} />;
+    case 'company-wants':
+      return <CompanyWantsPanel />;
+    case 'preparation':
+      return (
+        <ResponsesPreparationPanel
+          applications={props.state.applications}
+          onOpenExpert={props.onOpenExpert}
+          onRefresh={props.state.reload}
+        />
+      );
+    case 'offers':
+      return <ResponsesOffersPanel state={props.state} />;
+  }
+}
+
 export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
   const workspace = useWorkspaceController(props);
-  const tableView = renderTableView({
-    state: props.state,
-    workspace,
-  });
+  const tableView = renderTableView({ state: props.state, workspace });
+  const sections: readonly ResponsesWorkspaceSection[] = [
+    'funnel',
+    'company-wants',
+    'preparation',
+    'offers',
+  ];
   return (
     <div className="career-responses-board-wrap">
       <ResponsesWorkspaceNavigation
@@ -57,19 +96,29 @@ export function ResponsesWorkspaceScreen(props: ResponsesWorkspaceScreenProps) {
         onChange={workspace.setSection}
         counts={workspace.stageCounts}
       />
-      {workspace.section === 'funnel' ? (
-        <FunnelWorkspace props={props} workspace={workspace} tableView={tableView} />
-      ) : workspace.section === 'company-wants' ? (
-        <CompanyWantsPanel />
-      ) : workspace.section === 'preparation' ? (
-        <ResponsesPreparationPanel
-          applications={props.state.applications}
-          onOpenExpert={props.onOpenExpert}
-          onRefresh={props.state.reload}
-        />
-      ) : (
-        <ResponsesOffersPanel state={props.state} />
-      )}
+      {sections.map((section) => {
+        const active = workspace.section === section;
+        return (
+          <div
+            key={section}
+            id={'career-responses-tab-panel-' + section}
+            className="career-responses-tab-panel"
+            role="tabpanel"
+            aria-labelledby={'career-responses-tab-' + section}
+            tabIndex={active ? 0 : -1}
+            hidden={!active}
+          >
+            {active ? (
+              <WorkspacePanelContent
+                section={section}
+                props={props}
+                workspace={workspace}
+                tableView={tableView}
+              />
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -159,9 +208,22 @@ function FunnelResults({
   readonly tableView: ReactNode;
 }) {
   const applications = workspace.filteredApplications;
+  const pendingApprovalCount = usePendingAutomationApprovalCount();
   return (
     <>
       <PoolStatusMessage workspace={workspace} />
+      <ResponsesAutomationLink
+        count={pendingApprovalCount}
+        onOpenAutomation={props.onOpenAutomation}
+      />
+      <ResponsesMobileFeed
+        applications={applications}
+        allApplications={props.state.applications}
+        visibleLimit={workspace.mobileListLimit}
+        onLoadMore={workspace.loadMoreMobileList}
+        onSelectApplication={workspace.selectApplication}
+        onRefreshApplications={props.state.refreshApplications}
+      />
       <FunnelBodyContent
         props={props}
         workspace={workspace}

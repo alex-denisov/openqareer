@@ -273,7 +273,11 @@ async function seedWorkspace(page: Page): Promise<void> {
   );
 }
 
-async function stubSession(page: Page): Promise<void> {
+async function stubSession(
+  page: Page,
+  pendingApprovalCount: number | null = 0,
+  applications: readonly unknown[] = APPLICATIONS,
+): Promise<void> {
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -285,8 +289,18 @@ async function stubSession(page: Page): Promise<void> {
       return route.fulfill({ json: { data: [], meta: { nextOffset: null } } });
     if (pathname === '/api/v1/candidate/workspace')
       return route.fulfill({ json: { data: WORKSPACE_INPUT } });
+    if (pathname === '/api/v1/candidate/automation') {
+      return route.fulfill({
+        json: {
+          data:
+            pendingApprovalCount === null
+              ? null
+              : { queueCounts: { pending_approval: pendingApprovalCount } },
+        },
+      });
+    }
     if (pathname === '/api/v1/candidate/applications') {
-      return route.fulfill({ json: { data: APPLICATIONS } });
+      return route.fulfill({ json: { data: applications } });
     }
     return route.fulfill({ json: { data: null } });
   });
@@ -305,15 +319,29 @@ async function hideConsultantForEvidence(page: Page): Promise<void> {
 test.describe('B251 responses screen', () => {
   test('shows the four pipeline stages and keeps receipt status on sent cards', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
+    if (testInfo.project.name === 'mobile-390') {
+      const rows = page.getByRole('listitem');
+      await expect(rows.filter({ hasText: 'Enterprise Architect, Senior Advisor' })).toContainText(
+        'Пробовали отправить',
+      );
+      await expect(
+        rows.filter({ hasText: 'Enterprise Architect Director' }).filter({ hasText: 'Ответили' }),
+      ).toContainText('Ответили');
+      await expect(
+        rows.filter({ hasText: 'Enterprise Architect Director — раунд 2' }),
+      ).toContainText('Интервью');
+      await expect(page.getByRole('button', { name: 'Архив · 1' })).toBeVisible();
+      return;
+    }
+
     const columns = page.locator('.career-responses-column');
     await expect(columns).toHaveCount(4);
-
     const columnCount = async (label: string) =>
       page
         .locator('.career-responses-column', {
@@ -321,7 +349,6 @@ test.describe('B251 responses screen', () => {
         })
         .locator('.career-responses-column-count')
         .innerText();
-
     await expect.poll(() => columnCount('Отправлено')).toBe('5');
     await page
       .locator('.career-responses-column[aria-label="Отправлено"]')
@@ -451,16 +478,33 @@ test.describe('B251 responses screen', () => {
       .click();
 
     await expect(page.getByRole('button', { name: 'Архив · 2' })).toBeVisible();
-    await expect(
-      page.locator('.career-responses-column[aria-label="Отправлено"] .career-responses-card'),
-    ).toContainText('Role moved by candidate');
+    if (testInfo.project.name === 'mobile-390') {
+      await expect(
+        page.getByRole('listitem').filter({ hasText: 'Role moved by candidate' }),
+      ).toBeVisible();
+    } else {
+      await expect(
+        page.locator('.career-responses-column[aria-label="Отправлено"] .career-responses-card'),
+      ).toContainText('Role moved by candidate');
+    }
   });
 
-  test('shows role, company and hidden-company copy on cards', async ({ page }) => {
+  test('shows role, company and hidden-company copy on cards', async ({ page }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
+
+    if (testInfo.project.name === 'mobile-390') {
+      const rows = page.getByRole('listitem');
+      await expect(rows.filter({ hasText: 'Enterprise Architect, Senior Advisor' })).toContainText(
+        'Peraton',
+      );
+      await expect(rows.filter({ hasText: 'VP Technology, executive search' })).toContainText(
+        'Компания скрыта',
+      );
+      return;
+    }
 
     const board = page.locator('.career-responses-board');
     await page
@@ -475,6 +519,10 @@ test.describe('B251 responses screen', () => {
   test('refreshes a card after another window wins the version conflict', async ({
     page,
   }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile-390',
+      'B486 exercises the mobile next-step panel; this test covers the desktop card menu',
+    );
     await stubSession(page);
     await seedWorkspace(page);
     let changedElsewhere = false;
@@ -534,7 +582,7 @@ test.describe('B251 responses screen', () => {
 
   test('marks a sent follow-up from the selected response panel and refreshes its deadline', async ({
     page,
-  }) => {
+  }, testInfo) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.route('**/api/v1/candidate/applications/a-3/events', async (route) => {
@@ -557,8 +605,16 @@ test.describe('B251 responses screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openResponses(page);
 
-    const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
-    await card.locator('.career-responses-card-body').click();
+    if (testInfo.project.name === 'mobile-390') {
+      const response = page
+        .getByRole('list', { name: 'Нужно действие' })
+        .getByRole('listitem')
+        .filter({ hasText: 'Peraton' });
+      await response.getByRole('button', { name: /Открыть следующий шаг/ }).click();
+    } else {
+      const card = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
+      await card.locator('.career-responses-card-body').click();
+    }
     const selectedPanel = page.locator('.career-responses-selected');
     await expect(selectedPanel).toBeVisible();
     await selectedPanel.getByRole('button', { name: 'Напоминание отправлено' }).click();
@@ -686,9 +742,8 @@ test.describe('B251 responses screen', () => {
 
     const viewport = page.viewportSize();
     if (viewport?.width === 390) {
-      await expect(
-        page.locator('.career-responses-column .career-responses-card').first(),
-      ).toBeVisible();
+      await expect(page.getByRole('list', { name: 'Нужно действие' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Колонки', exact: true })).toBeHidden();
       await page.screenshot({ path: testInfo.outputPath('b450-home-390.png'), fullPage: true });
       return;
     }
@@ -716,7 +771,13 @@ test.describe('B251 responses screen', () => {
     );
   });
 
-  test('B414: единое оформление select доказательства доставки и этапа', async ({ page }) => {
+  test('B414: единое оформление select доказательства доставки и этапа', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile-390',
+      'B486 verifies receipt-backed status in the compact mobile row',
+    );
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -724,7 +785,6 @@ test.describe('B251 responses screen', () => {
 
     const peratonCard = page.locator('.career-responses-card').filter({ hasText: 'Peraton' });
     await expect(peratonCard).toBeVisible();
-
     const menuBtn = peratonCard.getByRole('button', { name: 'Действия с карточкой' });
     await menuBtn.click();
 
@@ -733,34 +793,21 @@ test.describe('B251 responses screen', () => {
       hasText: 'Доказательство доставки',
     });
     const deliverySelect = deliveryLabel.locator('select.career-responses-select');
-
     await expect(stageSelect).toBeVisible();
     await expect(deliverySelect).toBeVisible();
-
     await expect(stageSelect).toHaveClass(/career-responses-select/);
     await expect(deliverySelect).toHaveClass(/career-responses-select/);
-
     const stageBox = await stageSelect.boundingBox();
     expect(stageBox).not.toBeNull();
     expect(stageBox!.height).toBeGreaterThanOrEqual(44);
-
     const deliveryBox = await deliverySelect.boundingBox();
     expect(deliveryBox).not.toBeNull();
     expect(deliveryBox!.height).toBeGreaterThanOrEqual(44);
 
     await mkdir('output/playwright/B414', { recursive: true });
-
     await page.setViewportSize({ width: 1440, height: 900 });
-    await peratonCard.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: 'output/playwright/B414/responses-card-1440.png',
-      fullPage: true,
-    });
-
-    await page.setViewportSize({ width: 390, height: 844 });
-    await peratonCard.scrollIntoViewIfNeeded();
-    await page.screenshot({
-      path: 'output/playwright/B414/responses-card-390.png',
       fullPage: true,
     });
   });

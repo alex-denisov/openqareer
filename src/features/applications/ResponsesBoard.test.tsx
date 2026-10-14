@@ -561,6 +561,90 @@ describe('ResponsesBoard B450 workspace navigation', () => {
     expect(labels.some((label) => label.startsWith('Подготовка'))).toBe(true);
     expect(labels.some((label) => label.startsWith('Офферы'))).toBe(true);
     expect(labels.some((label) => label.startsWith('Автоматизация'))).toBe(false);
+
+    const tabs = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+    const panelIds = new Set(
+      Array.from(container.querySelectorAll<HTMLElement>('[role="tabpanel"]')).map(
+        (panel) => panel.id,
+      ),
+    );
+    expect(tabs).toHaveLength(4);
+    for (const tab of tabs) {
+      const panelId = tab.getAttribute('aria-controls');
+      expect(panelId).not.toBeNull();
+      expect(panelIds.has(panelId ?? '')).toBe(true);
+    }
+  });
+
+  it('retains the closed-response summary when no open response is visible', () => {
+    const closed = application({
+      id: 'closed-1',
+      stage: 'archived',
+      whoseTurn: null,
+      archiveReason: 'stale',
+    });
+    act(() => {
+      root.render(<ResponsesBoard state={readyState([closed])} onOpenVacancies={() => {}} />);
+    });
+
+    expect(container.querySelector('.career-responses-mobile-closed')).not.toBeNull();
+    expect(container.textContent).toContain('Закрыто · 1');
+  });
+
+  it('uses model-backed next steps for saved applications and offers', () => {
+    const apps = [
+      application({
+        id: 'saved-bare',
+        stage: 'saved',
+        whoseTurn: 'candidate',
+        materials: { coverLetter: false, resume: false },
+      }),
+      application({ id: 'offer-decision', stage: 'offer', whoseTurn: 'candidate' }),
+      application({
+        id: 'due-follow-up',
+        stage: 'applied',
+        whoseTurn: 'candidate',
+        followUp: {
+          dueAt: '2026-10-14T00:00:00.000Z',
+          urgency: 'due',
+          source: 'standard_schedule',
+          daysSinceContact: 1,
+        },
+      }),
+      application({
+        id: 'overdue-follow-up',
+        stage: 'applied',
+        whoseTurn: 'candidate',
+        followUp: {
+          dueAt: '2026-10-10T00:00:00.000Z',
+          urgency: 'overdue',
+          source: 'standard_schedule',
+          daysSinceContact: 5,
+        },
+      }),
+    ];
+    act(() => {
+      root.render(<ResponsesBoard state={readyState(apps)} onOpenVacancies={() => {}} />);
+    });
+
+    const actions = Array.from(container.querySelectorAll('.career-responses-mobile-row-next')).map(
+      (button) => button.textContent?.trim(),
+    );
+    expect(actions).toEqual(
+      expect.arrayContaining([
+        'Собрать письмо',
+        'Решить по офферу',
+        'Напомнить сегодня',
+        'Напомнить рекрутеру',
+      ]),
+    );
+    const manualSendButton = container.querySelector<HTMLButtonElement>(
+      'button[aria-controls="career-responses-mobile-manual-send"]',
+    );
+    expect(manualSendButton).not.toBeNull();
+    expect(
+      container.querySelector('#career-responses-mobile-manual-send')?.hasAttribute('hidden'),
+    ).toBe(true);
   });
 
   it('offers the columns and table views', () => {

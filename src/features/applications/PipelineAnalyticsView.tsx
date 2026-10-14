@@ -16,9 +16,7 @@ import {
   type SourceBreakdownItem,
   type PipelineBottleneck,
 } from './pipelineAnalytics';
-import { archiveReasonLabel } from './archiveReasonLabel';
 import { humanSourceLabel } from './sourceLabels';
-import type { ApplicationArchiveReason } from '../../../shared/applicationArchive';
 
 export interface PipelineAnalyticsViewProps {
   readonly applications: readonly ApplicationView[];
@@ -70,8 +68,8 @@ function AnalyticsEmptyState({ onOpenVacancies }: { readonly onOpenVacancies: ()
       <ChartBar size={32} weight="regular" aria-hidden="true" />
       <h3>Пока нет данных для аналитики</h3>
       <p>
-        Здесь появится сквозная конверсия откликов, воронка этапов и рекомендации
-        стратега по узким местам поиска.
+        Здесь появится сквозная конверсия откликов, воронка этапов и рекомендации стратега по узким
+        местам поиска.
       </p>
       <p className="career-responses-empty-step">
         Откликнитесь на вакансии из подборки, чтобы сформировать воронку.
@@ -148,6 +146,39 @@ function AnalyticsSummaryCards({ summary }: { readonly summary: PipelineAnalytic
   );
 }
 
+function FunnelStepRow({
+  step,
+  maxCount,
+}: {
+  readonly step: StageFunnelStep;
+  readonly maxCount: number;
+}) {
+  const share = Math.min(
+    100,
+    Math.max(step.count > 0 ? 10 : 0, Math.round((step.count / maxCount) * 10) * 10),
+  );
+  return (
+    <div className="career-pipeline-funnel-row" role="listitem">
+      <div className="career-pipeline-funnel-info">
+        <span className="career-pipeline-funnel-name">{step.label}</span>
+        <span className="career-pipeline-funnel-count career-numeric">{step.count}</span>
+      </div>
+      <div className="career-pipeline-funnel-track">
+        <div className="career-pipeline-funnel-fill" data-share={share} aria-hidden="true" />
+      </div>
+      <div className="career-pipeline-funnel-rates">
+        {step.conversionFromPrevious !== null ? (
+          <span className="career-pipeline-funnel-badge">
+            <span className="career-numeric">{step.conversionFromPrevious}%</span> от пред.
+          </span>
+        ) : (
+          <span className="career-pipeline-funnel-badge is-base">база</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FunnelDiagram({
   steps,
   totalCount,
@@ -156,43 +187,18 @@ function FunnelDiagram({
   readonly totalCount: number;
 }) {
   const maxCount = Math.max(totalCount, 1);
-
   return (
-    <section className="career-pipeline-card career-pipeline-funnel" aria-labelledby="funnel-diagram-title">
+    <section
+      className="career-pipeline-card career-pipeline-funnel"
+      aria-labelledby="funnel-diagram-title"
+    >
       <h3 id="funnel-diagram-title" className="career-pipeline-card-title">
         Этапы воронки поиска
       </h3>
       <div className="career-pipeline-funnel-steps" role="list">
-        {steps.map((step) => {
-          const share = Math.min(
-            100,
-            Math.max(step.count > 0 ? 10 : 0, Math.round((step.count / maxCount) * 10) * 10),
-          );
-          return (
-            <div key={step.stage} className="career-pipeline-funnel-row" role="listitem">
-              <div className="career-pipeline-funnel-info">
-                <span className="career-pipeline-funnel-name">{step.label}</span>
-                <span className="career-pipeline-funnel-count career-numeric">{step.count}</span>
-              </div>
-              <div className="career-pipeline-funnel-track">
-                <div
-                  className="career-pipeline-funnel-fill"
-                  data-share={share}
-                  aria-hidden="true"
-                />
-              </div>
-              <div className="career-pipeline-funnel-rates">
-                {step.conversionFromPrevious !== null ? (
-                  <span className="career-pipeline-funnel-badge">
-                    <span className="career-numeric">{step.conversionFromPrevious}%</span> от пред.
-                  </span>
-                ) : (
-                  <span className="career-pipeline-funnel-badge is-base">база</span>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {steps.map((step) => (
+          <FunnelStepRow key={step.stage} step={step} maxCount={maxCount} />
+        ))}
       </div>
     </section>
   );
@@ -252,7 +258,10 @@ function SourcesTable({ sources }: { readonly sources: readonly SourceBreakdownI
   if (sources.length === 0) return null;
 
   return (
-    <section className="career-pipeline-card career-pipeline-sources-table" aria-labelledby="sources-table-title">
+    <section
+      className="career-pipeline-card career-pipeline-sources-table"
+      aria-labelledby="sources-table-title"
+    >
       <h3 id="sources-table-title" className="career-pipeline-card-title">
         Эффективность каналов
       </h3>
@@ -278,11 +287,7 @@ function SourcesTable({ sources }: { readonly sources: readonly SourceBreakdownI
           <tbody>
             {sources.map((src) => (
               <tr key={src.source}>
-                <th
-                  scope="row"
-                  className="career-pipeline-source-name"
-                  data-source-id={src.source}
-                >
+                <th scope="row" className="career-pipeline-source-name" data-source-id={src.source}>
                   {humanSourceLabel(src.source)}
                 </th>
                 <td className="is-num career-numeric">{src.total}</td>
@@ -298,32 +303,22 @@ function SourcesTable({ sources }: { readonly sources: readonly SourceBreakdownI
   );
 }
 
-function formatReason(rawReason: string): string {
-  if (
-    rawReason === 'candidate' ||
-    rawReason === 'vacancy_closed' ||
-    rawReason === 'stale' ||
-    rawReason === 'unknown'
-  ) {
-    return archiveReasonLabel(rawReason as ApplicationArchiveReason);
-  }
-  return rawReason;
-}
-
-function ArchiveReasonsList({
+export function ArchiveReasonsList({
   reasons,
+  title = 'Причины закрытия вакансий',
 }: {
   readonly reasons: ReadonlyArray<{ readonly reason: string; readonly count: number }>;
+  readonly title?: string;
 }) {
   return (
     <section className="career-pipeline-card" aria-labelledby="reasons-list-title">
       <h3 id="reasons-list-title" className="career-pipeline-card-title">
-        Причины закрытия вакансий
+        {title}
       </h3>
       <ul className="career-pipeline-reasons-list">
         {reasons.map((item) => (
           <li key={item.reason} className="career-pipeline-reason-item">
-            <span className="career-pipeline-reason-label">{formatReason(item.reason)}</span>
+            <span className="career-pipeline-reason-label">{item.reason}</span>
             <span className="career-pipeline-reason-count career-numeric">{item.count}</span>
           </li>
         ))}
