@@ -2,10 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR =
-  '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/S11-WIZ-2';
+const EVIDENCE_DIR = e2eEvidenceDirectory('S11-WIZ-2');
 
 async function saveRenderedHtml(page: Page, name: string): Promise<void> {
   const html = await page.evaluate(async () => {

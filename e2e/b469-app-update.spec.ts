@@ -1,10 +1,13 @@
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { DEFAULT_UPDATE_INFO } from '../src/features/appUpdate/appUpdateModel';
+import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { renderAppUpdateStaticHtml } from '../src/features/appUpdate/renderAppUpdateHtml';
 import type { AppUpdateStatusData } from '../src/features/appUpdate/appUpdateTypes';
 
-const EVIDENCE_DIR = '/Users/alexeydenisov/Projects/openqareer/docs/v1-release/tasks/evidence/B469';
+const EVIDENCE_DIR = e2eEvidenceDirectory('B469');
+
+mkdirSync(EVIDENCE_DIR, { recursive: true });
 
 function renderFullPageHtml(status: AppUpdateStatusData): string {
   const appCss = readFileSync('src/App.css', 'utf8');
