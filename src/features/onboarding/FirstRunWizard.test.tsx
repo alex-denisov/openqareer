@@ -111,4 +111,16 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Файл резюме');
     expect(html).not.toContain('first-run-consultant-sidebar');
   });
+
+  it('renders partial-sources state with honest notice', () => {
+    const html = renderWizard({ specialState: 'partial-sources' });
+    expect(html).toContain('LinkedIn подключён, hh.ru нет: доступно после подключения hh.ru.');
+  });
+
+  it('renders all mockup starter prompts in consultant sidebar', () => {
+    const html = renderWizard({ initialStep: 'source' });
+    expect(html).toContain('С чего начать?');
+    expect(html).toContain('Что вы читаете в LinkedIn?');
+    expect(html).toContain('Можно без LinkedIn?');
+  });
 });

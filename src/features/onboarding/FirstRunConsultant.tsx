@@ -7,8 +7,9 @@ export interface FirstRunConsultantProps {
 
 const STARTER_PROMPTS = [
   'С чего начать?',
+  'Что вы читаете в LinkedIn?',
+  'Можно без LinkedIn?',
   'Какие источники можно подключить?',
-  'Можно без подключений?',
 ] as const;
 
 function ConsultantStarters({

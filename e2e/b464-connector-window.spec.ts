@@ -76,6 +76,81 @@ test.describe('B464 browser connector window', () => {
     expect(overflow).toBeLessThanOrEqual(0);
   });
 
+  test('opens the allowlisted LinkedIn login popup, reports an unconfirmed close and retries', async ({
+    page,
+  }, testInfo) => {
+    const unmatched = await mockSignedInCabinet(page);
+    await page.route('**/api/v1/candidate/connections', (route) =>
+      route.fulfill({
+        json: {
+          data: [
+            {
+              platform: 'linkedin',
+              available: false,
+              status: 'disconnected',
+              capabilities: [],
+              importsCareerHistory: false,
+            },
+          ],
+        },
+      }),
+    );
+    await page.context().route('https://www.linkedin.com/**', (route) =>
+      route.fulfill({
+        contentType: 'text/html',
+        body: '<main>Mock LinkedIn login page</main>',
+      }),
+    );
+
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+    const account = page.getByTestId('career-shell').getByRole('main');
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await account.getByRole('button', { name: 'Назад' }).click();
+      await account.getByRole('button', { name: 'Подключения' }).click();
+      await account.getByRole('button', { name: /LinkedIn/u }).click();
+    } else {
+      await account.getByRole('tab', { name: 'Подключения' }).click();
+      await expect(
+        account.getByRole('button', { name: 'Открыть окно входа LinkedIn' }),
+      ).toBeVisible();
+      await account.getByRole('button', { name: 'Открыть окно входа LinkedIn' }).click();
+    }
+
+    const dialog = page.getByRole('dialog', { name: 'Подключение LinkedIn' });
+    const popupPromise = page.waitForEvent('popup');
+    await dialog.getByRole('button', { name: 'Открыть окно входа в LinkedIn' }).click();
+    const popup = await popupPromise;
+    await expect(popup).toHaveURL(/linkedin\.com/);
+    await expect(dialog.locator('.career-connector-address')).toContainText(
+      'https://www.linkedin.com',
+    );
+    await expect(dialog.getByRole('button', { name: 'Показать окно входа' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Отмена' })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('b464-linkedin-session-open.png') });
+
+    await popup.close();
+    await expect(
+      dialog.getByText(/Браузер не подтвердил вход и профиль не обновлён/u),
+    ).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Подключить снова' })).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath('b464-linkedin-session-closed.png') });
+
+    const retryPopupPromise = page.waitForEvent('popup');
+    await dialog.getByRole('button', { name: 'Подключить снова' }).click();
+    const retryPopup = await retryPopupPromise;
+    await expect(retryPopup).toHaveURL(/linkedin\.com/);
+    await dialog.getByRole('button', { name: 'Отмена' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => retryPopup.isClosed()).toBe(true);
+    expect(unmatched).toEqual([]);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
   test('labels a provider login page as an expired saved session and leaves it open for re-entry', async ({
     page,
   }, testInfo) => {

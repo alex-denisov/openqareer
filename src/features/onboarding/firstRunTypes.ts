@@ -8,7 +8,8 @@ export type FirstRunSpecialState =
   | 'stale-loading'
   | 'error'
   | 'session-expired'
-  | 'empty-sources';
+  | 'empty-sources'
+  | 'partial-sources';
 
 export type SourceType = 'linkedin' | 'hh' | 'file' | 'talk';
 
