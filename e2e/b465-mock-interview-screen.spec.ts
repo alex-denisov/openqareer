@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { mockInterviewSimulatorRoutes } from './fixtures/mockInterviewSimulator';
 
 const interviewApplication = {
   id: 'application-b465-1',
@@ -177,6 +178,7 @@ async function createStarStoryFromSimulator(page: Page): Promise<void> {
     .click();
   const storiesDialog = page.getByRole('dialog', { name: 'STAR-истории' });
   await expect(storiesDialog).toBeVisible();
+  await expect(storiesDialog.getByRole('heading', { name: 'Нет STAR-историй' })).toBeVisible();
   await storiesDialog.getByRole('button', { name: 'Добавить историю' }).click();
   const editor = page.getByRole('dialog', { name: 'Новая STAR-история' });
   await expect(editor).toBeVisible();
@@ -243,6 +245,12 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await page.getByRole('button', { name: 'Отправить ответ' }).click();
       await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
       await checkAndCapture(page, `${width}-review`, true);
+      await page.getByRole('button', { name: 'Ответить ещё раз' }).click();
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue(
+        'Автоматизировал проверки и ускорил выпуск обновлений.',
+      );
+      await page.getByRole('button', { name: 'Отправить ответ' }).click();
+      await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
       await finishWithPartialAnswers(page);
       await checkAndCapture(page, `${width}-interrupted`);
       await resumeAndFinish(page);
@@ -268,6 +276,130 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await checkAndCapture(page, `${width}-voice-transcript`);
       await page.getByRole('button', { name: 'Закончить ответ' }).click();
       await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('switches a recognized voice answer into editable text at 1440 and 390', async ({
+  browser,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'This flow drives and captures both viewports.');
+  test.setTimeout(120_000);
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await openPreparation(page, width);
+      await startSimulator(page);
+      await page.getByRole('radio', { name: /Голосом/u }).check();
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
+      await page.getByRole('button', { name: 'Начать запись' }).click();
+      await enterSpeechText(page, 'Согласовал план и сократил цикл релиза.');
+      await page.getByRole('button', { name: 'Ответить текстом' }).click();
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue(
+        'Согласовал план и сократил цикл релиза.',
+      );
+      await checkAndCapture(page, `${width}-voice-to-text`);
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('opens the STAR story linked to an answer review at 1440 and 390', async ({
+  browser,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'This flow drives and captures both viewports.');
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await openPreparation(page, width);
+      const sourceFact = {
+        id: 'fact-release-cycle',
+        statement: 'Сократил цикл релиза с 14 до 3 дней.',
+        domain: 'outcome',
+        createdAt: '2026-10-01T12:00:00.000Z',
+      };
+      const story = {
+        id: 'story-release-cycle',
+        title: 'Сокращение цикла релиза',
+        version: 1,
+        createdAt: '2026-10-01T12:00:00.000Z',
+        updatedAt: '2026-10-01T12:00:00.000Z',
+        fields: {
+          situation: 'Команда выпускала релиз раз в две недели.',
+          task: 'Сократить цикл без потери качества.',
+          action: 'Автоматизировал проверки и выкладку.',
+          result: 'Сократил цикл релиза с 14 до 3 дней.',
+        },
+        sourceFactIds: ['fact-release-cycle'],
+        confidence: 'confirmed',
+        sourceFacts: [sourceFact],
+      };
+      await page.route('**/api/v1/candidate/star-stories', (route) =>
+        route.fulfill({ json: { data: { stories: [story], facts: [sourceFact] } } }),
+      );
+      await mockInterviewSimulatorRoutes(page, {
+        stories: [{ id: story.id, title: story.title, sourceFactIds: story.sourceFactIds }],
+      });
+      await startSimulator(page);
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
+      await expect(page.locator('.career-mock-source-panel')).toContainText(story.title);
+      await page
+        .getByLabel('Ваш ответ')
+        .fill(
+          'Команда выпускала релиз раз в две недели. Я автоматизировал проверки. Результат: цикл стал 3 дня.',
+        );
+      await page.getByRole('button', { name: 'Отправить ответ' }).click();
+      await expect(page.getByRole('heading', { name: 'Разбор ответа' })).toBeVisible();
+      const editStory = page.getByRole('button', { name: 'Править STAR-историю' });
+      await expect(editStory).toBeVisible();
+      await capture(page, `${width}-review-star-story`);
+      await editStory.click();
+      const stories = page.getByRole('dialog', { name: 'STAR-истории' });
+      await expect(stories).toContainText(story.title);
+      await expect(stories.getByRole('button', { name: /Править STAR-историю/u })).toBeVisible();
+      await stories.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
+    } finally {
+      await context.close();
+    }
+  }
+});
+
+test('returns to preparation and protects an unsent answer at 1440 and 390', async ({
+  browser,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'This flow drives and captures both viewports.');
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await openPreparation(page, width);
+      await startSimulator(page);
+      await page.getByRole('button', { name: 'Позже' }).click();
+      await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+
+      await startSimulator(page);
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
+      await page.getByLabel('Ваш ответ').fill('Черновик ответа, который ещё не отправлен.');
+      await page.getByRole('button', { name: 'Назад к подготовке' }).first().click();
+      const confirmation = page.getByRole('alertdialog', { name: 'Ответ ещё не отправлен' });
+      await expect(confirmation).toBeVisible();
+      await confirmation.getByRole('button', { name: 'Остаться' }).click();
+      await expect(page.getByLabel('Ваш ответ')).toHaveValue(
+        'Черновик ответа, который ещё не отправлен.',
+      );
+
+      await page.getByRole('button', { name: 'Назад к подготовке' }).first().click();
+      await page
+        .getByRole('alertdialog', { name: 'Ответ ещё не отправлен' })
+        .getByRole('button', { name: 'Выйти без отправки' })
+        .click();
+      await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
+      await capture(page, `${width}-unsent-answer-exit`);
     } finally {
       await context.close();
     }

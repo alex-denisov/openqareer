@@ -10,6 +10,7 @@ import {
   type InterviewAnswerMode,
   type InterviewQuestionType,
   type InterviewSession,
+  type InterviewStorySource,
 } from '../../server/domain/interviewSimulator';
 
 interface InterviewFixtureResponse {
@@ -29,6 +30,10 @@ const ACTIONS: readonly InterviewAction[] = [
   'finish',
 ];
 const now = '2026-10-11T08:00:00.000Z';
+
+interface MockInterviewSimulatorOptions {
+  readonly stories?: readonly InterviewStorySource[];
+}
 
 type InterviewSessionView = InterviewSession & {
   readonly currentQuestion: InterviewSession['questions'][number] | null;
@@ -79,6 +84,7 @@ function sessionIdFromPath(path: string, suffix: string): string | null {
 function createSession(
   body: Record<string, unknown>,
   current: InterviewSession | null,
+  stories: readonly InterviewStorySource[],
 ):
   | { readonly session: InterviewSession; readonly error?: never }
   | { readonly session?: never; readonly error: InterviewFixtureResponse } {
@@ -118,7 +124,7 @@ function createSession(
     applicationId: typeof body.applicationId === 'string' ? body.applicationId : null,
     questionTypes,
     stressMode: body.stressMode === true,
-    stories: [],
+    stories,
     verifiedSkills: [],
     questionIds: Array.from(
       { length: INTERVIEW_QUESTION_COUNT },
@@ -169,8 +175,9 @@ function answerSession(session: InterviewSession, body: Record<string, unknown>)
   };
 }
 
-export function createMockInterviewSimulatorFixture() {
+export function createMockInterviewSimulatorFixture(options: MockInterviewSimulatorOptions = {}) {
   let session: InterviewSession | null = null;
+  const stories = options.stories ?? [];
 
   return {
     handle(
@@ -182,7 +189,7 @@ export function createMockInterviewSimulatorFixture() {
         return { status: 200, data: { session: session ? sessionView(session) : null } };
       }
       if (path === BASE && method === 'POST') {
-        const created = createSession(body, session);
+        const created = createSession(body, session, stories);
         if (created.error) return created.error;
         session = created.session;
         return sessionResponse(session, 201);
@@ -239,8 +246,11 @@ function requestBody(route: Route): Record<string, unknown> {
   }
 }
 
-export async function mockInterviewSimulatorRoutes(page: Page): Promise<void> {
-  const fixture = createMockInterviewSimulatorFixture();
+export async function mockInterviewSimulatorRoutes(
+  page: Page,
+  options: MockInterviewSimulatorOptions = {},
+): Promise<void> {
+  const fixture = createMockInterviewSimulatorFixture(options);
   await page.route(
     (url) => url.pathname === BASE || url.pathname.startsWith(`${BASE}/`),
     async (route) => {
