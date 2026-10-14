@@ -450,6 +450,7 @@ async function handleCompanyRoute(
     if (company && action === 'next-step')
       company.nextStep = body as { text: string; dueAt: string | null };
     if (action === 'recruiter-search') {
+      if (company) company.recruiterSearchStatus = 'queued';
       await fulfill(route, { searchStatus: 'queued' });
       return true;
     }
@@ -666,6 +667,44 @@ test.describe('B450 responses workspace', () => {
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+    const smallTargets = await page
+      .locator(
+        '.career-cabinet-view-responses button:not(:disabled), .career-cabinet-view-responses input:not([type=hidden]):not(:disabled), .career-cabinet-view-responses select:not(:disabled), .career-cabinet-view-responses textarea:not(:disabled), .career-cabinet-view-responses [role=button], .career-cabinet-view-responses [role=tab]',
+      )
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => {
+            const style = getComputedStyle(element);
+            return (
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              element.getClientRects().length > 0
+            );
+          })
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              label: element.getAttribute('aria-label') ?? element.textContent?.trim(),
+              width: rect.width,
+              height: rect.height,
+            };
+          })
+          .filter((target) => target.width < 44 || target.height < 44),
+      );
+    expect(smallTargets).toEqual([]);
+
+    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).focus();
+    await page.keyboard.press('Tab');
+    const hasVisibleFocus = await page.evaluate(() => {
+      const active = document.activeElement;
+      return (
+        active instanceof HTMLElement &&
+        active.matches(':focus-visible') &&
+        getComputedStyle(active).outlineStyle !== 'none' &&
+        Number.parseFloat(getComputedStyle(active).outlineWidth) > 0
+      );
+    });
+    expect(hasVisibleFocus).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath('b450-board-after-390.png'),
       fullPage: true,
@@ -690,6 +729,8 @@ test.describe('B450 responses workspace', () => {
     await row.getByLabel('Следующий шаг').fill('Написать нанимающему менеджеру');
     await row.getByRole('button', { name: 'Сохранить шаг' }).click();
     await row.getByRole('button', { name: 'Найти путь к рекрутеру' }).click();
+    await expect(row).toContainText('Ищем путь к рекрутеру');
+    await expect(row.getByRole('button', { name: 'Найти путь к рекрутеру' })).toBeDisabled();
     await panel.getByRole('button', { name: 'Выбрать все 2 по фильтру' }).click();
     await panel.getByRole('button', { name: 'Проверить', exact: true }).click();
     await panel.getByRole('button', { name: 'Подтвердить 2' }).click();
@@ -841,6 +882,27 @@ test.describe('B450 responses workspace', () => {
     await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toContainText(
       'Кризис в команде: уход ведущего инженера',
     );
+  });
+
+  test('selected response shows an unconfirmed delivery failure and its reason', async ({
+    page,
+  }) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).fill('Компания 4');
+    await waitForResponsesPool(page);
+
+    const failedResponse = page
+      .locator('.career-responses-card-body')
+      .filter({ hasText: /Компания 4(?!\d)/ });
+    await expect(failedResponse).toHaveCount(1);
+    await failedResponse.click();
+
+    const selected = page.locator('.career-responses-selected');
+    await expect(selected).toContainText('Попытка не удалась');
+    await expect(selected).toContainText('Сайт не подтвердил отправку');
   });
 
   test('вкладка подготовки подключает STAR-истории и существующий поток мок-интервью', async ({
