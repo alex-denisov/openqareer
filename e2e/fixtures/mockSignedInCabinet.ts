@@ -390,6 +390,7 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly billing?: {
     readonly initialPlan?: FixtureCurrentPlan;
     readonly subscriptionStatus?: 'active' | 'past_due' | 'canceled' | 'expired';
+    readonly autoRenew?: boolean;
     readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
     readonly executiveStatus?: FixtureExecutiveStatus;
   };
@@ -1268,7 +1269,7 @@ export async function mockSignedInCabinet(
   let pendingEmailChange: { email: string; expiresAt: string; resendAfterSeconds: number } | null =
     null;
   let billingCurrentPlan: FixtureCurrentPlan = options.billing?.initialPlan ?? 'basic';
-  let billingAutoRenew = billingCurrentPlan !== 'free';
+  let billingAutoRenew = options.billing?.autoRenew ?? billingCurrentPlan !== 'free';
   let billingPeriodEnd = '2026-11-08T00:00:00.000Z';
   let currentInvoice: FixtureInvoice | null = null;
   let checkoutStatusIndex = 0;

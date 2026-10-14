@@ -41,7 +41,7 @@ export function CareerTariffsView({
   const [compareOpen, setCompareOpen] = useState(false);
   const [mobileCompareRevision, setMobileCompareRevision] = useState(0);
   const activeTier = billingSummary ? tierForPlan(billingSummary.currentPlan) : activeTierId;
-  const upgrade = useTariffUpgradeCallbacks(onSelectTier, onRequestTier);
+  const upgrade = useTariffUpgradeCallbacks(activeTier, onSelectTier, onRequestTier);
   const compare = () => {
     setCompareOpen(true);
     setMobileCompareRevision((revision) => revision + 1);
@@ -70,14 +70,28 @@ export function CareerTariffsView({
 }
 
 function useTariffUpgradeCallbacks(
+  activeTier: TariffTierId,
   onSelectTier?: (id: TariffTierId) => void,
   onRequestTier?: (id: TariffTierId) => void,
 ) {
   const [context, setContext] = useState<TariffUpgradeContext | null>(null);
   const selectTier = (id: TariffTierId) => {
+    if (id === 'free') {
+      onSelectTier?.(id);
+      return;
+    }
     const next = upgradeContextForTier(id);
-    if (next) setContext(next);
-    else onSelectTier?.(id);
+    if (!next) {
+      onSelectTier?.(id);
+      return;
+    }
+    const targetRank = TARIFF_LEVELS.findIndex((level) => level.id === id);
+    const activeRank = TARIFF_LEVELS.findIndex((level) => level.id === activeTier);
+    if (targetRank < activeRank && next.kind === 'plan') {
+      setContext({ kind: 'plan-change-unavailable', planId: next.planId });
+      return;
+    }
+    setContext(next);
   };
   const requestTier = (id: TariffTierId) => {
     if (id === 'exec') setContext({ kind: 'executive' });
@@ -122,7 +136,7 @@ function TariffsDesktopView(props: TariffsViewFrameProps) {
   return (
     <div className="career-tariffs-desktop">
       <div className="career-tariffs-panel">
-        <TariffsDesktopHeader activeTier={props.activeTier} onToggleCompare={props.onCompare} />
+        <TariffsDesktopHeader onToggleCompare={props.onCompare} />
         <div className="career-tariffs-ladder">
           {TARIFF_LEVELS.map((level) => (
             <TariffCard
@@ -186,13 +200,7 @@ function tierForPlan(plan: CandidateBillingSummary['currentPlan']): TariffTierId
   return plan === 'basic' ? 'go' : plan;
 }
 
-function TariffsDesktopHeader({
-  activeTier,
-  onToggleCompare,
-}: {
-  readonly activeTier: TariffTierId;
-  readonly onToggleCompare: () => void;
-}) {
+function TariffsDesktopHeader({ onToggleCompare }: { readonly onToggleCompare: () => void }) {
   return (
     <div className="career-tariffs-head">
       <div className="career-tariffs-head-row">
@@ -205,9 +213,8 @@ function TariffsDesktopHeader({
         </button>
       </div>
       <p className="career-tariffs-lead">
-        {activeTier === 'free'
-          ? 'Месячная подписка, автопродление, отмена в 1 клик. Перейти можно на любой тариф, а не только на следующий. Оплата ещё не включена: напишем, когда откроется.'
-          : 'Понижение вступает в силу со следующего периода, повышение сразу с доплатой за остаток месяца.'}
+        Платный тариф подключается после подтверждения оплаты. Возврат на Free отключает
+        автопродление; понижение между платными тарифами пока недоступно.
       </p>
     </div>
   );

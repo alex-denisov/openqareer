@@ -7,6 +7,8 @@ import * as billingApi from '../shell/candidateBillingApi';
 import type { CandidateBillingSummary } from '../shell/candidateBillingApi';
 import * as upgradeApi from './tariffUpgradeApi';
 import { TariffUpgradeFlow, type TariffUpgradeContext } from './TariffUpgradeFlow';
+import { CareerTariffsView } from './CareerTariffsView';
+import { BillingManagementPanel } from './BillingManagementPanel';
 
 const freeSummary: CandidateBillingSummary = {
   currentPlan: 'free',
@@ -51,6 +53,71 @@ describe('TariffUpgradeFlow', () => {
     act(() => root.unmount());
     host.remove();
     vi.restoreAllMocks();
+  });
+
+  it('shows an unavailable state for paid downgrades instead of opening checkout', async () => {
+    const summary: CandidateBillingSummary = {
+      ...basicSummary,
+      currentPlan: 'pro',
+      subscription: {
+        status: 'active',
+        currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+        nextChargeAt: '2026-11-08T00:00:00.000Z',
+        autoRenew: true,
+      },
+      plans: [
+        ...basicSummary.plans,
+        { id: 'pro', name: 'Pro', amountKopecks: 990_000, currency: 'RUB', interval: 'month' },
+      ],
+    };
+    const checkout = vi.spyOn(upgradeApi, 'createCandidateCheckout');
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root.render(<CareerTariffsView activeTierId="pro" billingSummary={summary} />);
+      await Promise.resolve();
+    });
+
+    await clickButton(host, 'Понизить до Basic');
+
+    expect(
+      host.querySelector('[data-testid="tariff-plan-change-unavailable"]')?.textContent,
+    ).toContain('следующего периода');
+    expect(host.textContent).toContain('Текущий тариф не изменён');
+    expect(checkout).not.toHaveBeenCalled();
+  });
+
+  it('explains that re-enabling renewal is still an external dependency', async () => {
+    const summary: CandidateBillingSummary = {
+      ...basicSummary,
+      subscription: { ...basicSummary.subscription!, nextChargeAt: null, autoRenew: false },
+    };
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <BillingManagementPanel
+          summary={summary}
+          receipts={[]}
+          receiptState="ready"
+          nextCursor={null}
+          loadingMore={false}
+          loadMoreError={false}
+          cancellationState="idle"
+          onCancelRenewal={vi.fn()}
+          onRetryReceipts={vi.fn()}
+          onLoadMore={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await clickButton(host, 'Включить автопродление');
+
+    expect(host.textContent).toContain('Автопродление пока недоступно');
+    expect(host.textContent).toContain('Оплатите следующий период вручную');
   });
 
   async function mount(context: TariffUpgradeContext, summary = freeSummary) {
