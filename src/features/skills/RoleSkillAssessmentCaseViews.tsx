@@ -379,11 +379,11 @@ export function ModelErrorState({
       <WarningCircle size={24} aria-hidden="true" />
       <h2>Модель не завершила проверку</h2>
       <p>
-        Ответ и прогресс сохранены без новой оценки. Повторите этот шаг, когда сервис будет
-        доступен.
+        Ответ не оценён: модель не ответила. Ваш текст и шаги сохранены, ничего не потеряно.
+        Повторите этот шаг, когда сервис будет доступен.
       </p>
       <button className="career-primary-button" type="button" disabled={busy} onClick={onRetry}>
-        {busy ? 'Повторяем…' : 'Повторить шаг'}
+        {busy ? 'Повторяем…' : 'Повторить'}
       </button>
       <span className="career-role-assessment-meta">Действие: {run.modelError?.action}</span>
     </section>
