@@ -36,7 +36,7 @@ describe('CareerTariffsView (B442)', () => {
     expect(htmlWithPaidTierActive).toContain('Очередь на одобрение и журнал с квитанциями');
     expect(htmlWithPaidTierActive).toContain('Готовит справку о компании к каждым воротам');
     expect(htmlWithPaidTierActive).toContain(
-      'Заявку рассматривает команда, ответ в течение недели',
+      'Заявка попадёт в очередь команды. Срок ответа пока не подтверждён.',
     );
   });
 

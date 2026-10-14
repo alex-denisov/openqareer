@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { BILLING_PLANS } from './billingPlans';
-import type { BillingInvoice } from './sqliteBillingRepository';
+import type { BillingInvoice, ReserveCheckoutResult } from './sqliteBillingRepository';
 import type { AuthPrincipal } from '../auth/authTypes';
 import type { RouteDeps } from '../routes/deps';
 import {
@@ -12,14 +12,18 @@ import {
   withDeps,
 } from '../routes/helpers';
 
-const checkoutSchema = z.object({
-  planId: z.enum(['basic', 'pro', 'max']),
-  autoRenew: z.boolean(),
-}).strict();
-const cursorSchema = z.object({
-  cursor: z.coerce.number().int().positive().optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(20),
-}).strict();
+const checkoutSchema = z
+  .object({
+    planId: z.enum(['basic', 'pro', 'max']),
+    autoRenew: z.boolean(),
+  })
+  .strict();
+const cursorSchema = z
+  .object({
+    cursor: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+  })
+  .strict();
 const invoiceParamsSchema = z.object({ invoiceId: z.coerce.number().int().positive() }).strict();
 
 function billingPrincipal(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -61,13 +65,22 @@ function checkoutConflict(
   const idempotentReplay = repository.hasCheckoutForIdempotencyKey(userId, idempotencyKey);
   if (idempotentReplay) return null;
   if (repository.hasUnresolvedPayment(userId)) {
-    return { code: 'billing_payment_processing', message: 'Дождитесь подтверждения текущего платежа.', retryable: true };
+    return {
+      code: 'billing_payment_processing',
+      message: 'Дождитесь подтверждения текущего платежа.',
+      retryable: true,
+    };
   }
   const subscription = repository.getSubscription(userId, new Date().toISOString());
   if (!subscription) return null;
+  if (subscription.status === 'past_due' && subscription.planId === planId) return null;
   const planRank = { basic: 0, pro: 1, max: 2 } as const;
   return planRank[planId] <= planRank[subscription.planId]
-    ? { code: 'billing_plan_not_upgrade', message: 'Вы уже используете этот тариф или выше.', retryable: false }
+    ? {
+        code: 'billing_plan_not_upgrade',
+        message: 'Вы уже используете этот тариф или выше.',
+        retryable: false,
+      }
     : null;
 }
 
@@ -79,45 +92,87 @@ async function createReservedCheckout(
   plan: (typeof BILLING_PLANS)[keyof typeof BILLING_PLANS],
   invoice: BillingInvoice,
 ) {
-  if (!deps.billingRepository || !deps.robokassaGateway) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'Оплата временно недоступна.', true);
+  const repository = deps.billingRepository;
+  if (!repository || !deps.robokassaGateway) {
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'Оплата временно недоступна.',
+      true,
+    );
   }
   try {
-    const created = await deps.robokassaGateway.createCheckout({
-      invoiceId: invoice.invoiceId,
-      userId: principal.userId,
-      userEmail: principal.emailVerified === true
-        ? deps.authService.getUser?.(principal.userId)?.email ?? null
-        : null,
-      planId: plan.id,
-      amountKopecks: plan.amountKopecks,
-      autoRenew: invoice.autoRenewOptIn,
-    });
-    if (created.invoiceId !== invoice.invoiceId || !isRobokassaPaymentUrl(created.paymentUrl)) {
-      throw new Error('robokassa_checkout_response_invalid');
-    }
-    deps.billingRepository.setCheckoutUrl(created.invoiceId, created.paymentUrl, new Date().toISOString());
-    const saved = deps.billingRepository.getInvoice(created.invoiceId);
-    if (!saved) throw new Error('billing_invoice_missing_after_checkout');
-    return reply.code(201).header('Location', checkoutResourceUrl(saved.invoiceId))
+    const saved = await saveProviderCheckout(deps, repository, principal, plan, invoice);
+    return reply
+      .code(201)
+      .header('Location', checkoutResourceUrl(saved.invoiceId))
       .send({ data: checkoutView(saved), meta: { requestId: request.id } });
   } catch {
-    deps.billingRepository.markCheckoutFailed(invoice.invoiceId, new Date().toISOString());
+    repository.markCheckoutFailed(invoice.invoiceId, new Date().toISOString());
     request.log.error({ invoiceId: invoice.invoiceId }, 'billing_checkout_failed');
-    return sendError(reply, request, 503, 'billing_checkout_failed', 'Не удалось создать ссылку на оплату.', true);
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_checkout_failed',
+      'Не удалось создать ссылку на оплату.',
+      true,
+    );
   }
+}
+
+async function saveProviderCheckout(
+  deps: RouteDeps,
+  repository: NonNullable<RouteDeps['billingRepository']>,
+  principal: AuthPrincipal,
+  plan: (typeof BILLING_PLANS)[keyof typeof BILLING_PLANS],
+  invoice: BillingInvoice,
+): Promise<BillingInvoice> {
+  const gateway = deps.robokassaGateway;
+  if (!gateway) throw new Error('robokassa_not_configured');
+  const created = await gateway.createCheckout({
+    invoiceId: invoice.invoiceId,
+    userId: principal.userId,
+    userEmail:
+      principal.emailVerified === true
+        ? (deps.authService.getUser?.(principal.userId)?.email ?? null)
+        : null,
+    planId: plan.id,
+    amountKopecks: plan.amountKopecks,
+    autoRenew: invoice.autoRenewOptIn,
+  });
+  if (created.invoiceId !== invoice.invoiceId || !isRobokassaPaymentUrl(created.paymentUrl)) {
+    throw new Error('robokassa_checkout_response_invalid');
+  }
+  repository.setCheckoutUrl(created.invoiceId, created.paymentUrl, new Date().toISOString());
+  const saved = repository.getInvoice(created.invoiceId);
+  if (!saved) throw new Error('billing_invoice_missing_after_checkout');
+  return saved;
 }
 
 function handleGetBillingSummary(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
   if (!deps.billingRepository) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'Управление тарифом временно недоступно.', true);
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'Управление тарифом временно недоступно.',
+      true,
+    );
   }
-  const subscription = deps.billingRepository.getSubscription(principal.userId, new Date().toISOString());
-  const currentPlan = subscription?.planId
-    ?? deps.billingRepository.getLegacyPaidPlan(principal.userId, new Date().toISOString())
-    ?? 'free';
+  const subscription = deps.billingRepository.getSubscription(
+    principal.userId,
+    new Date().toISOString(),
+  );
+  const currentPlan =
+    subscription?.planId ??
+    deps.billingRepository.getLegacyPaidPlan(principal.userId, new Date().toISOString()) ??
+    'free';
   return reply.send({
     data: {
       currentPlan,
@@ -139,58 +194,144 @@ function handleGetCheckout(deps: RouteDeps, request: FastifyRequest, reply: Fast
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
   if (!deps.billingRepository) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'Состояние оплаты временно недоступно.', true);
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'Состояние оплаты временно недоступно.',
+      true,
+    );
   }
   const parsed = invoiceParamsSchema.safeParse(request.params);
-  if (!parsed.success) return sendError(reply, request, 400, 'billing_invoice_id_invalid', 'Проверьте номер заказа.', false);
+  if (!parsed.success)
+    return sendError(
+      reply,
+      request,
+      400,
+      'billing_invoice_id_invalid',
+      'Проверьте номер заказа.',
+      false,
+    );
   const invoice = deps.billingRepository.getInvoiceForUser(principal.userId, parsed.data.invoiceId);
-  if (!invoice) return sendError(reply, request, 404, 'billing_checkout_not_found', 'Заказ не найден.', false);
+  if (!invoice)
+    return sendError(reply, request, 404, 'billing_checkout_not_found', 'Заказ не найден.', false);
   return reply.send({ data: checkoutView(invoice), meta: { requestId: request.id } });
+}
+
+function parseCheckoutIdempotencyKey(request: FastifyRequest, reply: FastifyReply): string | null {
+  const value = request.headers['idempotency-key'];
+  if (
+    typeof value === 'string' &&
+    value.length >= 8 &&
+    value.length <= 128 &&
+    /^[\w:.-]+$/u.test(value)
+  ) {
+    return value;
+  }
+  sendError(
+    reply,
+    request,
+    400,
+    'idempotency_key_required',
+    'Передайте корректный Idempotency-Key.',
+    false,
+  );
+  return null;
+}
+
+function parseCheckoutBody(request: FastifyRequest, reply: FastifyReply) {
+  const parsed = checkoutSchema.safeParse(request.body);
+  if (parsed.success) return parsed.data;
+  sendError(
+    reply,
+    request,
+    400,
+    'billing_checkout_invalid',
+    'Выберите доступный платный тариф.',
+    false,
+  );
+  return null;
 }
 
 async function handleCreateCheckout(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
-  const keyHeader = request.headers['idempotency-key'];
-  const key = typeof keyHeader === 'string' && keyHeader.length >= 8 && keyHeader.length <= 128
-    && /^[\w:.-]+$/u.test(keyHeader) ? keyHeader : null;
-  if (!key) {
-    return sendError(reply, request, 400, 'idempotency_key_required', 'Передайте корректный Idempotency-Key.', false);
+  const idempotencyKey = parseCheckoutIdempotencyKey(request, reply);
+  if (!idempotencyKey) return;
+  const checkout = parseCheckoutBody(request, reply);
+  if (!checkout) return;
+  const repository = deps.billingRepository;
+  const gateway = deps.robokassaGateway;
+  if (!repository || !gateway) {
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'Оплата временно недоступна.',
+      true,
+    );
   }
-  const checkout = checkoutSchema.safeParse(request.body);
-  if (!checkout.success) {
-    return sendError(reply, request, 400, 'billing_checkout_invalid', 'Выберите доступный платный тариф.', false);
-  }
-  if (!deps.billingRepository || !deps.robokassaGateway) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'Оплата временно недоступна.', true);
-  }
-  const { planId, autoRenew } = checkout.data;
-  const plan = BILLING_PLANS[planId];
-  const conflict = checkoutConflict(deps.billingRepository, principal.userId, key, plan.id);
-  if (conflict) {
+  const plan = BILLING_PLANS[checkout.planId];
+  const conflict = checkoutConflict(repository, principal.userId, idempotencyKey, plan.id);
+  if (conflict)
     return sendError(reply, request, 409, conflict.code, conflict.message, conflict.retryable);
-  }
-  const reservation = deps.billingRepository.reserveCheckout({
+  const reservation = repository.reserveCheckout({
     userId: principal.userId,
     planId: plan.id,
     amountKopecks: plan.amountKopecks,
-    autoRenewOptIn: autoRenew,
-    idempotencyKey: key,
-    testMode: deps.robokassaGateway.testMode,
+    autoRenewOptIn: checkout.autoRenew,
+    idempotencyKey,
+    testMode: gateway.testMode,
     now: new Date().toISOString(),
   });
+  return respondToCheckoutReservation(deps, request, reply, principal, plan, reservation);
+}
+
+async function respondToCheckoutReservation(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+  principal: AuthPrincipal,
+  plan: (typeof BILLING_PLANS)[keyof typeof BILLING_PLANS],
+  reservation: ReserveCheckoutResult,
+) {
   if (reservation.kind === 'conflict') {
-    return sendError(reply, request, 409, 'idempotency_key_reused', 'Этот ключ уже использован для другого тарифа.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'idempotency_key_reused',
+      'Этот ключ уже использован для другого тарифа.',
+      false,
+    );
   }
   if (reservation.kind === 'in_progress') {
-    return sendError(reply, request, 409, 'checkout_in_progress', 'Создание ссылки на оплату ещё выполняется.', true);
+    return sendError(
+      reply,
+      request,
+      409,
+      'checkout_in_progress',
+      'Создание ссылки на оплату ещё выполняется.',
+      true,
+    );
   }
   if (reservation.kind === 'existing') {
     if (reservation.invoice.status === 'failed') {
-      return sendError(reply, request, 409, 'checkout_failed_retry_new_key', 'Оплата не началась. Создайте новый заказ.', false);
+      return sendError(
+        reply,
+        request,
+        409,
+        'checkout_failed_retry_new_key',
+        'Оплата не началась. Создайте новый заказ.',
+        false,
+      );
     }
-    return reply.code(200).header('Location', checkoutResourceUrl(reservation.invoice.invoiceId))
+    return reply
+      .code(200)
+      .header('Location', checkoutResourceUrl(reservation.invoice.invoiceId))
       .send({ data: checkoutView(reservation.invoice), meta: { requestId: request.id } });
   }
 
@@ -201,10 +342,25 @@ function handleListReceipts(deps: RouteDeps, request: FastifyRequest, reply: Fas
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
   if (!deps.billingRepository) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'История платежей временно недоступна.', true);
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'История платежей временно недоступна.',
+      true,
+    );
   }
   const parsed = cursorSchema.safeParse(request.query);
-  if (!parsed.success) return sendError(reply, request, 400, 'billing_receipts_query_invalid', 'Проверьте параметры списка чеков.', false);
+  if (!parsed.success)
+    return sendError(
+      reply,
+      request,
+      400,
+      'billing_receipts_query_invalid',
+      'Проверьте параметры списка чеков.',
+      false,
+    );
   const rows = deps.billingRepository.listReceipts(principal.userId, parsed.data);
   const last = rows.at(-1);
   return reply.send({
@@ -232,11 +388,28 @@ function handleCancelRenewal(deps: RouteDeps, request: FastifyRequest, reply: Fa
   const principal = billingPrincipal(deps, request, reply);
   if (!principal) return;
   if (!deps.billingRepository) {
-    return sendError(reply, request, 503, 'billing_unavailable', 'Управление подпиской временно недоступно.', true);
+    return sendError(
+      reply,
+      request,
+      503,
+      'billing_unavailable',
+      'Управление подпиской временно недоступно.',
+      true,
+    );
   }
-  const subscription = deps.billingRepository.cancelRenewal(principal.userId, new Date().toISOString());
+  const subscription = deps.billingRepository.cancelRenewal(
+    principal.userId,
+    new Date().toISOString(),
+  );
   if (!subscription) {
-    return sendError(reply, request, 404, 'billing_subscription_not_found', 'Активная подписка не найдена.', false);
+    return sendError(
+      reply,
+      request,
+      404,
+      'billing_subscription_not_found',
+      'Активная подписка не найдена.',
+      false,
+    );
   }
   return reply.send({
     data: {
@@ -251,7 +424,11 @@ function handleCancelRenewal(deps: RouteDeps, request: FastifyRequest, reply: Fa
   });
 }
 
-async function handleRobokassaResult(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+async function handleRobokassaResult(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
   const params = callbackParams(request);
   const invoiceId = parsePositiveInvoiceId(params.get('InvId') ?? params.get('InvID'));
   const outSum = params.get('OutSum');
@@ -264,12 +441,14 @@ async function handleRobokassaResult(deps: RouteDeps, request: FastifyRequest, r
   }
   const invoice = deps.billingRepository.getInvoice(invoiceId);
   if (!invoice) return callbackText(reply, 404, 'unknown invoice');
-  if (!deps.robokassaGateway.verifyResultSignature({
-    invoiceId,
-    outSum,
-    signatureValue,
-    testMode: invoice.testMode,
-  })) {
+  if (
+    !deps.robokassaGateway.verifyResultSignature({
+      invoiceId,
+      outSum,
+      signatureValue,
+      testMode: invoice.testMode,
+    })
+  ) {
     request.log.warn({ invoiceId }, 'billing_result_bad_signature');
     return callbackText(reply, 403, 'bad signature');
   }

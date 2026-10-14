@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { ArrowClockwise, SpinnerGap } from '@phosphor-icons/react';
 import type {
   CandidateBillingReceipt,
@@ -20,6 +20,7 @@ export interface BillingManagementPanelProps {
   readonly loadMoreError: boolean;
   readonly cancellationState: 'idle' | 'pending' | 'done' | 'error';
   readonly onCancelRenewal: () => void;
+  readonly onUpdatePaymentMethod?: () => void;
   readonly onRetryReceipts: () => void;
   readonly onLoadMore: () => void;
 }
@@ -33,6 +34,7 @@ export function BillingManagementPanel({
   loadMoreError,
   cancellationState,
   onCancelRenewal,
+  onUpdatePaymentMethod,
   onRetryReceipts,
   onLoadMore,
 }: BillingManagementPanelProps) {
@@ -44,6 +46,7 @@ export function BillingManagementPanel({
         titleId={`career-billing-title-${id}`}
         cancellationState={cancellationState}
         onCancelRenewal={onCancelRenewal}
+        onUpdatePaymentMethod={onUpdatePaymentMethod}
       />
       <BillingHistory
         historyId={`career-billing-history-title-${id}`}
@@ -65,19 +68,23 @@ function BillingOverview({
   titleId,
   cancellationState,
   onCancelRenewal,
+  onUpdatePaymentMethod,
 }: {
   readonly summary: CandidateBillingSummary;
   readonly titleId: string;
   readonly cancellationState: CancellationState;
   readonly onCancelRenewal: () => void;
+  readonly onUpdatePaymentMethod?: () => void;
 }) {
   const subscription = summary.subscription;
   const plan = subscription
     ? summary.plans.find((candidatePlan) => candidatePlan.id === summary.currentPlan)
     : undefined;
-  const currentPlanName = summary.currentPlan === 'free'
-    ? 'Free'
-    : summary.plans.find((candidatePlan) => candidatePlan.id === summary.currentPlan)?.name ?? 'Платный тариф';
+  const currentPlanName =
+    summary.currentPlan === 'free'
+      ? 'Free'
+      : (summary.plans.find((candidatePlan) => candidatePlan.id === summary.currentPlan)?.name ??
+        'Платный тариф');
   const hasNextCharge = Boolean(
     subscription?.status === 'active' && subscription.autoRenew && subscription.nextChargeAt,
   );
@@ -85,18 +92,33 @@ function BillingOverview({
 
   return (
     <section className="career-billing-overview" aria-labelledby={titleId}>
-      <BillingOverviewIdentity currentPlanName={currentPlanName} subscription={subscription} titleId={titleId} />
+      <BillingOverviewIdentity
+        currentPlanName={currentPlanName}
+        subscription={subscription}
+        titleId={titleId}
+      />
       <BillingSummaryFacts
         subscription={subscription}
         hasNextCharge={hasNextCharge}
         chargeAmount={chargeAmount}
       />
+      {subscription?.status === 'past_due' && onUpdatePaymentMethod ? (
+        <UpdatePaymentMethodButton onClick={onUpdatePaymentMethod} />
+      ) : null}
       <BillingCancellationActions
         subscription={subscription}
         state={cancellationState}
         onCancel={onCancelRenewal}
       />
     </section>
+  );
+}
+
+function UpdatePaymentMethodButton({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <button className="career-btn career-btn-secondary" type="button" onClick={onClick}>
+      Обновить способ оплаты
+    </button>
   );
 }
 
@@ -112,7 +134,9 @@ function BillingOverviewIdentity({
   return (
     <div className="career-billing-overview-main">
       <p className="career-billing-eyebrow">Ваш тариф</p>
-      <h3 className="career-billing-title" id={titleId}>{currentPlanName}</h3>
+      <h3 className="career-billing-title" id={titleId}>
+        {currentPlanName}
+      </h3>
       {subscription?.status === 'past_due' ? (
         <p className="career-billing-status is-warning" role="status">
           Платёж за следующий период ещё не подтверждён.
@@ -176,10 +200,14 @@ function BillingCancellationActions({
   readonly state: CancellationState;
   readonly onCancel: () => void;
 }) {
-  if (!subscription || (!subscription.autoRenew && state !== 'done' && state !== 'error')) return null;
+  if (!subscription) return null;
   return (
     <div className="career-billing-action">
-      {subscription.autoRenew ? <CancelRenewalButton state={state} onCancel={onCancel} /> : null}
+      {subscription.autoRenew ? (
+        <CancelRenewalButton state={state} onCancel={onCancel} />
+      ) : (
+        <PreparedRenewalAction />
+      )}
       {state === 'error' ? (
         <p className="career-billing-error" role="alert">
           Не удалось отключить автопродление. Проверьте соединение и повторите.
@@ -187,10 +215,28 @@ function BillingCancellationActions({
       ) : null}
       {state === 'done' ? (
         <p className="career-billing-success" role="status">
-          Автопродление отключено. Доступ действует до {formatDate(subscription.currentPeriodEndsAt)}.
+          Автопродление отключено. Доступ действует до{' '}
+          {formatDate(subscription.currentPeriodEndsAt)}.
         </p>
       ) : null}
     </div>
+  );
+}
+
+function PreparedRenewalAction() {
+  const [unavailable, setUnavailable] = useState(false);
+  return unavailable ? (
+    <p className="career-billing-error" role="status">
+      Автопродление пока недоступно. Оплатите следующий период вручную.
+    </p>
+  ) : (
+    <button
+      className="career-btn career-btn-secondary"
+      type="button"
+      onClick={() => setUnavailable(true)}
+    >
+      Включить автопродление
+    </button>
   );
 }
 
@@ -260,12 +306,20 @@ function BillingHistory({
   );
 }
 
-function BillingHistoryHeading({ historyId, loading }: { readonly historyId: string; readonly loading: boolean }) {
+function BillingHistoryHeading({
+  historyId,
+  loading,
+}: {
+  readonly historyId: string;
+  readonly loading: boolean;
+}) {
   return (
     <div className="career-billing-history-heading">
       <div>
         <p className="career-billing-eyebrow">Платежи</p>
-        <h3 className="career-billing-title" id={historyId}>История платежей</h3>
+        <h3 className="career-billing-title" id={historyId}>
+          История платежей
+        </h3>
       </div>
       {loading ? (
         <span className="career-billing-loading" role="status" aria-busy="true">
@@ -357,7 +411,13 @@ function BillingHistoryRows({
   );
 }
 
-function LoadMoreReceiptsButton({ loading, onLoadMore }: { readonly loading: boolean; readonly onLoadMore: () => void }) {
+function LoadMoreReceiptsButton({
+  loading,
+  onLoadMore,
+}: {
+  readonly loading: boolean;
+  readonly onLoadMore: () => void;
+}) {
   return (
     <button
       className="career-btn career-btn-secondary career-billing-load-more"
@@ -371,7 +431,9 @@ function LoadMoreReceiptsButton({ loading, onLoadMore }: { readonly loading: boo
           <SpinnerGap className="career-billing-spinner career-billing-icon" aria-hidden="true" />
           Загружаем платежи
         </>
-      ) : 'Показать предыдущие платежи'}
+      ) : (
+        'Показать предыдущие платежи'
+      )}
     </button>
   );
 }
@@ -415,7 +477,9 @@ function BillingDesktopReceiptTable({
               <th scope="row">{formatDate(receipt.paidAt, true)}</th>
               <td>{planName(receipt.planId, plans)}</td>
               <td>{formatRubles(receipt.amountKopecks)}</td>
-              <td><ReceiptValue receipt={receipt} /></td>
+              <td>
+                <ReceiptValue receipt={receipt} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -450,7 +514,9 @@ function BillingMobileReceiptCards({
             </div>
             <div className="career-billing-fact">
               <dt>Чек</dt>
-              <dd><ReceiptValue receipt={receipt} /></dd>
+              <dd>
+                <ReceiptValue receipt={receipt} />
+              </dd>
             </div>
           </dl>
         </li>
@@ -463,7 +529,12 @@ function ReceiptValue({ receipt }: { readonly receipt: CandidateBillingReceipt }
   const href = safeReceiptUrl(receipt.receiptUrl);
   if (href) {
     return (
-      <a className="career-billing-receipt-link" href={href} target="_blank" rel="noopener noreferrer">
+      <a
+        className="career-billing-receipt-link"
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         Открыть чек
       </a>
     );
@@ -472,9 +543,13 @@ function ReceiptValue({ receipt }: { readonly receipt: CandidateBillingReceipt }
     <span>
       Ссылка на чек пока не получена
       {receipt.fiscalDocumentNumber ? (
-        <small className="career-billing-fiscal-number">Фискальный документ №{receipt.fiscalDocumentNumber}</small>
+        <small className="career-billing-fiscal-number">
+          Фискальный документ №{receipt.fiscalDocumentNumber}
+        </small>
       ) : (
-        <small className="career-billing-fiscal-number">Номер фискального документа пока не получен</small>
+        <small className="career-billing-fiscal-number">
+          Номер фискального документа пока не получен
+        </small>
       )}
     </span>
   );

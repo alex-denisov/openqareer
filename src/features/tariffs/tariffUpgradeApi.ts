@@ -22,6 +22,9 @@ export interface CandidateExecutiveRequest {
   readonly task: string;
   readonly timeline: string;
   readonly status: ExecutiveRequestStatus;
+  readonly profileSharingConsent: boolean;
+  readonly profileSharingConsentAt: string | null;
+  readonly profileSharingConsentVersion: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -51,6 +54,7 @@ export async function getCandidateCheckout(invoiceId: number): Promise<Candidate
 export async function createExecutiveSearchRequest(input: {
   readonly task: string;
   readonly timeline: string;
+  readonly profileSharingConsent: true;
   readonly idempotencyKey: string;
 }): Promise<CandidateExecutiveRequest> {
   const response = await apiFetch('/api/v1/candidate/executive-requests', {
@@ -59,7 +63,11 @@ export async function createExecutiveSearchRequest(input: {
       'Content-Type': 'application/json',
       'Idempotency-Key': input.idempotencyKey,
     },
-    body: JSON.stringify({ task: input.task, timeline: input.timeline }),
+    body: JSON.stringify({
+      task: input.task,
+      timeline: input.timeline,
+      profileSharingConsent: input.profileSharingConsent,
+    }),
   });
   return readData<CandidateExecutiveRequest>(response);
 }

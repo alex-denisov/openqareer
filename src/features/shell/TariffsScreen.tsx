@@ -2,7 +2,12 @@ import { useState } from 'react';
 import { ArrowClockwise } from '@phosphor-icons/react';
 import { CareerTariffsView, type TariffTierId } from '../tariffs';
 import { BillingManagementPanel } from '../tariffs/BillingManagementPanel';
-import { cancelCandidateBillingRenewal, type CandidateCurrentPlanId } from './candidateBillingApi';
+import type { TariffUpgradeContext } from '../tariffs/TariffUpgradeFlow';
+import {
+  cancelCandidateBillingRenewal,
+  type CandidateBillingSummary,
+  type CandidateCurrentPlanId,
+} from './candidateBillingApi';
 import { useCandidateBillingReceipts, useCandidateBillingSummary } from './candidateBillingHooks';
 
 type CancellationState = 'idle' | 'pending' | 'done' | 'error';
@@ -10,29 +15,23 @@ type CancellationState = 'idle' | 'pending' | 'done' | 'error';
 export function TariffsScreen() {
   const billing = useCandidateBillingSummary();
   const receipts = useCandidateBillingReceipts();
-  const [cancellationState, setCancellationState] = useState<CancellationState>('idle');
-
-  const cancelRenewal = async () => {
-    if (cancellationState === 'pending') return;
-    setCancellationState('pending');
-    try {
-      const cancellation = await cancelCandidateBillingRenewal();
-      billing.applyCancellation(cancellation);
-      setCancellationState('done');
-    } catch {
-      setCancellationState('error');
-    }
-  };
-
-  if (billing.state === 'loading') {
-    return <BillingLoadingState />;
-  }
-
+  if (billing.state === 'loading') return <BillingLoadingState />;
   if (billing.state === 'error' || !billing.summary) {
     return <BillingErrorState onRetry={billing.retry} />;
   }
+  return <ReadyTariffsScreen summary={billing.summary} billing={billing} receipts={receipts} />;
+}
 
-  const summary = billing.summary;
+function ReadyTariffsScreen({
+  summary,
+  billing,
+  receipts,
+}: {
+  readonly summary: CandidateBillingSummary;
+  readonly billing: ReturnType<typeof useCandidateBillingSummary>;
+  readonly receipts: ReturnType<typeof useCandidateBillingReceipts>;
+}) {
+  const actions = useTariffsScreenActions(summary, billing);
   const panel = (
     <BillingManagementPanel
       summary={summary}
@@ -41,8 +40,9 @@ export function TariffsScreen() {
       nextCursor={receipts.nextCursor}
       loadingMore={receipts.loadingMore}
       loadMoreError={receipts.loadMoreError}
-      cancellationState={cancellationState}
-      onCancelRenewal={cancelRenewal}
+      cancellationState={actions.cancellationState}
+      onCancelRenewal={actions.cancelRenewal}
+      onUpdatePaymentMethod={actions.openPaymentMethodUpdate}
       onRetryReceipts={receipts.retry}
       onLoadMore={receipts.loadMore}
     />
@@ -53,9 +53,47 @@ export function TariffsScreen() {
       activeTierId={tariffTierFor(summary.currentPlan)}
       billingSummary={summary}
       billingPanel={panel}
+      externalUpgradeContext={actions.paymentMethodContext}
+      onCloseExternalUpgrade={actions.closePaymentMethodUpdate}
+      onSelectTier={(tierId) => {
+        if (tierId === 'free') void actions.cancelRenewal();
+      }}
       onSummaryChanged={billing.applySummary}
     />
   );
+}
+
+function useTariffsScreenActions(
+  summary: CandidateBillingSummary,
+  billing: ReturnType<typeof useCandidateBillingSummary>,
+) {
+  const [cancellationState, setCancellationState] = useState<CancellationState>('idle');
+  const [paymentMethodContext, setPaymentMethodContext] = useState<TariffUpgradeContext | null>(
+    null,
+  );
+
+  const cancelRenewal = async () => {
+    if (cancellationState === 'pending') return;
+    setCancellationState('pending');
+    try {
+      billing.applyCancellation(await cancelCandidateBillingRenewal());
+      setCancellationState('done');
+    } catch {
+      setCancellationState('error');
+    }
+  };
+  const openPaymentMethodUpdate = () => {
+    if (summary.currentPlan !== 'free') {
+      setPaymentMethodContext({ kind: 'payment-method', planId: summary.currentPlan });
+    }
+  };
+  return {
+    cancellationState,
+    paymentMethodContext,
+    cancelRenewal,
+    openPaymentMethodUpdate,
+    closePaymentMethodUpdate: () => setPaymentMethodContext(null),
+  };
 }
 
 function BillingLoadingState() {

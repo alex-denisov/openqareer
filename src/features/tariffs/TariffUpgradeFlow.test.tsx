@@ -7,6 +7,8 @@ import * as billingApi from '../shell/candidateBillingApi';
 import type { CandidateBillingSummary } from '../shell/candidateBillingApi';
 import * as upgradeApi from './tariffUpgradeApi';
 import { TariffUpgradeFlow, type TariffUpgradeContext } from './TariffUpgradeFlow';
+import { CareerTariffsView } from './CareerTariffsView';
+import { BillingManagementPanel } from './BillingManagementPanel';
 
 const freeSummary: CandidateBillingSummary = {
   currentPlan: 'free',
@@ -41,6 +43,7 @@ const pendingCheckout: upgradeApi.CandidateCheckout = {
 };
 
 const paidCheckout: upgradeApi.CandidateCheckout = { ...pendingCheckout, status: 'paid' };
+const renewalCheckout: upgradeApi.CandidateCheckout = { ...pendingCheckout, autoRenew: true };
 
 describe('TariffUpgradeFlow', () => {
   let host: HTMLDivElement;
@@ -50,6 +53,71 @@ describe('TariffUpgradeFlow', () => {
     act(() => root.unmount());
     host.remove();
     vi.restoreAllMocks();
+  });
+
+  it('shows an unavailable state for paid downgrades instead of opening checkout', async () => {
+    const summary: CandidateBillingSummary = {
+      ...basicSummary,
+      currentPlan: 'pro',
+      subscription: {
+        status: 'active',
+        currentPeriodEndsAt: '2026-11-08T00:00:00.000Z',
+        nextChargeAt: '2026-11-08T00:00:00.000Z',
+        autoRenew: true,
+      },
+      plans: [
+        ...basicSummary.plans,
+        { id: 'pro', name: 'Pro', amountKopecks: 990_000, currency: 'RUB', interval: 'month' },
+      ],
+    };
+    const checkout = vi.spyOn(upgradeApi, 'createCandidateCheckout');
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root.render(<CareerTariffsView activeTierId="pro" billingSummary={summary} />);
+      await Promise.resolve();
+    });
+
+    await clickButton(host, 'Понизить до Basic');
+
+    expect(
+      host.querySelector('[data-testid="tariff-plan-change-unavailable"]')?.textContent,
+    ).toContain('следующего периода');
+    expect(host.textContent).toContain('Текущий тариф не изменён');
+    expect(checkout).not.toHaveBeenCalled();
+  });
+
+  it('explains that re-enabling renewal is still an external dependency', async () => {
+    const summary: CandidateBillingSummary = {
+      ...basicSummary,
+      subscription: { ...basicSummary.subscription!, nextChargeAt: null, autoRenew: false },
+    };
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    await act(async () => {
+      root.render(
+        <BillingManagementPanel
+          summary={summary}
+          receipts={[]}
+          receiptState="ready"
+          nextCursor={null}
+          loadingMore={false}
+          loadMoreError={false}
+          cancellationState="idle"
+          onCancelRenewal={vi.fn()}
+          onRetryReceipts={vi.fn()}
+          onLoadMore={vi.fn()}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await clickButton(host, 'Включить автопродление');
+
+    expect(host.textContent).toContain('Автопродление пока недоступно');
+    expect(host.textContent).toContain('Оплатите следующий период вручную');
   });
 
   async function mount(context: TariffUpgradeContext, summary = freeSummary) {
@@ -135,12 +203,48 @@ describe('TariffUpgradeFlow', () => {
     expect(host.textContent).toContain('Перейти на Pro');
   });
 
+  it('opens payment-method recovery at checkout and preserves recurring consent', async () => {
+    vi.spyOn(coachApi, 'getSession').mockResolvedValue({
+      username: 'qa.candidate',
+      email: 'verified@example.test',
+      displayName: 'Тестовый кандидат',
+      role: 'candidate',
+      isTest: true,
+      candidateId: 'candidate-b470',
+      emailVerified: true,
+    });
+    vi.spyOn(upgradeApi, 'createCandidateCheckout').mockResolvedValue(renewalCheckout);
+    await mount(
+      { kind: 'payment-method', planId: 'basic' },
+      {
+        ...basicSummary,
+        subscription: { ...basicSummary.subscription!, status: 'past_due' },
+      },
+    );
+
+    await flush();
+    expect(host.textContent).toContain('Обновить способ оплаты');
+    expect(host.querySelector<HTMLInputElement>('input[name="auto-renew"]')?.checked).toBe(true);
+    clickButton(host, 'Перейти к оплате, 3 990 ₽');
+    await flush();
+
+    expect(upgradeApi.createCandidateCheckout).toHaveBeenCalledWith({
+      planId: 'basic',
+      autoRenew: true,
+      idempotencyKey: expect.any(String),
+    });
+    expect(host.querySelector('a[href^="https://auth.robokassa.ru/"]')).not.toBeNull();
+  });
+
   it('submits an Executive request only after the candidate opts in and reflects the server waitlist state', async () => {
     const request = vi.spyOn(upgradeApi, 'createExecutiveSearchRequest').mockResolvedValue({
       id: 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
       task: 'Найти CTO в финтех-компанию',
       timeline: 'До конца года',
       status: 'waitlisted',
+      profileSharingConsent: true,
+      profileSharingConsentAt: '2026-10-11T12:00:00.000Z',
+      profileSharingConsentVersion: 'executive-profile-sharing-v1',
       createdAt: '2026-10-11T12:00:00.000Z',
       updatedAt: '2026-10-11T12:00:00.000Z',
     });
@@ -164,6 +268,7 @@ describe('TariffUpgradeFlow', () => {
     expect(request).toHaveBeenCalledWith({
       task: 'Найти CTO в финтех-компанию',
       timeline: 'До конца года',
+      profileSharingConsent: true,
       idempotencyKey: expect.any(String),
     });
     expect(host.textContent).toContain('Вы в списке ожидания');

@@ -97,7 +97,10 @@ function FlowHeader({
 }) {
   const title = titleForUpgradeFlow(state);
   const showBack =
-    state.view !== 'offer' && state.view !== 'executive-form' && state.view !== 'executive-sending';
+    state.context.kind !== 'plan-change-unavailable' &&
+    state.view !== 'offer' &&
+    state.view !== 'executive-form' &&
+    state.view !== 'executive-sending';
   const onBack = state.view.startsWith('executive') ? state.onCloseError : state.onBackToOffer;
   return (
     <div className="career-upgrade-header">
@@ -153,11 +156,24 @@ function trapDialogTab(
   }
 }
 
+function PlanChangeUnavailableView({ state }: { readonly state: UpgradeDialogState }) {
+  return (
+    <div className="career-upgrade-state" data-testid="tariff-plan-change-unavailable" role="status">
+      <p>{state.message}</p>
+      <button className="career-btn is-secondary" type="button" onClick={state.onClose}>
+        К тарифам
+      </button>
+    </div>
+  );
+}
+
 function FlowContent({ state }: { readonly state: UpgradeDialogState }) {
   if (state.summaryStatus === 'loading') return <FlowLoading message="Загружаем данные тарифа." />;
   if (state.summaryStatus === 'error' || !state.summary) {
     return <FlowSummaryError onRetry={state.onRetrySummary} onClose={state.onClose} />;
   }
+  if (state.context.kind === 'plan-change-unavailable')
+    return <PlanChangeUnavailableView state={state} />;
   if (state.view === 'offer') return <OfferView state={state} summary={state.summary} />;
   if (state.view === 'checkout' || state.view === 'creating') {
     return <CheckoutView state={state} summary={state.summary} />;
@@ -521,12 +537,14 @@ function SuccessView({
 }
 
 function FailedView({ state }: { readonly state: UpgradeDialogState }) {
+  const retryLabel =
+    state.context.kind === 'payment-method' ? 'Обновить способ оплаты' : 'Повторить оплату';
   return (
     <div className="career-upgrade-state is-error" data-testid="tariff-payment-failed" role="alert">
       <p>Оплата не прошла. Тариф не изменён.</p>
       <div className="career-upgrade-actions">
         <button className="career-btn is-primary" type="button" onClick={state.onRetryCheckout}>
-          Повторить оплату
+          {retryLabel}
         </button>
         <button className="career-btn is-secondary" type="button" onClick={state.onClose}>
           К тарифам
@@ -723,8 +741,10 @@ export function titleForUpgradeFlow(state: UpgradeDialogState): string {
       (findPlan(state.summary, state.checkout?.planId ?? null)?.name ?? 'Тариф') + ' подключён'
     );
   if (state.view === 'failed') return 'Оплата не прошла';
+  if (state.context.kind === 'payment-method') return 'Обновить способ оплаты';
   if (state.view === 'checkout' || state.view === 'creating')
     return 'Оплата тарифа ' + (findPlan(state.summary, state.selectedPlan)?.name ?? '');
+  if (state.context.kind === 'plan-change-unavailable') return 'Понижение тарифа недоступно';
   if (state.view === 'error') return 'Оплата недоступна';
   if (state.context.kind === 'feature')
     return state.context.detail ?? featureCopy(state.context.feature);
@@ -752,9 +772,11 @@ function planOptions(
       ? ['basic', 'pro']
       : context.kind === 'plan'
         ? [context.planId]
-        : context.kind === 'feature'
-          ? [context.feature === 'applications' ? 'pro' : 'basic']
-          : [];
+        : context.kind === 'payment-method'
+          ? [context.planId]
+          : context.kind === 'feature'
+            ? [context.feature === 'applications' ? 'pro' : 'basic']
+            : [];
   return plans.filter((plan) => !isCurrentOrHigher(current, plan));
 }
 

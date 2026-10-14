@@ -201,6 +201,16 @@ test('B470: Executive request uses B471 status and does not claim payment or ema
   await expect(dialog).toContainText('Оплата не списывалась');
   await expect(dialog).not.toContainText('в течение недели на почту');
   await capture(page, 'executive-waitlist', viewport);
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const storedRequest = await page.evaluate(async () => {
+    const response = await fetch('/api/v1/candidate/executive-requests', {
+      credentials: 'include',
+    });
+    return (await response.json()) as {
+      data: { items: Array<{ profileSharingConsent: boolean }> };
+    };
+  });
+  expect(storedRequest.data.items[0]?.profileSharingConsent).toBe(true);
   await expectNoHorizontalOverflow(page);
 });
 

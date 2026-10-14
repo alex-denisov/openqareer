@@ -822,6 +822,7 @@ export type ExecutiveRequestStatus =
 export interface ExecutiveRequestInput {
   readonly task: string;
   readonly timeline: string;
+  readonly profileSharingConsent: true;
   readonly idempotencyKey: string;
 }
 
@@ -830,6 +831,9 @@ export interface StoredExecutiveRequest {
   readonly task: string;
   readonly timeline: string;
   readonly status: ExecutiveRequestStatus;
+  readonly profileSharingConsent: boolean;
+  readonly profileSharingConsentAt: string | null;
+  readonly profileSharingConsentVersion: string | null;
   readonly createdAt: string;
   readonly updatedAt: string;
 }

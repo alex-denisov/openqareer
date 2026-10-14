@@ -43,7 +43,13 @@ async function createBillingApp() {
   });
   const auth = new AuthService({ databasePath, candidateStore: candidates });
   await auth.seedAccounts(
-    [{ username: 'billing.candidate', password: 'candidate-password-for-tests', role: 'candidate' }],
+    [
+      {
+        username: 'billing.candidate',
+        password: 'candidate-password-for-tests',
+        role: 'candidate',
+      },
+    ],
     candidates,
   );
   const login = await auth.login('billing.candidate', 'candidate-password-for-tests');
@@ -71,9 +77,13 @@ async function createBillingApp() {
     })),
     createRecurringCharge: vi.fn(async (input) => ({ invoiceId: input.invoiceId, accepted: true })),
     getRecurringChargeStatus: vi.fn(async () => ({
-      state: 'pending' as const, amountKopecks: null, paymentMethod: null,
+      state: 'pending' as const,
+      amountKopecks: null,
+      paymentMethod: null,
     })),
-    verifyResultSignature: vi.fn((input) => input.signatureValue === 'valid-signature' && input.testMode),
+    verifyResultSignature: vi.fn(
+      (input) => input.signatureValue === 'valid-signature' && input.testMode,
+    ),
   };
   const app = await buildApp({
     config,
@@ -112,10 +122,12 @@ describe('candidate billing HTTP contract', () => {
       },
     });
     expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
-    expect(gateway.createCheckout).toHaveBeenCalledWith(expect.objectContaining({
-      amountKopecks: 399_000,
-      planId: 'basic',
-    }));
+    expect(gateway.createCheckout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        amountKopecks: 399_000,
+        planId: 'basic',
+      }),
+    );
     const checkoutStatus = await app.inject({
       method: 'GET',
       url: '/api/v1/candidate/billing/checkouts/1',
@@ -140,6 +152,58 @@ describe('candidate billing HTTP contract', () => {
     expect(gateway.createCheckout).toHaveBeenCalledTimes(1);
   });
 
+  it('allows a past-due candidate to create a recurring checkout for the current plan', async () => {
+    const { app, gateway, authorization, databasePath } = await createBillingApp();
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/billing/checkouts',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': 'checkout-past-due-initial',
+      },
+      payload: { planId: 'basic', autoRenew: true },
+    });
+    const callback = new URLSearchParams({
+      OutSum: '3990.00',
+      InvId: String(first.json().data.invoiceId),
+      SignatureValue: 'valid-signature',
+    });
+    await app.inject({
+      method: 'POST',
+      url: '/api/v1/billing/robokassa/result',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      payload: callback.toString(),
+    });
+    const database = new DatabaseSync(databasePath);
+    const subscription = database
+      .prepare('SELECT user_id FROM billing_subscriptions LIMIT 1')
+      .get() as { user_id: string };
+    database
+      .prepare("UPDATE billing_subscriptions SET status = 'past_due' WHERE user_id = ?")
+      .run(subscription.user_id);
+    database.close();
+
+    const update = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/billing/checkouts',
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': 'checkout-past-due-method-update',
+      },
+      payload: { planId: 'basic', autoRenew: true },
+    });
+
+    expect(update.statusCode).toBe(201);
+    expect(update.json().data).toMatchObject({
+      planId: 'basic',
+      autoRenew: true,
+      status: 'pending',
+    });
+    expect(gateway.createCheckout).toHaveBeenCalledTimes(2);
+  });
+
   it('grants the plan only after a signed ResultURL and treats retries as idempotent', async () => {
     const { app, authorization } = await createBillingApp();
     const checkout = await app.inject({
@@ -154,7 +218,12 @@ describe('candidate billing HTTP contract', () => {
     });
     expect(checkout.statusCode).toBe(201);
 
-    const params = new URLSearchParams({ OutSum: '3990.00', InvId: '1', PaymentMethod: 'SBP', SignatureValue: 'bad-signature' });
+    const params = new URLSearchParams({
+      OutSum: '3990.00',
+      InvId: '1',
+      PaymentMethod: 'SBP',
+      SignatureValue: 'bad-signature',
+    });
     const invalid = await app.inject({
       method: 'POST',
       url: '/api/v1/billing/robokassa/result',
@@ -162,7 +231,15 @@ describe('candidate billing HTTP contract', () => {
       payload: params.toString(),
     });
     expect(invalid.statusCode).toBe(403);
-    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } })).json().data.currentPlan).toBe('free');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/candidate/billing',
+          headers: { authorization },
+        })
+      ).json().data.currentPlan,
+    ).toBe('free');
 
     params.set('SignatureValue', 'valid-signature');
     const applied = await app.inject({
@@ -173,7 +250,11 @@ describe('candidate billing HTTP contract', () => {
     });
     expect(applied.statusCode).toBe(200);
     expect(applied.body).toBe('OK1');
-    const summary = await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } });
+    const summary = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/billing',
+      headers: { authorization },
+    });
     expect(summary.json().data).toMatchObject({
       currentPlan: 'basic',
       subscription: { status: 'active', autoRenew: true },
@@ -187,8 +268,15 @@ describe('candidate billing HTTP contract', () => {
     });
     expect(duplicate.statusCode).toBe(200);
     expect(duplicate.body).toBe('OK1');
-    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } })).json().data.subscription.currentPeriodEndsAt)
-      .toBe(summary.json().data.subscription.currentPeriodEndsAt);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/candidate/billing',
+          headers: { authorization },
+        })
+      ).json().data.subscription.currentPeriodEndsAt,
+    ).toBe(summary.json().data.subscription.currentPeriodEndsAt);
   });
 
   it('lists only the candidate payment history and cancels renewal without shortening the paid period', async () => {
@@ -203,7 +291,11 @@ describe('candidate billing HTTP contract', () => {
       },
       payload: { planId: 'basic', autoRenew: true },
     });
-    const callback = new URLSearchParams({ OutSum: '3990.000000', InvId: '1', SignatureValue: 'valid-signature' });
+    const callback = new URLSearchParams({
+      OutSum: '3990.000000',
+      InvId: '1',
+      SignatureValue: 'valid-signature',
+    });
     await app.inject({
       method: 'POST',
       url: '/api/v1/billing/robokassa/result',
@@ -211,15 +303,25 @@ describe('candidate billing HTTP contract', () => {
       payload: callback.toString(),
     });
 
-    const before = await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } });
-    const receipts = await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/receipts', headers: { authorization } });
+    const before = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/billing',
+      headers: { authorization },
+    });
+    const receipts = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/billing/receipts',
+      headers: { authorization },
+    });
     expect(receipts.statusCode).toBe(200);
-    expect(receipts.json().data).toMatchObject([{
-      invoiceId: 1,
-      planId: 'basic',
-      amountKopecks: 399_000,
-      paymentMethod: null,
-    }]);
+    expect(receipts.json().data).toMatchObject([
+      {
+        invoiceId: 1,
+        planId: 'basic',
+        amountKopecks: 399_000,
+        paymentMethod: null,
+      },
+    ]);
 
     const canceled = await app.inject({
       method: 'POST',
@@ -228,10 +330,19 @@ describe('candidate billing HTTP contract', () => {
     });
     expect(canceled.statusCode).toBe(200);
     expect(canceled.json().data).toMatchObject({ autoRenew: false, nextChargeAt: null });
-    expect(canceled.json().data.currentPeriodEndsAt).toBe(before.json().data.subscription.currentPeriodEndsAt);
+    expect(canceled.json().data.currentPeriodEndsAt).toBe(
+      before.json().data.subscription.currentPeriodEndsAt,
+    );
     expect(canceled.json().data.cancellationEventId).toEqual(expect.any(String));
-    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } })).json().data.subscription.autoRenew)
-      .toBe(false);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/candidate/billing',
+          headers: { authorization },
+        })
+      ).json().data.subscription.autoRenew,
+    ).toBe(false);
     const repeated = await app.inject({
       method: 'POST',
       url: '/api/v1/candidate/billing/subscription/cancel-renewal',
@@ -240,9 +351,11 @@ describe('candidate billing HTTP contract', () => {
     expect(repeated.json().data.cancellationEventId).toBe(canceled.json().data.cancellationEventId);
     const database = new DatabaseSync(databasePath);
     try {
-      const eventCount = database.prepare(
-        `SELECT COUNT(*) AS count FROM billing_events WHERE event_type = 'subscription.auto_renew_disabled'`,
-      ).get() as { count: number };
+      const eventCount = database
+        .prepare(
+          `SELECT COUNT(*) AS count FROM billing_events WHERE event_type = 'subscription.auto_renew_disabled'`,
+        )
+        .get() as { count: number };
       expect(eventCount.count).toBe(1);
     } finally {
       database.close();
@@ -261,51 +374,81 @@ describe('candidate billing HTTP contract', () => {
       },
       payload: { planId: 'basic', autoRenew: true },
     });
-    const firstPayment = new URLSearchParams({ OutSum: '3990.00', InvId: '1', PaymentMethod: 'SBP', SignatureValue: 'valid-signature' });
+    const firstPayment = new URLSearchParams({
+      OutSum: '3990.00',
+      InvId: '1',
+      PaymentMethod: 'SBP',
+      SignatureValue: 'valid-signature',
+    });
     await app.inject({
       method: 'POST',
       url: '/api/v1/billing/robokassa/result',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       payload: firstPayment.toString(),
     });
-    const before = (await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } })).json().data;
+    const before = (
+      await app.inject({
+        method: 'GET',
+        url: '/api/v1/candidate/billing',
+        headers: { authorization },
+      })
+    ).json().data;
     const repository = new SqliteBillingRepository({ databasePath });
     try {
       const database = new DatabaseSync(databasePath);
-      database.prepare('UPDATE users SET email = ?, timezone = ? WHERE username = ?')
+      database
+        .prepare('UPDATE users SET email = ?, timezone = ? WHERE username = ?')
         .run('billing.candidate@example.test', 'Europe/Moscow', 'billing.candidate');
       database.close();
 
       const chargeAt = before.subscription.nextChargeAt;
       const reminderAt = new Date(Date.parse(chargeAt) - 2 * 24 * 60 * 60 * 1_000).toISOString();
       const sendReminder = vi.fn(async () => undefined);
-      const reminderRun = await runDueBillingRenewals({ repository, gateway, now: reminderAt, sendReminder });
+      const reminderRun = await runDueBillingRenewals({
+        repository,
+        gateway,
+        now: reminderAt,
+        sendReminder,
+      });
       expect(reminderRun).toMatchObject({ scanned: 0, remindersSent: 1, reminderFailures: 0 });
-      expect(sendReminder).toHaveBeenCalledWith(expect.objectContaining({
-        email: 'billing.candidate@example.test',
-        timezone: 'Europe/Moscow',
-        planId: 'basic',
-        amountKopecks: 399_000,
-      }));
+      expect(sendReminder).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'billing.candidate@example.test',
+          timezone: 'Europe/Moscow',
+          planId: 'basic',
+          amountKopecks: 399_000,
+        }),
+      );
       await runDueBillingRenewals({ repository, gateway, now: reminderAt, sendReminder });
       expect(sendReminder).toHaveBeenCalledTimes(1);
 
       const firstRun = await runDueBillingRenewals({ repository, gateway, now: chargeAt });
       expect(firstRun).toMatchObject({ scanned: 1, initiated: 1, failed: 0 });
       expect(gateway.createRecurringCharge).toHaveBeenCalledTimes(1);
-      expect(gateway.createRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({
-        invoiceId: 2,
-        previousInvoiceId: 1,
-        amountKopecks: 399_000,
-      }));
+      expect(gateway.createRecurringCharge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceId: 2,
+          previousInvoiceId: 1,
+          amountKopecks: 399_000,
+        }),
+      );
 
       const duplicateRun = await runDueBillingRenewals({ repository, gateway, now: chargeAt });
       expect(duplicateRun).toMatchObject({ scanned: 0, initiated: 0, failed: 0 });
       expect(gateway.createRecurringCharge).toHaveBeenCalledTimes(1);
-      const after = (await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization } })).json().data;
+      const after = (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/candidate/billing',
+          headers: { authorization },
+        })
+      ).json().data;
       expect(after.subscription.currentPeriodEndsAt).toBe(before.subscription.currentPeriodEndsAt);
       const childPayment = new URLSearchParams({
-        OutSum: '3990.00', InvId: '2', PaymentMethod: 'SBP', SignatureValue: 'valid-signature',
+        OutSum: '3990.00',
+        InvId: '2',
+        PaymentMethod: 'SBP',
+        SignatureValue: 'valid-signature',
       });
       const appliedChild = await app.inject({
         method: 'POST',
@@ -315,10 +458,16 @@ describe('candidate billing HTTP contract', () => {
       });
       expect(appliedChild.statusCode).toBe(200);
       expect(appliedChild.body).toBe('OK2');
-      const afterPayment = (await app.inject({
-        method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization },
-      })).json().data;
-      expect(afterPayment.subscription.currentPeriodEndsAt).not.toBe(before.subscription.currentPeriodEndsAt);
+      const afterPayment = (
+        await app.inject({
+          method: 'GET',
+          url: '/api/v1/candidate/billing',
+          headers: { authorization },
+        })
+      ).json().data;
+      expect(afterPayment.subscription.currentPeriodEndsAt).not.toBe(
+        before.subscription.currentPeriodEndsAt,
+      );
     } finally {
       repository.close();
     }
@@ -330,7 +479,9 @@ describe('candidate billing HTTP contract', () => {
       method: 'POST',
       url: '/api/v1/candidate/billing/checkouts',
       headers: {
-        authorization, origin: 'http://localhost:3000', 'idempotency-key': 'checkout-timeout-001',
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': 'checkout-timeout-001',
       },
       payload: { planId: 'basic', autoRenew: true },
     });
@@ -339,31 +490,46 @@ describe('candidate billing HTTP contract', () => {
       url: '/api/v1/billing/robokassa/result',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       payload: new URLSearchParams({
-        OutSum: '3990.00', InvId: '1', PaymentMethod: 'BankCard', SignatureValue: 'valid-signature',
+        OutSum: '3990.00',
+        InvId: '1',
+        PaymentMethod: 'BankCard',
+        SignatureValue: 'valid-signature',
       }).toString(),
     });
-    const summary = (await app.inject({
-      method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization },
-    })).json().data;
+    const summary = (
+      await app.inject({
+        method: 'GET',
+        url: '/api/v1/candidate/billing',
+        headers: { authorization },
+      })
+    ).json().data;
     const repository = new SqliteBillingRepository({ databasePath });
     try {
       vi.mocked(gateway.createRecurringCharge).mockRejectedValueOnce(new Error('network timeout'));
       const timeoutRun = await runDueBillingRenewals({
-        repository, gateway, now: summary.subscription.nextChargeAt,
+        repository,
+        gateway,
+        now: summary.subscription.nextChargeAt,
       });
       expect(timeoutRun).toMatchObject({ scanned: 1, initiated: 0, failed: 0, outcomeUnknown: 1 });
       const candidateDatabase = new DatabaseSync(databasePath);
       let candidateId: string;
       try {
-        candidateId = (candidateDatabase.prepare(
-          'SELECT candidate_id FROM users WHERE username = ?',
-        ).get('billing.candidate') as { candidate_id: string }).candidate_id;
+        candidateId = (
+          candidateDatabase
+            .prepare('SELECT candidate_id FROM users WHERE username = ?')
+            .get('billing.candidate') as { candidate_id: string }
+        ).candidate_id;
       } finally {
         candidateDatabase.close();
       }
-      expect(repository.canCandidateUseLlm(candidateId, summary.subscription.nextChargeAt)).toBe(true);
+      expect(repository.canCandidateUseLlm(candidateId, summary.subscription.nextChargeAt)).toBe(
+        true,
+      );
       const duplicateRun = await runDueBillingRenewals({
-        repository, gateway, now: summary.subscription.nextChargeAt,
+        repository,
+        gateway,
+        now: summary.subscription.nextChargeAt,
       });
       expect(duplicateRun).toMatchObject({ scanned: 0, outcomeUnknown: 0 });
       expect(gateway.createRecurringCharge).toHaveBeenCalledTimes(1);
@@ -372,7 +538,10 @@ describe('candidate billing HTTP contract', () => {
         url: '/api/v1/billing/robokassa/result',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         payload: new URLSearchParams({
-          OutSum: '3990.00', InvId: '2', PaymentMethod: 'BankCard', SignatureValue: 'valid-signature',
+          OutSum: '3990.00',
+          InvId: '2',
+          PaymentMethod: 'BankCard',
+          SignatureValue: 'valid-signature',
         }).toString(),
       });
       expect(lateCallback.statusCode).toBe(200);
@@ -384,18 +553,26 @@ describe('candidate billing HTTP contract', () => {
 
   it('uses the upgraded invoice as the next recurring parent and the new server price', async () => {
     const { app, gateway, authorization, databasePath } = await createBillingApp();
-    const postResult = async (invoiceId: number, amount: string) => app.inject({
-      method: 'POST',
-      url: '/api/v1/billing/robokassa/result',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      payload: new URLSearchParams({
-        OutSum: amount, InvId: String(invoiceId), PaymentMethod: 'BankCard', SignatureValue: 'valid-signature',
-      }).toString(),
-    });
+    const postResult = async (invoiceId: number, amount: string) =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/billing/robokassa/result',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        payload: new URLSearchParams({
+          OutSum: amount,
+          InvId: String(invoiceId),
+          PaymentMethod: 'BankCard',
+          SignatureValue: 'valid-signature',
+        }).toString(),
+      });
     const firstCheckout = await app.inject({
       method: 'POST',
       url: '/api/v1/candidate/billing/checkouts',
-      headers: { authorization, origin: 'http://localhost:3000', 'idempotency-key': 'checkout-upgrade-001' },
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': 'checkout-upgrade-001',
+      },
       payload: { planId: 'basic', autoRenew: true },
     });
     expect(firstCheckout.statusCode).toBe(201);
@@ -403,24 +580,36 @@ describe('candidate billing HTTP contract', () => {
     const upgradeCheckout = await app.inject({
       method: 'POST',
       url: '/api/v1/candidate/billing/checkouts',
-      headers: { authorization, origin: 'http://localhost:3000', 'idempotency-key': 'checkout-upgrade-002' },
+      headers: {
+        authorization,
+        origin: 'http://localhost:3000',
+        'idempotency-key': 'checkout-upgrade-002',
+      },
       payload: { planId: 'pro', autoRenew: true },
     });
     expect(upgradeCheckout.statusCode).toBe(201);
     await postResult(2, '9900.00');
-    const upgraded = (await app.inject({
-      method: 'GET', url: '/api/v1/candidate/billing', headers: { authorization },
-    })).json().data;
+    const upgraded = (
+      await app.inject({
+        method: 'GET',
+        url: '/api/v1/candidate/billing',
+        headers: { authorization },
+      })
+    ).json().data;
     const repository = new SqliteBillingRepository({ databasePath });
     try {
       const run = await runDueBillingRenewals({
-        repository, gateway, now: upgraded.subscription.nextChargeAt,
+        repository,
+        gateway,
+        now: upgraded.subscription.nextChargeAt,
       });
       expect(run).toMatchObject({ scanned: 1, initiated: 1 });
-      expect(gateway.createRecurringCharge).toHaveBeenCalledWith(expect.objectContaining({
-        previousInvoiceId: 2,
-        amountKopecks: 990_000,
-      }));
+      expect(gateway.createRecurringCharge).toHaveBeenCalledWith(
+        expect.objectContaining({
+          previousInvoiceId: 2,
+          amountKopecks: 990_000,
+        }),
+      );
     } finally {
       repository.close();
     }
