@@ -7,6 +7,7 @@ import { FirstRunConsultant } from './FirstRunConsultant';
 import {
   FirstRunEmptySources,
   FirstRunErrorState,
+  FirstRunPartialSources,
   FirstRunSessionExpired,
   FirstRunSkeleton,
   FirstRunStaleLoading,
@@ -167,6 +168,7 @@ function getSpecialStateView(
   if (specialState === 'stale-loading') return <FirstRunStaleLoading />;
   if (specialState === 'error') return <FirstRunErrorState onRetry={onRetry} />;
   if (specialState === 'session-expired') return <FirstRunSessionExpired onSignIn={onSignIn} />;
+  if (specialState === 'partial-sources') return <FirstRunPartialSources />;
   return null;
 }
 

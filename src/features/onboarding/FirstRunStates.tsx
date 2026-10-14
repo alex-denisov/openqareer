@@ -14,15 +14,25 @@ export function FirstRunSkeleton(): ReactElement {
   );
 }
 
-export function FirstRunStaleLoading(): ReactElement {
+export function FirstRunStaleLoading({
+  message = 'Подготавливаем данные профиля',
+  stepDetail = 'Читаем LinkedIn: раздел 2 из 5',
+  caption = 'Подпись называет субъект и шаг, а не «Собираем».',
+}: {
+  readonly message?: string;
+  readonly stepDetail?: string;
+  readonly caption?: string;
+} = {}): ReactElement {
   return (
     <div className="first-run-screen" data-testid="first-run-stale-loading">
       <div className="first-run-state-container">
-        <div className="first-run-state-status">
+        <div className="first-run-state-status" role="status">
           <CircleNotch size={20} className="career-spin" />
-          <span>Подготавливаем данные профиля</span>
+          <span>{message}</span>
         </div>
-        <p className="first-run-state-caption">Этот шаг может занять больше времени.</p>
+        <p className="first-run-state-caption">
+          {stepDetail}. {caption}
+        </p>
       </div>
     </div>
   );
@@ -60,7 +70,7 @@ export function FirstRunSessionExpired({
   return (
     <div className="first-run-screen" data-testid="first-run-session-expired">
       <div className="first-run-state-container is-error">
-        <div className="first-run-state-message">
+        <div className="first-run-state-message" role="status">
           <Info size={20} />
           <span>Вход устарел. Войдите снова, один раз для всего приложения.</span>
         </div>
@@ -87,9 +97,9 @@ export function FirstRunEmptySources({
 }): ReactElement {
   return (
     <div className="first-run-empty-sources" data-testid="first-run-empty-sources">
-      <p>
+      <p className="first-run-goal-text">
         Источник не выбран. Можно продолжить с указанной целью и контекстом, а файл или подключение
-        добавить позже.
+        добавить позже. Можно рассказать консультанту, профиль соберётся из ответов.
       </p>
       <button
         type="button"
@@ -99,6 +109,23 @@ export function FirstRunEmptySources({
       >
         Рассказать консультанту
       </button>
+    </div>
+  );
+}
+
+export function FirstRunPartialSources({
+  message = 'LinkedIn подключён, hh.ru нет: доступно после подключения hh.ru.',
+}: {
+  readonly message?: string;
+} = {}): ReactElement {
+  return (
+    <div className="first-run-screen" data-testid="first-run-partial-sources">
+      <div className="first-run-state-container">
+        <div className="first-run-state-message" role="status">
+          <Info size={20} />
+          <span>{message}</span>
+        </div>
+      </div>
     </div>
   );
 }
