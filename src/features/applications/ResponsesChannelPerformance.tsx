@@ -1,5 +1,5 @@
 import type { ApplicationListQuery, ApplicationView } from './applicationsApi';
-import { computePipelineAnalytics } from './pipelineAnalytics';
+import { computePipelineAnalytics, MIN_PIPELINE_SAMPLE_SIZE } from './pipelineAnalytics';
 import { humanSourceLabel } from './sourceLabels';
 import './responses-channel-performance.css';
 
@@ -33,6 +33,9 @@ export function ResponsesChannelPerformance({
       ) : (
         <ChannelPerformanceData sources={sources} />
       )}
+      {applications.length > 0 && applications.length < MIN_PIPELINE_SAMPLE_SIZE ? (
+        <LowDataFunnelNote />
+      ) : null}
       {sources.length === 1 ? <SingleChannelNote /> : null}
     </section>
   );
@@ -99,6 +102,14 @@ function ChannelPerformanceCards({ sources }: { readonly sources: readonly Chann
         </li>
       ))}
     </ul>
+  );
+}
+
+function LowDataFunnelNote() {
+  return (
+    <p className="career-responses-channel-performance__note" role="note">
+      Меньше 20 откликов: узкие места не определены.
+    </p>
   );
 }
 

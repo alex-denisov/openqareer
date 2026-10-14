@@ -26,8 +26,8 @@ export function VacanciesErrorState({
       </span>
       <h3>Не удалось загрузить подборку</h3>
       <p>
-        Не удалось загрузить общий пул вакансий.{' '}
-        {failureSourceLabel ?? 'Площадка hh.ru не ответила.'} Роль и география сохранены.
+        Не удалось загрузить общий пул вакансий. {failureSourceLabel ?? 'Причина сбоя не уточнена.'}{' '}
+        Роль и география сохранены.
       </p>
       {onRetry ? (
         <button type="button" className="btn btn-secondary vacancies-btn" onClick={onRetry}>

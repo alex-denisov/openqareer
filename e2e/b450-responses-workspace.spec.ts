@@ -7,6 +7,7 @@ type ApplicationRecord = RecordValue & { id: string; stage: string; vacancy: Rec
 type CapturedCalls = {
   readonly applicationQueries: string[];
   readonly companyMutations: Array<{ method: string; path: string; body?: unknown }>;
+  readonly companyPageQueries: string[];
   readonly outboundRetryPaths: string[];
   applicationBulkPreview?: RecordValue;
   applicationBulkExecute?: RecordValue;
@@ -219,8 +220,8 @@ function createApplications(): ApplicationRecord[] {
   });
 }
 
-function createCompanies() {
-  return [
+function createCompanies(total = 2) {
+  const companies = [
     {
       key: 'northstar',
       name: 'Northstar Labs',
@@ -254,14 +255,41 @@ function createCompanies() {
       recruiters: [],
     },
   ];
+  const additionalCount = Math.max(0, total - companies.length);
+  return [
+    ...companies,
+    ...Array.from({ length: additionalCount }, (_, index) => ({
+      key: `company-${index + 3}`,
+      name: `Компания ${index + 3}`,
+      location: 'Москва',
+      industry: 'ИТ',
+      vacancyCount: 1,
+      contactsCount: null,
+      contactsImportedAt: null,
+      want: false,
+      nextStep: null,
+      hasRecruiter: false,
+      recruiterSearchStatus: 'idle',
+      sources: [],
+      vacancies: [],
+      recruiters: [],
+    })),
+  ];
 }
 
 function companyPage(
   companies: ReturnType<typeof createCompanies>,
   filter: string,
   offset: number,
+  search = '',
 ) {
-  const filtered = filter === 'want' ? companies.filter((item) => item.want) : companies;
+  const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU');
+  const filtered = companies.filter((company) => {
+    const matchesFilter = filter !== 'want' || company.want;
+    const matchesSearch =
+      !normalizedSearch || company.name.toLocaleLowerCase('ru-RU').includes(normalizedSearch);
+    return matchesFilter && matchesSearch;
+  });
   return {
     items: filtered.slice(offset, offset + 20),
     total: filtered.length,
@@ -292,11 +320,52 @@ async function handleApplicationRoute(
   route: Route,
   calls: CapturedCalls,
   applications: ApplicationRecord[],
+  labels: Array<{ id: string; name: string; createdAt: string }>,
 ): Promise<boolean> {
   const request = route.request();
   const url = new URL(request.url());
   const method = request.method();
   const path = url.pathname;
+  if (path === '/api/v1/candidate/application-labels' && method === 'GET') {
+    await fulfill(route, labels);
+    return true;
+  }
+  if (path === '/api/v1/candidate/application-labels' && method === 'POST') {
+    const body = request.postDataJSON() as RecordValue;
+    const name = String(body.name ?? '').trim();
+    const label = labels.find(
+      (item) => item.name.toLocaleLowerCase('ru-RU') === name.toLocaleLowerCase('ru-RU'),
+    ) ?? { id: `label-${labels.length + 1}`, name, createdAt: '2026-10-14T10:00:00.000Z' };
+    if (!labels.some((item) => item.id === label.id)) labels.push(label);
+    await fulfill(route, label);
+    return true;
+  }
+  const labelPrefix = '/api/v1/candidate/applications/';
+  const labelParts = path.startsWith(labelPrefix)
+    ? path.slice(labelPrefix.length).split('/labels/')
+    : [];
+  if (labelParts.length === 2 && (method === 'PUT' || method === 'DELETE')) {
+    const application = applications.find(
+      (item) => item.id === decodeURIComponent(labelParts[0] ?? ''),
+    );
+    const label = labels.find((item) => item.id === decodeURIComponent(labelParts[1] ?? ''));
+    if (application && label) {
+      const current = Array.isArray(application.labels)
+        ? (application.labels as Array<{ id: string; name: string; createdAt: string }>)
+        : [];
+      application.labels =
+        method === 'PUT'
+          ? current.some((item) => item.id === label.id)
+            ? current
+            : [...current, label]
+          : current.filter((item) => item.id !== label.id);
+    }
+    await fulfill(route, {
+      changed: Boolean(application && label),
+      ...(method === 'PUT' && label ? { label } : {}),
+    });
+    return true;
+  }
   if (path === '/api/v1/candidate/applications' && method === 'GET') {
     calls.applicationQueries.push(url.href);
     const stages = url.searchParams.getAll('stage');
@@ -427,12 +496,14 @@ async function handleCompanyRoute(
   const path = url.pathname;
   const method = request.method();
   if (path === '/api/v1/candidate/companies' && method === 'GET') {
+    calls.companyPageQueries.push(url.href);
     await fulfill(
       route,
       companyPage(
         companies,
         url.searchParams.get('filter') ?? 'all',
         Number(url.searchParams.get('offset') ?? 0),
+        url.searchParams.get('search') ?? '',
       ),
     );
     return true;
@@ -450,6 +521,7 @@ async function handleCompanyRoute(
     if (company && action === 'next-step')
       company.nextStep = body as { text: string; dueAt: string | null };
     if (action === 'recruiter-search') {
+      if (company) company.recruiterSearchStatus = 'queued';
       await fulfill(route, { searchStatus: 'queued' });
       return true;
     }
@@ -469,14 +541,19 @@ async function handleCompanyRoute(
   return false;
 }
 
-async function installMocks(page: Page): Promise<CapturedCalls> {
+async function installMocks(
+  page: Page,
+  options: { readonly companyCount?: number } = {},
+): Promise<CapturedCalls> {
   const calls: CapturedCalls = {
     applicationQueries: [],
     companyMutations: [],
+    companyPageQueries: [],
     outboundRetryPaths: [],
   };
   const applications = createApplications();
-  const companies = createCompanies();
+  const companies = createCompanies(options.companyCount ?? 2);
+  const labels: Array<{ id: string; name: string; createdAt: string }> = [];
   const interviewFixture = createMockInterviewSimulatorFixture();
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -516,7 +593,7 @@ async function installMocks(page: Page): Promise<CapturedCalls> {
         body: JSON.stringify({ data: [], meta: { nextOffset: null } }),
       });
     }
-    if (await handleApplicationRoute(route, calls, applications)) return;
+    if (await handleApplicationRoute(route, calls, applications, labels)) return;
     if (await handleCompanyRoute(route, calls, companies)) return;
     await fulfill(route, null);
   });
@@ -665,6 +742,44 @@ test.describe('B450 responses workspace', () => {
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     expect(overflow).toBeLessThanOrEqual(0);
+    const smallTargets = await page
+      .locator(
+        '.career-cabinet-view-responses button:not(:disabled), .career-cabinet-view-responses input:not([type=hidden]):not(:disabled), .career-cabinet-view-responses select:not(:disabled), .career-cabinet-view-responses textarea:not(:disabled), .career-cabinet-view-responses [role=button], .career-cabinet-view-responses [role=tab]',
+      )
+      .evaluateAll((elements) =>
+        elements
+          .filter((element) => {
+            const style = getComputedStyle(element);
+            return (
+              style.display !== 'none' &&
+              style.visibility !== 'hidden' &&
+              element.getClientRects().length > 0
+            );
+          })
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            return {
+              label: element.getAttribute('aria-label') ?? element.textContent?.trim(),
+              width: rect.width,
+              height: rect.height,
+            };
+          })
+          .filter((target) => target.width < 44 || target.height < 44),
+      );
+    expect(smallTargets).toEqual([]);
+
+    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).focus();
+    await page.keyboard.press('Tab');
+    const hasVisibleFocus = await page.evaluate(() => {
+      const active = document.activeElement;
+      return (
+        active instanceof HTMLElement &&
+        active.matches(':focus-visible') &&
+        getComputedStyle(active).outlineStyle !== 'none' &&
+        Number.parseFloat(getComputedStyle(active).outlineWidth) > 0
+      );
+    });
+    expect(hasVisibleFocus).toBe(true);
     await page.screenshot({
       path: testInfo.outputPath('b450-board-after-390.png'),
       fullPage: true,
@@ -689,6 +804,8 @@ test.describe('B450 responses workspace', () => {
     await row.getByLabel('Следующий шаг').fill('Написать нанимающему менеджеру');
     await row.getByRole('button', { name: 'Сохранить шаг' }).click();
     await row.getByRole('button', { name: 'Найти путь к рекрутеру' }).click();
+    await expect(row).toContainText('Ищем путь к рекрутеру');
+    await expect(row.getByRole('button', { name: 'Найти путь к рекрутеру' })).toBeDisabled();
     await panel.getByRole('button', { name: 'Выбрать все 2 по фильтру' }).click();
     await panel.getByRole('button', { name: 'Проверить', exact: true }).click();
     await panel.getByRole('button', { name: 'Подтвердить 2' }).click();
@@ -711,6 +828,68 @@ test.describe('B450 responses workspace', () => {
       expect(overflow).toBeLessThanOrEqual(0);
     }
     await page.screenshot({ path: testInfo.outputPath('b450-companies.png'), fullPage: false });
+  });
+
+  test('company list filters and pages rows only when requested', async ({ page }) => {
+    const calls = await installMocks(page, { companyCount: 25 });
+    await seedWorkspace(page);
+    await openResponses(page);
+    await page.getByRole('tab', { name: 'Хочу в компанию' }).click();
+
+    const panel = page.locator('section[aria-label="Компании, которые интересуют"]');
+    const rows = panel.locator('.career-responses-company-row');
+    await panel.getByRole('tab', { name: /Хочу/ }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Northstar Labs');
+    expect(calls.companyPageQueries.at(-1)).toContain('filter=want');
+    await panel.getByRole('tab', { name: /Новые вакансии/ }).click();
+    await expect(rows).toHaveCount(20);
+    const more = panel.getByRole('button', { name: 'Показать ещё' });
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect(rows).toHaveCount(25);
+    expect(calls.companyPageQueries.at(-1)).toContain('offset=20');
+
+    await panel.getByLabel('Найти компанию').fill('Компания 25');
+    await panel.getByRole('button', { name: 'Найти', exact: true }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Компания 25');
+    expect(new URL(calls.companyPageQueries.at(-1) ?? '').searchParams.get('search')).toBe(
+      'Компания 25',
+    );
+  });
+
+  test('application card menu exports a response and creates a persistent label', async ({
+    page,
+  }, testInfo) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+
+    const firstCard = page.locator('.career-responses-card').first();
+    const title = await firstCard.locator('.career-responses-card-role').innerText();
+    await firstCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    const menu = page.locator('.career-responses-card-menu').first();
+    const downloadPromise = page.waitForEvent('download');
+    await menu.getByRole('button', { name: 'Экспорт' }).click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/response-application-\d+\.csv/u);
+    await menu.getByRole('button', { name: 'Добавить метку' }).click();
+    await menu.getByLabel('Название метки').fill('Контакт');
+    await captureCareerHarness(
+      page,
+      testInfo.outputPath('b450-label-menu-harness.html'),
+      '.career-responses-label-editor',
+    );
+    await menu.getByRole('button', { name: 'Создать метку' }).click();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    const reloadedCard = page.locator('.career-responses-card').filter({ hasText: title }).first();
+    await reloadedCard.getByRole('button', { name: 'Действия с карточкой' }).click();
+    await expect(page.locator('.career-responses-card-menu').first()).toContainText('Контакт');
   });
 
   test('оффер сохраняет состав компенсации и открывается в сравнении', async ({
@@ -839,6 +1018,47 @@ test.describe('B450 responses workspace', () => {
     await selected.getByRole('button', { name: 'Открыть STAR-истории' }).click();
     await expect(page.getByRole('dialog', { name: 'STAR-истории' })).toContainText(
       'Кризис в команде: уход ведущего инженера',
+    );
+  });
+
+  test('selected response shows an unconfirmed delivery failure and its reason', async ({
+    page,
+  }) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).fill('Компания 4');
+    await waitForResponsesPool(page);
+
+    const failedResponse = page
+      .locator('.career-responses-card-body')
+      .filter({ hasText: /Компания 4(?!\d)/ });
+    await expect(failedResponse).toHaveCount(1);
+    await failedResponse.click();
+
+    const selected = page.locator('.career-responses-selected');
+    await expect(selected).toContainText('Попытка не удалась');
+    await expect(selected).toContainText('Сайт не подтвердил отправку');
+  });
+
+  test('LinkedIn без квитанции сообщает, что доставка не подтверждена', async ({ page }) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page
+      .getByRole('searchbox', { name: 'Компания, роль или площадка' })
+      .fill('Руководитель платформы 3');
+    await waitForResponsesPool(page);
+
+    const card = page
+      .locator('.career-responses-card')
+      .filter({ hasText: /Руководитель платформы 3(?!\d)/u });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText('Пробовали отправить');
+    await expect(card).toContainText(
+      'Подтверждение LinkedIn не получено; доставка не подтверждена.',
     );
   });
 

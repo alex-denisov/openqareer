@@ -14,7 +14,7 @@ import {
 } from './mockRoleSkillAssessment';
 import { mockInterviewSimulatorRoutes } from './mockInterviewSimulator';
 import { createMockStarStoriesFixture } from './mockStarStories';
-import { mockCandidateCompanies } from './mockCandidateCompanies';
+import { mockCandidateCompanies, type MockCandidateCompanyOptions } from './mockCandidateCompanies';
 import {
   account,
   candidate,
@@ -393,6 +393,7 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly vacancyInitialFilters?: VacanciesScreenState;
   readonly savedVacanciesCount?: number;
   readonly companyCount?: number;
+  readonly companyDirectory?: Omit<MockCandidateCompanyOptions, 'companyCount'>;
   readonly billing?: {
     readonly initialPlan?: FixtureCurrentPlan;
     readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
@@ -1461,10 +1462,44 @@ export async function mockSignedInCabinet(
       json: {
         data: {
           vacancyId,
+          companyKey: 'fincloud',
+          companyName: 'FinCloud',
+          vacancyTitle: 'Head of Product, Payments',
           circles: [
-            { circle: 1, state: knownState, paths: [] },
-            { circle: 2, state: knownState, paths: [] },
-            { circle: 3, state: 'available', paths: [{ nextStep: 'cold_application' }] },
+            {
+              circle: 1,
+              state: knownState,
+              message: 'Связи в компании пока не найдены.',
+              paths: [],
+            },
+            {
+              circle: 2,
+              state: knownState,
+              message: 'Можно попросить представить через знакомого.',
+              paths: [],
+            },
+            {
+              circle: 3,
+              state: 'available',
+              message: 'Подготовьте холодный отклик по вакансии.',
+              paths: [
+                {
+                  id: 'cold-application',
+                  circle: 3,
+                  recipient: {
+                    id: 'fincloud-recruiting-team',
+                    fullName: 'Команда найма',
+                    roleTitle: null,
+                    companyName: 'FinCloud',
+                  },
+                  path: [],
+                  evidence: [],
+                  strength: 'unknown',
+                  source: 'cold',
+                  nextStep: 'cold_application',
+                },
+              ],
+            },
           ],
           linkedinImport: state.importReceipt,
         },
@@ -2383,7 +2418,10 @@ export async function mockSignedInCabinet(
     unmatched.push(path);
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
-  await mockCandidateCompanies(page, { companyCount: options.companyCount });
+  await mockCandidateCompanies(page, {
+    ...options.companyDirectory,
+    companyCount: options.companyCount,
+  });
   await mockInterviewSimulatorRoutes(page);
   return unmatched;
 }

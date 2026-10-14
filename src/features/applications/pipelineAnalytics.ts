@@ -3,6 +3,8 @@ import type { ApplicationView } from './applicationsApi';
 import { archiveReasonLabel } from './archiveReasonLabel';
 import { SKIP_REASONS } from '../../../shared/skipReasons';
 
+export const MIN_PIPELINE_SAMPLE_SIZE = 20;
+
 export interface StageFunnelStep {
   readonly stage: ApplicationStage;
   readonly label: string;
@@ -174,14 +176,13 @@ function diagnoseBottlenecks(
   offerCount: number,
   closedCount: number,
 ): PipelineBottleneck {
-  if (appliedCount < 3) {
+  if (appliedCount < MIN_PIPELINE_SAMPLE_SIZE) {
     return {
       id: 'need_more_data',
       severity: 'info',
-      title: 'Сбор статистики',
-      description: 'В воронке пока мало отправленных откликов для статистических выводов.',
-      recommendation:
-        'Отправьте от 5 до 10 целевых откликов, чтобы выявить закономерности и узкие места.',
+      title: 'Мало данных: воронка',
+      description: 'Меньше 20 откликов: узкие места не определены.',
+      recommendation: 'Соберите 20 откликов, чтобы система могла показать узкие места.',
     };
   }
 

@@ -12,6 +12,7 @@ import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import { SKIP_REASONS, type SkipReasonId } from '../../../shared/skipReasons';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { ApplicationView } from './applicationsApi';
+import { ApplicationLabelsEditor } from './ApplicationLabelsEditor';
 import { localIsoDate } from './localIsoDate';
 import { waitingLabel } from './waitingLabel';
 import { buildSubjectTitle, CardStageBlocks } from './ResponsesCardStageControls';
@@ -200,6 +201,7 @@ export function ResponsesCard(props: ResponsesCardProps) {
         onChangeStage={props.onChangeStage}
         onScheduleInterview={props.onScheduleInterview}
         onSaveNote={props.onSaveNote}
+        onRefresh={props.onRefresh}
         onSkip={props.onSkip}
       />
     </article>
@@ -221,6 +223,7 @@ interface CardFooterProps {
   ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
+  onRefresh: () => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }
 
@@ -237,11 +240,13 @@ interface CardMenuWrapProps {
   ) => void;
   onScheduleInterview: (scheduledAt: string) => Promise<void>;
   onSaveNote: (notes: string) => void;
+  onRefresh: () => void;
   onSkip: (reasonId: SkipReasonId) => void;
 }
 
 function CardMenuWrap(props: CardMenuWrapProps) {
   const { application, menuOpen, onToggleMenu, onCloseMenu } = props;
+  const discuss = createCardDiscussionHandler(props, application, onCloseMenu);
   return (
     <div className="career-responses-menu-wrap">
       <button
@@ -257,18 +262,7 @@ function CardMenuWrap(props: CardMenuWrapProps) {
       {menuOpen ? (
         <CardMenu
           application={application}
-          onDiscussWithConsultant={
-            props.onOpenExpert
-              ? () => {
-                  props.onOpenExpert?.(
-                    'responses',
-                    { kind: 'application', id: application.id },
-                    buildSubjectTitle(application.vacancy),
-                  );
-                  onCloseMenu();
-                }
-              : undefined
-          }
+          onDiscussWithConsultant={discuss}
           onChangeStage={(stage, occurredAt, receipt) => {
             props.onChangeStage(stage, occurredAt, receipt);
             onCloseMenu();
@@ -281,6 +275,7 @@ function CardMenuWrap(props: CardMenuWrapProps) {
             props.onSaveNote(notes);
             onCloseMenu();
           }}
+          onRefresh={props.onRefresh}
           onSkip={(reasonId) => {
             props.onSkip(reasonId);
             onCloseMenu();
@@ -289,6 +284,23 @@ function CardMenuWrap(props: CardMenuWrapProps) {
       ) : null}
     </div>
   );
+}
+
+
+function createCardDiscussionHandler(
+  props: CardMenuWrapProps,
+  application: ApplicationView,
+  onCloseMenu: () => void,
+) {
+  if (!props.onOpenExpert) return undefined;
+  return () => {
+    props.onOpenExpert?.(
+      'responses',
+      { kind: 'application', id: application.id },
+      buildSubjectTitle(application.vacancy),
+    );
+    onCloseMenu();
+  };
 }
 
 function CardFooter({
@@ -302,6 +314,7 @@ function CardFooter({
   onChangeStage,
   onScheduleInterview,
   onSaveNote,
+  onRefresh,
   onSkip,
 }: CardFooterProps) {
   return (
@@ -318,6 +331,7 @@ function CardFooter({
         onChangeStage={onChangeStage}
         onScheduleInterview={onScheduleInterview}
         onSaveNote={onSaveNote}
+        onRefresh={onRefresh}
         onSkip={onSkip}
       />
     </div>
@@ -599,27 +613,22 @@ function saveStageChange({
   }
 }
 
-function CardMenu({
-  application,
-  onDiscussWithConsultant,
-  onChangeStage,
-  onScheduleInterview,
-  onSaveNote,
-  onSkip,
-}: {
-  application: ApplicationView;
-  onDiscussWithConsultant?: () => void;
-  onChangeStage: (
+interface CardMenuProps {
+  readonly application: ApplicationView;
+  readonly onDiscussWithConsultant?: () => void;
+  readonly onChangeStage: (
     stage: ApplicationStage,
     occurredAt: string,
     receipt?: DeliveryReceipt | null,
   ) => void;
-  onScheduleInterview: (scheduledAt: string) => Promise<void>;
-  onSaveNote: (notes: string) => void;
-  onSkip: (reasonId: SkipReasonId) => void;
-}) {
-  const canSkip = application.stage === 'saved' && Boolean(application.clusterId);
+  readonly onScheduleInterview: (scheduledAt: string) => Promise<void>;
+  readonly onSaveNote: (notes: string) => void;
+  readonly onRefresh: () => void;
+  readonly onSkip: (reasonId: SkipReasonId) => void;
+}
 
+function CardMenu(props: CardMenuProps) {
+  const { application, onChangeStage, onScheduleInterview } = props;
   return (
     <div className="career-responses-card-menu">
       <StageChangeControl
@@ -628,6 +637,30 @@ function CardMenu({
         onChangeStage={onChangeStage}
         onScheduleInterview={onScheduleInterview}
       />
+      <CardMenuExtras {...props} />
+    </div>
+  );
+}
+
+
+function CardMenuExtras(
+  props: Pick<
+    CardMenuProps,
+    'application' | 'onDiscussWithConsultant' | 'onSaveNote' | 'onRefresh' | 'onSkip'
+  >,
+) {
+  const { application, onDiscussWithConsultant, onSaveNote, onRefresh, onSkip } = props;
+  const canSkip = application.stage === 'saved' && Boolean(application.clusterId);
+  return (
+    <>
+      <ApplicationLabelsEditor
+        applicationId={application.id}
+        assigned={application.labels ?? []}
+        onRefresh={onRefresh}
+      />
+      <button type="button" onClick={() => exportApplication(application)}>
+        Экспорт
+      </button>
       {onDiscussWithConsultant ? (
         <button type="button" onClick={onDiscussWithConsultant}>
           Обсудить с консультантом
@@ -640,8 +673,34 @@ function CardMenu({
       ) : null}
       <CardNoteField initialValue={application.notes ?? ''} onSave={onSaveNote} />
       {canSkip ? <SkipControl onSkip={onSkip} /> : null}
-    </div>
+    </>
   );
+}
+
+
+function exportApplication(application: ApplicationView) {
+  const vacancy = application.vacancy;
+  const company = vacancy?.companyHidden ? 'Компания скрыта' : vacancy?.company ?? '';
+  const rows = [
+    ['Компания', company],
+    ['Роль', vacancy?.title ?? ''],
+    ['Канал', vacancy?.source ?? ''],
+    ['Этап', STAGE_LABEL[application.stage]],
+    ['Дата отклика', application.createdAt],
+    ['Следующий шаг', application.followUp?.dueAt ?? application.followUpDueAt ?? ''],
+    ['Квитанция', application.deliveryReceipt?.value ?? ''],
+  ];
+  const csv = rows.map(([label, value]) => `${csvCell(label)},${csvCell(value)}`).join('\r\n');
+  const href = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = `response-${application.id.replace(/[^a-z0-9-]/giu, '-')}.csv`;
+  link.click();
+  URL.revokeObjectURL(href);
+}
+
+function csvCell(value: string) {
+  return `"${value.replace(/"/gu, '""')}"`;
 }
 
 function CardNoteField({

@@ -55,7 +55,7 @@ interface CandidateCompanyContext {
   readonly linkedin: {
     readonly status: 'connected' | 'profile-imported' | 'disconnected';
     readonly importedAt: string | null;
-    readonly contactsImported: false;
+    readonly contactsImported: boolean;
   };
   readonly searchConsentGranted: boolean;
 }

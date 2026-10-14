@@ -888,3 +888,45 @@
     padding-inline: var(--career-space-4);
   }
 }
+
+.vacancy-source-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.vacancy-source-search {
+  min-inline-size: 0;
+}
+
+.vacancy-source-group {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.vacancy-source-group > legend {
+  padding: 0;
+  margin-block-end: var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.vacancy-source-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+}
+
+.vacancy-source-selection > span {
+  margin-inline-end: auto;
+}
+
+.vacancy-source-categories .career-btn,
+.vacancy-source-selection .career-btn {
+  min-block-size: var(--career-target-min);
+}
