@@ -15,7 +15,7 @@ import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { verifiedCareerDiaryFixture, verifiedDiaryWorkplace } from './fixtures/verifiedCareerDiary';
 
 const DIARY_API = '/api/v1/candidate/career-diary';
-const EVIDENCE = e2eEvidenceDirectory('B458');
+const EVIDENCE = e2eEvidenceDirectory('AUD-10');
 const AS_OF = '2026-10-10';
 
 type DiaryMode = 'empty' | 'partial' | 'many';
@@ -514,6 +514,24 @@ test('adds a missing achievement with situation, action and result', async ({ pa
   ).toBeVisible();
   expect(state.achievements).toHaveLength(1);
   await captureDiary(page, testInfo, 'achievement-created');
+});
+
+test('lets the candidate defer an achievement and return it to the profile list', async ({
+  page,
+}, testInfo) => {
+  const state = createHarness('partial');
+  await openDiary(page, testInfo, state);
+  await page.getByRole('tab', { name: /Результаты|Достижения в профиль/u }).click();
+  await page.getByRole('button', { name: 'Не добавлять' }).click();
+  expect(state.achievements[0]?.status).toBe('dismissed');
+  await expect(page.getByText('Отложено', { exact: true })).toBeVisible();
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await navigateDiary(page, testInfo.project.name);
+  await page.getByRole('tab', { name: /Результаты|Достижения в профиль/u }).click();
+  await page.getByRole('button', { name: 'Вернуть в список' }).click();
+  expect(state.achievements[0]?.status).toBe('ready_to_add');
+  await expect(page.getByText('Готово к добавлению', { exact: true })).toBeVisible();
 });
 
 test('routes a diary achievement through profile approval and rollback', async ({

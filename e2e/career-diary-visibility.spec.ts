@@ -5,7 +5,7 @@ import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet, type MockCareerDiaryFixture } from './fixtures/mockSignedInCabinet';
 
 const AS_OF = '2026-12-06';
-const EVIDENCE = e2eEvidenceDirectory('B460');
+const EVIDENCE = e2eEvidenceDirectory('AUD-10');
 
 function workplace(id: string, company: string, title: string, sourceExperienceId: string | null) {
   return {

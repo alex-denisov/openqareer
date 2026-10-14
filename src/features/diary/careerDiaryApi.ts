@@ -2,6 +2,7 @@ import {
   type CareerDiaryAchievement,
   type CareerDiaryAchievementInput,
   type CareerDiaryAchievementStatus,
+  type CareerDiaryGoal,
   type CareerDiaryGoalInput,
   type CareerDiaryGoalSummary,
   type CareerDiaryMeasurement,
@@ -57,10 +58,7 @@ export function getCareerDiaryWorkplace(
   workplaceId: string,
   signal?: AbortSignal,
 ): Promise<CareerDiaryWorkplaceWithPlanning> {
-  return readResponse(
-    `${API_ROOT}/workplaces/${encodeURIComponent(workplaceId)}`,
-    { signal },
-  );
+  return readResponse(`${API_ROOT}/workplaces/${encodeURIComponent(workplaceId)}`, { signal });
 }
 
 export function updateCareerDiaryWorkplace(
@@ -88,7 +86,9 @@ export function getCareerDiaryGoal(
   return readResponse(`${API_ROOT}/goals/${encodeURIComponent(goalId)}`, { signal });
 }
 
-export function createCareerDiaryGoal(input: CareerDiaryGoalInput): Promise<CareerDiaryGoalSummary> {
+export function createCareerDiaryGoal(
+  input: CareerDiaryGoalInput,
+): Promise<CareerDiaryGoalSummary> {
   return readResponse(`${API_ROOT}/goals`, idempotentMutation(input));
 }
 
@@ -106,11 +106,25 @@ export function deleteCareerDiaryGoal(goalId: string): Promise<{ readonly delete
   return readResponse(`${API_ROOT}/goals/${encodeURIComponent(goalId)}`, { method: 'DELETE' });
 }
 
+export function splitCareerDiaryGoal(
+  goalId: string,
+  children: readonly CareerDiaryGoalInput[],
+): Promise<CareerDiaryGoal[]> {
+  return readResponse(
+    `${API_ROOT}/goals/${encodeURIComponent(goalId)}/split`,
+    jsonMutation('POST', { children }),
+  );
+}
+
 export function listCareerDiaryMeasurements(
   goalId: string,
   input: { limit: number; cursor?: string; signal?: AbortSignal },
 ): Promise<CareerDiaryPage<CareerDiaryMeasurement>> {
-  const path = pagePath(`goals/${encodeURIComponent(goalId)}/measurements`, input.limit, input.cursor);
+  const path = pagePath(
+    `goals/${encodeURIComponent(goalId)}/measurements`,
+    input.limit,
+    input.cursor,
+  );
   return readResponse(path, { signal: input.signal });
 }
 
