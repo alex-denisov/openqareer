@@ -8,7 +8,7 @@ import {
   type AutomationQueueFixtureItem,
 } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = e2eEvidenceDirectory('B454');
+const EVIDENCE_DIR = e2eEvidenceDirectory('AUD-6');
 
 const queueItem: AutomationQueueFixtureItem = {
   id: 'automation-queue-item',
@@ -523,4 +523,145 @@ test('массовое снятие изменяет только видимые
   await page.getByRole('button', { name: 'Снять', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Обновлено записей: 2.' })).toBeVisible();
   await expect(page.getByText('Записей по этим фильтрам пока нет.', { exact: true })).toBeVisible();
+});
+
+test('сводка, фильтры и сортировка очереди меняют видимые записи', async ({ page }, testInfo) => {
+  const statuses: AutomationQueueFixtureItem['status'][] = [
+    'pending_approval',
+    'letter_not_ready',
+    'approved',
+    'failed',
+    'pending_approval',
+  ];
+  const platforms = ['hh', 'linkedin', 'hh', 'linkedin', 'hh'];
+  const matches = [4, 3, 5, 2, 4];
+  const items = queueFixtureSet(5).map((item, index) => ({
+    ...item,
+    status: statuses[index],
+    sendTiming: index === 0 || index === 3 ? 'today' : 'later',
+    updatedAt: `2026-10-09T${String(index + 8).padStart(2, '0')}:00:00.000Z`,
+    payload: {
+      ...item.payload,
+      platform: platforms[index],
+      requirements: { matched: matches[index], total: 5 },
+    },
+  }));
+  await mockSignedInCabinet(page, {
+    candidateId: 'candidate-b232',
+    automation: { settings: { enabled: true, mode: 'approval_required' } },
+    automationQueue: items,
+  });
+  await openAutomation(page);
+  await openQueueIfNeeded(page);
+
+  const queue = page.locator('[data-page="queue"]');
+  const rows = page.locator(
+    '.automation-queue-list > li:visible, .automation-queue-table tbody tr:visible',
+  );
+  const summary = page.getByRole('group', { name: 'Сводка очереди' });
+  await expect(rows).toHaveCount(2);
+  await queue.getByLabel('Состояние').selectOption('');
+  await expect(rows).toHaveCount(5);
+  await summary.getByRole('button', { name: /уйдёт сегодня/u }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('FinCloud');
+  await summary.getByRole('button', { name: /позже/u }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Компания 5');
+  await summary.getByRole('button', { name: /все/u }).click();
+
+  await queue.getByLabel('Состояние').selectOption('failed');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Компания 4');
+  await queue.getByLabel('Состояние').selectOption('');
+  await queue.getByLabel('Площадка').selectOption('linkedin');
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText('Компания 2');
+  await expect(rows.nth(1)).toContainText('Компания 4');
+  await queue.getByLabel('Площадка').selectOption('');
+  await queue.getByLabel('Совпадение').selectOption('80');
+  await expect(rows).toHaveCount(3);
+  await queue.getByLabel('Сортировка').selectOption('match');
+  await expect(rows.first()).toContainText('Компания 3');
+  await captureAutomationState(page, testInfo.project.name, 'queue-filters', queue);
+});
+
+test('фильтры журнала запрашивают выбранные данные, поиск фильтрует локально', async ({ page }) => {
+  const entries = [
+    {
+      id: 'journal-fincloud',
+      queueItemId: 'automation-queue-item-1',
+      platform: 'hh',
+      result: 'delivered',
+      receiptStatus: null,
+      attempted: true,
+      localDate: '2026-10-13',
+      company: 'FinCloud',
+      occurredAt: '2026-10-13T10:00:00.000Z',
+      receiptId: 'receipt-fincloud',
+      failureCode: null,
+    },
+    {
+      id: 'journal-cloud',
+      queueItemId: 'automation-queue-item-2',
+      platform: 'linkedin',
+      result: 'error',
+      receiptStatus: null,
+      attempted: true,
+      localDate: '2026-10-12',
+      company: 'Cloud',
+      occurredAt: '2026-10-12T10:00:00.000Z',
+      receiptId: null,
+      failureCode: 'platform_rejected',
+    },
+  ];
+  const requests: URL[] = [];
+  await mockSignedInCabinet(page, { candidateId: 'candidate-b232' });
+  await page.route('**/api/v1/candidate/automation/journal**', async (route) => {
+    const url = new URL(route.request().url());
+    requests.push(url);
+    const result = url.searchParams.get('result');
+    const platform = url.searchParams.get('platform');
+    const filtered = entries.filter(
+      (entry) => (!result || entry.result === result) && (!platform || entry.platform === platform),
+    );
+    await route.fulfill({
+      json: {
+        data: {
+          entries: filtered,
+          periodDays: Number(url.searchParams.get('periodDays') ?? 30),
+          counts: {
+            total: filtered.length,
+            delivered: filtered.filter((entry) => entry.result === 'delivered').length,
+            errors: filtered.filter((entry) => entry.result === 'error').length,
+            removed: filtered.filter((entry) => entry.result === 'removed').length,
+          },
+          limit: 100,
+          offset: Number(url.searchParams.get('offset') ?? 0),
+        },
+      },
+    });
+  });
+  await openAutomation(page);
+  await page.getByRole('tab', { name: 'Журнал', exact: true }).click();
+  const journal = page.locator('[data-page="journal"]');
+  const rows = journal.getByRole('list', { name: 'Результаты отправки' }).getByRole('listitem');
+  await expect(rows).toHaveCount(2);
+
+  await journal.getByLabel(/^Период/u).selectOption('7');
+  await expect.poll(() => requests.at(-1)?.searchParams.get('periodDays')).toBe('7');
+  await journal.getByLabel(/^РезультатВсе/u).selectOption('delivered');
+  await expect.poll(() => requests.at(-1)?.searchParams.get('result')).toBe('delivered');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('FinCloud');
+  await journal.getByLabel(/^РезультатВсе/u).selectOption('');
+  await journal.getByLabel(/^ПлощадкаВсе/u).selectOption('linkedin');
+  await expect.poll(() => requests.at(-1)?.searchParams.get('platform')).toBe('linkedin');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Cloud');
+
+  await journal.getByLabel(/^ПлощадкаВсе/u).selectOption('');
+  await journal.getByLabel('Компания или квитанция', { exact: true }).fill('FinCloud');
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('FinCloud');
 });

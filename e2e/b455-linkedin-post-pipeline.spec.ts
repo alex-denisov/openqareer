@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'B455');
+const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'evidence', 'AUD-6');
 const cadence = {
   timezone: 'Europe/Moscow',
   lastPublishedAt: null,
@@ -102,9 +102,10 @@ async function seedWorkspace(page: Page) {
   );
 }
 
-async function openAutomationPosts(page: Page) {
+async function openAutomationPosts(page: Page, setup?: () => Promise<void>) {
   await mockSignedInCabinet(page, { candidateId: 'candidate-b232' });
   await seedWorkspace(page);
+  if (setup) await setup();
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await enterAutomationFromResponses(page);
   await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
@@ -221,11 +222,7 @@ async function writeHarness(page: Page, project: string) {
 
 for (const state of ['empty', 'error', 'partial', 'many'] as const) {
   test(`${state}: состояние конвейера LinkedIn видно на 1440 и 390`, async ({ page }, testInfo) => {
-    await openAutomationPosts(page);
-    await installStateApi(page, state);
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await enterAutomationFromResponses(page);
-    await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
+    await openAutomationPosts(page, () => installStateApi(page, state));
     const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
     await expect(card).toBeVisible();
     if (state === 'empty')
@@ -279,17 +276,15 @@ test('loading: очередь и темы имеют собственное со
   const pending = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await openAutomationPosts(page);
-  await page.route('**/api/v1/candidate/drafts**', async (route) => {
-    await pending;
-    const path = new URL(route.request().url()).pathname;
-    if (path.endsWith('/candidate/drafts/topics'))
-      return route.fulfill({ json: { data: { items: [], total: 0, cadence } } });
-    return route.fulfill({ json: { data: [] } });
+  await openAutomationPosts(page, async () => {
+    await page.route('**/api/v1/candidate/drafts**', async (route) => {
+      await pending;
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/candidate/drafts/topics'))
+        return route.fulfill({ json: { data: { items: [], total: 0, cadence } } });
+      return route.fulfill({ json: { data: [] } });
+    });
   });
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  await enterAutomationFromResponses(page);
-  await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
   await expect(card.getByText('Загружаем черновики…', { exact: true })).toBeVisible();
   await expect(card.getByText('Загружаем темы…', { exact: true })).toBeVisible();
