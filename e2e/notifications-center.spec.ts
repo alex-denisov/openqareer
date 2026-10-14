@@ -5,8 +5,8 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE = e2eEvidenceDirectory('B473');
-const GATE_HTML = join(process.cwd(), 'test-results', 'evidence', 'B473-dom');
+const EVIDENCE = e2eEvidenceDirectory('AUD-18');
+const GATE_HTML = join(process.cwd(), 'test-results', 'evidence', 'AUD-18', 'dom');
 const DIST_ASSETS = join(process.cwd(), 'dist', 'assets');
 
 interface NotificationFixture {
