@@ -1,0 +1,18 @@
+# AUD-5 — итог
+- Ветка/worktree: `codex/AUD-5`, `.claude/worktrees/oq-AUD-5`; создана от `codex/AUD-6`, `codex/AUD-13` влита merge `b1663451`.
+- Коммиты AUD-5: `d65cee9f`, `9f9909a4`, `67473199`, `72f99329`; изменено 12 файлов.
+- `npx tsc --noEmit` → PASS; `npm run lint` → PASS.
+- Целевой Vitest → 28 файлов, 207/207.
+- `npm run build` → PASS; Vite предупреждает о chunk `CareerWorkspaceShell` >500 kB.
+- Playwright: 3 spec-файла, desktop-1440/mobile-390 → 69 passed, 9 expected skipped, 0 failed (78 total).
+- Evidence: 16 PNG и 7 RGB harness в ignored `test-results/evidence/AUD-5/`; закоммичены только inventory/report.
+- KIT accuracy → 41/41 в предыдущем запуске этой сессии на неизменённом KIT; дублирующий шаблонный скан остановлен.
+- KIT `verify_states` → board 212 состояний/тема, preparation 12/тема, label menu 9/тема; channel harness содержит только текст.
+- KIT `verify_responsive` → 7 harness-файлов без переполнения на 280/320/414 px.
+- Инвентарь: 274 DOM-узла / 34 группы / 26 работает / 3 достроено / 5 внешних зависимостей; 6 состояний покрыты.
+- Внешнее: HH/LinkedIn runners и receipts, реальные OSINT-контакты B257/B258, live AI provider; реальные аккаунты не использовались.
+- Сквозные проверки: board/table/channel одна выборка; метка и «Хочу» сохраняются при E2E reload; серверные CRUD/provenance/candidate-scope тесты зелёные.
+- Не делались production, deploy, push, merge в main; B486 layout не трогали; owner visual acceptance 1440/390 ожидает CPO.
+- AUD-05 помечает B484 «в работе», но AUD README фиксирует закрытие/выкат 14.10; использован статус README.
+- `PipelineAnalyticsView.tsx` — legacy-компонент без importers; low-data state выведен в реально подключённый `ResponsesChannelPerformance`.
+- Что было неясно в пакете: расхождение B484 и отсутствие авторитетного LinkedIn session/receipt state.
