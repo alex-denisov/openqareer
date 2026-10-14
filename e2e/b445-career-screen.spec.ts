@@ -5,7 +5,7 @@ import path from 'node:path';
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'docs/v1-release/tasks/evidence/S11-CAR');
+const EVIDENCE_DIR = path.resolve(process.cwd(), 'test-results/evidence/AUD-3');
 const CLI_PATH = path.resolve(process.cwd(), 'src/features/career-map/renderCareerCli.ts');
 const BATCH_HTML_DIR = path.join(os.tmpdir(), 'oq-b445-html');
 
