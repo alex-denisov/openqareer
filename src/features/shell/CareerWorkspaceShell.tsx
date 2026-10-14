@@ -630,6 +630,7 @@ export function CareerWorkspaceShell({
                     onUnreadCountChange={setNotificationUnreadCount}
                     onNavigate={navigate}
                     onOpenSettings={openNotificationSettings}
+                    onOpenExpert={() => openExpert('responses')}
                   />
                 ) : null}
                 {!roleSkillAssessmentOpen &&

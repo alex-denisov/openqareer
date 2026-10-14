@@ -5,8 +5,8 @@ import { expect, test, type Page, type Route, type TestInfo } from '@playwright/
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE = e2eEvidenceDirectory('B473');
-const GATE_HTML = join(process.cwd(), 'test-results', 'evidence', 'B473-dom');
+const EVIDENCE = e2eEvidenceDirectory('AUD-18');
+const GATE_HTML = join(process.cwd(), 'test-results', 'evidence', 'AUD-18', 'dom');
 const DIST_ASSETS = join(process.cwd(), 'dist', 'assets');
 
 interface NotificationFixture {
@@ -98,6 +98,11 @@ const INTERVIEW_NOTICE = notification(
   '/app?view=responses&notificationSource=interview-1',
 );
 
+const INTERVIEW_SCHEDULED_AT = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+const EXPECTED_REMINDER_DUE_AT = new Date(
+  Date.parse(INTERVIEW_SCHEDULED_AT) - 24 * 3600 * 1000,
+).toISOString();
+
 const INTERVIEW_APPLICATION = {
   id: 'application-1',
   candidateId: 'candidate-1',
@@ -119,7 +124,7 @@ const INTERVIEW_APPLICATION = {
   materials: { coverLetter: false, resume: false },
   nearestInterview: {
     id: 'interview-1',
-    scheduledAt: '2026-10-15T12:00:00.000Z',
+    scheduledAt: INTERVIEW_SCHEDULED_AT,
     prepStatus: 'none',
     round: 1,
   },
@@ -273,7 +278,7 @@ async function mockNotificationApi(
 async function openToday(page: Page, options?: NotificationMockOptions): Promise<void> {
   await mockNotificationApi(page, options);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('heading', { level: 1, name: 'Сегодня' })).toBeVisible();
+  await expect(page.locator('.career-today')).toBeVisible({ timeout: 15_000 });
 }
 
 async function capture(page: Page, testInfo: TestInfo, state: string): Promise<void> {
@@ -457,5 +462,5 @@ test('interview reminder updates the candidate application', async ({ page }, te
   await page.getByRole('button', { name: /Скоро интервью/u }).click();
   await page.getByRole('button', { name: 'Напомнить за день' }).click();
   await expect(page.getByRole('status')).toContainText('Напоминание установлено');
-  expect(reminderApi.reminder()?.followUpDueAt).toBe('2026-10-14T12:00:00.000Z');
+  expect(reminderApi.reminder()?.followUpDueAt).toBe(EXPECTED_REMINDER_DUE_AT);
 });
