@@ -79,7 +79,7 @@
 
 .vacancies-summary-count {
   color: var(--career-text);
-  font-size: var(--career-text-2xl);
+  font-size: var(--career-text-xl);
   font-weight: 700;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -87,6 +87,7 @@
 
 .vacancies-summary-copy {
   display: grid;
+  font-size: var(--career-text-xs);
   gap: var(--career-space-1);
   min-inline-size: 0;
   margin: 0;
@@ -605,7 +606,7 @@
   }
 
   .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-count {
-    font-size: var(--career-text-2xl);
+    font-size: var(--career-text-xl);
   }
 
   .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-reset {
@@ -873,5 +874,17 @@
     .vacancies-filter-actions.is-mobile {
     position: sticky;
     inset-block-end: 0;
+  }
+}
+
+/* B430 экран 4, 1440: вкладки слева по ширине подписи, как в макете. */
+@media (min-width: 1024px) {
+  .vacancies-tabs-row .companies-people-tabs {
+    gap: var(--career-space-6);
+  }
+
+  .vacancies-tabs-row .companies-people-tab {
+    flex: 0 0 auto;
+    padding-inline: var(--career-space-4);
   }
 }
