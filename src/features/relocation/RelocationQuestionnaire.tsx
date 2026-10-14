@@ -4,6 +4,7 @@ import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
   relocationQuestionnaireStepSchemas,
+  type RelocationAlert,
   type RelocationCurrentStep,
   type RelocationQuestionnaire,
   type RelocationStepId,
@@ -27,12 +28,14 @@ const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
   languages: 'Языки',
 };
 
+type ProfileUpdate = (profile: RelocationQuestionnaire, alerts?: readonly RelocationAlert[]) => void;
+
 export interface RelocationQuestionnaireProps {
   readonly profile: RelocationQuestionnaire;
   readonly initialStep: RelocationStepId;
   readonly onClose: () => void;
   readonly onShowCountries: () => void;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaire) => void;
+  readonly onProfileUpdated: ProfileUpdate;
 }
 
 interface QuestionnaireController {
@@ -248,7 +251,7 @@ interface AdvanceInput {
   readonly setSavedProfile: Setter<RelocationQuestionnaire>;
   readonly setDraft: Setter<RelocationQuestionnaire>;
   readonly setStep: Setter<RelocationCurrentStep>;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaire) => void;
+  readonly onProfileUpdated: ProfileUpdate;
 }
 
 type Setter<T> = Dispatch<SetStateAction<T>>;
@@ -264,14 +267,15 @@ async function advanceQuestionnaire(input: AdvanceInput) {
   input.setError(undefined);
   input.setNotice(undefined);
   try {
-    const base = input.skip ? input.savedProfile : (await saveStep(input.step, input.draft)).profile;
+    const stepResult = input.skip ? undefined : await saveStep(input.step, input.draft);
+    const base = stepResult?.profile ?? input.savedProfile;
     const skippedSteps = input.skip
       ? [...new Set([...base.skippedSteps, input.step])]
       : [...base.skippedSteps];
-    if (!input.skip) {
+    if (stepResult) {
       input.setSavedProfile(base);
       input.setDraft(base);
-      input.onProfileUpdated(base);
+      input.onProfileUpdated(base, stepResult.alerts);
     }
     await saveProgress(input, base, nextStepAfter(input.step), skippedSteps);
     input.setNotice(input.skip ? 'Шаг пропущен. Его можно заполнить позже.' : 'Изменения сохранены.');
@@ -295,7 +299,7 @@ async function saveProgress(
   input.setSavedProfile(result.profile);
   input.setDraft(result.profile);
   input.setStep(result.profile.currentStep);
-  input.onProfileUpdated(result.profile);
+  input.onProfileUpdated(result.profile, result.alerts);
 }
 
 interface SelectStepInput {
@@ -310,7 +314,7 @@ interface SelectStepInput {
   readonly setSavedProfile: Setter<RelocationQuestionnaire>;
   readonly setDraft: Setter<RelocationQuestionnaire>;
   readonly setStep: Setter<RelocationCurrentStep>;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaire) => void;
+  readonly onProfileUpdated: ProfileUpdate;
 }
 
 async function selectQuestionnaireStep(input: SelectStepInput) {
@@ -325,7 +329,7 @@ async function selectQuestionnaireStep(input: SelectStepInput) {
     input.setSavedProfile(result.profile);
     input.setDraft(result.profile);
     input.setStep(result.profile.currentStep);
-    input.onProfileUpdated(result.profile);
+    input.onProfileUpdated(result.profile, result.alerts);
   } catch (reason) {
     input.setError(questionnaireError(reason));
   } finally {
@@ -342,7 +346,7 @@ interface ImportLanguagesInput {
   readonly setNotice: Setter<string | undefined>;
   readonly setSavedProfile: Setter<RelocationQuestionnaire>;
   readonly setDraft: Setter<RelocationQuestionnaire>;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaire) => void;
+  readonly onProfileUpdated: ProfileUpdate;
 }
 
 async function importQuestionnaireLanguages(input: ImportLanguagesInput) {
@@ -355,7 +359,7 @@ async function importQuestionnaireLanguages(input: ImportLanguagesInput) {
     const result = await importRelocationLanguagesFromLinkedIn(current.revision);
     input.setSavedProfile(result.profile);
     input.setDraft(result.profile);
-    input.onProfileUpdated(result.profile);
+    input.onProfileUpdated(result.profile, result.alerts);
     input.setNotice('Языки добавлены как предложения. Проверьте каждое значение.');
   } catch (reason) {
     input.setError(questionnaireError(reason));
@@ -373,7 +377,7 @@ interface RestartInput {
   readonly setDraft: Setter<RelocationQuestionnaire>;
   readonly setStep: Setter<RelocationCurrentStep>;
   readonly setConfirmRestart: Setter<boolean>;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaire) => void;
+  readonly onProfileUpdated: ProfileUpdate;
 }
 
 async function restartQuestionnaire(input: RestartInput) {
@@ -388,7 +392,7 @@ async function restartQuestionnaire(input: RestartInput) {
     input.setStep(RELOCATION_STEPS[0]);
     input.setConfirmRestart(false);
     input.setNotice('Анкета очищена. Согласие осталось активным.');
-    input.onProfileUpdated(fresh);
+    input.onProfileUpdated(fresh, []);
   } catch (reason) {
     input.setError(questionnaireError(reason));
   } finally {

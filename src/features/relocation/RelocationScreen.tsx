@@ -79,8 +79,11 @@ function useRelocationSnapshot() {
     return () => controller.abort();
   }, [reload]);
 
-  const updateProfile = useCallback((profile: RelocationQuestionnaireResponse['profile']) => {
-    setSnapshot((current) => current ? { ...current, profile } : current);
+  const updateProfile = useCallback((
+    profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
+    alerts: RelocationQuestionnaireResponse['alerts'] = [],
+  ) => {
+    setSnapshot((current) => current ? { ...current, profile, alerts } : current);
   }, []);
   const updateConsent = useCallback((consent: RelocationQuestionnaireResponse['consent']) => {
     setSnapshot((current) => current ? { ...current, consent, profile: null } : current);
@@ -97,7 +100,7 @@ function RelocationWorkspace({
   onConsentRevoked,
 }: RelocationScreenProps & {
   readonly snapshot: RelocationQuestionnaireResponse & { readonly profile: NonNullable<RelocationQuestionnaireResponse['profile']> };
-  readonly onProfileUpdated: (profile: RelocationQuestionnaireResponse['profile']) => void;
+  readonly onProfileUpdated: (profile: NonNullable<RelocationQuestionnaireResponse['profile']>, alerts?: RelocationQuestionnaireResponse['alerts']) => void;
   readonly onConsentRevoked: (consent: RelocationQuestionnaireResponse['consent']) => void;
 }) {
   const [tab, setTab] = useState<RelocationTab>('countries');
@@ -166,7 +169,7 @@ interface RelocationTabPanelProps {
   readonly onTabChange: (tab: RelocationTab) => void;
   readonly onOpenExpert?: () => void;
   readonly onOpenVacancies?: () => void;
-  readonly onProfileUpdated: (profile: RelocationQuestionnaireResponse['profile']) => void;
+  readonly onProfileUpdated: (profile: NonNullable<RelocationQuestionnaireResponse['profile']>, alerts?: RelocationQuestionnaireResponse['alerts']) => void;
   readonly onConsentRevoked: (consent: RelocationQuestionnaireResponse['consent']) => void;
 }
 
@@ -204,7 +207,7 @@ function RelocationTabContent({
   if (tab === 'countries') return <CountriesTab profile={snapshot.profile} selectedCountryCodes={selectedCountryCodes} onSelectedCountryCodesChange={onSelectedCountryCodesChange} onCompare={() => onTabChange('comparison')} onCalculateEconomy={(countryCode) => { onEconomyCountryCodeChange(countryCode); onTabChange('economy'); }} onOpenProfile={() => onTabChange('profile')} onOpenVacancies={onOpenVacancies} />;
   if (tab === 'comparison') return <ComparisonTab countries={comparisonCountries} onChangeCountries={() => onTabChange('countries')} onOpenExpert={onOpenExpert} />;
   if (tab === 'economy') return <RelocationEconomy profile={snapshot.profile} selectedCountryCodes={selectedCountryCodes} selectedCountryCode={economyCountryCode} grossAnnualIncome={grossAnnualIncome} onCountryCodeChange={onEconomyCountryCodeChange} onGrossAnnualIncomeChange={onGrossAnnualIncomeChange} onShowComparison={() => onTabChange('comparison')} />;
-  return <RelocationProfile profile={snapshot.profile} consent={snapshot.consent} onProfileUpdated={onProfileUpdated} onConsentRevoked={onConsentRevoked} onShowCountries={() => onTabChange('countries')} />;
+  return <RelocationProfile profile={snapshot.profile} consent={snapshot.consent} alerts={snapshot.alerts} onProfileUpdated={onProfileUpdated} onConsentRevoked={onConsentRevoked} onShowCountries={() => onTabChange('countries')} />;
 }
 
 function CountriesTab({

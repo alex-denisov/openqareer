@@ -39,7 +39,7 @@ describe('RelocationQuestionnaire', () => {
       { currentStep: 'education', skippedSteps: ['citizenship_documents'] },
       0,
     );
-    expect(onProfileUpdated).toHaveBeenCalledWith(updated);
+    expect(onProfileUpdated).toHaveBeenCalledWith(updated, []);
     expect(host?.textContent).toContain('Шаг 2 из 4');
   });
 

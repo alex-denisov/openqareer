@@ -12,6 +12,7 @@ describe('RelocationEconomy', () => {
   afterEach(() => {
     if (root) act(() => root?.unmount());
     host?.remove();
+    vi.useRealTimers();
     root = undefined;
     host = undefined;
   });
@@ -31,8 +32,17 @@ describe('RelocationEconomy', () => {
     expect(host?.textContent).not.toContain('Зарплата ниже порога');
   });
 
+  it('labels tax calculations with a stale data warning after 90 days', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2027-01-10T12:00:00.000Z'));
+    render(40_000);
+
+    expect(host?.textContent).toContain('Данные устарели');
+    expect(host?.textContent).toContain('прошло больше 90 дней');
+  });
+
   it('shows calculation errors instead of hiding invalid numeric input', () => {
-    render(Number.POSITIVE_INFINITY);
+    render(-1);
 
     expect(host?.querySelector('[role="alert"]')?.textContent).toContain('Укажите годовую зарплату числом');
   });

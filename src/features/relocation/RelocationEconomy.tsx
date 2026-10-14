@@ -28,7 +28,7 @@ export function RelocationEconomy({
   const country = countries.find((item) => item.countryCode === countryCode);
   const supported = supportedCountryCodes.some((code) => code === countryCode);
   const data = supported && countryCode ? getCountryTaxData(countryCode) : null;
-  const result = supported && grossAnnualIncome !== undefined && grossAnnualIncome > 0
+  const result = supported && grossAnnualIncome !== undefined
     ? calculateRelocationEconomy(countryCode, grossAnnualIncome)
     : undefined;
   const belowThresholds = useMemo(
@@ -39,6 +39,7 @@ export function RelocationEconomy({
     <section className="career-relocation-economy" aria-labelledby="career-relocation-economy-title">
       <EconomyHeading />
       <EconomyInputs countries={countries} countryCode={countryCode} data={data} income={grossAnnualIncome} onCountryChange={onCountryCodeChange} onIncomeChange={onGrossAnnualIncomeChange} />
+      <TaxDataFreshness data={data} />
       <EconomyOutput countryCode={countryCode} countryName={country?.name} supported={supported} income={grossAnnualIncome} result={result} />
       <SalaryThresholdWarnings warnings={belowThresholds} />
       <EconomyActions onShowComparison={onShowComparison} />
@@ -91,6 +92,20 @@ function EconomyInputs({
         {data ? `Валюта: ${data.currency}. Шкала налогов: ${data.taxYear}.` : 'Сначала выберите страну с доступной шкалой налогов.'}
       </p>
     </div>
+  );
+}
+
+function TaxDataFreshness({ data }: { readonly data: ReturnType<typeof getCountryTaxData> | null }) {
+  if (!data) return null;
+  const retrievedAt = Date.parse(data.incomeTax.source.retrievedAt);
+  const ageDays = Math.floor((Date.now() - retrievedAt) / 86_400_000);
+  if (!Number.isFinite(retrievedAt) || ageDays <= 90) return null;
+  const dateLabel = new Intl.DateTimeFormat('ru-RU').format(new Date(retrievedAt));
+  return (
+    <aside className="career-relocation-threshold-warning" role="status" aria-label="Данные устарели">
+      <h3>Данные устарели</h3>
+      <p>Налоговые шкалы обновлены {dateLabel}, прошло больше 90 дней. Расчёт показан с пометкой; цифры могли измениться.</p>
+    </aside>
   );
 }
 

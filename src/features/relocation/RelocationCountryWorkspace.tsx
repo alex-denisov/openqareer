@@ -46,7 +46,7 @@ function useCountryWorkspace(
   const visibleCountries = showAll ? filteredCountries : filteredCountries.slice(0, COUNTRY_PREVIEW_COUNT);
   const details = countries.find(({ countryCode }) => countryCode === detailsCountry);
   const detailsFit = details ? countryFitForQuestionnaire(details.countryCode, profile) : undefined;
-  const reset = () => { setScenario('all'); setQuery(''); setSearchOpen(false); };
+  const reset = () => { setScenario('all'); setQuery(''); setSearchOpen(false); setShowAll(false); };
   return {
     profile,
     countries: visibleCountries,
