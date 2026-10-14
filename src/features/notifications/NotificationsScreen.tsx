@@ -25,6 +25,7 @@ interface NotificationsScreenProps {
   readonly onUnreadCountChange: (count: number) => void;
   readonly onNavigate: (view: ShellSection) => void;
   readonly onOpenSettings: () => void;
+  readonly onOpenExpert?: () => void;
 }
 
 interface NotificationGroups {
@@ -48,6 +49,7 @@ interface NotificationsScreenModel {
   readonly handleReminder: (item: CandidateNotification) => Promise<void>;
   readonly onNavigate: (view: ShellSection) => void;
   readonly onOpenSettings: () => void;
+  readonly onOpenExpert?: () => void;
 }
 
 function groupNotifications(items: readonly CandidateNotification[]): NotificationGroups {
@@ -145,6 +147,7 @@ function useNotificationsScreenModel(props: NotificationsScreenProps): Notificat
     handleReminder: reminder.handleReminder,
     onNavigate: props.onNavigate,
     onOpenSettings: props.onOpenSettings,
+    onOpenExpert: props.onOpenExpert,
   };
 }
 
@@ -194,11 +197,12 @@ function NotificationCenterContent({ model }: { readonly model: NotificationsScr
   return (
     <div className="career-notification-layout">
       <section className="career-notification-list-panel" aria-label="Список уведомлений">
-        <NotificationFilterTabs filter={model.filter} onChange={model.setFilter} />
+        <NotificationFilterTabs filter={model.filter} unreadCount={model.page.unreadCount} onChange={model.setFilter} />
         {model.filteredItems.length === 0 ? <NotificationEmpty unreadOnly={model.unreadEmpty} /> : (
           <NotificationGroupsView groups={model.groups} selectedId={model.selectedId} onSelect={model.handleSelect} />
         )}
         <NotificationLoadMore nextCursor={model.page.nextCursor} loading={model.page.loadingMore} error={model.page.moreError} onLoadMore={model.page.loadMore} />
+        <p className="career-notification-night-foot">Ночью, с 22:00 до 08:00, уведомления копятся и приходят утром.</p>
       </section>
       <SelectedNotificationDetail model={model} />
     </div>
@@ -216,18 +220,22 @@ function SelectedNotificationDetail({ model }: { readonly model: NotificationsSc
       onBack={model.clearSelection}
       onNavigate={model.onNavigate}
       onReminder={() => void model.handleReminder(item)}
+      onOpenExpert={model.onOpenExpert}
     />
   );
 }
 
-function NotificationFilterTabs({ filter, onChange }: {
+function NotificationFilterTabs({ filter, unreadCount, onChange }: {
   readonly filter: NotificationFilter;
+  readonly unreadCount: number;
   readonly onChange: (value: NotificationFilter) => void;
 }) {
   return (
     <div className="career-notification-filters" role="tablist" aria-label="Фильтр уведомлений">
       <button role="tab" type="button" aria-selected={filter === 'all'} onClick={() => onChange('all')}>Все</button>
-      <button role="tab" type="button" aria-selected={filter === 'unread'} onClick={() => onChange('unread')}>Непрочитанные</button>
+      <button role="tab" type="button" aria-selected={filter === 'unread'} onClick={() => onChange('unread')}>
+        Непрочитанные{unreadCount > 0 ? ` ${unreadCount}` : ''}
+      </button>
     </div>
   );
 }
@@ -278,13 +286,14 @@ function NotificationGroup({ title, items, selectedId, onSelect }: {
   );
 }
 
-function NotificationDetail({ item, reminderState, reminderMessage, onBack, onNavigate, onReminder }: {
+function NotificationDetail({ item, reminderState, reminderMessage, onBack, onNavigate, onReminder, onOpenExpert }: {
   readonly item: CandidateNotification;
   readonly reminderState: ReminderState;
   readonly reminderMessage: string | null;
   readonly onBack: () => void;
   readonly onNavigate: (view: ShellSection) => void;
   readonly onReminder: () => void;
+  readonly onOpenExpert?: () => void;
 }) {
   const secondaryLabel = notificationSecondaryLabel(item);
   return (
@@ -314,8 +323,14 @@ function NotificationDetail({ item, reminderState, reminderMessage, onBack, onNa
               {reminderState === 'saving' ? 'Сохраняем…' : secondaryLabel}
             </button>
           ) : null}
+          {onOpenExpert ? (
+            <button className="career-btn is-ghost" type="button" onClick={onOpenExpert}>
+              Обсудить с консультантом
+            </button>
+          ) : null}
         </div>
         {reminderMessage ? <p className={`career-notification-reminder-message is-${reminderState}`} role={reminderState === 'error' ? 'alert' : 'status'}>{reminderMessage}</p> : null}
+        <p className="career-notification-detail-foot">Открытие уведомления отмечает его прочитанным.</p>
       </div>
     </article>
   );

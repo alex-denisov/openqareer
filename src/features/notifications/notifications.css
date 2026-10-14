@@ -424,6 +424,14 @@
   min-height: var(--career-target-min);
 }
 
+.career-notification-detail-foot,
+.career-notification-night-foot {
+  margin: var(--career-space-4) 0 0;
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+  line-height: 1.4;
+}
+
 .career-notification-reminder-message,
 .career-notification-action-error {
   margin: var(--career-space-4) 0 0;
