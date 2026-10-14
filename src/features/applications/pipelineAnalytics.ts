@@ -1,5 +1,7 @@
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
+import { archiveReasonLabel } from './archiveReasonLabel';
+import { SKIP_REASONS } from '../../../shared/skipReasons';
 
 export interface StageFunnelStep {
   readonly stage: ApplicationStage;
@@ -13,11 +15,7 @@ export type BottleneckSeverity = 'info' | 'warning' | 'success';
 
 export interface PipelineBottleneck {
   readonly id:
-    | 'need_more_data'
-    | 'low_response_rate'
-    | 'low_interview_rate'
-    | 'low_offer_rate'
-    | 'healthy';
+    'need_more_data' | 'low_response_rate' | 'low_interview_rate' | 'low_offer_rate' | 'healthy';
   readonly severity: BottleneckSeverity;
   readonly title: string;
   readonly description: string;
@@ -99,9 +97,7 @@ function applicationReachedStage(app: ApplicationView, targetStage: ApplicationS
 /**
  * Рассчитывает этапы воронки и их конверсии.
  */
-function buildFunnelSteps(
-  applications: readonly ApplicationView[],
-): readonly StageFunnelStep[] {
+function buildFunnelSteps(applications: readonly ApplicationView[]): readonly StageFunnelStep[] {
   const counts = STAGE_ORDER.map((stage) => {
     const reached = applications.filter((app) => applicationReachedStage(app, stage)).length;
     return { stage, count: reached };
@@ -114,9 +110,7 @@ function buildFunnelSteps(
     const conversionFromPrevious =
       index > 0 && prevCount > 0 ? Math.round((item.count / prevCount) * 100) : null;
     const conversionFromApplied =
-      index >= 1 && appliedCount > 0
-        ? Math.round((item.count / appliedCount) * 100)
-        : null;
+      index >= 1 && appliedCount > 0 ? Math.round((item.count / appliedCount) * 100) : null;
 
     return {
       stage: item.stage,
@@ -204,12 +198,7 @@ function diagnoseBottlenecks(
     };
   }
 
-  return diagnoseInterviewBottleneck(
-    interviewCount,
-    respondedCount,
-    offerCount,
-    closedCount,
-  );
+  return diagnoseInterviewBottleneck(interviewCount, respondedCount, offerCount, closedCount);
 }
 
 /**
@@ -258,15 +247,26 @@ function buildSourceBreakdown(
   }));
 }
 
+function closureReasonLabel(application: ApplicationView): string {
+  if (application.closedReason) {
+    const skipReason = SKIP_REASONS.find((reason) => reason.id === application.closedReason);
+    if (skipReason) return skipReason.label;
+    if (application.closedReason === 'company_declined') return 'Отказ компании';
+    return /^[a-z][a-z0-9_-]*$/iu.test(application.closedReason)
+      ? archiveReasonLabel('unknown')
+      : application.closedReason;
+  }
+  return archiveReasonLabel(application.archiveReason, application.archiveStaleDays);
+}
+
 function countArchiveReasons(
   applications: readonly ApplicationView[],
 ): ReadonlyArray<{ readonly reason: string; readonly count: number }> {
   const reasonMap = new Map<string, number>();
-  for (const app of applications) {
-    const reason = app.closedReason ?? app.archiveReason;
-    if (reason) {
-      reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
-    }
+  for (const application of applications) {
+    if (application.stage !== 'rejected' && application.stage !== 'archived') continue;
+    const reason = closureReasonLabel(application);
+    reasonMap.set(reason, (reasonMap.get(reason) ?? 0) + 1);
   }
   return Array.from(reasonMap.entries()).map(([reason, count]) => ({ reason, count }));
 }

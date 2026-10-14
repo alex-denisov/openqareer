@@ -658,10 +658,9 @@ test.describe('B450 responses workspace', () => {
     await seedWorkspace(page);
     await openResponses(page);
     await waitForResponsesPool(page);
-    await expect(page.locator('.career-responses-column[aria-label="Отправлено"]')).toBeVisible();
-    await expect(
-      page.locator('.career-responses-column .career-responses-card').first(),
-    ).toBeInViewport();
+    const actionList = page.getByRole('list', { name: 'Нужно действие' });
+    await expect(actionList).toBeVisible();
+    await expect(actionList.getByRole('listitem').first()).toBeInViewport();
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );

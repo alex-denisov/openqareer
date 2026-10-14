@@ -94,6 +94,37 @@ describe('PipelineAnalyticsView', () => {
     expect(html).toContain('Причины закрытия');
   });
 
+  it('локализует коды причин закрытия и сохраняет понятную текстовую причину', () => {
+    const apps: readonly ApplicationView[] = [
+      makeApp({ id: 'known-code', stage: 'archived', closedReason: 'geo-format' }),
+      makeApp({ id: 'unknown-code', stage: 'archived', closedReason: 'provider_internal_code' }),
+      makeApp({ id: 'company-declined', stage: 'rejected', closedReason: 'company_declined' }),
+      makeApp({ id: 'skip-stale', stage: 'archived', closedReason: 'stale', archiveReason: null }),
+      makeApp({
+        id: 'archive-stale',
+        stage: 'archived',
+        closedReason: null,
+        archiveReason: 'stale',
+        archiveStaleDays: 45,
+      }),
+      makeApp({ id: 'human-reason', stage: 'rejected', closedReason: 'Зарплатные ожидания' }),
+    ];
+    const html = renderToStaticMarkup(
+      <PipelineAnalyticsView applications={apps} onOpenVacancies={() => {}} />,
+    );
+
+    expect(html).toContain('география или формат не подходят');
+    expect(html).toContain('Причина не записана');
+    expect(html).toContain('Отказ компании');
+    expect(html).toContain('вакансия выглядит устаревшей или подозрительной');
+    expect(html).toContain('Нет движения 45 дней');
+    expect(html).not.toContain('Нет движения 30 дней');
+    expect(html).toContain('Зарплатные ожидания');
+    expect(html).not.toContain('geo-format');
+    expect(html).not.toContain('provider_internal_code');
+    expect(html).not.toContain('company_declined');
+  });
+
   it('Критерий 4: На экране воронки в тесте нет текста вида src-… / ats-…', () => {
     const apps: readonly ApplicationView[] = [
       makeApp({

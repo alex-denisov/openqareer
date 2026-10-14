@@ -57,6 +57,7 @@ export interface WorkspaceController {
   readonly selectedIds: ReadonlySet<string>;
   readonly allSelectedByFilter: boolean;
   readonly tableLimit: number;
+  readonly mobileListLimit: number;
   readonly columnLimits: Readonly<Record<string, number>>;
   readonly poolStatus: 'loading' | 'ready' | 'error';
   readonly poolError: string;
@@ -74,6 +75,7 @@ export interface WorkspaceController {
   readonly toggleAllFiltered: () => void;
   readonly clearSelection: () => void;
   readonly loadMoreTable: () => void;
+  readonly loadMoreMobileList: () => void;
   readonly loadMoreColumn: (column: string) => void;
   readonly bulkComplete: () => void;
 }
@@ -149,27 +151,40 @@ function useWorkspaceSelection(): WorkspaceSelection {
 
 interface WorkspacePagination {
   readonly tableLimit: number;
+  readonly mobileListLimit: number;
   readonly columnLimits: Readonly<Record<string, number>>;
   readonly resetPagination: () => void;
   readonly loadMoreTable: () => void;
+  readonly loadMoreMobileList: () => void;
   readonly loadMoreColumn: (column: string) => void;
 }
 
 function useWorkspacePagination(): WorkspacePagination {
   const [tableLimit, setTableLimit] = useState(20);
+  const [mobileListLimit, setMobileListLimit] = useState(10);
   const [columnLimits, setColumnLimits] =
     useState<Readonly<Record<string, number>>>(DEFAULT_COLUMN_LIMITS);
   const resetPagination = useCallback(() => {
     setTableLimit(20);
+    setMobileListLimit(10);
     setColumnLimits(DEFAULT_COLUMN_LIMITS);
   }, []);
   const loadMoreTable = useCallback(() => setTableLimit((current) => current + 20), []);
+  const loadMoreMobileList = useCallback(() => setMobileListLimit((current) => current + 20), []);
   const loadMoreColumn = useCallback(
     (column: string) =>
       setColumnLimits((current) => ({ ...current, [column]: (current[column] ?? 4) + 20 })),
     [],
   );
-  return { tableLimit, columnLimits, resetPagination, loadMoreTable, loadMoreColumn };
+  return {
+    tableLimit,
+    mobileListLimit,
+    columnLimits,
+    resetPagination,
+    loadMoreTable,
+    loadMoreMobileList,
+    loadMoreColumn,
+  };
 }
 
 interface WorkspaceFilters {

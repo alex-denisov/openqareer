@@ -8,7 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import { DotsThree, GearSix, Wallet, ShieldCheck } from '@phosphor-icons/react';
+import { DotsThree, GearSix, Sparkle, Wallet, ShieldCheck } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
@@ -274,10 +274,42 @@ interface CareerMobileTopbarProps {
 }
 
 export function CareerMobileTopbar(props: CareerMobileTopbarProps) {
+  const isResponsesHeader = props.activeView === 'responses' && props.title === 'Отклики';
+  const content = isResponsesHeader ? (
+    <ResponsesMobileTopbar {...props} />
+  ) : (
+    <DefaultMobileTopbar {...props} />
+  );
   return (
-    <header className="career-topbar" aria-hidden={props.ariaHidden || undefined}>
-      <DefaultMobileTopbar {...props} />
+    <header
+      className={isResponsesHeader ? 'career-topbar career-topbar--responses' : 'career-topbar'}
+      aria-hidden={props.ariaHidden || undefined}
+    >
+      {content}
     </header>
+  );
+}
+
+function ResponsesMobileTopbar({
+  title,
+  notificationsSlot,
+  onOpenConsultant,
+}: CareerMobileTopbarProps) {
+  return (
+    <>
+      <div className="career-topbar-actions career-responses-topbar-notifications">
+        {notificationsSlot}
+      </div>
+      <h1 className="career-mobile-page-title">{title ?? 'Отклики'}</h1>
+      <button
+        type="button"
+        className="career-responses-consultant-trigger"
+        aria-label="Открыть консультанта"
+        onClick={onOpenConsultant}
+      >
+        <Sparkle aria-hidden="true" />
+      </button>
+    </>
   );
 }
 

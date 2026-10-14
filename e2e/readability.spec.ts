@@ -861,7 +861,8 @@ test.describe('B232 readability gate', () => {
     await waitForCareerShell(page);
 
     await page.locator('button[aria-label="Отклики"]:visible').first().click();
-    await expect(page.locator('.career-responses-board')).toBeVisible();
-    await page.screenshot({ path: 'output/playwright/B337/board-390.png' });
+    await expect(page.getByRole('list', { name: 'Нужно действие' })).toBeVisible();
+    await expect(page.locator('.career-responses-board')).toBeHidden();
+    await page.screenshot({ path: 'output/playwright/B337/responses-list-390.png' });
   });
 });
