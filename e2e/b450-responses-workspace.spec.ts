@@ -7,6 +7,7 @@ type ApplicationRecord = RecordValue & { id: string; stage: string; vacancy: Rec
 type CapturedCalls = {
   readonly applicationQueries: string[];
   readonly companyMutations: Array<{ method: string; path: string; body?: unknown }>;
+  readonly companyPageQueries: string[];
   readonly outboundRetryPaths: string[];
   applicationBulkPreview?: RecordValue;
   applicationBulkExecute?: RecordValue;
@@ -219,8 +220,8 @@ function createApplications(): ApplicationRecord[] {
   });
 }
 
-function createCompanies() {
-  return [
+function createCompanies(total = 2) {
+  const companies = [
     {
       key: 'northstar',
       name: 'Northstar Labs',
@@ -254,14 +255,41 @@ function createCompanies() {
       recruiters: [],
     },
   ];
+  const additionalCount = Math.max(0, total - companies.length);
+  return [
+    ...companies,
+    ...Array.from({ length: additionalCount }, (_, index) => ({
+      key: `company-${index + 3}`,
+      name: `Компания ${index + 3}`,
+      location: 'Москва',
+      industry: 'ИТ',
+      vacancyCount: 1,
+      contactsCount: null,
+      contactsImportedAt: null,
+      want: false,
+      nextStep: null,
+      hasRecruiter: false,
+      recruiterSearchStatus: 'idle',
+      sources: [],
+      vacancies: [],
+      recruiters: [],
+    })),
+  ];
 }
 
 function companyPage(
   companies: ReturnType<typeof createCompanies>,
   filter: string,
   offset: number,
+  search = '',
 ) {
-  const filtered = filter === 'want' ? companies.filter((item) => item.want) : companies;
+  const normalizedSearch = search.trim().toLocaleLowerCase('ru-RU');
+  const filtered = companies.filter((company) => {
+    const matchesFilter = filter !== 'want' || company.want;
+    const matchesSearch =
+      !normalizedSearch || company.name.toLocaleLowerCase('ru-RU').includes(normalizedSearch);
+    return matchesFilter && matchesSearch;
+  });
   return {
     items: filtered.slice(offset, offset + 20),
     total: filtered.length,
@@ -427,12 +455,14 @@ async function handleCompanyRoute(
   const path = url.pathname;
   const method = request.method();
   if (path === '/api/v1/candidate/companies' && method === 'GET') {
+    calls.companyPageQueries.push(url.href);
     await fulfill(
       route,
       companyPage(
         companies,
         url.searchParams.get('filter') ?? 'all',
         Number(url.searchParams.get('offset') ?? 0),
+        url.searchParams.get('search') ?? '',
       ),
     );
     return true;
@@ -470,14 +500,18 @@ async function handleCompanyRoute(
   return false;
 }
 
-async function installMocks(page: Page): Promise<CapturedCalls> {
+async function installMocks(
+  page: Page,
+  options: { readonly companyCount?: number } = {},
+): Promise<CapturedCalls> {
   const calls: CapturedCalls = {
     applicationQueries: [],
     companyMutations: [],
+    companyPageQueries: [],
     outboundRetryPaths: [],
   };
   const applications = createApplications();
-  const companies = createCompanies();
+  const companies = createCompanies(options.companyCount ?? 2);
   const interviewFixture = createMockInterviewSimulatorFixture();
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
@@ -753,6 +787,35 @@ test.describe('B450 responses workspace', () => {
       expect(overflow).toBeLessThanOrEqual(0);
     }
     await page.screenshot({ path: testInfo.outputPath('b450-companies.png'), fullPage: false });
+  });
+
+  test('company list filters and pages rows only when requested', async ({ page }) => {
+    const calls = await installMocks(page, { companyCount: 25 });
+    await seedWorkspace(page);
+    await openResponses(page);
+    await page.getByRole('tab', { name: 'Хочу в компанию' }).click();
+
+    const panel = page.locator('section[aria-label="Компании, которые интересуют"]');
+    const rows = panel.locator('.career-responses-company-row');
+    await panel.getByRole('tab', { name: /Хочу/ }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Northstar Labs');
+    expect(calls.companyPageQueries.at(-1)).toContain('filter=want');
+    await panel.getByRole('tab', { name: /Новые вакансии/ }).click();
+    await expect(rows).toHaveCount(20);
+    const more = panel.getByRole('button', { name: 'Показать ещё' });
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect(rows).toHaveCount(25);
+    expect(calls.companyPageQueries.at(-1)).toContain('offset=20');
+
+    await panel.getByLabel('Найти компанию').fill('Компания 25');
+    await panel.getByRole('button', { name: 'Найти', exact: true }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.first()).toContainText('Компания 25');
+    expect(new URL(calls.companyPageQueries.at(-1) ?? '').searchParams.get('search')).toBe(
+      'Компания 25',
+    );
   });
 
   test('оффер сохраняет состав компенсации и открывается в сравнении', async ({
