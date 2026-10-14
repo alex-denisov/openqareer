@@ -5,7 +5,7 @@ export default defineConfig({
   // (`appVersionLine`), so any test that mounts them needs a real value, not
   // just the ambient `vite-env.d.ts` type.
   define: {
-    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '0.0.0'),
+    __APP_VERSION__: JSON.stringify(process.env.npm_package_version ?? '1.0.0'),
     __APP_COMMIT__: JSON.stringify(process.env.OPENQAREER_COMMIT_SHA ?? ''),
   },
   test: {
