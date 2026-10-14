@@ -149,6 +149,35 @@ test('AUD-07: comparison opens on desktop and mobile', async ({ page }, testInfo
   expect(unmatched).toEqual([]);
 });
 
+test('AUD-07: every paid level opens its matching offer without starting payment', async ({
+  page,
+}, testInfo) => {
+  const viewport = testInfo.project.name === 'mobile-390' ? '390' : '1440';
+  const isMobile = viewport === '390';
+  await page.setViewportSize(isMobile ? { width: 390, height: 844 } : { width: 1440, height: 900 });
+  await prepareCabinet(page);
+  const unmatched = await mockSignedInCabinet(page, { billing: { initialPlan: 'free' } });
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await openTariffs(page);
+
+  for (const plan of ['Basic', 'Pro', 'Max']) {
+    if (isMobile) {
+      await page
+        .locator('.career-tariffs-mobile:visible')
+        .getByRole('button', { name: new RegExp('^' + plan + '\\b', 'u') })
+        .click();
+    }
+    await page.getByRole('button', { name: 'Перейти на ' + plan, exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toHaveAccessibleName('Переход на тариф ' + plan);
+    await expect(dialog.getByTestId('tariff-offer')).toBeVisible();
+    await capture(page, 'offer-' + plan.toLowerCase(), viewport);
+    await dialog.getByRole('button', { name: 'Закрыть оплату' }).click();
+    if (isMobile) await page.getByRole('button', { name: 'Назад к списку тарифов' }).click();
+  }
+  expect(unmatched).toEqual([]);
+});
+
 async function prepareCabinet(page: Page): Promise<void> {
   await page.route('**/health', (route) => route.fulfill({ status: 200, body: 'fixture' }));
 }
