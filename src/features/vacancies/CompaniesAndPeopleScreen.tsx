@@ -20,16 +20,20 @@ import {
 } from './candidateCompaniesApi';
 import './companies-and-people.css';
 import { CompanyDetailPanel } from './CompanyDetailPanel';
+import type { VacancyLetterTarget } from './VacancyLetterScreen';
+import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
   CompanyFilterSheet,
   CompanyList,
   CompanyLoadingState,
   CompanyToolbar,
 } from './CompaniesAndPeopleControls';
-import { readableError } from './companiesAndPeopleUtils';
+import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
 interface CompaniesAndPeopleScreenProps {
   readonly onOpenConnections?: () => void;
+  readonly onOpenCareer?: () => void;
+  readonly onOpenLetter?: (vacancy: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
   readonly initialSearch?: string;
 }
 
@@ -360,8 +364,15 @@ function useCompaniesAndPeopleModel(initialSearch?: string): CompaniesAndPeopleM
     detail,
     selectedKey: selection.selectedKey,
     setSelectedKey: selection.setSelectedKey,
-    selected: detailedCompany ?? page.items.find((company) => company.key === selection.selectedKey) ?? null,
-    linkedin: page.page?.linkedin ?? { status: 'disconnected', importedAt: null, contactsImported: false },
+    selected:
+      detailedCompany ??
+      page.items.find((company) => company.key === selection.selectedKey) ??
+      null,
+    linkedin: page.page?.linkedin ?? {
+      status: 'disconnected',
+      importedAt: null,
+      contactsImported: false,
+    },
     consentGranted: recruiterSearch.consentOverride ?? page.page?.searchConsentGranted ?? false,
     consentRequiredKey: recruiterSearch.consentRequiredKey,
     filterSheetOpen,
@@ -378,10 +389,12 @@ function SelectedCompanyDetail({
   model,
   selected,
   onOpenConnections,
+  onOpenLetter,
 }: {
   readonly model: CompaniesAndPeopleModel;
   readonly selected: CandidateCompanyOpportunity;
   readonly onOpenConnections?: () => void;
+  readonly onOpenLetter?: CompaniesAndPeopleScreenProps['onOpenLetter'];
 }) {
   const {
     detail,
@@ -410,6 +423,7 @@ function SelectedCompanyDetail({
       busyNextStep={nextStepAction.busyKey === selected.key}
       onBack={() => setSelectedKey(null)}
       onOpenConnections={onOpenConnections}
+      onOpenLetter={onOpenLetter}
       onLoadMoreVacancies={() => void detail.loadMore()}
       onToggleWant={() => void wantAction.toggle(selected)}
       onSaveNextStep={(text, dueAt) => nextStepAction.save(selected.key, text, dueAt)}
@@ -422,93 +436,174 @@ function SelectedCompanyDetail({
 function CompanyResults({
   model,
   onOpenConnections,
+  onOpenLetter,
+  onOpenCareer,
 }: {
   readonly model: CompaniesAndPeopleModel;
   readonly onOpenConnections?: () => void;
+  readonly onOpenLetter?: CompaniesAndPeopleScreenProps['onOpenLetter'];
+  readonly onOpenCareer?: () => void;
 }) {
-  const { page, selected, selectedKey, setSelectedKey, wantAction } = model;
+  const { page, selected } = model;
+  if (page.loading && page.items.length === 0) return <CompanyLoadingState />;
+  if (page.error) return null;
   return (
-    <>
-      {page.loading && page.items.length === 0 ? <CompanyLoadingState /> : null}
-      {!page.loading && !page.error ? (
-        <div className={`companies-people-layout${selected ? ' is-detail' : ''}`}>
-          <div>
-            <CompanyList
-              companies={page.items}
-              selectedKey={selectedKey}
-              busyKey={wantAction.busyKey}
-              onSelect={setSelectedKey}
-              onToggleWant={(company) => void wantAction.toggle(company)}
-            />
-            {page.items.length < (page.page?.total ?? 0) ? (
-              <button
-                type="button"
-                className="companies-people-load-more"
-                disabled={page.loadingMore}
-                onClick={() => void page.loadMore()}
-              >
-                {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
-              </button>
-            ) : null}
-          </div>
-          {selected ? (
-            <SelectedCompanyDetail
-              model={model}
-              selected={selected}
-              onOpenConnections={onOpenConnections}
-            />
-          ) : null}
-        </div>
+    <div className={`companies-people-layout${selected ? ' is-detail' : ''}`}>
+      <CompanyListColumn model={model} onOpenCareer={onOpenCareer} />
+      {selected ? (
+        <SelectedCompanyDetail
+          model={model}
+          selected={selected}
+          onOpenConnections={onOpenConnections}
+          onOpenLetter={onOpenLetter}
+        />
       ) : null}
-    </>
+    </div>
+  );
+}
+
+function CompanyListColumn({
+  model,
+  onOpenCareer,
+}: {
+  readonly model: CompaniesAndPeopleModel;
+  readonly onOpenCareer?: () => void;
+}) {
+  const { page, selectedKey, wantAction, filters } = model;
+  return (
+    <div>
+      <CompanyList
+        companies={page.items}
+        selectedKey={selectedKey}
+        busyKey={wantAction.busyKey}
+        filter={filters.filter}
+        allCount={page.page?.filterCounts.all ?? 0}
+        search={filters.search}
+        onSelect={model.setSelectedKey}
+        onToggleWant={(company) => void wantAction.toggle(company)}
+        onOpenCareer={onOpenCareer}
+      />
+      {page.items.length < (page.page?.total ?? 0) ? (
+        <button
+          type="button"
+          className="companies-people-load-more"
+          disabled={page.loadingMore}
+          onClick={() => void page.loadMore()}
+        >
+          {page.loadingMore ? 'Загружаем…' : 'Показать ещё 20'}
+        </button>
+      ) : null}
+    </div>
   );
 }
 
 function CompaniesAndPeopleView({
   model,
   onOpenConnections,
+  onOpenLetter,
+  onOpenCareer,
 }: {
   readonly model: CompaniesAndPeopleModel;
   readonly onOpenConnections?: () => void;
+  readonly onOpenLetter?: CompaniesAndPeopleScreenProps['onOpenLetter'];
+  readonly onOpenCareer?: () => void;
 }) {
-  const { filters, page, filterSheetOpen, setFilterSheetOpen } = model;
-  const counts = page.page?.filterCounts ?? { all: 0, want: 0, contacts: null, recruiter: 0 };
+  const { filters, page, setFilterSheetOpen } = model;
+  const counts = visibleCompanyFilterCounts(page);
   return (
     <section className="companies-and-people" aria-label="Компании и люди">
-      <CompanyToolbar
-        search={filters.searchInput}
-        sort={filters.sort}
-        filter={filters.filter}
-        filterCounts={counts}
-        onSearch={filters.setSearchInput}
-        onSort={filters.setSort}
-        onFilter={filters.setFilter}
+      <CompanyToolbarView
+        filters={filters}
+        counts={counts}
         onOpenFilters={() => setFilterSheetOpen(true)}
       />
-      <p className="companies-people-count" aria-live="polite">
-        {page.page
-          ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в текущей подборке`
-          : 'Загружаем компании…'}
-      </p>
-      <CompanyPageError error={page.error} onRetry={page.reload} />
+      <CompanyDirectorySummary page={page} />
+      <CompanyActionErrors model={model} />
+      <CompanyResults
+        model={model}
+        onOpenConnections={onOpenConnections}
+        onOpenLetter={onOpenLetter}
+        onOpenCareer={onOpenCareer}
+      />
+      <CompanyFilterSheetView model={model} counts={counts} />
+    </section>
+  );
+}
+
+function visibleCompanyFilterCounts(page: CompanyListState): CandidateCompanyPage['filterCounts'] {
+  const counts = page.page?.filterCounts ?? { all: 0, want: 0, contacts: null, recruiter: 0 };
+  const linkedin = page.page?.linkedin;
+  return linkedin?.contactsImported && isContactImportStale(linkedin.importedAt)
+    ? { ...counts, contacts: null }
+    : counts;
+}
+
+function CompanyToolbarView({
+  filters,
+  counts,
+  onOpenFilters,
+}: {
+  readonly filters: CompanyFiltersState;
+  readonly counts: CandidateCompanyPage['filterCounts'];
+  readonly onOpenFilters: () => void;
+}) {
+  return (
+    <CompanyToolbar
+      search={filters.searchInput}
+      sort={filters.sort}
+      filter={filters.filter}
+      filterCounts={counts}
+      onSearch={filters.setSearchInput}
+      onSort={filters.setSort}
+      onFilter={filters.setFilter}
+      onOpenFilters={onOpenFilters}
+    />
+  );
+}
+
+function CompanyDirectorySummary({ page }: { readonly page: CompanyListState }) {
+  return (
+    <p className="companies-people-count" aria-live="polite">
+      {page.page
+        ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в текущей подборке`
+        : 'Загружаем компании…'}
+    </p>
+  );
+}
+
+function CompanyActionErrors({ model }: { readonly model: CompaniesAndPeopleModel }) {
+  return (
+    <>
+      <CompanyPageError error={model.page.error} onRetry={model.page.reload} />
       {model.actionError ? (
         <p className="companies-people-error" role="alert">
           {model.actionError}
         </p>
       ) : null}
-      <CompanyResults model={model} onOpenConnections={onOpenConnections} />
-      <CompanyFilterSheet
-        open={filterSheetOpen}
-        filter={filters.filter}
-        sort={filters.sort}
-        counts={counts}
-        onClose={() => setFilterSheetOpen(false)}
-        onApply={(filter, sort) => {
-          filters.setFilter(filter);
-          filters.setSort(sort);
-        }}
-      />
-    </section>
+    </>
+  );
+}
+
+function CompanyFilterSheetView({
+  model,
+  counts,
+}: {
+  readonly model: CompaniesAndPeopleModel;
+  readonly counts: CandidateCompanyPage['filterCounts'];
+}) {
+  const { filters, filterSheetOpen, setFilterSheetOpen } = model;
+  return (
+    <CompanyFilterSheet
+      open={filterSheetOpen}
+      filter={filters.filter}
+      sort={filters.sort}
+      counts={counts}
+      onClose={() => setFilterSheetOpen(false)}
+      onApply={(filter, sort) => {
+        filters.setFilter(filter);
+        filters.setSort(sort);
+      }}
+    />
   );
 }
 
@@ -532,8 +627,17 @@ function CompanyPageError({
 
 export function CompaniesAndPeopleScreen({
   onOpenConnections,
+  onOpenLetter,
+  onOpenCareer,
   initialSearch,
 }: CompaniesAndPeopleScreenProps) {
   const model = useCompaniesAndPeopleModel(initialSearch);
-  return <CompaniesAndPeopleView model={model} onOpenConnections={onOpenConnections} />;
+  return (
+    <CompaniesAndPeopleView
+      model={model}
+      onOpenConnections={onOpenConnections}
+      onOpenLetter={onOpenLetter}
+      onOpenCareer={onOpenCareer}
+    />
+  );
 }

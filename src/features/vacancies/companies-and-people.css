@@ -275,6 +275,50 @@
   gap: var(--career-space-2);
 }
 
+.companies-people-circles,
+.companies-people-circle-paths {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.companies-people-circles h4 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-circle-path {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+}
+
+.companies-people-circle-path > div {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.companies-people-circle-path strong {
+  overflow-wrap: anywhere;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.companies-people-circle-path span,
+.companies-people-circle-path small,
+.companies-people-circle-path p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
 .companies-people-vacancy,
 .companies-people-recruiter {
   display: grid;
@@ -315,6 +359,14 @@
   color: var(--career-text-soft);
   background: var(--career-bg-elevated);
   font-size: var(--career-text-xs);
+}
+
+.companies-people-empty-state {
+  display: grid;
+}
+
+.companies-people-empty-state p {
+  margin: 0;
 }
 
 .companies-people-error {

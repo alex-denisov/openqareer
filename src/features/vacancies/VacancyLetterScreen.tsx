@@ -10,7 +10,6 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
-import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { ConnectionContactsDialog } from '../outreach/ConnectionContactsDialog';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { CandidateWorkplaceForLetter, ConnectionCircleNumber } from './vacancyLetterApi';
@@ -21,6 +20,17 @@ import './vacancy-letter.css';
 type PitchTone = NonNullable<VacancyPitchPayload['tone']>;
 type PitchLanguage = NonNullable<VacancyPitchPayload['language']>;
 
+export interface VacancyLetterTarget {
+  readonly id: string;
+  readonly canonicalTitle: string;
+  readonly canonicalCompany: string;
+  readonly canonicalLocation?: string | null;
+  readonly isRemote?: boolean | null;
+  readonly sources: readonly { readonly sourceName?: string }[];
+  readonly descriptionSummary: string;
+  readonly primaryUrl: string;
+}
+
 const TONE_OPTIONS: readonly { readonly id: PitchTone; readonly label: string }[] = [
   { id: 'executive', label: 'Деловой' },
   { id: 'confident', label: 'Тёплый' },
@@ -28,7 +38,8 @@ const TONE_OPTIONS: readonly { readonly id: PitchTone; readonly label: string }[
 ];
 
 interface VacancyLetterScreenProps {
-  readonly vacancy: MatchedVacancyItem['cluster'];
+  readonly vacancy: VacancyLetterTarget;
+  readonly initialCircle?: ConnectionCircleNumber;
   readonly onBack: () => void;
   readonly onOpenResponses?: () => void;
   readonly onOpenExpert?: (
@@ -67,11 +78,12 @@ function ConnectionsError({
 
 export function VacancyLetterScreen({
   vacancy,
+  initialCircle,
   onBack,
   onOpenResponses,
   onOpenExpert,
 }: VacancyLetterScreenProps) {
-  const state = useVacancyLetterController(vacancy.id);
+  const state = useVacancyLetterController(vacancy.id, initialCircle);
   return (
     <VacancyLetterPage
       vacancy={vacancy}
@@ -163,7 +175,7 @@ function selectLetterCircle(state: LetterScreenState, circle: ConnectionCircleNu
 }
 
 interface LetterPageActionProps {
-  readonly vacancy: MatchedVacancyItem['cluster'];
+  readonly vacancy: VacancyLetterTarget;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
@@ -270,7 +282,7 @@ function LetterHeader({
   vacancy,
   onBack,
 }: {
-  readonly vacancy: MatchedVacancyItem['cluster'];
+  readonly vacancy: VacancyLetterTarget;
   readonly onBack: () => void;
 }) {
   const backButtonRef = useRef<HTMLButtonElement>(null);
@@ -296,7 +308,7 @@ function LetterHeader({
   );
 }
 
-function VacancyCard({ vacancy }: { readonly vacancy: MatchedVacancyItem['cluster'] }) {
+function VacancyCard({ vacancy }: { readonly vacancy: VacancyLetterTarget }) {
   const location = vacancy.canonicalLocation ?? 'Локация не указана';
   const sources = vacancy.sources.map((source) => source.sourceName).filter(Boolean);
   return (
@@ -305,7 +317,7 @@ function VacancyCard({ vacancy }: { readonly vacancy: MatchedVacancyItem['cluste
         <h2>{vacancy.canonicalTitle}</h2>
         <p>
           {vacancy.canonicalCompany} · {location} ·{' '}
-          {vacancy.isRemote ? 'Удалённо' : 'Формат не указан'}
+          {vacancy.isRemote === true ? 'Удалённо' : 'Формат не указан'}
           {sources.length ? ' · ' + sources.join(', ') : ''}
         </p>
         <details className="career-letter-description">

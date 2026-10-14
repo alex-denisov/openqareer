@@ -164,17 +164,32 @@ export function CompanyList({
   companies,
   selectedKey,
   busyKey,
+  filter,
+  allCount,
+  search,
   onSelect,
   onToggleWant,
+  onOpenCareer,
 }: {
   readonly companies: readonly CandidateCompanyOpportunity[];
   readonly selectedKey: string | null;
   readonly busyKey: string | null;
+  readonly filter: CandidateCompanyFilter;
+  readonly allCount: number;
+  readonly search: string;
   readonly onSelect: (key: string) => void;
   readonly onToggleWant: (company: CandidateCompanyOpportunity) => void;
+  readonly onOpenCareer?: () => void;
 }) {
   if (companies.length === 0) {
-    return <p className="companies-people-empty">Нет компаний по этим условиям.</p>;
+    return (
+      <CompanyListEmptyState
+        filter={filter}
+        allCount={allCount}
+        search={search}
+        onOpenCareer={onOpenCareer}
+      />
+    );
   }
   return (
     <div className="companies-people-list" role="list" aria-label="Компании текущей подборки">
@@ -190,6 +205,50 @@ export function CompanyList({
       ))}
     </div>
   );
+}
+
+function CompanyListEmptyState({
+  filter,
+  allCount,
+  search,
+  onOpenCareer,
+}: {
+  readonly filter: CandidateCompanyFilter;
+  readonly allCount: number;
+  readonly search: string;
+  readonly onOpenCareer?: () => void;
+}) {
+  if (filter === 'want' && allCount > 0 && !search) {
+    return (
+      <div className="companies-people-empty companies-people-empty-state" role="status">
+        <p>В «Хочу» пока нет компаний.</p>
+        <p id="companies-want-bulk-unavailable">
+          Массовое добавление всех компаний пока не подключено.
+        </p>
+        <button
+          type="button"
+          className="companies-people-action"
+          aria-describedby="companies-want-bulk-unavailable"
+          disabled
+        >
+          Все компании подборки в «Хочу» ({allCount})
+        </button>
+      </div>
+    );
+  }
+  if (filter === 'all' && allCount === 0 && !search) {
+    return (
+      <div className="companies-people-empty companies-people-empty-state" role="status">
+        <p>Компаний пока нет: подборка вакансий пуста. Задайте роль и условия в «Карьере».</p>
+        {onOpenCareer ? (
+          <button type="button" className="companies-people-action" onClick={onOpenCareer}>
+            Открыть «Карьеру»
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  return <p className="companies-people-empty">Нет компаний по этим условиям.</p>;
 }
 
 function CompanyListRow({

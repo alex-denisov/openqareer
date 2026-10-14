@@ -101,8 +101,11 @@ function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
   return { data, loading, error, retry };
 }
 
-function useCircleSelection(circles: readonly ConnectionCircleResult[]): CircleSelection {
-  const [circle, setCircle] = useState<ConnectionCircleNumber>(1);
+function useCircleSelection(
+  circles: readonly ConnectionCircleResult[],
+  initialCircle?: ConnectionCircleNumber,
+): CircleSelection {
+  const [circle, setCircle] = useState<ConnectionCircleNumber>(initialCircle ?? 1);
   const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
   const result = circles.find((item) => item.circle === circle);
   const selectedPath = result?.paths.find((path) => path.id === selectedPathId) ?? result?.paths[0];
@@ -407,9 +410,12 @@ function useLetterApproval(input: {
   return { saved, busy, error, approve, reset };
 }
 
-export function useVacancyLetterController(vacancyId: string): LetterScreenState {
+export function useVacancyLetterController(
+  vacancyId: string,
+  initialCircle?: ConnectionCircleNumber,
+): LetterScreenState {
   const circles = useConnectionCircles(vacancyId);
-  const circle = useCircleSelection(circles.data?.circles ?? []);
+  const circle = useCircleSelection(circles.data?.circles ?? [], initialCircle);
   const [tone, setTone] = useState<PitchTone>('executive');
   const [language, setLanguage] = useState<'auto' | PitchLanguage>('auto');
   const draft = useLetterDraft({

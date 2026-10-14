@@ -8,7 +8,7 @@ import {
 } from './mockRoleSkillAssessment';
 import { mockInterviewSimulatorRoutes } from './mockInterviewSimulator';
 import { createMockStarStoriesFixture } from './mockStarStories';
-import { mockCandidateCompanies } from './mockCandidateCompanies';
+import { mockCandidateCompanies, type MockCandidateCompanyOptions } from './mockCandidateCompanies';
 import {
   account,
   candidate,
@@ -387,6 +387,7 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly vacancyInitialFilters?: VacanciesScreenState;
   readonly savedVacanciesCount?: number;
   readonly companyCount?: number;
+  readonly companyDirectory?: Omit<MockCandidateCompanyOptions, 'companyCount'>;
   readonly billing?: {
     readonly initialPlan?: FixtureCurrentPlan;
     readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
@@ -2375,7 +2376,10 @@ export async function mockSignedInCabinet(
     unmatched.push(path);
     return route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });
   });
-  await mockCandidateCompanies(page, { companyCount: options.companyCount });
+  await mockCandidateCompanies(page, {
+    ...options.companyDirectory,
+    companyCount: options.companyCount,
+  });
   await mockInterviewSimulatorRoutes(page);
   return unmatched;
 }

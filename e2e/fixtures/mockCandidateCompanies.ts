@@ -12,8 +12,11 @@ type MutableCompany = {
 };
 let companies: MutableCompany[] = createCompanyFixtures();
 
-function createCompanyFixtures(count = 400): MutableCompany[] {
-  return Array.from({ length: count }, (_, index) => companyFixture(index));
+function createCompanyFixtures(
+  count = 400,
+  options: MockCandidateCompanyOptions = {},
+): MutableCompany[] {
+  return Array.from({ length: count }, (_, index) => companyFixture(index, options));
 }
 
 function recruiterFixture(
@@ -45,7 +48,7 @@ function recruiterFixture(
   };
 }
 
-function companyFixture(index: number): MutableCompany {
+function companyFixture(index: number, options: MockCandidateCompanyOptions): MutableCompany {
   const seed = companySeed(index);
   const key = `synthetic-company-${index}`;
   const recruiters = seed.recruiterName
@@ -60,6 +63,29 @@ function companyFixture(index: number): MutableCompany {
         ),
       ]
     : [];
+  if (
+    options.recruiterSearch?.companyName === seed.name &&
+    options.recruiterSearch.outcome === 'found'
+  ) {
+    recruiters.push(
+      recruiterFixture(
+        key,
+        'Елена Миронова',
+        'Руководитель по подбору',
+        'public-profile',
+        'Публичный профиль LinkedIn',
+        true,
+      ),
+      recruiterFixture(
+        key,
+        'Илья Громов',
+        'HR-менеджер',
+        'public-profile',
+        'Публичный профиль LinkedIn',
+        true,
+      ),
+    );
+  }
   const vacancies = Array.from({ length: Math.min(seed.vacancyCount, 3) }, (_, item) => ({
     id: `${key}-vacancy-${item + 1}`,
     title: item === 0 ? 'Head of Platform' : `Руководитель направления ${item + 1}`,
@@ -68,18 +94,23 @@ function companyFixture(index: number): MutableCompany {
     sourceDate: '2026-10-08T10:00:00.000Z',
     href: `https://example.test/${key}/${item + 1}`,
   }));
+  const contactImport =
+    options.contactImport?.companyName === seed.name ? options.contactImport : null;
   return {
     key,
     name: seed.name,
     location: seed.location,
     industry: seed.industry,
     vacancyCount: seed.vacancyCount,
-    contactsCount: null,
-    contactsImportedAt: null,
-    want: seed.want,
+    contactsCount: contactImport?.count ?? null,
+    contactsImportedAt: contactImport?.importedAt ?? null,
+    want: options.wantedCompanyCount === undefined ? seed.want : index < options.wantedCompanyCount,
     nextStep: wantedSteps.get(key) ?? null,
     hasRecruiter: recruiters.length > 0,
-    recruiterSearchStatus: recruiters.length > 0 ? 'ready' : 'idle',
+    recruiterSearchStatus:
+      recruiters.length > 0 || options.recruiterSearch?.companyName === seed.name
+        ? 'ready'
+        : 'idle',
     sources: [{ name: 'hh.ru', observedAt: '2026-10-08T10:00:00.000Z' }],
     vacancies,
     recruiters,
@@ -228,6 +259,7 @@ function pageFor(url: URL): CandidateCompanyPage {
   const rows = filteredCompanies(url.searchParams);
   const offset = Number(url.searchParams.get('offset') ?? 0);
   const limit = Math.min(20, Number(url.searchParams.get('limit') ?? 20));
+  const contactImport = companies.find((company) => company.contactsCount !== null);
   return {
     items: rows.slice(offset, offset + limit),
     total: rows.length,
@@ -241,7 +273,11 @@ function pageFor(url: URL): CandidateCompanyPage {
       contacts: null,
       recruiter: companies.filter((company) => company.hasRecruiter).length,
     },
-    linkedin: { status: 'disconnected', importedAt: null, contactsImported: false },
+    linkedin: {
+      status: contactImport ? 'profile-imported' : 'disconnected',
+      importedAt: contactImport?.contactsImportedAt ?? null,
+      contactsImported: Boolean(contactImport),
+    },
     searchConsentGranted,
   };
 }
@@ -267,15 +303,60 @@ function detailsFor(company: CandidateCompanyOpportunity, offset: number): Candi
 
 export interface MockCandidateCompanyOptions {
   readonly companyCount?: number;
+  readonly wantedCompanyCount?: number;
+  readonly contactImport?: {
+    readonly companyName: string;
+    readonly count: number;
+    readonly importedAt: string;
+  };
+  readonly recruiterSearch?: {
+    readonly companyName: string;
+    readonly outcome: 'not-found' | 'found';
+  };
 }
 
 export async function mockCandidateCompanies(
   page: Page,
   options: MockCandidateCompanyOptions = {},
 ): Promise<void> {
-  searchConsentGranted = false;
+  searchConsentGranted = options.recruiterSearch !== undefined;
   wantedSteps.clear();
-  companies = createCompanyFixtures(options.companyCount ?? 400);
+  companies = createCompanyFixtures(options.companyCount ?? 400, options);
+  await page.route('**/api/v1/candidate/vacancies/*/connection-circles', async (route) => {
+    const vacancyId = decodeURIComponent(
+      new URL(route.request().url()).pathname.split('/').at(-2) ?? '',
+    );
+    const company = companies.find((item) =>
+      item.vacancies.some((vacancy) => vacancy.id === vacancyId),
+    );
+    const vacancy = company?.vacancies.find((item) => item.id === vacancyId);
+    if (!company || !vacancy) return route.fallback();
+    const state = company.contactsCount === null ? 'unknown' : 'none';
+    return route.fulfill({
+      json: {
+        data: {
+          vacancyId,
+          companyKey: company.key,
+          companyName: company.name,
+          vacancyTitle: vacancy.title,
+          circles: [1, 2, 3].map((circle) => ({
+            circle,
+            state,
+            message:
+              state === 'unknown'
+                ? 'Связи неизвестны: импорт контактов не подтверждён.'
+                : 'Связей в импортированном списке не найдено.',
+            paths: [],
+          })),
+          linkedinImport: {
+            state: company.contactsCount === null ? 'unknown' : 'imported',
+            importedAt: company.contactsImportedAt,
+            importedCount: null,
+          },
+        },
+      },
+    });
+  });
   await page.route('**/api/v1/candidate/companies**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
