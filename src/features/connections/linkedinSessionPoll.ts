@@ -12,6 +12,7 @@ import {
 } from './linkedinProfileSanitize';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
+import type { LinkedInImportProgressEvent } from './linkedinImportProgress';
 import { captureSignedInPage } from './sessionCapture';
 import {
   sessionWaitingNotice,
@@ -105,6 +106,8 @@ interface LinkedInSessionImportFlowDependencies {
   readonly pauseBetweenDetailReads?: () => Promise<void>;
   /** Remembers the last detail-page read so LinkedIn is walked at most once per 12 h. */
   readonly detailReadThrottle?: DetailReadThrottle;
+  /** Reports the detail-page walk so the profile can show which sections are read. */
+  readonly onDetailProgress?: (event: LinkedInImportProgressEvent) => void;
 }
 
 export interface DetailReadThrottle {
@@ -305,16 +308,23 @@ async function readLinkedDetailPages(
   throttle.markRead(now);
   const pause = dependencies.pauseBetweenDetailReads ?? humanPause;
   const base = page.url.endsWith('/') ? page.url : `${page.url}/`;
+  const report = dependencies.onDetailProgress ?? (() => {});
   let read: Partial<Record<DetailPageKey, string>> = {};
-  for (const key of keys) {
-    await pause();
-    const detail = await dependencies
-      .readSessionPage(new URL(DETAIL_PAGE_PATHS[key], base).toString())
-      .catch(() => ({ ok: false as const }));
-    // A redirect to /checkpoint/, /authwall or a captcha still answers ok=true:
-    // anything but the requested section ends the walk (security review B266).
-    if (!detail.ok || !detail.body || !landedOn(detail.url, DETAIL_PAGE_PATHS[key])) break;
-    if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
+  report({ type: 'start', keys });
+  try {
+    for (const key of keys) {
+      await pause();
+      const detail = await dependencies
+        .readSessionPage(new URL(DETAIL_PAGE_PATHS[key], base).toString())
+        .catch(() => ({ ok: false as const }));
+      // A redirect to /checkpoint/, /authwall or a captcha still answers ok=true:
+      // anything but the requested section ends the walk (security review B266).
+      if (!detail.ok || !detail.body || !landedOn(detail.url, DETAIL_PAGE_PATHS[key])) break;
+      if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
+      report({ type: 'read', key });
+    }
+  } finally {
+    report({ type: 'end' });
   }
   return read;
 }

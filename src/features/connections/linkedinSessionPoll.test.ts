@@ -137,6 +137,37 @@ describe('LinkedIn session import flow', () => {
     await first;
   });
 
+  it('reports each detail section as it is read and closes the walk when it stops', async () => {
+    const events: unknown[] = [];
+    const profileUrl = 'https://www.linkedin.com/in/alexey-test/';
+    await createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      // The main profile reads fine; every detail page redirects back to it, which ends the walk.
+      readSessionPage: async () => ({
+        ok: true,
+        url: profileUrl,
+        body: '<main><h1>Alexey Test</h1><section>Product Director\nExample GmbH\n2022 — настоящее время</section></main>',
+      }),
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(),
+      onDetailProgress: (event) => events.push(event),
+      onAuthenticated: vi.fn(),
+      onProviderDataCaptured: vi.fn(),
+      onReady: vi.fn(),
+    }).run();
+
+    expect(events[0]).toMatchObject({ type: 'start' });
+    expect(events.at(-1)).toEqual({ type: 'end' });
+    expect(events.some((event) => (event as { type: string }).type === 'read')).toBe(false);
+  });
+
   it('says why the structured capture fell back to text (B266)', async () => {
     const result = await createLinkedInSessionImportFlow({
       inspectCurrentPage: async () => ({

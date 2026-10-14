@@ -731,3 +731,49 @@
   font-size: var(--career-text-xs);
   font-weight: 600;
 }
+
+.career-profile-screen-import-live {
+  display: grid;
+  flex-basis: 100%;
+  gap: var(--career-space-2);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.career-profile-screen-import-live-title {
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+}
+
+.career-profile-screen-import-live-bar {
+  inline-size: 100%;
+  block-size: var(--career-space-2);
+  accent-color: var(--career-accent);
+}
+
+.career-profile-screen-import-live-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-1) var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-profile-screen-import-live-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+.career-profile-screen-import-live-list .is-done {
+  color: var(--career-text);
+}
+
+.career-profile-screen-import-live-list .is-done svg {
+  color: var(--career-success);
+}

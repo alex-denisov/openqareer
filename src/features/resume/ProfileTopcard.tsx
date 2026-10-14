@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ProfileImportLive } from './ProfileImportLive';
 import {
   ArrowClockwise,
   CaretDown,
@@ -586,6 +587,7 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
         <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
+      <ProfileImportLive />
     </div>
   );
 }

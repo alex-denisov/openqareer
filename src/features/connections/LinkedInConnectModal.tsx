@@ -24,6 +24,7 @@ import {
   startConnectorSession,
 } from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import { applyLinkedInImportProgress } from './linkedinImportProgress';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createLinkedInSessionImportFlow,
@@ -230,6 +231,7 @@ export function LinkedInConnectModal({
     sessionFlow.current = createLinkedInSessionImportFlow({
       inspectCurrentPage: () => inspectSessionPage('linkedin'),
       readSessionPage: (url) => readSessionPage('linkedin', url),
+      onDetailProgress: applyLinkedInImportProgress,
       onAuthenticated: () => {
         // The sign-in window stays on screen while the profile is read: a
         // hidden WKWebView stops running the script that read depends on, so
