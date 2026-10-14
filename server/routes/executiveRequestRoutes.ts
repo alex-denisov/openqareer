@@ -13,7 +13,13 @@ import type {
 } from '../data/candidateStore';
 import { notifyOwner } from '../notifications/ownerTelegram';
 import type { RouteDeps } from './deps';
-import { authenticateCandidate, csrfError, hasSafeMutationOrigin, sendError, withDeps } from './helpers';
+import {
+  authenticateCandidate,
+  csrfError,
+  hasSafeMutationOrigin,
+  sendError,
+  withDeps,
+} from './helpers';
 import { requireAdmin, requireAdminMutation } from './adminAuth';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
@@ -21,6 +27,7 @@ type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) =
 const executiveRequestSchema = z.object({
   task: z.string().trim().min(10).max(1_000),
   timeline: z.string().trim().min(2).max(160),
+  profileSharingConsent: z.literal(true),
 });
 const idempotencyKeySchema = z.string().uuid();
 const pageQuerySchema = z.object({
@@ -96,10 +103,15 @@ async function submitExecutiveRequest(
     );
     setCreatedRequestHeaders(reply, result.request.id, result.replayed);
     request.log.info(
-      { executiveRequestId: result.request.id, status: result.request.status, created: result.created },
+      {
+        executiveRequestId: result.request.id,
+        status: result.request.status,
+        created: result.created,
+      },
       'executive_request_received',
     );
-    if (result.created) notifyExecutiveRequestTeam(deps, request, result.request.id, result.request.status);
+    if (result.created)
+      notifyExecutiveRequestTeam(deps, request, result.request.id, result.request.status);
     reply.code(result.created ? 201 : 200);
     return { data: result.request, meta: { requestId: request.id } };
   } catch (reason) {
@@ -107,11 +119,7 @@ async function submitExecutiveRequest(
   }
 }
 
-function setCreatedRequestHeaders(
-  reply: FastifyReply,
-  requestId: string,
-  replayed: boolean,
-): void {
+function setCreatedRequestHeaders(reply: FastifyReply, requestId: string, replayed: boolean): void {
   reply.header('location', '/api/v1/candidate/executive-requests/' + requestId);
   if (replayed) reply.header('idempotency-replayed', 'true');
 }
@@ -126,7 +134,10 @@ function notifyExecutiveRequestTeam(
     deps.config,
     ['Новая заявка Executive', 'ID заявки: ' + requestId, 'Статус: ' + status].join('\n'),
   ).then((outcome) => {
-    request.log.info({ executiveRequestId: requestId, outcome }, 'executive_request_team_notification');
+    request.log.info(
+      { executiveRequestId: requestId, outcome },
+      'executive_request_team_notification',
+    );
   });
 }
 
@@ -220,7 +231,14 @@ const handleGetExecutiveRequest: Handler = async (deps, request, reply) => {
   if (!candidate) return undefined;
   const { requestId } = request.params as { requestId: string };
   if (!z.string().uuid().safeParse(requestId).success) {
-    return sendError(reply, request, 404, 'executive_request_not_found', 'Заявка не найдена.', false);
+    return sendError(
+      reply,
+      request,
+      404,
+      'executive_request_not_found',
+      'Заявка не найдена.',
+      false,
+    );
   }
   if (!deps.candidateStore.getExecutiveRequest) {
     return sendError(
@@ -234,7 +252,14 @@ const handleGetExecutiveRequest: Handler = async (deps, request, reply) => {
   }
   const executiveRequest = deps.candidateStore.getExecutiveRequest(candidate.id, requestId);
   if (!executiveRequest) {
-    return sendError(reply, request, 404, 'executive_request_not_found', 'Заявка не найдена.', false);
+    return sendError(
+      reply,
+      request,
+      404,
+      'executive_request_not_found',
+      'Заявка не найдена.',
+      false,
+    );
   }
   return { data: executiveRequest, meta: { requestId: request.id } };
 };
@@ -293,14 +318,7 @@ function parseExecutiveRequestStatusChange(
 ): ExecutiveRequestStatusChange | null {
   const { requestId } = request.params as { requestId: string };
   if (!z.string().uuid().safeParse(requestId).success) {
-    sendError(
-      reply,
-      request,
-      400,
-      'executive_request_id_invalid',
-      'Заявка не найдена.',
-      false,
-    );
+    sendError(reply, request, 400, 'executive_request_id_invalid', 'Заявка не найдена.', false);
     return null;
   }
   const parsed = statusSchema.safeParse(request.body ?? {});
@@ -350,7 +368,14 @@ async function applyExecutiveRequestStatusChange(
       deps.config.executiveRequestCapacity ?? 0,
     );
     if (!updated) {
-      return sendError(reply, request, 404, 'executive_request_not_found', 'Заявка не найдена.', false);
+      return sendError(
+        reply,
+        request,
+        404,
+        'executive_request_not_found',
+        'Заявка не найдена.',
+        false,
+      );
     }
     request.log.info(
       { executiveRequestId: change.requestId, actorUserId, status: updated.status },
@@ -391,10 +416,7 @@ function sendExecutiveStatusError(
 }
 
 export function registerExecutiveRequestRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get(
-    '/api/v1/candidate/executive-requests',
-    withDeps(deps, handleListExecutiveRequests),
-  );
+  app.get('/api/v1/candidate/executive-requests', withDeps(deps, handleListExecutiveRequests));
   app.get(
     '/api/v1/candidate/executive-requests/:requestId',
     withDeps(deps, handleGetExecutiveRequest),
@@ -407,10 +429,7 @@ export function registerExecutiveRequestRoutes(app: FastifyInstance, deps: Route
 }
 
 export function registerAdminExecutiveRequestRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get(
-    '/api/v1/admin/executive-requests',
-    withDeps(deps, handleListExecutiveRequestQueue),
-  );
+  app.get('/api/v1/admin/executive-requests', withDeps(deps, handleListExecutiveRequestQueue));
   app.patch(
     '/api/v1/admin/executive-requests/:requestId',
     withDeps(deps, handleSetExecutiveRequestStatus),

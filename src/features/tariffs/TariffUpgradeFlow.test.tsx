@@ -41,6 +41,7 @@ const pendingCheckout: upgradeApi.CandidateCheckout = {
 };
 
 const paidCheckout: upgradeApi.CandidateCheckout = { ...pendingCheckout, status: 'paid' };
+const renewalCheckout: upgradeApi.CandidateCheckout = { ...pendingCheckout, autoRenew: true };
 
 describe('TariffUpgradeFlow', () => {
   let host: HTMLDivElement;
@@ -135,12 +136,48 @@ describe('TariffUpgradeFlow', () => {
     expect(host.textContent).toContain('Перейти на Pro');
   });
 
+  it('opens payment-method recovery at checkout and preserves recurring consent', async () => {
+    vi.spyOn(coachApi, 'getSession').mockResolvedValue({
+      username: 'qa.candidate',
+      email: 'verified@example.test',
+      displayName: 'Тестовый кандидат',
+      role: 'candidate',
+      isTest: true,
+      candidateId: 'candidate-b470',
+      emailVerified: true,
+    });
+    vi.spyOn(upgradeApi, 'createCandidateCheckout').mockResolvedValue(renewalCheckout);
+    await mount(
+      { kind: 'payment-method', planId: 'basic' },
+      {
+        ...basicSummary,
+        subscription: { ...basicSummary.subscription!, status: 'past_due' },
+      },
+    );
+
+    await flush();
+    expect(host.textContent).toContain('Обновить способ оплаты');
+    expect(host.querySelector<HTMLInputElement>('input[name="auto-renew"]')?.checked).toBe(true);
+    clickButton(host, 'Перейти к оплате, 3 990 ₽');
+    await flush();
+
+    expect(upgradeApi.createCandidateCheckout).toHaveBeenCalledWith({
+      planId: 'basic',
+      autoRenew: true,
+      idempotencyKey: expect.any(String),
+    });
+    expect(host.querySelector('a[href^="https://auth.robokassa.ru/"]')).not.toBeNull();
+  });
+
   it('submits an Executive request only after the candidate opts in and reflects the server waitlist state', async () => {
     const request = vi.spyOn(upgradeApi, 'createExecutiveSearchRequest').mockResolvedValue({
       id: 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
       task: 'Найти CTO в финтех-компанию',
       timeline: 'До конца года',
       status: 'waitlisted',
+      profileSharingConsent: true,
+      profileSharingConsentAt: '2026-10-11T12:00:00.000Z',
+      profileSharingConsentVersion: 'executive-profile-sharing-v1',
       createdAt: '2026-10-11T12:00:00.000Z',
       updatedAt: '2026-10-11T12:00:00.000Z',
     });
@@ -164,6 +201,7 @@ describe('TariffUpgradeFlow', () => {
     expect(request).toHaveBeenCalledWith({
       task: 'Найти CTO в финтех-компанию',
       timeline: 'До конца года',
+      profileSharingConsent: true,
       idempotencyKey: expect.any(String),
     });
     expect(host.textContent).toContain('Вы в списке ожидания');

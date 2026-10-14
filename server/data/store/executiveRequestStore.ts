@@ -21,6 +21,15 @@ interface ExecutiveRequestRow {
   updated_at: string;
 }
 
+interface ExecutiveRequestPayload {
+  readonly task: string;
+  readonly timeline: string;
+  readonly profileSharingConsentAt?: string;
+  readonly profileSharingConsentVersion?: string;
+}
+
+const PROFILE_SHARING_CONSENT_VERSION = 'executive-profile-sharing-v1';
+
 export class ExecutiveRequestIdempotencyConflictError extends Error {
   constructor() {
     super('executive_request_idempotency_conflict');
@@ -97,12 +106,14 @@ function createOrReuseExecutiveRequest(
     if (existing.payload_digest !== payloadDigest) {
       throw new ExecutiveRequestIdempotencyConflictError();
     }
-    return { request: toStoredRequest(existing, sealedText), created: false, replayed: true };
+    const consented = recordProfileSharingConsent(database, sealedText, candidateId, existing);
+    return { request: toStoredRequest(consented, sealedText), created: false, replayed: true };
   }
 
   const duplicate = findActiveDuplicate(database, candidateId, payloadDigest);
   if (duplicate) {
-    return { request: toStoredRequest(duplicate, sealedText), created: false, replayed: false };
+    const consented = recordProfileSharingConsent(database, sealedText, candidateId, duplicate);
+    return { request: toStoredRequest(consented, sealedText), created: false, replayed: false };
   }
   assertCandidateRequestLimit(database, candidateId);
   const status = activeRequestCount(database) < capacity ? 'submitted' : 'waitlisted';
@@ -185,7 +196,12 @@ function persistExecutiveRequest(
   const now = new Date().toISOString();
   const id = randomUUID();
   const requestCipher = sealedText.seal(
-    JSON.stringify({ task: input.task, timeline: input.timeline }),
+    JSON.stringify({
+      task: input.task,
+      timeline: input.timeline,
+      profileSharingConsentAt: now,
+      profileSharingConsentVersion: PROFILE_SHARING_CONSENT_VERSION,
+    }),
     associatedData(candidateId, id),
   );
   database
@@ -196,7 +212,17 @@ function persistExecutiveRequest(
     )
     .run(id, candidateId, idempotencyDigest, payloadDigest, requestCipher, status, now, now);
   return {
-    request: { id, task: input.task, timeline: input.timeline, status, createdAt: now, updatedAt: now },
+    request: {
+      id,
+      task: input.task,
+      timeline: input.timeline,
+      status,
+      profileSharingConsent: true,
+      profileSharingConsentAt: now,
+      profileSharingConsentVersion: PROFILE_SHARING_CONSENT_VERSION,
+      createdAt: now,
+      updatedAt: now,
+    },
     created: true,
     replayed: false,
   };
@@ -374,15 +400,42 @@ function decodeCursor(value: string): { readonly createdAt: string; readonly id:
 function toStoredRequest(row: ExecutiveRequestRow, sealedText: SealedText): StoredExecutiveRequest {
   const input = JSON.parse(
     sealedText.open(row.request_cipher, associatedData(row.candidate_id, row.id)),
-  ) as { task: string; timeline: string };
+  ) as ExecutiveRequestPayload;
   return {
     id: row.id,
     task: input.task,
     timeline: input.timeline,
     status: row.status,
+    profileSharingConsent: Boolean(input.profileSharingConsentAt),
+    profileSharingConsentAt: input.profileSharingConsentAt ?? null,
+    profileSharingConsentVersion: input.profileSharingConsentVersion ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+function recordProfileSharingConsent(
+  database: DatabaseSync,
+  sealedText: SealedText,
+  candidateId: string,
+  row: ExecutiveRequestRow,
+): ExecutiveRequestRow {
+  const associated = associatedData(candidateId, row.id);
+  const input = JSON.parse(sealedText.open(row.request_cipher, associated)) as ExecutiveRequestPayload;
+  if (input.profileSharingConsentAt) return row;
+  const now = new Date().toISOString();
+  const requestCipher = sealedText.seal(
+    JSON.stringify({
+      ...input,
+      profileSharingConsentAt: now,
+      profileSharingConsentVersion: PROFILE_SHARING_CONSENT_VERSION,
+    }),
+    associated,
+  );
+  database.prepare(
+    'UPDATE executive_requests SET request_cipher = ?, updated_at = ? WHERE id = ?',
+  ).run(requestCipher, now, row.id);
+  return { ...row, request_cipher: requestCipher, updated_at: now };
 }
 
 function associatedData(candidateId: string, requestId: string): string {

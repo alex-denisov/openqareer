@@ -389,6 +389,7 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly companyCount?: number;
   readonly billing?: {
     readonly initialPlan?: FixtureCurrentPlan;
+    readonly subscriptionStatus?: 'active' | 'past_due' | 'canceled' | 'expired';
     readonly checkoutStatuses?: readonly FixtureCheckoutStatus[];
     readonly executiveStatus?: FixtureExecutiveStatus;
   };
@@ -1276,6 +1277,9 @@ export async function mockSignedInCabinet(
     task: '',
     timeline: '',
     status: options.billing?.executiveStatus ?? 'waitlisted',
+    profileSharingConsent: true,
+    profileSharingConsentAt: '2026-10-11T12:00:00.000Z',
+    profileSharingConsentVersion: 'executive-profile-sharing-v1',
     createdAt: '2026-10-11T12:00:00.000Z',
     updatedAt: '2026-10-11T12:00:00.000Z',
   };
@@ -1520,7 +1524,7 @@ export async function mockSignedInCabinet(
         currentPlan === 'free'
           ? null
           : {
-              status: 'active',
+              status: options.billing?.subscriptionStatus ?? 'active',
               currentPeriodEndsAt: billingPeriodEnd,
               nextChargeAt: billingAutoRenew ? billingPeriodEnd : null,
               autoRenew: billingAutoRenew,
@@ -1644,7 +1648,17 @@ export async function mockSignedInCabinet(
       });
     }
     if (path === '/api/v1/candidate/executive-requests' && route.request().method() === 'POST') {
-      const body = route.request().postDataJSON() as { task?: string; timeline?: string };
+      const body = route.request().postDataJSON() as {
+        task?: string;
+        timeline?: string;
+        profileSharingConsent?: boolean;
+      };
+      if (body.profileSharingConsent !== true) {
+        return route.fulfill({
+          status: 400,
+          json: { error: { code: 'executive_request_invalid' } },
+        });
+      }
       const replayed = storedExecutiveRequest !== null;
       storedExecutiveRequest = {
         ...executiveRequest,

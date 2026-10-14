@@ -49,12 +49,15 @@ describe('tariffUpgradeApi', () => {
     expect(fetch).toHaveBeenCalledWith('/api/v1/candidate/billing/checkouts/731');
   });
 
-  it('submits the Executive request with task, timeline and an idempotency key', async () => {
+  it('submits the Executive request with the recorded profile-sharing consent', async () => {
     const submitted = {
       id: 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
       task: 'Найти CTO в финтех-компанию',
       timeline: 'До конца года',
       status: 'waitlisted' as const,
+      profileSharingConsent: true,
+      profileSharingConsentAt: '2026-10-11T12:00:00.000Z',
+      profileSharingConsentVersion: 'executive-profile-sharing-v1',
       createdAt: '2026-10-11T12:00:00.000Z',
       updatedAt: '2026-10-11T12:00:00.000Z',
     };
@@ -64,6 +67,7 @@ describe('tariffUpgradeApi', () => {
       createExecutiveSearchRequest({
         task: submitted.task,
         timeline: submitted.timeline,
+        profileSharingConsent: true,
         idempotencyKey: 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
       }),
     ).resolves.toEqual(submitted);
@@ -74,7 +78,11 @@ describe('tariffUpgradeApi', () => {
         'Content-Type': 'application/json',
         'Idempotency-Key': 'b070e908-b525-4fb9-9aa4-3b289d5d190b',
       },
-      body: JSON.stringify({ task: submitted.task, timeline: submitted.timeline }),
+      body: JSON.stringify({
+        task: submitted.task,
+        timeline: submitted.timeline,
+        profileSharingConsent: true,
+      }),
     });
   });
 });

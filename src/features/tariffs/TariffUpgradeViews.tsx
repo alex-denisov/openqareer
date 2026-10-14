@@ -521,12 +521,14 @@ function SuccessView({
 }
 
 function FailedView({ state }: { readonly state: UpgradeDialogState }) {
+  const retryLabel =
+    state.context.kind === 'payment-method' ? 'Обновить способ оплаты' : 'Повторить оплату';
   return (
     <div className="career-upgrade-state is-error" data-testid="tariff-payment-failed" role="alert">
       <p>Оплата не прошла. Тариф не изменён.</p>
       <div className="career-upgrade-actions">
         <button className="career-btn is-primary" type="button" onClick={state.onRetryCheckout}>
-          Повторить оплату
+          {retryLabel}
         </button>
         <button className="career-btn is-secondary" type="button" onClick={state.onClose}>
           К тарифам
@@ -723,6 +725,7 @@ export function titleForUpgradeFlow(state: UpgradeDialogState): string {
       (findPlan(state.summary, state.checkout?.planId ?? null)?.name ?? 'Тариф') + ' подключён'
     );
   if (state.view === 'failed') return 'Оплата не прошла';
+  if (state.context.kind === 'payment-method') return 'Обновить способ оплаты';
   if (state.view === 'checkout' || state.view === 'creating')
     return 'Оплата тарифа ' + (findPlan(state.summary, state.selectedPlan)?.name ?? '');
   if (state.view === 'error') return 'Оплата недоступна';
@@ -752,9 +755,11 @@ function planOptions(
       ? ['basic', 'pro']
       : context.kind === 'plan'
         ? [context.planId]
-        : context.kind === 'feature'
-          ? [context.feature === 'applications' ? 'pro' : 'basic']
-          : [];
+        : context.kind === 'payment-method'
+          ? [context.planId]
+          : context.kind === 'feature'
+            ? [context.feature === 'applications' ? 'pro' : 'basic']
+            : [];
   return plans.filter((plan) => !isCurrentOrHigher(current, plan));
 }
 

@@ -20,6 +20,8 @@ export interface CareerTariffsViewProps {
   readonly billingSummary?: CandidateBillingSummary | null;
   readonly onSummaryChanged?: (summary: CandidateBillingSummary) => void;
   readonly billingPanel?: ReactNode;
+  readonly externalUpgradeContext?: TariffUpgradeContext | null;
+  readonly onCloseExternalUpgrade?: () => void;
   readonly onSelectTier?: (id: TariffTierId) => void;
   readonly onRequestTier?: (id: TariffTierId) => void;
 }
@@ -31,6 +33,8 @@ export function CareerTariffsView({
   billingSummary,
   onSummaryChanged,
   billingPanel,
+  externalUpgradeContext,
+  onCloseExternalUpgrade,
   onSelectTier,
   onRequestTier,
 }: CareerTariffsViewProps) {
@@ -50,6 +54,8 @@ export function CareerTariffsView({
       subscription={subscription}
       billingSummary={billingSummary}
       billingPanel={billingPanel}
+      externalUpgradeContext={externalUpgradeContext}
+      onCloseExternalUpgrade={onCloseExternalUpgrade}
       compareOpen={compareOpen}
       mobileCompareRevision={mobileCompareRevision}
       upgradeContext={upgrade.context}
@@ -87,6 +93,8 @@ interface TariffsViewFrameProps {
   readonly subscription?: TariffSubscriptionInfo;
   readonly billingSummary?: CandidateBillingSummary | null;
   readonly billingPanel?: ReactNode;
+  readonly externalUpgradeContext?: TariffUpgradeContext | null;
+  readonly onCloseExternalUpgrade?: () => void;
   readonly compareOpen: boolean;
   readonly mobileCompareRevision: number;
   readonly upgradeContext: TariffUpgradeContext | null;
@@ -103,7 +111,9 @@ function TariffsViewFrame(props: TariffsViewFrameProps) {
     <section className="career-tariffs" aria-labelledby="tariffs-page-title">
       <TariffsDesktopView {...props} />
       <TariffsMobileView {...props} />
-      {props.upgradeContext ? <TariffUpgradeHost {...props} /> : null}
+      {props.upgradeContext || props.externalUpgradeContext ? (
+        <TariffUpgradeHost {...props} />
+      ) : null}
     </section>
   );
 }
@@ -149,12 +159,17 @@ function TariffsMobileView(props: TariffsViewFrameProps) {
 }
 
 function TariffUpgradeHost(props: TariffsViewFrameProps) {
+  const context = props.externalUpgradeContext ?? props.upgradeContext;
   return (
     <PaywallModal
       isOpen
-      context={props.upgradeContext!}
+      context={context!}
       summary={props.billingSummary}
-      onClose={props.onCloseUpgrade}
+      onClose={
+        props.externalUpgradeContext
+          ? (props.onCloseExternalUpgrade ?? props.onCloseUpgrade)
+          : props.onCloseUpgrade
+      }
       onNavigate={props.onNavigateToCompare}
       onSummaryChanged={props.onSummaryChanged}
     />

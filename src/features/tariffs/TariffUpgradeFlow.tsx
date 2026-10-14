@@ -23,6 +23,7 @@ if (typeof document !== 'undefined') {
 export type TariffUpgradeContext =
   | { readonly kind: 'gate' }
   | { readonly kind: 'plan'; readonly planId: PaidTariffPlanId }
+  | { readonly kind: 'payment-method'; readonly planId: PaidTariffPlanId }
   | {
       readonly kind: 'feature';
       readonly feature: 'resume' | 'interview' | 'applications';
@@ -112,7 +113,7 @@ function useFlowScaffold(context: TariffUpgradeContext): FlowScaffold {
   const [task, setTask] = useState('');
   const [timeline, setTimeline] = useState('');
   const [profileConsent, setProfileConsent] = useState(false);
-  const [autoRenew, setAutoRenew] = useState(false);
+  const [autoRenew, setAutoRenew] = useState(context.kind === 'payment-method');
   const [checkoutKey, setCheckoutKey] = useState<string | null>(null);
   const [requestKey, setRequestKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -336,7 +337,7 @@ async function confirmPaidCheckout(
 ): Promise<void> {
   try {
     const summary = await state.billing.reload();
-    if (summary.currentPlan === checkout.planId && summary.subscription) {
+    if (summary.currentPlan === checkout.planId && summary.subscription?.status === 'active') {
       state.setMessage(null);
       state.setView('success');
       return;
@@ -370,6 +371,7 @@ async function submitExecutiveRequest(
     const request = await createExecutiveSearchRequest({
       task: state.task.trim(),
       timeline: state.timeline.trim(),
+      profileSharingConsent: true,
       idempotencyKey: key,
     });
     state.setExecutiveRequest(request);
@@ -405,11 +407,12 @@ function useAccountEmail(view: FlowView): AccountEmailState {
 }
 
 function initialView(context: TariffUpgradeContext): FlowView {
-  return context.kind === 'executive' ? 'executive-form' : 'offer';
+  if (context.kind === 'executive') return 'executive-form';
+  return context.kind === 'payment-method' ? 'checkout' : 'offer';
 }
 
 function planForContext(context: TariffUpgradeContext): PaidTariffPlanId | null {
-  if (context.kind === 'plan') return context.planId;
+  if (context.kind === 'plan' || context.kind === 'payment-method') return context.planId;
   if (context.kind === 'feature') return context.feature === 'applications' ? 'pro' : 'basic';
   return null;
 }

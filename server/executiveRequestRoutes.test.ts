@@ -45,7 +45,11 @@ async function createApp(
   const auth = new AuthService({ databasePath });
   await auth.seedAccounts(
     [
-      { username: 'candidate.executive', password: 'candidate-executive-password', role: 'candidate' },
+      {
+        username: 'candidate.executive',
+        password: 'candidate-executive-password',
+        role: 'candidate',
+      },
       { username: 'candidate.second', password: 'candidate-second-password', role: 'candidate' },
       { username: 'admin.executive', password: 'admin-executive-password', role: 'admin' },
     ],
@@ -111,6 +115,7 @@ describe('Executive request API (B471)', () => {
     const payload = {
       task: 'Найти позицию директора по продукту в технологической компании',
       timeline: 'В течение трёх месяцев',
+      profileSharingConsent: true,
     };
     const anonymous = await app.inject({
       method: 'POST',
@@ -130,6 +135,12 @@ describe('Executive request API (B471)', () => {
       url: '/api/v1/candidate/executive-requests',
       headers,
       payload,
+    });
+    const missingConsent = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/executive-requests',
+      headers: { ...headers, 'idempotency-key': 'ed3a7bb2-40a5-4f89-8b8c-32fb61ee7aab' },
+      payload: { ...payload, profileSharingConsent: false },
     });
     const invalidTask = await app.inject({
       method: 'POST',
@@ -151,6 +162,7 @@ describe('Executive request API (B471)', () => {
       payload,
     });
     expect(missingKey.statusCode).toBe(400);
+    expect(missingConsent.statusCode).toBe(400);
     expect(invalidTask.statusCode).toBe(400);
     expect(foreignOrigin.statusCode).toBe(403);
   });
@@ -173,6 +185,7 @@ describe('Executive request API (B471)', () => {
       payload: {
         task: 'Найти позицию операционного директора в технологической компании',
         timeline: 'В течение трёх месяцев',
+        profileSharingConsent: true,
       },
     });
 
@@ -181,12 +194,17 @@ describe('Executive request API (B471)', () => {
       task: 'Найти позицию операционного директора в технологической компании',
       timeline: 'В течение трёх месяцев',
       status: 'waitlisted',
+      profileSharingConsent: true,
     });
+    expect(response.json().data.profileSharingConsentAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
     expect(response.headers.location).toMatch(/^\/api\/v1\/candidate\/executive-requests\//u);
     const requestPath = String(response.headers.location);
     const ownRead = await app.inject({ method: 'GET', url: requestPath, headers: { cookie } });
     expect(ownRead.statusCode).toBe(200);
     expect(ownRead.json().data.id).toBe(response.json().data.id);
+    expect(ownRead.json().data.profileSharingConsentAt).toBe(
+      response.json().data.profileSharingConsentAt,
+    );
     const exported = await app.inject({
       method: 'GET',
       url: '/api/v1/candidate/export',
@@ -221,6 +239,7 @@ describe('Executive request API (B471)', () => {
     const payload = {
       task: 'Найти позицию операционного директора в технологической компании',
       timeline: 'В течение трёх месяцев',
+      profileSharingConsent: true,
     };
     const first = await app.inject({
       method: 'POST',
@@ -281,7 +300,7 @@ describe('Executive request API (B471)', () => {
           cookie,
           'idempotency-key': key,
         },
-        payload: { task, timeline: 'В течение трёх месяцев' },
+        payload: { task, timeline: 'В течение трёх месяцев', profileSharingConsent: true },
       });
 
     const first = await submit(
@@ -316,6 +335,7 @@ describe('Executive request API (B471)', () => {
         payload: {
           task: 'Найти позицию руководителя направления номер ' + suffix,
           timeline: 'В течение трёх месяцев',
+          profileSharingConsent: true,
         },
       });
     await submit('c5e02985-947b-42c9-9bda-5992003fe00b', 1);
@@ -350,6 +370,7 @@ describe('Executive request API (B471)', () => {
       payload: {
         task: 'Найти позицию коммерческого директора в технологической компании',
         timeline: 'В течение трёх месяцев',
+        profileSharingConsent: true,
       },
     });
     const requestId = created.json().data.id as string;
@@ -368,6 +389,7 @@ describe('Executive request API (B471)', () => {
       payload: {
         task: 'Найти позицию директора по развитию в технологической компании',
         timeline: 'В течение шести месяцев',
+        profileSharingConsent: true,
       },
     });
     const waitlistedId = waitlisted.json().data.id as string;
@@ -394,7 +416,11 @@ describe('Executive request API (B471)', () => {
     expect(queue.json().data.items).toHaveLength(2);
     expect(queue.json().data.items).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: requestId, candidateId: expect.any(String), status: 'submitted' }),
+        expect.objectContaining({
+          id: requestId,
+          candidateId: expect.any(String),
+          status: 'submitted',
+        }),
         expect.objectContaining({ id: waitlistedId, status: 'waitlisted' }),
       ]),
     );
@@ -455,6 +481,7 @@ describe('Executive request API (B471)', () => {
         payload: {
           task: 'Найти позицию руководителя направления ' + suffix,
           timeline: 'В течение трёх месяцев',
+          profileSharingConsent: true,
         },
       });
     await submit(firstCookie, '8f8cd63c-d4f5-47c4-8cd4-984c538ce6fb', 'продукта');
@@ -499,6 +526,7 @@ describe('Executive request API (B471)', () => {
     const payload = {
       task: 'Найти позицию директора по стратегии в технологической компании',
       timeline: 'В течение трёх месяцев',
+      profileSharingConsent: true,
     };
     const created = await app.inject({
       method: 'POST',
