@@ -744,8 +744,7 @@ test.describe('B251 today screen', () => {
     await page.setViewportSize({ width: 1176, height: 900 });
     await stubSession(page, customSnapshot);
     await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
+    await openApp(page);
 
     const queueItem = page
       .locator('.career-today-item:not([data-testid="consultant-queue-card"])')
