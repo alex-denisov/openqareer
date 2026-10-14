@@ -2,8 +2,10 @@
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import * as coachApi from '../coach/coachApi';
 import * as billingApi from './candidateBillingApi';
 import { TariffsScreen } from './TariffsScreen';
+import * as upgradeApi from '../tariffs/tariffUpgradeApi';
 
 vi.mock('./planRequestApi', () => ({
   usePlanRequests: () => ({ states: {}, dates: {}, send: vi.fn() }),
@@ -28,6 +30,11 @@ const freeSummary: billingApi.CandidateBillingSummary = {
   plans: [
     { id: 'basic', name: 'Basic', amountKopecks: 399_000, currency: 'RUB', interval: 'month' },
   ],
+};
+
+const pastDueSummary: billingApi.CandidateBillingSummary = {
+  ...basicSummary,
+  subscription: { ...basicSummary.subscription!, status: 'past_due', autoRenew: true },
 };
 
 const emptyReceipts = { receipts: [], nextCursor: null };
@@ -115,6 +122,41 @@ describe('TariffsScreen billing management', () => {
     expect(desktop.textContent).toContain('Автопродление отключено');
     expect(desktop.textContent).toContain('Доступ действует до 8 ноября');
     expect(desktop.textContent).not.toContain('Следующее списание');
+  });
+
+  it('opens payment-method recovery for a past-due subscription with renewal enabled', async () => {
+    vi.spyOn(coachApi, 'getSession').mockResolvedValue({
+      username: 'qa.candidate',
+      email: 'verified@example.test',
+      displayName: 'Тестовый кандидат',
+      role: 'candidate',
+      isTest: true,
+      candidateId: 'candidate-aud-17',
+      emailVerified: true,
+    });
+    vi.spyOn(upgradeApi, 'createCandidateCheckout').mockResolvedValue({
+      invoiceId: 731,
+      planId: 'basic',
+      amountKopecks: 399_000,
+      currency: 'RUB',
+      status: 'pending',
+      autoRenew: true,
+      paymentUrl: 'https://auth.robokassa.ru/Merchant/Index?InvoiceID=731',
+      createdAt: '2026-10-11T12:00:00.000Z',
+    });
+    vi.spyOn(billingApi, 'getCandidateBillingSummary').mockResolvedValue(pastDueSummary);
+    vi.spyOn(billingApi, 'getCandidateBillingReceipts').mockResolvedValue(emptyReceipts);
+    await mount();
+    const desktop = container.querySelector('.career-tariffs-desktop') as HTMLElement;
+    const update = [...desktop.querySelectorAll('button')].find((item) =>
+      item.textContent?.includes('Обновить способ оплаты'),
+    ) as HTMLButtonElement;
+
+    await act(async () => update.click());
+
+    const dialog = container.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Обновить способ оплаты');
+    expect(dialog.querySelector<HTMLInputElement>('input[name="auto-renew"]')?.checked).toBe(true);
   });
 
   it('does not invent or render unsafe receipt URLs', async () => {
