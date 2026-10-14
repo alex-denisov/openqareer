@@ -191,6 +191,39 @@ describe('B448 connection circles', () => {
     });
   });
 
+  it('uses a manually added contact at the vacancy company as a direct path without LinkedIn import', () => {
+    const result = buildConnectionCircles(
+      connectionInput({
+        contacts: [
+          {
+            id: 'manual-colleague',
+            fullName: 'Елена Мельникова',
+            roleTitle: 'Продакт-менеджер',
+            companyName: 'Вектор Банк',
+            linkedinUrl: null,
+            source: 'manual',
+            relationship: 'Работали вместе в одной команде',
+            strength: 'unknown',
+            workplaces: [],
+            knowsRecruiterIds: [],
+          },
+        ],
+        linkedinContactsImported: false,
+      }),
+    );
+    const direct = result.circles.find((circle) => circle.circle === 1)!;
+
+    expect(direct).toMatchObject({ state: 'available' });
+    expect(direct.paths).toMatchObject([
+      {
+        recipient: { id: 'manual-colleague', fullName: 'Елена Мельникова' },
+        strength: 'unknown',
+        nextStep: 'write_known_contact',
+        evidence: ['Работали вместе в одной команде'],
+      },
+    ]);
+  });
+
   it('retains a weak path as weak and uses the prepare-only next step', () => {
     const result = buildConnectionCircles(
       connectionInput({

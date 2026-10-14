@@ -474,6 +474,71 @@ test.describe('B232 readability gate', () => {
         },
       }),
     );
+    await page.route('**/api/v1/candidate/vacancies/*/connection-circles', async (route) =>
+      route.fulfill({
+        json: {
+          data: {
+            vacancyId: 'cluster-0',
+            companyKey: 'fincloud',
+            companyName: 'FinCloud',
+            vacancyTitle: 'Head of Product, Payments',
+            circles: [
+              {
+                circle: 1,
+                state: 'available',
+                message: 'Есть знакомый в компании.',
+                paths: [
+                  {
+                    id: 'direct-maria',
+                    circle: 1,
+                    recipient: {
+                      id: 'person-maria',
+                      fullName: 'Мария Крылова',
+                      roleTitle: 'Директор по продукту',
+                      companyName: 'FinCloud',
+                    },
+                    path: [],
+                    evidence: ['Связь подтверждена в профиле кандидата'],
+                    strength: 'direct',
+                    source: 'manual',
+                    nextStep: 'write_known_contact',
+                  },
+                ],
+              },
+              {
+                circle: 2,
+                state: 'unknown',
+                message: 'Можно попросить представить через знакомого.',
+                paths: [],
+              },
+              {
+                circle: 3,
+                state: 'available',
+                message: 'Подготовьте холодный отклик по вакансии.',
+                paths: [
+                  {
+                    id: 'cold-team',
+                    circle: 3,
+                    recipient: {
+                      id: 'recruiting-team',
+                      fullName: 'Команда найма',
+                      roleTitle: null,
+                      companyName: 'FinCloud',
+                    },
+                    path: [],
+                    evidence: [],
+                    strength: 'unknown',
+                    source: 'cold',
+                    nextStep: 'cold_application',
+                  },
+                ],
+              },
+            ],
+            linkedinImport: { state: 'unknown', importedAt: null, importedCount: null },
+          },
+        },
+      }),
+    );
     await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
       await route.fulfill({
         json: {
@@ -481,6 +546,7 @@ test.describe('B232 readability gate', () => {
             vacancyId: 'test-vacancy',
             emailPitch: { subject: 'Отклик', body: 'Текст отклика.' },
             linkedInNote: 'Здравствуйте! Рад знакомству.',
+            contactMessage: 'Текст отклика.',
             atsCoverLetter: 'Cover letter',
             usedEvidenceIds: ['fact-1'],
             language: 'ru',

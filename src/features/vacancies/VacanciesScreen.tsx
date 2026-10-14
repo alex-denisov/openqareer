@@ -718,7 +718,6 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
           vacancy={letterVacancy}
           onBack={() => setLetterVacancy(null)}
           onOpenResponses={input.onOpenResponses}
-          onOpenNetworking={input.onOpenNetworking ?? screenState.setOutreachVacancy}
           onOpenExpert={input.onOpenExpert}
         />
         <VacancyOutreachDialog screenState={screenState} />
