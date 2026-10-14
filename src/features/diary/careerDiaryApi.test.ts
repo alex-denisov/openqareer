@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CareerDiaryAchievementInput, CareerDiaryGoalInput, CareerDiaryMeasurementInput, CareerDiaryWeeklyReviewInput } from '../../../shared/careerDiary';
+import type {
+  CareerDiaryAchievementInput,
+  CareerDiaryGoalInput,
+  CareerDiaryMeasurementInput,
+  CareerDiaryWeeklyReviewInput,
+} from '../../../shared/careerDiary';
 import { apiFetch, readData } from '../coach/apiClient';
 import {
   createCareerDiaryAchievement,
@@ -8,6 +13,7 @@ import {
   listCareerDiaryGoals,
   recordCareerDiaryMeasurement,
   setCareerDiaryAchievementStatus,
+  splitCareerDiaryGoal,
   updateCareerDiaryGoal,
   updateCareerDiaryWorkplace,
   upsertCareerDiaryReview,
@@ -156,6 +162,30 @@ describe('career diary API client', () => {
     expect(apiFetch).toHaveBeenCalledWith(
       '/api/v1/candidate/career-diary/goals/goal-1',
       expect.objectContaining({ method: 'PATCH', body: JSON.stringify(patch) }),
+    );
+  });
+
+  it('splits a goal through its candidate-scoped endpoint', async () => {
+    const children: CareerDiaryGoalInput[] = [
+      {
+        ...goalInput,
+        title: 'Снизить число инцидентов до 6',
+        dueDate: '2026-12-15',
+        targetValue: 6,
+      },
+      {
+        ...goalInput,
+        title: 'Снизить число инцидентов до 4',
+        startDate: '2026-12-16',
+        targetValue: 4,
+      },
+    ];
+
+    await splitCareerDiaryGoal('goal-1', children);
+
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/career-diary/goals/goal-1/split',
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ children }) }),
     );
   });
 });

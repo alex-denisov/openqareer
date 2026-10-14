@@ -5,7 +5,7 @@ import { mockSignedInCabinet, type MockCareerDiaryFixture } from './fixtures/moc
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 
 const AS_OF = '2026-12-06';
-const EVIDENCE = e2eEvidenceDirectory('B459');
+const EVIDENCE = e2eEvidenceDirectory('AUD-10');
 
 function workplace(startDate = '2026-10-18', status: 'active' | 'archived' = 'active') {
   return {

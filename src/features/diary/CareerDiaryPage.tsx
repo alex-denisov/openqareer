@@ -337,6 +337,7 @@ function DiaryTabPanel(props: ReturnType<typeof useCareerDiaryController>) {
           onBack={() => props.setSelectedGoalId(null)}
           onEdit={props.openEditGoal}
           onAskConsultant={() => props.detail.goal && props.onOpenConsultant(props.detail.goal)}
+          onSplitGoal={props.splitGoal}
           onLoadMore={props.detail.loadMore}
           onRecordMeasurement={props.saveMeasurement}
         />

@@ -1,9 +1,22 @@
+import { useState } from 'react';
 import { CaretLeft, PencilSimple, Sparkle, Warning } from '@phosphor-icons/react';
-import type { CareerDiaryGoalSummary, CareerDiaryMeasurement, CareerDiaryMeasurementInput } from '../../../shared/careerDiary';
-import { formatCareerDiaryDate, formatCareerDiaryValue, goalHorizonLabel, goalRiskLabel } from './careerDiaryModel';
+import type {
+  CareerDiaryGoal,
+  CareerDiaryGoalInput,
+  CareerDiaryGoalSummary,
+  CareerDiaryMeasurement,
+  CareerDiaryMeasurementInput,
+} from '../../../shared/careerDiary';
+import {
+  formatCareerDiaryDate,
+  formatCareerDiaryValue,
+  goalHorizonLabel,
+  goalRiskLabel,
+} from './careerDiaryModel';
 import { CareerDiaryGoalChart } from './CareerDiaryGoalChart';
 import { CareerDiaryMeasurementForm } from './CareerDiaryMeasurementForm';
 import { CareerDiaryMeasurementHistory } from './CareerDiaryMeasurementHistory';
+import { CareerDiaryGoalSplitForm } from './CareerDiaryGoalSplitForm';
 import type { CareerDiaryLoadState } from './useCareerDiaryOverview';
 
 interface CareerDiaryGoalDetailProps {
@@ -17,6 +30,7 @@ interface CareerDiaryGoalDetailProps {
   readonly onBack: () => void;
   readonly onEdit: () => void;
   readonly onAskConsultant: () => void;
+  readonly onSplitGoal: (children: readonly CareerDiaryGoalInput[]) => Promise<CareerDiaryGoal[]>;
   readonly onLoadMore: () => void;
   readonly onRecordMeasurement: (input: CareerDiaryMeasurementInput) => Promise<void>;
 }
@@ -29,17 +43,27 @@ export function CareerDiaryGoalDetail(props: CareerDiaryGoalDetailProps) {
   return (
     <article className="career-diary-goal-detail">
       <GoalHeading goal={goal} onBack={props.onBack} onEdit={props.onEdit} />
-      {props.error ? <p className="career-diary-error" role="alert">{props.error}</p> : null}
+      {props.error ? (
+        <p className="career-diary-error" role="alert">
+          {props.error}
+        </p>
+      ) : null}
       <GoalFacts goal={goal} />
       <RiskNotice goal={goal} />
       <CareerDiaryGoalChart goal={goal} measurements={props.measurements} />
       <div className="career-diary-goal-detail__actions">
-        <CareerDiaryMeasurementForm goal={goal} saving={props.measurementSaving} onSave={props.onRecordMeasurement} />
+        <CareerDiaryMeasurementForm
+          goal={goal}
+          saving={props.measurementSaving}
+          onSave={props.onRecordMeasurement}
+        />
         <aside className="career-diary-consultant">
           <h3>Консультант по цели</h3>
           <p>Обсудите формулировку и ваши замеры. Значения за вас не придумываем.</p>
+          <CareerDiaryGoalSplitAction goal={goal} onSplitGoal={props.onSplitGoal} />
           <button className="career-btn is-ghost" type="button" onClick={props.onAskConsultant}>
-            <Sparkle size={18} aria-hidden="true" />Спросить по этой цели
+            <Sparkle size={18} aria-hidden="true" />
+            Спросить по этой цели
           </button>
         </aside>
       </div>
@@ -55,6 +79,50 @@ export function CareerDiaryGoalDetail(props: CareerDiaryGoalDetailProps) {
   );
 }
 
+function CareerDiaryGoalSplitAction({
+  goal,
+  onSplitGoal,
+}: {
+  readonly goal: CareerDiaryGoalSummary;
+  readonly onSplitGoal: CareerDiaryGoalDetailProps['onSplitGoal'];
+}) {
+  const [open, setOpen] = useState(false);
+  const [splitChildren, setSplitChildren] = useState<CareerDiaryGoal[] | null>(null);
+  return (
+    <>
+      <button
+        className="career-btn is-ghost"
+        type="button"
+        aria-label="Разбить цель"
+        onClick={() => {
+          setSplitChildren(null);
+          setOpen(true);
+        }}
+      >
+        Разбить
+      </button>
+      {splitChildren ? (
+        <div role="status">
+          <p>Цель разбита на {splitChildren.length} подцели.</p>
+          <ul aria-label="Созданные подцели">
+            {splitChildren.map((child) => (
+              <li key={child.id}>{child.title}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {open ? (
+        <CareerDiaryGoalSplitForm
+          goal={goal}
+          onClose={() => setOpen(false)}
+          onSave={onSplitGoal}
+          onSaved={setSplitChildren}
+        />
+      ) : null}
+    </>
+  );
+}
+
 function GoalHeading({
   goal,
   onBack,
@@ -66,17 +134,31 @@ function GoalHeading({
 }) {
   return (
     <header className="career-diary-goal-heading">
-      <button className="career-btn is-ghost is-icon career-diary-back" type="button" aria-label="Назад к целям" onClick={onBack}>
+      <button
+        className="career-btn is-ghost is-icon career-diary-back"
+        type="button"
+        aria-label="Назад к целям"
+        onClick={onBack}
+      >
         <CaretLeft size={20} aria-hidden="true" />
       </button>
       <div>
-        <p className="career-diary-eyebrow">{goalHorizonLabel(goal.horizon)} · срок {formatCareerDiaryDate(goal.dueDate)}</p>
-        <h2 id="career-diary-goal-title" tabIndex={-1}>{goal.title}</h2>
-        <p>{goalTypeLabel(goal.type)} · единица: {goal.unit} · источник: ввели вы</p>
+        <p className="career-diary-eyebrow">
+          {goalHorizonLabel(goal.horizon)} · срок {formatCareerDiaryDate(goal.dueDate)}
+        </p>
+        <h2 id="career-diary-goal-title" tabIndex={-1}>
+          {goal.title}
+        </h2>
+        <p>
+          {goalTypeLabel(goal.type)} · единица: {goal.unit} · источник: ввели вы
+        </p>
       </div>
-      <span className={`career-diary-status-chip is-${goal.risk.status}`}>{goalRiskLabel(goal.risk.status)}</span>
+      <span className={`career-diary-status-chip is-${goal.risk.status}`}>
+        {goalRiskLabel(goal.risk.status)}
+      </span>
       <button className="career-btn is-ghost" type="button" onClick={onEdit}>
-        <PencilSimple size={18} aria-hidden="true" />Изменить цель
+        <PencilSimple size={18} aria-hidden="true" />
+        Изменить цель
       </button>
     </header>
   );
@@ -85,15 +167,37 @@ function GoalHeading({
 function GoalFacts({ goal }: { readonly goal: CareerDiaryGoalSummary }) {
   return (
     <dl className="career-diary-goal-facts">
-      <GoalFact label="Исходное значение" value={goal.baselineValue === null ? 'Не задано' : `${formatCareerDiaryValue(goal.baselineValue)} ${goal.unit}`} />
-      <GoalFact label="Последний замер" value={goal.latestMeasurement ? `${formatCareerDiaryValue(goal.latestMeasurement.value)} ${goal.unit} · ${formatCareerDiaryDate(goal.latestMeasurement.measuredAt)}` : 'Замеров пока нет'} />
-      <GoalFact label="Целевое значение" value={`${formatCareerDiaryValue(goal.targetValue)} ${goal.unit}`} />
+      <GoalFact
+        label="Исходное значение"
+        value={
+          goal.baselineValue === null
+            ? 'Не задано'
+            : `${formatCareerDiaryValue(goal.baselineValue)} ${goal.unit}`
+        }
+      />
+      <GoalFact
+        label="Последний замер"
+        value={
+          goal.latestMeasurement
+            ? `${formatCareerDiaryValue(goal.latestMeasurement.value)} ${goal.unit} · ${formatCareerDiaryDate(goal.latestMeasurement.measuredAt)}`
+            : 'Замеров пока нет'
+        }
+      />
+      <GoalFact
+        label="Целевое значение"
+        value={`${formatCareerDiaryValue(goal.targetValue)} ${goal.unit}`}
+      />
     </dl>
   );
 }
 
 function GoalFact({ label, value }: { readonly label: string; readonly value: string }) {
-  return <div><dt>{label}</dt><dd>{value}</dd></div>;
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd>{value}</dd>
+    </div>
+  );
 }
 
 function RiskNotice({ goal }: { readonly goal: CareerDiaryGoalSummary }) {
@@ -107,11 +211,33 @@ function RiskNotice({ goal }: { readonly goal: CareerDiaryGoalSummary }) {
 }
 
 function GoalDetailLoading({ onBack }: { readonly onBack: () => void }) {
-  return <section className="career-diary-state" aria-busy="true"><button className="career-btn is-ghost" type="button" onClick={onBack}>Назад к целям</button><p role="status">Загружаем цель и замеры.</p></section>;
+  return (
+    <section className="career-diary-state" aria-busy="true">
+      <button className="career-btn is-ghost" type="button" onClick={onBack}>
+        Назад к целям
+      </button>
+      <p role="status">Загружаем цель и замеры.</p>
+    </section>
+  );
 }
 
-function GoalDetailError({ error, onBack }: { readonly error: string | null; readonly onBack: () => void }) {
-  return <section className="career-diary-state"><p className="career-diary-error" role="alert">{error ?? 'Цель недоступна.'}</p><button className="career-btn is-ghost" type="button" onClick={onBack}>Назад к целям</button></section>;
+function GoalDetailError({
+  error,
+  onBack,
+}: {
+  readonly error: string | null;
+  readonly onBack: () => void;
+}) {
+  return (
+    <section className="career-diary-state">
+      <p className="career-diary-error" role="alert">
+        {error ?? 'Цель недоступна.'}
+      </p>
+      <button className="career-btn is-ghost" type="button" onClick={onBack}>
+        Назад к целям
+      </button>
+    </section>
+  );
 }
 
 function goalTypeLabel(type: CareerDiaryGoalSummary['type']): string {
