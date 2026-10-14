@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check } from '@phosphor-icons/react';
 
-import type {
-  MatchedVacancyFacets,
-  MatchedVacancySourceGroupId,
-} from '../../../shared/matchedVacancyFacets';
-import { getVacancySources, type VacancySourceRegistryEntry } from '../coach/coachApi';
+import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import {
   VACANCY_FILTER_GROUPS,
   VacanciesFilterToolbarFromState,
@@ -24,6 +20,7 @@ import {
   useMobileRoleFocus,
 } from './VacanciesFilterPopover';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
+import { VacancySourceCatalogFilter } from './VacancySourceCatalogFilter';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 export interface VacanciesScreenFiltersProps {
@@ -468,112 +465,14 @@ function FormatFilterSection({ props }: { readonly props: VacanciesScreenFilters
   );
 }
 
-function SourceFacetGroup({
-  title,
-  count,
-  sources,
-  props,
-}: {
-  readonly title: string;
-  readonly count?: number;
-  readonly sources: readonly {
-    readonly sourceId: string;
-    readonly name: string;
-    readonly count: number;
-  }[];
-  readonly props: VacanciesScreenFiltersProps;
-}) {
-  if (!sources.length) return null;
-  return (
-    <fieldset className="vacancy-source-group">
-      <legend>
-        {title}
-        {count === undefined ? '' : ' · ' + count}
-      </legend>
-      <div className="chip-row">
-        {sources.map((source) => (
-          <FacetChip
-            key={source.sourceId}
-            option={{ id: source.sourceId, label: source.name, count: source.count }}
-            selected={(props.state.sources ?? []).includes(source.sourceId)}
-            onClick={() =>
-              props.onChange((state) => toggleValue(state, 'sources', source.sourceId))
-            }
-          />
-        ))}
-      </div>
-    </fieldset>
-  );
-}
-
-const SOURCE_GROUP_BY_CATEGORY: Readonly<Record<string, MatchedVacancySourceGroupId>> = {
-  'ATS компаний': 'ats',
-  'Агрегаторы и API': 'aggregators',
-  'Международные площадки': 'platforms',
-  'Telegram каналы': 'channels',
-};
-
-function useVacancySourceCatalog(): VacancySourceRegistryEntry[] {
-  const [catalog, setCatalog] = useState<VacancySourceRegistryEntry[]>([]);
-  useEffect(() => {
-    let active = true;
-    void getVacancySources()
-      .then((sources) => {
-        if (active) setCatalog(Array.isArray(sources) ? sources : []);
-      })
-      .catch(() => {
-        if (active) setCatalog([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  return catalog;
-}
-
-function matchedSourceOptions(
-  facets: MatchedVacancyFacets,
-  catalog: readonly VacancySourceRegistryEntry[],
-) {
-  const sourceById = new Map<string, VacancySourceRegistryEntry>(
-    catalog.map((source) => [source.id, source] as const),
-  );
-  return facets.sources.map(({ sourceId, name, count }) => {
-    const source = sourceById.get(sourceId);
-    return {
-      sourceId,
-      name: source?.name ?? name,
-      groupId: source?.category ? (SOURCE_GROUP_BY_CATEGORY[source.category] ?? null) : null,
-      count,
-    };
-  });
-}
-
 function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersProps }) {
-  const catalog = useVacancySourceCatalog();
-  const facets = props.facets;
-  if (!facets) return null;
-  const matchedSources = matchedSourceOptions(facets, catalog);
-  if (!matchedSources.length) return null;
-  const grouped = (facets.sourceGroups ?? []).map((group) => ({
-    ...group,
-    sources: matchedSources.filter((source) => source.groupId === group.id),
-  }));
-  const ungrouped = matchedSources.filter((source) => source.groupId === null);
+  if (!props.facets || props.facets.sources.length === 0) return null;
   return (
-    <div className="field-group vacancy-source-filter">
-      <h4>Источники</h4>
-      {grouped.map((group) => (
-        <SourceFacetGroup
-          key={group.id}
-          title={group.name}
-          count={group.count}
-          sources={group.sources}
-          props={props}
-        />
-      ))}
-      <SourceFacetGroup title="Другие источники" sources={ungrouped} props={props} />
-    </div>
+    <VacancySourceCatalogFilter
+      state={props.state}
+      facets={props.facets}
+      onChange={props.onChange}
+    />
   );
 }
 

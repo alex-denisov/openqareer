@@ -14,6 +14,7 @@ import { PageHeader } from '../shell/PageHeader';
 import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyLetterScreen } from './VacancyLetterScreen';
+import { VacancySourceHealthNotice } from './VacancySourceHealthNotice';
 import {
   countActiveFilters,
   VacanciesFilters,
@@ -574,6 +575,7 @@ function VacanciesScreenContent({
         }
         viewMode={screenState.viewMode}
       />
+      {!input.loading && !input.failed && <VacancySourceHealthNotice facets={input.facets} />}
       <VacanciesMainBody {...mainBodyProps(input, screenState, onOpenLetter)} />
     </div>
   );
