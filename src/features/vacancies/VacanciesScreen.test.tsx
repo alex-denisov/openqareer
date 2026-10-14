@@ -306,6 +306,13 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toContain('Повторить');
   });
 
+  it('не называет одну площадку, если источник ошибки неизвестен', () => {
+    const html = render({ failed: true });
+
+    expect(html).toContain('Причина сбоя не уточнена.');
+    expect(html).not.toContain('hh.ru');
+  });
+
   it('показывает кнопку «Добавить: <регион>» в фильтре «География» из suggestedRegions, сам не применяя (C63)', () => {
     const html = render({
       campaign: {

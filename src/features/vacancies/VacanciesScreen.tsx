@@ -8,12 +8,14 @@ import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplicat
 import type { VacancySubscription, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { DesktopOutreachModal } from '../outreach/DesktopOutreachModal';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
-import { VacancyHypothesisBanner } from './VacancyHypothesisBanner';
+import { VacancyHypothesisSection } from './VacancyHypothesisSection';
 import { useVacancyCampaignActions } from './useVacancyCampaignActions';
 import { PageHeader } from '../shell/PageHeader';
 import type { NavigationOptions, PathDestination, PathStep } from '../shell/pathIndicator';
 import type { VacancyApplications } from './useVacancyApplications';
 import { VacancyLetterScreen } from './VacancyLetterScreen';
+import { useVacancyLetterRoute, type CompanyLetterOpen } from './useVacancyLetterRoute';
+import { VacancySourceHealthNotice } from './VacancySourceHealthNotice';
 import {
   countActiveFilters,
   VacanciesFilters,
@@ -33,8 +35,6 @@ import {
   companyLookupKey,
   useVacancyCollections,
 } from './vacancyScreenCollections';
-
-import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 
 import './vacancies-screen.css';
 import './s10-vis.css';
@@ -574,6 +574,7 @@ function VacanciesScreenContent({
         }
         viewMode={screenState.viewMode}
       />
+      {!input.loading && !input.failed && <VacancySourceHealthNotice facets={input.facets} />}
       <VacanciesMainBody {...mainBodyProps(input, screenState, onOpenLetter)} />
     </div>
   );
@@ -616,11 +617,13 @@ function OpportunityContent({
   screenState,
   activeTab,
   onOpenLetter,
+  onOpenCompanyLetter,
 }: {
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
   readonly activeTab: OpportunityTab;
   readonly onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenCompanyLetter: CompanyLetterOpen;
 }) {
   if (activeTab === 'selection') {
     return (
@@ -633,9 +636,19 @@ function OpportunityContent({
   return (
     <CompaniesAndPeopleScreen
       onOpenConnections={input.onOpenConnections}
+      onOpenLetter={onOpenCompanyLetter}
+      onOpenCareer={careerPathAction(input.pathIndicator)}
       initialSearch={screenState.companyPathSearch}
     />
   );
+}
+
+function VacancyCollectionActionError({ message }: { readonly message?: string }) {
+  return message ? (
+    <p className="career-inline-error" role="alert">
+      {message}
+    </p>
+  ) : null;
 }
 
 function VacancyOutreachDialog({
@@ -667,12 +680,14 @@ function VacanciesScreenFrame({
   activeTab,
   onSelectTab,
   onOpenLetter,
+  onOpenCompanyLetter,
 }: {
   readonly input: VacanciesScreenProps;
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
   readonly activeTab: OpportunityTab;
   readonly onSelectTab: (tab: OpportunityTab) => void;
   readonly onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenCompanyLetter: CompanyLetterOpen;
 }) {
   return (
     <div className="vacancies-screen">
@@ -692,16 +707,13 @@ function VacanciesScreenFrame({
           <ViewSwitch viewMode={screenState.viewMode} onChange={screenState.setViewMode} />
         ) : null}
       </div>
-      {screenState.collections.actionError ? (
-        <p className="career-inline-error" role="alert">
-          {screenState.collections.actionError}
-        </p>
-      ) : null}
+      <VacancyCollectionActionError message={screenState.collections.actionError} />
       <OpportunityContent
         input={input}
         screenState={screenState}
         activeTab={activeTab}
         onOpenLetter={onOpenLetter}
+        onOpenCompanyLetter={onOpenCompanyLetter}
       />
       <VacancyOutreachDialog screenState={screenState} />
     </div>
@@ -710,15 +722,15 @@ function VacanciesScreenFrame({
 
 export function VacanciesScreen(input: VacanciesScreenProps) {
   const screenState = useVacanciesScreenState(input);
-  const [letterVacancy, setLetterVacancy] = useState<MatchedVacancyItem['cluster'] | null>(null);
-  if (letterVacancy) {
+  const { request: letterRequest, openFromRow, openFromCompany, close } = useVacancyLetterRoute();
+  if (letterRequest) {
     return (
       <>
         <VacancyLetterScreen
-          vacancy={letterVacancy}
-          onBack={() => setLetterVacancy(null)}
+          vacancy={letterRequest.vacancy}
+          initialCircle={letterRequest.initialCircle}
+          onBack={close}
           onOpenResponses={input.onOpenResponses}
-          onOpenNetworking={input.onOpenNetworking ?? screenState.setOutreachVacancy}
           onOpenExpert={input.onOpenExpert}
         />
         <VacancyOutreachDialog screenState={screenState} />
@@ -731,7 +743,8 @@ export function VacanciesScreen(input: VacanciesScreenProps) {
       screenState={screenState}
       activeTab={screenState.activeTab}
       onSelectTab={screenState.chooseTab}
-      onOpenLetter={setLetterVacancy}
+      onOpenLetter={openFromRow}
+      onOpenCompanyLetter={openFromCompany}
     />
   );
 }
@@ -742,6 +755,10 @@ function campaignUpdateHandler(
 ) {
   return (updated: CampaignMetaView, addedRole: string | undefined) =>
     applyCampaignUpdate(updated, addedRole, setCampaign, setScreenState);
+}
+
+function careerPathAction(path: VacanciesPathIndicator | undefined) {
+  return path ? () => path.onNavigate('career') : undefined;
 }
 
 function useActiveCampaign(campaign?: CampaignMetaView) {
@@ -765,53 +782,6 @@ function applyCampaignUpdate(
     regions: current.regions,
     remoteOnly: current.remoteOnly,
   }));
-}
-
-function VacancyHypothesisSection({
-  campaign,
-  board,
-  actions,
-}: {
-  readonly campaign?: CampaignMetaView;
-  readonly board: ReturnType<typeof useVacanciesScreenBoard>;
-  readonly actions: ReturnType<typeof useVacancyCampaignActions>;
-}) {
-  const [regionsOpen, setRegionsOpen] = useState(false);
-  const hypothesis = campaign?.roleHypotheses?.find(
-    (item) => item.role === board.primaryRole && item.isHypothesis,
-  );
-  if (!hypothesis) return null;
-
-  const adjacentRole = campaign?.autoRoles?.find(
-    (role) => role.kind === 'adjacent' && !campaign.roles.value.includes(role.title),
-  );
-  const availableRegions = CANDIDATE_REGION_CATALOGUE.filter(
-    (region) => !board.regions.includes(region.id),
-  );
-
-  return (
-    <VacancyHypothesisBanner
-      role={hypothesis.role}
-      vacancyCount={hypothesis.vacancyCount}
-      adjacentRole={adjacentRole}
-      regionsChosenExplicitly={
-        campaign?.regions.origin === 'explicit' && campaign.regions.value.length > 0
-      }
-      remoteOnly={campaign?.remoteOnly ?? false}
-      saving={actions.saving}
-      error={actions.error}
-      onAddAdjacentRole={(role) => void actions.addAdjacentRole(role)}
-      onAddRegion={(region) => {
-        void actions.addRegion(region).then((saved) => {
-          if (saved) setRegionsOpen(false);
-        });
-      }}
-      onToggleRemote={() => void actions.toggleRemote()}
-      regionsOpen={regionsOpen}
-      onToggleRegions={() => setRegionsOpen((open) => !open)}
-      availableRegions={availableRegions}
-    />
-  );
 }
 
 /** Единственная точка «есть совпадение» на всех трёх fit-dots (B248/B324). */

@@ -7,15 +7,13 @@ import type {
   ConnectionCirclePath,
   ConnectionCircleResult,
 } from './vacancyLetterApi';
-import {
-  approveVacancyLetter,
-  getVacancyConnectionCircles,
-} from './vacancyLetterApi';
+import { approveVacancyLetter, getVacancyConnectionCircles } from './vacancyLetterApi';
 import type { VacancyPitchPayload, VacancyPitchResult } from './vacancyPitchApi';
 import { requestVacancyPitch } from './vacancyPitchApi';
 import {
   excludedEvidenceIdsForWorkplaces,
   letterBodyForCircle,
+  personAddressedByConnectionPath,
   recipientForConnectionPath,
 } from './vacancyLetterModel';
 
@@ -74,7 +72,9 @@ export interface LetterScreenState {
 }
 
 function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
-  const [data, setData] = useState<Awaited<ReturnType<typeof getVacancyConnectionCircles>> | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof getVacancyConnectionCircles>> | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
@@ -87,7 +87,8 @@ function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
         if (active) setData(result);
       })
       .catch((reason: unknown) => {
-        if (active) setError(reason instanceof Error ? reason.message : 'Не удалось загрузить пути.');
+        if (active)
+          setError(reason instanceof Error ? reason.message : 'Не удалось загрузить пути.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -100,18 +101,26 @@ function useConnectionCircles(vacancyId: string): ConnectionCirclesState {
   return { data, loading, error, retry };
 }
 
-function useCircleSelection(circles: readonly ConnectionCircleResult[]): CircleSelection {
-  const [circle, setCircle] = useState<ConnectionCircleNumber>(1);
+function useCircleSelection(
+  circles: readonly ConnectionCircleResult[],
+  initialCircle?: ConnectionCircleNumber,
+): CircleSelection {
+  const [circle, setCircle] = useState<ConnectionCircleNumber>(initialCircle ?? 1);
   const [selectedPathId, setSelectedPathId] = useState<string | null>(null);
   const result = circles.find((item) => item.circle === circle);
   const selectedPath = result?.paths.find((path) => path.id === selectedPathId) ?? result?.paths[0];
   return { circle, setCircle, selectedPathId, setSelectedPathId, selectedPath, result };
 }
 
-function useWorkplaceSelection(workplaces: readonly CandidateWorkplaceForLetter[]): WorkplaceSelection {
+function useWorkplaceSelection(
+  workplaces: readonly CandidateWorkplaceForLetter[],
+): WorkplaceSelection {
   const [override, setOverride] = useState<readonly string[] | null>(null);
   const availableIds = useMemo(
-    () => workplaces.filter((workplace) => workplace.evidenceIds.length > 0).map((workplace) => workplace.id),
+    () =>
+      workplaces
+        .filter((workplace) => workplace.evidenceIds.length > 0)
+        .map((workplace) => workplace.id),
     [workplaces],
   );
   const includedIds = override ?? availableIds;
@@ -119,14 +128,17 @@ function useWorkplaceSelection(workplaces: readonly CandidateWorkplaceForLetter[
     () => excludedEvidenceIdsForWorkplaces(workplaces, includedIds),
     [includedIds, workplaces],
   );
-  const toggle = useCallback((workplaceId: string) => {
-    setOverride((current) => {
-      const next = new Set(current ?? availableIds);
-      if (next.has(workplaceId)) next.delete(workplaceId);
-      else next.add(workplaceId);
-      return Array.from(next);
-    });
-  }, [availableIds]);
+  const toggle = useCallback(
+    (workplaceId: string) => {
+      setOverride((current) => {
+        const next = new Set(current ?? availableIds);
+        if (next.has(workplaceId)) next.delete(workplaceId);
+        else next.add(workplaceId);
+        return Array.from(next);
+      });
+    },
+    [availableIds],
+  );
   return { includedIds, excludedEvidenceIds, toggle };
 }
 
@@ -150,7 +162,6 @@ function beginLetterPitchRequest(input: {
   input.setLoading(true);
   input.setError('');
   input.setPitch(null);
-  input.setText('');
   const payload: VacancyPitchPayload = {
     tone: input.tone,
     ...(input.language === 'auto' ? {} : { language: input.language }),
@@ -177,6 +188,118 @@ function beginLetterPitchRequest(input: {
   };
 }
 
+interface PitchRequestState {
+  readonly pitch: VacancyPitchResult | null;
+  readonly text: string;
+  readonly setText: (text: string) => void;
+  readonly loading: boolean;
+  readonly error: string;
+  readonly retry: () => void;
+}
+
+interface PitchRequestInput {
+  readonly vacancyId: string;
+  readonly circle: ConnectionCircleNumber;
+  readonly requestKey: number;
+  readonly path?: ConnectionCirclePath;
+  readonly tone: PitchTone;
+  readonly language: 'auto' | PitchLanguage;
+  readonly enabled: boolean;
+  readonly resetWhenDisabled: boolean;
+  readonly excludedEvidenceIds: readonly string[];
+  readonly setWorkplaces: (workplaces: readonly CandidateWorkplaceForLetter[]) => void;
+  readonly setPitch: (pitch: VacancyPitchResult | null) => void;
+  readonly setText: (text: string) => void;
+  readonly setLoading: (loading: boolean) => void;
+  readonly setError: (error: string) => void;
+}
+
+function runPitchRequestEffect(
+  input: PitchRequestInput,
+  recipient: VacancyPitchPayload['recipient'] | undefined,
+  excludedKey: string,
+  requestSequence: { current: number },
+) {
+  if (!input.enabled) {
+    if (input.resetWhenDisabled) clearDisabledPitch(input);
+    input.setLoading(false);
+    return undefined;
+  }
+  return beginLetterPitchRequest({
+    vacancyId: input.vacancyId,
+    circle: input.circle,
+    tone: input.tone,
+    language: input.language,
+    recipient,
+    excludedEvidenceIds: JSON.parse(excludedKey) as string[],
+    requestSequence,
+    setPitch: input.setPitch,
+    setWorkplaces: input.setWorkplaces,
+    setText: input.setText,
+    setLoading: input.setLoading,
+    setError: input.setError,
+  });
+}
+
+function clearDisabledPitch(input: PitchRequestInput) {
+  input.setPitch(null);
+  input.setWorkplaces([]);
+  input.setText('');
+  input.setError('');
+}
+
+function usePitchRequestEffect(input: PitchRequestInput): void {
+  const recipient = useMemo(
+    () => (input.path ? recipientForConnectionPath(input.path) : undefined),
+    [input.path],
+  );
+  const requestSequence = useRef(0);
+  const excludedKey = JSON.stringify(input.excludedEvidenceIds);
+  useEffect(
+    () => runPitchRequestEffect(input, recipient, excludedKey, requestSequence),
+    [input, recipient, excludedKey],
+  );
+}
+
+type PitchGenerationInput = Omit<
+  PitchRequestInput,
+  'requestKey' | 'setPitch' | 'setText' | 'setLoading' | 'setError'
+>;
+
+function usePitchGeneration(input: PitchGenerationInput): PitchRequestState {
+  const [pitch, setPitch] = useState<VacancyPitchResult | null>(null);
+  const [text, setText] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
+  const excludedEvidenceKey = JSON.stringify(input.excludedEvidenceIds);
+  const requestInput = useMemo(
+    () => ({
+      ...input,
+      requestKey: retryKey,
+      setPitch,
+      setText,
+      setLoading,
+      setError,
+    }),
+    [
+      input.vacancyId,
+      input.circle,
+      input.path,
+      input.tone,
+      input.language,
+      input.enabled,
+      input.resetWhenDisabled,
+      excludedEvidenceKey,
+      input.setWorkplaces,
+      retryKey,
+    ],
+  );
+  usePitchRequestEffect(requestInput);
+  const retry = useCallback(() => setRetryKey((current) => current + 1), []);
+  return { pitch, text, setText, loading, error, retry };
+}
+
 function useLetterDraft({
   vacancyId,
   circle,
@@ -184,6 +307,7 @@ function useLetterDraft({
   tone,
   language,
   enabled,
+  resetWhenDisabled,
 }: {
   readonly vacancyId: string;
   readonly circle: ConnectionCircleNumber;
@@ -191,40 +315,22 @@ function useLetterDraft({
   readonly tone: PitchTone;
   readonly language: 'auto' | PitchLanguage;
   readonly enabled: boolean;
+  readonly resetWhenDisabled: boolean;
 }): LetterDraftState {
-  const [pitch, setPitch] = useState<VacancyPitchResult | null>(null);
   const [workplaces, setWorkplaces] = useState<readonly CandidateWorkplaceForLetter[]>([]);
-  const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [retryKey, setRetryKey] = useState(0);
-  const requestSequence = useRef(0);
   const selection = useWorkplaceSelection(workplaces);
-  const excludedKey = JSON.stringify(selection.excludedEvidenceIds);
-  const recipient = useMemo(() => (path ? recipientForConnectionPath(path) : undefined), [path]);
-  useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
-    const excludedEvidenceIds = JSON.parse(excludedKey) as string[];
-    return beginLetterPitchRequest({
-      vacancyId,
-      circle,
-      tone,
-      language,
-      recipient,
-      excludedEvidenceIds,
-      requestSequence,
-      setPitch,
-      setWorkplaces,
-      setText,
-      setLoading,
-      setError,
-    });
-  }, [circle, enabled, excludedKey, language, recipient, retryKey, tone, vacancyId]);
-  const retry = useCallback(() => setRetryKey((current) => current + 1), []);
-  return { pitch, workplaces, text, setText, loading, error, retry, ...selection };
+  const pitchState = usePitchGeneration({
+    vacancyId,
+    circle,
+    path,
+    tone,
+    language,
+    enabled,
+    resetWhenDisabled,
+    excludedEvidenceIds: selection.excludedEvidenceIds,
+    setWorkplaces,
+  });
+  return { ...pitchState, workplaces, ...selection };
 }
 
 function approvedSnapshot(
@@ -239,19 +345,21 @@ function approvedSnapshot(
   },
   language: PitchLanguage,
 ): ApprovedVacancyLetterInput {
-  const recipient = input.path?.recipient;
+  const recipient = input.path ? personAddressedByConnectionPath(input.path) : undefined;
   return {
     circle: input.circle,
     language,
     tone: input.tone,
-    ...(recipient ? {
-      recipient: {
-        id: recipient.id,
-        name: recipient.fullName,
-        ...(recipient.roleTitle ? { role: recipient.roleTitle } : {}),
-        ...(recipient.companyName ? { company: recipient.companyName } : {}),
-      },
-    } : {}),
+    ...(recipient
+      ? {
+          recipient: {
+            id: recipient.id,
+            name: recipient.fullName,
+            ...(recipient.roleTitle ? { role: recipient.roleTitle } : {}),
+            ...(recipient.companyName ? { company: recipient.companyName } : {}),
+          },
+        }
+      : {}),
     ...(input.pitch.emailPitch.subject ? { subject: input.pitch.emailPitch.subject } : {}),
     body: input.body.trim(),
     usedEvidenceIds: input.pitch.usedEvidenceIds,
@@ -287,7 +395,12 @@ function useLetterApproval(input: {
     setBusy(true);
     setError('');
     try {
-      setSaved(await approveVacancyLetter(input.vacancyId, approvedSnapshot({ ...input, pitch }, language)));
+      setSaved(
+        await approveVacancyLetter(
+          input.vacancyId,
+          approvedSnapshot({ ...input, pitch }, language),
+        ),
+      );
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : 'Не удалось сохранить снимок письма.');
     } finally {
@@ -297,9 +410,12 @@ function useLetterApproval(input: {
   return { saved, busy, error, approve, reset };
 }
 
-export function useVacancyLetterController(vacancyId: string): LetterScreenState {
+export function useVacancyLetterController(
+  vacancyId: string,
+  initialCircle?: ConnectionCircleNumber,
+): LetterScreenState {
   const circles = useConnectionCircles(vacancyId);
-  const circle = useCircleSelection(circles.data?.circles ?? []);
+  const circle = useCircleSelection(circles.data?.circles ?? [], initialCircle);
   const [tone, setTone] = useState<PitchTone>('executive');
   const [language, setLanguage] = useState<'auto' | PitchLanguage>('auto');
   const draft = useLetterDraft({
@@ -308,7 +424,17 @@ export function useVacancyLetterController(vacancyId: string): LetterScreenState
     path: circle.selectedPath,
     tone,
     language,
-    enabled: Boolean(circles.data) && !circles.loading && !circles.error,
+    enabled:
+      Boolean(circles.data) &&
+      !circles.loading &&
+      !circles.error &&
+      (circle.circle === 3 || Boolean(circle.selectedPath)),
+    resetWhenDisabled:
+      Boolean(circles.data) &&
+      !circles.loading &&
+      !circles.error &&
+      circle.circle !== 3 &&
+      !circle.selectedPath,
   });
   const approval = useLetterApproval({
     vacancyId,

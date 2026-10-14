@@ -14,10 +14,14 @@ import type {
   CandidateCompanyRecruiter,
 } from '../../../shared/candidateCompany';
 import { SEARCH_CONSENT_TEXT } from '../../../shared/searchConsent';
+import { CompanyConnectionCircles } from './CompanyConnectionCircles';
 import { RecruiterMessagePanel } from './RecruiterMessagePanel';
+import type { VacancyLetterTarget } from './VacancyLetterScreen';
+import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
   companyVacancySummary,
   formatObservedDate,
+  isContactImportStale,
   readableError,
 } from './companiesAndPeopleUtils';
 
@@ -31,6 +35,22 @@ function ContactImportNotice({
   readonly onOpenConnections?: () => void;
 }) {
   if (company.contactsCount !== null) {
+    if (isContactImportStale(company.contactsImportedAt)) {
+      return (
+        <div className="companies-people-data-note" role="note">
+          <Info aria-hidden="true" />
+          <span>
+            Импорт контактов устарел: {formatObservedDate(company.contactsImportedAt)}. Обновите
+            его в «Аккаунте».
+          </span>
+          {onOpenConnections ? (
+            <button type="button" className="career-btn" onClick={onOpenConnections}>
+              Открыть подключения
+            </button>
+          ) : null}
+        </div>
+      );
+    }
     return (
       <p className="companies-people-data-note" role="note">
         <UsersThree aria-hidden="true" /> Контакты в сети: {company.contactsCount}. Импорт LinkedIn,{' '}
@@ -353,6 +373,7 @@ interface CompanyDetailPanelProps {
   readonly onSaveNextStep: (text: string, dueAt: string | null) => Promise<void>;
   readonly onSearch: () => void;
   readonly onAllowAndSearch: () => void;
+  readonly onOpenLetter?: (vacancy: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
 }
 
 function CompanyDetailHeader({
@@ -445,6 +466,7 @@ function CompanyDetailContent(props: CompanyDetailPanelProps) {
         onAllowAndSearch={props.onAllowAndSearch}
         onWrite={setMessageTo}
       />
+      <CompanyConnectionCircles company={props.company} onOpenLetter={props.onOpenLetter} />
       {messageTo ? (
         <div className="companies-people-message">
           <RecruiterMessagePanel contact={messageTo} onClose={() => setMessageTo(null)} />

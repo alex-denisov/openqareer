@@ -1,12 +1,19 @@
 import type { CandidateCompanyOpportunity } from '../../../shared/candidateCompany';
 import { pluralRu } from '../../../shared/pluralRu';
 
+const CONTACT_IMPORT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
 export function readableError(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
 
+export function isContactImportStale(importedAt: string | null, now = Date.now()): boolean {
+  const timestamp = importedAt ? Date.parse(importedAt) : Number.NaN;
+  return Number.isFinite(timestamp) && now - timestamp > CONTACT_IMPORT_MAX_AGE_MS;
+}
+
 export function companyContactSummary(company: CandidateCompanyOpportunity): string {
-  return company.contactsCount === null
+  return company.contactsCount === null || isContactImportStale(company.contactsImportedAt)
     ? 'Контакты в сети: неизвестно'
     : `${company.contactsCount} в сети`;
 }

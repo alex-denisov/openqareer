@@ -65,7 +65,7 @@ export interface CandidateCompanyConnectionStatus {
   readonly status: CandidateLinkedInStatus;
   readonly importedAt: string | null;
   /** B439 can report this honestly only after a candidate-owned contact import exists. */
-  readonly contactsImported: false;
+  readonly contactsImported: boolean;
 }
 
 export interface CandidateCompanyPage {

@@ -297,19 +297,47 @@ export function buildConnectionCircles(input: BuildConnectionCirclesInput): {
 }
 
 function directConnectionPaths(input: BuildConnectionCirclesInput): ConnectionCirclePath[] {
-  return input.recruiters
-    .flatMap((recruiter) => {
-      const directContact = input.contacts.find((contact) =>
-        sameConnectionPerson(contact, recruiter),
-      );
-      if (directContact) return [directContactPath(input.candidate, directContact, recruiter)];
-      const evidence = sharedWorkplaceEvidence(
-        input.candidateWorkplaces,
-        recruiter.workplaces ?? [],
-      );
-      return evidence ? [workplacePath(input.candidate, recruiter, evidence)] : [];
-    })
-    .sort(compareConnectionPaths);
+  const recruiterPaths = input.recruiters.flatMap((recruiter) => {
+    const directContact = input.contacts.find((contact) =>
+      sameConnectionPerson(contact, recruiter),
+    );
+    if (directContact) return [directContactPath(input.candidate, directContact, recruiter)];
+    const evidence = sharedWorkplaceEvidence(input.candidateWorkplaces, recruiter.workplaces ?? []);
+    return evidence ? [workplacePath(input.candidate, recruiter, evidence)] : [];
+  });
+  const vacancyCompany = input.vacancy.companyName?.trim() ?? '';
+  const vacancyCompanyKey = vacancyCompany ? candidateCompanyKey(vacancyCompany) : null;
+  const directContacts = (
+    vacancyCompanyKey
+      ? input.contacts.filter((contact) => {
+          const companyName = contact.companyName?.trim();
+          if (!companyName) return false;
+          return candidateCompanyKey(companyName) === vacancyCompanyKey;
+        })
+      : []
+  )
+    .filter(
+      (contact) => !input.recruiters.some((recruiter) => sameConnectionPerson(contact, recruiter)),
+    )
+    .map((contact) => directCandidateContactPath(input.candidate, contact));
+  return [...recruiterPaths, ...directContacts].sort(compareConnectionPaths);
+}
+
+function directCandidateContactPath(
+  candidate: BuildConnectionCirclesInput['candidate'],
+  contact: CandidateConnectionContact,
+): ConnectionCirclePath {
+  const recipient = contactNode(contact);
+  return {
+    id: 'circle-1:contact:' + contact.id,
+    circle: 1,
+    path: [candidateNode(candidate), recipient],
+    recipient,
+    evidence: [contact.relationship || 'Контакт указан кандидатом.'],
+    strength: contact.strength,
+    source: contact.source,
+    nextStep: 'write_known_contact',
+  };
 }
 
 function introductionPaths(input: BuildConnectionCirclesInput): ConnectionCirclePath[] {
