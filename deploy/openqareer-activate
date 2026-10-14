@@ -57,7 +57,7 @@ actual_checksum="$(sha256sum "$archive" | awk '{print $1}')"
   fail "release checksum mismatch"
 
 mapfile -t archive_entries < <(tar -tzf "$archive")
-[[ "${#archive_entries[@]}" -le 500 ]] ||
+[[ "${#archive_entries[@]}" -le 1500 ]] ||
   fail "release archive contains too many entries"
 for entry in "${archive_entries[@]}"; do
   case "$entry" in
