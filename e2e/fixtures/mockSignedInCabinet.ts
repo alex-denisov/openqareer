@@ -1,5 +1,11 @@
 import type { Page, Route } from '@playwright/test';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
+import {
+  RELOCATION_CONSENT_VERSION,
+  relocationAlerts as buildRelocationAlerts,
+  type RelocationCurrentStep,
+  type RelocationQuestionnaire,
+} from '../../shared/relocationQuestionnaire';
 import type { VacanciesScreenState } from '../../src/features/vacancies/vacanciesScreenState';
 import { mockNotificationRequest } from './mockNotifications';
 import {
@@ -410,6 +416,19 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly linkedinDrafts?: readonly Record<string, unknown>[];
   readonly linkedinDraftTopics?: readonly Record<string, unknown>[];
   readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
+  readonly relocation?: {
+    readonly consentGranted?: boolean;
+    readonly currentStep?: RelocationCurrentStep;
+    readonly citizenshipCountryCodes?: readonly string[];
+    readonly documents?: readonly {
+      readonly id: string;
+      readonly kind:
+        'residence_permit' | 'work_permit' | 'work_visa' | 'study_visa' | 'visa' | 'other';
+      readonly countryCode: string;
+      readonly issuedAt?: string;
+      readonly expiresAt?: string;
+    }[];
+  };
 }
 
 function seedInitialVacancyItems(
@@ -1476,13 +1495,26 @@ export async function mockSignedInCabinet(
   const automation = createAutomationFixtureState(options);
   const linkedinDrafts = createLinkedinDraftFixtureState(options);
   const relocationConsent = {
-    status: 'not_granted',
-    granted: false,
-    versionId: null as string | null,
-    grantedAt: null as string | null,
+    status: options.relocation?.consentGranted ? 'granted' : 'not_granted',
+    granted: options.relocation?.consentGranted ?? false,
+    versionId: options.relocation?.consentGranted
+      ? RELOCATION_CONSENT_VERSION
+      : (null as string | null),
+    grantedAt: options.relocation?.consentGranted
+      ? '2026-10-10T12:00:00.000Z'
+      : (null as string | null),
     revokedAt: null as string | null,
   };
-  let relocationProfile: Record<string, unknown> | null = null;
+  let relocationProfile: Record<string, unknown> | null = options.relocation?.consentGranted
+    ? {
+        ...emptyRelocationProfile(),
+        currentStep: options.relocation.currentStep ?? 'citizenship_documents',
+        citizenshipDocuments: {
+          citizenshipCountryCodes: [...(options.relocation.citizenshipCountryCodes ?? [])],
+          documents: [...(options.relocation.documents ?? [])],
+        },
+      }
+    : null;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -1971,7 +2003,12 @@ export async function mockSignedInCabinet(
       };
       return route.fulfill({
         headers: { etag: `"${revision + 1}"` },
-        json: { data: { profile: relocationProfile, alerts: [] } },
+        json: {
+          data: {
+            profile: relocationProfile,
+            alerts: buildFixtureRelocationAlerts(relocationProfile, relocationConsent.granted),
+          },
+        },
       });
     }
     const relocationStep = path.match(/\/candidate\/relocation-questionnaire\/steps\/([^/]+)$/u);
@@ -2011,7 +2048,12 @@ export async function mockSignedInCabinet(
       };
       return route.fulfill({
         headers: { etag: `"${revision + 1}"` },
-        json: { data: { profile: relocationProfile, alerts: [] } },
+        json: {
+          data: {
+            profile: relocationProfile,
+            alerts: buildFixtureRelocationAlerts(relocationProfile, relocationConsent.granted),
+          },
+        },
       });
     }
     if (
@@ -2029,7 +2071,7 @@ export async function mockSignedInCabinet(
               : null,
             consent: relocationConsent,
             consentTextStatus: 'pending_dpo_review',
-            alerts: [],
+            alerts: buildFixtureRelocationAlerts(relocationProfile, relocationConsent.granted),
           },
         },
       });
@@ -2392,6 +2434,15 @@ function checkoutResponse(invoice: FixtureInvoice) {
     paymentUrl: invoice.paymentUrl,
     createdAt: invoice.createdAt,
   };
+}
+
+function buildFixtureRelocationAlerts(
+  profile: Record<string, unknown> | null,
+  consentGranted: boolean,
+) {
+  return consentGranted && profile
+    ? buildRelocationAlerts(profile as unknown as RelocationQuestionnaire, '2026-10-14')
+    : [];
 }
 
 function emptyRelocationProfile(): Record<string, unknown> {

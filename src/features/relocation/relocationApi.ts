@@ -117,11 +117,10 @@ export async function revokeRelocationConsent(): Promise<RelocationConsentRevoke
   return readDataObject<RelocationConsentRevokeResult>(response);
 }
 
-export async function restartRelocationQuestionnaire(): Promise<RelocationProfileDeleteResult> {
-  const response = await apiFetch('/api/v1/candidate/relocation-questionnaire', {
+export async function restartRelocationQuestionnaire(): Promise<void> {
+  await apiFetch('/api/v1/candidate/relocation-questionnaire', {
     method: 'DELETE',
   });
-  return readDataObject<RelocationProfileDeleteResult>(response);
 }
 
 function quotedRevision(revision: number): string {

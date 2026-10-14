@@ -78,6 +78,55 @@ describe('RelocationScreen', () => {
     expect(host?.querySelector('#career-relocation-tab-profile')?.getAttribute('aria-selected')).toBe('true');
   });
 
+  it('shows citizenship and document-expiration alerts from the profile response', async () => {
+    const profile = emptyRelocationQuestionnaire();
+    vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
+      profile: {
+        ...profile,
+        citizenshipDocuments: {
+          ...profile.citizenshipDocuments,
+          documents: [{
+            id: 'permit-1',
+            kind: 'residence_permit',
+            countryCode: 'DE',
+            expiresAt: '2026-10-20',
+          }],
+        },
+      },
+      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consentTextStatus: 'pending_dpo_review',
+      alerts: [
+        { kind: 'citizenship_missing' },
+        { kind: 'document_expiring', documentId: 'permit-1', expiresAt: '2026-10-20' },
+      ],
+    });
+    render();
+
+    await flushLoad();
+    await clickButton('Мои данные');
+
+    expect(host?.textContent).toContain('Укажите страну гражданства');
+    expect(host?.textContent).toContain('Срок действия документа «Вид на жительство» истекает');
+    expect(host?.querySelector('[aria-label="Предупреждения профиля"]')).not.toBeNull();
+  });
+
+  it('resumes an interrupted questionnaire at its saved step', async () => {
+    const profile = { ...emptyRelocationQuestionnaire(), currentStep: 'education' as const };
+    vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
+      profile,
+      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consentTextStatus: 'pending_dpo_review',
+      alerts: [],
+    });
+    render();
+
+    await flushLoad();
+    await clickButton('Мои данные');
+    await clickButton('Продолжить с шага 2');
+
+    expect(host?.textContent).toContain('Шаг 2 из 4: Диплом и опыт');
+  });
+
   it('opens economy for the country selected from its details', async () => {
     mockGrantedQuestionnaire();
     render();

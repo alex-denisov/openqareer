@@ -4,6 +4,7 @@ import * as apiClient from '../coach/apiClient';
 import {
   getRelocationQuestionnaire,
   putRelocationQuestionnaireStep,
+  restartRelocationQuestionnaire,
 } from './relocationApi';
 
 afterEach(() => vi.restoreAllMocks());
@@ -58,6 +59,17 @@ describe('relocation questionnaire API client', () => {
         headers: { 'Content-Type': 'application/json', 'If-Match': '"0"' },
         body: JSON.stringify(step),
       }),
+    );
+  });
+
+  it('accepts the server 204 response when restarting the questionnaire', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(restartRelocationQuestionnaire()).resolves.toBeUndefined();
+
+    expect(apiClient.apiFetch).toHaveBeenCalledWith(
+      '/api/v1/candidate/relocation-questionnaire',
+      { method: 'DELETE' },
     );
   });
 });

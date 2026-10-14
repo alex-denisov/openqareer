@@ -295,9 +295,11 @@ function ConditionsChipList({
 function RelocationBox({
   isRelocationEnabled,
   onEnableRelocation,
+  onOpenRelocation,
 }: {
   isRelocationEnabled: boolean;
   onEnableRelocation?: () => void;
+  onOpenRelocation?: () => void;
 }): ReactElement {
   return (
     <div className="career-relocation-box">
@@ -307,7 +309,15 @@ function RelocationBox({
           <span className="career-relocation-title">Страны и релокация</span>
           <span className="career-badge">{isRelocationEnabled ? 'Включено' : 'Не включено'}</span>
         </div>
-        {!isRelocationEnabled ? (
+        {isRelocationEnabled ? (
+          <button
+            type="button"
+            className="career-btn career-btn-secondary career-btn-sm"
+            onClick={onOpenRelocation}
+          >
+            Открыть страны и релокацию
+          </button>
+        ) : (
           <button
             type="button"
             className="career-btn career-btn-secondary career-btn-sm"
@@ -315,7 +325,7 @@ function RelocationBox({
           >
             Включить релокацию
           </button>
-        ) : null}
+        )}
       </div>
     </div>
   );
@@ -325,10 +335,12 @@ export function CareerConditionsCard({
   conditions,
   onEditField,
   onEnableRelocation,
+  onOpenRelocation,
 }: {
   conditions: SearchConditionsDraft;
   onEditField: (field: EditableConditionField) => void;
   onEnableRelocation?: () => void;
+  onOpenRelocation?: () => void;
 }): ReactElement {
   const formatStr = [
     conditions.format.office ? 'Офис' : null,
@@ -353,6 +365,7 @@ export function CareerConditionsCard({
       <RelocationBox
         isRelocationEnabled={conditions.geography.isRelocationEnabled}
         onEnableRelocation={onEnableRelocation}
+        onOpenRelocation={onOpenRelocation}
       />
     </section>
   );

@@ -1,4 +1,4 @@
-import type { ReactElement } from 'react';
+import { useState, type ReactElement } from 'react';
 import type { CareerPushView, CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
 import {
   CareerConditionsCard,
@@ -18,6 +18,7 @@ import {
 import { MobileConditionSalaryView, MobileRoleDetailView } from './CareerMobileComponents';
 import { applyConditionsEdit } from './careerConditionsStorage';
 import { useCareerScreenState } from './useCareerScreenState';
+import { RelocationScreen } from '../relocation/RelocationScreen';
 
 export interface CareerScreenProps {
   readonly initialRoles?: readonly CareerRoleModel[];
@@ -283,14 +284,15 @@ interface CareerMainContentProps {
   readonly onOpenExpert?: () => void;
   readonly onOpenVacancies?: (roleTitle?: string) => void;
   readonly onCheckSkills?: (roleId?: string) => void;
+  readonly onOpenRelocation: () => void;
 }
 
 function CareerMainConditionsBlock({
   state,
-  onNavigate,
+  onOpenRelocation,
 }: {
   state: ReturnType<typeof useCareerScreenState>;
-  onNavigate?: (view: string, params?: unknown) => void;
+  onOpenRelocation: () => void;
 }): ReactElement {
   return (
     <>
@@ -303,8 +305,9 @@ function CareerMainConditionsBlock({
               geography: { ...prev.geography, isRelocationEnabled: true },
             }),
           );
-          onNavigate?.('relocation');
+          onOpenRelocation();
         }}
+        onOpenRelocation={onOpenRelocation}
       />
       <CareerConditionsEditorRow
         editingField={state.editingField}
@@ -323,6 +326,44 @@ function CareerMainConditionsBlock({
   );
 }
 
+function CareerScreenContent({
+  props,
+  state,
+  onOpenRelocation,
+}: {
+  props: CareerScreenProps;
+  state: ReturnType<typeof useCareerScreenState>;
+  onOpenRelocation: () => void;
+}): ReactElement {
+  if (state.isMobile && state.pushView !== 'home') {
+    return (
+      <MobilePushRouter
+        pushView={state.pushView}
+        roles={state.activeRoles}
+        conditions={state.conditions}
+        onBack={() => state.setPushView('home')}
+        onConsultant={() => props.onOpenExpert?.()}
+        onOpenVacancies={(t) => props.onOpenVacancies?.(t)}
+        onCheckSkills={(id) => props.onCheckSkills?.(id)}
+        onRejectRole={state.handleRejectRole}
+        onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
+      /> as ReactElement
+    );
+  }
+  return (
+    <CareerMainContent
+      state={state}
+      marketError={state.marketError}
+      isMarketStale={props.isMarketStale ?? false}
+      onNavigate={props.onNavigate}
+      onOpenExpert={props.onOpenExpert}
+      onOpenVacancies={props.onOpenVacancies}
+      onCheckSkills={props.onCheckSkills}
+      onOpenRelocation={onOpenRelocation}
+    />
+  );
+}
+
 function CareerMainContent({
   state,
   marketError,
@@ -331,6 +372,7 @@ function CareerMainContent({
   onOpenExpert,
   onOpenVacancies,
   onCheckSkills,
+  onOpenRelocation,
 }: CareerMainContentProps): ReactElement {
   return (
     <div className="career-screen" data-testid="career-screen">
@@ -339,7 +381,7 @@ function CareerMainContent({
         isMarketStale={isMarketStale}
         onClearError={() => state.setSaveError(null)}
       />
-      <CareerMainConditionsBlock state={state} onNavigate={onNavigate} />
+      <CareerMainConditionsBlock state={state} onOpenRelocation={onOpenRelocation} />
       <CareerRolesSection
         roles={state.activeRoles}
         showAllRoles={state.showAllRoles}
@@ -355,17 +397,9 @@ function CareerMainContent({
 }
 
 export function CareerScreen(props: CareerScreenProps): ReactElement {
-  const {
-    hasProfile = true,
-    isMarketStale = false,
-    onNavigate,
-    onOpenExpert,
-    onOpenVacancies,
-    onCheckSkills,
-    onOpenProfile,
-  } = props;
-
+  const { hasProfile = true, onOpenExpert, onOpenVacancies, onOpenProfile } = props;
   const state = useCareerScreenState(props);
+  const [relocationOpen, setRelocationOpen] = useState(false);
 
   if (state.isLoading) return <CareerLoadingSkeleton />;
   if (!hasProfile) {
@@ -375,32 +409,20 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
       </div>
     );
   }
-
-  if (state.isMobile && state.pushView !== 'home') {
+  if (relocationOpen) {
     return (
-      <MobilePushRouter
-        pushView={state.pushView}
-        roles={state.activeRoles}
-        conditions={state.conditions}
-        onBack={() => state.setPushView('home')}
-        onConsultant={() => onOpenExpert?.()}
-        onOpenVacancies={(t) => onOpenVacancies?.(t)}
-        onCheckSkills={(id) => onCheckSkills?.(id)}
-        onRejectRole={state.handleRejectRole}
-        onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
+      <RelocationScreen
+        onNavigateBack={() => setRelocationOpen(false)}
+        onOpenExpert={onOpenExpert}
+        onOpenVacancies={onOpenVacancies ? () => onOpenVacancies() : undefined}
       />
-    ) as ReactElement;
+    );
   }
-
   return (
-    <CareerMainContent
+    <CareerScreenContent
+      props={props}
       state={state}
-      marketError={state.marketError}
-      isMarketStale={isMarketStale}
-      onNavigate={onNavigate}
-      onOpenExpert={onOpenExpert}
-      onOpenVacancies={onOpenVacancies}
-      onCheckSkills={onCheckSkills}
+      onOpenRelocation={() => setRelocationOpen(true)}
     />
   );
 }
