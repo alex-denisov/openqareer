@@ -704,6 +704,7 @@ test.describe('B251 responses screen', () => {
     const channelSection = page.locator('.career-responses-channel-performance');
     await expect(channelSection).toBeVisible();
     await expect(channelSection).toContainText('выборка 7');
+    await expect(channelSection).toContainText('Меньше 20 откликов: узкие места не определены.');
     await expect(channelSection.locator('tbody tr')).toHaveCount(2);
     await expect(channelSection).toContainText('Ввод вручную');
     await page.screenshot({ path: testInfo.outputPath('b450-channels-1440.png'), fullPage: true });

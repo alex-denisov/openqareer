@@ -61,16 +61,13 @@ describe('PipelineAnalyticsView', () => {
     expect(html).toContain('Интервью');
     expect(html).toContain('Получен оффер');
     expect(html).toContain('hh.ru');
-    expect(html).toContain('Воронка стабильна');
+    expect(html).toContain('Меньше 20 откликов: узкие места не определены.');
   });
 
   it('отображает диагностику узкого места и рекомендацию стратега', () => {
-    const apps: readonly ApplicationView[] = [
-      makeApp({ id: '1', stage: 'applied' }),
-      makeApp({ id: '2', stage: 'applied' }),
-      makeApp({ id: '3', stage: 'applied' }),
-      makeApp({ id: '4', stage: 'applied' }),
-    ];
+    const apps = Array.from({ length: 20 }, (_, index) =>
+      makeApp({ id: String(index + 1), stage: 'applied' }),
+    );
 
     const html = renderToStaticMarkup(
       <PipelineAnalyticsView applications={apps} onOpenVacancies={() => {}} />,

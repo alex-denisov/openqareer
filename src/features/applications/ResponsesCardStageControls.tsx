@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { DeliveryReceipt } from '../../../shared/applicationStage';
 import { deliveryState } from '../../../shared/applicationStage';
+import { humanSourceLabel } from './sourceLabels';
 import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { StarStoriesModal } from '../interview/StarStoriesModal';
@@ -11,8 +12,16 @@ import {
 } from './applicationsApi';
 import { InterviewDebriefModal, type InterviewDebriefSubmitData } from './InterviewDebriefModal';
 
-export function DeliveryStatus({ receipt }: { receipt: DeliveryReceipt | null }) {
+export function DeliveryStatus({
+  receipt,
+  source,
+}: {
+  readonly receipt: DeliveryReceipt | null;
+  readonly source?: string | null;
+}) {
   const state = deliveryState('applied', receipt);
+  const isLinkedInWithoutReceipt =
+    !receipt && humanSourceLabel(source).toLocaleLowerCase('ru-RU') === 'linkedin';
   const label =
     state === 'failed'
       ? 'Не доставлено'
@@ -25,6 +34,9 @@ export function DeliveryStatus({ receipt }: { receipt: DeliveryReceipt | null })
     <p className={`career-responses-card-delivery is-${state}`} role="status">
       <span>{label}</span>
       {receipt && state === 'delivered' ? <small>Квитанция сохранена</small> : null}
+      {isLinkedInWithoutReceipt ? (
+        <small>Подтверждение LinkedIn не получено; доставка не подтверждена.</small>
+      ) : null}
       {receipt?.kind === 'failure_note' ? <small>{receipt.value}</small> : null}
     </p>
   );
@@ -212,7 +224,12 @@ export function CardStageBlocks({
   ) => void;
 }) {
   if (application.stage === 'applied') {
-    return <DeliveryStatus receipt={application.deliveryReceipt ?? null} />;
+    return (
+      <DeliveryStatus
+        receipt={application.deliveryReceipt ?? null}
+        source={application.vacancy?.source}
+      />
+    );
   }
   if (application.stage === 'interview') {
     const date = application.nearestInterview?.scheduledAt;

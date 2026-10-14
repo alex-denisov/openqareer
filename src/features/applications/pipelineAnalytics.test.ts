@@ -100,14 +100,19 @@ describe('computePipelineAnalytics', () => {
     expect(summary.archivedCount).toBe(1);
   });
 
+  it('не диагностирует узкие места для выборки меньше 20 откликов', () => {
+    const apps = Array.from({ length: 19 }, (_, index) => makeApp({ id: String(index + 1) }));
+    const summary = computePipelineAnalytics(apps);
+
+    expect(summary.bottleneck.id).toBe('need_more_data');
+    expect(summary.bottleneck.title).toBe('Мало данных: воронка');
+    expect(summary.bottleneck.description).toBe('Меньше 20 откликов: узкие места не определены.');
+  });
+
   it('определяет узкое место при низком отклике работодателей', () => {
-    const apps: readonly ApplicationView[] = [
-      makeApp({ id: '1', stage: 'applied' }),
-      makeApp({ id: '2', stage: 'applied' }),
-      makeApp({ id: '3', stage: 'applied' }),
-      makeApp({ id: '4', stage: 'applied' }),
-      makeApp({ id: '5', stage: 'applied' }),
-    ];
+    const apps = Array.from({ length: 20 }, (_, index) =>
+      makeApp({ id: String(index + 1), stage: 'applied' }),
+    );
 
     const summary = computePipelineAnalytics(apps);
     expect(summary.bottleneck.id).toBe('low_response_rate');
@@ -115,11 +120,9 @@ describe('computePipelineAnalytics', () => {
   });
 
   it('определяет узкое место при отсутствии интервью при наличии ответов', () => {
-    const apps: readonly ApplicationView[] = [
-      makeApp({ id: '1', stage: 'responded' }),
-      makeApp({ id: '2', stage: 'responded' }),
-      makeApp({ id: '3', stage: 'applied' }),
-    ];
+    const apps = Array.from({ length: 20 }, (_, index) =>
+      makeApp({ id: String(index + 1), stage: index < 6 ? 'responded' : 'applied' }),
+    );
 
     const summary = computePipelineAnalytics(apps);
     expect(summary.bottleneck.id).toBe('low_interview_rate');

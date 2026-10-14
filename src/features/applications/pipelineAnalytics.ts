@@ -1,6 +1,8 @@
 import type { ApplicationStage } from '../../../shared/applicationStage';
 import type { ApplicationView } from './applicationsApi';
 
+export const MIN_PIPELINE_SAMPLE_SIZE = 20;
+
 export interface StageFunnelStep {
   readonly stage: ApplicationStage;
   readonly label: string;
@@ -13,11 +15,7 @@ export type BottleneckSeverity = 'info' | 'warning' | 'success';
 
 export interface PipelineBottleneck {
   readonly id:
-    | 'need_more_data'
-    | 'low_response_rate'
-    | 'low_interview_rate'
-    | 'low_offer_rate'
-    | 'healthy';
+    'need_more_data' | 'low_response_rate' | 'low_interview_rate' | 'low_offer_rate' | 'healthy';
   readonly severity: BottleneckSeverity;
   readonly title: string;
   readonly description: string;
@@ -99,9 +97,7 @@ function applicationReachedStage(app: ApplicationView, targetStage: ApplicationS
 /**
  * Рассчитывает этапы воронки и их конверсии.
  */
-function buildFunnelSteps(
-  applications: readonly ApplicationView[],
-): readonly StageFunnelStep[] {
+function buildFunnelSteps(applications: readonly ApplicationView[]): readonly StageFunnelStep[] {
   const counts = STAGE_ORDER.map((stage) => {
     const reached = applications.filter((app) => applicationReachedStage(app, stage)).length;
     return { stage, count: reached };
@@ -114,9 +110,7 @@ function buildFunnelSteps(
     const conversionFromPrevious =
       index > 0 && prevCount > 0 ? Math.round((item.count / prevCount) * 100) : null;
     const conversionFromApplied =
-      index >= 1 && appliedCount > 0
-        ? Math.round((item.count / appliedCount) * 100)
-        : null;
+      index >= 1 && appliedCount > 0 ? Math.round((item.count / appliedCount) * 100) : null;
 
     return {
       stage: item.stage,
@@ -180,14 +174,13 @@ function diagnoseBottlenecks(
   offerCount: number,
   closedCount: number,
 ): PipelineBottleneck {
-  if (appliedCount < 3) {
+  if (appliedCount < MIN_PIPELINE_SAMPLE_SIZE) {
     return {
       id: 'need_more_data',
       severity: 'info',
-      title: 'Сбор статистики',
-      description: 'В воронке пока мало отправленных откликов для статистических выводов.',
-      recommendation:
-        'Отправьте от 5 до 10 целевых откликов, чтобы выявить закономерности и узкие места.',
+      title: 'Мало данных: воронка',
+      description: 'Меньше 20 откликов: узкие места не определены.',
+      recommendation: 'Соберите 20 откликов, чтобы система могла показать узкие места.',
     };
   }
 
@@ -204,12 +197,7 @@ function diagnoseBottlenecks(
     };
   }
 
-  return diagnoseInterviewBottleneck(
-    interviewCount,
-    respondedCount,
-    offerCount,
-    closedCount,
-  );
+  return diagnoseInterviewBottleneck(interviewCount, respondedCount, offerCount, closedCount);
 }
 
 /**

@@ -1043,6 +1043,26 @@ test.describe('B450 responses workspace', () => {
     await expect(selected).toContainText('Сайт не подтвердил отправку');
   });
 
+  test('LinkedIn без квитанции сообщает, что доставка не подтверждена', async ({ page }) => {
+    await installMocks(page);
+    await seedWorkspace(page);
+    await openResponses(page);
+    await waitForResponsesPool(page);
+    await page
+      .getByRole('searchbox', { name: 'Компания, роль или площадка' })
+      .fill('Руководитель платформы 3');
+    await waitForResponsesPool(page);
+
+    const card = page
+      .locator('.career-responses-card')
+      .filter({ hasText: /Руководитель платформы 3(?!\d)/u });
+    await expect(card).toHaveCount(1);
+    await expect(card).toContainText('Пробовали отправить');
+    await expect(card).toContainText(
+      'Подтверждение LinkedIn не получено; доставка не подтверждена.',
+    );
+  });
+
   test('вкладка подготовки подключает STAR-истории и существующий поток мок-интервью', async ({
     page,
   }, testInfo) => {
