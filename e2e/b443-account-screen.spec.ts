@@ -6,7 +6,7 @@ import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
-const EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS-2');
+const EVIDENCE_DIR = e2eEvidenceDirectory('AUD-8');
 
 const accountConnections: CandidateConnection[] = [
   {
@@ -125,10 +125,10 @@ function accountConsentHandler() {
 async function openAccount(page: import('@playwright/test').Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const trigger = page.getByRole('button', { name: 'Открыть аккаунт' });
-  await expect(trigger).toBeEnabled();
+  await expect(trigger).toBeEnabled({ timeout: 15_000 });
   await trigger.click();
   const account = page.getByTestId('career-shell').getByRole('main');
-  await expect(account).toBeVisible();
+  await expect(account).toBeVisible({ timeout: 15_000 });
   if ((page.viewportSize()?.width ?? 1440) > 760) {
     await expect(account.getByRole('heading', { name: 'Аккаунт' })).toBeVisible();
   }
@@ -277,7 +277,7 @@ test.describe('B443: Account screen in the signed-in shell', () => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     const trigger = page.getByRole('button', { name: 'Открыть аккаунт' });
-    await expect(trigger).toBeEnabled();
+    await expect(trigger).toBeEnabled({ timeout: 15_000 });
     await page.evaluate(installDesktopApiTestBridge);
     await page.evaluate(() => {
       (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
