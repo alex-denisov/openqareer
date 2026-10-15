@@ -927,7 +927,12 @@ test.describe('B251 today screen', () => {
     await openApp(page);
 
     const panel = page.locator('.career-expert-panel');
-    await page.getByRole('button', { name: 'Почему это решение' }).click();
+    const why = page.getByRole('button', { name: 'Почему это решение' });
+    await expect(why).toHaveAttribute('aria-expanded', 'false');
+    await why.click();
+    await expect(why).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('.tm-reasons')).toBeVisible();
+    await page.getByRole('button', { name: 'Консультант: открыть' }).click();
     await expect(page.getByRole('dialog', { name: /Консультант/u })).toBeVisible();
     await expect(page.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
