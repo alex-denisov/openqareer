@@ -1,10 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { consultantTargetView, queueItemTarget, TodayScreen } from './TodayScreen';
-import {
-  clearConsultantActionResolution,
-  resolveConsultantAction,
-} from './consultantActionStorage';
+import { queueItemTarget, TodayScreen } from './TodayScreen';
 import type { TodaySnapshot } from './todayApi';
 
 const snapshot: TodaySnapshot = {
@@ -81,282 +77,198 @@ function renderTodayScreen(props: Partial<Parameters<typeof TodayScreen>[0]> = {
 }
 
 function mobileTodayMarkup(html: string): string {
-  const start = html.indexOf('<div class="career-today-mobile">');
+  const start = html.indexOf('<div class="career-today-mobile');
   const end = html.indexOf('<div class="career-today-desktop">', start);
   return start >= 0 && end > start ? html.slice(start, end) : html;
 }
 
-describe('TodayScreen (B251 S5)', () => {
-  it('shows the digest counters with a basis caption under each number', () => {
-    const html = mobileTodayMarkup(renderTodayScreen());
+describe('TodayScreen (ACC-A-1)', () => {
+  const action: NonNullable<Parameters<typeof TodayScreen>[0]['consultantAction']> = {
+    revision: 'career-action-policy-v1-2026-08-07',
+    type: 'review',
+    destination: 'profile',
+    headline: 'Подтвердите размер команды',
+    label: 'Подтвердить факт',
+    rationale: 'Проверьте исходные данные профиля.',
+    expectedChange: 'Откроется оценка уровня для вакансий.',
+    findingIds: ['team-size'],
+    roleIds: ['role-target'],
+    marketIds: ['market-target'],
+    alternatives: [],
+    approvalBoundary: 'Изменения требуют подтверждения.',
+  };
 
-    expect(html).toContain('3</span>');
-    expect(html).toContain('напоминание компании на сегодня');
-    expect(html).toContain('напоминание просрочено');
-    expect(html).not.toContain('follow-up');
-    expect(html).not.toContain('Follow-up');
-    expect(html.match(/class="career-today-digest-number"/gu)).toHaveLength(4);
-    expect(html).toContain('class="career-today-digest-number">1</span>');
-    expect(html).toContain('кампания VP Technology Ops');
-    expect(html).toContain('Peraton — 6 дней тишины');
-    expect(html).toContain('HRTx Inc. · раунд 2');
-
-    const htmlMultiple = mobileTodayMarkup(
+  it('renders the approved decision, queue, funnel and profile shortcut', () => {
+    const html = mobileTodayMarkup(
       renderTodayScreen({
-        snapshot: {
-          ...snapshot,
-          digest: {
-            ...snapshot.digest,
-            followUpsDueToday: 5,
-            followUpsOverdue: 5,
-          },
+        consultantAction: action,
+        onNavigate: vi.fn(),
+        onOpenExpert: vi.fn(),
+        funnelContext: {
+          found: 214,
+          favorites: 18,
+          responses: 3,
+          offers: 0,
+          catalogObservedAt: '2026-10-07T09:12:00.000Z',
         },
       }),
     );
-    expect(htmlMultiple).toContain('напоминаний компании на сегодня');
-    expect(htmlMultiple).toContain('напоминаний просрочено');
+
+    expect(html).toContain('class="tm-hero"');
+    expect(html).toContain('Подтвердите размер команды');
+    expect(html).toContain('Подтвердить факт');
+    expect(html).toContain('Отложить до завтра');
+    expect(html).toContain('Почему это решение');
+    expect(html).toContain('Очередь дня');
+    expect(html.match(/data-testid="today-mobile-queue-row"/gu)).toHaveLength(2);
+    expect(html).toContain('Воронка за 30 дней');
+    expect(html).toContain('Избранное');
+    expect(html).toContain('Дополнить профиль');
   });
 
-  it('marks the first queue row with an accent border, not an overlapping flag', () => {
-    const html = renderTodayScreen();
-
-    expect(html).toContain('career-today-item is-first');
-    expect(html).not.toContain('Следующее действие');
-  });
-
-  it('shows fit checks for a new vacancy and the action buttons per kind', () => {
-    const html = renderTodayScreen();
-
-    expect(html).toContain('роль');
-    expect(html).toContain('Отметить отправленным');
-    expect(html).toContain('Черновик напоминания');
-    expect(html).toContain('Открыть');
-  });
-
-  it('uses one in-progress set for the queue action and follow-up list action', () => {
-    const html = renderTodayScreen({ markingFollowUpIds: new Set(['app-1']) });
-
-    expect(html.match(/Сохраняем…/gu)).toHaveLength(2);
-    expect(html.match(/disabled="" aria-busy="true"/gu)).toHaveLength(2);
-  });
-
-  it('renders follow-ups by due date', () => {
-    const html = renderTodayScreen();
-
-    expect(html).toContain('Напоминания компании по срокам');
-    expect(html).toContain('Peraton — Enterprise Architect');
-    expect(html).toContain('сегодня');
-  });
-
-  it('shows returning-user line at the top with clickable links when returning (B255)', () => {
-    const htmlWithReturning = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        digest: {
-          ...snapshot.digest,
-          applicationsWaitingOver7Days: 2,
+  it('does not display a recruiter name as the company in a mobile queue row', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        snapshot: {
+          ...snapshot,
+          queue: [
+            {
+              ...snapshot.queue[1],
+              company: 'Глушкова Ксения Евгеньевна',
+            },
+          ],
         },
-        sinceLastVisit: {
-          since: '2026-09-23T09:00:00.000Z',
-          items: ['Genetec запросили доступность на этой неделе'],
-          newVacanciesCount: 3,
-          applicationsWaitingOver7Days: 2,
-          nearestInterview: {
-            company: 'HRTx Inc.',
-            title: 'Enterprise Architect Director',
-            round: 2,
-            at: '2026-09-26T14:00:00.000Z',
+        onNavigate: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('Компания не указана — Business Information Architect');
+    expect(html).not.toContain('Глушкова');
+  });
+
+  it('does not repeat removed legacy modules on mobile', () => {
+    const html = mobileTodayMarkup(renderTodayScreen());
+
+    expect(html).not.toContain('career-today-return-banner');
+    expect(html).not.toContain('career-today-digest');
+    expect(html).not.toContain('career-momentum-widget');
+    expect(html).not.toContain('career-today-since-hint');
+    expect(html).not.toContain('career-drafts');
+    expect(html).not.toContain('career-today-followups');
+    expect(html).not.toContain('career-onboarding');
+    expect(html).not.toContain('Открыть карьерный дневник');
+  });
+
+  it('shows zero, one or at most four queue rows', () => {
+    const emptyHtml = mobileTodayMarkup(
+      renderTodayScreen({ snapshot: { ...snapshot, queue: [] } }),
+    );
+    const oneHtml = mobileTodayMarkup(
+      renderTodayScreen({ snapshot: { ...snapshot, queue: [snapshot.queue[0]] } }),
+    );
+    const twentyQueue = Array.from({ length: 20 }, (_, index) => ({
+      ...snapshot.queue[0],
+      applicationId: 'queue-' + index,
+      title: 'Enterprise Architect ' + index,
+    }));
+    const manyHtml = mobileTodayMarkup(
+      renderTodayScreen({ snapshot: { ...snapshot, queue: twentyQueue } }),
+    );
+    const rowCount = (html: string) =>
+      html.match(/data-testid="today-mobile-queue-row"/gu)?.length ?? 0;
+
+    expect(rowCount(emptyHtml)).toBe(0);
+    expect(rowCount(oneHtml)).toBe(1);
+    expect(rowCount(manyHtml)).toBe(4);
+    expect(manyHtml).not.toContain('Enterprise Architect 4');
+    expect(manyHtml).not.toContain('Показать ещё');
+  });
+
+  it('marks an overdue follow-up row without relying on color alone', () => {
+    const overdueItem = { ...snapshot.queue[0], applicationId: 'app-2' };
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        snapshot: { ...snapshot, queue: [overdueItem] },
+        onNavigate: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('class="pm-row is-warn"');
+    expect(html).toContain('просрочен');
+  });
+
+  it('shows funnel counts with their source date and sample size', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        snapshot: {
+          ...snapshot,
+          momentum: {
+            calculatedAt: '2026-10-07T09:12:00.000Z',
+            windows: {
+              '7d': { applied: 2, views: 3, screenings: 1, interviews: 0 },
+              '30d': { applied: 7, views: 14, screenings: 3, interviews: 2 },
+            },
+            burnoutNotice: false,
           },
         },
-      },
-    });
-
-    expect(htmlWithReturning).toContain('career-today-return-banner');
-    expect(htmlWithReturning).toContain('С прошлого визита:');
-    expect(htmlWithReturning).toContain('3 новые подходящие вакансии');
-    expect(htmlWithReturning).toContain('2 отклика ждут ответа больше 7 дней');
-    expect(htmlWithReturning).toContain('ближайшее интервью 26 сентября');
-    expect(htmlWithReturning).toContain('data-testid="since-visit-vacancies"');
-    expect(htmlWithReturning).toContain('data-testid="since-visit-applications"');
-    expect(htmlWithReturning).toContain('data-testid="since-visit-interview"');
-  });
-
-  it('does not show the returning banner when since is null or nothing is new (B255)', () => {
-    const htmlFirstVisit = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        sinceLastVisit: { since: null, items: [] },
-      },
-    });
-    expect(htmlFirstVisit).not.toContain('career-today-return-banner');
-
-    const htmlNothingNew = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        digest: {
-          ...snapshot.digest,
-          newVacancies: 0,
-          applicationsWaitingOver7Days: 0,
-          nextInterview: null,
+        funnelContext: {
+          found: 214,
+          favorites: 18,
+          responses: 3,
+          offers: 0,
+          catalogObservedAt: '2026-10-07T09:12:00.000Z',
         },
-        sinceLastVisit: {
-          since: '2026-09-23T09:00:00.000Z',
-          items: [],
-          newVacanciesCount: 0,
-          applicationsWaitingOver7Days: 0,
-          nearestInterview: null,
-        },
-      },
-    });
-    expect(htmlNothingNew).not.toContain('career-today-return-banner');
+      }),
+    );
+    const funnel = html.slice(html.indexOf('class="tm-funnel"'));
+
+    expect(funnel).toContain('class="is-here"');
+    expect(funnel).toContain('aria-current="step"');
+    expect(funnel).toContain('n = 7');
+    expect(funnel).toContain('Найдено в каталоге: 214');
+    expect(funnel).toContain('Офферов пока 0');
+    expect(funnel).toContain('Данные на');
   });
 
-  it('shows since-last-visit facts as a hint line under the queue title, not a separate block (C55)', () => {
-    const html = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        sinceLastVisit: { since: null, items: ['Genetec запросили доступность на этой неделе'] },
-      },
-    });
+  it('shows dashes and an explicit unknown state for metrics without verified data', () => {
+    const html = mobileTodayMarkup(renderTodayScreen());
+    const funnel = html.slice(html.indexOf('class="tm-funnel"'));
 
-    expect(html).toContain('career-today-since-hint');
-    expect(html).toContain('Genetec запросили доступность на этой неделе');
-    // No separate «С прошлого визита» section duplicating the KPI tiles.
-    expect(html).not.toContain('career-today-since"');
+    expect(funnel.match(/>—<\/b>/gu)).toHaveLength(4);
+    expect(funnel).toContain('Нет проверенных данных');
+    expect(funnel).not.toContain('class="is-here"');
   });
 
-  it('shows a skeleton while the first reading is in flight', () => {
+  it('uses the desktop empty-decision copy and keeps a real consultant route', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        snapshot: { ...snapshot, queue: [] },
+        onOpenExpert: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('Нет проверенного следующего шага');
+    expect(html).toContain('В текущих данных нет основания предложить конкретное действие.');
+    expect(html).toContain('Обсудить');
+    expect(html).toContain('Очередь дня пуста. Новые задачи появятся здесь.');
+    expect(html).not.toContain('Подтвердить факт');
+    expect(html).not.toContain('Отложить до завтра');
+  });
+
+  it('shows a mobile skeleton while the first reading is in flight', () => {
     const html = renderTodayScreen({ snapshot: null, loading: true });
 
     expect(html).toContain('aria-label="Читаем очередь дня"');
     expect(html).toContain('aria-busy="true"');
-    expect(html.match(/career-today-digest-card/gu)).toHaveLength(4);
+    expect(html).toContain('today-loading-mobile');
+    expect(html).not.toContain('today-loading-desktop career-today-digest');
   });
 
-  it('shows a retry action when the reading failed', () => {
+  it('shows a working retry control when loading fails', () => {
     const html = renderTodayScreen({ snapshot: null, failed: true });
 
     expect(html).toContain('Не удалось обновить очередь дня');
     expect(html).toContain('Повторить');
-  });
-
-  it('keeps the digest and says what to do when the queue is empty', () => {
-    const html = renderTodayScreen({
-      snapshot: {
-        ...snapshot,
-        queue: [],
-        followUps: [],
-        sinceLastVisit: { since: null, items: [] },
-      },
-    });
-
-    expect(html).toContain('Очередь дня');
-    expect(html).toContain('career-today-digest');
-    expect(html).toContain('Решений на сегодня нет: подборка разобрана.');
-    expect(html).toContain('Новые вакансии появятся здесь сами.');
-  });
-
-  describe('Консультант на «Сегодня» (C57)', () => {
-    const mockAction: Parameters<typeof TodayScreen>[0]['consultantAction'] = {
-      revision: 'career-action-policy-v1-2026-08-07',
-      type: 'review',
-      destination: 'profile',
-      headline: 'Добавим полный источник',
-      label: 'Дополнить профиль',
-      rationale: 'Сначала закрываем «материала недостаточно для полного разбора».',
-      expectedChange: 'Полный источник откроет недостающие даты, задачи и результаты.',
-      findingIds: ['readability-short'],
-      roleIds: ['role-target'],
-      marketIds: ['eu', 'mena'],
-      alternatives: [],
-      approvalBoundary: 'Профиль меняется только после согласования.',
-    };
-
-    it('оставляет единственную акцентную кнопку консультанта при наличии интервью', () => {
-      const html = mobileTodayMarkup(
-        renderTodayScreen({
-          consultantAction: { ...mockAction, label: 'Проверить факты' },
-          snapshot: {
-            ...snapshot,
-            queue: [
-              ...snapshot.queue,
-              {
-                kind: 'interview',
-                applicationId: 'interview-one',
-                title: 'Product Lead',
-                company: 'Компания',
-                eyebrow: 'Интервью',
-                dueAt: null,
-                fit: null,
-              },
-            ],
-          },
-        }),
-      );
-      const accentButtons =
-        html.match(/<button[^>]*class="[^"]*career-btn-primary[^"]*"[^>]*>[\s\S]*?<\/button>/gu) ??
-        [];
-      expect(accentButtons).toHaveLength(1);
-      expect(accentButtons[0]).toContain('Проверить факты');
-      expect(html).toContain('Подготовиться');
-    });
-
-    it('встраивает карточку консультанта в очередь дня с заголовком, обоснованием и кнопкой действия', () => {
-      const html = renderTodayScreen({ consultantAction: mockAction });
-
-      expect(html).toContain('career-today-consultant-card');
-      expect(html).toContain('Консультант · Один шаг на сегодня');
-      expect(html).toContain('Добавим полный источник');
-      expect(html).toContain('Сначала закрываем «материала недостаточно для полного разбора».');
-      expect(html).toContain('Что изменится:');
-      expect(html).toContain('Полный источник откроет недостающие даты, задачи и результаты.');
-      expect(html).toContain('Дополнить профиль');
-      expect(html).toContain('Отклонить предложение');
-      // Total cards count in queue increases
-      expect(html).toContain('3 карточки · решение нужно по каждой');
-    });
-
-    it('показывает карточку консультанта в пустой очереди вместо заглушки «Решений на сегодня нет»', () => {
-      const html = mobileTodayMarkup(
-        renderTodayScreen({
-          snapshot: {
-            ...snapshot,
-            queue: [],
-            followUps: [],
-            sinceLastVisit: { since: null, items: [] },
-          },
-          consultantAction: mockAction,
-        }),
-      );
-
-      expect(html).toContain('career-today-consultant-card');
-      expect(html).toContain('Добавим полный источник');
-      expect(html).toContain('1 карточка · решение нужно по каждой');
-      expect(html).not.toContain('Решений на сегодня нет: подборка разобрана.');
-    });
-
-    it('не показывает отклонённое или принятое предложение консультанта', () => {
-      const testCandId = 'cand-c57-test';
-      resolveConsultantAction(testCandId, mockAction, 'dismissed');
-
-      const html = renderTodayScreen({
-        candidateId: testCandId,
-        consultantAction: mockAction,
-      });
-
-      expect(html).not.toContain('career-today-consultant-card');
-      expect(html).toContain('2 карточки · решение нужно по каждой');
-
-      clearConsultantActionResolution(testCandId, mockAction);
-    });
-
-    it('маршрутизирует read-only действия в правильные разделы кабинета', () => {
-      expect(consultantTargetView('profile')).toBe('profile');
-      expect(consultantTargetView('evidence')).toBe('profile');
-      expect(consultantTargetView('coach')).toBe('profile');
-      expect(consultantTargetView('career')).toBe('opportunities');
-      expect(consultantTargetView('search')).toBe('opportunities');
-    });
   });
 });
 
