@@ -81,14 +81,27 @@ async function openPreparation(page: Page, width: number): Promise<void> {
   );
   await page.setViewportSize({ width, height: width <= 760 ? 844 : 900 });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await openPreparationDialog(page, width);
+}
+
+async function openPreparationDialog(page: Page, width: number): Promise<void> {
   const nav =
     width <= 760 ? page.locator('.career-mobile-nav') : page.locator('aside#career-rail nav');
   await nav.getByRole('button', { name: 'Отклики' }).click();
-  const card = page
-    .locator('.career-responses-card')
-    .filter({ hasText: interviewApplication.vacancy.title });
-  await expect(card).toBeVisible();
-  await card.getByRole('button', { name: 'Подготовиться' }).click();
+  if (width <= 760) {
+    // B486: the 390 list opens the next step from the row, not from a board card.
+    await page.getByRole('button', { name: /^Открыть следующий шаг: Подготовиться/u }).click();
+    await page
+      .locator('.career-responses-selected')
+      .getByRole('button', { name: 'Начать мок-интервью' })
+      .click();
+  } else {
+    const card = page
+      .locator('.career-responses-card')
+      .filter({ hasText: interviewApplication.vacancy.title });
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Подготовиться' }).click();
+  }
   await expect(page.getByRole('dialog', { name: /Интервью/u })).toBeVisible();
 }
 
@@ -562,13 +575,7 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
       );
       await page.setViewportSize({ width, height: width <= 760 ? 844 : 900 });
       await page.goto('/app', { waitUntil: 'domcontentloaded' });
-      const nav =
-        width <= 760 ? page.locator('.career-mobile-nav') : page.locator('aside#career-rail nav');
-      await nav.getByRole('button', { name: 'Отклики' }).click();
-      const card = page
-        .locator('.career-responses-card')
-        .filter({ hasText: interviewApplication.vacancy.title });
-      await card.getByRole('button', { name: 'Подготовиться' }).click();
+      await openPreparationDialog(page, width);
       await page
         .getByRole('dialog', { name: /Интервью/u })
         .getByRole('button', { name: 'Начать мок-интервью' })
