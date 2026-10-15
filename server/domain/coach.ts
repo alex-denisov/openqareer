@@ -281,6 +281,31 @@ const memoryCandidateSchema = z.object({
   sensitive: z.boolean(),
 });
 
+function normalizeQuickReplies(value: unknown): string[] {
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+
+  for (const candidate of Array.isArray(value) ? value : []) {
+    if (typeof candidate !== 'string') continue;
+    const reply = candidate.replace(/\s+/gu, ' ').trim().slice(0, 40).trim();
+    if (
+      reply.length < 2 ||
+      /[\p{Extended_Pictographic}\uFE0F]/u.test(reply) ||
+      /\d/u.test(reply) ||
+      /[\w.+-]+@[\w.-]+\.[a-z]{2,}/iu.test(reply)
+    ) {
+      continue;
+    }
+    const key = reply.toLocaleLowerCase('ru-RU');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(reply);
+    if (normalized.length === 3) break;
+  }
+
+  return normalized;
+}
+
 export const coachTurnResultSchema = z.object({
   message: z.string().trim().min(1).max(6_000),
   phase: z.enum(COACH_PHASES),
@@ -295,6 +320,9 @@ export const coachTurnResultSchema = z.object({
     reason: z.string().trim().min(1).max(500).nullable(),
   }),
   careerTrack: careerTrackSchema.nullable().default(null),
+  quickReplies: z
+    .preprocess(normalizeQuickReplies, z.array(z.string().min(2).max(40)).max(3))
+    .optional(),
   actionProposals: z.array(careerActionProposalSchema).max(20).default([]),
   intelligence: z
     .object({
@@ -477,6 +505,11 @@ export const COACH_TURN_JSON_SCHEMA = {
         { type: 'null' },
       ],
     },
+    quickReplies: {
+      type: 'array',
+      maxItems: 3,
+      items: { type: 'string', minLength: 2, maxLength: 40 },
+    },
     actionProposals: {
       type: 'array',
       maxItems: 20,
@@ -550,6 +583,7 @@ export const COACH_TURN_JSON_SCHEMA = {
     'safety',
     'careerTrack',
     'actionProposals',
+    'quickReplies',
   ],
   additionalProperties: false,
 } as const;

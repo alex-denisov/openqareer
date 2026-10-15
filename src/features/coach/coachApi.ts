@@ -205,6 +205,7 @@ export interface CoachResult {
     needsHuman: boolean;
     reason: string | null;
   };
+  quickReplies?: string[];
   careerTrack: {
     objective: string;
     alternatives: Array<{

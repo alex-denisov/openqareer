@@ -9,6 +9,12 @@ describe('career role prompts', () => {
     const summary = careerInstructionsForRole('career_consultant', 'consultant-summary');
 
     expect(consultant).toContain('один главный вопрос');
+    expect(consultant).toContain('quickReplies');
+    expect(consultant).toContain('Для открытого вопроса верни пустой массив.');
+    expect(consultant).toContain('Не повторяй');
+    expect(strategist).toContain('quickReplies как пустой массив');
+    expect(expert).toContain('quickReplies как пустой массив');
+    expect(summary).toContain('пустой массив quickReplies');
     expect(strategist).toContain('сравни 1–3 маршрута');
     expect(strategist).toContain('market:hh:<id>');
     expect(expert).toContain('датированные рыночные наблюдения');

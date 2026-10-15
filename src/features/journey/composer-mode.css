@@ -78,6 +78,31 @@
   outline: 2px solid var(--career-accent);
   outline-offset: -2px;
 }
+.career-expert-chip-group {
+  display: flex;
+  gap: var(--career-space-2);
+  overflow-x: auto;
+  padding-block-end: var(--career-space-1);
+  scrollbar-width: none;
+}
+
+.career-expert-chip-group::-webkit-scrollbar {
+  display: none;
+}
+
+.career-expert-quick-replies {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  flex-wrap: wrap;
+  overflow-x: visible;
+  margin-block-start: var(--career-space-3);
+}
+
+.career-expert-quick-replies .career-expert-starter-chip {
+  max-inline-size: 100%;
+  white-space: normal;
+}
+
 @media (max-width: 760px) {
   .career-composer-send {
     border: 0;
