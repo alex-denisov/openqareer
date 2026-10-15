@@ -1,7 +1,13 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CoachResult } from '../coach/coachApi';
-import { CareerExpertPanel, CareerIntelligenceSummary, ExpertWaitingRow } from './CareerExpertPanel';
+import {
+  ConsultantStripButton,
+  CareerExpertPanel,
+  CareerIntelligenceSummary,
+  ExpertWaitingRow,
+} from './CareerExpertPanel';
+import { pendingConsultantProposalCount } from '../shell/CareerWorkspaceShellHelpers';
 import { CareerActionProposalCard } from './CareerCommandActions';
 
 describe('CareerIntelligenceSummary', () => {
@@ -44,11 +50,7 @@ describe('CareerIntelligenceSummary', () => {
       ],
       intelligence: {
         orchestrationRevision: 'test',
-        roleCoverage: [
-          'career_expert',
-          'career_strategist',
-          'career_consultant',
-        ],
+        roleCoverage: ['career_expert', 'career_strategist', 'career_consultant'],
         roleContributions: [],
         evidenceCoverage: 1,
         unsupportedClaimCount: 0,
@@ -60,9 +62,7 @@ describe('CareerIntelligenceSummary', () => {
       },
     };
 
-    const html = renderToStaticMarkup(
-      <CareerIntelligenceSummary result={result} />,
-    );
+    const html = renderToStaticMarkup(<CareerIntelligenceSummary result={result} />);
 
     expect(html).toContain('Проверить переход в продуктовую роль');
     expect(html).toContain('Пять релевантных вакансий');
@@ -157,11 +157,14 @@ describe('CareerExpertPanel copy', () => {
   });
 
   it('puts goal facts into the consultant message that will be sent to the coach', () => {
-    const prompt = 'Оцените цель «Снизить время релиза»: сейчас 12 дней, цель 8 дней, срок 2026-12-31.';
+    const prompt =
+      'Оцените цель «Снизить время релиза»: сейчас 12 дней, цель 8 дней, срок 2026-12-31.';
     const html = renderToStaticMarkup(
       <CareerExpertPanel
         initialPrompt={prompt}
-        initialUser={{ username: 'synthetic', candidateId: 'candidate-b457', role: 'candidate' } as never}
+        initialUser={
+          { username: 'synthetic', candidateId: 'candidate-b457', role: 'candidate' } as never
+        }
         onClose={() => undefined}
       />,
     );
@@ -173,7 +176,9 @@ describe('CareerExpertPanel copy', () => {
   it('uses a dockable complementary panel with starter chips and an available voice control', () => {
     const html = renderToStaticMarkup(
       <CareerExpertPanel
-        initialUser={{ username: 'synthetic', candidateId: 'candidate-b440', role: 'candidate' } as never}
+        initialUser={
+          { username: 'synthetic', candidateId: 'candidate-b440', role: 'candidate' } as never
+        }
         mobileExpanded={false}
         onToggleMobileExpanded={() => undefined}
         onClose={() => undefined}
@@ -190,11 +195,7 @@ describe('CareerExpertPanel copy', () => {
 
   it('renders skill quiz verification prompt when stage is profile (B376)', () => {
     const html = renderToStaticMarkup(
-      <CareerExpertPanel
-        stage="profile"
-        initialUser={null}
-        onClose={() => undefined}
-      />,
+      <CareerExpertPanel stage="profile" initialUser={null} onClose={() => undefined} />,
     );
 
     expect(html).toContain('Консультант · Профиль');
@@ -321,3 +322,47 @@ function resultWithMilestone(measureAfter: string): CoachResult {
     },
   };
 }
+
+describe('Pending consultant proposals', () => {
+  it('uses current proposals and omits already prepared commands from the same turn', () => {
+    const base = resultWithMilestone('2026-10-15');
+    const proposal: CoachResult['actionProposals'][number] = {
+      kind: 'application.submit',
+      objective: 'Отправить отклик',
+      evidenceRefs: [],
+      acceptanceCriteria: [],
+      expectedSignal: 'Receipt',
+      measureAfter: '2026-10-15',
+      risk: 'external_side_effect',
+    };
+    const result = { ...base, actionProposals: [proposal] };
+    const command = {
+      commandId: 'one',
+      execution: null,
+      capability: proposal.kind,
+      status: 'prepared' as const,
+      proposal,
+      provenance: { strategyDecisionId: 'turn-one', evidenceRefs: [], modelInvocationIds: [] },
+    };
+    expect(pendingConsultantProposalCount(result, [], 'turn-one')).toBe(1);
+    expect(pendingConsultantProposalCount(result, [command], 'turn-one')).toBe(0);
+    expect(pendingConsultantProposalCount(result, [command], 'other-turn')).toBe(1);
+    expect(pendingConsultantProposalCount(undefined, [])).toBe(0);
+  });
+});
+
+describe('Consultant strip proposals', () => {
+  it('shows the real proposal count and an accessible expansion action', () => {
+    const html = renderToStaticMarkup(<ConsultantStripButton count={3} />);
+    expect(html).toContain('Развернуть консультанта, есть предложение');
+    expect(html).toContain('consultant-strip-dot');
+    expect(html).toContain('consultant-strip-count">3');
+    expect(html).toContain('aria-expanded="false"');
+  });
+  it('omits the dot and badge without proposals', () => {
+    const html = renderToStaticMarkup(<ConsultantStripButton count={0} />);
+    expect(html).toContain('aria-label="Развернуть консультанта"');
+    expect(html).not.toContain('consultant-strip-dot');
+    expect(html).not.toContain('consultant-strip-count');
+  });
+});

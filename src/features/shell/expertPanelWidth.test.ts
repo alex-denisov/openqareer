@@ -19,6 +19,14 @@ describe('expertPanelOpenOnWidthChange', () => {
   });
   afterEach(() => vi.unstubAllGlobals());
 
+  it('starts folded for both migrated closed and explicit strip preferences', () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    for (const preference of ['closed', 'strip']) {
+      store.set(DESKTOP_EXPERT_PREFERENCE_KEY, preference);
+      expect(initialExpertPanelOpen(true, 'today')).toBe(false);
+    }
+  });
+
   it('collapses the consultant when the window narrows below the desktop width', () => {
     expect(expertPanelOpenOnWidthChange(false)).toBe(false);
   });
@@ -27,6 +35,8 @@ describe('expertPanelOpenOnWidthChange', () => {
     expect(expertPanelOpenOnWidthChange(true)).toBe(true);
     store.set(DESKTOP_EXPERT_PREFERENCE_KEY, 'open');
     expect(expertPanelOpenOnWidthChange(true)).toBe(true);
+    store.set(DESKTOP_EXPERT_PREFERENCE_KEY, 'strip');
+    expect(expertPanelOpenOnWidthChange(true)).toBe(false);
     store.set(DESKTOP_EXPERT_PREFERENCE_KEY, 'closed');
     expect(expertPanelOpenOnWidthChange(true)).toBe(false);
   });
@@ -54,6 +64,11 @@ describe('initialExpertPanelOpen while the session is still being checked', () =
   it('keeps the panel folded on a narrowed desktop window such as 1176 px', () => {
     stubWidth(1176);
     expect(initialExpertPanelOpen(true, 'today')).toBe(false);
+  });
+
+  it('starts in a strip on narrow desktop even on vacancies', () => {
+    stubWidth(1024);
+    expect(initialExpertPanelOpen(false, 'opportunities')).toBe(false);
   });
 
   it('keeps the phone sheet behaviour untouched', () => {

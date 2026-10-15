@@ -40,6 +40,95 @@ async function expectPanelAccessible(page: import('@playwright/test').Page): Pro
   ).toEqual([]);
 }
 
+test('ACC-0-1 narrow consultant overlay preserves content and focus', async ({ page }, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'desktop only');
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await openCabinet(page);
+  const panel = page.locator('.career-expert-panel');
+  const strip = panel.getByRole('button', { name: 'Развернуть консультанта', exact: true });
+  for (const width of [1176, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(panel).toHaveClass(/consultant-strip/);
+    expect((await panel.boundingBox())?.width).toBe(56);
+    const before = await page.locator('.career-main').boundingBox();
+    await strip.click();
+    await expect(panel).toHaveClass(/consultant-overlay/);
+    expect((await panel.boundingBox())?.width).toBe(360);
+    if (width === 1176)
+      await page.screenshot({ path: 'test-results/evidence/ACC-0-1/overlay-1176.png' });
+    expect((await page.locator('.career-main').boundingBox())?.width).toBe(before?.width);
+    await page.keyboard.press('Escape');
+    await expect(strip).toBeFocused();
+    await strip.press('Enter');
+    await page.locator('.consultant-scrim').click({ position: { x: 10, y: 100 } });
+    await expect(strip).toBeFocused();
+    await strip.click();
+    await panel.getByRole('button', { name: 'Свернуть консультанта в полосу' }).click();
+    await expect(strip).toBeFocused();
+  }
+  await page.screenshot({ path: 'test-results/evidence/ACC-0-1/strip-1024.png' });
+});
+
+test('ACC-0-1 server history loads, opens, returns, retries and empties', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'desktop only');
+  await openCabinet(page);
+  let fail = true;
+  let empty = false;
+  const item = {
+    id: '00000000-0000-4000-8000-000000000001',
+    stage: 'today',
+    firstPhrase: 'Обсудим следующий шаг',
+    summary: null,
+    lastMessageAt: '2026-10-15T10:00:00Z',
+    openedAt: '2026-10-15T10:00:00Z',
+    closedAt: null,
+    messageCount: 1,
+  };
+  await page.route('**/api/v1/candidate/consultant-history**', async (route) => {
+    if (fail) {
+      await route.fulfill({ status: 503, json: { error: { message: 'offline' } } });
+      return;
+    }
+    const detail = new URL(route.request().url()).pathname.endsWith(item.id);
+    await route.fulfill({
+      json: {
+        data: detail
+          ? {
+              ...item,
+              messages: [
+                {
+                  id: 'history-message',
+                  role: 'assistant',
+                  content: 'Сохранённый ответ консультанта',
+                  createdAt: item.lastMessageAt,
+                },
+              ],
+            }
+          : empty
+            ? []
+            : [item],
+      },
+    });
+  });
+  const panel = page.locator('.career-expert-panel');
+  await panel.getByRole('button', { name: 'История бесед', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('Не удалось загрузить');
+  fail = false;
+  await panel.getByRole('button', { name: 'Повторить', exact: true }).click();
+  await panel.getByRole('button', { name: 'Открыть беседу: Обсудим следующий шаг' }).click();
+  await expect(panel.getByLabel('Открытая беседа')).toContainText('Сохранённый ответ');
+  await page.screenshot({ path: 'test-results/evidence/ACC-0-1/history-detail-1440.png' });
+  await panel.getByRole('button', { name: 'К истории', exact: true }).click();
+  await panel.getByRole('button', { name: 'Назад', exact: true }).click();
+  await expect(panel.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
+  empty = true;
+  await panel.getByRole('button', { name: 'История бесед', exact: true }).click();
+  await expect(panel).toContainText('Бесед пока нет.');
+  await page.screenshot({ path: 'test-results/evidence/ACC-0-1/history-empty-1440.png' });
+});
+
 test('keeps the fixed desktop rail and docks the consultant beside the page', async ({
   page,
 }, testInfo) => {
@@ -56,6 +145,11 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   const mainBox = await page.locator('.career-main').boundingBox();
   expect(railBox?.width).toBe(76);
   expect(panelBox?.width).toBe(360);
+  for (const control of await panel.locator('.career-expert-panel-controls > button').all()) {
+    const box = await control.boundingBox();
+    expect(box?.width).toBe(44);
+    expect(box?.height).toBe(44);
+  }
   expect((mainBox?.x ?? 0) + (mainBox?.width ?? 0)).toBeLessThanOrEqual(panelBox?.x ?? 0);
   const primaryRail = rail.getByRole('navigation', { name: 'Разделы кабинета' });
   await expect(primaryRail.getByRole('button')).toHaveText([
@@ -105,7 +199,8 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   // Below 1280 px the consultant folds away so the screen keeps its columns; it returns on a
   // wide window (the .app is resized live, so the line is crossed after the first render).
   await page.setViewportSize({ width: 1176, height: 900 });
-  await expect(panel).toHaveCount(0);
+  await expect(panel).toHaveClass(/consultant-strip/);
+  expect((await panel.boundingBox())?.width).toBe(56);
   await expectNoOverflow(page);
   expect((await page.locator('.career-main').boundingBox())?.width).toBeGreaterThan(1000);
 
@@ -124,15 +219,13 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   }
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await panel.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
-  await expect(panel).toHaveCount(0);
+  await panel.getByRole('button', { name: 'Свернуть консультанта в полосу' }).click();
+  await expect(panel).toHaveClass(/consultant-strip/);
+  expect((await panel.boundingBox())?.width).toBe(56);
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect(page.locator('.career-cabinet')).toBeVisible();
-  await expect(page.locator('.career-expert-panel')).toHaveCount(0);
-  await page
-    .locator('.career-desktop-topbar')
-    .getByRole('button', { name: 'Открыть консультанта', exact: true })
-    .click();
+  await expect(panel).toHaveClass(/consultant-strip/);
+  await panel.getByRole('button', { name: 'Развернуть консультанта', exact: true }).click();
   await expect(panel).toBeVisible();
 });
 
@@ -144,6 +237,8 @@ test('mobile navigation uses four sections plus More and the consultant sheet co
   await page.getByRole('button', { name: 'Спросить консультанта' }).click();
   const navigation = page.getByRole('navigation', { name: 'Основная навигация' });
   const panel = page.locator('.career-expert-panel');
+  await expect(panel.locator('.consultant-mobile-stage-picker')).not.toBeVisible();
+  await expect(panel.locator('.consultant-desktop-sheet-toggle')).not.toBeVisible();
   const more = navigation.getByRole('button', { name: 'Ещё' });
   await expect(page.getByRole('button', { name: 'Тарифы' })).toBeVisible();
   await expect(navigation.getByRole('button')).toHaveCount(5);
