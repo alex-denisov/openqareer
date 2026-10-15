@@ -351,8 +351,8 @@ function CareerScreenContent({
         onCheckSkills={(id) => props.onCheckSkills?.(id)}
         onRejectRole={state.handleRejectRole}
         onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
-      /> as ReactElement
-    );
+      />
+    ) as ReactElement;
   }
   return (
     <CareerMainContent
