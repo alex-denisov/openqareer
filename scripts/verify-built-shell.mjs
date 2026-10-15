@@ -1456,10 +1456,19 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // карточки выше обязан появиться здесь карточкой трекера, без тупика.
   await page.locator('button[aria-label="Отклики"]:visible').click();
   await page.getByRole('heading', { name: 'Отклики', exact: true }).waitFor();
-  await page
-    .locator('.career-responses-card', { hasText: 'Продуктовый аналитик' })
+  // B486: on narrow screens the list shows rows, not board cards.
+  await (
+    viewport.width <= 640
+      ? page.getByRole('listitem').filter({ hasText: 'Продуктовый аналитик' })
+      : page.locator('.career-responses-card', { hasText: 'Продуктовый аналитик' })
+  )
     .first()
     .waitFor();
+
+  // B486: the 390 «Отклики» header carries only the bell and the consultant,
+  // so the tariffs and account entries are exercised from «Сегодня».
+  await page.locator('button[aria-label="Сегодня"]:visible').click();
+  await page.getByRole('heading', { name: 'Сегодня', exact: true }).waitFor();
 
   // B248: narrow screens keep the topbar's «Тарифы» link. Desktop opens it
   // from the connected Account billing tab.
