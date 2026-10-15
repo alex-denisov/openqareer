@@ -450,6 +450,8 @@ test('partial pages keep prior rows and load more notifications on request', asy
 
 test('interview reminder updates the candidate application', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'reminder action only');
+  // The notice is for an interview on 2026-10-15: "a day before" must still lie ahead.
+  await page.clock.setFixedTime(new Date('2026-10-14T06:00:00.000Z'));
   const reminderApi = createReminderApi();
   await openToday(page, { items: [INTERVIEW_NOTICE], applicationHandler: reminderApi.handler });
   await page.getByRole('button', { name: 'Центр уведомлений, 1 непрочитанных' }).click();

@@ -379,7 +379,12 @@ interface FixtureReceipt {
   readonly fiscalDate: string | null;
 }
 
+/** The calendar day the shared cabinet fixtures were written for. */
+export const FIXTURE_NOW = new Date('2026-10-14T06:00:00.000Z');
+
 export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptions {
+  /** Freeze Date at FIXTURE_NOW for specs that compare fixture dates with the present. */
+  readonly freezeNow?: boolean;
   readonly candidateId?: string;
   readonly careerDiary?: MockCareerDiaryFixture;
   readonly vacancyTotal?: number;
@@ -1259,6 +1264,9 @@ export async function mockSignedInCabinet(
   options: MockSignedInCabinetOptions = {},
 ): Promise<string[]> {
   const unmatched: string[] = [];
+  // Fixtures carry fixed calendar dates; specs whose assertions compare them with "now"
+  // opt in to a frozen clock so a run on a later day does not drift out of their windows.
+  if (options.freezeNow) await page.clock.setFixedTime(FIXTURE_NOW);
   let accountState = {
     ...account,
     profile: { ...account.profile },

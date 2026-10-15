@@ -727,6 +727,8 @@ test.describe('B232 readability gate', () => {
 
   test('capture B337 screenshots: responses board fit and card menu', async ({ page }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'run once from desktop-1440');
+    // Sample applications are dated September 2026; the board shows a 30-day window.
+    await page.clock.setFixedTime(new Date('2026-10-14T06:00:00.000Z'));
     const sampleApplications = [
       {
         id: 'app-1',
