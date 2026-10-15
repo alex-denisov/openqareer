@@ -14,7 +14,7 @@ export function VacanciesPoolScreen({
       {...props}
       matched={selection.matched}
       // While pages are still being read the server's pool size is the denominator, not 0.
-      total={selection.total || selection.poolTotal || undefined}
+      total={selection.total || selection.poolTotal}
       poolComplete={selection.complete}
       facets={selection.facets}
       initialFilters={selection.initialFilters}
