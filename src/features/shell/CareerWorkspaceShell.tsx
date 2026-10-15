@@ -10,6 +10,7 @@ import {
   TodayJourneyView,
 } from '../journey/CareerJourneyViews';
 import { CareerScreen } from '../career-map/CareerScreen';
+import '../career-map/careerScreen.css';
 import { buildCareerJourney } from '../journey/careerJourneyEngine';
 import type { CandidateWorkspace, WorkspaceInput } from '../workspace/workspaceStorage';
 import { TariffsScreen } from './TariffsScreen';
