@@ -1,7 +1,14 @@
-import { ChartLineUp, Lightning, Notebook } from '@phosphor-icons/react';
+import {
+  Briefcase,
+  CalendarCheck,
+  Lightning,
+  Notebook,
+  PaperPlaneTilt,
+  TrendUp,
+  UserCircle,
+} from '@phosphor-icons/react';
 import type { ReactElement } from 'react';
 import type { ShellSection } from './shellNavigation';
-import { ProfileIcon, ResponsesIcon, TodayIcon, VacanciesIcon } from './sectionIcons';
 import type { SectionIconProps } from './sectionIcons';
 
 export type SectionIcon = (props: SectionIconProps) => ReactElement;
@@ -14,16 +21,32 @@ export interface NavigationItem {
   readonly target: ShellSection;
 }
 
-function CareerIcon({ size = 22, active = false }: SectionIconProps) {
-  return <ChartLineUp size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
+function TodayIcon({ size = 22 }: SectionIconProps) {
+  return <CalendarCheck size={size} weight="regular" aria-hidden="true" />;
 }
 
-function AutomationIcon({ size = 22, active = false }: SectionIconProps) {
-  return <Lightning size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
+function ProfileIcon({ size = 22 }: SectionIconProps) {
+  return <UserCircle size={size} weight="regular" aria-hidden="true" />;
 }
 
-function DiaryIcon({ size = 22, active = false }: SectionIconProps) {
-  return <Notebook size={size} weight={active ? 'fill' : 'regular'} aria-hidden="true" />;
+function VacanciesIcon({ size = 22 }: SectionIconProps) {
+  return <Briefcase size={size} weight="regular" aria-hidden="true" />;
+}
+
+function ResponsesIcon({ size = 22 }: SectionIconProps) {
+  return <PaperPlaneTilt size={size} weight="regular" aria-hidden="true" />;
+}
+
+function CareerIcon({ size = 22 }: SectionIconProps) {
+  return <TrendUp size={size} weight="regular" aria-hidden="true" />;
+}
+
+function AutomationIcon({ size = 22 }: SectionIconProps) {
+  return <Lightning size={size} weight="regular" aria-hidden="true" />;
+}
+
+function DiaryIcon({ size = 22 }: SectionIconProps) {
+  return <Notebook size={size} weight="regular" aria-hidden="true" />;
 }
 
 export const primaryNavigation: readonly NavigationItem[] = [

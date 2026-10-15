@@ -1,0 +1,66 @@
+/* Оболочка по утверждённому макету B430 (shared.css: .rail, .rail-item, .fn-step): пункты рельсы
+   52×52 с иконкой 24, активный — плашка accent-soft и засечка 3 px у левой кромки; полоса воронки
+   прижата к низу карточки, а не к тексту. Мобильная нижняя навигация этих правил не получает. */
+@media (min-width: 761px) {
+  .career-desktop-topbar-actions {
+    margin-inline-end: var(--career-space-6);
+  }
+  .career-rail {
+    padding: var(--career-space-3) 0;
+    gap: var(--career-space-1);
+  }
+  .career-rail nav,
+  .career-rail-bottom {
+    gap: var(--career-space-1);
+  }
+  .career-rail nav {
+    margin-block-start: var(--career-space-3);
+  }
+  .career-rail .career-nav-button,
+  .career-rail .career-rail-wallet,
+  .career-rail .career-account-button {
+    width: 52px;
+    height: 52px;
+    min-height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    color: var(--career-text-soft);
+    background: transparent;
+  }
+  .career-rail .career-nav-button svg,
+  .career-rail .career-rail-wallet svg {
+    width: 24px;
+    height: 24px;
+  }
+  .career-rail .career-nav-button.is-active {
+    color: var(--career-accent);
+    background: var(--career-accent-soft);
+    border: 0;
+  }
+  .career-rail .career-nav-button.is-active::before {
+    inset-inline-start: calc((var(--career-rail-width) - 52px) / -2);
+    inset-block: var(--career-space-3);
+    inline-size: 3px;
+    border-radius: 0 3px 3px 0;
+  }
+}
+.career-today-funnel-list > li {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--career-radius-sm);
+}
+.career-today-funnel-value {
+  font-size: var(--career-text-xl);
+  font-weight: 600;
+  line-height: 1.1;
+}
+.career-today-funnel-track {
+  box-sizing: content-box;
+  height: var(--career-space-1);
+  margin-block-start: auto;
+  padding-block-start: var(--career-space-2);
+  background: var(--career-surface-raised);
+  background-clip: content-box;
+}

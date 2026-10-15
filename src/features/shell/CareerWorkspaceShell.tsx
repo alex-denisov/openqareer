@@ -3,6 +3,7 @@ import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachA
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
 import { CaretUp, Sparkle } from '@phosphor-icons/react';
 import '../journey/consultant-strip.css';
+import './mockup-shell.css';
 import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
 import { FirstRunWizard, firstRunDataToWorkspaceInput } from '../onboarding';
 import {
