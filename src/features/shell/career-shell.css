@@ -181,7 +181,7 @@
   align-items: center;
   padding: var(--career-space-2) var(--career-space-3) var(--career-space-4);
   border-right: 1px solid var(--career-line);
-  background: oklch(14% 0.022 255);
+  background: var(--career-bg-elevated);
 }
 
 .career-brand-mark,
@@ -2809,10 +2809,23 @@
     min-width: 0;
     margin: 0;
     font-size: var(--career-text-xl);
+    font-weight: 600;
     line-height: 1.2;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* The mockups draw the desktop bell as a bare icon button: no fill, no frame, 10 px corners. */
+  .career-desktop-topbar .career-notification-bell {
+    border-color: transparent;
+    border-radius: var(--career-radius-sm);
+    background: transparent;
+  }
+
+  .career-desktop-topbar .career-notification-bell:hover {
+    border-color: transparent;
+    background: var(--career-surface);
   }
 
   .career-desktop-topbar-hint {
