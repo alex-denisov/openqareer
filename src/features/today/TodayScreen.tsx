@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
   Bell,
   BookmarkSimple,
   Briefcase,
+  CaretDown,
   CaretRight,
+  CheckCircle,
   ChatCircle,
   ClockCountdown,
   LinkedinLogo,
@@ -19,7 +21,7 @@ import {
   resolveConsultantAction,
 } from './consultantActionStorage';
 import type { TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
-import { TodayDesktopContent, type TodayFunnelContext } from './TodayDesktop';
+import { TodayDesktopContent, actionSourceSummary, type TodayFunnelContext } from './TodayDesktop';
 export type { TodayFunnelContext } from './TodayDesktop';
 import {
   consultantTargetView,
@@ -211,6 +213,28 @@ function TodayMobileContent({
   );
 }
 
+function TodayMobileReasons({
+  action,
+  open,
+  id,
+}: {
+  readonly action: ReasonedCareerAction;
+  readonly open: boolean;
+  readonly id: string;
+}) {
+  return (
+    <ol className="tm-reasons" id={id} hidden={!open}>
+      <li>
+        <span className="num-badge" aria-hidden="true">
+          1
+        </span>
+        <span>{action.rationale}</span>
+      </li>
+      <li className="tm-src">Источники: {actionSourceSummary(action)}</li>
+    </ol>
+  );
+}
+
 function TodayMobileDecision({
   action,
   onAccept,
@@ -222,6 +246,8 @@ function TodayMobileDecision({
   readonly onPostpone: () => void;
   readonly onOpenExpert?: () => void;
 }) {
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+  const reasonsId = useId();
   return (
     <section className="tm-hero" aria-label="Следующее решение">
       <p className="tm-eyebrow">Следующее решение</p>
@@ -232,16 +258,22 @@ function TodayMobileDecision({
       {action ? (
         <>
           <button className="pm-cta tm-main" type="button" onClick={onAccept}>
+            <CheckCircle aria-hidden="true" weight="regular" />
             {action.label}
           </button>
           <button className="pm-text tm-later" type="button" onClick={onPostpone}>
             Отложить до завтра
           </button>
-          {onOpenExpert ? (
-            <button className="tm-why" type="button" onClick={onOpenExpert}>
-              Почему это решение <CaretRight aria-hidden="true" weight="regular" />
-            </button>
-          ) : null}
+          <button
+            className="tm-why"
+            type="button"
+            aria-expanded={reasonsOpen}
+            aria-controls={reasonsId}
+            onClick={() => setReasonsOpen((open) => !open)}
+          >
+            Почему это решение <CaretDown aria-hidden="true" weight="regular" />
+          </button>
+          <TodayMobileReasons action={action} open={reasonsOpen} id={reasonsId} />
         </>
       ) : onOpenExpert ? (
         <button className="tm-why" type="button" onClick={onOpenExpert}>
@@ -473,7 +505,7 @@ function TodayMobileProfileRow({
   const subtitle =
     actionCount === undefined
       ? 'Контакты, даты, курсы · нет проверенных данных'
-      : `Контакты, даты, курсы · ${actionCount} ${pluralRu(actionCount, ['действие', 'действия', 'действий'])}`;
+      : `Контакты, даты, курсы · ${pluralRu(actionCount, ['действие', 'действия', 'действий'])}`;
   return (
     <section className="pm-group" aria-label="Дополнить профиль">
       <div className="pm-list">
