@@ -436,11 +436,15 @@ async function waitForLetter(page: Page): Promise<void> {
 
 async function reviewWithConsultant(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Попросить правки у консультанта' }).click();
-  const panel = page.locator('aside.career-expert-panel');
+  const panel = page.locator('.career-expert-panel');
   await expect(panel).toBeVisible();
   await expect(panel.locator('header strong')).toHaveText('Консультант');
   await expect(panel.locator('header small')).toContainText('Вакансии');
-  await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+  await page
+    .getByRole('button', {
+      name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+    })
+    .click();
   await expect(panel).toBeHidden();
 }
 
@@ -755,7 +759,7 @@ test.describe('B449 — письмо под вакансию', () => {
       ),
     ).toBeVisible();
     await page.getByRole('button', { name: 'Собрать факты с консультантом' }).click();
-    const panel = page.locator('aside.career-expert-panel');
+    const panel = page.locator('.career-expert-panel');
     await expect(panel).toBeVisible();
     await expect(panel.locator('header small')).toContainText('Профиль');
   });

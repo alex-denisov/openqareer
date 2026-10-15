@@ -227,6 +227,6 @@ test('opens the consultant from the empty STAR stories state', async ({ page }, 
   );
   await openStories(page, 390);
   await page.getByRole('button', { name: 'Собрать с консультантом' }).click();
-  await expect(page.locator('aside.career-expert-panel')).toBeVisible();
+  await expect(page.locator('.career-expert-panel')).toBeVisible();
   await expect(page.getByTestId('role-skill-assessment')).toHaveCount(0);
 });

@@ -59,7 +59,7 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       await expect(page.locator('#sec-skills')).toBeVisible();
 
       // Open consultant
-      const expertPanel = page.locator('aside.career-expert-panel');
+      const expertPanel = page.locator('.career-expert-panel');
       if (!(await expertPanel.isVisible())) {
         const desktopTrigger = page
           .locator('.career-desktop-topbar')
@@ -68,7 +68,9 @@ test.describe('B376 skill quiz dialogue & verification', () => {
           await desktopTrigger.click();
         } else {
           await page
-            .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+            .getByRole('button', {
+              name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/,
+            })
             .first()
             .click();
         }
@@ -163,7 +165,11 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       expect(repeatedRevert.body.error.code).toBe('profile_revision_already_reverted');
 
       // Close consultant panel for next iteration
-      await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+      await page
+        .getByRole('button', {
+          name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+        })
+        .click();
       await expect(expertPanel).not.toBeVisible();
     }
   });

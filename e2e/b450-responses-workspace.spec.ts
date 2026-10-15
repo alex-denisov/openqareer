@@ -655,7 +655,9 @@ async function openResponses(page: Page) {
 }
 
 async function hideConsultantForEvidence(page: Page): Promise<void> {
-  const closeButton = page.getByRole('button', { name: 'Закрыть карьерного консультанта' });
+  const closeButton = page.getByRole('button', {
+    name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+  });
   if (await closeButton.isVisible()) await closeButton.click();
 }
 

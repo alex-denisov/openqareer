@@ -23,7 +23,7 @@ async function openAssessment(
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  const consultant = page.locator('aside.career-expert-panel');
+  const consultant = page.locator('.career-expert-panel');
   if (!(await consultant.isVisible())) {
     const desktopTrigger = page
       .locator('.career-desktop-topbar')
@@ -32,7 +32,7 @@ async function openAssessment(
       await desktopTrigger.click();
     } else {
       await page
-        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+        .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
         .first()
         .click();
     }
@@ -281,10 +281,10 @@ test('connects mobile checklist, suggestions, detail screens and role links', as
       await surface.getByRole('button', { name: 'Позже' }).click();
       await expect(surface.getByTestId('role-skill-assessment')).toHaveCount(0);
       await surface
-        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+        .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
         .first()
         .click();
-      const consultant = surface.locator('aside.career-expert-panel');
+      const consultant = surface.locator('.career-expert-panel');
       const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
       if (await expand.isVisible()) await expand.click();
       await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();

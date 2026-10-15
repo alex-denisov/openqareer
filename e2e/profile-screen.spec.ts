@@ -693,9 +693,13 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-skills-tab`));
 
     await page.getByRole('button', { name: 'Пройти квиз по навыкам' }).click();
-    const expert = page.getByRole('complementary', { name: /^Консультант · / });
+    const expert = page.locator('.career-expert-panel');
     await expect(expert).toBeVisible();
-    await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+    await expert
+      .getByRole('button', {
+        name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+      })
+      .click();
 
     await tabs.getByRole('tab', { name: 'Цифровой след' }).click();
     await expect(tabs.getByRole('tab', { name: 'Цифровой след' })).toHaveAttribute(
@@ -1245,7 +1249,7 @@ test.describe('B265 Profile screen', () => {
     } else {
       await page.getByRole('button', { name: 'Собрать факты с консультантом' }).click();
     }
-    const expert = page.getByRole('complementary', { name: /^Консультант · / });
+    const expert = page.locator('.career-expert-panel');
     if (testInfo.project.name === 'mobile-390') {
       await expert.getByRole('button', { name: 'Развернуть консультанта' }).click();
     }
@@ -1258,7 +1262,11 @@ test.describe('B265 Profile screen', () => {
     expect(turnIdempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
     expect(preparedBody).not.toHaveProperty('executionTarget');
 
-    await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
+    await expert
+      .getByRole('button', {
+        name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+      })
+      .click();
     const suggestion = page.locator(`[data-testid="consultant-suggestion-${commandId}"]`);
     await expect(suggestion).toBeVisible();
     await expect(suggestion).toContainText('Сейчас');

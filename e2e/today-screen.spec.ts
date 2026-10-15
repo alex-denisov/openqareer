@@ -928,10 +928,10 @@ test.describe('B251 today screen', () => {
 
     const panel = page.locator('.career-expert-panel');
     await page.getByRole('button', { name: 'Почему это решение' }).click();
-    await expect(page.getByRole('complementary', { name: /Консультант/u })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: /Консультант/u })).toBeVisible();
     await expect(page.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
-      await expect(panel).toHaveAttribute('data-mobile-expanded', 'false');
+      await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
     }
   });
 

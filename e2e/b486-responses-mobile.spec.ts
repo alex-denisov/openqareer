@@ -27,10 +27,10 @@ test.describe('B486 mobile responses', () => {
     await expect(
       page.getByRole('button', { name: 'Спросить консультанта', exact: true }),
     ).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Открыть консультанта' })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Консультант/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Консультант: открыть' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Консультант/ })).toHaveCount(1);
 
-    await page.getByRole('button', { name: 'Открыть консультанта' }).click();
+    await page.getByRole('button', { name: 'Консультант: открыть' }).click();
     await expect(page.locator('.career-expert-panel')).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page.locator('.career-expert-panel')).toBeHidden();

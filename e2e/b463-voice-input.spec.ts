@@ -96,10 +96,10 @@ async function openConsultant(page: Page) {
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await waitForCareerShell(page);
-  const expertPanel = page.locator('aside.career-expert-panel');
+  const expertPanel = page.locator('.career-expert-panel');
   if ((page.viewportSize()?.width ?? 1440) <= 760 && !(await expertPanel.isVisible())) {
     await page
-      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/ })
       .first()
       .click();
   }

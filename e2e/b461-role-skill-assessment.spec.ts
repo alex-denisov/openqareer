@@ -16,7 +16,7 @@ async function openAssessment(page: Page, width: number): Promise<void> {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  const consultant = page.locator('aside.career-expert-panel');
+  const consultant = page.locator('.career-expert-panel');
   if (!(await consultant.isVisible())) {
     const desktopTrigger = page
       .locator('.career-desktop-topbar')
@@ -25,7 +25,7 @@ async function openAssessment(page: Page, width: number): Promise<void> {
       await desktopTrigger.click();
     } else {
       await page
-        .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+        .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
         .first()
         .click();
     }
@@ -111,10 +111,10 @@ async function resumeSavedDialogue(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'Назад к профилю' }).click();
   await expect(page.getByTestId('role-skill-assessment')).toHaveCount(0);
   await page
-    .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+    .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
     .first()
     .click();
-  const consultant = page.locator('aside.career-expert-panel');
+  const consultant = page.locator('.career-expert-panel');
   const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();
   await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
@@ -200,10 +200,10 @@ async function discussAndEvaluateFirstCase(page: Page, width: number): Promise<v
 
 async function reopenAssessment(page: Page): Promise<void> {
   await page
-    .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+    .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
     .first()
     .click();
-  const consultant = page.locator('aside.career-expert-panel');
+  const consultant = page.locator('.career-expert-panel');
   const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();
   await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
@@ -233,10 +233,10 @@ async function finishRemainingCases(page: Page, width: number): Promise<void> {
 async function refreshStaleResult(page: Page, width: number): Promise<void> {
   await page.getByRole('button', { name: 'Назад к профилю' }).click();
   await page
-    .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/u })
+    .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
     .first()
     .click();
-  const consultant = page.locator('aside.career-expert-panel');
+  const consultant = page.locator('.career-expert-panel');
   const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();
   await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();

@@ -26,6 +26,11 @@
     overflow-x: clip;
   }
 
+  /* У «Вакансий» своя шапка: строка общей шапки оболочки не нужна, иначе main попадает в неё. */
+  .career-shell.career-shell--vacancies {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
   .career-topbar {
     position: sticky;
     inset-block-start: 0;
