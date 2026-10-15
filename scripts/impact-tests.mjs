@@ -71,7 +71,7 @@ function buildCommands(plan, wantUnit, wantE2e) {
   const cmds = [];
   const targets = [...new Set([...plan.unitFiles, ...plan.unitTests])];
   if (wantUnit && targets.length) {
-    cmds.push(['env', 'CI=1', './node_modules/.bin/vitest', 'run', '--related', ...targets]);
+    cmds.push(['env', 'CI=1', './node_modules/.bin/vitest', 'related', ...targets, '--run']);
   }
   if (wantE2e && plan.specs.length) {
     for (const project of plan.projects) {
