@@ -33,7 +33,8 @@
     "tauri:build": "node scripts/tauri-build.mjs",
     "test:e2e:intake-fits": "node scripts/verify-intake-fits.mjs",
     "test:e2e:wizard-source-step": "node scripts/verify-wizard-source-step.mjs",
-    "verify:hh-session-import": "tsx scripts/verify-hh-session-import.ts"
+    "verify:hh-session-import": "tsx scripts/verify-hh-session-import.ts",
+    "test:impact": "node scripts/impact-tests.mjs"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",

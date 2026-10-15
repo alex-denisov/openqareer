@@ -1,0 +1,151 @@
+{
+  "comment": "Карта «изменённый путь → e2e-спеки» для scripts/impact-tests.mjs. Ключ — префикс пути; побеждают все подходящие префиксы (объединение). `projects`: both — менялись общие файлы оболочки, иначе достаточно desktop-1440 (мобильные правки — mobile-390). Правит CPO по отчётам исполнителей.",
+  "rules": [
+    {
+      "prefix": "src/features/shell/",
+      "specs": ["career-shell", "readability", "cabinet-header", "consultant-stage", "smoke"],
+      "projects": "both"
+    },
+    {
+      "prefix": "src/features/journey/",
+      "specs": ["consultant-stage", "career-shell"],
+      "projects": "both"
+    },
+    { "prefix": "src/features/coach/", "specs": ["consultant-stage", "b463-voice-input"] },
+    { "prefix": "src/features/today/", "specs": ["today-screen"], "projects": "both" },
+    {
+      "prefix": "src/features/resume/",
+      "specs": ["profile-screen", "b476-profile-gaps", "targeted-resume"]
+    },
+    { "prefix": "src/features/career-map/", "specs": ["b445-career-screen", "career-premises"] },
+    { "prefix": "src/features/strategy/", "specs": ["b445-career-screen", "b366-role-step"] },
+    { "prefix": "src/features/relocation/", "specs": ["aud15-relocation"] },
+    {
+      "prefix": "src/features/connections/",
+      "specs": ["companies-and-people", "hh-connector-session", "b464-connector-window"]
+    },
+    {
+      "prefix": "src/features/vacancies/",
+      "specs": [
+        "vacancies-screen",
+        "vacancies-screen-b446",
+        "vacancies-screen-s11",
+        "vacancies-screen-aud-4",
+        "vacancy-detail-modal",
+        "matched-facets"
+      ],
+      "projects": "both"
+    },
+    {
+      "prefix": "src/features/opportunity/",
+      "specs": ["vacancies-screen", "vacancy-detail-modal", "b449-vacancy-letter"]
+    },
+    {
+      "prefix": "src/features/applications/",
+      "specs": [
+        "responses-screen",
+        "b450-responses-workspace",
+        "b486-responses-mobile",
+        "apply-to-interview",
+        "offerComparison",
+        "interviewDebrief"
+      ],
+      "projects": "both"
+    },
+    {
+      "prefix": "src/features/interview/",
+      "specs": [
+        "b465-mock-interview-screen",
+        "interview-simulator-fixture",
+        "b466-star-stories-editor"
+      ]
+    },
+    {
+      "prefix": "src/features/skills/",
+      "specs": ["b462-skill-check-screen", "b461-role-skill-assessment", "b376-skill-quiz"]
+    },
+    {
+      "prefix": "src/features/automation/",
+      "specs": [
+        "b454-automation-screen",
+        "intelligence-automation",
+        "b455-linkedin-post-pipeline",
+        "linkedin-drafts"
+      ]
+    },
+    {
+      "prefix": "src/features/outreach/",
+      "specs": ["b455-linkedin-post-pipeline", "linkedin-drafts"]
+    },
+    {
+      "prefix": "src/features/diary/",
+      "specs": [
+        "career-diary-goals",
+        "career-diary-quarter-adaptation",
+        "career-diary-visibility",
+        "career-diary-weekly-achievements"
+      ]
+    },
+    {
+      "prefix": "src/features/tariffs/",
+      "specs": [
+        "b442-tariffs-screen",
+        "aud-07-tariffs",
+        "b346-subscription-management",
+        "b470-payment-upgrade",
+        "aud-17-payment-upgrade"
+      ]
+    },
+    {
+      "prefix": "src/features/account/",
+      "specs": [
+        "b443-account-screen",
+        "account-notification-preferences",
+        "b398-email-verification",
+        "password-reset"
+      ]
+    },
+    {
+      "prefix": "src/features/notifications/",
+      "specs": ["notifications-center", "account-notification-preferences"]
+    },
+    { "prefix": "src/features/appUpdate/", "specs": ["b469-app-update"] },
+    {
+      "prefix": "src/features/onboarding/",
+      "specs": [
+        "b475-first-run",
+        "onboarding-first-selection",
+        "b357-executive-onboarding",
+        "intake-registration"
+      ]
+    },
+    { "prefix": "src/features/diagnostic/", "specs": ["b475-first-run", "intake-registration"] },
+    {
+      "prefix": "src/features/site/",
+      "specs": [
+        "b426-login-transition",
+        "b398-email-verification",
+        "password-reset",
+        "legal-pack",
+        "smoke"
+      ]
+    },
+    { "prefix": "src/features/legal/", "specs": ["legal-pack"] },
+    { "prefix": "src/features/reputation/", "specs": ["candidate-footprint"] },
+    { "prefix": "src/features/admin/", "specs": ["admin-console", "admin-linkedin-remote-login"] },
+    { "prefix": "src/features/workspace/", "specs": ["workspace-defects", "today-screen"] },
+    { "prefix": "src/features/next-action/", "specs": ["today-screen", "candidate-actions"] },
+    { "prefix": "src/features/action/", "specs": ["candidate-actions"] },
+    {
+      "prefix": "e2e/fixtures/",
+      "specs": ["smoke"],
+      "note": "кроме этого скрипт добавляет спеки, импортирующие изменённую фикстуру"
+    },
+    { "prefix": "src/index.css", "specs": ["readability", "smoke"], "projects": "both" },
+    {
+      "prefix": "server/",
+      "specs": [],
+      "note": "серверные правки проверяются vitest; e2e на моках сервер не видит"
+    }
+  ]
+}
