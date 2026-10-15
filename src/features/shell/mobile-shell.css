@@ -387,11 +387,9 @@
   .career-shell > .panel-col .career-expert-composer {
     position: relative;
     z-index: 1;
-    grid-template-rows: var(--career-target-min);
+    grid-template-rows: auto;
     gap: 0;
-    block-size: calc(
-      var(--career-target-min) * 2 + var(--career-space-2) - var(--career-border-width)
-    );
+    block-size: auto;
     min-block-size: calc(
       var(--career-target-min) * 2 + var(--career-space-2) - var(--career-border-width)
     );
@@ -408,7 +406,7 @@
   }
 
   .career-shell > .panel-col .career-expert-composer .career-expert-input-row {
-    block-size: var(--career-target-min);
+    block-size: auto;
     min-block-size: var(--career-target-min);
   }
 
