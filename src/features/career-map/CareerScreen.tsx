@@ -190,9 +190,6 @@ function CareerHeader({
     <>
       <header className="career-header">
         <h1>Карьера</h1>
-        <p className="career-header-lead">
-          Позиция на рынке только с источником, n и датой; гипотезы ролей; условия поиска; трек.
-        </p>
       </header>
       {marketError ? <CareerMarketErrorState onRetry={onClearError} /> : null}
       {isMarketStale ? <CareerStaleMarketNote dateText="05.10" /> : null}

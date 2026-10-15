@@ -103,4 +103,3 @@ describe('careerConditionsStorage (B445 Criterion 2, 4)', () => {
     expect(backToProfile.workFormats).toContain('home_market');
   });
 });
-

@@ -35,8 +35,14 @@ function runBatchRender(dir: string) {
     { file: 'desktop-1440-stale.html', props: { ...baseProps, isMarketStale: true } },
     { file: 'desktop-1440-loading.html', props: { ...baseProps, isLoading: true } },
     { file: 'mobile-390.html', props: { ...baseProps, isMobile: true, initialPushView: 'home' } },
-    { file: 'mobile-390-dir.html', props: { ...baseProps, isMobile: true, initialPushView: 'dir' } },
-    { file: 'mobile-390-sal.html', props: { ...baseProps, isMobile: true, initialPushView: 'sal' } },
+    {
+      file: 'mobile-390-dir.html',
+      props: { ...baseProps, isMobile: true, initialPushView: 'dir' },
+    },
+    {
+      file: 'mobile-390-sal.html',
+      props: { ...baseProps, isMobile: true, initialPushView: 'sal' },
+    },
   ];
 
   for (const state of states) {

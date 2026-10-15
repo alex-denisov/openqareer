@@ -13,10 +13,14 @@
 }
 
 /* Header & metadata */
+/* The shell top bar already shows the screen title; keep the h1 for assistive tech only. */
 .career-header {
-  display: flex;
-  flex-direction: column;
-  gap: var(--career-space-1);
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .career-header h1 {

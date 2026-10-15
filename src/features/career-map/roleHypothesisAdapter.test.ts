@@ -84,4 +84,26 @@ describe('roleHypothesisAdapter', () => {
     expect(mapped.sampleNote).toBe('нет вакансий');
     expect(mapped.nextAction.action).toBe('few_data');
   });
+
+  it('formats the observation date as DD.MM from a full ISO timestamp', () => {
+    const proposed: ProposedRole = {
+      id: 'role-dir',
+      title: 'Технический директор',
+      origin: 'model',
+      reason: 'Опыт совпадает.',
+      evidenceRefs: [],
+      confirmation: {
+        state: 'observed',
+        sampleSize: 83,
+        observedFrom: '2026-09-01T00:00:00.000+03:00',
+        observedTo: '2026-10-14T18:31:16.263+03:00',
+        sources: [{ source: 'hh.ru', count: 83 }],
+        repeatedRequirements: [],
+        matchedRequirements: 0,
+      },
+      family: 'СП',
+    };
+
+    expect(mapProposedRoleToCareerRole(proposed).observedDate).toBe('14.10');
+  });
 });

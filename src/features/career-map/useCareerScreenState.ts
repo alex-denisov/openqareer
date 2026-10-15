@@ -50,8 +50,8 @@ function useCareerConditionsState(
   initialConditions?: SearchConditionsDraft,
   onSaveConditions?: (conditions: SearchConditionsDraft) => Promise<void>,
 ) {
-  const [conditions, setConditions] = useState<SearchConditionsDraft>(() =>
-    initialConditions ?? decisionProfileToSearchConditions(loadDecisionProfile()),
+  const [conditions, setConditions] = useState<SearchConditionsDraft>(
+    () => initialConditions ?? decisionProfileToSearchConditions(loadDecisionProfile()),
   );
   const [editingField, setEditingField] = useState<EditableConditionField>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -107,7 +107,10 @@ function useCareerRolesState(
   const roleHypo = useRoleHypotheses(
     initialRoles ? { roles: [], loading: false, failed: false } : undefined,
   );
-  const loadedRoles = useMemo(() => mapProposedRolesToCareerRoles(roleHypo.roles), [roleHypo.roles]);
+  const loadedRoles = useMemo(
+    () => mapProposedRolesToCareerRoles(roleHypo.roles),
+    [roleHypo.roles],
+  );
   const roles: readonly CareerRoleModel[] = initialRoles ?? loadedRoles;
   const [rejectedIds, setRejectedIds] = useState<ReadonlySet<string>>(new Set());
   const [showAllRoles, setShowAllRoles] = useState(false);

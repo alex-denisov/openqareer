@@ -1,5 +1,10 @@
 import type { ProposedRole } from '../../../shared/roleProposals';
-import type { CareerRoleModel, MissingRoleRequirement, RoleNextAction, RoleStatus } from './careerScreenTypes';
+import type {
+  CareerRoleModel,
+  MissingRoleRequirement,
+  RoleNextAction,
+  RoleStatus,
+} from './careerScreenTypes';
 import { calculateRoleWageFork, formatVacancyCount } from './careerWageFork';
 
 function determineRoleStatus(proposed: ProposedRole): RoleStatus {
@@ -56,7 +61,8 @@ export function mapProposedRoleToCareerRole(proposed: ProposedRole): CareerRoleM
     const conf = proposed.confirmation;
     vacancyCount = conf.sampleSize;
     if (conf.observedTo) {
-      observedDate = conf.observedTo.slice(5).replace('-', '.');
+      const [, month, day] = conf.observedTo.slice(0, 10).split('-');
+      if (month && day) observedDate = `${day}.${month}`;
     }
     const matchedCount = conf.matchedRequirements;
     const repeated = conf.repeatedRequirements ?? [];
