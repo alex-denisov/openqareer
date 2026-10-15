@@ -1,4 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import {
+  STAGE_TITLE,
+  STAGE_INITIAL_REPLICA,
+  useConsultantHistory,
+  usePendingConsultantProposals,
+  ConsultantStripButton,
+  MobileConsultantStagePicker,
+} from '../shell/CareerWorkspaceShellHelpers';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import {
   ArrowRight,
@@ -33,26 +41,15 @@ import { VoiceInput } from '../coach/VoiceInput';
 import type { VoiceInputState } from '../coach/voiceInputMachine';
 import { HhSkillQuizSimulator } from '../skills/HhSkillQuizSimulator';
 import { getSkillQuizById, type QuizEvaluationResult } from '../../services/hhSkillQuizzes';
-
-export const STAGE_TITLE: Record<CoachTurnStage, string> = {
-  profile: 'Профиль',
-  career: 'Карьера',
-  vacancies: 'Вакансии',
-  responses: 'Отклики',
-  interviews: 'Интервью',
-  today: 'Сегодня',
-};
-
-export const STAGE_INITIAL_REPLICA: Record<CoachTurnStage, string> = {
-  profile: 'Покажу, что срежет рекрутер за 30 секунд, и предложу правки по фактам вашего профиля.',
-  career: 'Разберём, какие роли вам реально подходят и как их называют в разных компаниях.',
-  vacancies: 'Выберите вакансию — сравню её требования с вашим опытом и скажу, где пробелы.',
-  responses: 'Подскажу, кому и когда напомнить о себе и что написать.',
-  interviews: 'Соберу вопросы, которые вам вероятно зададут, и ответы из вашего опыта.',
-  today: 'Скажу, какой шаг сегодня даст больше всего.',
-};
-
+export {
+  STAGE_TITLE,
+  STAGE_INITIAL_REPLICA,
+  ConsultantStripButton,
+} from '../shell/CareerWorkspaceShellHelpers';
 interface CareerExpertPanelProps {
+  collapsed?: boolean;
+  overlay?: boolean;
+  onExpand?: () => void;
   journey?: CareerJourney;
   marketQuery?: string;
   stage?: CoachTurnStage;
@@ -71,8 +68,10 @@ interface CareerExpertPanelProps {
   onStageChange?: (stage: CoachTurnStage) => void;
   onClose: () => void;
 }
-
 export function CareerExpertPanel({
+  collapsed = false,
+  overlay = false,
+  onExpand,
   journey,
   marketQuery,
   stage = 'today',
@@ -88,9 +87,20 @@ export function CareerExpertPanel({
   mobileExpanded = false,
   onToggleMobileExpanded,
   onEscape,
-  onStageChange,
   onClose,
+  onStageChange,
 }: CareerExpertPanelProps) {
+  const {
+    historyOpen,
+    setHistoryOpen,
+    historyItems,
+    historyBusy,
+    historyError,
+    historicalConversation,
+    setHistoricalConversation,
+    historyRequest,
+    loadHistory,
+  } = useConsultantHistory(initialUser?.candidateId ?? undefined);
   const [user, setUser] = useState<AuthUser | null>(initialUser);
   const [snapshot, setSnapshot] = useState<CandidateSnapshot | undefined>(initialSnapshot);
   const [liveResult, setLiveResult] = useState<CoachResult>();
@@ -108,12 +118,10 @@ export function CareerExpertPanel({
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
   const [skillQuizApplying, setSkillQuizApplying] = useState(false);
   const [skillQuizApplyError, setSkillQuizApplyError] = useState<string>();
-  const [stageMenuOpen, setStageMenuOpen] = useState(false);
   const [appliedSkillQuiz, setAppliedSkillQuiz] =
     useState<Awaited<ReturnType<typeof applySkillQuizResult>>>();
   const skillQuizApplyInFlight = useRef(false);
   const skillQuizApplyIdempotencyKey = useRef<{ quizId: string; key: string }>();
-
   async function handleAcceptQuizResult(
     res: QuizEvaluationResult,
     answers: Record<string, number>,
@@ -159,35 +167,44 @@ export function CareerExpertPanel({
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
-  const stageMenuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  useEscapeLayer(onEscape ?? onClose);
-  useEscapeLayer(() => setStageMenuOpen(false), stageMenuOpen);
-
+  useEscapeLayer(onEscape ?? onClose, !collapsed);
   useEffect(() => {
-    if (!stageMenuOpen) return undefined;
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && !stageMenuRef.current?.contains(event.target)) {
-        setStageMenuOpen(false);
+    if (!overlay) return;
+    const element = panel.current;
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const controls = Array.from(
+        element?.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), textarea:not([disabled]), input:not([disabled])',
+        ) ?? [],
+      ).filter((control) => control.getClientRects().length);
+      const first = controls[0];
+      const last = controls.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      }
+      if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     };
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => document.removeEventListener('pointerdown', onPointerDown, true);
-  }, [stageMenuOpen]);
+    element?.addEventListener('keydown', trap);
+    return () => element?.removeEventListener('keydown', trap);
+  }, [overlay]);
 
   useEffect(() => {
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    closeButton.current?.focus();
+    if (!collapsed) closeButton.current?.focus();
     return () => {
       returnFocusTo?.focus();
     };
-  }, [onClose]);
-
+  }, [onClose, collapsed]);
   useEffect(() => {
     setUser(initialUser);
   }, [initialUser]);
-
   useEffect(() => {
     if (!user) {
       setSnapshot(undefined);
@@ -211,7 +228,6 @@ export function CareerExpertPanel({
       active = false;
     };
   }, [user, stage]);
-
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
     setSending(true);
@@ -227,13 +243,13 @@ export function CareerExpertPanel({
       setSending(false);
     }
   }
-
   async function handleSend(event: React.FormEvent) {
     event.preventDefault();
     if (voiceState !== 'idle' && voiceState !== 'transcribed') return;
+    ++historyRequest.current;
+    setHistoryOpen(false);
     await sendContent(content);
   }
-
   async function sendContent(message: string): Promise<boolean> {
     const clean = message.trim();
     if (!clean || !user) return false;
@@ -280,10 +296,6 @@ export function CareerExpertPanel({
       setSending(false);
       setPendingQuestion(undefined);
     }
-    // Ответ уже доставлен и показан, поэтому следующий вопрос доступен сразу.
-    // Обновление истории — отдельная сетевая операция: на проблемном канале она
-    // может тянуться или не дойти, и держать на ней композер значит отнимать у
-    // кандидата разговор из-за уже полученного ответа (B198).
     if (!delivered) return false;
     try {
       setSnapshot(await getCandidateWithMessages(stage));
@@ -292,7 +304,6 @@ export function CareerExpertPanel({
     }
     return true;
   }
-
   const turns = consultantTurns(snapshot?.messages);
   const showLiveMessage =
     liveResult &&
@@ -310,16 +321,24 @@ export function CareerExpertPanel({
   const latestTurnIdempotencyKey = liveResult
     ? liveTurnIdempotencyKey
     : latestStoredTurn?.idempotencyKey;
+  const { count: proposalCount, refreshProposalCount } = usePendingConsultantProposals(
+    latestResult,
+    latestTurnIdempotencyKey,
+  );
   const voiceActive = voiceState !== 'idle';
   const voiceTextLocked = voiceActive && voiceState !== 'transcribed';
-
   return (
     <aside
       ref={panel}
-      className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}`}
+      className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}${collapsed ? ' consultant-strip' : ''}${overlay ? ' consultant-overlay' : ''}`}
+      role={overlay ? 'dialog' : undefined}
+      aria-modal={overlay ? true : undefined}
       data-mobile-expanded={mobileExpanded}
       aria-label={`Консультант · ${STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
+      {collapsed ? (
+        <ConsultantStripButton count={loadingSnapshot ? 0 : proposalCount} onExpand={onExpand} />
+      ) : null}
       <header>
         <div className="career-expert-identity">
           <span>
@@ -331,58 +350,42 @@ export function CareerExpertPanel({
           </div>
         </div>
         <div className="career-expert-panel-controls">
+          <MobileConsultantStagePicker stage={stage} onStageChange={onStageChange} />
           <button
             className="career-expert-history-button"
             type="button"
-            aria-label="Перейти к истории диалога"
+            aria-label="История бесед"
+            aria-pressed={historyOpen}
             disabled={loadingSession || !user}
-            onClick={() =>
-              historyEndRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
-            }
+            onClick={() => {
+              if (historyOpen) {
+                ++historyRequest.current;
+                setHistoryOpen(false);
+                return;
+              }
+              void loadHistory();
+            }}
           >
             <ClockCounterClockwise size="1em" aria-hidden="true" />
           </button>
-          <div className="career-expert-stage-picker" ref={stageMenuRef}>
-            <button
-              className="career-expert-stage-button"
-              type="button"
-              aria-label="Выбрать раздел консультанта"
-              aria-expanded={stageMenuOpen}
-              disabled={!onStageChange}
-              onClick={() => setStageMenuOpen((open) => !open)}
-            >
-              <CaretDown size="1em" aria-hidden="true" />
-            </button>
-            {stageMenuOpen ? (
-              <div
-                className="career-expert-stage-menu"
-                role="group"
-                aria-label="Раздел консультанта"
-              >
-                {(Object.entries(STAGE_TITLE) as [CoachTurnStage, string][]).map(
-                  ([targetStage, label]) => (
-                    <button
-                      key={targetStage}
-                      type="button"
-                      aria-pressed={targetStage === stage}
-                      onClick={() => {
-                        onStageChange?.(targetStage);
-                        setStageMenuOpen(false);
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ),
-                )}
-              </div>
-            ) : null}
-          </div>
+          <button
+            className="career-expert-stage-button consultant-desktop-sheet-toggle"
+            type="button"
+            aria-label="Развернуть или свернуть консультанта"
+            aria-expanded={!collapsed}
+            onClick={onExpand ? onClose : onToggleMobileExpanded}
+          >
+            <CaretDown size="1em" aria-hidden="true" />
+          </button>
           <button
             ref={closeButton}
             className="career-close-button"
             type="button"
             onClick={onClose}
-            aria-label="Закрыть карьерного консультанта"
+            aria-label={
+              onExpand ? 'Свернуть консультанта в полосу' : 'Закрыть карьерного консультанта'
+            }
+            aria-expanded={!collapsed}
           >
             <CaretDoubleRight
               className="career-expert-close-desktop-icon"
@@ -404,146 +407,205 @@ export function CareerExpertPanel({
           </button>
         ) : null}
       </header>
-
-      <div className="career-expert-conversation">
-        {loadingSession ? (
-          <ExpertPanelSkeleton />
-        ) : (
-          <div className="career-expert-message">
-            <span>AI-сопровождение</span>
-            <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
-            <p>
-              {journey?.nextAction.reason ??
-                'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
-            </p>
-          </div>
-        )}
-
-        {!loadingSession && (turns.length || showLiveMessage) ? (
-          <div className="career-dialogue-history" aria-label="История диалога">
-            {turns.map((message) => (
-              <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
-                <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
-                {message.role === 'assistant' ? (
-                  <ConsultantMessage text={message.content} />
-                ) : (
-                  message.content
-                    .split('\n')
-                    .map((paragraph, index) =>
-                      paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
-                    )
-                )}
-              </article>
-            ))}
-            {showLiveMessage ? (
-              <article className="career-dialogue-turn is-assistant" aria-live="polite">
-                <span>Карьерный консультант</span>
-                <ConsultantMessage text={liveResult.message} />
-              </article>
-            ) : null}
-            <div ref={historyEndRef} aria-hidden="true" />
-          </div>
-        ) : !loadingSession ? (
-          <div className="career-dialogue-history" aria-label="История диалога">
-            <article className="career-dialogue-turn is-assistant">
-              <span>Карьерный консультант</span>
-              <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
-            </article>
-          </div>
+      <div
+        className={`career-expert-conversation${historyOpen ? ' consultant-history-is-open' : ''}`}
+      >
+        {historyOpen ? (
+          <section
+            className="consultant-history"
+            aria-label="История бесед"
+            aria-busy={historyBusy}
+          >
+            {historyBusy ? (
+              <p role="status">Загружаем беседы…</p>
+            ) : historyError ? (
+              <>
+                <p role="alert">{historyError}</p>
+                <button type="button" onClick={() => void loadHistory()}>
+                  Повторить
+                </button>
+              </>
+            ) : historyItems.length ? (
+              historyItems.map((item) => (
+                <button
+                  className="consultant-history-row"
+                  type="button"
+                  key={item.id}
+                  aria-label={`Открыть беседу: ${item.summary ?? item.firstPhrase}`}
+                  onClick={() => void loadHistory(item.id)}
+                >
+                  <small>
+                    <time dateTime={item.lastMessageAt}>
+                      {formatHistoryMoment(item.lastMessageAt)}
+                    </time>
+                    <b>{STAGE_TITLE[item.stage]}</b>
+                  </small>
+                  <span>{item.summary ?? item.firstPhrase}</span>
+                </button>
+              ))
+            ) : (
+              <p>Бесед пока нет.</p>
+            )}
+          </section>
         ) : null}
-
-        {stage === 'profile' ? (
-          <div className="career-expert-skill-quiz-prompt" aria-label="Подтверждение навыков">
-            <span>Проверка навыков со стратегом</span>
-            <strong>Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn</strong>
-            <p>
-              3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с
-              источником и датой. Никаких субъективных оценок.
-            </p>
+        {historicalConversation && !historyOpen ? (
+          <section className="consultant-history-detail" aria-label="Открытая беседа">
             <button
               type="button"
-              className="career-quiet-button"
               onClick={() => {
-                setSkillQuizApplyError(undefined);
-                setSkillQuizOpen(true);
+                setHistoricalConversation(undefined);
+                void loadHistory();
               }}
             >
-              <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
+              К истории
             </button>
-            {user && onOpenRoleSkillAssessment ? (
+            <button type="button" onClick={() => setHistoricalConversation(undefined)}>
+              Назад в диалог
+            </button>
+            {historicalConversation.messages.map((message) => (
+              <article key={message.id}>
+                <span>{message.role === 'user' ? 'Вы' : 'Консультант'}</span>
+                <ConsultantMessage text={message.content} />
+              </article>
+            ))}
+          </section>
+        ) : null}
+        <div
+          className={historicalConversation ? 'consultant-current-hidden' : 'consultant-current'}
+        >
+          {loadingSession ? (
+            <ExpertPanelSkeleton />
+          ) : (
+            <div className="career-expert-message">
+              <span>AI-сопровождение</span>
+              <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
+              <p>
+                {journey?.nextAction.reason ??
+                  'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
+              </p>
+            </div>
+          )}
+          {!loadingSession && (turns.length || showLiveMessage) ? (
+            <div className="career-dialogue-history" aria-label="История диалога">
+              {turns.map((message) => (
+                <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
+                  <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
+                  {message.role === 'assistant' ? (
+                    <ConsultantMessage text={message.content} />
+                  ) : (
+                    message.content
+                      .split('\n')
+                      .map((paragraph, index) =>
+                        paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
+                      )
+                  )}
+                </article>
+              ))}
+              {showLiveMessage ? (
+                <article className="career-dialogue-turn is-assistant" aria-live="polite">
+                  <span>Карьерный консультант</span>
+                  <ConsultantMessage text={liveResult.message} />
+                </article>
+              ) : null}
+              <div ref={historyEndRef} aria-hidden="true" />
+            </div>
+          ) : !loadingSession ? (
+            <div className="career-dialogue-history" aria-label="История диалога">
+              <article className="career-dialogue-turn is-assistant">
+                <span>Карьерный консультант</span>
+                <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
+              </article>
+            </div>
+          ) : null}
+          {stage === 'profile' ? (
+            <div className="career-expert-skill-quiz-prompt" aria-label="Подтверждение навыков">
+              <span>Проверка навыков со стратегом</span>
+              <strong>Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn</strong>
+              <p>
+                3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с
+                источником и датой. Никаких субъективных оценок.
+              </p>
               <button
                 type="button"
                 className="career-quiet-button"
-                onClick={onOpenRoleSkillAssessment}
+                onClick={() => {
+                  setSkillQuizApplyError(undefined);
+                  setSkillQuizOpen(true);
+                }}
               >
-                <ArrowRight size={16} /> Проверить навыки роли
+                <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
               </button>
-            ) : null}
-          </div>
-        ) : null}
-
-        {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
-
-        {latestResult ? (
-          <CareerIntelligenceSummary
-            result={latestResult}
-            turnIdempotencyKey={latestTurnIdempotencyKey}
-            onCommandPrepared={onCommandPrepared}
-          />
-        ) : null}
-
-        {appliedSkillQuiz ? <SkillQuizApplyResultCard {...appliedSkillQuiz} /> : null}
-
-        {loadingSnapshot ? (
-          <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
-        ) : null}
-
-        {!loadingSession && user === null && !loginOpen ? (
-          <div className="career-expert-auth">
-            <ShieldCheck size={24} />
-            <div>
-              <strong>Персональный ответ требует входа</strong>
-              <p>Так память кандидатов не смешивается, а ключи моделей не попадают в браузер.</p>
+              {user && onOpenRoleSkillAssessment ? (
+                <button
+                  type="button"
+                  className="career-quiet-button"
+                  onClick={onOpenRoleSkillAssessment}
+                >
+                  <ArrowRight size={16} /> Проверить навыки роли
+                </button>
+              ) : null}
             </div>
-            <button type="button" onClick={() => setLoginOpen(true)}>
-              Войти в аккаунт
-              <ArrowRight size={16} />
-            </button>
-          </div>
-        ) : null}
-
-        {!loadingSession && user === null && loginOpen ? (
-          <form className="career-expert-login" onSubmit={handleLogin}>
-            <label>
-              <span>Логин</span>
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value)}
-                autoComplete="username"
-                required
-              />
-            </label>
-            <label>
-              <span>Пароль</span>
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <button className="career-primary-button" disabled={sending}>
-              {sending ? 'Проверяем…' : 'Продолжить'}
-            </button>
-          </form>
-        ) : null}
+          ) : null}
+          {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
+          {latestResult ? (
+            <CareerIntelligenceSummary
+              result={latestResult}
+              turnIdempotencyKey={latestTurnIdempotencyKey}
+              onCommandPrepared={() => {
+                refreshProposalCount();
+                onCommandPrepared?.();
+              }}
+            />
+          ) : null}
+          {appliedSkillQuiz ? <SkillQuizApplyResultCard {...appliedSkillQuiz} /> : null}
+          {loadingSnapshot ? (
+            <div className="career-expert-loading">Загружаем историю и карьерный трек…</div>
+          ) : null}
+          {!loadingSession && user === null && !loginOpen ? (
+            <div className="career-expert-auth">
+              <ShieldCheck size={24} />
+              <div>
+                <strong>Персональный ответ требует входа</strong>
+                <p>Так память кандидатов не смешивается, а ключи моделей не попадают в браузер.</p>
+              </div>
+              <button type="button" onClick={() => setLoginOpen(true)}>
+                Войти в аккаунт
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          ) : null}
+          {!loadingSession && user === null && loginOpen ? (
+            <form className="career-expert-login" onSubmit={handleLogin}>
+              <label>
+                <span>Логин</span>
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  autoComplete="username"
+                  required
+                />
+              </label>
+              <label>
+                <span>Пароль</span>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              <button className="career-primary-button" disabled={sending}>
+                {sending ? 'Проверяем…' : 'Продолжить'}
+              </button>
+            </form>
+          ) : null}
+        </div>
       </div>
-
       {loadingSession ? <ExpertComposerSkeleton /> : null}
-      {user && !loadingSession ? (
+      {user && !loadingSession && !historicalConversation ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          {!content.trim() && !voiceActive ? (
+          {!content.trim() && !voiceActive && !historyOpen ? (
             <ExpertStarterChips
               onChoose={(prompt) => {
                 setContent(prompt);
@@ -591,13 +653,11 @@ export function CareerExpertPanel({
           </div>
         </form>
       ) : null}
-
       {error ? (
         <p className="career-expert-error" role="alert">
           {error}
         </p>
       ) : null}
-
       {skillQuizOpen ? (
         <HhSkillQuizSimulator
           onClose={() => {
@@ -613,7 +673,6 @@ export function CareerExpertPanel({
     </aside>
   );
 }
-
 function ExpertPanelSkeleton() {
   return (
     <div className="career-expert-panel-skeleton" aria-hidden="true">
@@ -623,7 +682,6 @@ function ExpertPanelSkeleton() {
     </div>
   );
 }
-
 function ExpertComposerSkeleton() {
   return (
     <div className="career-expert-composer-skeleton" aria-hidden="true">
@@ -632,13 +690,11 @@ function ExpertComposerSkeleton() {
     </div>
   );
 }
-
 const EXPERT_STARTER_PROMPTS = [
   'С чего начать?',
   'Какие источники можно подключить?',
   'Можно без подключений?',
 ];
-
 function ExpertStarterChips({ onChoose }: { readonly onChoose: (prompt: string) => void }) {
   return (
     <div className="career-expert-starters" role="group" aria-label="Темы для начала">
@@ -655,13 +711,7 @@ function ExpertStarterChips({ onChoose }: { readonly onChoose: (prompt: string) 
     </div>
   );
 }
-
-/**
- * The answer takes up to ~95 seconds. Until it arrives the only sign the
- * question left the browser was the send button swapping its icon for a tick —
- * which reads as «done», not «waiting», so the candidate either leaves or asks
- * the same question twice (B162, P1-3).
- */
+/** Показываем ожидание, пока ответ консультанта не доставлен. */
 export function ExpertWaitingRow({ question }: { question: string }) {
   return (
     <article className="career-dialogue-turn is-user" aria-live="polite" aria-busy="true">
@@ -674,7 +724,6 @@ export function ExpertWaitingRow({ question }: { question: string }) {
     </article>
   );
 }
-
 export function CareerIntelligenceSummary({
   result,
   turnIdempotencyKey,
@@ -703,7 +752,6 @@ export function CareerIntelligenceSummary({
           </ol>
         </div>
       ) : null}
-
       {result.actionProposals.length ? (
         <CareerActionProposalList
           proposals={result.actionProposals}
@@ -715,10 +763,15 @@ export function CareerIntelligenceSummary({
   );
 }
 
-/**
- * A check date without a year cannot be read: «Проверка 31 дек.» leaves the
- * candidate guessing whether the deadline has already passed (B162).
- */
+function formatHistoryMoment(iso: string) {
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: 'numeric',
@@ -726,13 +779,11 @@ function formatDate(value: string) {
     year: 'numeric',
   }).format(new Date(`${value}T00:00:00Z`));
 }
-
 function messageFrom(reason: unknown): string {
   if (reason instanceof CoachApiError) return reason.message;
   if (reason instanceof Error) return reason.message;
   return 'Не удалось открыть защищённый диалог. Попробуйте ещё раз.';
 }
-
 function skillQuizApplyMessage(reason: unknown): string {
   if (reason instanceof CoachApiError && reason.code !== 'network_error') return reason.message;
   return 'Не удалось сохранить результат. Проверьте соединение и попробуйте ещё раз.';

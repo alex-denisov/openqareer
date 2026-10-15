@@ -1,0 +1,182 @@
+.career-shell {
+  --consultant-strip-width: calc(var(--career-space-8) + var(--career-space-6));
+  --consultant-dot-size: calc(var(--career-space-2) + var(--career-space-1) / 2);
+}
+.consultant-strip-button,
+.career-expert-panel .consultant-desktop-sheet-toggle {
+  display: none;
+}
+.consultant-history-is-open > :not(.consultant-history),
+.consultant-current-hidden {
+  display: none;
+}
+.consultant-history {
+  display: grid;
+  gap: var(--career-space-2);
+}
+.consultant-history h2 {
+  font-size: var(--career-text-md);
+}
+.consultant-history button,
+.consultant-history-detail button {
+  min-height: var(--career-target-min);
+  color: var(--career-text);
+  background: var(--career-surface);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-3);
+  cursor: pointer;
+}
+.career-expert-conversation.consultant-history-is-open {
+  padding-block-start: var(--career-space-4);
+}
+.consultant-history .consultant-history-row {
+  padding: var(--career-space-2) var(--career-space-3);
+  background: transparent;
+}
+.consultant-history-row {
+  line-height: 1.5;
+  display: grid;
+  gap: var(--career-space-2);
+  gap: var(--career-space-1);
+  min-height: 0;
+  text-align: start;
+  overflow-wrap: anywhere;
+}
+.consultant-history-row small {
+  display: flex;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-xs);
+  color: var(--career-text-dim);
+}
+.consultant-history-row small b {
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+.consultant-history-row span {
+  font-size: var(--career-text-sm);
+}
+@media (min-width: 761px) {
+  .consultant-mobile-stage-picker {
+    display: none;
+  }
+  .consultant-desktop .consultant-desktop-sheet-toggle {
+    display: inline-grid;
+  }
+  .career-shell.consultant-desktop.consultant-is-strip,
+  .career-shell.consultant-desktop.consultant-is-overlay {
+    grid-template-columns: var(--career-rail-width) minmax(0, 1fr) var(--consultant-strip-width);
+  }
+  .career-expert-panel.consultant-strip {
+    width: var(--consultant-strip-width);
+    display: block;
+  }
+  .consultant-strip > :not(.consultant-strip-button) {
+    display: none;
+  }
+  .consultant-strip .consultant-strip-button {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--career-space-3);
+    padding: var(--career-space-4) 0;
+    border: 0;
+    color: var(--career-accent);
+    background: transparent;
+    cursor: pointer;
+  }
+  .consultant-strip .consultant-strip-button:hover {
+    background: var(--career-surface);
+  }
+  .consultant-strip-icon {
+    display: grid;
+    place-items: center;
+    width: var(--career-target-min);
+    height: var(--career-target-min);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-accent-soft);
+  }
+  .consultant-strip-title {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    line-height: 1.5;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .consultant-strip-dot {
+    position: absolute;
+    inset-block-start: var(--career-space-3);
+    inset-inline-end: var(--career-space-3);
+    width: var(--consultant-dot-size);
+    height: var(--consultant-dot-size);
+    border-radius: 50%;
+    background: var(--career-accent);
+    border: 2px solid var(--career-bg-elevated);
+  }
+  .consultant-strip-count {
+    display: grid;
+    place-items: center;
+    min-width: var(--career-space-6);
+    height: var(--career-space-6);
+    padding: 0 var(--career-space-1);
+    border-radius: calc(var(--career-space-6) / 2);
+    border: var(--career-border-width) solid var(--career-accent);
+    color: var(--career-accent);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+  .consultant-strip-caret {
+    margin-block-start: auto;
+    color: var(--career-text-dim);
+  }
+  .consultant-desktop .career-expert-panel-controls {
+    gap: 0;
+  }
+  .consultant-desktop .career-expert-panel-controls button {
+    width: var(--career-target-min);
+    height: var(--career-target-min);
+    flex-shrink: 0;
+  }
+  .consultant-desktop .career-expert-history-button {
+    order: 1;
+  }
+  .consultant-desktop .career-close-button {
+    order: 2;
+  }
+  .consultant-desktop .career-expert-stage-button {
+    order: 3;
+  }
+  .consultant-desktop .career-expert-panel > header {
+    gap: 0;
+    padding-block: 0;
+    padding-inline: var(--career-space-4) 2px;
+  }
+  .consultant-overlay {
+    position: fixed;
+    right: 0;
+    z-index: 41;
+  }
+  .consultant-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    border: 0;
+    background: var(--career-overlay-bg, var(--career-bg));
+    opacity: 0.6;
+    cursor: pointer;
+  }
+  .consultant-strip-button:hover,
+  .consultant-history button:hover {
+    background: var(--career-accent-soft);
+  }
+  .consultant-strip-button:focus-visible,
+  .consultant-history button:focus-visible {
+    outline: var(--career-border-width) solid var(--career-accent);
+    outline-offset: calc(-1 * var(--career-space-1));
+  }
+}

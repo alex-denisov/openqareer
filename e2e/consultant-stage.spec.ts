@@ -44,8 +44,8 @@ test.describe('B340 stage consultant', () => {
     await expect(expertPanel).toBeVisible();
     await expect(expertPanel.locator('header strong')).toHaveText('Консультант');
     await expect(expertPanel.locator('header small')).toContainText('Сегодня');
-    await page.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
-    await expect(expertPanel).not.toBeVisible();
+    await page.getByRole('button', { name: 'Свернуть консультанта в полосу' }).click();
+    await expect(expertPanel).toHaveClass(/consultant-strip/);
 
     // Navigate to Vacancies
     await page
