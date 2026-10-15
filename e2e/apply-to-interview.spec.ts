@@ -455,6 +455,21 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await detailActions.getByRole('button', { name: 'Да, отклик отправлен' }).click();
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });
   await expect(goToResponses).toBeVisible();
+  const viewport = page.viewportSize()?.width ?? 0;
+  if (viewport < 1024) {
+    // B486: the 390 list has no inline stage editor; the interview is set from the vacancy.
+    await page.getByRole('button', { name: 'Назначили интервью' }).click();
+    await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
+    await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
+    await expect(page.getByRole('dialog')).toContainText('Genetec');
+    await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
+    await goToResponses.click();
+    await expect(
+      page.locator('.career-responses-mobile-row').filter({ hasText: 'Genetec' }),
+    ).toBeVisible();
+    await openToday(page);
+    return;
+  }
   await goToResponses.click();
 
   const board = page.locator('.career-responses-board');
@@ -465,7 +480,6 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await card.getByLabel('Действия с карточкой').click();
   await card.locator('.career-responses-stage-control select').first().selectOption('interview');
   await card.locator('input[type="date"]').fill('2026-09-30');
-  const viewport = page.viewportSize()?.width ?? 0;
   if (captureEvidence) {
     await page.screenshot({ path: `output/playwright/c70-interview-assignment-${viewport}.png` });
   }
@@ -480,6 +494,11 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   }
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 
+  await openToday(page);
+}
+
+async function openToday(page: Page): Promise<void> {
+  const viewport = page.viewportSize()?.width ?? 0;
   await page.locator('button[aria-label="Сегодня"]:visible').first().click();
   await expect(page.locator('.career-today')).toBeVisible();
   if (viewport >= 1024) {

@@ -768,7 +768,7 @@ test.describe('B450 responses workspace', () => {
       );
     expect(smallTargets).toEqual([]);
 
-    await page.getByRole('searchbox', { name: 'Компания, роль или площадка' }).focus();
+    await page.getByRole('searchbox', { name: 'Компания или роль' }).focus();
     await page.keyboard.press('Tab');
     const hasVisibleFocus = await page.evaluate(() => {
       const active = document.activeElement;
@@ -862,6 +862,10 @@ test.describe('B450 responses workspace', () => {
   test('application card menu exports a response and creates a persistent label', async ({
     page,
   }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile-390',
+      'B486: cards, board and card menus are desktop-only',
+    );
     await installMocks(page);
     await seedWorkspace(page);
     await openResponses(page);
@@ -1023,7 +1027,11 @@ test.describe('B450 responses workspace', () => {
 
   test('selected response shows an unconfirmed delivery failure and its reason', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile-390',
+      'B486: cards, board and card menus are desktop-only',
+    );
     await installMocks(page);
     await seedWorkspace(page);
     await openResponses(page);
@@ -1042,7 +1050,13 @@ test.describe('B450 responses workspace', () => {
     await expect(selected).toContainText('Сайт не подтвердил отправку');
   });
 
-  test('LinkedIn без квитанции сообщает, что доставка не подтверждена', async ({ page }) => {
+  test('LinkedIn без квитанции сообщает, что доставка не подтверждена', async ({
+    page,
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name === 'mobile-390',
+      'B486: cards, board and card menus are desktop-only',
+    );
     await installMocks(page);
     await seedWorkspace(page);
     await openResponses(page);
