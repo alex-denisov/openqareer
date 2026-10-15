@@ -1,26 +1,119 @@
-.career-drafts { min-width: 0; padding: var(--career-space-4); border: var(--career-border-width) solid var(--career-line); border-radius: var(--career-radius-md); background: var(--career-surface); overflow-wrap: break-word; hyphens: auto; }
-.career-drafts h2 { margin: 0; font-size: var(--career-text-md); }
-.career-drafts p, .career-drafts label, .career-drafts-recent { font-size: var(--career-text-xs); line-height: 1.45; }
-.career-drafts > p { color: var(--career-text-soft); margin: var(--career-space-2) 0 var(--career-space-3); }
-.career-drafts form { display: grid; gap: var(--career-space-2); }
-.career-drafts input, .career-drafts textarea { width: 100%; min-width: 0; box-sizing: border-box; background: var(--career-bg); color: var(--career-text); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); padding: var(--career-space-2); font: inherit; font-size: var(--career-text-sm); min-height: calc(var(--career-space-5) + var(--career-space-6)); }
-.career-drafts-kinds { display: flex; flex-wrap: wrap; gap: var(--career-space-2); }
-.career-drafts .career-btn { min-height: calc(var(--career-space-5) + var(--career-space-6)); min-width: 0; white-space: normal; }
-.career-drafts [aria-pressed=true] { border-color: var(--career-accent); }
-.career-drafts-result { margin-top: var(--career-space-3); }
-.career-drafts-result p { white-space: pre-wrap; }
-.career-drafts-safety-stop { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: var(--career-space-2); margin-block: var(--career-space-3); padding: var(--career-space-3); border: var(--career-border-width) solid var(--career-line-strong); border-radius: var(--career-radius-sm); background: var(--career-bg); color: var(--career-text); overflow-wrap: anywhere; }
-.career-drafts-safety-stop__icon { inline-size: var(--career-space-4); block-size: var(--career-space-4); flex: none; }
-.career-drafts-safety-stop__content { min-inline-size: 0; }
-.career-drafts-safety-stop__content p { margin: 0 0 var(--career-space-2); }
-.career-drafts p.career-drafts-safety-stop__title { font-size: var(--career-text-md); }
-.career-drafts-safety-stop__content p:not(.career-drafts-safety-stop__title) { font-size: var(--career-text-sm); }
-.career-drafts-safety-stop__content .career-btn { margin-block-start: var(--career-space-1); }
-.career-drafts-safety-stop .career-btn[aria-busy=true] { opacity: 1; cursor: progress; }
-.career-drafts p.career-drafts-safety-error, .career-drafts p.career-drafts-safety-notice { margin-block: var(--career-space-3); font-size: var(--career-text-sm); overflow-wrap: anywhere; }
-.career-drafts-recent { margin: var(--career-space-3) 0 0; padding-inline-start: var(--career-space-4); color: var(--career-text-soft); }
-.career-drafts :focus-visible { outline: var(--career-border-width) solid var(--career-accent); outline-offset: var(--career-space-1); }
-.career-drafts :disabled { opacity: .5; cursor: wait; }
+.career-drafts {
+  min-width: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+.career-drafts h2 {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+.career-drafts p,
+.career-drafts label,
+.career-drafts-recent {
+  font-size: var(--career-text-xs);
+  line-height: 1.45;
+}
+.career-drafts > p {
+  color: var(--career-text-soft);
+  margin: var(--career-space-2) 0 var(--career-space-3);
+}
+.career-drafts form {
+  display: grid;
+  gap: var(--career-space-2);
+}
+.career-drafts input,
+.career-drafts textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  background: var(--career-bg);
+  color: var(--career-text);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  padding: var(--career-space-2);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  min-height: calc(var(--career-space-5) + var(--career-space-6));
+}
+.career-drafts-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+.career-drafts .career-btn {
+  min-height: calc(var(--career-space-5) + var(--career-space-6));
+  min-width: 0;
+  white-space: normal;
+}
+.career-drafts [aria-pressed='true'] {
+  border-color: var(--career-accent);
+}
+.career-drafts-result {
+  margin-top: var(--career-space-3);
+}
+.career-drafts-result p {
+  white-space: pre-wrap;
+}
+.career-drafts-safety-stop {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--career-space-2);
+  margin-block: var(--career-space-3);
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg);
+  color: var(--career-text);
+  overflow-wrap: anywhere;
+}
+.career-drafts-safety-stop__icon {
+  inline-size: var(--career-space-4);
+  block-size: var(--career-space-4);
+  flex: none;
+}
+.career-drafts-safety-stop__content {
+  min-inline-size: 0;
+}
+.career-drafts-safety-stop__content p {
+  margin: 0 0 var(--career-space-2);
+}
+.career-drafts p.career-drafts-safety-stop__title {
+  font-size: var(--career-text-md);
+}
+.career-drafts-safety-stop__content p:not(.career-drafts-safety-stop__title) {
+  font-size: var(--career-text-sm);
+}
+.career-drafts-safety-stop__content .career-btn {
+  margin-block-start: var(--career-space-1);
+}
+.career-drafts-safety-stop .career-btn[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
+}
+.career-drafts p.career-drafts-safety-error,
+.career-drafts p.career-drafts-safety-notice {
+  margin-block: var(--career-space-3);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+.career-drafts-recent {
+  margin: var(--career-space-3) 0 0;
+  padding-inline-start: var(--career-space-4);
+  color: var(--career-text-soft);
+}
+.career-drafts :focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+.career-drafts :disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
 
 /* На широком экране очередь задаёт высоту; черновики доступны во внутренней прокрутке. */
 @media (min-width: 1025px) {

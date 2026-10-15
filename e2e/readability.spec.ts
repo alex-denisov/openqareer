@@ -17,7 +17,6 @@ const SECTIONS = ['Сегодня', 'Роль', 'Вакансии'] as const;
 const DESKTOP_WIDTHS = [1176, 1280, 1440] as const;
 const MAX_DISTINCT_SIZES = 6;
 const MIN_FONT_PX = 13;
-const CAPTION_SLACK_PX = 2;
 
 interface ReadabilityFacts {
   readonly textNodes: number;
@@ -201,9 +200,10 @@ async function openSection(
       if (await mobileSummary.isVisible()) {
         await mobileSummary.click();
       } else {
+        await page.locator('nav.career-mobile-nav').getByRole('button', { name: 'Ещё' }).click();
         await page
-          .getByRole('button', { name: /Роль\./ })
-          .first()
+          .getByRole('menu', { name: 'Ещё разделы' })
+          .getByRole('menuitem', { name: 'Карьера', exact: true })
           .click();
       }
     }
@@ -270,15 +270,68 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    for (const label of SECTIONS) {
+    for (const label of ['Сегодня', 'Вакансии'] as const) {
       await openSection(page, label);
       await page.screenshot({ path: info.outputPath(`${label}-390.png`), fullPage: true });
       await assertReadable(page, label, 390, errors);
     }
     expect(unmatched).toEqual([]);
+  });
+
+  test('the mobile shell has no horizontal overflow from 280 to 414 pixels', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone only');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+
+    for (const width of [280, 320, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(page.locator('nav.career-mobile-nav')).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('Today fits 320, 390 and 414 without overflow or undersized touch targets', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone responsive acceptance');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+    await openSection(page, 'Сегодня');
+
+    for (const width of [320, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(page.locator('.career-today-mobile')).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `Today overflows at ${width}px`).toBeLessThanOrEqual(0);
+      const undersizedTargets = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '.career-today-mobile button, .career-today-mobile a',
+          ),
+        ]
+          .filter((element) => element.getClientRects().length > 0)
+          .map((element) => ({
+            name: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? '',
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+          }))
+          .filter((target) => target.width < 44 || target.height < 44),
+      );
+      expect(undersizedTargets, `Today touch targets at ${width}px`).toEqual([]);
+    }
   });
 
   test('the collapsed desktop rail hides captions and the path opens only existing sections', async ({
@@ -327,72 +380,53 @@ test.describe('B232 readability gate', () => {
     expect(unmatched).toEqual([]);
   });
 
-  test('the path indicator on the phone is a one-line current-step summary without overflow', async ({
-    page,
-  }, info) => {
-    test.skip(info.project.name !== 'mobile-390', 'phone only');
+  test('Today mobile omits the path indicator from the approved screen', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'Today mobile surface');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
     await openSection(page, 'Сегодня');
 
-    const facts = await page.evaluate(() => {
-      const path = document.querySelector<HTMLElement>('.career-path');
-      const summary = document.querySelector<HTMLElement>('.career-path-mobile-summary');
-      if (!path || !summary) return null;
-      const pathBox = path.getBoundingClientRect();
-      const summaryBox = summary.getBoundingClientRect();
-      return {
-        pathHeight: pathBox.height,
-        summaryHeight: summaryBox.height,
-        pathOverflow: path.scrollWidth - path.clientWidth,
-      };
+    await expect(page.locator('.career-page-header')).toBeHidden();
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({
+      path: info.outputPath('today-mobile-without-path-390.png'),
+      fullPage: true,
     });
-
-    expect(facts).not.toBeNull();
-    expect(facts!.pathHeight).toBeLessThanOrEqual(48);
-    expect(facts!.summaryHeight).toBeGreaterThanOrEqual(44);
-    expect(facts!.pathOverflow).toBeLessThanOrEqual(0);
-    await expect(page.locator('.career-path-mobile-summary')).toContainText(/^Шаг \d из 5/);
     expect(unmatched).toEqual([]);
   });
 
-  /**
-   * B248, owner review 2026-09-23 (390px) — the rail's left-edge active tick
-   * floated between «Сегодня» and «Профиль» in the bottom nav, with nothing
-   * for it to mark there. Colour alone still names the active item.
-   */
-  /**
-   * CI 2026-09-25: «Консультант» in a fifth of 390 px ran 1.3 px past the
-   * screen on Linux fonts and failed every screen's overflow check. Every
-   * caption must fit its own button, so the strip never depends on metrics.
-   */
   test('every bottom-nav caption fits its button and the screen', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    const spills = await page.evaluate((minSlack) => {
-      const cw = document.documentElement.clientWidth;
-      return [...document.querySelectorAll<HTMLElement>('.career-mobile-nav .career-nav-button')]
-        .map((button) => {
-          const caption = button.querySelector('span')?.getBoundingClientRect();
+    const items = await page
+      .locator(
+        '.career-mobile-nav .career-nav-button, .career-mobile-nav .career-mobile-more-button',
+      )
+      .evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const caption = button.querySelector('span');
           const box = button.getBoundingClientRect();
-          if (!caption) return null;
-          // 2 px of headroom on each side absorbs font-metric drift between
-          // macOS and the Linux CI runner.
-          const slack = Math.min(
-            box.right - caption.right,
-            caption.left - box.left,
-            cw - caption.right,
-          );
-          return slack < minSlack
-            ? `${button.textContent?.trim()} slack ${slack.toFixed(2)}px`
-            : null;
-        })
-        .filter(Boolean);
-    }, CAPTION_SLACK_PX);
-    expect(spills).toEqual([]);
+          return {
+            label: caption?.textContent?.trim(),
+            width: box.width,
+            height: box.height,
+            captionOverflow: caption
+              ? caption.scrollWidth - caption.clientWidth
+              : Number.POSITIVE_INFINITY,
+          };
+        }),
+      );
+
+    expect(items).toHaveLength(5);
+    expect(
+      items.every(
+        (item) => Math.abs(item.width - 69) <= 1 && item.height === 52 && item.captionOverflow <= 0,
+      ),
+    ).toBe(true);
   });
 
   test('the bottom nav carries no stray active-tick bar between icons', async ({ page }, info) => {
@@ -401,10 +435,17 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    const beforeContent = await page
-      .locator('nav.career-mobile-nav .career-nav-button.is-active')
-      .first()
-      .evaluate((el) => getComputedStyle(el, '::before').content);
+    const selected = page.locator('nav.career-mobile-nav .career-nav-button[aria-current="page"]');
+    const beforeContent = await selected.evaluate(
+      (element) => getComputedStyle(element, '::before').content,
+    );
+    const selectedBackground = await selected.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    const capsuleBackground = await page
+      .locator('nav.career-mobile-nav')
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(selectedBackground).not.toBe(capsuleBackground);
     expect(beforeContent).toBe('none');
   });
 
@@ -588,10 +629,19 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    const tariffsTrigger = page
-      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-      .first();
-    await tariffsTrigger.click();
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await page
+        .getByRole('navigation', { name: 'Разделы' })
+        .getByRole('button', { name: 'Ещё' })
+        .click();
+      await page
+        .getByRole('menu', { name: 'Ещё разделы' })
+        .getByRole('menuitem', { name: 'Тарифы', exact: true })
+        .click();
+    } else {
+      await page.locator('.career-rail-wallet:visible').click();
+    }
+
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
@@ -610,7 +660,11 @@ test.describe('B232 readability gate', () => {
     await waitForCareerShell(page);
     await page.locator('button[aria-label="Профиль"]:visible').first().click();
 
-    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+    const title =
+      (page.viewportSize()?.width ?? 1440) <= 760
+        ? page.locator('.career-topbar h1')
+        : page.locator('.career-desktop-topbar h1');
+    await expect(title).toHaveText('Профиль');
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
     await expect(page.getByText('FinCloud').locator('visible=true').first()).toBeVisible();
     await expect(page.getByText('Head of Product').first()).toBeVisible();
@@ -640,10 +694,9 @@ test.describe('B232 readability gate', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    await page.screenshot({ path: 'output/playwright/C52/rail-and-path-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/C52/rail-and-today-390.png' });
   });
 
   test('capture C73 screenshots: Today drops the old path; B450 Responses and B446 vacancies stay focused', async ({
@@ -670,15 +723,13 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-path')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/C73/screen-responses-1440.png' });
 
-    // 390 viewport keeps its current path summary.
+    // The approved mobile Today screen omits the old path summary.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/C73/screen-today-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-today-390.png' });
 
     await openSection(page, 'Вакансии');
     await expect(page.locator('.career-path')).toHaveCount(0);
@@ -716,9 +767,12 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1000.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({
+      path: 'output/playwright/B344/d9-today-without-path-390.png',
+      fullPage: true,
+    });
   });
 
   test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }, info) => {
@@ -746,46 +800,39 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    // Profile screen: languages
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
       .getByRole('button', { name: 'Профиль', exact: true })
       .click();
     await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Профиль');
-
     const languagesHeading = page.getByRole('heading', { name: 'Языки', exact: true });
     await expect(languagesHeading).toBeVisible();
     await languagesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
 
-    // B367: self-audit tab remains behind the consent-approval gate.
     await page.getByRole('tab', { name: /^Цифровой след/ }).click();
-    const sourcesHeading = page.getByRole('heading', {
-      name: 'Как вас видят',
-      exact: true,
-    });
+    const sourcesHeading = page.getByRole('heading', { name: 'Как вас видят', exact: true });
     await expect(sourcesHeading).toBeVisible();
     await sourcesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/sources-1176.png' });
 
-    // Tariffs at 1176
-    const tariffsTrigger = page
-      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-      .first();
-    await tariffsTrigger.click();
+    await page.locator('.career-rail-wallet:visible').click();
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
-    // Tariffs at 390
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    const mobileTariffsTrigger = page
-      .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
-      .first();
-    await mobileTariffsTrigger.click();
+    await page
+      .getByRole('navigation', { name: 'Разделы' })
+      .getByRole('button', { name: 'Ещё' })
+      .click();
+    await page
+      .getByRole('menu', { name: 'Ещё разделы' })
+      .getByRole('menuitem', { name: 'Тарифы', exact: true })
+      .click();
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();

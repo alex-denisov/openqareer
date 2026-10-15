@@ -71,13 +71,18 @@ test('built career workspace is ready, operable and free of critical accessibili
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
   await expect(page.getByTestId('source-opt-file')).toBeEnabled();
 
-  const accountButton = page.getByRole('button', { name: 'Открыть аккаунт' });
-  await expect(accountButton).toBeEnabled();
-  await accountButton.click();
-  const accountAccess = page.locator('.career-account-access');
-  await expect(accountAccess.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
-  await accountAccess.getByRole('button', { name: 'Назад' }).click();
-  await expect(firstRun).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    // Утверждённый экран 0 на 390 не содержит кнопки аккаунта: шапка — «Назад», «Старт», консультант.
+    await expect(page.getByRole('button', { name: 'Консультант: открыть' })).toBeVisible();
+  } else {
+    const accountButton = page.getByRole('button', { name: 'Открыть аккаунт' });
+    await expect(accountButton).toBeEnabled();
+    await accountButton.click();
+    const accountAccess = page.locator('.career-account-access');
+    await expect(accountAccess.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible();
+    await accountAccess.getByRole('button', { name: 'Назад' }).click();
+    await expect(firstRun).toBeVisible();
+  }
 
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - window.innerWidth,
@@ -155,16 +160,17 @@ test('candidate confirms one saved command and sees an honest queued state', asy
 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
-  const expertPanel = page.getByRole('complementary', { name: /^Консультант · / });
+  const expertPanel = page.locator('.career-expert-panel');
   if ((page.viewportSize()?.width ?? 1440) >= 1280) {
     await expect(expertPanel).toBeVisible();
   } else if (!(await expertPanel.isVisible())) {
     await page
-      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/ })
       .first()
       .click();
   }
-  const dialog = page.getByRole('complementary', { name: /^Консультант · / });
+  const dialog = page.locator('.career-expert-panel');
+  await expect(dialog).toBeVisible();
   const expand = dialog.getByRole('button', { name: 'Развернуть консультанта' });
   if (await expand.isVisible()) await expand.click();
   await expect(dialog.getByText('Ничего не отправлено')).toBeVisible();

@@ -1,11 +1,18 @@
-import { useState } from 'react';
-import { LinkedinDraftCard } from './LinkedinDraftCard';
-import { SearchMomentum } from './SearchMomentum';
-import { ExecutiveOnboardingCard } from '../onboarding/ExecutiveOnboardingCard';
-import { ClockCountdown, Sparkle, X } from '@phosphor-icons/react';
+import { useId, useState } from 'react';
+import {
+  Bell,
+  BookmarkSimple,
+  Briefcase,
+  CaretDown,
+  CaretRight,
+  CheckCircle,
+  ChatCircle,
+  ClockCountdown,
+  LinkedinLogo,
+  PaperPlaneTilt,
+  UserCircle,
+} from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
-import { InterviewPrepModal } from '../interview/InterviewPrepModal';
-import { CompanyReminderModal } from './CompanyReminderModal';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import {
@@ -14,12 +21,9 @@ import {
   resolveConsultantAction,
 } from './consultantActionStorage';
 import type { TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
-import { formatTodaySalary } from './todayCompensation';
-import { TodayDesktopContent, type TodayFunnelContext } from './TodayDesktop';
-import { TodayDigestRow, TodayReturnBanner } from './TodayMobileHeader';
+import { TodayDesktopContent, actionSourceSummary, type TodayFunnelContext } from './TodayDesktop';
 export type { TodayFunnelContext } from './TodayDesktop';
 import {
-  companyInitials,
   consultantTargetView,
   followUpStatusLabel,
   formatQueueTitle,
@@ -27,12 +31,9 @@ import {
   queueKey,
 } from './todayFormat';
 export { consultantTargetView, queueItemTarget } from './todayFormat';
-import { vacancyLevelMatchLabel } from '../vacancies/vacancyLevelMatch';
-import { CareerTooltip } from '../shell/CareerTooltip';
-import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
+import { profileCompleteness } from '../resume/profileCompleteness';
 import type { ResumeDraft } from '../resume/resumeTypes';
-
-const NO_PENDING_FOLLOW_UPS: ReadonlySet<string> = new Set();
+import './today-mobile.css';
 
 /**
  * Маршрутизация действия консультанта в разделы кабинета.
@@ -112,17 +113,14 @@ export function TodayScreen({
   loading,
   failed,
   onRetry,
-  onMarkFollowUpSent,
-  markingFollowUpIds = NO_PENDING_FOLLOW_UPS,
   candidateId,
   consultantAction,
   profileDraft,
   funnelContext,
   onNavigate,
-  onOpenTariffs,
   onOpenExpert,
 }: TodayScreenProps) {
-  const { activeAction, onAccept, onDismiss, onPostpone } = useTodayConsultantAction({
+  const { activeAction, onAccept, onPostpone } = useTodayConsultantAction({
     candidateId,
     consultantAction,
     onNavigate,
@@ -136,13 +134,9 @@ export function TodayScreen({
   return (
     <TodayContent
       snapshot={snapshot}
-      onOpenTariffs={onOpenTariffs}
       activeAction={activeAction}
       onAccept={onAccept}
-      onDismiss={onDismiss}
       onPostpone={onPostpone}
-      onMarkFollowUpSent={onMarkFollowUpSent}
-      markingFollowUpIds={markingFollowUpIds}
       onNavigate={onNavigate}
       onOpenExpert={onOpenExpert}
       profileDraft={profileDraft}
@@ -158,11 +152,7 @@ interface TodayContentProps {
   readonly onOpenExpert?: () => void;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
-  readonly onDismiss: () => void;
   readonly onPostpone: () => void;
-  readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  readonly markingFollowUpIds: ReadonlySet<string>;
-  readonly onOpenTariffs?: () => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }
 
@@ -188,555 +178,216 @@ function TodayMobileContent({
   snapshot,
   activeAction,
   onAccept,
-  onDismiss,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
+  onPostpone,
+  onOpenExpert,
   onNavigate,
-  onOpenTariffs,
+  profileDraft,
+  funnelContext,
 }: Pick<
   TodayContentProps,
   | 'snapshot'
   | 'activeAction'
   | 'onAccept'
-  | 'onDismiss'
-  | 'onMarkFollowUpSent'
-  | 'markingFollowUpIds'
+  | 'onPostpone'
+  | 'onOpenExpert'
   | 'onNavigate'
-  | 'onOpenTariffs'
+  | 'profileDraft'
+  | 'funnelContext'
 >) {
-  const { queue, followUps, sinceLastVisit } = snapshot;
   return (
-    <div className="career-today-mobile">
-      <TodayMobileIntro snapshot={snapshot} onNavigate={onNavigate} />
-      <TodayDigestRow digest={snapshot.digest} />
-      <SearchMomentum momentum={snapshot.momentum} onNavigate={onNavigate} />
-      <div className="career-today-panels">
-        <TodayQueue
-          queue={queue}
-          sinceLastVisitItems={sinceLastVisit.items}
-          onMarkFollowUpSent={onMarkFollowUpSent}
-          markingFollowUpIds={markingFollowUpIds}
-          consultantAction={activeAction}
-          onAcceptConsultant={onAccept}
-          onDismissConsultant={onDismiss}
-          onNavigate={onNavigate}
-        />
-        <TodayMobileSidebar
-          followUps={followUps}
-          onMarkFollowUpSent={onMarkFollowUpSent}
-          markingFollowUpIds={markingFollowUpIds}
-          onOpenTariffs={onOpenTariffs}
-        />
-      </div>
-      <ExecutiveOnboardingCard />
-    </div>
-  );
-}
-
-function TodayMobileIntro({
-  snapshot,
-  onNavigate,
-}: Pick<TodayContentProps, 'snapshot' | 'onNavigate'>) {
-  return (
-    <>
-      <TodayReturnBanner
-        sinceLastVisit={snapshot.sinceLastVisit}
-        digest={snapshot.digest}
+    <div className="career-today-mobile pm tm">
+      <TodayMobileDecision
+        action={activeAction}
+        onAccept={onAccept}
+        onPostpone={onPostpone}
+        onOpenExpert={onOpenExpert}
+      />
+      <TodayMobileQueue
+        queue={snapshot.queue}
+        followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
-      <p className="career-today-subtitle">
-        Что изменилось с прошлого визита и что решить сегодня.
-      </p>
-      <CareerDiaryShortcut onNavigate={onNavigate} />
-      {snapshot.vacanciesPending ? <TodayPendingNotice /> : null}
-    </>
-  );
-}
-
-function TodayMobileSidebar({
-  followUps,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
-  onOpenTariffs,
-}: {
-  readonly followUps: readonly TodayFollowUp[];
-  readonly onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  readonly markingFollowUpIds: ReadonlySet<string>;
-  readonly onOpenTariffs?: () => void;
-}) {
-  return (
-    <div className="career-today-side">
-      <LinkedinDraftCard onOpenTariffs={onOpenTariffs} />
-      <TodayFollowUps
-        followUps={followUps}
-        onMarkFollowUpSent={onMarkFollowUpSent}
-        markingFollowUpIds={markingFollowUpIds}
-      />
+      <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
+      <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>
   );
 }
 
-function CareerDiaryShortcut({
-  onNavigate,
+function TodayMobileReasons({
+  action,
+  open,
+  id,
 }: {
-  readonly onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  const diary = useCareerDiaryAccess();
-  if (diary.state === 'loading') {
-    return (
-      <p className="career-diary-access-status" role="status">
-        Проверяем статус места работы…
-      </p>
-    );
-  }
-  if (diary.state === 'error') {
-    return (
-      <section className="career-diary-access-error">
-        <p role="alert">{diary.error ?? 'Не удалось проверить место работы.'}</p>
-        <button className="career-btn is-ghost" type="button" onClick={diary.reload}>
-          Повторить
-        </button>
-      </section>
-    );
-  }
-  if (!diary.isVisible || !onNavigate) return null;
-  return (
-    <button
-      className="career-btn is-ghost career-today-diary-shortcut"
-      type="button"
-      onClick={() => onNavigate('diary')}
-    >
-      Открыть карьерный дневник
-    </button>
-  );
-}
-
-function sinceHintOf(items: readonly string[]) {
-  const extra = items.filter((item) => !/вакан/u.test(item));
-  if (extra.length === 0) return null;
-  return <p className="career-today-since-hint">{extra.join(' · ')}</p>;
-}
-
-function TodayQueueList({
-  queue,
-  hasConsultantCard,
-  consultantAction,
-  onAcceptConsultant,
-  onDismissConsultant,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
-  onNavigate,
-}: {
-  queue: readonly TodayQueueItem[];
-  hasConsultantCard: boolean;
-  consultantAction?: ReasonedCareerAction;
-  onAcceptConsultant?: () => void;
-  onDismissConsultant?: () => void;
-  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  markingFollowUpIds: ReadonlySet<string>;
-  onNavigate?: (view: CareerCabinetView) => void;
+  readonly action: ReasonedCareerAction;
+  readonly open: boolean;
+  readonly id: string;
 }) {
   return (
-    <ul className="career-today-list">
-      {consultantAction ? (
-        <ConsultantQueueCard
-          action={consultantAction}
-          isFirst={true}
-          onAccept={onAcceptConsultant}
-          onDismiss={onDismissConsultant}
-        />
-      ) : null}
-      {queue.map((item, index) => (
-        <QueueRow
-          key={queueKey(item)}
-          item={item}
-          isFirst={!hasConsultantCard && index === 0}
-          onMarkFollowUpSent={onMarkFollowUpSent}
-          markingFollowUpIds={markingFollowUpIds}
-          onNavigate={onNavigate}
-        />
-      ))}
-    </ul>
-  );
-}
-
-function TodayQueue({
-  queue,
-  sinceLastVisitItems,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
-  consultantAction,
-  onAcceptConsultant,
-  onDismissConsultant,
-  onNavigate,
-}: {
-  queue: readonly TodayQueueItem[];
-  sinceLastVisitItems: readonly string[];
-  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  markingFollowUpIds: ReadonlySet<string>;
-  consultantAction?: ReasonedCareerAction;
-  onAcceptConsultant?: () => void;
-  onDismissConsultant?: () => void;
-  onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  const hasConsultantCard = Boolean(consultantAction);
-  const totalCount = queue.length + (hasConsultantCard ? 1 : 0);
-
-  return (
-    <section className="career-today-queue" aria-label="Очередь дня">
-      <header className="career-today-queue-head">
-        <h2>Очередь дня</h2>
-        <span className="career-today-hint">
-          {pluralRu(totalCount, ['карточка', 'карточки', 'карточек'])} · решение нужно по каждой
+    <ol className="tm-reasons" id={id} hidden={!open}>
+      <li>
+        <span className="num-badge" aria-hidden="true">
+          1
         </span>
-      </header>
-      {sinceHintOf(sinceLastVisitItems)}
-      {totalCount === 0 ? (
-        <p className="career-today-empty">
-          Решений на сегодня нет: подборка разобрана. Новые вакансии появятся здесь сами.
-        </p>
+        <span>{action.rationale}</span>
+      </li>
+      <li className="tm-src">Источники: {actionSourceSummary(action)}</li>
+    </ol>
+  );
+}
+
+function TodayMobileDecision({
+  action,
+  onAccept,
+  onPostpone,
+  onOpenExpert,
+}: {
+  readonly action?: ReasonedCareerAction;
+  readonly onAccept: () => void;
+  readonly onPostpone: () => void;
+  readonly onOpenExpert?: () => void;
+}) {
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+  const reasonsId = useId();
+  return (
+    <section className="tm-hero" aria-label="Следующее решение">
+      <p className="tm-eyebrow">Следующее решение</p>
+      <h2>{action?.headline ?? 'Нет проверенного следующего шага'}</h2>
+      <p className="tm-effect">
+        {action?.expectedChange ?? 'В текущих данных нет основания предложить конкретное действие.'}
+      </p>
+      {action ? (
+        <>
+          <button className="pm-cta tm-main" type="button" onClick={onAccept}>
+            <CheckCircle aria-hidden="true" weight="regular" />
+            {action.label}
+          </button>
+          <button className="pm-text tm-later" type="button" onClick={onPostpone}>
+            Отложить до завтра
+          </button>
+          <button
+            className="tm-why"
+            type="button"
+            aria-expanded={reasonsOpen}
+            aria-controls={reasonsId}
+            onClick={() => setReasonsOpen((open) => !open)}
+          >
+            Почему это решение <CaretDown aria-hidden="true" weight="regular" />
+          </button>
+          <TodayMobileReasons action={action} open={reasonsOpen} id={reasonsId} />
+        </>
+      ) : onOpenExpert ? (
+        <button className="tm-why" type="button" onClick={onOpenExpert}>
+          Обсудить <CaretRight aria-hidden="true" weight="regular" />
+        </button>
       ) : (
-        <TodayQueueList
-          queue={queue}
-          hasConsultantCard={hasConsultantCard}
-          consultantAction={consultantAction}
-          onAcceptConsultant={onAcceptConsultant}
-          onDismissConsultant={onDismissConsultant}
-          onMarkFollowUpSent={onMarkFollowUpSent}
-          markingFollowUpIds={markingFollowUpIds}
-          onNavigate={onNavigate}
-        />
+        <p className="pm-foot">Источники: нет проверенных данных</p>
       )}
     </section>
   );
 }
 
-function ConsultantCardBody({ action }: { action: ReasonedCareerAction }) {
-  return (
-    <div className="career-today-item-body">
-      <span className="career-today-item-kind is-accent">Консультант · Один шаг на сегодня</span>
-      <div className="career-today-item-title">{action.headline}</div>
-      <div className="career-today-item-rationale">{action.rationale}</div>
-      {action.expectedChange ? (
-        <div className="career-today-item-effect">
-          <span className="career-today-effect-label">Что изменится:</span> {action.expectedChange}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ConsultantQueueCard({
-  action,
-  isFirst,
-  onAccept,
-  onDismiss,
-}: {
-  action: ReasonedCareerAction;
-  isFirst: boolean;
-  onAccept?: () => void;
-  onDismiss?: () => void;
-}) {
-  return (
-    <li
-      className={`career-today-item career-today-consultant-card${isFirst ? ' is-first' : ''}`}
-      data-testid="consultant-queue-card"
-    >
-      <span className="career-today-item-logo is-consultant">
-        <Sparkle size={18} aria-hidden="true" />
-      </span>
-      <ConsultantCardBody action={action} />
-      <span className="career-today-item-fit" />
-      <div className="career-today-item-actions">
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-sm career-today-consultant-action"
-          onClick={onAccept}
-        >
-          {action.label}
-        </button>
-        <button
-          type="button"
-          className="career-btn-icon career-today-consultant-dismiss"
-          aria-label="Отклонить предложение"
-          onClick={onDismiss}
-        >
-          <X size={16} aria-hidden="true" />
-        </button>
-      </div>
-    </li>
-  );
-}
-
-function QueueRow({
-  item,
-  isFirst,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
-  onNavigate,
-}: {
-  item: TodayQueueItem;
-  isFirst: boolean;
-  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  markingFollowUpIds: ReadonlySet<string>;
-  onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  const salary = formatTodaySalary(item.salary);
-  const isVacancy = item.kind === 'new_vacancy' || item.kind === 'shortlist';
-  const secondLine = isVacancy ? (salary ?? 'вилка не указана') : (salary ?? 'Ждём вас');
-  const isAccentKind = item.kind === 'follow_up' || item.kind === 'interview';
-
-  return (
-    <li className={`career-today-item${isFirst ? ' is-first' : ''}`}>
-      <span className="career-today-item-logo">{companyInitials(item.company)}</span>
-      <div className="career-today-item-body">
-        <span className={`career-today-item-kind${isAccentKind ? ' is-accent' : ''}`}>
-          {(item.eyebrow ?? queueKindLabel(item)).replace(/follow-up/gi, 'Напоминание компании')}
-        </span>
-        <div className="career-today-item-title">{formatQueueTitle(item.company, item.title)}</div>
-        <div className="career-today-item-meta">
-          <span className="metric">{secondLine}</span>
-          {item.location ? <span>{item.location}</span> : null}
-        </div>
-      </div>
-      {item.fit ? <QueueFit fit={item.fit} /> : <span className="career-today-item-fit" />}
-      <div className="career-today-item-actions">
-        <QueueAction
-          item={item}
-          onMarkFollowUpSent={onMarkFollowUpSent}
-          markingFollowUpIds={markingFollowUpIds}
-          onNavigate={onNavigate}
-        />
-      </div>
-    </li>
-  );
-}
-
-function QueueFit({ fit }: { fit: NonNullable<TodayQueueItem['fit']> }) {
-  return (
-    <div className="career-today-item-fit">
-      <FitDot ok={fit.role !== 'none'} label="роль" />
-      <FitDot
-        ok={fit.level === 'match' ? true : fit.level === 'unknown' ? null : false}
-        label="уровень"
-        title={vacancyLevelMatchLabel(fit.level)}
-      />
-      <FitDot ok={fit.geo} label="гео" />
-    </div>
-  );
-}
-
-function FitDot({ ok, label, title }: { ok: boolean | null; label: string; title?: string }) {
-  const content =
-    ok === null ? (
-      <span className="career-today-fit-dot is-unknown" aria-label={title}>
-        {label} —
-      </span>
-    ) : (
-      <span className={`career-today-fit-dot${ok ? ' is-yes' : ' is-no'}`}>
-        {ok ? label : `${label} —`}
-      </span>
-    );
-
-  if (title) {
-    return <CareerTooltip content={title}>{content}</CareerTooltip>;
-  }
-  return content;
-}
-
-function FollowUpQueueAction({
-  item,
-  isSaving,
-  onMark,
-}: {
-  item: TodayQueueItem;
-  isSaving: boolean;
-  onMark: (applicationId: string) => Promise<void>;
-}) {
-  const [modalOpen, setModalOpen] = useState(false);
-  if (!item.applicationId) return null;
-  return (
-    <div className="career-today-followup-buttons">
-      <button
-        type="button"
-        className="career-btn career-btn-secondary career-btn-sm career-today-draft-btn"
-        onClick={() => setModalOpen(true)}
-      >
-        Черновик напоминания
-      </button>
-      <MarkFollowUpButton applicationId={item.applicationId} isSaving={isSaving} onMark={onMark} />
-      {modalOpen ? (
-        <CompanyReminderModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onMarkSent={onMark}
-          applicationId={item.applicationId}
-          company={item.company}
-          positionTitle={item.title}
-          promisedDate={item.dueAt}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function QueueAction({
-  item,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
-  onNavigate,
-}: {
-  item: TodayQueueItem;
-  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  markingFollowUpIds: ReadonlySet<string>;
-  onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  if (item.kind === 'follow_up') {
-    return (
-      <FollowUpQueueAction
-        item={item}
-        isSaving={item.applicationId ? markingFollowUpIds.has(item.applicationId) : false}
-        onMark={onMarkFollowUpSent}
-      />
-    );
-  }
-  if (item.kind === 'interview') {
-    return <PrepareInterviewButton item={item} />;
-  }
-  return (
-    <button
-      type="button"
-      className="career-btn career-btn-secondary career-btn-sm"
-      onClick={() => onNavigate?.(queueItemTarget(item))}
-    >
-      Открыть
-    </button>
-  );
-}
-
-/** «Подготовиться» from «Сегодня» (B251 F5) opens the same interview prep
- * material the tracker card offers — no dedicated prep screen exists yet. */
-function PrepareInterviewButton({ item }: { item: TodayQueueItem }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <button
-        type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
-        onClick={() => setOpen(true)}
-      >
-        Подготовиться
-      </button>
-      <InterviewPrepModal
-        isOpen={open}
-        onClose={() => setOpen(false)}
-        vacancy={{
-          id: item.applicationId ?? item.clusterId ?? item.title,
-          title: item.title,
-          company: item.company ?? undefined,
-        }}
-      />
-    </>
-  );
-}
-
-function FollowUpItemActions({
-  item,
-  isSaving,
-  onMark,
-}: {
-  item: TodayFollowUp;
-  isSaving: boolean;
-  onMark: (applicationId: string) => Promise<void>;
-}) {
-  const [modalOpen, setModalOpen] = useState(false);
-  return (
-    <div className="career-today-followup-buttons">
-      <button
-        type="button"
-        className="career-btn career-btn-secondary career-btn-sm career-today-draft-btn"
-        onClick={() => setModalOpen(true)}
-      >
-        Черновик
-      </button>
-      <MarkFollowUpButton applicationId={item.applicationId} isSaving={isSaving} onMark={onMark} />
-      {modalOpen ? (
-        <CompanyReminderModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          onMarkSent={onMark}
-          applicationId={item.applicationId}
-          company={item.company}
-          positionTitle={item.title}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function TodayFollowUps({
+function TodayMobileQueue({
+  queue,
   followUps,
-  onMarkFollowUpSent,
-  markingFollowUpIds,
+  onNavigate,
 }: {
-  followUps: readonly TodayFollowUp[];
-  onMarkFollowUpSent: (applicationId: string) => Promise<void>;
-  markingFollowUpIds: ReadonlySet<string>;
+  readonly queue: readonly TodayQueueItem[];
+  readonly followUps: readonly TodayFollowUp[];
+  readonly onNavigate?: (view: CareerCabinetView) => void;
 }) {
-  if (followUps.length === 0) return null;
+  const visibleQueue = queue.slice(0, 4);
   return (
-    <section className="career-today-followups" aria-label="Напоминания компании по срокам">
-      <h2>Напоминания компании по срокам</h2>
-      <ul>
-        {followUps.map((item) => (
-          <li key={item.applicationId} className="career-today-followup-item">
-            <span className="career-today-followup-who">
-              {formatQueueTitle(item.company, item.title)}
-            </span>
-            <span className={`career-today-followup-when metric is-${item.status}`}>
-              {followUpStatusLabel(item.status)}
-            </span>
-            {item.status === 'sent' ? null : (
-              <FollowUpItemActions
-                item={item}
-                isSaving={markingFollowUpIds.has(item.applicationId)}
-                onMark={onMarkFollowUpSent}
-              />
-            )}
-          </li>
-        ))}
-      </ul>
+    <section className="pm-group" aria-label="Очередь дня">
+      <h3 className="pm-cap">Очередь дня</h3>
+      {visibleQueue.length ? (
+        <ul className="pm-list">
+          {visibleQueue.map((item) => (
+            <TodayMobileQueueRow
+              key={queueKey(item)}
+              item={item}
+              followUps={followUps}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </ul>
+      ) : (
+        <p className="pm-empty">Очередь дня пуста. Новые задачи появятся здесь.</p>
+      )}
+      <p className="pm-foot">Только то, у чего есть срок или что ждёт вашего ответа.</p>
     </section>
   );
 }
 
-function MarkFollowUpButton({
-  applicationId,
-  isSaving,
-  onMark,
+function TodayMobileQueueRow({
+  item,
+  followUps,
+  onNavigate,
 }: {
-  applicationId: string;
-  isSaving: boolean;
-  onMark: (applicationId: string) => Promise<void>;
+  readonly item: TodayQueueItem;
+  readonly followUps: readonly TodayFollowUp[];
+  readonly onNavigate?: (view: CareerCabinetView) => void;
 }) {
-  const [failed, setFailed] = useState(false);
+  const isWarn = isOverdueMobileQueueItem(item, followUps);
   return (
-    <span className="career-today-followup-action">
-      {failed ? <span role="alert">Не удалось сохранить отметку.</span> : null}
+    <li>
       <button
+        className={`pm-row${isWarn ? ' is-warn' : ''}`}
         type="button"
-        className="career-btn career-btn-secondary career-btn-sm"
-        disabled={isSaving}
-        aria-busy={isSaving}
-        onClick={() => {
-          setFailed(false);
-          void onMark(applicationId).catch(() => setFailed(true));
-        }}
+        aria-label={`Открыть: ${formatQueueTitle(item.company, item.title)}`}
+        data-testid="today-mobile-queue-row"
+        disabled={!onNavigate}
+        onClick={() => onNavigate?.(queueItemTarget(item))}
       >
-        {isSaving ? 'Сохраняем…' : 'Отметить отправленным'}
+        <span className="pm-ico">
+          <TodayMobileQueueIcon item={item} />
+        </span>
+        <span className="pm-main">
+          <b>{item.title}</b>
+          <small>{todayMobileQueueSubtitle(item, followUps)}</small>
+        </span>
+        <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />
       </button>
-    </span>
+    </li>
   );
+}
+
+function isOverdueMobileQueueItem(
+  item: TodayQueueItem,
+  followUps: readonly TodayFollowUp[],
+): boolean {
+  const followUp = followUps.find((entry) => entry.applicationId === item.applicationId);
+  if (followUp) return followUp.status === 'overdue';
+  const dueAt = item.dueAt ? Date.parse(item.dueAt) : Number.NaN;
+  return Number.isFinite(dueAt) && dueAt < Date.now();
+}
+
+function todayMobileQueueSubtitle(
+  item: TodayQueueItem,
+  followUps: readonly TodayFollowUp[],
+): string {
+  const followUp = followUps.find((entry) => entry.applicationId === item.applicationId);
+  const status = followUp ? followUpStatusLabel(followUp.status) : undefined;
+  const eyebrow = item.eyebrow?.replace(/follow-up/giu, 'Напоминание компании');
+  const detail = eyebrow ?? queueKindLabel(item);
+  return [todayMobileQueueCompany(item), detail, status].filter(Boolean).join(' · ');
+}
+
+function todayMobileQueueCompany(item: TodayQueueItem): string {
+  const title = formatQueueTitle(item.company, item.title);
+  const suffix = ` — ${item.title}`;
+  return title.endsWith(suffix) ? title.slice(0, -suffix.length) : 'Компания не указана';
+}
+
+function TodayMobileQueueIcon({ item }: { readonly item: TodayQueueItem }) {
+  const sourceText = `${item.company ?? ''} ${item.eyebrow ?? ''}`.toLocaleLowerCase();
+  if (sourceText.includes('linkedin')) {
+    return <LinkedinLogo aria-hidden="true" weight="regular" />;
+  }
+  if (item.kind === 'follow_up') return <Bell aria-hidden="true" weight="regular" />;
+  if (item.kind === 'interview') return <ChatCircle aria-hidden="true" weight="regular" />;
+  if (item.kind === 'candidate_turn') return <PaperPlaneTilt aria-hidden="true" weight="regular" />;
+  if (item.kind === 'shortlist') return <BookmarkSimple aria-hidden="true" weight="regular" />;
+  return <Briefcase aria-hidden="true" weight="regular" />;
 }
 
 function queueKindLabel(item: TodayQueueItem): string {
@@ -747,27 +398,180 @@ function queueKindLabel(item: TodayQueueItem): string {
   return 'Ваш ход';
 }
 
-function TodayPendingNotice() {
+interface TodayMobileFunnelMetric {
+  readonly label: string;
+  readonly value: number | 'unknown';
+}
+
+function todayMobileFunnelMetrics(
+  snapshot: TodaySnapshot,
+  context?: TodayFunnelContext,
+): readonly TodayMobileFunnelMetric[] {
+  const metrics = snapshot.momentum?.windows['30d'];
+  return [
+    { label: 'Избранное', value: context?.favorites ?? 'unknown' },
+    { label: 'Отклики', value: metrics?.applied ?? 'unknown' },
+    { label: 'Ответы', value: context?.responses ?? metrics?.screenings ?? 'unknown' },
+    { label: 'Интервью', value: metrics?.interviews ?? 'unknown' },
+  ];
+}
+
+function TodayMobileFunnel({
+  snapshot,
+  context,
+}: {
+  readonly snapshot: TodaySnapshot;
+  readonly context?: TodayFunnelContext;
+}) {
+  const items = todayMobileFunnelMetrics(snapshot, context);
+  const currentStage = items.reduce(
+    (last, item, index) => (typeof item.value === 'number' && item.value > 0 ? index : last),
+    -1,
+  );
   return (
-    <p className="career-today-pending">
-      <Sparkle size={16} aria-hidden="true" />
-      Считаем вашу подборку — секунду. Если очередь пуста дольше минуты, откройте «Вакансии».
-    </p>
+    <section className="pm-group" aria-label="Воронка за 30 дней">
+      <h3 className="pm-cap">Воронка за 30 дней</h3>
+      <div className="tm-funnel" role="list">
+        {items.map((item, index) => (
+          <div
+            className={index === currentStage ? 'is-here' : undefined}
+            key={item.label}
+            role="listitem"
+            aria-current={index === currentStage ? 'step' : undefined}
+            aria-label={
+              item.value === 'unknown'
+                ? `${item.label}: Нет проверенных данных`
+                : `${item.label}: ${item.value}`
+            }
+          >
+            <b className="num">{metricText(item.value)}</b>
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+      <p className="pm-foot">{todayMobileFunnelBasis(snapshot, context, items)}</p>
+    </section>
+  );
+}
+
+function todayMobileFunnelBasis(
+  snapshot: TodaySnapshot,
+  context: TodayFunnelContext | undefined,
+  items: readonly TodayMobileFunnelMetric[],
+): string {
+  const applications = snapshot.momentum?.windows['30d'].applied ?? 'unknown';
+  const missing = items.filter((item) => item.value === 'unknown').map((item) => item.label);
+  if (context?.found === undefined) missing.push('каталог');
+  if (context?.offers === undefined) missing.push('офферы');
+  const catalogDate = formatTodayMobileDate(context?.catalogObservedAt) ?? 'дата неизвестна';
+  const calculationDate =
+    formatTodayMobileDate(snapshot.momentum?.calculatedAt) ?? 'дата неизвестна';
+  const sample = typeof applications === 'number' ? ` (n = ${applications})` : '';
+  return [
+    `Найдено в каталоге: ${metricText(context?.found)}. Офферов пока ${metricText(context?.offers)}; каталог на ${catalogDate}.`,
+    `Откликов: ${metricText(applications)}${sample}. Данные на ${calculationDate}.`,
+    missing.length ? `Нет проверенных данных: ${[...new Set(missing)].join(', ')}.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function metricText(value: number | 'unknown' | undefined): string {
+  return typeof value === 'number' ? String(value) : '—';
+}
+
+function formatTodayMobileDate(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function TodayMobileProfileRow({
+  profileDraft,
+  onNavigate,
+}: {
+  readonly profileDraft?: ResumeDraft;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  const actionCount = profileDraft
+    ? profileCompleteness(profileDraft).missingSections.length
+    : undefined;
+  const subtitle =
+    actionCount === undefined
+      ? 'Контакты, даты, курсы · нет проверенных данных'
+      : `Контакты, даты, курсы · ${pluralRu(actionCount, ['действие', 'действия', 'действий'])}`;
+  return (
+    <section className="pm-group" aria-label="Дополнить профиль">
+      <div className="pm-list">
+        <button
+          className="pm-row"
+          type="button"
+          disabled={!onNavigate}
+          onClick={() => onNavigate?.('profile')}
+          aria-label={`Перейти в профиль. ${subtitle}`}
+        >
+          <span className="pm-ico">
+            <UserCircle aria-hidden="true" weight="regular" />
+          </span>
+          <span className="pm-main">
+            <b>Дополнить профиль</b>
+            <small>{subtitle}</small>
+          </span>
+          <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />
+        </button>
+      </div>
+    </section>
   );
 }
 
 function TodaySkeleton() {
   return (
     <div className="career-today" aria-busy="true" aria-label="Читаем очередь дня">
-      <div className="career-today-digest">
-        <div className="career-skeleton-line is-wide career-today-digest-card" />
-        <div className="career-skeleton-line is-wide career-today-digest-card" />
-        <div className="career-skeleton-line is-wide career-today-digest-card" />
-        <div className="career-skeleton-line is-wide career-today-digest-card" />
+      <div className="today-loading-mobile pm tm" aria-hidden="true">
+        <div className="tm-hero today-loading-hero">
+          <span className="today-loading-bar is-short" />
+          <span className="today-loading-bar is-title" />
+          <span className="today-loading-bar is-copy" />
+          <span className="today-loading-bar is-button" />
+          <span className="today-loading-bar is-link" />
+          <span className="today-loading-bar is-link" />
+        </div>
+        <section className="pm-group">
+          <span className="career-skeleton-line is-short" />
+          <div className="pm-list">
+            <div className="today-loading-row is-tall" />
+            <div className="today-loading-row" />
+            <div className="today-loading-row" />
+            <div className="today-loading-row" />
+          </div>
+          <span className="career-skeleton-line is-wide" />
+        </section>
+        <section className="pm-group">
+          <span className="career-skeleton-line is-short" />
+          <div className="tm-funnel today-loading-funnel" />
+          <span className="career-skeleton-line is-wide" />
+        </section>
+        <div className="pm-list">
+          <div className="today-loading-row" />
+        </div>
       </div>
-      <div className="career-skeleton-line is-wide" />
-      <div className="career-skeleton-line is-wide" />
-      <div className="career-skeleton-line is-short" />
+      <div className="today-loading-desktop">
+        <div className="career-today-digest">
+          <div className="career-skeleton-line is-wide career-today-digest-card" />
+          <div className="career-skeleton-line is-wide career-today-digest-card" />
+          <div className="career-skeleton-line is-wide career-today-digest-card" />
+          <div className="career-skeleton-line is-wide career-today-digest-card" />
+        </div>
+        <div className="career-skeleton-line is-wide" />
+        <div className="career-skeleton-line is-wide" />
+        <div className="career-skeleton-line is-short" />
+      </div>
     </div>
   );
 }

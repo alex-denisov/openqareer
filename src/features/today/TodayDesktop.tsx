@@ -231,7 +231,7 @@ function actionDestinationLabel(action: ReasonedCareerAction): string {
   return 'Профиль';
 }
 
-function actionSourceSummary(action: ReasonedCareerAction): string {
+export function actionSourceSummary(action: ReasonedCareerAction): string {
   const sources = [
     ...(action.findingIds.length ? ['профиль'] : []),
     ...(action.roleIds.length || action.marketIds.length ? ['карьерная гипотеза'] : []),

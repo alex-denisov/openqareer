@@ -2,15 +2,22 @@ import AxeBuilder from '@axe-core/playwright';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
+import type { Page } from '@playwright/test';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
+const MOBILE_SHELL_EVIDENCE_DIR = e2eEvidenceDirectory('ACC-0-2');
 
 function evidenceScreenshot(name: string): string {
   mkdirSync(EVIDENCE_DIR, { recursive: true });
   return join(EVIDENCE_DIR, `${name}.png`);
+}
+
+function mobileShellEvidenceScreenshot(name: string): string {
+  mkdirSync(MOBILE_SHELL_EVIDENCE_DIR, { recursive: true });
+  return join(MOBILE_SHELL_EVIDENCE_DIR, `${name}.png`);
 }
 
 async function openCabinet(page: import('@playwright/test').Page): Promise<void> {
@@ -24,7 +31,7 @@ async function expectNoOverflow(page: import('@playwright/test').Page): Promise<
   const overflow = await page.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
   );
-  expect(overflow).toBeLessThanOrEqual(1);
+  expect(overflow).toBeLessThanOrEqual(0);
 }
 
 async function expectPanelAccessible(page: import('@playwright/test').Page): Promise<void> {
@@ -232,70 +239,248 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   await expect(panel).toBeVisible();
 });
 
-test('mobile navigation uses four sections plus More and the consultant sheet collapses on Escape', async ({
+async function expectMobileShellGeometry(page: Page): Promise<void> {
+  const navigation = page.getByRole('navigation', { name: 'Разделы' });
+  const header = page.locator('.career-topbar');
+  await expect(header.locator('.career-notification-bell')).toBeVisible();
+  await expect(header.locator('h1')).toHaveText('Сегодня');
+  await expect(page.getByRole('button', { name: 'Консультант: открыть' })).toBeVisible();
+  await expect(navigation.getByRole('button')).toHaveCount(5);
+  await expect(page.locator('.career-mobile-tariffs')).toHaveCount(0);
+  await expect(page.locator('.career-account-trigger')).toHaveCount(0);
+  await expect(navigation.getByRole('button', { name: 'Сегодня' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+
+  const metrics = await page.evaluate(() => {
+    const box = (element: Element | null) => {
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    };
+    const nav = document.querySelector('nav.career-mobile-nav');
+    const header = document.querySelector('header.career-topbar');
+    return {
+      navigation: box(nav),
+      bell: box(header?.querySelector('.career-notification-bell') ?? null),
+      title: box(header?.querySelector('h1') ?? null),
+      consultant: box(header?.querySelector('.career-mobile-consultant-trigger') ?? null),
+      navItems: [...(nav?.querySelectorAll('button') ?? [])].map(box),
+      bottomGap: nav ? window.innerHeight - nav.getBoundingClientRect().bottom : null,
+    };
+  });
+  expect(metrics.navigation?.x).toBe(12);
+  expect(metrics.navigation?.width).toBe(366);
+  expect(metrics.navigation?.height).toBe(62);
+  expect(metrics.bell?.width).toBe(44);
+  expect(metrics.bell?.height).toBe(44);
+  expect(metrics.consultant?.width).toBe(44);
+  expect(metrics.consultant?.height).toBe(44);
+  expect(
+    Math.abs((metrics.title?.x ?? 0) + (metrics.title?.width ?? 0) / 2 - 195),
+  ).toBeLessThanOrEqual(1);
+  expect(metrics.bottomGap).toBeGreaterThanOrEqual(12);
+  expect(metrics.navItems).toHaveLength(5);
+  expect(
+    metrics.navItems.every((item) => item && Math.abs(item.width - 69) <= 1 && item.height === 52),
+  ).toBe(true);
+}
+
+async function expectMoreMenu(page: Page): Promise<void> {
+  const navigation = page.getByRole('navigation', { name: 'Разделы' });
+  const more = navigation.getByRole('button', { name: 'Ещё' });
+  const labels = [
+    'Карьера',
+    'Карьерный дневник',
+    'Автоматизация',
+    'Тарифы',
+    'Аккаунт',
+    'Консультант',
+  ];
+  await more.click();
+  const menu = page.getByRole('menu', { name: 'Ещё разделы' });
+  await expect(menu.getByRole('menuitem')).toHaveCount(labels.length);
+  for (const label of labels) {
+    await expect(menu.getByRole('menuitem', { name: label, exact: true })).toBeVisible();
+  }
+  await page.keyboard.press('Escape');
+  await expect(menu).toHaveCount(0);
+  await expect(more).toBeFocused();
+  await more.click();
+  await expect(menu).toBeVisible();
+  await page.getByRole('button', { name: 'Закрыть меню разделов' }).click({
+    position: { x: 10, y: 100 },
+  });
+  await expect(menu).toHaveCount(0);
+  await expect(more).toBeFocused();
+}
+
+async function navigateFromMore(page: Page, label: string, contentSelector: string): Promise<void> {
+  const navigation = page.getByRole('navigation', { name: 'Разделы' });
+  const more = navigation.getByRole('button', { name: 'Ещё' });
+  await more.click();
+  await page
+    .getByRole('menu', { name: 'Ещё разделы' })
+    .getByRole('menuitem', { name: label, exact: true })
+    .click();
+  await expect(page.locator(contentSelector).first()).toBeVisible();
+  await expect(more).toHaveAttribute('aria-current', 'page');
+  await navigation.getByRole('button', { name: 'Сегодня', exact: true }).click();
+}
+
+async function expectMoreDestinations(page: Page): Promise<void> {
+  await navigateFromMore(page, 'Карьера', '.career-screen');
+  await navigateFromMore(page, 'Автоматизация', '.automation-screen');
+
+  const navigation = page.getByRole('navigation', { name: 'Разделы' });
+  const more = navigation.getByRole('button', { name: 'Ещё' });
+  await more.click();
+  const diary = page
+    .getByRole('menu', { name: 'Ещё разделы' })
+    .getByRole('menuitem', { name: 'Карьерный дневник', exact: true });
+  if (await diary.isEnabled()) {
+    await diary.click();
+    await expect(page.locator('.career-diary-page')).toBeVisible();
+    await expect(more).toHaveAttribute('aria-current', 'page');
+    await navigation.getByRole('button', { name: 'Сегодня', exact: true }).click();
+  } else {
+    await page.keyboard.press('Escape');
+  }
+
+  await more.click();
+  await page
+    .getByRole('menu', { name: 'Ещё разделы' })
+    .getByRole('menuitem', { name: 'Тарифы', exact: true })
+    .click();
+  await expect(
+    page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
+  ).toBeVisible();
+  await expect(more).toHaveAttribute('aria-current', 'page');
+  await navigation.getByRole('button', { name: 'Сегодня', exact: true }).click();
+
+  await more.click();
+  await page
+    .getByRole('menu', { name: 'Ещё разделы' })
+    .getByRole('menuitem', { name: 'Аккаунт', exact: true })
+    .click();
+  await expect(
+    page.locator('.career-account-container').getByRole('heading', { name: 'Профиль и вход' }),
+  ).toBeVisible();
+  await expect(more).toHaveAttribute('aria-current', 'page');
+  await navigation.getByRole('button', { name: 'Сегодня', exact: true }).click();
+}
+
+async function expectConsultantSheetGeometry(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: 'Консультант: открыть' });
+  await trigger.click();
+  const panel = page.locator('.career-shell > .panel-col.is-open .career-expert-panel');
+  await expect(page.getByRole('dialog', { name: /Консультант/u })).toBeVisible();
+  await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
+  await expectPanelAccessible(page);
+  const [sheet, header, composer, textarea, composerAction] = await Promise.all([
+    panel.boundingBox(),
+    panel.locator('header').boundingBox(),
+    panel.locator('.career-expert-composer').boundingBox(),
+    panel.locator('.career-expert-composer textarea').boundingBox(),
+    panel.getByRole('button', { name: 'Голосовой ввод' }).boundingBox(),
+  ]);
+  expect(sheet?.x).toBe(0);
+  expect(Math.abs((sheet?.y ?? 0) - 253)).toBeLessThanOrEqual(1);
+  expect(sheet?.width).toBe(390);
+  expect(Math.abs((sheet?.height ?? 0) - 591)).toBeLessThanOrEqual(1);
+  expect(header?.height).toBe(61);
+  expect(composer?.height).toBe(95);
+  expect(textarea?.width).toBe(358);
+  expect(textarea?.height).toBe(44);
+  expect(composerAction?.width).toBe(36);
+  expect(composerAction?.height).toBe(36);
+}
+
+async function expectConsultantFocusTrap(page: Page): Promise<void> {
+  const panel = page.getByRole('dialog', { name: /Консультант/u });
+  const controls = panel.locator(
+    'button:not([disabled]):visible, textarea:not([disabled]):visible, input:not([disabled]):visible',
+  );
+  const first = controls.first();
+  const last = controls.last();
+  await first.focus();
+  await page.keyboard.press('Shift+Tab');
+  await expect(last).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(first).toBeFocused();
+}
+
+async function expectMobileComposerActions(page: Page): Promise<void> {
+  const panel = page.getByRole('dialog', { name: /Консультант/u });
+  const input = panel.getByLabel('Сообщение карьерному консультанту');
+  await input.fill('Проверяю действие отправки');
+  await expect(panel.getByRole('button', { name: 'Отправить вопрос', exact: true })).toBeEnabled();
+  await expect(panel.getByRole('button', { name: 'Голосовой ввод' })).toBeHidden();
+}
+
+async function closeConsultantBySheetButton(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: 'Консультант: открыть' });
+  await page.getByRole('button', { name: 'Развернуть или свернуть консультанта' }).click();
+  await expect(page.locator('.panel-col.is-open')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+}
+
+async function closeConsultantByEscape(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: 'Консультант: открыть' });
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.panel-col.is-open')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+}
+
+async function openConsultantFromMore(page: Page): Promise<void> {
+  const navigation = page.getByRole('navigation', { name: 'Разделы' });
+  await navigation.getByRole('button', { name: 'Ещё' }).click();
+  await page
+    .getByRole('menu', { name: 'Ещё разделы' })
+    .getByRole('menuitem', { name: 'Консультант', exact: true })
+    .click();
+  await expect(page.getByRole('dialog', { name: /Консультант/u })).toBeVisible();
+}
+
+async function closeConsultantByBackdrop(page: Page): Promise<void> {
+  const trigger = page.getByRole('button', { name: 'Консультант: открыть' });
+  await page.getByRole('button', { name: 'Закрыть консультанта' }).click({
+    position: { x: 12, y: 100 },
+  });
+  await expect(page.locator('.panel-col.is-open')).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+}
+
+test('ACC-0-2 mobile shell geometry, menu actions and consultant sheet match the approved layout', async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== 'mobile-390', 'The compact navigation audit runs on mobile.');
+  test.skip(testInfo.project.name !== 'mobile-390', 'The compact shell audit runs on mobile.');
+  await page.setViewportSize({ width: 390, height: 844 });
   await openCabinet(page);
-  await page.getByRole('button', { name: 'Спросить консультанта' }).click();
-  const navigation = page.getByRole('navigation', { name: 'Основная навигация' });
-  const panel = page.locator('.career-expert-panel');
-  await expect(panel.locator('.consultant-mobile-stage-picker')).not.toBeVisible();
-  await expect(panel.locator('.consultant-desktop-sheet-toggle')).not.toBeVisible();
-  const more = navigation.getByRole('button', { name: 'Ещё' });
-  await expect(page.getByRole('button', { name: 'Тарифы' })).toBeVisible();
-  await expect(navigation.getByRole('button')).toHaveCount(5);
-  await expect(panel).toHaveAttribute('data-mobile-expanded', 'false');
-  await expect(page.locator('.career-main')).toHaveCSS('overflow-y', 'auto');
-  await expectPanelAccessible(page);
-
-  const targets = await navigation.getByRole('button').evaluateAll((buttons) =>
-    buttons.map((button) => {
-      const rect = button.getBoundingClientRect();
-      return { width: rect.width, height: rect.height };
-    }),
-  );
-  expect(targets).toHaveLength(5);
-  expect(targets.every((target) => target.width >= 44 && target.height >= 44)).toBe(true);
-
+  await expectMobileShellGeometry(page);
+  await expectMoreMenu(page);
+  await expectMoreDestinations(page);
+  await page.screenshot({
+    path: mobileShellEvidenceScreenshot('shell-390'),
+    fullPage: true,
+  });
+  await expectConsultantSheetGeometry(page);
+  await expectConsultantFocusTrap(page);
+  await page.screenshot({
+    path: mobileShellEvidenceScreenshot('shell-390-consultant-expanded'),
+    fullPage: true,
+  });
+  await expectMobileComposerActions(page);
+  await closeConsultantBySheetButton(page);
+  await closeConsultantByEscape(page);
+  await openConsultantFromMore(page);
+  await closeConsultantByBackdrop(page);
   for (const width of [280, 320, 390, 414]) {
     await page.setViewportSize({ width, height: 844 });
     await expectNoOverflow(page);
   }
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.screenshot({
-    path: evidenceScreenshot('shell-390'),
-    fullPage: true,
-  });
-
-  await more.click();
-  const menu = page.getByRole('menu', { name: 'Ещё разделы' });
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem', { name: 'Карьера' })).toBeEnabled();
-  await page.keyboard.press('Escape');
-  await expect(menu).toHaveCount(0);
-  await expect(more).toBeFocused();
-
-  const panelToggle = panel.getByRole('button', { name: 'Развернуть консультанта' });
-  await panelToggle.click();
-  await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
-  await expectPanelAccessible(page);
-  await page.screenshot({
-    path: evidenceScreenshot('shell-390-consultant-expanded'),
-    fullPage: true,
-  });
-  await page.keyboard.press('Escape');
-  await expect(panel).toHaveAttribute('data-mobile-expanded', 'false');
-  await page.keyboard.press('Escape');
-  await expect(panel).toHaveCount(0);
-
-  await page.getByRole('button', { name: 'Спросить консультанта' }).click();
-  const composer = page.getByLabel('Сообщение карьерному консультанту');
-  await expect(composer).toBeVisible();
-  await expect(panel.getByRole('button', { name: 'Голосовой ввод' })).toBeEnabled();
-  await page.getByRole('button', { name: 'С чего начать?' }).click();
-  await expect(composer).toHaveValue('С чего начать?');
-  await expect(panel.getByRole('button', { name: 'Отправить вопрос' })).toBeEnabled();
 });
 
 test('keeps the shell visible while the shell module is still loading', async ({

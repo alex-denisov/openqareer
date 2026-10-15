@@ -1,0 +1,469 @@
+/* Approved compact shell layout for ACC-0-2. */
+.panel-col {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .career-shell {
+    --career-mobile-topbar-height: calc(var(--career-target-min) + env(safe-area-inset-top, 0));
+    --mobile-shell-nav-height: calc(
+      var(--career-target-min) + var(--career-space-4) + var(--career-space-1) / 2
+    );
+    --mobile-shell-nav-bottom: max(
+      var(--career-space-3),
+      calc(env(safe-area-inset-bottom, 0) + var(--career-space-3))
+    );
+    --career-mobile-nav-height: calc(
+      var(--mobile-shell-nav-height) + var(--mobile-shell-nav-bottom) +
+        env(safe-area-inset-bottom, 0)
+    );
+    --mobile-shell-sheet-max-height: calc(
+      var(--career-space-8) * 18 + var(--career-space-3) + var(--career-space-1) -
+        var(--career-border-width)
+    );
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: var(--career-mobile-topbar-height) minmax(0, 1fr);
+    overflow-x: clip;
+  }
+
+  /* У «Вакансий» своя шапка: строка общей шапки оболочки не нужна, иначе main попадает в неё. */
+  .career-shell.career-shell--vacancies {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .career-topbar {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
+    grid-template-rows: var(--career-target-min);
+    align-items: center;
+    gap: 0;
+    block-size: var(--career-mobile-topbar-height);
+    min-block-size: var(--career-mobile-topbar-height);
+    padding-block-start: env(safe-area-inset-top, 0);
+    padding-inline: var(--career-space-2);
+    border: 0;
+    background: var(--career-bg);
+  }
+
+  .career-mobile-topbar-notifications {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+  }
+
+  .career-mobile-topbar-notifications .career-notification-bell-anchor {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+  }
+
+  .career-mobile-topbar-notifications > *,
+  .career-mobile-topbar-notifications .career-notification-bell {
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    min-block-size: var(--career-target-min);
+    padding: 0;
+  }
+
+  .career-mobile-topbar-notifications .career-notification-bell {
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    background: transparent;
+  }
+
+  .career-mobile-topbar-notifications .career-notification-bell > svg {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+
+  .career-mobile-topbar-notifications .career-notification-badge {
+    position: absolute;
+    inset-block-start: 3px;
+    inset-inline-start: 27px;
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-space-4);
+    min-inline-size: 0;
+    block-size: var(--career-space-4);
+    padding: 0;
+    line-height: 1;
+  }
+
+  .career-mobile-page-title {
+    grid-column: 2;
+    grid-row: 1;
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    color: var(--career-text);
+    font-size: var(--career-text-md);
+    font-weight: 600;
+    letter-spacing: normal;
+    line-height: 1.25;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .career-mobile-consultant-trigger {
+    position: relative;
+    grid-column: 3;
+    grid-row: 1;
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    margin-inline-start: calc(-1 * var(--career-space-1));
+    border: 0;
+    border-radius: 50%;
+    padding: 0;
+    color: var(--career-accent);
+    background: transparent;
+  }
+
+  .career-mobile-consultant-dot {
+    position: absolute;
+    inset-block-start: calc(var(--career-space-2) + var(--career-border-width));
+    inset-inline-end: calc(var(--career-space-2) + var(--career-border-width));
+    inline-size: calc(var(--career-space-2) + var(--career-border-width));
+    block-size: calc(var(--career-space-2) + var(--career-border-width));
+    border: var(--career-border-width) solid var(--career-bg);
+    border-radius: 50%;
+    background: var(--career-accent);
+  }
+
+  .career-main {
+    grid-column: 1;
+    grid-row: 2;
+    min-inline-size: 0;
+    padding-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4));
+    overflow-x: clip;
+  }
+
+  .career-mobile-nav {
+    position: fixed;
+    inset-inline: var(--career-space-3);
+    inset-block-end: var(--mobile-shell-nav-bottom);
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: calc(var(--career-space-1) / 2);
+    inline-size: auto;
+    block-size: var(--mobile-shell-nav-height);
+    min-block-size: 0;
+    justify-self: auto;
+    margin: 0;
+    padding-block: calc(var(--career-space-1) + var(--career-border-width));
+    padding-inline: calc(var(--career-space-1) + var(--career-border-width));
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: calc(var(--mobile-shell-nav-height) / 2);
+    background: color-mix(in oklch, var(--career-bg-elevated) 86%, transparent);
+    backdrop-filter: blur(var(--career-space-5));
+    box-shadow: var(--career-shadow-tooltip);
+  }
+
+  .career-mobile-nav .career-nav-button,
+  .career-mobile-more-button {
+    display: grid;
+    grid-template-rows: auto auto;
+    align-content: center;
+    justify-items: center;
+    gap: 1px;
+    min-inline-size: 0;
+    min-block-size: calc(var(--career-target-min) + var(--career-space-2));
+    block-size: calc(var(--career-target-min) + var(--career-space-2));
+    border: 0;
+    border-radius: calc(var(--career-target-min) / 2 + var(--career-space-1));
+    padding: 0;
+    color: var(--career-text-soft);
+    background: transparent;
+    font-size: var(--career-text-xs);
+    font-weight: 400;
+    line-height: 1;
+  }
+
+  .career-mobile-nav .career-nav-button > svg,
+  .career-mobile-more-button > svg {
+    inline-size: var(--career-space-6);
+    block-size: var(--career-space-6);
+    flex: none;
+  }
+
+  .career-shell .career-mobile-nav .career-nav-button > span,
+  .career-mobile-more-button > span {
+    display: block;
+    position: static;
+    inline-size: 100%;
+    block-size: auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    clip: auto;
+    color: inherit;
+    font-size: var(--career-text-sm);
+    font-weight: 400;
+    line-height: 1.5;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .career-mobile-nav .career-nav-button:hover,
+  .career-mobile-more-button:hover,
+  .career-mobile-nav .career-nav-button:active,
+  .career-mobile-more-button:active {
+    color: var(--career-text);
+    background: var(--career-surface);
+  }
+
+  .career-mobile-nav .career-nav-button[aria-current='page'],
+  .career-mobile-more-button[aria-current='page'],
+  .career-mobile-more-button[aria-expanded='true'] {
+    color: var(--career-accent);
+    background: var(--career-accent-soft);
+  }
+
+  .career-mobile-nav .career-nav-button:disabled {
+    color: var(--career-text-dim);
+  }
+
+  .career-mobile-more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    display: grid;
+    align-items: end;
+    background: color-mix(in oklch, var(--career-bg) 60%, transparent);
+  }
+
+  .career-mobile-more-dismiss {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .career-mobile-more-menu {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: 0;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding-block: var(--career-space-5)
+      calc(env(safe-area-inset-bottom, 0) + var(--career-space-3));
+    padding-inline: var(--career-space-4);
+    border-block-start: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+    background: var(--career-bg-elevated);
+    box-shadow: var(--career-shadow-tooltip);
+  }
+
+  .career-mobile-more-menu::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--career-space-2);
+    inset-inline-start: 50%;
+    inline-size: calc(var(--career-space-8) + var(--career-space-1));
+    block-size: calc(var(--career-space-1) + var(--career-border-width));
+    border-radius: var(--career-radius-sm);
+    background: var(--career-line-strong);
+    transform: translateX(-50%);
+  }
+
+  .career-mobile-more-menu [role='menuitem'] {
+    display: grid;
+    grid-template-columns: var(--career-space-6) minmax(0, 1fr) var(--career-space-4);
+    align-items: center;
+    gap: var(--career-space-3);
+    min-inline-size: 0;
+    min-block-size: calc(var(--career-space-8) + var(--career-space-5));
+    border: 0;
+    border-block-end: var(--career-border-width) solid var(--career-line);
+    border-radius: 0;
+    padding-inline: var(--career-space-2);
+    color: var(--career-text);
+    background: transparent;
+    font-size: var(--career-text-md);
+    font-weight: 400;
+    text-align: start;
+  }
+
+  .career-mobile-more-menu [role='menuitem'] > svg {
+    inline-size: var(--career-space-6);
+    block-size: var(--career-space-6);
+    color: var(--career-text-soft);
+  }
+
+  .career-mobile-more-menu [role='menuitem'] > svg:last-child {
+    inline-size: var(--career-space-4);
+    block-size: var(--career-space-4);
+  }
+
+  .career-mobile-more-menu [role='menuitem'][aria-current='page'],
+  .career-mobile-more-menu [role='menuitem']:not(:disabled):hover {
+    color: var(--career-accent);
+    background: var(--career-accent-soft);
+  }
+
+  .career-mobile-more-menu [role='menuitem']:disabled {
+    color: var(--career-text-dim);
+    opacity: 0.7;
+  }
+
+  .career-mobile-more-menu [role='menuitem']:last-child {
+    border-block-end: 0;
+  }
+
+  .career-shell > .panel-col:is(:not(.is-open), .is-open) {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    align-content: end;
+    min-inline-size: 0;
+    border: 0;
+    background: color-mix(in oklch, var(--career-bg) 60%, transparent);
+  }
+
+  .career-shell > .panel-col:not(.is-open) {
+    display: none;
+  }
+
+  .career-shell > .panel-col.is-open {
+    display: grid;
+  }
+
+  .career-shell > .panel-col .career-consultant-backdrop {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+
+  .career-shell > .panel-col .career-expert-panel {
+    position: relative;
+    inset: auto;
+    z-index: 1;
+    grid-column: 1;
+    grid-row: auto;
+    inline-size: 100%;
+    min-inline-size: 0;
+    block-size: min(70dvh, var(--mobile-shell-sheet-max-height));
+    max-block-size: calc(100dvh - env(safe-area-inset-top, 0));
+    padding-block-end: env(safe-area-inset-bottom, 0);
+    border: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+    background: var(--career-bg-elevated);
+    box-shadow: var(--career-shadow-tooltip);
+    animation: career-sheet-enter var(--career-motion-quick);
+  }
+
+  .career-shell > .panel-col .career-expert-panel > header {
+    position: relative;
+    block-size: calc(var(--career-target-min) + var(--career-space-4) + var(--career-border-width));
+    min-block-size: calc(
+      var(--career-target-min) + var(--career-space-4) + var(--career-border-width)
+    );
+    padding-block: 0;
+    padding-inline: var(--career-space-4);
+  }
+
+  .career-shell > .panel-col .career-expert-panel-controls {
+    display: none;
+  }
+
+  .career-shell > .panel-col .career-expert-composer {
+    position: relative;
+    z-index: 1;
+    grid-template-rows: auto;
+    gap: 0;
+    block-size: auto;
+    min-block-size: calc(
+      var(--career-target-min) * 2 + var(--career-space-2) - var(--career-border-width)
+    );
+    padding: var(--career-space-2) var(--career-space-3);
+  }
+
+  .career-shell > .panel-col .career-expert-starters {
+    position: absolute;
+    inset-block-end: calc(100% + var(--career-space-2));
+    inset-inline: 0;
+    inline-size: 100%;
+    min-inline-size: 0;
+    z-index: 1;
+  }
+
+  .career-shell > .panel-col .career-expert-composer .career-expert-input-row {
+    block-size: auto;
+    min-block-size: var(--career-target-min);
+  }
+
+  .career-shell > .panel-col .career-expert-composer textarea {
+    inline-size: calc(100% - var(--career-space-2));
+    block-size: var(--career-target-min);
+    min-block-size: var(--career-target-min);
+    max-block-size: var(--career-target-min);
+    padding-block: var(--career-space-2);
+    padding-inline: var(--career-space-3) calc(var(--career-target-min) + var(--career-space-2));
+  }
+
+  .career-shell
+    > .panel-col
+    .career-expert-input-row.has-text
+    .career-voice-input[data-active='false'] {
+    display: none;
+  }
+
+  .career-shell > .panel-col .career-voice-input[data-active='false'] {
+    inset-inline-end: var(--career-space-1);
+    inset-block-end: var(--career-border-width);
+    inline-size: calc(var(--career-space-8) + var(--career-space-1));
+    block-size: calc(var(--career-space-8) + var(--career-space-1));
+  }
+
+  .career-shell > .panel-col .career-expert-input-row > button {
+    inset-inline-end: var(--career-space-1);
+    inset-block-end: var(--career-border-width);
+    inline-size: calc(var(--career-space-8) + var(--career-space-1));
+    block-size: calc(var(--career-space-8) + var(--career-space-1));
+  }
+
+  .career-shell > .panel-col .career-expert-sheet-toggle {
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-end: var(--career-space-2);
+    display: grid;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    border: 0;
+    border-radius: var(--career-radius-sm);
+    padding: 0;
+    color: var(--career-text-soft);
+    background: transparent;
+    transform: translateY(-50%);
+  }
+
+  .career-shell > .panel-col .career-expert-panel[data-mobile-expanded='false'] {
+    block-size: var(--career-expert-sheet-collapsed-height);
+    max-block-size: var(--career-expert-sheet-collapsed-height);
+  }
+}
+
+@media (max-width: 760px) and (prefers-reduced-motion: reduce) {
+  .career-mobile-more-backdrop,
+  .career-shell > .panel-col .career-expert-panel {
+    animation: none;
+  }
+}
