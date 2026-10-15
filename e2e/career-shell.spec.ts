@@ -102,8 +102,16 @@ test('keeps the fixed desktop rail and docks the consultant beside the page', as
   await expect(page.getByRole('main').getByRole('heading', { name: 'Сегодня' })).toBeVisible();
   await expect(panel).toBeVisible();
 
-  for (const width of [1176, 1280, 1440]) {
+  // Below 1280 px the consultant folds away so the screen keeps its columns; it returns on a
+  // wide window (the .app is resized live, so the line is crossed after the first render).
+  await page.setViewportSize({ width: 1176, height: 900 });
+  await expect(panel).toHaveCount(0);
+  await expectNoOverflow(page);
+  expect((await page.locator('.career-main').boundingBox())?.width).toBeGreaterThan(1000);
+
+  for (const width of [1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
+    await expect(panel).toBeVisible();
     const currentRail = await rail.boundingBox();
     const currentPanel = await panel.boundingBox();
     const currentMain = await page.locator('.career-main').boundingBox();

@@ -341,7 +341,7 @@
   accent-color: var(--career-accent);
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1024px) {
   .career-profile-screen-topcard {
     display: grid;
     gap: var(--career-space-4);

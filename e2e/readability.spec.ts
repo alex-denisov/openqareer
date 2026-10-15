@@ -688,11 +688,12 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/C73/screen-responses-390.png' });
   });
 
-  test('B344 D9: на 1176 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
+  test('B344 D9: на 1000 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
-    await page.setViewportSize({ width: 1176, height: 900 });
+    // From 1024 px «Сегодня» uses the desktop composition of the mockups, which drops the path.
+    await page.setViewportSize({ width: 1000, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
     await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
@@ -712,7 +713,7 @@ test.describe('B232 readability gate', () => {
 
     await page
       .locator('.career-path')
-      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1176.png' });
+      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1000.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page

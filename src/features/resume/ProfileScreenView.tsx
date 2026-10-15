@@ -107,12 +107,12 @@ function useDesktopProfileLayout(): boolean {
     () =>
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
-      window.matchMedia('(min-width: 1280px)').matches,
+      window.matchMedia('(min-width: 1024px)').matches,
   );
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia('(min-width: 1280px)');
+    const query = window.matchMedia('(min-width: 1024px)');
     const update = () => setDesktopLayout(query.matches);
     update();
     query.addEventListener('change', update);
