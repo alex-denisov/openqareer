@@ -1,5 +1,5 @@
 import { createElement, useEffect, useRef, useState } from 'react';
-import { CaretDown, Sparkle } from '@phosphor-icons/react';
+import { CaretDoubleLeft, CaretDown, Sparkle } from '@phosphor-icons/react';
 import { useEscapeLayer } from './escapeLayers';
 import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
 import type {
@@ -95,12 +95,21 @@ export function ConsultantStripButton({
       'aria-expanded': false,
       onClick: onExpand,
     },
+    createElement(
+      'span',
+      { className: 'consultant-strip-icon', 'aria-hidden': true },
+      createElement(Sparkle, { size: 20, 'aria-hidden': true }),
+    ),
     count > 0
       ? createElement('span', { className: 'consultant-strip-dot', 'aria-hidden': true })
       : null,
     count > 0 ? createElement('span', { className: 'consultant-strip-count' }, count) : null,
     createElement('span', { className: 'consultant-strip-title' }, 'Консультант'),
-    createElement(Sparkle, { size: 20, 'aria-hidden': true }),
+    createElement(CaretDoubleLeft, {
+      className: 'consultant-strip-caret',
+      size: 20,
+      'aria-hidden': true,
+    }),
   );
 }
 function useMobileStagePicker() {

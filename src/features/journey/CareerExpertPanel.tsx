@@ -246,6 +246,8 @@ export function CareerExpertPanel({
   async function handleSend(event: React.FormEvent) {
     event.preventDefault();
     if (voiceState !== 'idle' && voiceState !== 'transcribed') return;
+    ++historyRequest.current;
+    setHistoryOpen(false);
     await sendContent(content);
   }
   async function sendContent(message: string): Promise<boolean> {
@@ -353,8 +355,16 @@ export function CareerExpertPanel({
             className="career-expert-history-button"
             type="button"
             aria-label="История бесед"
+            aria-pressed={historyOpen}
             disabled={loadingSession || !user}
-            onClick={() => void loadHistory()}
+            onClick={() => {
+              if (historyOpen) {
+                ++historyRequest.current;
+                setHistoryOpen(false);
+                return;
+              }
+              void loadHistory();
+            }}
           >
             <ClockCounterClockwise size="1em" aria-hidden="true" />
           </button>
@@ -406,16 +416,6 @@ export function CareerExpertPanel({
             aria-label="История бесед"
             aria-busy={historyBusy}
           >
-            <button
-              type="button"
-              onClick={() => {
-                ++historyRequest.current;
-                setHistoryOpen(false);
-              }}
-            >
-              Назад
-            </button>
-            <h2>История бесед</h2>
             {historyBusy ? (
               <p role="status">Загружаем беседы…</p>
             ) : historyError ? (
@@ -434,10 +434,13 @@ export function CareerExpertPanel({
                   aria-label={`Открыть беседу: ${item.summary ?? item.firstPhrase}`}
                   onClick={() => void loadHistory(item.id)}
                 >
-                  {item.summary ?? item.firstPhrase}
                   <small>
-                    {STAGE_TITLE[item.stage]} · {formatDate(item.lastMessageAt.slice(0, 10))}
+                    <time dateTime={item.lastMessageAt}>
+                      {formatHistoryMoment(item.lastMessageAt)}
+                    </time>
+                    <b>{STAGE_TITLE[item.stage]}</b>
                   </small>
+                  <span>{item.summary ?? item.firstPhrase}</span>
                 </button>
               ))
             ) : (
@@ -600,9 +603,9 @@ export function CareerExpertPanel({
         </div>
       </div>
       {loadingSession ? <ExpertComposerSkeleton /> : null}
-      {user && !loadingSession && !historyOpen && !historicalConversation ? (
+      {user && !loadingSession && !historicalConversation ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          {!content.trim() && !voiceActive ? (
+          {!content.trim() && !voiceActive && !historyOpen ? (
             <ExpertStarterChips
               onChoose={(prompt) => {
                 setContent(prompt);
@@ -758,6 +761,15 @@ export function CareerIntelligenceSummary({
       ) : null}
     </section>
   );
+}
+
+function formatHistoryMoment(iso: string) {
+  return new Date(iso).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function formatDate(value: string) {

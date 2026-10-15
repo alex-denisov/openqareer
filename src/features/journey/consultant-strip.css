@@ -12,7 +12,7 @@
 }
 .consultant-history {
   display: grid;
-  gap: var(--career-space-3);
+  gap: var(--career-space-2);
 }
 .consultant-history h2 {
   font-size: var(--career-text-md);
@@ -27,16 +27,34 @@
   padding: var(--career-space-3);
   cursor: pointer;
 }
+.career-expert-conversation.consultant-history-is-open {
+  padding-block-start: var(--career-space-4);
+}
+.consultant-history .consultant-history-row {
+  padding: var(--career-space-2) var(--career-space-3);
+  background: transparent;
+}
 .consultant-history-row {
+  line-height: 1.5;
   display: grid;
   gap: var(--career-space-2);
-  min-height: calc(var(--career-space-8) * 2);
+  gap: var(--career-space-1);
+  min-height: 0;
   text-align: start;
   overflow-wrap: anywhere;
 }
 .consultant-history-row small {
+  display: flex;
+  gap: var(--career-space-2);
   font-size: var(--career-text-xs);
   color: var(--career-text-dim);
+}
+.consultant-history-row small b {
+  color: var(--career-text-soft);
+  font-weight: 600;
+}
+.consultant-history-row span {
+  font-size: var(--career-text-sm);
 }
 @media (min-width: 761px) {
   .consultant-mobile-stage-picker {
@@ -57,38 +75,67 @@
     display: none;
   }
   .consultant-strip .consultant-strip-button {
+    position: relative;
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: var(--career-space-3);
-    padding: var(--career-space-5) var(--career-space-1);
+    padding: var(--career-space-4) 0;
     border: 0;
-    color: var(--career-text);
-    background: var(--career-bg-elevated);
+    color: var(--career-accent);
+    background: transparent;
     cursor: pointer;
+  }
+  .consultant-strip .consultant-strip-button:hover {
+    background: var(--career-surface);
+  }
+  .consultant-strip-icon {
+    display: grid;
+    place-items: center;
+    width: var(--career-target-min);
+    height: var(--career-target-min);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-accent-soft);
   }
   .consultant-strip-title {
     writing-mode: vertical-rl;
-    margin: auto 0;
-    font-size: var(--career-text-sm);
+    transform: rotate(180deg);
+    line-height: 1.5;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+    letter-spacing: 0.04em;
   }
   .consultant-strip-dot {
+    position: absolute;
+    inset-block-start: var(--career-space-3);
+    inset-inline-end: var(--career-space-3);
     width: var(--consultant-dot-size);
     height: var(--consultant-dot-size);
     border-radius: 50%;
     background: var(--career-accent);
+    border: 2px solid var(--career-bg-elevated);
   }
   .consultant-strip-count {
     display: grid;
     place-items: center;
-    width: var(--career-space-6);
+    min-width: var(--career-space-6);
     height: var(--career-space-6);
-    border-radius: 50%;
-    color: var(--career-text);
-    background: var(--career-accent-soft);
+    padding: 0 var(--career-space-1);
+    border-radius: calc(var(--career-space-6) / 2);
+    border: var(--career-border-width) solid var(--career-accent);
+    color: var(--career-accent);
     font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+  .consultant-strip-caret {
+    margin-block-start: auto;
+    color: var(--career-text-dim);
+  }
+  .consultant-desktop .career-expert-panel-controls {
+    gap: 0;
   }
   .consultant-desktop .career-expert-panel-controls button {
     width: var(--career-target-min);
@@ -104,13 +151,10 @@
   .consultant-desktop .career-expert-stage-button {
     order: 3;
   }
-  .consultant-desktop .career-expert-identity > span,
-  .consultant-desktop .career-expert-identity small {
-    display: none;
-  }
   .consultant-desktop .career-expert-panel > header {
-    gap: var(--career-space-1);
-    padding-inline: var(--career-space-3);
+    gap: 0;
+    padding-block: 0;
+    padding-inline: var(--career-space-4) 2px;
   }
   .consultant-overlay {
     position: fixed;

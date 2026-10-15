@@ -121,7 +121,10 @@ test('ACC-0-1 server history loads, opens, returns, retries and empties', async 
   await expect(panel.getByLabel('Открытая беседа')).toContainText('Сохранённый ответ');
   await page.screenshot({ path: 'test-results/evidence/ACC-0-1/history-detail-1440.png' });
   await panel.getByRole('button', { name: 'К истории', exact: true }).click();
-  await panel.getByRole('button', { name: 'Назад', exact: true }).click();
+  const historyButton = panel.getByRole('button', { name: 'История бесед', exact: true });
+  await expect(historyButton).toHaveAttribute('aria-pressed', 'true');
+  await historyButton.click();
+  await expect(historyButton).toHaveAttribute('aria-pressed', 'false');
   await expect(panel.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
   empty = true;
   await panel.getByRole('button', { name: 'История бесед', exact: true }).click();
