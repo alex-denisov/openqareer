@@ -612,10 +612,14 @@ test.describe('B250 vacancies screen', () => {
     await expect(filters.getByRole('button', { name: 'Удалённо · 12' })).toBeVisible();
 
     await openFilterGroup(page, 'sources');
-    await expect(filters.getByRole('button', { name: 'hh.ru · 61' })).toBeVisible();
-    await expect(filters.locator('.vacancy-source-group legend')).toHaveText('Агрегаторы · 61');
+    // AUD-4: the catalogue filter lists sources in a group and categories as buttons.
+    await expect(
+      filters.getByRole('group', { name: 'Источники в каталоге' }).getByRole('button', {
+        name: 'hh.ru 61',
+      }),
+    ).toBeVisible();
+    await expect(filters.getByRole('button', { name: 'Агрегаторы · 61' })).toBeVisible();
     await expect.poll(() => sourceCatalogReadCount.value).toBeGreaterThan(0);
-    await expect(filters.locator('.vacancy-source-filter .vacancy-facet-chip')).toHaveCount(1);
     await expect(filters.getByRole('button', { name: /Добавить:/ })).toHaveCount(0);
 
     const rows = page.locator('.vac-list-item');
