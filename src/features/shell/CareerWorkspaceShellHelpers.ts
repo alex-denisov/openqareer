@@ -56,3 +56,10 @@ export function initialExpertPanelOpen(sessionPending: boolean, initialView: She
   if (sessionPending) return true;
   return desktop || (initialView === 'opportunities' && matchesMedia('(min-width: 761px)'));
 }
+
+// The window can be resized while the cabinet is open: below the desktop width the
+// consultant folds away so the screen keeps its columns, above it the panel returns
+// unless the candidate closed it on purpose.
+export function expertPanelOpenOnWidthChange(wide: boolean): boolean {
+  return wide && readDesktopExpertPreference() !== 'closed';
+}

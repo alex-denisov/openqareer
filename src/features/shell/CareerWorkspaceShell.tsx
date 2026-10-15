@@ -33,6 +33,7 @@ import { ResponsesAutomationSwitch } from './ResponsesAutomationSwitch';
 import { DesktopCabinetTopbar } from './DesktopCabinetTopbar';
 import {
   DESKTOP_EXPERT_PREFERENCE_KEY,
+  expertPanelOpenOnWidthChange,
   hasClosedDesktopExpertPreference,
   initialExpertPanelOpen,
   matchesMedia,
@@ -398,6 +399,16 @@ export function CareerWorkspaceShell({
     update();
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const media = window.matchMedia('(min-width: 1280px)');
+    const onChange = () => {
+      const open = expertPanelOpenOnWidthChange(media.matches);
+      setExpertConfig((config) => (config.open === open ? config : { ...config, open }));
+    };
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
   }, []);
   const desktopPageTitle = intakeVisible
     ? 'Старт'
