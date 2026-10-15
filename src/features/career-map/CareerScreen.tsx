@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react';
+import { lazy, Suspense, useState, type ReactElement } from 'react';
 import type { CareerPushView, CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
 import {
   CareerConditionsCard,
@@ -18,7 +18,11 @@ import {
 import { MobileConditionSalaryView, MobileRoleDetailView } from './CareerMobileComponents';
 import { applyConditionsEdit } from './careerConditionsStorage';
 import { useCareerScreenState } from './useCareerScreenState';
-import { RelocationScreen } from '../relocation/RelocationScreen';
+
+// Lazy: the screen pulls CSS, which the CLI mockup renderer (tsx) cannot load, and opens only on demand.
+const RelocationScreen = lazy(() =>
+  import('../relocation/RelocationScreen').then((m) => ({ default: m.RelocationScreen })),
+);
 
 export interface CareerScreenProps {
   readonly initialRoles?: readonly CareerRoleModel[];
@@ -411,11 +415,13 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
   }
   if (relocationOpen) {
     return (
-      <RelocationScreen
-        onNavigateBack={() => setRelocationOpen(false)}
-        onOpenExpert={onOpenExpert}
-        onOpenVacancies={onOpenVacancies ? () => onOpenVacancies() : undefined}
-      />
+      <Suspense fallback={<CareerLoadingSkeleton />}>
+        <RelocationScreen
+          onNavigateBack={() => setRelocationOpen(false)}
+          onOpenExpert={onOpenExpert}
+          onOpenVacancies={onOpenVacancies ? () => onOpenVacancies() : undefined}
+        />
+      </Suspense>
     );
   }
   return (
