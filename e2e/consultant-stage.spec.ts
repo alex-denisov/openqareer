@@ -40,7 +40,7 @@ test.describe('B340 stage consultant', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    const expertPanel = page.locator('aside.career-expert-panel');
+    const expertPanel = page.locator('section.career-expert-panel');
     await expect(expertPanel).toBeVisible();
     await expect(expertPanel.locator('header strong')).toHaveText('Консультант');
     await expect(expertPanel.locator('header small')).toContainText('Сегодня');

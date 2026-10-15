@@ -1,4 +1,11 @@
-import { createElement, useEffect, useRef, useState } from 'react';
+import {
+  createElement,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
 import { CaretDoubleLeft, CaretDown, Sparkle } from '@phosphor-icons/react';
 import { useEscapeLayer } from './escapeLayers';
 import { apiFetch, readDataArray, readDataObject } from '../coach/apiClient';
@@ -8,10 +15,86 @@ import type {
 } from '../../../server/data/candidateStore';
 import { getCareerCommands } from '../coach/careerCommandApi';
 import type { CoachResult, CareerCommand } from '../coach/coachApi';
-import type { CoachTurnStage } from '../coach/coachApi';
+import type { CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import type { ShellSection } from './shellNavigation';
 
 export type ShellView = ShellSection;
+
+export interface ExpertPanelConfig {
+  open: boolean;
+  stage: CoachTurnStage;
+  subject?: CoachTurnSubject;
+  subjectTitle?: string;
+  initialPrompt?: string;
+}
+
+export function openExpertPanel(
+  setConfig: Dispatch<SetStateAction<ExpertPanelConfig>>,
+  setExpanded: Dispatch<SetStateAction<boolean>>,
+  setAccountOpen: Dispatch<SetStateAction<boolean>>,
+  activeView: ShellView,
+  isCompactViewport: boolean,
+  stage?: CoachTurnStage,
+  subject?: CoachTurnSubject,
+  subjectTitle?: string,
+  initialPrompt?: string,
+) {
+  setAccountOpen(false);
+  setExpanded(isCompactViewport);
+  setConfig({
+    open: true,
+    stage: stage ?? stageForView(activeView),
+    subject,
+    subjectTitle,
+    initialPrompt,
+  });
+}
+
+export function openIntakeConsultantPanel(
+  openExpert: (
+    stage?: CoachTurnStage,
+    subject?: CoachTurnSubject,
+    subjectTitle?: string,
+    initialPrompt?: string,
+  ) => void,
+  setExpanded: Dispatch<SetStateAction<boolean>>,
+  prompt?: string,
+) {
+  openExpert('today', undefined, 'Старт', prompt);
+  setExpanded(true);
+}
+
+export function updateExpertStage(
+  setConfig: Dispatch<SetStateAction<ExpertPanelConfig>>,
+  stage: CoachTurnStage,
+) {
+  setConfig((previous) => ({
+    ...previous,
+    stage,
+    subject: undefined,
+    subjectTitle: undefined,
+    initialPrompt: undefined,
+  }));
+}
+
+export function focusConsultantTrigger() {
+  const trigger = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(
+      '.career-mobile-consultant-trigger, .consultant-strip-button',
+    ),
+  ).find((candidate) => candidate.getClientRects().length > 0);
+  trigger?.focus();
+}
+
+export function closeExpertPanel(
+  setConfig: Dispatch<SetStateAction<ExpertPanelConfig>>,
+  setExpanded: Dispatch<SetStateAction<boolean>>,
+  focusConsultantTrigger: () => void,
+) {
+  setExpanded(false);
+  setConfig((previous) => ({ ...previous, open: false }));
+  window.requestAnimationFrame(focusConsultantTrigger);
+}
 
 export const SESSION_GATE_DELAY_MS = 4_000;
 export const DESKTOP_EXPERT_PREFERENCE_KEY = 'openqareer.desktop-expert-panel';
@@ -194,7 +277,12 @@ export function pendingConsultantProposalCount(
     ).length ?? 0
   );
 }
-export function usePendingConsultantProposals(result: CoachResult | undefined, turnKey?: string) {
+export function usePendingConsultantProposals(
+  result: CoachResult | undefined,
+  turnKey?: string,
+  onCountChange?: (count: number) => void,
+  loading = false,
+) {
   const [revision, setRevision] = useState(0);
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -210,6 +298,9 @@ export function usePendingConsultantProposals(result: CoachResult | undefined, t
       active = false;
     };
   }, [result, turnKey, revision]);
+  useEffect(() => {
+    onCountChange?.(loading ? 0 : count);
+  }, [count, loading, onCountChange]);
   return { count, refreshProposalCount: () => setRevision((current) => current + 1) };
 }
 

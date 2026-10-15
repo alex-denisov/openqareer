@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
-import { CaretUp, Sparkle } from '@phosphor-icons/react';
 import '../journey/consultant-strip.css';
 import './mockup-shell.css';
-import { CareerExpertPanel, STAGE_TITLE } from '../journey/CareerExpertPanel';
+import './mobile-shell.css';
+import { CareerExpertPanel } from '../journey/CareerExpertPanel';
 import { FirstRunWizard, firstRunDataToWorkspaceInput } from '../onboarding';
 import {
   OpportunitiesView,
@@ -35,13 +35,19 @@ import { ResponsesAutomationSwitch } from './ResponsesAutomationSwitch';
 import { DesktopCabinetTopbar } from './DesktopCabinetTopbar';
 import {
   DESKTOP_EXPERT_PREFERENCE_KEY,
+  closeExpertPanel,
   expertPanelOpenOnWidthChange,
+  focusConsultantTrigger,
+  openExpertPanel,
+  openIntakeConsultantPanel,
   hasClosedDesktopExpertPreference,
   initialExpertPanelOpen,
   matchesMedia,
   pageNames,
   SESSION_GATE_DELAY_MS,
   stageForView,
+  updateExpertStage,
+  type ExpertPanelConfig,
   type ShellView,
 } from './CareerWorkspaceShellHelpers';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
@@ -95,13 +101,7 @@ export function CareerWorkspaceShell({
     return initialView;
   });
   const [roleSkillAssessmentOpen, setRoleSkillAssessmentOpen] = useState(false);
-  const [expertConfig, setExpertConfig] = useState<{
-    open: boolean;
-    stage: CoachTurnStage;
-    subject?: CoachTurnSubject;
-    subjectTitle?: string;
-    initialPrompt?: string;
-  }>({
+  const [expertConfig, setExpertConfig] = useState<ExpertPanelConfig>({
     open: initialExpertPanelOpen(sessionPending, initialView),
     stage: stageForView(initialView),
   });
@@ -113,6 +113,7 @@ export function CareerWorkspaceShell({
   const [accountReturnToIntake, setAccountReturnToIntake] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
+  const [pendingProposalCount, setPendingProposalCount] = useState(0);
   const [isWideViewport, setIsWideViewport] = useState(() => matchesMedia('(min-width: 1280px)'));
   const [isCompactViewport, setIsCompactViewport] = useState(() =>
     matchesMedia('(max-width: 760px)'),
@@ -175,6 +176,9 @@ export function CareerWorkspaceShell({
   }, [intakeVisible, session?.candidateId, visibleWorkspace]);
 
   const expertPanelOpen = !accountOpen && (intakeVisible ? expertSheetExpanded : expertConfig.open);
+  const expertPanelVisible = isCompactViewport
+    ? expertPanelOpen && expertSheetExpanded
+    : expertPanelOpen;
 
   useEffect(() => {
     if (!sessionPending) {
@@ -185,8 +189,7 @@ export function CareerWorkspaceShell({
     return () => window.clearTimeout(timer);
   }, [sessionPending]);
 
-  // The page name lives in the navigation and in the tab title; repeating it in
-  // the top bar only duplicated the active item.
+  // The active page title stays in the mobile shell and browser tab.
   useEffect(() => {
     const title = intakeVisible
       ? 'Старт'
@@ -270,32 +273,28 @@ export function CareerWorkspaceShell({
       subject?: CoachTurnSubject,
       subjectTitle?: string,
       initialPrompt?: string,
-    ) => {
-      setExpertSheetExpanded(false);
-      setExpertConfig({
-        open: true,
-        stage: stage ?? stageForView(activeView),
+    ) =>
+      openExpertPanel(
+        setExpertConfig,
+        setExpertSheetExpanded,
+        setAccountOpen,
+        activeView,
+        isCompactViewport,
+        stage,
         subject,
         subjectTitle,
         initialPrompt,
-      });
-    },
-    [activeView],
+      ),
+    [activeView, isCompactViewport],
   );
 
-  const closeExpert = useCallback(() => {
-    setExpertSheetExpanded(false);
-    setExpertConfig((prev) => ({ ...prev, open: false }));
-    window.requestAnimationFrame(() =>
-      document.querySelector<HTMLButtonElement>('.consultant-strip-button')?.focus(),
-    );
-  }, []);
+  const closeExpert = useCallback(
+    () => closeExpertPanel(setExpertConfig, setExpertSheetExpanded, focusConsultantTrigger),
+    [],
+  );
 
   const openIntakeConsultant = useCallback(
-    (prompt?: string) => {
-      openExpert('today', undefined, 'Старт', prompt);
-      setExpertSheetExpanded(true);
-    },
+    (prompt?: string) => openIntakeConsultantPanel(openExpert, setExpertSheetExpanded, prompt),
     [openExpert],
   );
 
@@ -310,15 +309,7 @@ export function CareerWorkspaceShell({
     window.requestAnimationFrame(() => document.getElementById('career-main')?.focus());
   }, []);
 
-  const handleExpertEscape = useCallback(() => {
-    const onPhone =
-      typeof window !== 'undefined' && Boolean(window.matchMedia?.('(max-width: 760px)').matches);
-    if (onPhone && expertSheetExpanded) {
-      setExpertSheetExpanded(false);
-      return;
-    }
-    closeExpert();
-  }, [closeExpert, expertSheetExpanded]);
+  const handleExpertEscape = useCallback(() => closeExpert(), [closeExpert]);
 
   const closeAccount = useCallback(() => {
     setAccountOpen(false);
@@ -466,30 +457,17 @@ export function CareerWorkspaceShell({
         />
         {activeView === 'opportunities' ? null : (
           <CareerMobileTopbar
-            session={session}
-            sessionPending={sessionPending}
             activeView={activeView}
-            title={
-              accountOpen
-                ? 'Аккаунт'
-                : intakeVisible
-                  ? 'Старт'
-                  : activeView === 'responses' || activeView === 'automation'
-                    ? 'Отклики'
-                    : undefined
-            }
-            tariffsAvailable={isNavigable('tariffs')}
-            tariffsLockedReason={lockedReason('tariffs')}
-            onNavigateHome={() => navigate('today')}
-            onNavigateTariffs={() => navigate('tariffs')}
-            onOpenAccount={openAccount}
-            onOpenConsultant={() => openExpert('responses')}
+            title={accountOpen ? 'Аккаунт' : desktopPageTitle}
+            pendingProposalCount={pendingProposalCount}
+            expertOpen={expertPanelVisible}
+            onOpenConsultant={() => (intakeVisible ? openIntakeConsultant() : openExpert())}
             notificationsSlot={
               cabinetSession &&
               !sessionPending &&
               !accountOpen &&
               !intakeVisible &&
-              !expertPanelOpen &&
+              !expertPanelVisible &&
               isCompactViewport ? (
                 <NotificationsBell
                   unreadCount={notificationUnreadCount}
@@ -763,31 +741,12 @@ export function CareerWorkspaceShell({
           lockedReason={lockedReason}
           onNavigate={navigate}
           onOpenExpert={() => (intakeVisible ? openIntakeConsultant() : openExpert())}
+          onOpenAccount={openAccount}
+          sessionPending={sessionPending}
+          accountOpen={accountOpen}
+          expertOpen={expertPanelVisible}
         />
 
-        {isCompactViewport &&
-        activeView !== 'opportunities' &&
-        !expertPanelOpen &&
-        !accountOpen &&
-        (!intakeVisible || isCompactViewport) &&
-        !roleSkillAssessmentOpen &&
-        activeView !== 'automation' ? (
-          <button
-            className="career-expert-peek"
-            type="button"
-            onClick={() => (intakeVisible ? openIntakeConsultant() : openExpert())}
-            aria-label="Открыть консультанта"
-          >
-            <span className="career-expert-peek-icon">
-              <Sparkle size={18} weight="fill" />
-            </span>
-            <span className="career-expert-peek-text">
-              <strong>Консультант</strong>
-              <small>{STAGE_TITLE[stageForView(activeView)]}</small>
-            </span>
-            <CaretUp size={20} />
-          </button>
-        ) : null}
         {!isCompactViewport && !isWideViewport && expertPanelOpen ? (
           <button
             className="consultant-scrim"
@@ -795,36 +754,44 @@ export function CareerWorkspaceShell({
             onClick={closeExpert}
           />
         ) : null}
-        {expertPanelOpen || (!isCompactViewport && !accountOpen) ? (
-          <CareerExpertPanel
-            collapsed={!isCompactViewport && !expertPanelOpen}
-            overlay={!isCompactViewport && !isWideViewport && expertPanelOpen}
-            onExpand={isCompactViewport ? undefined : () => openExpert()}
-            journey={journey}
-            marketQuery={visibleWorkspace?.targetDirection}
-            stage={expertConfig.stage}
-            subject={expertConfig.subject}
-            subjectTitle={expertConfig.subjectTitle}
-            initialPrompt={expertConfig.initialPrompt}
-            initialUser={session ?? null}
-            loadingSession={sessionPending}
-            mobileExpanded={expertSheetExpanded}
-            onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
-            onIdentityChange={resetForAccount}
-            onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
-            onOpenRoleSkillAssessment={openRoleSkillAssessment}
-            onEscape={handleExpertEscape}
-            onStageChange={(stage) =>
-              setExpertConfig((previous) => ({
-                ...previous,
-                stage,
-                subject: undefined,
-                subjectTitle: undefined,
-                initialPrompt: undefined,
-              }))
-            }
-            onClose={closeExpert}
-          />
+        {isCompactViewport || !accountOpen ? (
+          <aside
+            className={`panel-col${expertPanelVisible ? ' is-open' : ''}`}
+            role="presentation"
+            aria-hidden={isCompactViewport && !expertPanelVisible ? true : undefined}
+          >
+            {expertPanelVisible ? (
+              <button
+                className="career-consultant-backdrop"
+                type="button"
+                aria-label="Закрыть консультанта"
+                tabIndex={-1}
+                onClick={closeExpert}
+              />
+            ) : null}
+            <CareerExpertPanel
+              collapsed={!expertPanelVisible}
+              overlay={expertPanelVisible && (isCompactViewport || !isWideViewport)}
+              onExpand={isCompactViewport ? undefined : () => openExpert()}
+              journey={journey}
+              marketQuery={visibleWorkspace?.targetDirection}
+              stage={expertConfig.stage}
+              subject={expertConfig.subject}
+              subjectTitle={expertConfig.subjectTitle}
+              initialPrompt={expertConfig.initialPrompt}
+              initialUser={session ?? null}
+              loadingSession={sessionPending}
+              mobileExpanded={expertSheetExpanded}
+              onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
+              onProposalCountChange={setPendingProposalCount}
+              onIdentityChange={resetForAccount}
+              onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
+              onOpenRoleSkillAssessment={openRoleSkillAssessment}
+              onEscape={handleExpertEscape}
+              onStageChange={(stage) => updateExpertStage(setExpertConfig, stage)}
+              onClose={closeExpert}
+            />
+          </aside>
         ) : null}
       </div>
     </CareerDiaryAccessProvider>
