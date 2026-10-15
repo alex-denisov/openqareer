@@ -47,11 +47,16 @@ async function openStories(page: Page, width: number): Promise<void> {
   } else {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Отклики' }).click();
   }
-  const card = page
-    .locator('.career-responses-card')
-    .filter({ hasText: 'Руководитель инженерной команды' });
-  await expect(card).toBeVisible();
-  await card.click();
+  if (width <= 760) {
+    // B486: the 390 list selects a response from its row, not from a board card.
+    await page.getByRole('button', { name: /^Открыть следующий шаг: Подготовиться/u }).click();
+  } else {
+    const card = page
+      .locator('.career-responses-card')
+      .filter({ hasText: 'Руководитель инженерной команды' });
+    await expect(card).toBeVisible();
+    await card.click();
+  }
   await page
     .getByRole('button', { name: 'Открыть STAR-истории' })
     .filter({ visible: true })
@@ -182,10 +187,17 @@ test('lists, creates, edits and opens linked STAR stories at 1440 and 390', asyn
       await expect(page.getByText('Не подтверждено')).toBeVisible();
       await page.getByRole('button', { name: 'Закрыть STAR-истории' }).click();
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      const card = page
-        .locator('.career-responses-card')
-        .filter({ hasText: 'Руководитель инженерной команды' });
-      await card.getByRole('button', { name: 'Подготовиться' }).click();
+      if (width <= 760) {
+        await page
+          .locator('.career-responses-selected')
+          .getByRole('button', { name: 'Начать мок-интервью' })
+          .click();
+      } else {
+        const card = page
+          .locator('.career-responses-card')
+          .filter({ hasText: 'Руководитель инженерной команды' });
+        await card.getByRole('button', { name: 'Подготовиться' }).click();
+      }
       const prepDialog = page.getByRole('dialog');
       await expect(prepDialog).toBeVisible();
       const prepBackground = await prepDialog.evaluate(
