@@ -53,7 +53,9 @@ export function initialExpertPanelOpen(sessionPending: boolean, initialView: She
   if (typeof window === 'undefined') return false;
   const desktop = matchesMedia('(min-width: 1280px)');
   if (desktop && readDesktopExpertPreference() === 'closed') return false;
-  if (sessionPending) return true;
+  // While the session is checked the panel stays on the phone sheet and a wide desktop; a
+  // narrowed desktop window keeps its columns until the candidate opens the consultant.
+  if (sessionPending) return desktop || !matchesMedia('(min-width: 761px)');
   return desktop || (initialView === 'opportunities' && matchesMedia('(min-width: 761px)'));
 }
 

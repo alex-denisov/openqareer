@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DESKTOP_EXPERT_PREFERENCE_KEY,
   expertPanelOpenOnWidthChange,
+  initialExpertPanelOpen,
 } from './CareerWorkspaceShellHelpers';
 
 describe('expertPanelOpenOnWidthChange', () => {
@@ -28,5 +29,35 @@ describe('expertPanelOpenOnWidthChange', () => {
     expect(expertPanelOpenOnWidthChange(true)).toBe(true);
     store.set(DESKTOP_EXPERT_PREFERENCE_KEY, 'closed');
     expect(expertPanelOpenOnWidthChange(true)).toBe(false);
+  });
+});
+
+describe('initialExpertPanelOpen while the session is still being checked', () => {
+  const stubWidth = (width: number) =>
+    vi.stubGlobal('window', {
+      localStorage: { getItem: () => null, setItem: () => undefined },
+      matchMedia: (query: string) => {
+        const min = /min-width: (\d+)px/.exec(query);
+        const max = /max-width: (\d+)px/.exec(query);
+        return {
+          matches: min ? width >= Number(min[1]) : max ? width <= Number(max[1]) : false,
+        };
+      },
+    });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('keeps the panel open on a wide desktop window', () => {
+    stubWidth(1440);
+    expect(initialExpertPanelOpen(true, 'today')).toBe(true);
+  });
+
+  it('keeps the panel folded on a narrowed desktop window such as 1176 px', () => {
+    stubWidth(1176);
+    expect(initialExpertPanelOpen(true, 'today')).toBe(false);
+  });
+
+  it('keeps the phone sheet behaviour untouched', () => {
+    stubWidth(390);
+    expect(initialExpertPanelOpen(true, 'today')).toBe(true);
   });
 });
