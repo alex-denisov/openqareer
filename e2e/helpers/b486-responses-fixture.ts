@@ -236,6 +236,8 @@ export async function stubB486Session(
 ): Promise<void> {
   const pendingApprovalCount = options.pendingApprovalCount ?? 0;
   const unreadCount = options.unreadCount ?? 0;
+  // Fixture dates are 2026-09-15..20; the product default period is 30 days.
+  await page.clock.setFixedTime(new Date('2026-09-25T12:00:00.000Z'));
   await page.route('**/api/v1/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
