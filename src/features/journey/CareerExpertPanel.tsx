@@ -345,7 +345,7 @@ export function CareerExpertPanel({
       <header>
         <div className="career-expert-identity">
           <span>
-            <Sparkle size={18} weight="fill" />
+            <Sparkle size={18} weight="regular" />
           </span>
           <div>
             <strong>Консультант</strong>

@@ -416,7 +416,25 @@
     min-block-size: var(--career-target-min);
     max-block-size: var(--career-target-min);
     padding-block: var(--career-space-2);
-    padding-inline: var(--career-space-3) calc(var(--career-target-min) + var(--career-space-2));
+    padding-inline: var(--career-space-4) calc(var(--career-target-min) + var(--career-space-2));
+    border: 0;
+    border-radius: calc(var(--career-target-min) / 2);
+    background: var(--career-bg-elevated);
+    box-shadow: none;
+  }
+
+  .career-shell > .panel-col .career-expert-panel::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--career-space-2);
+    inset-inline-start: 50%;
+    z-index: 2;
+    inline-size: calc(var(--career-space-8) + var(--career-space-1));
+    block-size: calc(var(--career-space-1) + var(--career-border-width));
+    border-radius: var(--career-space-1);
+    background: var(--career-line-strong);
+    transform: translateX(-50%);
+    pointer-events: none;
   }
 
   .career-shell
