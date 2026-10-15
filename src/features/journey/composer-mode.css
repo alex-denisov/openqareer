@@ -1,0 +1,97 @@
+/* Поле ввода консультанта по макету B430 (.career-expert-composer): пилюля 44 px и круглая кнопка
+   отправки; рядом со стрелкой выбора способа ввода (голос / текст) в духе Telegram. */
+.career-composer-split {
+  position: absolute;
+  inset-block-end: var(--career-space-2);
+  inset-inline-end: var(--career-space-2);
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+.career-composer-mode-trigger {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-space-6);
+  block-size: var(--career-target-min);
+  border: 0;
+  color: var(--career-text-soft);
+  background: transparent;
+  cursor: pointer;
+}
+.career-composer-mode-trigger:hover,
+.career-composer-mode-trigger[aria-expanded='true'] {
+  color: var(--career-text);
+}
+.career-composer-send {
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-accent);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-accent);
+  background: transparent;
+  cursor: pointer;
+}
+.career-composer-send:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.career-composer-menu {
+  position: absolute;
+  inset-block-end: calc(100% + var(--career-space-2));
+  inset-inline-end: 0;
+  z-index: 5;
+  display: grid;
+  min-inline-size: calc(var(--career-space-8) * 6);
+  padding: var(--career-space-1);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: color-mix(in oklch, var(--career-bg-elevated) 92%, transparent);
+  backdrop-filter: blur(var(--career-space-5));
+  box-shadow: var(--career-shadow-tooltip);
+}
+.career-composer-menu button {
+  display: grid;
+  grid-template-columns: var(--career-space-5) 1fr var(--career-space-4);
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+.career-composer-menu button:hover {
+  background: var(--career-surface);
+}
+.career-composer-menu button[aria-checked='true'] {
+  color: var(--career-accent);
+}
+.career-composer-menu button:focus-visible,
+.career-composer-mode-trigger:focus-visible,
+.career-composer-send:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+}
+@media (max-width: 760px) {
+  .career-composer-send {
+    border: 0;
+    border-radius: 50%;
+    color: var(--career-accent-ink);
+    background: var(--career-accent);
+    inline-size: calc(var(--career-target-min) - var(--career-space-2));
+    block-size: calc(var(--career-target-min) - var(--career-space-2));
+  }
+  .career-composer-split {
+    inset-block-end: var(--career-space-1);
+    inset-inline-end: var(--career-space-1);
+  }
+}
+.career-voice-input[data-active='false']:empty {
+  display: none;
+}

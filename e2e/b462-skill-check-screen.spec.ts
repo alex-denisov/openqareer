@@ -6,6 +6,7 @@ import {
   mockSignedInCabinet,
   type MockSignedInCabinetOptions,
 } from './fixtures/mockSignedInCabinet';
+import { startVoiceFromMenu } from './fixtures/voiceMode';
 
 const evidenceDirectory = e2eEvidenceDirectory('B462');
 
@@ -201,10 +202,10 @@ async function answerDialogue(page: Page, width: number): Promise<void> {
   for (let index = width === 390 ? 1 : 0; index < 3; index += 1) {
     await answer.fill(`Факт и результат по вопросу ${index + 1}.`);
     if (width <= 760 && index === 0) {
-      await expect(page.getByRole('button', { name: 'Голосовой ввод' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Способ ввода' })).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Ответить' })).toBeVisible();
       await answer.fill('');
-      await expect(page.getByRole('button', { name: 'Голосовой ввод' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Способ ввода' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Ответить' })).toHaveCount(0);
       await answer.fill(`Факт и результат по вопросу ${index + 1}.`);
     }
@@ -244,7 +245,7 @@ async function installSpeechRecognitionStub(page: Page): Promise<void> {
 }
 
 async function answerUsingVoice(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+  await startVoiceFromMenu(page);
   await page.getByRole('button', { name: 'Разрешить микрофон' }).click();
   await expect(page.getByText('Идёт запись')).toBeVisible();
   await capture(page, '390-dialogue-recording');
@@ -305,7 +306,7 @@ test('connects mobile checklist, suggestions, detail screens and role links', as
         await expect(surface.getByLabel('Ваш ответ')).toBeVisible();
         await expect(surface.getByRole('button', { name: 'К кейсам' })).toBeDisabled();
         await expect(surface.getByRole('button', { name: 'Пропустить' })).toBeDisabled();
-        await expect(surface.getByRole('button', { name: 'Голосовой ввод' })).toBeVisible();
+        await expect(surface.getByRole('button', { name: 'Способ ввода' })).toBeVisible();
         await expect(surface.getByRole('button', { name: 'Ответить' })).toHaveCount(0);
       }
       if (width === 390) await answerUsingVoice(surface);

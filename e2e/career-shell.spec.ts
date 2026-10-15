@@ -383,7 +383,7 @@ async function expectConsultantSheetGeometry(page: Page): Promise<void> {
     panel.locator('header').boundingBox(),
     panel.locator('.career-expert-composer').boundingBox(),
     panel.locator('.career-expert-composer textarea').boundingBox(),
-    panel.getByRole('button', { name: 'Голосовой ввод' }).boundingBox(),
+    panel.getByRole('button', { name: 'Отправить вопрос' }).boundingBox(),
   ]);
   expect(sheet?.x).toBe(0);
   expect(Math.abs((sheet?.y ?? 0) - 253)).toBeLessThanOrEqual(1);
@@ -416,7 +416,7 @@ async function expectMobileComposerActions(page: Page): Promise<void> {
   const input = panel.getByLabel('Сообщение карьерному консультанту');
   await input.fill('Проверяю действие отправки');
   await expect(panel.getByRole('button', { name: 'Отправить вопрос', exact: true })).toBeEnabled();
-  await expect(panel.getByRole('button', { name: 'Голосовой ввод' })).toBeHidden();
+  await expect(panel.getByRole('button', { name: 'Способ ввода' })).toBeVisible();
 }
 
 async function closeConsultantBySheetButton(page: Page): Promise<void> {

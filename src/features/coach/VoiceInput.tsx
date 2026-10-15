@@ -30,6 +30,9 @@ interface VoiceInputProps {
   onVoiceDraftChange: (hasVoiceDraft: boolean) => void;
   onSubmitVoice: (value: string) => Promise<boolean>;
   onTextMode: () => void;
+  /** Монотонный счётчик: рост запускает запись, когда кнопка микрофона скрыта (меню способа ввода). */
+  startSignal?: number;
+  hideTrigger?: boolean;
 }
 
 interface VoiceInputViewProps extends VoiceInputProps {
@@ -71,9 +74,18 @@ function useVoiceInput(props: VoiceInputProps): VoiceInputViewProps {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [hasTranscript, setHasTranscript] = useState(false);
   const [showPermissionHelp, setShowPermissionHelp] = useState(false);
-  const [controller] = useState(() => createVoiceController(latestProps, setState, setElapsedSeconds, setHasTranscript));
+  const [controller] = useState(() =>
+    createVoiceController(latestProps, setState, setElapsedSeconds, setHasTranscript),
+  );
   useVoiceControllerLifecycle(controller, props, state, hasTranscript);
   const actions = useVoiceInputActions(controller, latestProps, setShowPermissionHelp);
+  const handledSignal = useRef(props.startSignal ?? 0);
+  useEffect(() => {
+    const signal = props.startSignal ?? 0;
+    if (signal === handledSignal.current) return;
+    handledSignal.current = signal;
+    if (state === 'idle') actions.request();
+  }, [props.startSignal, state, actions]);
 
   return {
     ...props,
@@ -142,7 +154,16 @@ function useVoiceInputActions(
   const submitVoice = useCallback(() => {
     void submitVoiceText(controller, latestProps);
   }, [controller, latestProps]);
-  return { request, approve, cancel, restart, finish, useTextMode, togglePermissionHelp, submitVoice };
+  return {
+    request,
+    approve,
+    cancel,
+    restart,
+    finish,
+    useTextMode,
+    togglePermissionHelp,
+    submitVoice,
+  };
 }
 
 async function submitVoiceText(
@@ -158,7 +179,9 @@ function VoiceInputView(props: VoiceInputViewProps) {
   const { state } = props;
   return (
     <div className="career-voice-input" data-active={state !== 'idle'} data-status={state}>
-      {state === 'idle' ? <VoiceTrigger disabled={props.disabled} onClick={props.request} /> : null}
+      {state === 'idle' && !props.hideTrigger ? (
+        <VoiceTrigger disabled={props.disabled} onClick={props.request} />
+      ) : null}
       {state === 'consent' ? <ConsentPanel {...props} /> : null}
       {state === 'starting' || state === 'finishing' ? <LoadingPanel {...props} /> : null}
       {state === 'recording' ? <RecordingPanel {...props} /> : null}
@@ -187,9 +210,14 @@ function VoiceTrigger({ disabled, onClick }: { disabled?: boolean; onClick: () =
 function ConsentPanel({ approve, cancel }: VoiceInputViewProps) {
   return (
     <section className="career-voice-panel" aria-label="Согласие на голосовой ввод">
-      <p>Проверим, поддерживает ли браузер локальное распознавание. OpenQareer не получает аудиозапись.</p>
+      <p>
+        Проверим, поддерживает ли браузер локальное распознавание. OpenQareer не получает
+        аудиозапись.
+      </p>
       <div className="career-voice-actions">
-        <ActionButton primary onClick={approve}>Разрешить микрофон</ActionButton>
+        <ActionButton primary onClick={approve}>
+          Разрешить микрофон
+        </ActionButton>
         <ActionButton onClick={cancel}>Отмена</ActionButton>
       </div>
     </section>
@@ -225,7 +253,9 @@ function RecordingPanel({ elapsedSeconds, cancel, restart, finish }: VoiceInputV
         <ActionButton icon={<ArrowsClockwise size="1em" aria-hidden="true" />} onClick={restart}>
           Записать снова
         </ActionButton>
-        <ActionButton primary onClick={finish}>Закончить запись</ActionButton>
+        <ActionButton primary onClick={finish}>
+          Закончить запись
+        </ActionButton>
       </div>
     </section>
   );
@@ -234,9 +264,16 @@ function RecordingPanel({ elapsedSeconds, cancel, restart, finish }: VoiceInputV
 function TranscriptPanel({ disabled, submitVoice, useTextMode, restart }: VoiceInputViewProps) {
   return (
     <section className="career-voice-panel" aria-label="Распознанный текст">
-      <p role="status" aria-live="polite">Текст распознан. Проверьте его в поле ввода перед отправкой.</p>
+      <p role="status" aria-live="polite">
+        Текст распознан. Проверьте его в поле ввода перед отправкой.
+      </p>
       <div className="career-voice-actions">
-        <ActionButton primary disabled={disabled} icon={<PaperPlaneTilt size="1em" aria-hidden="true" />} onClick={submitVoice}>
+        <ActionButton
+          primary
+          disabled={disabled}
+          icon={<PaperPlaneTilt size="1em" aria-hidden="true" />}
+          onClick={submitVoice}
+        >
           Отправить голосом
         </ActionButton>
         <ActionButton icon={<PencilSimple size="1em" aria-hidden="true" />} onClick={useTextMode}>
@@ -254,7 +291,8 @@ function DeniedPanel(props: VoiceInputViewProps) {
   return (
     <section className="career-voice-panel" aria-label="Нет доступа к микрофону">
       <p role="alert">
-        <WarningCircle size="1em" aria-hidden="true" /> Доступ к микрофону не разрешён. Можно ответить текстом.
+        <WarningCircle size="1em" aria-hidden="true" /> Доступ к микрофону не разрешён. Можно
+        ответить текстом.
       </p>
       <div className="career-voice-actions">
         <ActionButton ariaExpanded={props.showPermissionHelp} onClick={props.togglePermissionHelp}>
@@ -273,9 +311,13 @@ function FailurePanel(props: VoiceInputViewProps) {
   const message = failureMessage(state);
   return (
     <section className="career-voice-panel" aria-label="Голосовой ввод недоступен">
-      <p role={state === 'error' ? 'alert' : 'status'} aria-live="polite">{message}</p>
+      <p role={state === 'error' ? 'alert' : 'status'} aria-live="polite">
+        {message}
+      </p>
       <div className="career-voice-actions">
-        {state !== 'unsupported' ? <ActionButton onClick={props.restart}>Записать снова</ActionButton> : null}
+        {state !== 'unsupported' ? (
+          <ActionButton onClick={props.restart}>Записать снова</ActionButton>
+        ) : null}
         <ActionButton onClick={props.useTextMode}>Ответить текстом</ActionButton>
       </div>
     </section>
@@ -283,7 +325,11 @@ function FailurePanel(props: VoiceInputViewProps) {
 }
 
 function PermissionHelp() {
-  return <p className="career-voice-help">В настройках браузера для этого сайта разрешите микрофон, затем начните запись снова.</p>;
+  return (
+    <p className="career-voice-help">
+      В настройках браузера для этого сайта разрешите микрофон, затем начните запись снова.
+    </p>
+  );
 }
 
 function ActionButton({
@@ -303,7 +349,11 @@ function ActionButton({
   ariaExpanded?: boolean;
   onClick: () => void;
 }) {
-  const variant = primary ? ' career-voice-button--primary' : danger ? ' career-voice-button--danger' : '';
+  const variant = primary
+    ? ' career-voice-button--primary'
+    : danger
+      ? ' career-voice-button--danger'
+      : '';
   return (
     <button
       type="button"
@@ -323,8 +373,10 @@ function isVoiceFailure(state: VoiceInputState): boolean {
 }
 
 function failureMessage(state: VoiceInputState): string {
-  if (state === 'unrecognized') return 'Речь не распознана. Попробуйте ещё раз или ответьте текстом.';
-  if (state === 'unsupported') return 'Локальное распознавание речи на русском в этом браузере недоступно. Ответьте текстом.';
+  if (state === 'unrecognized')
+    return 'Речь не распознана. Попробуйте ещё раз или ответьте текстом.';
+  if (state === 'unsupported')
+    return 'Локальное распознавание речи на русском в этом браузере недоступно. Ответьте текстом.';
   return 'Локальное распознавание не завершилось. Ответьте текстом или начните запись снова.';
 }
 

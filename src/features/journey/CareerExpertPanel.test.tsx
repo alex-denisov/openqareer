@@ -188,7 +188,8 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('<section id="career-consultant-sheet"');
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('career-expert-starters');
-    expect(html).toContain('aria-label="Голосовой ввод"');
+    expect(html).toContain('aria-label="Способ ввода"');
+    expect(html).toContain('aria-label="Отправить вопрос"');
     expect(html).toContain('career-expert-sheet-toggle');
     expect(html).toContain('aria-expanded="false"');
   });

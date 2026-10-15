@@ -14,7 +14,6 @@ import {
   CaretDown,
   CaretUp,
   ClockCounterClockwise,
-  PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
   Spinner,
@@ -35,6 +34,7 @@ import { applySkillQuizResult } from '../coach/careerCommandApi';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
+import { ComposerModeSplit, type ComposerInputMode } from './ComposerModeSplit';
 import { CareerActionProposalList } from './CareerCommandActions';
 import { ConsultantMessage } from './ConsultantMessage';
 import { VoiceInput } from '../coach/VoiceInput';
@@ -169,6 +169,13 @@ export function CareerExpertPanel({
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
+  const [inputMode, setInputMode] = useState<ComposerInputMode>('text');
+  const [voiceStartSignal, setVoiceStartSignal] = useState(0);
+  function chooseInputMode(mode: ComposerInputMode) {
+    setInputMode(mode);
+    if (mode === 'voice') setVoiceStartSignal((signal) => signal + 1);
+    else inputRef.current?.focus();
+  }
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEscapeLayer(onEscape ?? onClose, !collapsed);
   useEffect(() => {
@@ -639,16 +646,18 @@ export function CareerExpertPanel({
               rows={1}
               disabled={sending || voiceTextLocked}
             />
-            {content.trim() && !voiceActive ? (
-              <button
-                type="submit"
-                disabled={sending}
-                aria-label={voiceDraft ? 'Отправить голосом' : 'Отправить вопрос'}
-              >
-                {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
-              </button>
+            {!voiceActive ? (
+              <ComposerModeSplit
+                mode={inputMode}
+                canSend={Boolean(content.trim())}
+                sending={sending}
+                sendLabel={voiceDraft ? 'Отправить голосом' : 'Отправить вопрос'}
+                onChooseMode={chooseInputMode}
+              />
             ) : null}
             <VoiceInput
+              hideTrigger
+              startSignal={voiceStartSignal}
               value={content}
               disabled={sending}
               onChange={setContent}

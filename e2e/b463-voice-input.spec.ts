@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { writeFile } from 'node:fs/promises';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
+import { startVoiceFromMenu } from './fixtures/voiceMode';
 
 interface VoiceTestControl {
   starts: number;
@@ -156,7 +157,7 @@ test.describe('B463 voice input', () => {
     page,
   }, testInfo) => {
     const { getSentTurn, getControl } = await openConsultant(page);
-    await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await startVoiceFromMenu(page);
     if (testInfo.project.name === 'mobile-390') {
       await expect(page.locator('.career-expert-panel')).toHaveClass(/is-mobile-expanded/u);
     }
@@ -201,14 +202,14 @@ test.describe('B463 voice input', () => {
 
   test('keeps denial recoverable and the text fallback working', async ({ page }, testInfo) => {
     const { getSentTurn, getControl } = await openConsultant(page);
-    await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await startVoiceFromMenu(page);
     await page.getByRole('button', { name: 'Разрешить микрофон' }).click();
     await expect(page.getByText('Идёт запись')).toBeVisible();
     await page.getByRole('button', { name: 'Отменить запись' }).click();
-    await expect(page.getByRole('button', { name: 'Голосовой ввод' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Способ ввода' })).toBeVisible();
     await expect(page.locator('#career-expert-input')).toHaveValue('');
 
-    await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await startVoiceFromMenu(page);
     await page.getByRole('button', { name: 'Разрешить микрофон' }).click();
     await expect(page.getByText('Идёт запись')).toBeVisible();
     await page.evaluate(() => {
@@ -233,7 +234,7 @@ test.describe('B463 voice input', () => {
 
   test('does not submit empty speech and offers a new recording', async ({ page }, testInfo) => {
     const { getSentTurn, getControl } = await openConsultant(page);
-    await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await startVoiceFromMenu(page);
     await page.getByRole('button', { name: 'Разрешить микрофон' }).click();
     await expect(page.getByText('Идёт запись')).toBeVisible();
     await page.evaluate(() => {
@@ -257,7 +258,7 @@ test.describe('B463 voice input', () => {
 
   test('keeps partial recognition editable after an engine error', async ({ page }, testInfo) => {
     const { getSentTurn } = await openConsultant(page);
-    await page.getByRole('button', { name: 'Голосовой ввод' }).click();
+    await startVoiceFromMenu(page);
     await page.getByRole('button', { name: 'Разрешить микрофон' }).click();
     await expect(page.getByText('Идёт запись')).toBeVisible();
     await page.evaluate(() => {
@@ -280,5 +281,26 @@ test.describe('B463 voice input', () => {
     await page.getByRole('button', { name: 'Отправить вопрос' }).click();
     await expect(page.getByText('Разберём ответ по фактам.')).toBeVisible();
     expect(getSentTurn()).toMatchObject({ content: 'Предварительный ответ без проверки.' });
+  });
+
+  test('the input mode menu offers voice and text, closes on Escape and keeps the text field', async ({
+    page,
+  }) => {
+    await openConsultant(page);
+    const trigger = page.getByRole('button', { name: 'Способ ввода' });
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('menuitemradio', { name: 'Голосовой ввод' })).toBeVisible();
+    await expect(page.getByRole('menuitemradio', { name: 'Текстовый ввод' })).toBeChecked();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menu', { name: 'Способ ввода' })).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(page.locator('#career-expert-input')).toBeVisible();
+
+    await trigger.click();
+    await page.getByRole('menuitemradio', { name: 'Текстовый ввод' }).click();
+    await expect(page.locator('#career-expert-input')).toBeFocused();
+    await startVoiceFromMenu(page);
+    await expect(page.getByText(/OpenQareer не получает аудиозапись/u)).toBeVisible();
   });
 });

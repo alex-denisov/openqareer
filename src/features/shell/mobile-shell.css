@@ -92,6 +92,7 @@
     min-inline-size: 0;
     block-size: var(--career-space-4);
     padding: 0;
+    font-size: var(--career-text-aux);
     line-height: 1;
   }
 
@@ -406,17 +407,21 @@
   }
 
   .career-shell > .panel-col .career-expert-composer .career-expert-input-row {
+    align-self: start;
     block-size: auto;
     min-block-size: var(--career-target-min);
   }
 
   .career-shell > .panel-col .career-expert-composer textarea {
+    display: block;
+    resize: none;
     inline-size: calc(100% - var(--career-space-2));
     block-size: var(--career-target-min);
     min-block-size: var(--career-target-min);
     max-block-size: var(--career-target-min);
     padding-block: var(--career-space-2);
-    padding-inline: var(--career-space-4) calc(var(--career-target-min) + var(--career-space-2));
+    padding-inline: var(--career-space-4)
+      calc(var(--career-target-min) + var(--career-space-6) + var(--career-space-2));
     border: 0;
     border-radius: calc(var(--career-target-min) / 2);
     background: var(--career-bg-elevated);
