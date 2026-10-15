@@ -160,7 +160,7 @@
   align-items: center;
   gap: var(--career-space-2);
   margin: 0;
-  font-size: var(--career-text-lg);
+  font-size: var(--career-text-md);
 }
 
 .career-profile-screen-quality-summary,

@@ -439,6 +439,8 @@
 .career-secondary-button,
 .career-icon-text-button {
   min-height: 44px;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -465,6 +467,18 @@
   color: var(--career-text);
   border-color: var(--career-line-strong);
   background: var(--career-surface-raised);
+}
+
+/* Headings take the scale and weight of the mockups unless a component sets its own: the
+   browser defaults (h2 24 px, h3 18.72 px, bold) are outside the type scale. */
+.career-shell :where(h2) {
+  font-size: var(--career-text-md);
+  font-weight: 600;
+}
+
+.career-shell :where(h3, h4) {
+  font-size: var(--career-text-sm);
+  font-weight: 600;
 }
 
 .career-main {
@@ -787,7 +801,7 @@
   padding: 0 18px;
   color: var(--career-accent-ink);
   background: var(--career-accent);
-  font-weight: 790;
+  font-weight: 600;
   transition:
     transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
     background 160ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -884,7 +898,7 @@
   background: var(--career-surface);
   font: inherit;
   font-size: var(--career-text-sm);
-  font-weight: 650;
+  font-weight: 600;
   cursor: pointer;
   transition:
     color 150ms ease,
@@ -13334,8 +13348,8 @@
 }
 
 .career-profile-screen-section-head h2 {
-  font-size: var(--career-text-lg);
-  font-weight: 700;
+  font-size: var(--career-text-md);
+  font-weight: 600;
   margin: 0;
 }
 
