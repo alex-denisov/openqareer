@@ -8,14 +8,24 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
 } from 'react';
-import { DotsThree, GearSix, Sparkle, Wallet, ShieldCheck } from '@phosphor-icons/react';
+import {
+  CaretRight,
+  DotsThree,
+  GearSix,
+  Lightning,
+  Notebook,
+  Sparkle,
+  TrendUp,
+  UserCircle,
+  Wallet,
+  ShieldCheck,
+} from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
 import { CareerTooltip, type TooltipTriggerProps } from './CareerTooltip';
 import { primaryNavigation, railNavigation, type SectionIcon } from './desktopNavigationItems';
 import { useEscapeLayer } from './escapeLayers';
 import type { ShellSection } from './shellNavigation';
-import { initialsFor } from './accountIdentity';
 
 export interface NavigationButtonProps {
   readonly label: string;
@@ -259,152 +269,92 @@ function CareerRailBottom({
 }
 
 interface CareerMobileTopbarProps {
-  readonly session?: AuthUser | null;
-  readonly sessionPending: boolean;
   readonly activeView: ShellSection;
   readonly title?: string;
   readonly ariaHidden?: boolean;
-  readonly tariffsAvailable: boolean;
-  readonly tariffsLockedReason: string;
-  readonly onNavigateHome: () => void;
-  readonly onNavigateTariffs: () => void;
-  readonly onOpenAccount: () => void;
+  readonly pendingProposalCount?: number;
+  readonly expertOpen?: boolean;
   readonly onOpenConsultant: () => void;
   readonly notificationsSlot?: ReactNode;
 }
 
 export function CareerMobileTopbar(props: CareerMobileTopbarProps) {
-  const isResponsesHeader = props.activeView === 'responses' && props.title === 'Отклики';
-  const content = isResponsesHeader ? (
-    <ResponsesMobileTopbar {...props} />
-  ) : (
-    <DefaultMobileTopbar {...props} />
-  );
+  const content =
+    props.activeView === 'responses' ? (
+      <ResponsesMobileTopbar {...props} />
+    ) : (
+      <DefaultMobileTopbar {...props} />
+    );
+
   return (
-    <header
-      className={isResponsesHeader ? 'career-topbar career-topbar--responses' : 'career-topbar'}
-      aria-hidden={props.ariaHidden || undefined}
-    >
+    <header className="career-topbar" aria-hidden={props.ariaHidden || undefined}>
       {content}
     </header>
   );
 }
 
-function ResponsesMobileTopbar({
+function ResponsesMobileTopbar(props: CareerMobileTopbarProps) {
+  return (
+    <MobileTopbarContent
+      title={props.title ?? 'Отклики'}
+      pendingProposalCount={props.pendingProposalCount}
+      expertOpen={props.expertOpen}
+      onOpenConsultant={props.onOpenConsultant}
+      notificationsSlot={props.notificationsSlot}
+    />
+  );
+}
+
+function MobileTopbarContent({
   title,
-  notificationsSlot,
+  pendingProposalCount = 0,
+  expertOpen,
   onOpenConsultant,
-}: CareerMobileTopbarProps) {
-  return (
-    <>
-      <div className="career-topbar-actions career-responses-topbar-notifications">
-        {notificationsSlot}
-      </div>
-      <h1 className="career-mobile-page-title">{title ?? 'Отклики'}</h1>
-      <button
-        type="button"
-        className="career-responses-consultant-trigger"
-        aria-label="Открыть консультанта"
-        onClick={onOpenConsultant}
-      >
-        <Sparkle aria-hidden="true" />
-      </button>
-    </>
-  );
-}
-
-function DefaultMobileTopbar({
-  session,
-  sessionPending,
-  title,
-  tariffsAvailable,
-  tariffsLockedReason,
-  onNavigateHome,
-  onNavigateTariffs,
-  onOpenAccount,
-  notificationsSlot,
-}: CareerMobileTopbarProps) {
-  return (
-    <>
-      {title ? (
-        <span className="career-mobile-page-title">{title}</span>
-      ) : (
-        <button
-          className="career-wordmark"
-          type="button"
-          onClick={onNavigateHome}
-          aria-label="openqareer, главная"
-        >
-          <BrandMark variant="mark" size={26} />
-        </button>
-      )}
-      <CareerMobileTopbarActions
-        session={session}
-        sessionPending={sessionPending}
-        tariffsAvailable={tariffsAvailable}
-        tariffsLockedReason={tariffsLockedReason}
-        notificationsSlot={notificationsSlot}
-        onNavigateTariffs={onNavigateTariffs}
-        onOpenAccount={onOpenAccount}
-      />
-    </>
-  );
-}
-
-function CareerMobileTopbarActions({
-  session,
-  sessionPending,
-  tariffsAvailable,
-  tariffsLockedReason,
-  onNavigateTariffs,
-  onOpenAccount,
   notificationsSlot,
 }: {
-  readonly session?: AuthUser | null;
-  readonly sessionPending: boolean;
-  readonly tariffsAvailable: boolean;
-  readonly tariffsLockedReason: string;
-  readonly onNavigateTariffs: () => void;
-  readonly onOpenAccount: () => void;
+  readonly title: string;
+  readonly pendingProposalCount?: number;
+  readonly expertOpen?: boolean;
+  readonly onOpenConsultant: () => void;
   readonly notificationsSlot?: ReactNode;
 }) {
   return (
-    <div className="career-topbar-actions">
-      {notificationsSlot}
+    <>
+      <div className="career-mobile-topbar-notifications">{notificationsSlot}</div>
+      <h1 className="career-mobile-page-title">{title}</h1>
       <button
-        className="career-mobile-tariffs"
+        className="career-mobile-consultant-trigger"
         type="button"
-        disabled={!tariffsAvailable}
-        aria-label={tariffsAvailable ? 'Тарифы' : `Тарифы. ${tariffsLockedReason}`}
-        onClick={onNavigateTariffs}
+        aria-label="Консультант: открыть"
+        aria-expanded={expertOpen || undefined}
+        aria-controls="career-consultant-sheet"
+        onClick={onOpenConsultant}
       >
-        <Wallet size={20} aria-hidden="true" />
-        <span>Тарифы</span>
+        <Sparkle size={18} weight="regular" aria-hidden="true" />
+        {pendingProposalCount > 0 ? (
+          <span className="career-mobile-consultant-dot" aria-hidden="true" />
+        ) : null}
       </button>
-      {session?.role === 'admin' ? (
-        <a href="/admin" className="career-topbar-admin">
-          Админка
-        </a>
-      ) : null}
-      <button
-        className="career-account-trigger"
-        type="button"
-        disabled={sessionPending}
-        onClick={() => onOpenAccount()}
-        aria-label="Открыть аккаунт"
-      >
-        <span className="career-rail-avatar" aria-hidden="true">
-          {initialsFor(session?.displayName ?? session?.username ?? null)}
-        </span>
-      </button>
-    </div>
+    </>
+  );
+}
+
+function DefaultMobileTopbar(props: CareerMobileTopbarProps) {
+  return (
+    <MobileTopbarContent
+      title={props.title ?? 'Сегодня'}
+      pendingProposalCount={props.pendingProposalCount}
+      expertOpen={props.expertOpen}
+      onOpenConsultant={props.onOpenConsultant}
+      notificationsSlot={props.notificationsSlot}
+    />
   );
 }
 
 function useMoreMenu(
   open: boolean,
   triggerRef: RefObject<HTMLButtonElement | null>,
-  menuRef: RefObject<HTMLDivElement | null>,
+  menuRef: RefObject<HTMLDivElement>,
   close: () => void,
 ) {
   useEffect(() => {
@@ -418,7 +368,8 @@ function useMoreMenu(
       if (
         !(target instanceof Node) ||
         menuRef.current?.contains(target) ||
-        triggerRef.current?.contains(target)
+        triggerRef.current?.contains(target) ||
+        (target instanceof Element && target.closest('.career-mobile-more-dismiss'))
       )
         return;
       close();
@@ -431,21 +382,31 @@ function useMoreMenu(
 interface MoreMenuItemData {
   readonly index: number;
   readonly label: string;
+  readonly icon: ReactNode;
   readonly active?: boolean;
   readonly disabled?: boolean;
   readonly lockedReason?: string;
   readonly onSelect: () => void;
 }
 
+interface MoreMenuProps extends NavigationStateProps {
+  readonly onOpenExpert: () => void;
+  readonly onOpenAccount: () => void;
+  readonly sessionPending: boolean;
+  readonly accountOpen: boolean;
+  readonly expertOpen: boolean;
+  readonly onClose: () => void;
+  readonly menuRef: RefObject<HTMLDivElement>;
+}
+
+type MoreMenuItemOptions = Omit<MoreMenuProps, 'menuRef'>;
+
 function useMoreMenuKeyboard(
-  isCareerEnabled: boolean,
-  isDiaryEnabled: boolean,
+  initialIndex: number,
   menuRef: RefObject<HTMLDivElement>,
   onClose: () => void,
 ) {
-  const [focusedIndex, setFocusedIndex] = useState(() =>
-    isCareerEnabled ? 0 : isDiaryEnabled ? 1 : 2,
-  );
+  const [focusedIndex, setFocusedIndex] = useState(initialIndex);
   const onKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       const items = Array.from(
@@ -503,137 +464,136 @@ function MoreMenuItem({
       onFocus={() => onFocusIndex(item.index)}
       onClick={item.onSelect}
     >
-      {item.label}
+      {item.icon}
+      <span>{item.label}</span>
+      <CaretRight size={16} weight="regular" aria-hidden="true" />
     </button>
+  );
+}
+
+function MoreMenuItems({
+  items,
+  focusedIndex,
+  onFocusIndex,
+}: {
+  readonly items: MoreMenuItemData[];
+  readonly focusedIndex: number;
+  readonly onFocusIndex: (index: number) => void;
+}) {
+  return items.map((item) => (
+    <MoreMenuItem
+      key={item.index}
+      item={item}
+      focusedIndex={focusedIndex}
+      onFocusIndex={onFocusIndex}
+    />
+  ));
+}
+
+function MobileMoreMenuDismissButton({ onClose }: { readonly onClose: () => void }) {
+  return (
+    <button
+      className="career-mobile-more-dismiss"
+      type="button"
+      aria-label="Закрыть меню разделов"
+      tabIndex={-1}
+      onClick={onClose}
+    />
   );
 }
 
 function MoreMenu({
   activeView,
-  isCareerEnabled,
-  careerLockedReason,
-  isDiaryEnabled,
+  isNavigable,
+  lockedReason,
   onNavigate,
   onOpenExpert,
+  onOpenAccount,
+  sessionPending,
+  accountOpen,
+  expertOpen,
   onClose,
   menuRef,
-}: {
-  readonly activeView: ShellSection;
-  readonly isCareerEnabled: boolean;
-  readonly careerLockedReason: string;
-  readonly isDiaryEnabled: boolean;
-  readonly onNavigate: (view: ShellSection) => void;
-  readonly onOpenExpert: () => void;
-  readonly onClose: () => void;
-  readonly menuRef: RefObject<HTMLDivElement>;
-}) {
-  const keyboard = useMoreMenuKeyboard(isCareerEnabled, isDiaryEnabled, menuRef, onClose);
+}: MoreMenuProps) {
   const items = buildMoreMenuItems({
     activeView,
-    isCareerEnabled,
-    careerLockedReason,
-    isDiaryEnabled,
+    isNavigable,
+    lockedReason,
     onNavigate,
     onOpenExpert,
+    onOpenAccount,
+    sessionPending,
+    accountOpen,
+    expertOpen,
     onClose,
   });
+  const firstEnabledIndex = items.find((item) => !item.disabled)?.index ?? 0;
+  const keyboard = useMoreMenuKeyboard(firstEnabledIndex, menuRef, onClose);
   return (
-    <div
-      className="career-mobile-more-menu"
-      id="career-mobile-more-menu"
-      role="menu"
-      aria-label="Ещё разделы"
-      ref={keyboard.menuRef}
-      tabIndex={-1}
-      onKeyDown={keyboard.onKeyDown}
-    >
-      {items.map((item) => (
-        <MoreMenuItem
-          key={item.index}
-          item={item}
+    <div className="career-mobile-more-backdrop">
+      <MobileMoreMenuDismissButton onClose={onClose} />
+      <div
+        className="career-mobile-more-menu"
+        id="career-mobile-more-menu"
+        role="menu"
+        aria-label="Ещё разделы"
+        ref={keyboard.menuRef}
+        tabIndex={-1}
+        onKeyDown={keyboard.onKeyDown}
+      >
+        <MoreMenuItems
+          items={items}
           focusedIndex={keyboard.focusedIndex}
           onFocusIndex={keyboard.setFocusedIndex}
         />
-      ))}
+      </div>
     </div>
   );
 }
 
-function buildMoreMenuItems({
-  activeView,
-  isCareerEnabled,
-  careerLockedReason,
-  isDiaryEnabled,
-  onNavigate,
-  onOpenExpert,
-  onClose,
-}: {
-  readonly activeView: ShellSection;
-  readonly isCareerEnabled: boolean;
-  readonly careerLockedReason: string;
-  readonly isDiaryEnabled: boolean;
-  readonly onNavigate: (view: ShellSection) => void;
-  readonly onOpenExpert: () => void;
-  readonly onClose: () => void;
-}): MoreMenuItemData[] {
-  const options = {
-    activeView,
-    isCareerEnabled,
-    careerLockedReason,
-    onNavigate,
-    onOpenExpert,
-    onClose,
-  };
-  return [
-    makeCareerMenuItem(options),
-    ...(isDiaryEnabled ? [makeDiaryMenuItem(options)] : []),
-    makeExpertMenuItem(options),
-  ];
-}
-
-function makeCareerMenuItem(options: {
-  readonly activeView: ShellSection;
-  readonly isCareerEnabled: boolean;
-  readonly careerLockedReason: string;
-  readonly onNavigate: (view: ShellSection) => void;
-  readonly onClose: () => void;
-}): MoreMenuItemData {
+function makeSectionMenuItem(
+  options: MoreMenuItemOptions,
+  index: number,
+  label: string,
+  target: ShellSection,
+  icon: ReactNode,
+): MoreMenuItemData {
+  const disabled = !options.isNavigable(target);
   return {
-    index: 0,
-    label: 'Карьера',
-    active: options.activeView === 'career',
-    disabled: !options.isCareerEnabled,
-    lockedReason: options.careerLockedReason,
+    index,
+    label,
+    icon,
+    active: options.activeView === target,
+    disabled,
+    lockedReason: disabled ? options.lockedReason(target) : undefined,
     onSelect: () => {
       options.onClose();
-      options.onNavigate('career');
+      options.onNavigate(target);
     },
   };
 }
 
-function makeDiaryMenuItem(options: {
-  readonly activeView: ShellSection;
-  readonly onNavigate: (view: ShellSection) => void;
-  readonly onClose: () => void;
-}): MoreMenuItemData {
+function makeAccountMenuItem(options: MoreMenuItemOptions): MoreMenuItemData {
   return {
-    index: 1,
-    label: 'Карьерный дневник',
-    active: options.activeView === 'diary',
+    index: 4,
+    label: 'Аккаунт',
+    icon: <UserCircle size={20} weight="regular" aria-hidden="true" />,
+    active: options.accountOpen,
+    disabled: options.sessionPending,
+    lockedReason: options.sessionPending ? 'Проверяем вход' : undefined,
     onSelect: () => {
       options.onClose();
-      options.onNavigate('diary');
+      options.onOpenAccount();
     },
   };
 }
 
-function makeExpertMenuItem(options: {
-  readonly onOpenExpert: () => void;
-  readonly onClose: () => void;
-}): MoreMenuItemData {
+function makeExpertMenuItem(options: MoreMenuItemOptions): MoreMenuItemData {
   return {
-    index: 2,
+    index: 5,
     label: 'Консультант',
+    icon: <Sparkle size={20} weight="regular" aria-hidden="true" />,
+    active: options.expertOpen,
     onSelect: () => {
       options.onClose();
       options.onOpenExpert();
@@ -641,84 +601,113 @@ function makeExpertMenuItem(options: {
   };
 }
 
-export function CareerMobileNavigation({
-  activeView,
-  isNavigable,
-  lockedReason,
-  onNavigate,
-  onOpenExpert,
-  ariaHidden,
-}: NavigationStateProps & { readonly onOpenExpert: () => void; readonly ariaHidden?: boolean }) {
-  const [moreOpen, setMoreOpen] = useState(false);
+function buildMoreMenuItems(options: MoreMenuItemOptions): MoreMenuItemData[] {
+  return [
+    makeSectionMenuItem(
+      options,
+      0,
+      'Карьера',
+      'career',
+      <TrendUp size={20} weight="regular" aria-hidden="true" />,
+    ),
+    makeSectionMenuItem(
+      options,
+      1,
+      'Карьерный дневник',
+      'diary',
+      <Notebook size={20} weight="regular" aria-hidden="true" />,
+    ),
+    makeSectionMenuItem(
+      options,
+      2,
+      'Автоматизация',
+      'automation',
+      <Lightning size={20} weight="regular" aria-hidden="true" />,
+    ),
+    makeSectionMenuItem(
+      options,
+      3,
+      'Тарифы',
+      'tariffs',
+      <Wallet size={20} weight="regular" aria-hidden="true" />,
+    ),
+    makeAccountMenuItem(options),
+    makeExpertMenuItem(options),
+  ];
+}
+
+function useMobileMoreMenu(ariaHidden?: boolean) {
+  const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const closeMenu = useCallback(() => {
-    setMoreOpen(false);
+  const close = useCallback(() => {
+    setOpen(false);
     triggerRef.current?.focus();
   }, []);
-  const dismissMenu = useCallback(() => setMoreOpen(false), []);
+  const toggle = useCallback(() => setOpen((current) => !current), []);
   useEffect(() => {
-    if (ariaHidden) setMoreOpen(false);
+    if (ariaHidden) setOpen(false);
   }, [ariaHidden]);
-  useMoreMenu(moreOpen, triggerRef, menuRef, dismissMenu);
+  useMoreMenu(open, triggerRef, menuRef, close);
+  return { open, triggerRef, menuRef, close, toggle };
+}
+
+function isMoreSectionActive(activeView: ShellSection, accountOpen: boolean) {
+  return (
+    accountOpen ||
+    activeView === 'career' ||
+    activeView === 'diary' ||
+    activeView === 'automation' ||
+    activeView === 'tariffs'
+  );
+}
+
+interface CareerMobileNavigationProps extends NavigationStateProps {
+  readonly onOpenExpert: () => void;
+  readonly onOpenAccount: () => void;
+  readonly sessionPending: boolean;
+  readonly accountOpen: boolean;
+  readonly expertOpen: boolean;
+  readonly ariaHidden?: boolean;
+}
+
+export function CareerMobileNavigation(props: CareerMobileNavigationProps) {
+  const menu = useMobileMoreMenu(props.ariaHidden);
+  const moreActive = isMoreSectionActive(props.activeView, props.accountOpen);
   return (
     <>
       <CareerMobileMoreMenu
-        open={moreOpen}
-        activeView={activeView}
-        isNavigable={isNavigable}
-        lockedReason={lockedReason}
-        onNavigate={onNavigate}
-        onOpenExpert={onOpenExpert}
-        onClose={closeMenu}
-        menuRef={menuRef}
+        open={menu.open}
+        activeView={props.activeView}
+        isNavigable={props.isNavigable}
+        lockedReason={props.lockedReason}
+        onNavigate={props.onNavigate}
+        onOpenExpert={props.onOpenExpert}
+        onOpenAccount={props.onOpenAccount}
+        sessionPending={props.sessionPending}
+        accountOpen={props.accountOpen}
+        expertOpen={props.expertOpen}
+        onClose={menu.close}
+        menuRef={menu.menuRef}
       />
       <CareerMobileNavigationBar
-        activeView={activeView}
-        isNavigable={isNavigable}
-        lockedReason={lockedReason}
-        onNavigate={onNavigate}
-        triggerRef={triggerRef}
-        ariaHidden={ariaHidden}
-        moreOpen={moreOpen}
-        onToggleMore={() => setMoreOpen((open) => !open)}
+        activeView={props.activeView}
+        isNavigable={props.isNavigable}
+        lockedReason={props.lockedReason}
+        onNavigate={props.onNavigate}
+        triggerRef={menu.triggerRef}
+        ariaHidden={props.ariaHidden}
+        moreOpen={menu.open}
+        moreActive={moreActive}
+        onToggleMore={menu.toggle}
       />
     </>
   );
 }
 
-function CareerMobileMoreMenu({
-  open,
-  activeView,
-  isNavigable,
-  lockedReason,
-  onNavigate,
-  onOpenExpert,
-  onClose,
-  menuRef,
-}: {
-  readonly open: boolean;
-  readonly activeView: ShellSection;
-  readonly isNavigable: (view: ShellSection) => boolean;
-  readonly lockedReason: (view: ShellSection) => string;
-  readonly onNavigate: (view: ShellSection) => void;
-  readonly onOpenExpert: () => void;
-  readonly onClose: () => void;
-  readonly menuRef: RefObject<HTMLDivElement>;
-}) {
+function CareerMobileMoreMenu({ open, ...props }: MoreMenuProps & { readonly open: boolean }) {
   if (!open) return null;
-  return (
-    <MoreMenu
-      activeView={activeView}
-      isCareerEnabled={isNavigable('career')}
-      careerLockedReason={lockedReason('career')}
-      isDiaryEnabled={isNavigable('diary')}
-      onNavigate={onNavigate}
-      onOpenExpert={onOpenExpert}
-      onClose={onClose}
-      menuRef={menuRef}
-    />
-  );
+  return <MoreMenu {...props} />;
 }
 
 function CareerMobileNavigationBar({
@@ -729,6 +718,7 @@ function CareerMobileNavigationBar({
   triggerRef,
   ariaHidden,
   moreOpen,
+  moreActive,
   onToggleMore,
 }: {
   readonly activeView: ShellSection;
@@ -738,14 +728,11 @@ function CareerMobileNavigationBar({
   readonly triggerRef: RefObject<HTMLButtonElement>;
   readonly ariaHidden?: boolean;
   readonly moreOpen: boolean;
+  readonly moreActive: boolean;
   readonly onToggleMore: () => void;
 }) {
   return (
-    <nav
-      className="career-mobile-nav"
-      aria-label="Основная навигация"
-      aria-hidden={ariaHidden || undefined}
-    >
+    <nav className="career-mobile-nav" aria-label="Разделы" aria-hidden={ariaHidden || undefined}>
       <CareerMobilePrimaryItems
         activeView={activeView}
         isNavigable={isNavigable}
@@ -759,9 +746,10 @@ function CareerMobileNavigationBar({
         aria-haspopup="menu"
         aria-expanded={moreOpen}
         aria-controls="career-mobile-more-menu"
+        aria-current={moreActive ? 'page' : undefined}
         onClick={onToggleMore}
       >
-        <DotsThree size={22} aria-hidden="true" />
+        <DotsThree size={24} weight="regular" aria-hidden="true" />
         <span>Ещё</span>
       </button>
     </nav>
@@ -781,9 +769,7 @@ function CareerMobilePrimaryItems({
         key={item.key}
         label={item.label}
         icon={item.icon}
-        active={
-          activeView === item.target || (activeView === 'automation' && item.target === 'responses')
-        }
+        active={activeView === item.target}
         disabled={!isNavigable(item.target)}
         lockedReason={lockedReason(item.target)}
         onClick={() => onNavigate(item.target)}

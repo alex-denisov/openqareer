@@ -185,7 +185,7 @@ describe('CareerExpertPanel copy', () => {
       />,
     );
 
-    expect(html).toContain('<aside');
+    expect(html).toContain('<section id="career-consultant-sheet"');
     expect(html).not.toContain('aria-modal="true"');
     expect(html).toContain('career-expert-starters');
     expect(html).toContain('aria-label="Голосовой ввод"');

@@ -11,6 +11,7 @@ import {
 } from '../opportunity/opportunityEngine';
 import { recordOutcome } from '../outcome/outcomeEngine';
 import { CareerWorkspaceShell } from './CareerWorkspaceShell';
+import { CareerMobileTopbar } from './CareerShellNavigation';
 import { CareerTariffsView } from './CareerTariffsView';
 import type { ShellSection } from './shellNavigation';
 
@@ -571,13 +572,38 @@ describe('CareerWorkspaceShell brand chrome', () => {
       expect(rail).toContain('<svg');
     });
 
-    it('keeps mobile tariffs visible and uses four sections plus More', () => {
-      expect(html).toContain('career-mobile-tariffs');
+    it('keeps tariff and account actions in More beside four primary sections', () => {
+      expect(html).not.toContain('career-mobile-tariffs');
+      expect(html).not.toContain('career-account-trigger');
       const navStart = html.indexOf('<nav class="career-mobile-nav"');
       const mobileNav = html.slice(navStart, html.indexOf('</nav>', navStart));
+      expect(mobileNav).toContain('aria-label="Разделы"');
       expect(mobileNav.match(/class="career-nav-button/gu)).toHaveLength(4);
       expect(mobileNav).toContain('career-mobile-more-button');
       expect(mobileNav).toContain('Ещё');
+    });
+
+    it('centres the screen title between notification and consultant controls', () => {
+      const html = renderToStaticMarkup(
+        <CareerMobileTopbar
+          activeView="today"
+          title="Сегодня"
+          pendingProposalCount={3}
+          onOpenConsultant={() => undefined}
+          notificationsSlot={<button type="button" aria-label="Уведомления: 3 новых" />}
+        />,
+      );
+
+      expect(html).toContain('career-mobile-topbar-notifications');
+      expect(html).toContain('<h1 class="career-mobile-page-title">Сегодня</h1>');
+      expect(html).toContain('career-mobile-consultant-trigger');
+      expect(html).toContain('career-mobile-consultant-dot');
+      expect(html.indexOf('career-mobile-topbar-notifications')).toBeLessThan(
+        html.indexOf('career-mobile-page-title'),
+      );
+      expect(html.indexOf('career-mobile-page-title')).toBeLessThan(
+        html.indexOf('career-mobile-consultant-trigger'),
+      );
     });
 
     it('styles the administrator link with a class, not a blocked attribute', () => {

@@ -17,7 +17,6 @@ const SECTIONS = ['Сегодня', 'Роль', 'Вакансии'] as const;
 const DESKTOP_WIDTHS = [1176, 1280, 1440] as const;
 const MAX_DISTINCT_SIZES = 6;
 const MIN_FONT_PX = 13;
-const CAPTION_SLACK_PX = 2;
 
 interface ReadabilityFacts {
   readonly textNodes: number;
@@ -270,6 +269,7 @@ test.describe('B232 readability gate', () => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     const errors = collectPageErrors(page);
     const unmatched = await mockSignedInCabinet(page);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
@@ -279,6 +279,24 @@ test.describe('B232 readability gate', () => {
       await assertReadable(page, label, 390, errors);
     }
     expect(unmatched).toEqual([]);
+  });
+
+  test('the mobile shell has no horizontal overflow from 280 to 414 pixels', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone only');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+
+    for (const width of [280, 320, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(page.locator('nav.career-mobile-nav')).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow).toBeLessThanOrEqual(0);
+    }
   });
 
   test('the collapsed desktop rail hides captions and the path opens only existing sections', async ({
@@ -372,27 +390,31 @@ test.describe('B232 readability gate', () => {
     await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    const spills = await page.evaluate((minSlack) => {
-      const cw = document.documentElement.clientWidth;
-      return [...document.querySelectorAll<HTMLElement>('.career-mobile-nav .career-nav-button')]
-        .map((button) => {
-          const caption = button.querySelector('span')?.getBoundingClientRect();
+    const items = await page
+      .locator(
+        '.career-mobile-nav .career-nav-button, .career-mobile-nav .career-mobile-more-button',
+      )
+      .evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const caption = button.querySelector('span');
           const box = button.getBoundingClientRect();
-          if (!caption) return null;
-          // 2 px of headroom on each side absorbs font-metric drift between
-          // macOS and the Linux CI runner.
-          const slack = Math.min(
-            box.right - caption.right,
-            caption.left - box.left,
-            cw - caption.right,
-          );
-          return slack < minSlack
-            ? `${button.textContent?.trim()} slack ${slack.toFixed(2)}px`
-            : null;
-        })
-        .filter(Boolean);
-    }, CAPTION_SLACK_PX);
-    expect(spills).toEqual([]);
+          return {
+            label: caption?.textContent?.trim(),
+            width: box.width,
+            height: box.height,
+            captionOverflow: caption
+              ? caption.scrollWidth - caption.clientWidth
+              : Number.POSITIVE_INFINITY,
+          };
+        }),
+      );
+
+    expect(items).toHaveLength(5);
+    expect(
+      items.every(
+        (item) => Math.abs(item.width - 69) <= 1 && item.height === 52 && item.captionOverflow <= 0,
+      ),
+    ).toBe(true);
   });
 
   test('the bottom nav carries no stray active-tick bar between icons', async ({ page }, info) => {
@@ -401,10 +423,17 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    const beforeContent = await page
-      .locator('nav.career-mobile-nav .career-nav-button.is-active')
-      .first()
-      .evaluate((el) => getComputedStyle(el, '::before').content);
+    const selected = page.locator('nav.career-mobile-nav .career-nav-button[aria-current="page"]');
+    const beforeContent = await selected.evaluate(
+      (element) => getComputedStyle(element, '::before').content,
+    );
+    const selectedBackground = await selected.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    const capsuleBackground = await page
+      .locator('nav.career-mobile-nav')
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+    expect(selectedBackground).not.toBe(capsuleBackground);
     expect(beforeContent).toBe('none');
   });
 
@@ -588,10 +617,19 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    const tariffsTrigger = page
-      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-      .first();
-    await tariffsTrigger.click();
+    if ((page.viewportSize()?.width ?? 1440) <= 760) {
+      await page
+        .getByRole('navigation', { name: 'Разделы' })
+        .getByRole('button', { name: 'Ещё' })
+        .click();
+      await page
+        .getByRole('menu', { name: 'Ещё разделы' })
+        .getByRole('menuitem', { name: 'Тарифы', exact: true })
+        .click();
+    } else {
+      await page.locator('.career-rail-wallet:visible').click();
+    }
+
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
@@ -610,7 +648,11 @@ test.describe('B232 readability gate', () => {
     await waitForCareerShell(page);
     await page.locator('button[aria-label="Профиль"]:visible').first().click();
 
-    await expect(page.getByRole('heading', { name: 'Профиль', exact: true })).toBeVisible();
+    const title =
+      (page.viewportSize()?.width ?? 1440) <= 760
+        ? page.locator('.career-topbar h1')
+        : page.locator('.career-desktop-topbar h1');
+    await expect(title).toHaveText('Профиль');
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
     await expect(page.getByText('FinCloud').locator('visible=true').first()).toBeVisible();
     await expect(page.getByText('Head of Product').first()).toBeVisible();
@@ -746,46 +788,39 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    // Profile screen: languages
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
       .getByRole('button', { name: 'Профиль', exact: true })
       .click();
     await expect(page.locator('.career-desktop-topbar h1')).toHaveText('Профиль');
-
     const languagesHeading = page.getByRole('heading', { name: 'Языки', exact: true });
     await expect(languagesHeading).toBeVisible();
     await languagesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
 
-    // B367: self-audit tab remains behind the consent-approval gate.
     await page.getByRole('tab', { name: /^Цифровой след/ }).click();
-    const sourcesHeading = page.getByRole('heading', {
-      name: 'Как вас видят',
-      exact: true,
-    });
+    const sourcesHeading = page.getByRole('heading', { name: 'Как вас видят', exact: true });
     await expect(sourcesHeading).toBeVisible();
     await sourcesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/sources-1176.png' });
 
-    // Tariffs at 1176
-    const tariffsTrigger = page
-      .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-      .first();
-    await tariffsTrigger.click();
+    await page.locator('.career-rail-wallet:visible').click();
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B336/tariffs-1176.png' });
 
-    // Tariffs at 390
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    const mobileTariffsTrigger = page
-      .locator('.career-mobile-tariffs:visible, .career-rail-wallet:visible')
-      .first();
-    await mobileTariffsTrigger.click();
+    await page
+      .getByRole('navigation', { name: 'Разделы' })
+      .getByRole('button', { name: 'Ещё' })
+      .click();
+    await page
+      .getByRole('menu', { name: 'Ещё разделы' })
+      .getByRole('menuitem', { name: 'Тарифы', exact: true })
+      .click();
     await expect(
       page.locator('.career-main-content').getByRole('heading', { name: 'Тарифы', exact: true }),
     ).toBeVisible();

@@ -61,6 +61,7 @@ interface CareerExpertPanelProps {
   initialSnapshot?: CandidateSnapshot;
   onIdentityChange?: (user: AuthUser) => void;
   onCommandPrepared?: () => void;
+  onProposalCountChange?: (count: number) => void;
   onOpenRoleSkillAssessment?: () => void;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
@@ -83,6 +84,7 @@ export function CareerExpertPanel({
   initialSnapshot,
   onIdentityChange = () => undefined,
   onCommandPrepared,
+  onProposalCountChange,
   onOpenRoleSkillAssessment,
   mobileExpanded = false,
   onToggleMobileExpanded,
@@ -198,10 +200,8 @@ export function CareerExpertPanel({
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!collapsed) closeButton.current?.focus();
-    return () => {
-      returnFocusTo?.focus();
-    };
-  }, [onClose, collapsed]);
+    return () => returnFocusTo?.focus();
+  }, [onClose, collapsed, overlay]);
   useEffect(() => {
     setUser(initialUser);
   }, [initialUser]);
@@ -324,14 +324,17 @@ export function CareerExpertPanel({
   const { count: proposalCount, refreshProposalCount } = usePendingConsultantProposals(
     latestResult,
     latestTurnIdempotencyKey,
+    onProposalCountChange,
+    loadingSnapshot,
   );
   const voiceActive = voiceState !== 'idle';
   const voiceTextLocked = voiceActive && voiceState !== 'transcribed';
   return (
-    <aside
+    <section
+      id="career-consultant-sheet"
       ref={panel}
       className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}${collapsed ? ' consultant-strip' : ''}${overlay ? ' consultant-overlay' : ''}`}
-      role={overlay ? 'dialog' : undefined}
+      role={overlay ? 'dialog' : 'complementary'}
       aria-modal={overlay ? true : undefined}
       data-mobile-expanded={mobileExpanded}
       aria-label={`Консультант · ${STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
@@ -378,7 +381,7 @@ export function CareerExpertPanel({
             <CaretDown size="1em" aria-hidden="true" />
           </button>
           <button
-            ref={closeButton}
+            ref={overlay ? undefined : closeButton}
             className="career-close-button"
             type="button"
             onClick={onClose}
@@ -397,13 +400,18 @@ export function CareerExpertPanel({
         </div>
         {onToggleMobileExpanded ? (
           <button
+            ref={overlay ? closeButton : undefined}
             className="career-expert-sheet-toggle"
             type="button"
-            onClick={onToggleMobileExpanded}
+            onClick={() => (mobileExpanded ? onClose() : onToggleMobileExpanded())}
             aria-expanded={mobileExpanded}
-            aria-label={mobileExpanded ? 'Свернуть консультанта' : 'Развернуть консультанта'}
+            aria-label="Развернуть или свернуть консультанта"
           >
-            {mobileExpanded ? <CaretDown size={20} /> : <CaretUp size={20} />}
+            {mobileExpanded ? (
+              <CaretDown size={20} aria-hidden="true" />
+            ) : (
+              <CaretUp size={20} aria-hidden="true" />
+            )}
           </button>
         ) : null}
       </header>
@@ -616,7 +624,9 @@ export function CareerExpertPanel({
           <label className="career-sr-only" htmlFor="career-expert-input">
             Сообщение карьерному консультанту
           </label>
-          <div className={`career-expert-input-row${voiceActive ? ' is-voice-active' : ''}`}>
+          <div
+            className={`career-expert-input-row${voiceActive ? ' is-voice-active' : ''}${content.trim() ? ' has-text' : ''}`}
+          >
             <textarea
               ref={inputRef}
               id="career-expert-input"
@@ -670,7 +680,7 @@ export function CareerExpertPanel({
           acceptError={skillQuizApplyError}
         />
       ) : null}
-    </aside>
+    </section>
   );
 }
 function ExpertPanelSkeleton() {
@@ -780,7 +790,6 @@ function formatDate(value: string) {
   }).format(new Date(`${value}T00:00:00Z`));
 }
 function messageFrom(reason: unknown): string {
-  if (reason instanceof CoachApiError) return reason.message;
   if (reason instanceof Error) return reason.message;
   return 'Не удалось открыть защищённый диалог. Попробуйте ещё раз.';
 }
