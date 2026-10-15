@@ -3,7 +3,7 @@ import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import * as fs from 'node:fs';
 
 test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
-  test('renders executive onboarding card, supports tabs, checklist and captures 1440, 1176, 390', async ({
+  test('renders executive onboarding card, supports tabs, checklist and captures 1440, 1000, 390', async ({
     page,
   }, testInfo) => {
     test.skip(
@@ -24,8 +24,9 @@ test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
     await page.screenshot({ path: 'output/playwright/B357/onboarding-1440.png' });
 
     // The approved 1440 Today screen no longer includes the onboarding block.
-    // It remains available in the legacy compact Today layout.
-    await page.setViewportSize({ width: 1176, height: 800 });
+    // It remains available in the legacy compact Today layout, which is used below the 1024 px
+    // line where the desktop composition of the mockups starts.
+    await page.setViewportSize({ width: 1000, height: 800 });
     await expect(card).toBeVisible();
 
     // Check title and advice box
@@ -57,8 +58,8 @@ test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
     await expect(card.locator('[data-testid="quantums-list"]')).toBeVisible();
     await expect(card.locator('[data-testid="quantums-list"]')).toContainText('Time to market');
 
-    // Screenshot 1176px after exercising the retained component.
-    await page.screenshot({ path: 'output/playwright/B357/onboarding-1176.png' });
+    // Screenshot 1000px after exercising the retained component.
+    await page.screenshot({ path: 'output/playwright/B357/onboarding-1000.png' });
 
     // --- 390px ---
     await page.setViewportSize({ width: 390, height: 844 });
