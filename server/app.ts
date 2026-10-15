@@ -1,6 +1,10 @@
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
-import Fastify, { type FastifyInstance, type FastifyServerOptions } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import type { ServerConfig } from './config';
 import type { CandidateStore } from './data/candidateStore';
 import type { HhVacancySample } from './connectors/hhVacancySearch';
@@ -62,6 +66,8 @@ import { registerCandidateCompanyRoutes } from './routes/candidateCompanyRoutes'
 import type { RobokassaGateway } from './billing/robokassaGateway';
 import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import { registerBillingRoutes } from './billing/billingRoutes';
+import { installRateLimitPolicy } from './routes/rateLimitPolicy';
+import { sessionCookieName } from './routes/helpers';
 import { createRobokassaGateway } from './billing/robokassaProtocol';
 import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
@@ -196,6 +202,14 @@ export function redactRequestUrlForLogs(value: unknown): string {
   }
 }
 
+function sessionTokenForRateLimit(config: ServerConfig): (request: FastifyRequest) => string {
+  return (request) => {
+    const authorization = request.headers.authorization;
+    if (authorization?.startsWith('Bearer ')) return authorization.slice('Bearer '.length).trim();
+    return request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+  };
+}
+
 async function createFastifyBase(
   config: ServerConfig,
   logDestination?: { write(line: string): void },
@@ -211,6 +225,7 @@ async function createFastifyBase(
   });
 
   await app.register(cookie);
+  installRateLimitPolicy(app, { tokenOf: sessionTokenForRateLimit(config) });
   await app.register(rateLimit, {
     global: false,
     keyGenerator: (request) => request.ip,

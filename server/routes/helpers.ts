@@ -100,7 +100,7 @@ export function csrfError(request: FastifyRequest, reply: FastifyReply): Fastify
   );
 }
 
-function sessionCookieName(secure: boolean): string {
+export function sessionCookieName(secure: boolean): string {
   return secure ? '__Host-openqareer_session' : 'openqareer_session';
 }
 
