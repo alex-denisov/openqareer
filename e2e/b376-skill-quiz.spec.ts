@@ -170,7 +170,8 @@ test.describe('B376 skill quiz dialogue & verification', () => {
           name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
         })
         .click();
-      await expect(expertPanel).not.toBeVisible();
+      await expect(expertPanel).toBeVisible();
+      await expect(expertPanel).toHaveClass(/consultant-strip/u);
     }
   });
 });

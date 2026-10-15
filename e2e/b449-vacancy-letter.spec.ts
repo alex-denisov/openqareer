@@ -440,12 +440,17 @@ async function reviewWithConsultant(page: Page): Promise<void> {
   await expect(panel).toBeVisible();
   await expect(panel.locator('header strong')).toHaveText('Консультант');
   await expect(panel.locator('header small')).toContainText('Вакансии');
-  await page
-    .getByRole('button', {
-      name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-    })
-    .click();
-  await expect(panel).toBeHidden();
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  if (viewportWidth <= 760) {
+    await expect(panel).toHaveAttribute('data-mobile-expanded', 'true');
+    await panel.getByRole('button', { name: 'Развернуть или свернуть консультанта' }).click();
+    await expect(panel).not.toHaveAttribute('data-mobile-expanded', 'true');
+    await expect(panel).toHaveAttribute('role', 'complementary');
+  } else {
+    await page.getByRole('button', { name: 'Свернуть консультанта в полосу' }).click();
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveClass(/consultant-strip/u);
+  }
 }
 
 async function showIntroductionPaths(page: Page): Promise<void> {

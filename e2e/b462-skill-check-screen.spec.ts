@@ -281,11 +281,15 @@ test('connects mobile checklist, suggestions, detail screens and role links', as
       await openAssessment(surface, width);
       await surface.getByRole('button', { name: 'Позже' }).click();
       await expect(surface.getByTestId('role-skill-assessment')).toHaveCount(0);
-      await surface
-        .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
-        .first()
-        .click();
       const consultant = surface.locator('.career-expert-panel');
+      if (!(await consultant.isVisible())) {
+        await surface
+          .getByRole('button', {
+            name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u,
+          })
+          .first()
+          .click();
+      }
       const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
       if (await expand.isVisible()) await expand.click();
       await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
