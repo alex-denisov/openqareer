@@ -4549,6 +4549,15 @@
   padding: 0;
 }
 
+/* On the desktop the shell frame owns the page edge: the topbar and the content carry
+   their own inline padding, so a cabinet screen must not add a second one (the title
+   of «Сегодня», «Профиль» and «Отклики» sat 30 px right of «Карьера» and «Вакансии»). */
+@media (min-width: 761px) {
+  .career-shell .career-main:has(.career-cabinet) {
+    padding: 0;
+  }
+}
+
 .career-cabinet {
   width: min(100%, 1460px);
   margin-inline: auto;
