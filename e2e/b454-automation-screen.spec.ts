@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { openAutomationMobile } from './helpers/open-automation-mobile';
 import { mkdir } from 'node:fs/promises';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -42,11 +43,7 @@ async function openAutomation(page: Page) {
   await seedWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
-    await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-    await page
-      .getByRole('group', { name: 'Раздел откликов' })
-      .getByRole('button', { name: 'Автоматизация', exact: true })
-      .click();
+    await openAutomationMobile(page);
     await expect(page.locator('.career-mobile-page-title')).toHaveText('Отклики');
     await expect(
       page

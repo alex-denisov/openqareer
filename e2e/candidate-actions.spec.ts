@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAutomationMobile } from './helpers/open-automation-mobile';
 
 const APPLICATION = {
   id: 'action-app-1',
@@ -176,11 +177,7 @@ async function openAutomationFromResponses(page: Page): Promise<void> {
       .click();
     return;
   }
-  await page.locator('button[aria-label="Отклики"]:visible').first().click();
-  const navigation = page.getByRole('group', { name: 'Раздел откликов' });
-  const automation = navigation.getByRole('button', { name: 'Автоматизация', exact: true });
-  await expect(automation).toBeVisible();
-  await automation.click();
+  await openAutomationMobile(page);
 }
 
 test('candidate reviews and submits a prepared action on desktop and mobile', async ({

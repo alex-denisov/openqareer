@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page, type Route } from '@playwright/t
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAutomationMobile } from './helpers/open-automation-mobile';
 
 const EVIDENCE_DIR = join(process.cwd(), 'test-results', 'evidence', 'AUD-6');
 const cadence = {
@@ -120,11 +121,7 @@ async function enterAutomationFromResponses(page: Page): Promise<void> {
       .click();
     return;
   }
-  await page.getByRole('button', { name: 'Отклики', exact: true }).click();
-  await page
-    .getByRole('group', { name: 'Раздел откликов' })
-    .getByRole('button', { name: 'Автоматизация', exact: true })
-    .click();
+  await openAutomationMobile(page);
 }
 
 function fulfillError(route: Route, status: number, code: string, message: string) {
