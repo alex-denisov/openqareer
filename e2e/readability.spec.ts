@@ -200,9 +200,10 @@ async function openSection(
       if (await mobileSummary.isVisible()) {
         await mobileSummary.click();
       } else {
+        await page.locator('nav.career-mobile-nav').getByRole('button', { name: 'Ещё' }).click();
         await page
-          .getByRole('button', { name: /Роль\./ })
-          .first()
+          .getByRole('menu', { name: 'Ещё разделы' })
+          .getByRole('menuitem', { name: 'Карьера', exact: true })
           .click();
       }
     }
@@ -273,7 +274,7 @@ test.describe('B232 readability gate', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    for (const label of SECTIONS) {
+    for (const label of ['Сегодня', 'Вакансии'] as const) {
       await openSection(page, label);
       await page.screenshot({ path: info.outputPath(`${label}-390.png`), fullPage: true });
       await assertReadable(page, label, 390, errors);
@@ -296,6 +297,40 @@ test.describe('B232 readability gate', () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       );
       expect(overflow).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test('Today fits 320, 390 and 414 without overflow or undersized touch targets', async ({
+    page,
+  }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'phone responsive acceptance');
+    await mockSignedInCabinet(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+    await openSection(page, 'Сегодня');
+
+    for (const width of [320, 390, 414]) {
+      await page.setViewportSize({ width, height: 844 });
+      await expect(page.locator('.career-today-mobile')).toBeVisible();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflow, `Today overflows at ${width}px`).toBeLessThanOrEqual(0);
+      const undersizedTargets = await page.evaluate(() =>
+        [
+          ...document.querySelectorAll<HTMLElement>(
+            '.career-today-mobile button, .career-today-mobile a',
+          ),
+        ]
+          .filter((element) => element.getClientRects().length > 0)
+          .map((element) => ({
+            name: element.getAttribute('aria-label') ?? element.textContent?.trim() ?? '',
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+          }))
+          .filter((target) => target.width < 44 || target.height < 44),
+      );
+      expect(undersizedTargets, `Today touch targets at ${width}px`).toEqual([]);
     }
   });
 
@@ -345,46 +380,23 @@ test.describe('B232 readability gate', () => {
     expect(unmatched).toEqual([]);
   });
 
-  test('the path indicator on the phone is a one-line current-step summary without overflow', async ({
-    page,
-  }, info) => {
-    test.skip(info.project.name !== 'mobile-390', 'phone only');
+  test('Today mobile omits the path indicator from the approved screen', async ({ page }, info) => {
+    test.skip(info.project.name !== 'mobile-390', 'Today mobile surface');
     const unmatched = await mockSignedInCabinet(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
     await openSection(page, 'Сегодня');
 
-    const facts = await page.evaluate(() => {
-      const path = document.querySelector<HTMLElement>('.career-path');
-      const summary = document.querySelector<HTMLElement>('.career-path-mobile-summary');
-      if (!path || !summary) return null;
-      const pathBox = path.getBoundingClientRect();
-      const summaryBox = summary.getBoundingClientRect();
-      return {
-        pathHeight: pathBox.height,
-        summaryHeight: summaryBox.height,
-        pathOverflow: path.scrollWidth - path.clientWidth,
-      };
+    await expect(page.locator('.career-page-header')).toBeHidden();
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({
+      path: info.outputPath('today-mobile-without-path-390.png'),
+      fullPage: true,
     });
-
-    expect(facts).not.toBeNull();
-    expect(facts!.pathHeight).toBeLessThanOrEqual(48);
-    expect(facts!.summaryHeight).toBeGreaterThanOrEqual(44);
-    expect(facts!.pathOverflow).toBeLessThanOrEqual(0);
-    await expect(page.locator('.career-path-mobile-summary')).toContainText(/^Шаг \d из 5/);
     expect(unmatched).toEqual([]);
   });
 
-  /**
-   * B248, owner review 2026-09-23 (390px) — the rail's left-edge active tick
-   * floated between «Сегодня» and «Профиль» in the bottom nav, with nothing
-   * for it to mark there. Colour alone still names the active item.
-   */
-  /**
-   * CI 2026-09-25: «Консультант» in a fifth of 390 px ran 1.3 px past the
-   * screen on Linux fonts and failed every screen's overflow check. Every
-   * caption must fit its own button, so the strip never depends on metrics.
-   */
   test('every bottom-nav caption fits its button and the screen', async ({ page }, info) => {
     test.skip(info.project.name !== 'mobile-390', 'phone only');
     await mockSignedInCabinet(page);
@@ -682,10 +694,9 @@ test.describe('B232 readability gate', () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    await page.screenshot({ path: 'output/playwright/C52/rail-and-path-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C52/path-indicator-390.png' });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/C52/rail-and-today-390.png' });
   });
 
   test('capture C73 screenshots: Today drops the old path; B450 Responses and B446 vacancies stay focused', async ({
@@ -712,15 +723,13 @@ test.describe('B232 readability gate', () => {
     await expect(page.locator('.career-path')).toBeHidden();
     await page.screenshot({ path: 'output/playwright/C73/screen-responses-1440.png' });
 
-    // 390 viewport keeps its current path summary.
+    // The approved mobile Today screen omits the old path summary.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/C73/screen-today-390.png' });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/C73/path-indicator-today-390.png' });
 
     await openSection(page, 'Вакансии');
     await expect(page.locator('.career-path')).toHaveCount(0);
@@ -758,9 +767,12 @@ test.describe('B232 readability gate', () => {
       .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1000.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-390.png' });
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await page.screenshot({
+      path: 'output/playwright/B344/d9-today-without-path-390.png',
+      fullPage: true,
+    });
   });
 
   test('capture B335 screenshots: fixed rail at 1176 and mobile', async ({ page }, info) => {

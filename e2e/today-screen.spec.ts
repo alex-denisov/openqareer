@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
+import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAutomationMobile } from './helpers/open-automation-mobile';
 
 /**
  * B251 S5 — «Сегодня»: дайджест дня и очередь решений, подключённые вместо
@@ -83,8 +85,12 @@ const SNAPSHOT = {
 
 const TODAY_NEXT_INTERVIEW_AT = new Date(Date.now() + 48 * 60 * 60 * 1_000).toISOString();
 const S10_EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
+const ACC_A1_EVIDENCE_DIR = e2eEvidenceDirectory('ACC-A-1');
 
-test.beforeAll(() => mkdirSync(S10_EVIDENCE_DIR, { recursive: true }));
+test.beforeAll(() => {
+  mkdirSync(S10_EVIDENCE_DIR, { recursive: true });
+  mkdirSync(ACC_A1_EVIDENCE_DIR, { recursive: true });
+});
 
 async function captureS10Today(page: Page, name: string): Promise<void> {
   const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
@@ -97,6 +103,31 @@ async function captureS10Today(page: Page, name: string): Promise<void> {
   });
   await page.screenshot({ path: join(S10_EVIDENCE_DIR, `${name}.png`), fullPage: true });
   await captureCareerHarness(page, join(S10_EVIDENCE_DIR, `${name}.html`));
+  await page.setViewportSize(viewport);
+}
+
+async function captureAccA1Today(page: Page, name: string): Promise<void> {
+  const viewport = page.viewportSize() ?? { width: 390, height: 844 };
+  const scrollHeight = await page.evaluate(() => {
+    const scrollables = [...document.querySelectorAll<HTMLElement>('*')].filter((element) => {
+      const style = getComputedStyle(element);
+      return /(auto|scroll)/u.test(style.overflowY) && element.scrollHeight > element.clientHeight;
+    });
+    return Math.max(
+      document.documentElement.scrollHeight,
+      ...scrollables.map((element) => element.getBoundingClientRect().top + element.scrollHeight),
+    );
+  });
+  await page.setViewportSize({
+    width: viewport.width,
+    height: Math.max(viewport.height, scrollHeight),
+  });
+  const profileRow = page.locator(
+    '.career-today-mobile .pm-group[aria-label="Дополнить профиль"] .pm-row',
+  );
+  if (await profileRow.count()) await profileRow.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: join(ACC_A1_EVIDENCE_DIR, `${name}.png`), fullPage: true });
+  await captureCareerHarness(page, join(ACC_A1_EVIDENCE_DIR, `${name}.html`));
   await page.setViewportSize(viewport);
 }
 
@@ -165,7 +196,12 @@ const TODAY_SNAPSHOT = {
     },
   ],
   followUps: [
-    { applicationId: 'app-1', company: 'Peraton', title: 'Enterprise Architect', status: 'today' },
+    {
+      applicationId: 'app-1',
+      company: 'Peraton',
+      title: 'Enterprise Architect',
+      status: 'overdue',
+    },
     { applicationId: 'app-3', company: 'Genetec', title: 'обещанный ответ', status: 'overdue' },
     { applicationId: 'app-4', company: 'HRTx', title: 'thank-you после раунда 1', status: 'sent' },
   ],
@@ -187,12 +223,6 @@ interface LinkedinStopStatusFixture {
   readonly updatedAt: string | null;
 }
 
-const LINKEDIN_STOP_STATUS: LinkedinStopStatusFixture = {
-  paused: true,
-  reason: 'platform_restricted' as const,
-  canResume: true,
-  updatedAt: '2026-10-06T10:00:00.000Z',
-};
 const LINKEDIN_RESUMED_STATUS: LinkedinStopStatusFixture = {
   paused: false,
   reason: null,
@@ -230,9 +260,17 @@ function todayApplication(
     followUpDueAt: stage === 'applied' || stage === 'responded' ? TODAY_NEXT_INTERVIEW_AT : null,
     stageChangedAt: '2026-09-20T10:00:00.000Z',
     version: 1,
-    createdAt: '2026-09-15T10:00:00.000Z',
+    createdAt: '2026-09-20T10:00:00.000Z',
     updatedAt: '2026-09-20T10:00:00.000Z',
-    followUp: null,
+    followUp:
+      stage === 'applied'
+        ? {
+            dueAt: '2026-09-23T00:00:00.000Z',
+            urgency: 'overdue',
+            source: 'standard_schedule',
+            daysSinceContact: 6,
+          }
+        : null,
     whoseTurn: 'company',
     materials: { coverLetter: true, resume: true },
     nearestInterview,
@@ -460,96 +498,246 @@ async function openApp(page: Page): Promise<void> {
 }
 
 test.describe('B251 today screen', () => {
-  test('shows the legacy digest and queue on mobile', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop Today uses the S10 layout.');
+  test('shows the approved mobile Today screen and saves full-height evidence', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Today 390 acceptance.');
     await stubSession(page, PENDING_TODAY_SNAPSHOT);
     await seedWorkspace(page);
     await openApp(page);
 
-    await expect(page.locator('.career-today-mobile')).toBeVisible();
-    await expect(page.locator('.career-today-return-banner')).toBeVisible();
-    await expect(page.locator('.career-today-since-hint')).toContainText(
-      'Genetec запросили доступность на этой неделе',
-    );
-    await expect(page.locator('.career-today-digest')).toBeVisible();
-    const queue = page.locator('.career-today-queue');
-    await expect(queue.getByRole('listitem')).toHaveCount(5);
-    await expect(queue.locator('.career-today-consultant-card')).toContainText(
-      'Добавим полный источник',
-    );
-    await expect(queue).toContainText('Peraton');
-    await captureS10Today(page, 'today-390-legacy');
+    const mobile = page.locator('.career-today-mobile');
+    const decision = page.getByRole('region', { name: 'Следующее решение' });
+    const queue = page.getByRole('region', { name: 'Очередь дня' });
+    const funnel = page.getByRole('region', { name: 'Воронка за 30 дней' });
+    await expect(mobile).toBeVisible();
+    await expect(page.locator('.career-page-header')).toBeHidden();
+    await expect(page.locator('.career-path')).toBeHidden();
+    await expect(page.getByText('ЛИЧНЫЙ КАБИНЕТ', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Спросить консультанта' })).toHaveCount(0);
+    await expect(decision).toContainText('Добавим полный источник');
+    await expect(decision.locator('.tm-main')).toBeEnabled();
+    await expect(decision.getByRole('button', { name: 'Почему это решение' })).toBeEnabled();
+    await expect(queue.getByTestId('today-mobile-queue-row')).toHaveCount(4);
+    await expect(queue.locator('.pm-row.is-warn')).toHaveCount(1);
+    await expect(funnel.getByRole('listitem')).toHaveCount(4);
+    await expect(funnel).toContainText('Нет проверенных данных');
+    await expect(mobile.getByRole('button', { name: /Перейти в профиль/u })).toBeEnabled();
+    await expect(
+      mobile.locator(
+        '.career-today-return-banner, .career-today-digest, .career-momentum-widget, .career-drafts, .career-onboarding',
+      ),
+    ).toHaveCount(0);
+    const boxes = await mobile.evaluate((root) => {
+      const rect = (selector: string) => {
+        const box = root.querySelector(selector)?.getBoundingClientRect();
+        return box ? { x: box.x, y: box.y, width: box.width, height: box.height } : null;
+      };
+      const hero = root.querySelector<HTMLElement>('.tm-hero');
+      const heroStyles = hero ? getComputedStyle(hero) : null;
+      const heroChildren = hero
+        ? [...hero.children].map((child) => {
+            const box = child.getBoundingClientRect();
+            const style = getComputedStyle(child);
+            return {
+              tag: child.tagName,
+              className: child.getAttribute('class'),
+              text: child.textContent?.trim(),
+              height: box.height,
+              fontSize: style.fontSize,
+              lineHeight: style.lineHeight,
+              minBlockSize: style.minBlockSize,
+            };
+          })
+        : [];
+      const queueRowHeights = [
+        ...root.querySelectorAll<HTMLElement>('.pm-group[aria-label="Очередь дня"] .pm-row'),
+      ].map((row) => row.getBoundingClientRect().height);
+      return {
+        root: rect('.career-today-mobile'),
+        hero: rect('.tm-hero'),
+        heroGridRows: heroStyles?.gridTemplateRows,
+        heroGap: heroStyles?.rowGap,
+        heroPaddingBlock: heroStyles
+          ? [heroStyles.paddingBlockStart, heroStyles.paddingBlockEnd]
+          : null,
+        heroChildren,
+        main: rect('.tm-main'),
+        later: rect('.tm-later'),
+        why: rect('.tm-why'),
+        queue: rect('.pm-group[aria-label="Очередь дня"]'),
+        list: rect('.pm-group[aria-label="Очередь дня"] .pm-list'),
+        queueRowHeights,
+        funnel: rect('.tm-funnel'),
+        profile: rect('.pm-group[aria-label="Дополнить профиль"] .pm-row'),
+      };
+    });
+    const expectSize = (
+      box: { width: number; height: number } | null,
+      width: number,
+      height: number,
+      label: string,
+    ) => {
+      expect(box, label).not.toBeNull();
+      if (!box) return;
+      expect(Math.abs(box.width - width), label).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(box.height - height),
+        `${label}; hero details: ${JSON.stringify({ children: boxes.heroChildren, rows: boxes.heroGridRows, gap: boxes.heroGap, padding: boxes.heroPaddingBlock })}`,
+      ).toBeLessThanOrEqual(1);
+    };
+    expectSize(boxes.hero, 358, 328, 'hero 358x328');
+    expectSize(boxes.main, 326, 48, 'primary action 326x48');
+    expectSize(boxes.later, 184, 44, 'defer action 184x44');
+    expectSize(boxes.why, 326, 48, 'consultant action 326x48');
+    expect(Math.abs((boxes.list?.width ?? 0) - 358)).toBeLessThanOrEqual(1);
+    expect(boxes.queueRowHeights).toHaveLength(4);
+    expect(
+      boxes.queueRowHeights.every(
+        (height) => Math.abs(height - 60) <= 1 || Math.abs(height - 79) <= 1,
+      ),
+    ).toBe(true);
+    expectSize(boxes.funnel, 358, 84, 'funnel 358x84');
+    expect(Math.abs((boxes.profile?.width ?? 0) - 358)).toBeLessThanOrEqual(1);
+    const profileHeight = boxes.profile?.height ?? 0;
+    expect(
+      Math.abs(profileHeight - 60) <= 1 || Math.abs(profileHeight - 79) <= 1,
+      `profile row height ${profileHeight}`,
+    ).toBe(true);
+    expect(boxes.queue?.x).toBe(boxes.hero?.x);
+    expect(boxes.funnel?.x).toBe(boxes.hero?.x);
+    expect(boxes.profile?.x).toBe(boxes.hero?.x);
+    await captureAccA1Today(page, '390-default');
     await captureCareerHarness(page, testInfo.outputPath('today-screen-mobile.html'));
   });
 
-  test('marks a follow-up as sent from the day queue and removes it after refresh', async ({
+  test('accepting the next decision completes the profile navigation', async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-390', 'Desktop queue rows route to Responses.');
+    test.skip(testInfo.project.name !== 'mobile-390', 'Decision acceptance at 390.');
     await stubSession(page);
     await seedWorkspace(page);
     await openApp(page);
 
-    const followUp = page
-      .locator('.career-today-queue')
-      .getByRole('listitem')
-      .filter({ hasText: 'Peraton' });
-    await expect(followUp).toBeVisible();
-    await followUp.click();
-    const markSent = followUp.getByRole('button', { name: 'Отметить отправленным' });
-    await expect(markSent).toBeVisible();
-    await markSent.click();
-    await expect(followUp).toHaveCount(0);
+    const accept = page.locator('.career-today-mobile .tm-main');
+    await expect(accept).toBeEnabled();
+    await accept.click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
   });
 
-  test('B395: shows the LinkedIn stop, then resumes only after a manual candidate action', async ({
+  test('deferring the next decision hides it until the next day', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Decision deferral at 390.');
+    await stubSession(page);
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const decision = page.getByRole('region', { name: 'Следующее решение' });
+    await decision.getByRole('button', { name: 'Отложить до завтра' }).click();
+    await expect(decision).toContainText('Нет проверенного следующего шага');
+    await expect(decision.locator('.tm-main')).toHaveCount(0);
+    await expect(decision.getByRole('button', { name: 'Отложить до завтра' })).toHaveCount(0);
+    await captureAccA1Today(page, '390-deferred');
+
+    await page.locator('.career-mobile-nav').getByRole('button', { name: 'Профиль' }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
+    await page.locator('.career-mobile-nav').getByRole('button', { name: 'Сегодня' }).click();
+    await expect(
+      page.getByRole('region', { name: 'Следующее решение' }).locator('.tm-main'),
+    ).toHaveCount(0);
+  });
+
+  test('queue rows and profile shortcut navigate to their real destinations on mobile', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Today navigation at 390.');
+    await stubSession(page);
+    await seedWorkspace(page);
+    await openApp(page);
+    await captureAccA1Today(page, '390-navigation');
+
+    await page.getByRole('button', { name: /Открыть: Peraton/u }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
+    await page.locator('.career-mobile-nav').getByRole('button', { name: 'Сегодня' }).click();
+    await page.getByRole('button', { name: /Открыть: Genetec/u }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Вакансии');
+    await page.locator('.career-mobile-nav').getByRole('button', { name: 'Сегодня' }).click();
+
+    const profileShortcut = page.getByRole('button', { name: /Перейти в профиль/u });
+    await profileShortcut.click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Профиль');
+  });
+
+  test('keeps the follow-up action available after a Today row opens Responses', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Follow-up transfer on mobile.');
+    await stubSession(page);
+    await seedWorkspace(page);
+    await page.route('**/api/v1/candidate/applications/app-1/events', async (route) => {
+      expect(route.request().postDataJSON()).toMatchObject({ kind: 'follow_up_sent' });
+      await route.fulfill({
+        json: {
+          data: {
+            ...TODAY_TRACKER_APPLICATIONS[0],
+            followUp: {
+              dueAt: '2026-10-20T00:00:00.000Z',
+              urgency: 'upcoming',
+              source: 'standard_schedule',
+              daysSinceContact: 0,
+            },
+          },
+        },
+      });
+    });
+    await openApp(page);
+
+    await page.getByRole('button', { name: /Открыть: Peraton/u }).click();
+    await expect(page.locator('.career-page-header h1')).toHaveText('Отклики');
+    const response = page
+      .getByRole('list', { name: 'По сроку шага' })
+      .getByRole('listitem')
+      .filter({ hasText: 'Peraton' });
+    await response.getByRole('button', { name: /Открыть следующий шаг/u }).click();
+
+    const selectedPanel = page.locator('.career-responses-selected');
+    const markSent = selectedPanel.getByRole('button', { name: 'Напоминание отправлено' });
+    await expect(markSent).toBeVisible();
+    const sentRequest = page.waitForRequest(
+      (request) =>
+        request.method() === 'POST' &&
+        request.url().includes('/candidate/applications/app-1/events'),
+    );
+    await markSent.click();
+    await sentRequest;
+    await expect(markSent).toHaveCount(0);
+    await expect(selectedPanel).toContainText('Отправлен');
+  });
+
+  test('B395: LinkedIn drafts stay reachable in Automation, outside mobile Today', async ({
     page,
   }, testInfo) => {
     test.skip(
       testInfo.project.name !== 'mobile-390',
-      'The LinkedIn draft card stays in compact Today.',
+      'Checks the mobile Automation entry from the More menu.',
     );
-    const session = await stubSession(page, TODAY_SNAPSHOT, LINKEDIN_STOP_STATUS);
+    await mockSignedInCabinet(page, { candidateId: CANDIDATE.candidateId });
     await seedWorkspace(page);
-    await openApp(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+    await page.locator('.career-mobile-nav').getByRole('button', { name: 'Сегодня' }).click();
 
-    const stop = page.getByRole('status').filter({ hasText: 'Действия LinkedIn приостановлены' });
-    await expect(stop).toContainText('LinkedIn ограничил запрос');
-    const resumeButton = page.getByRole('button', { name: 'Возобновить вручную' });
-    await expect(resumeButton).toBeEnabled();
-
-    const width = page.viewportSize()?.width;
-    expect(width).toBe(testInfo.project.name === 'desktop-1440' ? 1440 : 390);
-    await stop.scrollIntoViewIfNeeded();
-    const overflow = await page.evaluate(
-      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-    );
-    expect(overflow).toBeLessThanOrEqual(0);
-    await captureCareerHarness(
-      page,
-      testInfo.outputPath(`b395-linkedin-stop-${width}.html`),
-      '.career-drafts',
-    );
-    await captureCareerHarness(page, testInfo.outputPath(`b395-today-${width}.html`));
-    await page.screenshot({
-      path: testInfo.outputPath(`b395-linkedin-stop-${width}.png`),
-      fullPage: true,
-    });
-
-    await resumeButton.click();
-    await expect(page.getByRole('status').filter({ hasText: 'Пауза снята.' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Возобновить вручную' })).toHaveCount(0);
-    expect(session.resumeRequest()).toEqual({ active: false, platform: 'linkedin' });
-    await page.screenshot({
-      path: testInfo.outputPath(`b395-linkedin-resumed-${width}.png`),
-      fullPage: true,
-    });
+    await expect(page.locator('.career-drafts')).toHaveCount(0);
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    await captureAccA1Today(page, '390-linkedin-not-on-today');
+    await openAutomationMobile(page);
+    await page.getByRole('tab', { name: 'Посты LinkedIn', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Черновики для LinkedIn' })).toBeVisible();
   });
 
-  test('S10-VIS: the new Today layout fits 1440 and 390 without horizontal overflow', async ({
+  test('keeps desktop Today unchanged and fits the approved mobile screen at 390', async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop-1440', 'Captures both target widths once.');
+    test.skip(testInfo.project.name !== 'desktop-1440', 'Captures desktop and mobile once.');
     await stubSession(page);
     await seedWorkspace(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -563,19 +751,24 @@ test.describe('B251 today screen', () => {
     await expect(page.getByRole('region', { name: 'Следующее решение' })).toContainText(
       'Добавим полный источник',
     );
-    await expect(page.getByRole('region', { name: 'Очередь дня' })).toBeVisible();
-    await expect(page.getByRole('region', { name: 'Воронка за 30 дней' })).toBeVisible();
+    await expect(page.locator('.career-today-queue-desktop')).toBeVisible();
     await captureS10Today(page, 'today-1440');
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.career-today-mobile')).toBeVisible();
+    const mobile = page.locator('.career-today-mobile');
+    await expect(mobile).toBeVisible();
     await expect(page.locator('.career-today-desktop')).toBeHidden();
-    await expect(page.locator('.career-today-digest')).toBeVisible();
+    await expect(mobile.locator('.tm-hero')).toBeVisible();
+    await expect(mobile.locator('.career-today-digest, .career-momentum-widget')).toHaveCount(0);
+    await expect(mobile.getByTestId('today-mobile-queue-row')).toHaveCount(4);
+    await expect(mobile.locator('.tm-funnel [role="listitem"]')).toHaveCount(4);
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(narrowOverflow).toBeLessThanOrEqual(0);
     await captureS10Today(page, 'today-390');
+    await captureAccA1Today(page, '390-desktop-switch');
+    await captureCareerHarness(page, testInfo.outputPath('today-screen-mobile.html'));
   });
 
   test('keeps an empty mobile queue honest when no consultant action exists', async ({
@@ -589,9 +782,123 @@ test.describe('B251 today screen', () => {
     await seedEmptyWorkspace(page);
     await openApp(page);
 
-    const queue = page.locator('.career-today-queue');
-    await expect(queue).toContainText(/Решений на сегодня нет/u);
-    await expect(page.locator('.career-today-consultant-card')).toHaveCount(0);
+    const decision = page.getByRole('region', { name: 'Следующее решение' });
+    const queue = page.getByRole('region', { name: 'Очередь дня' });
+    await expect(decision).toContainText('Нет проверенного следующего шага');
+    await expect(decision.getByRole('button', { name: 'Обсудить' })).toBeEnabled();
+    await expect(queue.locator('.pm-empty')).toHaveText(
+      'Очередь дня пуста. Новые задачи появятся здесь.',
+    );
+    await expect(queue.getByTestId('today-mobile-queue-row')).toHaveCount(0);
+    await captureAccA1Today(page, '390-empty-queue-no-decision');
+  });
+
+  test('shows a single mobile queue row without adding a show-more control', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Single queue row at 390.');
+    await stubSession(page, { ...TODAY_SNAPSHOT, queue: [TODAY_SNAPSHOT.queue[0]] });
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const queue = page.getByRole('region', { name: 'Очередь дня' });
+    await expect(queue.getByTestId('today-mobile-queue-row')).toHaveCount(1);
+    await expect(queue).not.toContainText('Показать ещё');
+    await captureAccA1Today(page, '390-queue-1');
+  });
+
+  test('keeps long mobile queue titles inside the row and viewport', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Long queue title at 390.');
+    const longItem = {
+      ...TODAY_SNAPSHOT.queue[1],
+      company: 'Компания с очень длинным официальным названием',
+      title: 'Head of Engineering and Infrastructure for a Global Platform',
+      eyebrow: 'Новая вакансия · проверено сегодня',
+    };
+    await stubSession(page, { ...TODAY_SNAPSHOT, queue: [longItem] });
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const row = page.getByTestId('today-mobile-queue-row');
+    await expect(row).toBeVisible();
+    const title = row.locator('.pm-main b');
+    await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+    const subtitleOverflow = await row
+      .locator('.pm-main small')
+      .evaluate((element) => element.scrollWidth > element.clientWidth);
+    expect(subtitleOverflow).toBe(false);
+    const pageOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(pageOverflow).toBeLessThanOrEqual(0);
+    await captureAccA1Today(page, '390-long-queue-name');
+  });
+
+  test('caps a twenty item mobile queue at the four approved rows', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Today queue cap at 390.');
+    const queue = Array.from({ length: 20 }, (_, index) => ({
+      ...TODAY_SNAPSHOT.queue[0],
+      applicationId: 'long-queue-' + index,
+      title: 'Enterprise Architect ' + index,
+    }));
+    await stubSession(page, { ...TODAY_SNAPSHOT, queue });
+    await seedWorkspace(page);
+    await openApp(page);
+
+    const rows = page
+      .getByRole('region', { name: 'Очередь дня' })
+      .getByTestId('today-mobile-queue-row');
+    await expect(rows).toHaveCount(4);
+    await expect(rows.last()).toContainText('Enterprise Architect 3');
+    await captureAccA1Today(page, '390-queue-20');
+  });
+
+  test('shows the mobile loading skeleton while the Today request is pending', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Today loading state at 390.');
+    await stubSession(page);
+    let releaseToday: (() => void) | undefined;
+    let requestStarted = false;
+    const pending = new Promise<void>((resolve) => {
+      releaseToday = resolve;
+    });
+    await page.route('**/api/v1/candidate/today*', async (route) => {
+      requestStarted = true;
+      await pending;
+      await route.fulfill({ json: { data: TODAY_SNAPSHOT } });
+    });
+    await seedWorkspace(page);
+    await openApp(page);
+
+    await expect(page.locator('.today-loading-mobile')).toBeVisible();
+    await expect.poll(() => requestStarted).toBe(true);
+    await captureAccA1Today(page, '390-loading');
+    releaseToday?.();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
+  });
+
+  test('shows an error, then retries the Today request successfully', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Today retry state at 390.');
+    await stubSession(page);
+    let attempts = 0;
+    await page.route('**/api/v1/candidate/today*', async (route) => {
+      attempts += 1;
+      if (attempts === 1) return route.abort();
+      return route.fulfill({ json: { data: TODAY_SNAPSHOT } });
+    });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await waitForCareerShell(page);
+
+    await expect(
+      page.getByRole('heading', { name: 'Не удалось обновить очередь дня' }),
+    ).toBeVisible();
+    await captureAccA1Today(page, '390-error');
+    await page.getByRole('button', { name: 'Повторить' }).click();
+    await expect(page.locator('.career-today-mobile')).toBeVisible();
   });
 
   test('an unverified desktop decision opens the consultant without claiming a profile action', async ({
@@ -620,7 +927,7 @@ test.describe('B251 today screen', () => {
     await openApp(page);
 
     const panel = page.locator('.career-expert-panel');
-    await page.getByRole('button', { name: 'Спросить консультанта' }).click();
+    await page.getByRole('button', { name: 'Почему это решение' }).click();
     await expect(page.getByRole('complementary', { name: /Консультант/u })).toBeVisible();
     await expect(page.getByLabel('Сообщение карьерному консультанту')).toBeVisible();
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
@@ -628,7 +935,7 @@ test.describe('B251 today screen', () => {
     }
   });
 
-  test('S10-VIS: returning changes appear in one dismissible notice at 1440 and 390 (B255)', async ({
+  test('B255: returning changes stay on desktop and the old mobile banner stays absent', async ({
     page,
   }) => {
     let visitCount = 0;
@@ -704,7 +1011,7 @@ test.describe('B251 today screen', () => {
     await expect(changesStrip.getByText(/3 новые вакансии по VP Technology Ops/u)).toBeVisible();
     await expect(changesStrip.getByText(/1 отклик ждёт ответа больше 7 дней/u)).toBeVisible();
     await expect(changesStrip.getByText(/HRTx Inc\..*ближайшее интервью/u)).toBeVisible();
-    await expect(page.locator('.career-today-mobile .career-today-return-banner')).toBeHidden();
+    await expect(page.locator('.career-today-mobile .career-today-return-banner')).toHaveCount(0);
     await captureS10Today(page, 'today-changes-1440');
 
     await page.getByRole('button', { name: 'Закрыть уведомление', exact: true }).click();
@@ -712,7 +1019,7 @@ test.describe('B251 today screen', () => {
 
     // Check responsive layout on 390
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(page.locator('.career-today-return-banner')).toBeVisible();
+    await expect(page.locator('.career-today-return-banner')).toHaveCount(0);
     await expect(page.locator('.career-today-changes')).toBeHidden();
     const narrowOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -721,9 +1028,7 @@ test.describe('B251 today screen', () => {
     await captureS10Today(page, 'today-changes-390');
   });
 
-  test('B344 D10: карточка очереди показывает «Компания не указана — Должность» вместо ФИО рекрутёра', async ({
-    page,
-  }) => {
+  test('B344 D10: queue rows never use recruiter names as company names', async ({ page }) => {
     const customSnapshot = {
       ...TODAY_SNAPSHOT,
       queue: [
@@ -746,20 +1051,28 @@ test.describe('B251 today screen', () => {
     await seedWorkspace(page);
     await openApp(page);
 
-    const queueItem = page
-      .locator('.career-today-item:not([data-testid="consultant-queue-card"])')
-      .first();
-    const titleEl = queueItem.locator('.career-today-item-title');
-    await expect(titleEl).toHaveText('Компания не указана — Head of Engineering');
-    await expect(titleEl).not.toContainText('Глушкова');
-
-    const logoEl = queueItem.locator('.career-today-item-logo');
-    await expect(logoEl).toHaveText('—');
-
+    const desktopRow = page.getByRole('button', {
+      name: 'Открыть: Компания не указана — Head of Engineering',
+    });
+    await expect(desktopRow.locator('.career-today-queue-desktop-copy strong')).toHaveText(
+      'Компания не указана — Head of Engineering',
+    );
+    await expect(desktopRow).toHaveAttribute(
+      'aria-label',
+      'Открыть: Компания не указана — Head of Engineering',
+    );
     await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-1176.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
-    await expect(titleEl).toHaveText('Компания не указана — Head of Engineering');
+    const mobileRow = page.getByRole('button', {
+      name: 'Открыть: Компания не указана — Head of Engineering',
+    });
+    await expect(mobileRow.locator('.pm-main b')).toHaveText('Head of Engineering');
+    await expect(mobileRow).toHaveAttribute(
+      'aria-label',
+      'Открыть: Компания не указана — Head of Engineering',
+    );
+    await expect(mobileRow).not.toContainText('Глушкова');
     await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-390.png' });
   });
 });
