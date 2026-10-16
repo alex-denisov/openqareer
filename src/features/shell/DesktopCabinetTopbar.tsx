@@ -58,6 +58,24 @@ function DesktopTopbarActions(props: DesktopTopbarActionsProps) {
   );
 }
 
+function BootStatus({ text }: { readonly text?: string | null }) {
+  if (!text) return null;
+  return (
+    <>
+      <span className="career-notification-bell career-bootstrap-bell" aria-hidden="true">
+        <BellSimple size={22} />
+      </span>
+      <span
+        className="career-desktop-topbar-hint career-bootstrap-status"
+        role="status"
+        aria-live="polite"
+      >
+        <CircleNotch size={16} aria-hidden="true" /> {text}
+      </span>
+    </>
+  );
+}
+
 export function DesktopCabinetTopbar({
   title,
   railHint,
@@ -98,20 +116,7 @@ export function DesktopCabinetTopbar({
         onOpenCenter={onOpenCenter}
         onOpenSettings={onOpenSettings}
       />
-      {bootStatus ? (
-        <span className="career-notification-bell career-bootstrap-bell" aria-hidden="true">
-          <BellSimple size={22} />
-        </span>
-      ) : null}
-      {bootStatus ? (
-        <span
-          className="career-desktop-topbar-hint career-bootstrap-status"
-          role="status"
-          aria-live="polite"
-        >
-          <CircleNotch size={16} aria-hidden="true" /> {bootStatus}
-        </span>
-      ) : null}
+      <BootStatus text={bootStatus} />
     </header>
   );
 }
