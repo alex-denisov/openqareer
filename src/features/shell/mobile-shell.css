@@ -147,6 +147,11 @@
     overflow-x: clip;
   }
 
+  /* Кабинетные экраны задают свой нижний отступ (48 px) и иначе остаются под плавающим меню. */
+  .career-shell .career-main:has(.career-cabinet) {
+    padding-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4));
+  }
+
   .career-mobile-nav {
     position: fixed;
     inset-inline: var(--career-space-3);

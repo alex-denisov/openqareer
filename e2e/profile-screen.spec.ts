@@ -8,6 +8,7 @@ import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import type { MatchedVacancyItem } from '../src/features/coach/cabinetTypes';
 import type { ImportedSourceSummary } from '../src/features/coach/coachApi';
+import { closeConsultant } from './helpers/close-consultant';
 
 /**
  * B265 — the rail's «Профиль» replaces Resume Studio with its own screen.
@@ -695,11 +696,18 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await page.getByRole('button', { name: 'Пройти квиз по навыкам' }).click();
     const expert = page.locator('.career-expert-panel');
     await expect(expert).toBeVisible();
-    await expert
-      .getByRole('button', {
-        name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-      })
-      .click();
+    if (testInfo.project.name === 'mobile-390') {
+      await expert
+        .getByRole('button', { name: 'Развернуть или свернуть консультанта' })
+        .last()
+        .click();
+    } else {
+      await expert
+        .getByRole('button', {
+          name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+        })
+        .click();
+    }
 
     await tabs.getByRole('tab', { name: 'Цифровой след' }).click();
     await expect(tabs.getByRole('tab', { name: 'Цифровой след' })).toHaveAttribute(
@@ -1250,9 +1258,6 @@ test.describe('B265 Profile screen', () => {
       await page.getByRole('button', { name: 'Собрать факты с консультантом' }).click();
     }
     const expert = page.locator('.career-expert-panel');
-    if (testInfo.project.name === 'mobile-390') {
-      await expert.getByRole('button', { name: 'Развернуть консультанта' }).click();
-    }
     await expert
       .getByLabel('Сообщение карьерному консультанту')
       .fill('Обнови раздел «Обо мне» по фактам профиля.');
@@ -1262,11 +1267,7 @@ test.describe('B265 Profile screen', () => {
     expect(turnIdempotencyKey).toMatch(/^[0-9a-f-]{36}$/u);
     expect(preparedBody).not.toHaveProperty('executionTarget');
 
-    await expert
-      .getByRole('button', {
-        name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-      })
-      .click();
+    await closeConsultant(page);
     const suggestion = page.locator(`[data-testid="consultant-suggestion-${commandId}"]`);
     await expect(suggestion).toBeVisible();
     await expect(suggestion).toContainText('Сейчас');
