@@ -188,27 +188,22 @@ async function openCareer(page: Page): Promise<void> {
     await expect(page.locator('.vacancies-screen')).toBeVisible();
     await page.getByRole('button', { name: /Роли/ }).first().click();
   } else {
-    const mobileRole = page.locator('.career-path-mobile-role');
-    if (await mobileRole.isVisible()) {
-      await mobileRole.first().click();
-    } else {
-      const mobileSummary = page.locator('.career-path-mobile-summary');
-      if (await mobileSummary.isVisible()) {
-        await mobileSummary.click();
-      } else {
-        await page
-          .getByRole('button', { name: /Роль\./ })
-          .first()
-          .click();
-      }
-    }
+    await page
+      .getByRole('navigation', { name: 'Разделы' })
+      .getByRole('button', { name: 'Вакансии', exact: true })
+      .click();
+    await expect(page.locator('.vacancies-screen')).toBeVisible();
+    await page
+      .getByRole('button', { name: /^Фильтры/ })
+      .first()
+      .click();
   }
   await expect(page.locator('.vacancies-screen')).toBeVisible();
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     const filterSheet = page.locator('.vacancies-filters.is-mobile-open');
     await expect(filterSheet).toBeVisible();
+    await filterSheet.getByText('Добавить свою роль', { exact: true }).click();
     await expect(page.locator('.add-role-input')).toBeVisible();
-    await filterSheet.getByRole('button', { name: 'Все фильтры', exact: true }).click();
     await expect(
       filterSheet.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
     ).toBeVisible();

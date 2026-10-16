@@ -587,6 +587,11 @@
     display: none;
   }
 
+  /* The filter sheet is a full-screen step with its own action footer: the floating nav would cover it. */
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .career-mobile-nav {
+    display: none;
+  }
+
   .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-tabs-row,
   .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-content,
   .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-saved-panel,
