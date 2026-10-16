@@ -27,6 +27,7 @@ import {
   consultantTargetView,
   followUpStatusLabel,
   formatQueueTitle,
+  queueActionTitle,
   queueItemTarget,
   queueKey,
 } from './todayFormat';
@@ -342,7 +343,7 @@ function TodayMobileQueueRow({
           <TodayMobileQueueIcon item={item} />
         </span>
         <span className="pm-main">
-          <b>{item.title}</b>
+          <b>{queueActionTitle(item)}</b>
           <small>{todayMobileQueueSubtitle(item, followUps)}</small>
         </span>
         <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />

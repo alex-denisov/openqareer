@@ -1,5 +1,5 @@
 /* Полоса профиля «Сегодня» (макет 1-segodnya, .pfstrip): счётчик, шкала и малые кнопки. */
-.career-today-profile-progress {
+.career-today-desktop .career-today-profile-progress {
   grid-template-columns: minmax(0, calc(var(--career-space-8) * 9.5)) minmax(0, 1fr);
   gap: var(--career-space-4) var(--career-space-6);
   padding: var(--career-space-4) var(--career-space-6);

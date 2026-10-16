@@ -24,6 +24,8 @@ import {
   buildReturningDigestItems,
   consultantTargetView,
   formatQueueTitle,
+  queueActionTitle,
+  queueCompanyLabel,
   queueItemTarget,
   queueKey,
 } from './todayFormat';
@@ -424,6 +426,7 @@ function TodayQueueDesktopRow({
 }) {
   const ItemIcon = queueIcon(item.kind);
   const title = formatQueueTitle(item.company, item.title);
+  const actionTitle = queueActionTitle(item);
   const subtitle = item.eyebrow?.replace(/follow-up/giu, 'Напоминание компании');
   return (
     <li key={queueKey(item)}>
@@ -438,8 +441,8 @@ function TodayQueueDesktopRow({
           <ItemIcon size="1em" aria-hidden="true" />
         </span>
         <span className="career-today-queue-desktop-copy">
-          <strong>{title}</strong>
-          <small>{[item.company, subtitle].filter(Boolean).join(' · ')}</small>
+          <strong>{actionTitle}</strong>
+          <small>{[queueCompanyLabel(item.company), subtitle].filter(Boolean).join(' · ')}</small>
         </span>
         <span className="career-today-queue-desktop-deadline">
           <span>{queueBadgeLabel(item.kind)}</span>

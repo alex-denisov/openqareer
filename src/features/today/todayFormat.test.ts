@@ -5,6 +5,8 @@ import {
   formatInterviewDate,
   formatQueueTitle,
   nextInterviewBasis,
+  queueActionTitle,
+  queueCompanyLabel,
 } from './todayFormat';
 
 describe('todayFormat (B255 returning user digest)', () => {
@@ -145,9 +147,13 @@ describe('todayFormat (B255 returning user digest)', () => {
     });
 
     it('подставляет «Компания не указана — Должность», если компании нет', () => {
-      expect(formatQueueTitle(null, 'Head of Product')).toBe('Компания не указана — Head of Product');
+      expect(formatQueueTitle(null, 'Head of Product')).toBe(
+        'Компания не указана — Head of Product',
+      );
       expect(formatQueueTitle('', 'Head of Product')).toBe('Компания не указана — Head of Product');
-      expect(formatQueueTitle('   ', 'Head of Product')).toBe('Компания не указана — Head of Product');
+      expect(formatQueueTitle('   ', 'Head of Product')).toBe(
+        'Компания не указана — Head of Product',
+      );
     });
 
     it('не пропускает ФИО человека в заголовок, подставляя «Компания не указана»', () => {
@@ -163,5 +169,21 @@ describe('todayFormat (B255 returning user digest)', () => {
     it('companyInitials возвращает «—» для ФИО человека', () => {
       expect(companyInitials('Глушкова Ксения Евгеньевна')).toBe('—');
     });
+  });
+});
+
+describe('queueActionTitle', () => {
+  it('writes the row as an action, as in the approved Today mockup', () => {
+    const base = { company: 'Вектор Банк', title: 'Head of Platform' } as const;
+    expect(queueActionTitle({ ...base, kind: 'follow_up' })).toBe('Напомнить компании Вектор Банк');
+    expect(queueActionTitle({ ...base, kind: 'interview' })).toBe('Подготовиться к интервью');
+    expect(queueActionTitle({ ...base, kind: 'candidate_turn' })).toBe('Ваш ход: Head of Platform');
+  });
+
+  it('never uses a recruiter name as the company', () => {
+    expect(
+      queueActionTitle({ kind: 'follow_up', company: 'Глушкова Ксения Евгеньевна', title: 'X' }),
+    ).toBe('Напомнить компании');
+    expect(queueCompanyLabel('Глушкова Ксения Евгеньевна')).toBe('Компания не указана');
   });
 });

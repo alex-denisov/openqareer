@@ -838,6 +838,7 @@ test.describe('B251 today screen', () => {
     test.skip(testInfo.project.name !== 'mobile-390', 'Today queue cap at 390.');
     const queue = Array.from({ length: 20 }, (_, index) => ({
       ...TODAY_SNAPSHOT.queue[0],
+      kind: 'new_vacancy' as const,
       applicationId: 'long-queue-' + index,
       title: 'Enterprise Architect ' + index,
     }));
@@ -1060,23 +1061,20 @@ test.describe('B251 today screen', () => {
       name: 'Открыть: Компания не указана — Head of Engineering',
     });
     await expect(desktopRow.locator('.career-today-queue-desktop-copy strong')).toHaveText(
-      'Компания не указана — Head of Engineering',
+      'Новая вакансия: Head of Engineering',
     );
-    await expect(desktopRow).toHaveAttribute(
-      'aria-label',
-      'Открыть: Компания не указана — Head of Engineering',
+    await expect(desktopRow.locator('.career-today-queue-desktop-copy small')).toContainText(
+      'Компания не указана',
     );
+    await expect(desktopRow).not.toContainText('Глушкова');
     await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-1176.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
     const mobileRow = page.getByRole('button', {
       name: 'Открыть: Компания не указана — Head of Engineering',
     });
-    await expect(mobileRow.locator('.pm-main b')).toHaveText('Head of Engineering');
-    await expect(mobileRow).toHaveAttribute(
-      'aria-label',
-      'Открыть: Компания не указана — Head of Engineering',
-    );
+    await expect(mobileRow.locator('.pm-main b')).toHaveText('Новая вакансия: Head of Engineering');
+    await expect(mobileRow.locator('.pm-main small')).toContainText('Компания не указана');
     await expect(mobileRow).not.toContainText('Глушкова');
     await page.screenshot({ path: 'output/playwright/B344/d10-today-queue-390.png' });
   });

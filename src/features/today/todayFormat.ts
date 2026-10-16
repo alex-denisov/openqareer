@@ -233,6 +233,28 @@ export function isPersonName(value: string | null | undefined): boolean {
  * Правило: «<Компания> — <Должность>»; нет компании → «Компания не указана — <Должность>»;
  * имя человека в заголовок не попадает никогда.
  */
+/** Строка очереди по макету: действие — объект, а не «компания — вакансия». */
+export function queueActionTitle(item: {
+  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
+  readonly company: string | null;
+  readonly title: string;
+}): string {
+  const company = item.company?.trim();
+  const named = company && !isPersonName(company) ? company : null;
+  if (item.kind === 'follow_up')
+    return named ? `Напомнить компании ${named}` : 'Напомнить компании';
+  if (item.kind === 'interview') return 'Подготовиться к интервью';
+  if (item.kind === 'candidate_turn') return `Ваш ход: ${item.title}`;
+  if (item.kind === 'shortlist') return `Из подборки: ${item.title}`;
+  return `Новая вакансия: ${item.title}`;
+}
+
+/** Компания строки очереди; имя рекрутера в роли компании не показываем. */
+export function queueCompanyLabel(company: string | null | undefined): string {
+  const clean = company?.trim();
+  return clean && !isPersonName(clean) ? clean : 'Компания не указана';
+}
+
 export function formatQueueTitle(company: string | null | undefined, title: string): string {
   const cleanCompany = company?.trim();
   if (!cleanCompany || isPersonName(cleanCompany)) {
