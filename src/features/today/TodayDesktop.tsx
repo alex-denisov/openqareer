@@ -5,10 +5,14 @@ import {
   CalendarBlank,
   ChatCircleDots,
   CheckCircle,
+  EnvelopeSimple,
+  GraduationCap,
   Info,
   ListChecks,
+  Plus,
   X,
 } from '@phosphor-icons/react';
+import './today-desktop.css';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
@@ -184,6 +188,13 @@ function profileProgressActions(draft: ResumeDraft): readonly TodayProfileProgre
   });
 }
 
+function ProfileActionIcon({ section }: { readonly section: string }) {
+  if (section === 'Контакты') return <EnvelopeSimple size={16} aria-hidden="true" />;
+  if (section === 'Опыт') return <CalendarBlank size={16} aria-hidden="true" />;
+  if (section === 'Курсы') return <GraduationCap size={16} aria-hidden="true" />;
+  return <Plus size={16} aria-hidden="true" />;
+}
+
 function TodayProfileProgress({
   draft,
   onNavigate,
@@ -202,21 +213,24 @@ function TodayProfileProgress({
           Профиль готов на <strong>{percent} %</strong>:{' '}
           {pluralRu(actions.length, ['действие', 'действия', 'действий'])}
         </p>
-        <progress
-          max={completeness.totalCount}
-          value={completeness.completedCount}
+        <div
+          className="career-today-profile-meter"
+          role="img"
           aria-label={`Профиль готов на ${percent} процентов`}
-        />
+        >
+          <i style={{ inlineSize: `${percent}%` }} />
+        </div>
       </div>
       <div className="career-today-profile-actions" aria-label="Что заполнить">
         {actions.map((action) => (
           <button
             key={action.section}
             type="button"
-            className="career-btn career-btn-secondary career-btn-sm"
+            className="career-btn career-btn-secondary career-btn-sm career-today-profile-action"
             onClick={() => onNavigate?.('profile')}
             disabled={!onNavigate}
           >
+            <ProfileActionIcon section={action.section} />
             {action.label}
           </button>
         ))}

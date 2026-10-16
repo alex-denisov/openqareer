@@ -1,0 +1,43 @@
+/* Полоса профиля «Сегодня» (макет 1-segodnya, .pfstrip): счётчик, шкала и малые кнопки. */
+.career-today-profile-progress {
+  grid-template-columns: minmax(0, calc(var(--career-space-8) * 9.5)) minmax(0, 1fr);
+  gap: var(--career-space-4) var(--career-space-6);
+  padding: var(--career-space-4) var(--career-space-6);
+  border-color: color-mix(in oklch, var(--career-warning) 45%, var(--career-line-strong));
+}
+
+.career-today-profile-progress-main p {
+  font-size: var(--career-text-md);
+}
+
+.career-today-profile-meter {
+  block-size: var(--career-space-2);
+  border-radius: var(--career-space-1);
+  background: var(--career-surface-raised, var(--career-surface));
+  overflow: hidden;
+}
+
+.career-today-profile-meter > i {
+  display: block;
+  block-size: 100%;
+  border-radius: inherit;
+  background: var(--career-accent);
+}
+
+/* Малая кнопка макета: видимые 32 px, зона касания 44 px за счёт прозрачной каймы. */
+.career-today-profile-action.career-btn-sm {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-block-size: var(--career-target-min);
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  gap: var(--career-space-2);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width)
+    color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated));
+  font-size: var(--career-text-xs);
+}
