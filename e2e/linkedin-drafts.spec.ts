@@ -19,10 +19,17 @@ const draft = {
 async function openCard(page: Page) {
   test.skip(
     test.info().project.name !== 'mobile-390',
-    'Desktop Today uses the approved decision and funnel layout; compact Today keeps LinkedIn drafts.',
+    'LinkedIn drafts live in Automation → Посты LinkedIn; the 390 path goes through the «Ещё» menu.',
   );
   await seedReadabilityWorkspace(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByRole('heading', { level: 1, name: 'Сегодня' })).toBeVisible();
+  await page
+    .getByRole('navigation', { name: 'Разделы' })
+    .getByRole('button', { name: 'Ещё' })
+    .click();
+  await page.getByRole('menuitem', { name: 'Автоматизация' }).click();
+  await page.getByRole('tab', { name: 'Посты LinkedIn' }).click();
   const card = page.getByRole('region', { name: 'Черновики для LinkedIn' });
   await expect(card).toBeVisible({ timeout: 15_000 });
   return card;
@@ -110,14 +117,14 @@ test('подготовить комментарий, скопировать и �
   await expect(card.getByRole('button', { name: 'Скопировано', exact: true })).toBeVisible();
   await expect.poll(() => status).toBe('copied');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(draft.text);
-  await expect(card.getByRole('list', { name: 'Последние черновики' })).toContainText(
+  await expect(card.getByRole('list', { name: 'Черновики и публикация' })).toContainText(
     status === 'copied' ? 'скопирован' : 'отклонён',
   );
   await capture(page, 'copied', width);
   await card.getByRole('button', { name: 'Отклонить', exact: true }).click();
   await expect.poll(() => status).toBe('rejected');
   await expect(card.getByRole('button', { name: 'Отклонить', exact: true })).toHaveCount(0);
-  await expect(card.getByRole('list', { name: 'Последние черновики' })).toContainText(
+  await expect(card.getByRole('list', { name: 'Черновики и публикация' })).toContainText(
     status === 'copied' ? 'скопирован' : 'отклонён',
   );
 });

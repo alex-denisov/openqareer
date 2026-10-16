@@ -67,6 +67,24 @@ function currentExperience(overrides: Record<string, unknown> = {}) {
   };
 }
 
+async function openMoreMenu(page: Page): Promise<void> {
+  await page
+    .getByRole('navigation', { name: 'Разделы' })
+    .getByRole('button', { name: 'Ещё' })
+    .click();
+}
+
+async function openMobileDiary(page: Page): Promise<void> {
+  await openMoreMenu(page);
+  await page.getByRole('menuitem', { name: 'Карьерный дневник' }).click();
+}
+
+async function expectMobileDiaryEnabled(page: Page): Promise<void> {
+  await openMoreMenu(page);
+  await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toBeEnabled();
+  await page.keyboard.press('Escape');
+}
+
 async function openToday(page: Page, state?: MockCareerDiaryFixture): Promise<void> {
   await mockSignedInCabinet(page, state ? { careerDiary: state } : {});
   const diaryData = waitForDiaryInitialRequests(page);
@@ -136,7 +154,7 @@ test('hides the diary entry points when the profile has no current work', async 
       .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Ещё' })
       .click();
-    await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toBeDisabled();
   } else {
     const diaryButton = page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -156,8 +174,8 @@ test('creates the first diary from the current profile experience', async ({ pag
     }),
   );
   if (testInfo.project.name === 'mobile-390') {
-    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
-    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+    await expectMobileDiaryEnabled(page);
+    await openMobileDiary(page);
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -196,19 +214,25 @@ test('shows loading and error status before offering the diary link', async ({
     await route.fallback();
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  if (testInfo.project.name === 'desktop-1440') {
-    await page
-      .getByRole('navigation', { name: 'Разделы кабинета' })
-      .getByRole('button', { name: 'Карьерный дневник' })
-      .click();
+  if (testInfo.project.name === 'mobile-390') {
+    // 390 has no inline status: the «Ещё» entry stays locked until availability is known.
+    await expect(page.getByRole('heading', { level: 1, name: 'Сегодня' })).toBeVisible();
+    await openMoreMenu(page);
+    await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toBeDisabled();
+    await capture(page, testInfo, 'availability-loading');
+    await page.keyboard.press('Escape');
+    releaseFailure();
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expectMobileDiaryEnabled(page);
+    return;
   }
-  await expect(
-    page.getByText(
-      testInfo.project.name === 'mobile-390'
-        ? 'Проверяем статус места работы…'
-        : 'Проверяем место работы из профиля…',
-    ),
-  ).toBeVisible({ timeout: 15_000 });
+  await page
+    .getByRole('navigation', { name: 'Разделы кабинета' })
+    .getByRole('button', { name: 'Карьерный дневник' })
+    .click();
+  await expect(page.getByText('Проверяем место работы из профиля…')).toBeVisible({
+    timeout: 15_000,
+  });
   await capture(page, testInfo, 'availability-loading');
   releaseFailure();
   await expect(
@@ -216,15 +240,11 @@ test('shows loading and error status before offering the diary link', async ({
   ).toBeVisible();
   await capture(page, testInfo, 'availability-error');
   await page.getByRole('button', { name: 'Повторить' }).click();
-  if (testInfo.project.name === 'mobile-390') {
-    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
-  } else {
-    await expect(
-      page
-        .getByRole('navigation', { name: 'Разделы кабинета' })
-        .getByRole('button', { name: 'Карьерный дневник' }),
-    ).toBeEnabled();
-  }
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Разделы кабинета' })
+      .getByRole('button', { name: 'Карьерный дневник' }),
+  ).toBeEnabled();
 });
 
 test('opens the diary from Today and the desktop rail or mobile More menu', async ({
@@ -232,7 +252,7 @@ test('opens the diary from Today and the desktop rail or mobile More menu', asyn
 }, testInfo) => {
   await openToday(page, diaryFixture({ profileExperience: currentExperience() }));
   if (testInfo.project.name === 'mobile-390') {
-    await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toBeVisible();
+    await expectMobileDiaryEnabled(page);
   } else {
     await expect(
       page
@@ -256,7 +276,7 @@ test('opens the diary from Today and the desktop rail or mobile More menu', asyn
   }
   await capture(page, testInfo, 'diary-entry-today');
   if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+    await openMobileDiary(page);
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -275,7 +295,7 @@ test('offers an explicit choice when the linked profile role changed', async ({
   });
   await openToday(page, state);
   if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+    await openMobileDiary(page);
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -297,7 +317,7 @@ test('starts a separate diary with the actual role start date', async ({ page },
   });
   await openToday(page, state);
   if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+    await openMobileDiary(page);
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
@@ -333,7 +353,7 @@ test('switches the primary workplace using the saved profile places', async ({
     }),
   );
   if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Открыть карьерный дневник' }).click();
+    await openMobileDiary(page);
   } else {
     await page
       .getByRole('navigation', { name: 'Разделы кабинета' })
