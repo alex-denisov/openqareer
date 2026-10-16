@@ -38,6 +38,19 @@ async function openHhConnectionManagement(page, viewport) {
   await account.getByRole('button', { name: 'Управлять' }).click();
 }
 
+/** 1440 opens account and tariffs from the rail; 390 reaches them through the «Ещё» menu. */
+async function openFromShell(page, label, railSelector) {
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    await page
+      .getByRole('navigation', { name: 'Разделы' })
+      .getByRole('button', { name: 'Ещё' })
+      .click();
+    await page.getByRole('menuitem', { name: label }).click();
+    return;
+  }
+  await page.locator(railSelector).first().click();
+}
+
 async function verifyViewport(browser, baseUrl, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -1301,9 +1314,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
   // the campaign stays in «Поиске» and the collected pool in «Вакансиях».
   await page.getByRole('heading', { name: 'Сегодня', exact: true }).first().waitFor();
   // B251 S5 / S10-VIS B — desktop Today uses the approved decisions, queue,
-  // and funnel composition. Narrower layouts keep the existing compact composition.
+  // and funnel composition above 760 px; the 390 layout is the approved mobile Today.
   await page.locator('.career-today').first().waitFor();
-  if (viewport.width >= 1280) {
+  if (viewport.width > 760) {
     await page.locator('.career-today-desktop').waitFor({ state: 'visible' });
     for (const section of ['Следующее решение', 'Очередь дня', 'Воронка за 30 дней']) {
       await page.getByRole('region', { name: section }).waitFor();
@@ -1323,14 +1336,18 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   // S10-VIS A2 — the consultant is docked and open on wide desktop layouts;
   // narrower layouts keep the existing explicit open action.
-  const expert = page.getByRole('complementary', { name: /^Консультант · / });
+  // The panel is a complementary dock, a dialog overlay below 1280 px or a dialog sheet at 390 px.
+  const expert = page.locator('.career-expert-panel');
   if (!(await expert.isVisible())) {
     await page
-      .getByRole('button', { name: /^(Спросить|Открыть) консультанта$/ })
+      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/ })
       .first()
       .click();
   }
   await expert.waitFor({ state: 'visible' });
+  // Below 1280 px the panel starts as the 56 px strip; open it before the dialogue checks.
+  const expand = expert.getByRole('button', { name: 'Развернуть консультанта' });
+  if (await expand.isVisible()) await expand.click();
   await verifyCoachDelivery(page, expert, viewport);
   const dialogueContainment = await page.locator('.career-dialogue-history').evaluate((history) => {
     const boundary = history.closest('.career-expert-panel').getBoundingClientRect();
@@ -1361,8 +1378,16 @@ async function verifyViewport(browser, baseUrl, viewport) {
     dialogueContainment.contained,
     `${viewport.name}: long dialogue text escaped the expert drawer ${JSON.stringify(dialogueContainment)}`,
   );
-  await expert.getByRole('button', { name: 'Закрыть карьерного консультанта' }).click();
-  await expert.waitFor({ state: 'hidden' });
+  if (viewport.width <= 760) {
+    await expert
+      .getByRole('button', { name: 'Развернуть или свернуть консультанта' })
+      .last()
+      .click();
+    await expert.waitFor({ state: 'hidden' });
+  } else {
+    await expert.getByRole('button', { name: 'Свернуть консультанта в полосу' }).click();
+    await page.locator('.career-expert-panel.consultant-strip').waitFor({ state: 'visible' });
+  }
 
   // S10-VIS A3: desktop keeps the «Карьера» rail entry. Its route and filter
   // focus are exercised by the B366 end-to-end spec; the removed Today
@@ -1472,9 +1497,8 @@ async function verifyViewport(browser, baseUrl, viewport) {
 
   // B248: narrow screens keep the topbar's «Тарифы» link. Desktop opens it
   // from the connected Account billing tab.
-  const mobileTariffs = page.locator('.career-mobile-tariffs:visible').first();
-  if (await mobileTariffs.count()) {
-    await mobileTariffs.click();
+  if (viewport.width <= 760) {
+    await openFromShell(page, 'Тарифы');
   } else {
     await page.locator('button[aria-label="Открыть аккаунт"]:visible').first().click();
     const account = page.getByTestId('career-shell').getByRole('main');
@@ -1495,7 +1519,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
 
   const catalogBeforeAccount = connectionCatalogRequests;
-  await page.locator('button[aria-label="Открыть аккаунт"]:visible').last().click();
+  await openFromShell(page, 'Аккаунт', 'button[aria-label="Открыть аккаунт"]:visible');
   const account = page.getByTestId('career-shell').getByRole('main');
   if (viewport.width <= 760) {
     await account.getByRole('heading', { name: 'Профиль и вход' }).waitFor();
