@@ -9,7 +9,7 @@ const EVIDENCE = e2eEvidenceDirectory('AUD-15');
 async function openCareer(page: Page, projectName: string): Promise<void> {
   if (projectName === 'mobile-390') {
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Ещё' })
       .click();
     await page.getByRole('menuitem', { name: 'Карьера' }).click();

@@ -170,7 +170,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     await page.getByRole('button', { name: 'Уведомления' }).click();
     await expect(page.getByRole('heading', { name: 'Уведомления' })).toBeVisible();
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Вакансии' })
       .click();
     await expect(shell.getByRole('main').getByRole('heading', { name: 'Вакансии' })).toBeVisible();

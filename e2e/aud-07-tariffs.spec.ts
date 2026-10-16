@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openTariffsFromShell } from './helpers/open-tariffs';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('AUD-7');
 
@@ -182,13 +183,8 @@ async function prepareCabinet(page: Page): Promise<void> {
   await page.route('**/health', (route) => route.fulfill({ status: 200, body: 'fixture' }));
 }
 
-async function openTariffs(page: Page): Promise<void> {
-  const trigger = page
-    .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-    .first();
-  await expect(trigger).toBeVisible({ timeout: 20_000 });
-  await trigger.click();
-  await expect(page.locator('.career-tariffs:visible')).toBeVisible();
+async function openTariffs(page: import('@playwright/test').Page): Promise<void> {
+  await openTariffsFromShell(page);
 }
 
 async function capture(page: Page, state: string, viewport: string): Promise<void> {

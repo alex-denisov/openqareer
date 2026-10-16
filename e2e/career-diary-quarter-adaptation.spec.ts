@@ -122,7 +122,7 @@ async function openDiary(
   await page.route('**/api/v1/coach/turn*', async (route) => replyToCoach(route));
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   if (testInfo.project.name === 'mobile-390') {
-    const navigation = page.getByRole('navigation', { name: 'Основная навигация' });
+    const navigation = page.getByRole('navigation', { name: 'Разделы' });
     await navigation.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: 'Карьерный дневник' }).click();
   } else {
@@ -226,7 +226,7 @@ test('launches an offer-stage plan, manages tasks, and asks the ordinary consult
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   if (testInfo.project.name === 'mobile-390') {
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Ещё' })
       .click();
     await page.getByRole('menuitem', { name: 'Карьерный дневник' }).click();

@@ -25,7 +25,7 @@ test.describe('B384: Candidate Decision Profile', () => {
     // Open Profile screen via rail button
     const profileNavigation =
       (page.viewportSize()?.width ?? 1440) <= 760
-        ? page.getByRole('navigation', { name: 'Основная навигация' })
+        ? page.getByRole('navigation', { name: 'Разделы' })
         : page.getByRole('navigation', { name: 'Разделы кабинета' });
     await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();
@@ -161,7 +161,7 @@ test.describe('B384: Candidate Decision Profile', () => {
     });
 
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Профиль', exact: true })
       .click();
     await expect(page.locator('.career-profile-screen-view')).toBeVisible();

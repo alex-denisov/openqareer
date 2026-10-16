@@ -26,7 +26,7 @@ export async function waitForScreenReady(page) {
 export async function clickCabinetSection(page, section, viewport) {
   const nav =
     viewport === '390'
-      ? page.getByRole('navigation', { name: 'Основная навигация' })
+      ? page.getByRole('navigation', { name: 'Разделы' })
       : page.getByRole('complementary', { name: 'Основная навигация' }).getByRole('navigation');
   await nav.getByRole('button', { name: section, exact: true }).click({ timeout: 8_000 });
   const selector = SECTION_SELECTORS[section];

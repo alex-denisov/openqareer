@@ -44,7 +44,7 @@ async function openAutomation(page: Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await openAutomationMobile(page);
-    await expect(page.locator('.career-mobile-page-title')).toHaveText('Отклики');
+    await expect(page.locator('.career-mobile-page-title')).toHaveText('Автоматизация');
     await expect(
       page
         .getByRole('group', { name: 'Раздел откликов' })

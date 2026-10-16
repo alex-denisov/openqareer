@@ -387,7 +387,7 @@ async function installMocks(page: Page, state: DiaryHarness): Promise<void> {
 
 async function navigateDiary(page: Page, projectName: string): Promise<void> {
   if (projectName === 'mobile-390') {
-    const navigation = page.getByRole('navigation', { name: 'Основная навигация' });
+    const navigation = page.getByRole('navigation', { name: 'Разделы' });
     await navigation.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: 'Карьерный дневник' }).click();
   } else {
@@ -562,7 +562,7 @@ test('routes a diary achievement through profile approval and rollback', async (
 
   if (testInfo.project.name === 'mobile-390') {
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Профиль' })
       .click();
   } else {

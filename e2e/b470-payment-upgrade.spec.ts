@@ -4,6 +4,7 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { captureCareerHarness } from './helpers/capture-career-harness';
+import { openTariffsFromShell } from './helpers/open-tariffs';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('B470');
 const S10_EVIDENCE_DIR = e2eEvidenceDirectory('S10-VIS');
@@ -274,12 +275,7 @@ test('B470: Executive displays the submitted state returned by B471', async ({
 });
 
 async function openTariffs(page: import('@playwright/test').Page): Promise<void> {
-  const trigger = page
-    .locator('.career-rail-wallet:visible, .career-mobile-tariffs:visible')
-    .first();
-  await expect(trigger).toBeVisible({ timeout: 20_000 });
-  await trigger.click();
-  await expect(page.locator('.career-tariffs:visible')).toBeVisible();
+  await openTariffsFromShell(page);
 }
 
 async function openTariffLevel(

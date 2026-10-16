@@ -44,7 +44,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
   });
   await page
     .getByRole('navigation', {
-      name: (page.viewportSize()?.width ?? 1440) <= 760 ? 'Основная навигация' : 'Разделы кабинета',
+      name: (page.viewportSize()?.width ?? 1440) <= 760 ? 'Разделы' : 'Разделы кабинета',
     })
     .getByRole('button', { name: 'Профиль', exact: true })
     .click();

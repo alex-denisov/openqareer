@@ -165,13 +165,21 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       expect(repeatedRevert.body.error.code).toBe('profile_revision_already_reverted');
 
       // Close consultant panel for next iteration
-      await page
-        .getByRole('button', {
-          name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-        })
-        .click();
-      await expect(expertPanel).toBeVisible();
-      await expect(expertPanel).toHaveClass(/consultant-strip/u);
+      if (vp.width <= 640) {
+        await expertPanel
+          .getByRole('button', { name: 'Развернуть или свернуть консультанта' })
+          .last()
+          .click();
+        await expect(expertPanel).not.toBeVisible();
+      } else {
+        await page
+          .getByRole('button', {
+            name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
+          })
+          .click();
+        await expect(expertPanel).toBeVisible();
+        await expect(expertPanel).toHaveClass(/consultant-strip/u);
+      }
     }
   });
 });

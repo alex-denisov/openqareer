@@ -32,7 +32,7 @@ test('syncs a legacy decision profile once after sign-in', async ({ page }) => {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   const profileNavigation =
     (page.viewportSize()?.width ?? 1440) <= 760
-      ? page.getByRole('navigation', { name: 'Основная навигация' })
+      ? page.getByRole('navigation', { name: 'Разделы' })
       : page.getByRole('navigation', { name: 'Разделы кабинета' });
   await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();

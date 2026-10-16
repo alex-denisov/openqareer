@@ -133,7 +133,7 @@ test('hides the diary entry points when the profile has no current work', async 
   await expect(page.getByRole('button', { name: 'Открыть карьерный дневник' })).toHaveCount(0);
   if (testInfo.project.name === 'mobile-390') {
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Ещё' })
       .click();
     await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toHaveCount(0);
@@ -242,7 +242,7 @@ test('opens the diary from Today and the desktop rail or mobile More menu', asyn
   }
   if (testInfo.project.name === 'mobile-390') {
     await page
-      .getByRole('navigation', { name: 'Основная навигация' })
+      .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Ещё' })
       .click();
     await expect(page.getByRole('menuitem', { name: 'Карьерный дневник' })).toBeVisible();

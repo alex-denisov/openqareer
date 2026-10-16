@@ -316,7 +316,7 @@ async function installDiaryApi(page: Page, state: DiaryHarness): Promise<void> {
 
 async function navigateDiary(page: Page, projectName: string): Promise<void> {
   if (projectName === 'mobile-390') {
-    const nav = page.getByRole('navigation', { name: 'Основная навигация' });
+    const nav = page.getByRole('navigation', { name: 'Разделы' });
     await nav.getByRole('button', { name: 'Ещё' }).click();
     await page.getByRole('menuitem', { name: 'Карьерный дневник' }).click();
   } else {
