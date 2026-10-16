@@ -230,7 +230,7 @@ test('shows empty comparison, calculation error, and stale tax data states', asy
       .first(),
   ).toBeVisible();
   await capture(page, info, 'relocation-country-no-data');
-  await page.getByRole('button', { name: 'Свернуть' }).click();
+  await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
   await page.getByRole('button', { name: /^Германия/u }).click();
   await page.getByRole('button', { name: 'Посчитать экономику' }).click();
 

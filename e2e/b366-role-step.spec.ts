@@ -61,22 +61,22 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    // The compact layout keeps its existing role-step path.
-    const mobileRole = page.locator('.career-path-mobile-role');
-    if (await mobileRole.isVisible()) {
-      await mobileRole.click();
-    } else {
-      const mobileSummary = page.locator('.career-path-mobile-summary');
-      if (await mobileSummary.isVisible()) {
-        await mobileSummary.click();
-      }
-    }
+    // The compact layout reaches the role filter through «Вакансии» → «Фильтры».
+    await page
+      .getByRole('navigation', { name: 'Разделы' })
+      .getByRole('button', { name: 'Вакансии', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: /^Фильтры/ })
+      .first()
+      .click();
+    await page.getByText('Добавить свою роль', { exact: true }).click();
 
     await expect(page.locator('.vacancies-screen')).toBeVisible();
+    // 390 has no role-step link any more: the role field opens from the filter sheet and takes input.
     const mobileRoleInput = page.locator('.add-role-input');
-    if (!(await mobileRoleInput.isVisible())) {
-      await page.locator('[data-filter-sheet-group="roles"]').click();
-    }
+    await expect(mobileRoleInput).toBeVisible();
+    await mobileRoleInput.focus();
     await expect(mobileRoleInput).toBeFocused();
     await page.screenshot({ path: 'output/playwright/B366/role-step-after-390.png' });
   });

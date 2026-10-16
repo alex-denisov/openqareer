@@ -4,6 +4,10 @@ import { todaySnapshot } from './fixtures/readabilityWorkspace';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
 test.describe('B397: Search Momentum Widget', () => {
+  test.fixme(
+    true,
+    'ACC-A-1 removed this surface from the approved Today and nothing mounts it now; owner decision pending (restore or retire). Do not weaken: re-enable when the surface is back.',
+  );
   test('renders compact momentum on mobile and the S10 funnel on desktop (Criterion 6)', async ({
     page,
   }, testInfo) => {

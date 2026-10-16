@@ -147,6 +147,11 @@
     overflow-x: clip;
   }
 
+  /* Мастер первого запуска занимает экран без отступов: его нижние кнопки не должны уходить под меню. */
+  .career-shell .career-main:has(.first-run-screen) {
+    padding-block-end: var(--career-mobile-nav-height);
+  }
+
   /* Кабинетные экраны задают свой нижний отступ (48 px) и иначе остаются под плавающим меню. */
   .career-shell .career-main:has(.career-cabinet) {
     padding-block-end: calc(var(--career-mobile-nav-height) + var(--career-space-4));

@@ -3,6 +3,10 @@ import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import * as fs from 'node:fs';
 
 test.describe('B357: Executive Onboarding 30-60-90 Coach', () => {
+  test.fixme(
+    true,
+    'ACC-A-1 removed this surface from the approved Today and nothing mounts it now; owner decision pending (restore or retire). Do not weaken: re-enable when the surface is back.',
+  );
   test('renders executive onboarding card, supports tabs, checklist and captures 1440, 1000, 390', async ({
     page,
   }, testInfo) => {

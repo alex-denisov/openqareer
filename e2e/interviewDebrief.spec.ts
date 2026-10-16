@@ -118,6 +118,10 @@ test.describe('B393 interview debrief and company reminder draft', () => {
   test('completes debriefing, computes deadline and proposes polite company reminder draft on today screen', async ({
     page,
   }, testInfo) => {
+    test.fixme(
+      true,
+      'ACC-A-1 removed the company reminder draft from the approved Today and nothing mounts it now; owner decision pending (restore or retire). Do not weaken: re-enable when the surface is back.',
+    );
     test.skip(
       testInfo.project.name !== 'mobile-390',
       'Desktop Today rows route to Responses; compact Today retains reminder drafting.',
