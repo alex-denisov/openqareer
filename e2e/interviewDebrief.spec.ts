@@ -120,7 +120,7 @@ test.describe('B393 interview debrief and company reminder draft', () => {
   }, testInfo) => {
     test.fixme(
       true,
-      'ACC-A-1 removed the company reminder draft from the approved Today and nothing mounts it now; owner decision pending (restore or retire). Do not weaken: re-enable when the surface is back.',
+      'The approved Responses mockup (screen 5) has «Напомнить» for waiting responses (row and bulk menu); the company reminder draft modal is not mounted yet. Re-enable when it is wired on Responses (block B).',
     );
     test.skip(
       testInfo.project.name !== 'mobile-390',
