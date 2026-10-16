@@ -1163,7 +1163,7 @@ test.describe('B265 Profile screen', () => {
 
   test('C58: a grounded consultant proposal is prepared before it appears in the Profile', async ({
     page,
-  }, testInfo) => {
+  }) => {
     const turnResult = {
       message: 'Предлагаю обновить раздел «Обо мне» по подтверждённым фактам.',
       phase: 'resume',
