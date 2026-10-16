@@ -321,6 +321,11 @@ async function hideConsultantForEvidence(page: Page): Promise<void> {
 }
 
 test.describe('B251 responses screen', () => {
+  // The fixtures are dated September 2026 and the board shows a 30-day window.
+  test.beforeEach(async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-14T06:00:00.000Z'));
+  });
+
   test('shows the four pipeline stages and keeps receipt status on sent cards', async ({
     page,
   }, testInfo) => {
