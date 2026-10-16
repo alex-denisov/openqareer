@@ -5,6 +5,7 @@ import type { CandidateConnection } from '../src/features/coach/coachApi';
 import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.mjs';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAccountFromShell } from './helpers/open-account';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('AUD-8');
 
@@ -124,9 +125,7 @@ function accountConsentHandler() {
 
 async function openAccount(page: import('@playwright/test').Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  const trigger = page.getByRole('button', { name: 'Открыть аккаунт' });
-  await expect(trigger).toBeEnabled({ timeout: 15_000 });
-  await trigger.click();
+  await openAccountFromShell(page);
   const account = page.getByTestId('career-shell').getByRole('main');
   await expect(account).toBeVisible({ timeout: 15_000 });
   if ((page.viewportSize()?.width ?? 1440) > 760) {

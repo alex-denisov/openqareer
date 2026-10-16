@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Route } from '@playwright/test';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAccountFromShell } from './helpers/open-account';
 
 const EVIDENCE_DIR = e2eEvidenceDirectory('B474');
 const PREFERENCE_KEYS = [
@@ -97,7 +98,7 @@ function createPreferencesHandler() {
 
 async function openNotifications(page: import('@playwright/test').Page) {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+  await openAccountFromShell(page);
   const account = page.getByTestId('career-shell').getByRole('main');
   if ((page.viewportSize()?.width ?? 1440) <= 760) {
     await account.getByRole('button', { name: 'Назад' }).click();

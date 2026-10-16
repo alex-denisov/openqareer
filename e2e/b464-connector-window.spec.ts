@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.mjs';
+import { openAccountFromShell } from './helpers/open-account';
 
 const TEST_CONNECTION = {
   platform: 'hh',
@@ -26,7 +27,7 @@ test.describe('B464 browser connector window', () => {
     );
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+    await openAccountFromShell(page);
     const account = page.getByTestId('career-shell').getByRole('main');
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
       await account.getByRole('button', { name: 'Назад' }).click();
@@ -103,7 +104,7 @@ test.describe('B464 browser connector window', () => {
     );
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+    await openAccountFromShell(page);
     const account = page.getByTestId('career-shell').getByRole('main');
     if ((page.viewportSize()?.width ?? 1440) <= 760) {
       await account.getByRole('button', { name: 'Назад' }).click();
@@ -217,7 +218,7 @@ test.describe('B464 browser connector window', () => {
     );
 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Открыть аккаунт' }).click();
+    await openAccountFromShell(page);
     const account = page.getByTestId('career-shell').getByRole('main');
     await account.getByRole('tab', { name: 'Подключения' }).click();
     await account.getByRole('button', { name: 'Управлять' }).click();

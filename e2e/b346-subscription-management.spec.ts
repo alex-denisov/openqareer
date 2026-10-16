@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { openAccountFromShell } from './helpers/open-account';
 
 test('B346 subscription management is usable on desktop and mobile', async ({ page }, testInfo) => {
   test.skip(
@@ -12,12 +13,7 @@ test('B346 subscription management is usable on desktop and mobile', async ({ pa
   await mockSignedInCabinet(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
 
-  const accountButton = page
-    .locator('.career-account-button:visible, .career-account-trigger:visible')
-    .first();
-  await expect(accountButton).toBeVisible({ timeout: 20_000 });
-  await expect(accountButton).toBeEnabled();
-  await accountButton.click();
+  await openAccountFromShell(page);
 
   const account = page.getByTestId('career-shell').getByRole('main');
   await expect(account).toBeVisible();
