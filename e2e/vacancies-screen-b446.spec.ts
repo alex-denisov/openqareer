@@ -176,12 +176,12 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     await expect(shell.getByRole('main').getByRole('heading', { name: 'Вакансии' })).toBeVisible();
     await page.getByRole('button', { name: 'Спросить консультанта' }).click();
     await expect(shell.locator('.career-expert-panel')).toBeVisible();
-    await page
-      .getByRole('button', {
-        name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,
-      })
+    await shell
+      .locator('.career-expert-panel')
+      .getByRole('button', { name: 'Развернуть или свернуть консультанта' })
+      .last()
       .click();
-    await expect(page.locator('.career-expert-panel')).toHaveCount(0);
+    await expect(page.locator('.career-expert-panel')).not.toBeVisible();
   }
   const viewportSuffix = testInfo.project.name === 'mobile-390' ? '390' : '1440';
   mkdirSync('output/playwright/B446', { recursive: true });
