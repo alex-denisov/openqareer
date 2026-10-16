@@ -4040,9 +4040,15 @@
     padding: var(--career-space-6) var(--career-space-4) var(--career-space-6);
   }
 
+  /* Макет 390 «Вход → скелет»: заголовок живёт в шапке, карточки без рамок и крупнее радиусом. */
   .career-today-skeleton-heading {
-    display: grid;
-    align-items: start;
+    display: none;
+  }
+
+  .career-today-skeleton-card,
+  .career-today-skeleton-card.is-decision {
+    border-color: transparent;
+    border-radius: var(--career-radius-lg);
   }
 
   .career-today-skeleton-grid {
@@ -16685,11 +16691,6 @@ button.chip {
 
 /* Заглушка загрузки (макет 0 «скелет»): заголовок и статус живут в общей шапке, а не в теле экрана. */
 @media (min-width: 761px) {
-  .career-session-gate:has(.career-today-skeleton) {
-    max-width: none;
-    padding-top: 0;
-  }
-
   .career-today-skeleton-heading {
     display: none;
   }
@@ -16732,4 +16733,9 @@ button.chip {
   .career-desktop-topbar .career-bootstrap-status {
     min-block-size: calc(var(--career-space-8) + var(--career-space-1));
   }
+}
+
+.career-session-gate:has(.career-today-skeleton) {
+  max-width: none;
+  padding-top: 0;
 }
