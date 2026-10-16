@@ -716,24 +716,19 @@ test.describe('B251 responses screen', () => {
     await expect(responseError.getByRole('button', { name: 'Повторить' })).toBeVisible();
   });
 
-  test('D15: desktop Today omits the path; mobile keeps the single current-step summary', async ({
+  test('D15: the approved Today omits the campaign path on desktop and mobile', async ({
     page,
-  }, testInfo) => {
+  }) => {
     await stubSession(page);
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
 
-    if (testInfo.project.name === 'mobile-390') {
-      await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
-      const summary = page.locator('.career-path-mobile-summary');
-      await expect(summary).toBeVisible();
-      await expect(page.locator('.career-path-desktop')).toBeHidden();
-      await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
-      return;
-    }
-
-    // The approved desktop Today layout no longer includes the campaign stepper.
-    await expect(page.locator('.career-path')).toHaveCount(0);
+    // The approved Today (1440 and 390) no longer includes the campaign stepper.
+    await expect(page.getByRole('heading', { level: 1, name: 'Сегодня' })).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(page.locator('.career-path')).not.toBeVisible();
+    await expect(page.locator('.career-responses-filter-notice')).toHaveCount(0);
   });
 
   test('B450: columns, table and channel performance use the same response cohort', async ({

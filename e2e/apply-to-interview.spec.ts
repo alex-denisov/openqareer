@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 
@@ -485,9 +485,7 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   }
   await card.getByRole('button', { name: 'Сохранить этап' }).click();
 
-  const prepButton = card.getByRole('button', { name: 'Подготовиться' });
-  await expect(prepButton).toBeVisible();
-  await prepButton.click();
+  await openInterviewPrep(page, card);
   await expect(page.getByRole('dialog')).toContainText('Genetec');
   if (captureEvidence) {
     await page.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
@@ -497,22 +495,28 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openToday(page);
 }
 
+/** 1440 cards carry «Подготовиться»; the 390 tracker opens preparation from the selected response. */
+async function openInterviewPrep(page: Page, card: Locator): Promise<void> {
+  const compact = (page.viewportSize()?.width ?? 1440) < 1024;
+  const button = compact
+    ? page.getByRole('button', { name: 'Начать мок-интервью' })
+    : card.getByRole('button', { name: 'Подготовиться' });
+  await expect(button).toBeVisible();
+  await button.click();
+}
+
 async function openToday(page: Page): Promise<void> {
   const viewport = page.viewportSize()?.width ?? 0;
   await page.locator('button[aria-label="Сегодня"]:visible').first().click();
-  await expect(page.locator('.career-today')).toBeVisible();
-  if (viewport >= 1024) {
-    // Desktop queue rows navigate to the response tracker, where the actual
-    // interview preparation action lives.
-    await page.locator('.career-today-queue-desktop-row').filter({ hasText: 'Genetec' }).click();
-    const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
-    await expect(todayCard.getByRole('button', { name: 'Подготовиться' })).toBeVisible();
-    await todayCard.getByRole('button', { name: 'Подготовиться' }).click();
-  } else {
-    const todayPrep = page.getByRole('button', { name: 'Подготовиться' });
-    await expect(todayPrep).toBeVisible();
-    await todayPrep.click();
-  }
+  await expect(page.locator('.career-today, .career-today-mobile').first()).toBeVisible();
+  // Today rows navigate to the response tracker, where the interview preparation action lives.
+  const row =
+    viewport >= 1024
+      ? page.locator('.career-today-queue-desktop-row').filter({ hasText: 'Genetec' })
+      : page.getByTestId('today-mobile-queue-row').filter({ hasText: 'Genetec' });
+  await row.click();
+  const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
+  await openInterviewPrep(page, todayCard);
   await expect(page.getByRole('dialog')).toContainText('Genetec');
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 }
