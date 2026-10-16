@@ -14,6 +14,7 @@ import {
   CaretDown,
   CaretUp,
   ClockCounterClockwise,
+  PaperPlaneTilt,
   ShieldCheck,
   Sparkle,
   Spinner,
@@ -744,8 +745,10 @@ function ExpertPanelSkeleton() {
 function ExpertComposerSkeleton() {
   return (
     <div className="career-expert-composer-skeleton" aria-hidden="true">
-      <span />
-      <span />
+      <span>Спросите по этому разделу</span>
+      <span>
+        <PaperPlaneTilt size={18} />
+      </span>
     </div>
   );
 }

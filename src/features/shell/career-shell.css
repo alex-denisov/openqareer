@@ -3519,14 +3519,20 @@
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-sm);
   background: var(--career-surface);
+  padding-inline: var(--career-space-3);
+  line-height: var(--career-target-min);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
 }
 
 .career-expert-composer-skeleton > span:last-child {
-  display: block;
+  display: grid;
+  place-items: center;
   inline-size: var(--career-target-min);
   block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-accent);
   border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
+  color: var(--career-accent);
 }
 
 .career-expert-message,
@@ -16675,4 +16681,55 @@ button.chip {
 .career-shell input[type='radio']:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Заглушка загрузки (макет 0 «скелет»): заголовок и статус живут в общей шапке, а не в теле экрана. */
+@media (min-width: 761px) {
+  .career-session-gate:has(.career-today-skeleton) {
+    max-width: none;
+    padding-top: 0;
+  }
+
+  .career-today-skeleton-heading {
+    display: none;
+  }
+
+  .career-desktop-topbar .career-bootstrap-bell {
+    margin-inline-start: auto;
+  }
+
+  .career-desktop-topbar .career-bootstrap-status {
+    margin-inline-start: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--career-space-2);
+    padding: var(--career-space-2) var(--career-space-3);
+    border-radius: var(--career-radius-sm);
+    background: var(--career-surface);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-today-skeleton-grid {
+    grid-template-columns: minmax(0, 576fr) minmax(0, 340fr);
+    gap: var(--career-space-6);
+  }
+
+  /* Высоты карточек скелета равны высотам макета «Вход → скелет». */
+  .career-today-skeleton-card.is-decision {
+    min-block-size: calc(var(--career-space-8) * 6.6875);
+  }
+
+  .career-today-skeleton-card.is-queue {
+    min-block-size: calc(var(--career-space-8) * 9.15625);
+  }
+
+  .career-today-skeleton-card.is-path {
+    min-block-size: calc(var(--career-space-8) * 6.3125);
+  }
+
+  .career-desktop-topbar .career-bootstrap-status {
+    min-block-size: calc(var(--career-space-8) + var(--career-space-1));
+  }
 }

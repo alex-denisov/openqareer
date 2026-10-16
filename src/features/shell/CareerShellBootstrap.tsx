@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { BellSimple, CircleNotch } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import { CareerTodaySkeleton } from './CareerTodaySkeleton';
 
@@ -31,6 +32,22 @@ function BootstrapTopbar() {
         <i className="career-bootstrap-icon" /> Тарифы
       </span>
       <i />
+    </header>
+  );
+}
+
+function BootstrapDesktopTopbar() {
+  return (
+    <header className="career-desktop-topbar career-bootstrap-desktop-topbar" aria-hidden="true">
+      <h1>Сегодня</h1>
+      <span className="career-desktop-topbar-hint career-bootstrap-status">
+        <CircleNotch size={16} aria-hidden="true" /> Проверяем вход и читаем ваш профиль
+      </span>
+      <div className="career-desktop-topbar-actions">
+        <span className="career-notification-bell">
+          <BellSimple size={22} aria-hidden="true" />
+        </span>
+      </div>
     </header>
   );
 }
@@ -93,9 +110,12 @@ export function CareerShellBootstrap() {
       <BootstrapRail />
       <BootstrapTopbar />
       <main className="career-main" id="career-main">
-        <section className="career-session-gate">
-          <CareerTodaySkeleton statusRole={false} />
-        </section>
+        <BootstrapDesktopTopbar />
+        <div className="career-main-content">
+          <section className="career-session-gate">
+            <CareerTodaySkeleton statusRole={false} />
+          </section>
+        </div>
       </main>
       <BootstrapMobileNavigation />
       <BootstrapExpertPanel />

@@ -215,13 +215,12 @@ function TodayProfileProgress({
           Профиль готов на <strong>{percent} %</strong>:{' '}
           {pluralRu(actions.length, ['действие', 'действия', 'действий'])}
         </p>
-        <div
+        <progress
           className="career-today-profile-meter"
-          role="img"
+          max={completeness.totalCount}
+          value={completeness.completedCount}
           aria-label={`Профиль готов на ${percent} процентов`}
-        >
-          <i style={{ inlineSize: `${percent}%` }} />
-        </div>
+        />
       </div>
       <div className="career-today-profile-actions" aria-label="Что заполнить">
         {actions.map((action) => (

@@ -11,16 +11,26 @@
 }
 
 .career-today-profile-meter {
+  appearance: none;
+  inline-size: 100%;
   block-size: var(--career-space-2);
+  border: 0;
   border-radius: var(--career-space-1);
-  background: var(--career-surface-raised, var(--career-surface));
+  background: var(--career-surface-raised);
   overflow: hidden;
 }
 
-.career-today-profile-meter > i {
-  display: block;
-  block-size: 100%;
-  border-radius: inherit;
+.career-today-profile-meter::-webkit-progress-bar {
+  background: var(--career-surface-raised);
+}
+
+.career-today-profile-meter::-webkit-progress-value {
+  border-radius: var(--career-space-1);
+  background: var(--career-accent);
+}
+
+.career-today-profile-meter::-moz-progress-bar {
+  border-radius: var(--career-space-1);
   background: var(--career-accent);
 }
 

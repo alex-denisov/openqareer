@@ -1,10 +1,12 @@
-import { Sparkle } from '@phosphor-icons/react';
+import { BellSimple, CircleNotch, Sparkle } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 
 interface DesktopCabinetTopbarProps {
   readonly title: string;
   readonly railHint: string | null;
+  /** Идёт проверка входа: статус в шапке, как на макете «Вход → скелет». */
+  readonly bootStatus?: string | null;
   readonly showNotifications: boolean;
   readonly showConsultantButton: boolean;
   readonly onOpenConsultant: () => void;
@@ -59,6 +61,7 @@ function DesktopTopbarActions(props: DesktopTopbarActionsProps) {
 export function DesktopCabinetTopbar({
   title,
   railHint,
+  bootStatus,
   showNotifications,
   showConsultantButton,
   onOpenConsultant,
@@ -79,7 +82,7 @@ export function DesktopCabinetTopbar({
       aria-label={`Раздел ${title}`}
     >
       <h1>{title}</h1>
-      {railHint ? (
+      {railHint && !bootStatus ? (
         <span className="career-desktop-topbar-hint" role="status" aria-live="polite">
           {railHint}
         </span>
@@ -95,6 +98,20 @@ export function DesktopCabinetTopbar({
         onOpenCenter={onOpenCenter}
         onOpenSettings={onOpenSettings}
       />
+      {bootStatus ? (
+        <span className="career-notification-bell career-bootstrap-bell" aria-hidden="true">
+          <BellSimple size={22} />
+        </span>
+      ) : null}
+      {bootStatus ? (
+        <span
+          className="career-desktop-topbar-hint career-bootstrap-status"
+          role="status"
+          aria-live="polite"
+        >
+          <CircleNotch size={16} aria-hidden="true" /> {bootStatus}
+        </span>
+      ) : null}
     </header>
   );
 }
