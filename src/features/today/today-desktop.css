@@ -60,3 +60,14 @@
 .career-today-changes > p {
   justify-content: flex-start;
 }
+
+/* Макет: в узком окне заголовок полосы профиля и кнопки идут друг под другом. */
+@media (max-width: 1100px) {
+  .career-today-desktop .career-today-profile-progress {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .career-today-profile-actions {
+    justify-content: flex-start;
+  }
+}

@@ -739,17 +739,17 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/C73/screen-responses-390.png' });
   });
 
-  test('B344 D9: на 1000 ни одна подпись статуса шага не длиннее 14 символов, у подписи нет text-overflow: ellipsis', async ({
+  test('B344 D9: на 1000 «Сегодня» без пути, как в утверждённом макете; подписи шага, если путь показан, не длиннее 14 символов', async ({
     page,
   }) => {
     await mockSignedInCabinet(page);
-    // From 1024 px «Сегодня» uses the desktop composition of the mockups, which drops the path.
+    // From 761 px «Сегодня» uses the desktop composition of the mockups, which drops the path.
     await page.setViewportSize({ width: 1000, height: 900 });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
-    await expect(page.locator('.career-path')).toBeVisible({ timeout: 15_000 });
-
     await openSection(page, 'Сегодня');
+    await expect(page.locator('.career-today-desktop')).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('.career-path')).toBeHidden();
     const reasons = page.locator('.career-path-reason:visible');
     const count = await reasons.count();
     for (let i = 0; i < count; i++) {
@@ -762,9 +762,7 @@ test.describe('B232 readability gate', () => {
       expect(textOverflow).not.toBe('ellipsis');
     }
 
-    await page
-      .locator('.career-path')
-      .screenshot({ path: 'output/playwright/B344/d9-path-indicator-1000.png' });
+    await page.screenshot({ path: 'output/playwright/B344/d9-today-1000.png' });
 
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(page.locator('.career-path')).toBeHidden();

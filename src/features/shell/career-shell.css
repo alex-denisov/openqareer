@@ -3355,9 +3355,9 @@
   transform: translateY(-50%);
 }
 
-/* The Today composition of the mockups needs about 950 px of content: with the consultant
-   folded that is a window from 1024 px, not only the 1280 px that keeps the panel open. */
-@media (min-width: 1024px) {
+/* The Today composition of the mockups (1440) is the one for every window wider than the phone
+   layout: 761 px and up. The compact composition below 761 px is the approved 390 mobile Today. */
+@media (min-width: 761px) {
   .career-cabinet-view-today .career-path {
     display: none;
   }
