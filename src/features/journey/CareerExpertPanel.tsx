@@ -32,6 +32,7 @@ import {
 } from '../coach/coachApi';
 import { applySkillQuizResult } from '../coach/careerCommandApi';
 import { SkillQuizApplyResultCard } from './SkillQuizApplyResultCard';
+import { starterPromptsForStage } from './starterPrompts';
 import type { CareerJourney } from './careerJourneyEngine';
 import { consultantTurns } from './consultantHistory';
 import { ComposerModeSplit, type ComposerInputMode } from './ComposerModeSplit';
@@ -112,6 +113,7 @@ export function CareerExpertPanel({
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [content, setContent] = useState(initialPrompt ?? '');
+  const [quickRepliesDismissed, setQuickRepliesDismissed] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
   const [voiceDraft, setVoiceDraft] = useState(false);
   const [sending, setSending] = useState(false);
@@ -221,6 +223,7 @@ export function CareerExpertPanel({
     let active = true;
     setLoadingSnapshot(true);
     setLiveResult(undefined);
+    setQuickRepliesDismissed(false);
     void getCandidateWithMessages(stage)
       .then((candidate) => {
         if (active) setSnapshot(candidate);
@@ -262,6 +265,7 @@ export function CareerExpertPanel({
     if (!clean || !user) return false;
     // На телефоне шторка свёрнута и прячет ленту: отправка раскрывает её, чтобы ответ был виден.
     if (!mobileExpanded) onToggleMobileExpanded?.();
+    setQuickRepliesDismissed(true);
     setSending(true);
     setPendingQuestion(clean);
     setError(undefined);
@@ -293,6 +297,7 @@ export function CareerExpertPanel({
       });
       pendingOperation.current = undefined;
       setLiveResult(result);
+      setQuickRepliesDismissed(false);
       setLiveTurnIdempotencyKey(idempotencyKey);
       setContent('');
       setVoiceDraft(false);
@@ -325,6 +330,16 @@ export function CareerExpertPanel({
     .reverse()
     .find((turn) => turn.status === 'completed' && turn.result);
   const latestResult = liveResult ?? latestStoredTurn?.result ?? undefined;
+  const lastAssistantMessage = [...turns].reverse().find((message) => message.role === 'assistant');
+  const visibleQuickReplies =
+    !quickRepliesDismissed &&
+    !content.trim() &&
+    !sending &&
+    !loadingSnapshot &&
+    !historyOpen &&
+    !historicalConversation
+      ? (latestResult?.quickReplies ?? [])
+      : [];
   const latestTurnIdempotencyKey = liveResult
     ? liveTurnIdempotencyKey
     : latestStoredTurn?.idempotencyKey;
@@ -514,12 +529,31 @@ export function CareerExpertPanel({
                         paragraph ? <p key={`${message.id}-${index}`}>{paragraph}</p> : null,
                       )
                   )}
+                  {message.role === 'assistant' &&
+                  message.id === lastAssistantMessage?.id &&
+                  latestResult?.message === message.content &&
+                  visibleQuickReplies.length ? (
+                    <ExpertStarterChips
+                      prompts={visibleQuickReplies}
+                      ariaLabel="Варианты ответа"
+                      variantClass="career-expert-quick-replies"
+                      onChoose={(reply) => void sendContent(reply)}
+                    />
+                  ) : null}
                 </article>
               ))}
               {showLiveMessage ? (
                 <article className="career-dialogue-turn is-assistant" aria-live="polite">
                   <span>Карьерный консультант</span>
                   <ConsultantMessage text={liveResult.message} />
+                  {visibleQuickReplies.length ? (
+                    <ExpertStarterChips
+                      prompts={visibleQuickReplies}
+                      ariaLabel="Варианты ответа"
+                      variantClass="career-expert-quick-replies"
+                      onChoose={(reply) => void sendContent(reply)}
+                    />
+                  ) : null}
                 </article>
               ) : null}
               <div ref={historyEndRef} aria-hidden="true" />
@@ -530,6 +564,16 @@ export function CareerExpertPanel({
                 <span>Карьерный консультант</span>
                 <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
               </article>
+              {user && !loadingSnapshot && !historyOpen && !content.trim() && !sending ? (
+                <ExpertStarterChips
+                  prompts={starterPromptsForStage(stage)}
+                  ariaLabel="Темы для начала"
+                  onChoose={(prompt) => {
+                    setContent(prompt);
+                    inputRef.current?.focus();
+                  }}
+                />
+              ) : null}
             </div>
           ) : null}
           {stage === 'profile' ? (
@@ -620,14 +664,6 @@ export function CareerExpertPanel({
       {loadingSession ? <ExpertComposerSkeleton /> : null}
       {user && !loadingSession && !historicalConversation ? (
         <form className="career-expert-composer" onSubmit={handleSend}>
-          {!content.trim() && !voiceActive && !historyOpen ? (
-            <ExpertStarterChips
-              onChoose={(prompt) => {
-                setContent(prompt);
-                inputRef.current?.focus();
-              }}
-            />
-          ) : null}
           <label className="career-sr-only" htmlFor="career-expert-input">
             Сообщение карьерному консультанту
           </label>
@@ -640,6 +676,7 @@ export function CareerExpertPanel({
               value={content}
               onChange={(event) => {
                 setContent(event.target.value);
+                if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
               placeholder="Сообщение консультанту"
@@ -660,7 +697,10 @@ export function CareerExpertPanel({
               startSignal={voiceStartSignal}
               value={content}
               disabled={sending}
-              onChange={setContent}
+              onChange={(value) => {
+                setContent(value);
+                if (value.trim()) setQuickRepliesDismissed(true);
+              }}
               onStateChange={(nextState) => {
                 setVoiceState(nextState);
                 if (nextState !== 'idle' && !mobileExpanded) onToggleMobileExpanded?.();
@@ -709,15 +749,24 @@ function ExpertComposerSkeleton() {
     </div>
   );
 }
-const EXPERT_STARTER_PROMPTS = [
-  'С чего начать?',
-  'Какие источники можно подключить?',
-  'Можно без подключений?',
-];
-function ExpertStarterChips({ onChoose }: { readonly onChoose: (prompt: string) => void }) {
+export function ExpertStarterChips({
+  prompts,
+  ariaLabel,
+  onChoose,
+  variantClass,
+}: {
+  readonly prompts: readonly string[];
+  readonly ariaLabel: string;
+  readonly onChoose: (prompt: string) => void;
+  readonly variantClass?: string;
+}) {
   return (
-    <div className="career-expert-starters" role="group" aria-label="Темы для начала">
-      {EXPERT_STARTER_PROMPTS.map((prompt) => (
+    <div
+      className={`career-expert-chip-group${variantClass ? ` ${variantClass}` : ''}`}
+      role="group"
+      aria-label={ariaLabel}
+    >
+      {prompts.map((prompt) => (
         <button
           className="career-expert-starter-chip"
           type="button"

@@ -6,6 +6,7 @@ import {
   CareerExpertPanel,
   CareerIntelligenceSummary,
   ExpertWaitingRow,
+  ExpertStarterChips,
 } from './CareerExpertPanel';
 import { pendingConsultantProposalCount } from '../shell/CareerWorkspaceShellHelpers';
 import { CareerActionProposalCard } from './CareerCommandActions';
@@ -173,7 +174,7 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain(prompt);
   });
 
-  it('uses a dockable complementary panel with starter chips and an available voice control', () => {
+  it('uses a dockable complementary panel with an available voice control', () => {
     const html = renderToStaticMarkup(
       <CareerExpertPanel
         initialUser={
@@ -187,11 +188,28 @@ describe('CareerExpertPanel copy', () => {
 
     expect(html).toContain('<section id="career-consultant-sheet"');
     expect(html).not.toContain('aria-modal="true"');
-    expect(html).toContain('career-expert-starters');
     expect(html).toContain('aria-label="Способ ввода"');
     expect(html).toContain('aria-label="Отправить вопрос"');
     expect(html).toContain('career-expert-sheet-toggle');
     expect(html).toContain('aria-expanded="false"');
+  });
+
+  it('renders reply chips in an accessible group with buttons', () => {
+    const html = renderToStaticMarkup(
+      <ExpertStarterChips
+        prompts={['Как уточнить цель?', 'Что проверить?']}
+        ariaLabel="Варианты ответа"
+        variantClass="career-expert-quick-replies"
+        onChoose={() => undefined}
+      />,
+    );
+
+    expect(html).toContain('role="group"');
+    expect(html).toContain('aria-label="Варианты ответа"');
+    expect(html).toContain('career-expert-chip-group');
+    expect(html).toContain('career-expert-quick-replies');
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html).toContain('Как уточнить цель?');
   });
 
   it('renders skill quiz verification prompt when stage is profile (B376)', () => {
