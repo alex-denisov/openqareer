@@ -679,7 +679,7 @@ export function CareerExpertPanel({
                 if (event.target.value.trim()) setQuickRepliesDismissed(true);
                 if (!event.target.value.trim()) setVoiceDraft(false);
               }}
-              placeholder="Сообщение консультанту"
+              placeholder="Спросите по этому разделу"
               rows={1}
               disabled={sending || voiceTextLocked}
             />

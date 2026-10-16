@@ -1019,7 +1019,7 @@ test.describe('B251 today screen', () => {
     await expect(page.locator('.career-today-mobile .career-today-return-banner')).toHaveCount(0);
     await captureS10Today(page, 'today-changes-1440');
 
-    await page.getByRole('button', { name: 'Закрыть уведомление', exact: true }).click();
+    await page.getByRole('button', { name: 'Скрыть уведомление', exact: true }).click();
     await expect(page.locator('.career-today-changes')).toHaveCount(0);
 
     // Check responsive layout on 390

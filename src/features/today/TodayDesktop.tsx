@@ -156,7 +156,7 @@ function TodayChangesNotice({
       <button
         className="career-today-changes-close"
         type="button"
-        aria-label="Закрыть уведомление"
+        aria-label="Скрыть уведомление"
         onClick={onDismiss}
       >
         <X size="1em" aria-hidden="true" />

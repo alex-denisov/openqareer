@@ -41,3 +41,12 @@
     color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated));
   font-size: var(--career-text-xs);
 }
+
+/* Полоса изменений: ссылка «Смотреть» идёт сразу за текстом, как в макете. */
+.career-today-changes-summary {
+  flex: 0 1 auto;
+}
+
+.career-today-changes > p {
+  justify-content: flex-start;
+}

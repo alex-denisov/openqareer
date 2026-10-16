@@ -120,3 +120,25 @@
 .career-voice-input[data-active='false']:empty {
   display: none;
 }
+
+/* Макет 1440: одна строка 44 px, рядом кнопка отправки с выбором способа ввода; без наложения на поле. */
+@media (min-width: 761px) {
+  .career-expert-composer .career-expert-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: var(--career-space-2);
+  }
+  .career-expert-composer textarea {
+    min-block-size: var(--career-target-min);
+    padding-inline-end: var(--career-space-3);
+    resize: none;
+  }
+  .career-expert-composer .career-composer-split {
+    position: static;
+  }
+  .career-expert-composer .career-expert-input-row > .career-voice-input,
+  .career-expert-composer .career-expert-input-row > section {
+    grid-column: 1 / -1;
+  }
+}
