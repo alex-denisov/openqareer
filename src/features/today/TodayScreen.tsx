@@ -20,7 +20,12 @@ import {
   isConsultantActionResolved,
   resolveConsultantAction,
 } from './consultantActionStorage';
-import type { TodayFollowUp, TodayQueueItem, TodaySnapshot } from './todayApi';
+import {
+  selectTodayDecision,
+  type TodayFollowUp,
+  type TodayQueueItem,
+  type TodaySnapshot,
+} from './todayApi';
 import { TodayDesktopContent, actionSourceSummary, type TodayFunnelContext } from './TodayDesktop';
 export type { TodayFunnelContext } from './TodayDesktop';
 import {
@@ -109,6 +114,30 @@ function useTodayConsultantAction({
   return { activeAction, onAccept, onDismiss, onPostpone };
 }
 
+function selectedDecisionAction(snapshot: TodaySnapshot): ReasonedCareerAction | undefined {
+  if (snapshot.todayDecisionSelection?.resolution !== 'accepted') return undefined;
+  const item = snapshot.queue.find(
+    (entry) =>
+      entry.applicationId === snapshot.todayDecisionSelection?.applicationId &&
+      entry.kind === 'follow_up',
+  );
+  if (!item) return undefined;
+  return {
+    revision: 'career-action-policy-v1-2026-08-07',
+    type: 'decision',
+    destination: 'coach',
+    headline: queueActionTitle(item),
+    label: 'Открыть отклик',
+    rationale: item.eyebrow ?? 'Задача из вашей очереди дня.',
+    expectedChange: 'Откроются отклики, чтобы подготовить напоминание.',
+    findingIds: [],
+    roleIds: [],
+    marketIds: [],
+    alternatives: [],
+    approvalBoundary: 'Напоминание отправляется только после вашего подтверждения.',
+  };
+}
+
 export function TodayScreen({
   snapshot,
   loading,
@@ -135,9 +164,18 @@ export function TodayScreen({
   return (
     <TodayContent
       snapshot={snapshot}
-      activeAction={activeAction}
-      onAccept={onAccept}
-      onPostpone={onPostpone}
+      activeAction={selectedDecisionAction(snapshot) ?? activeAction}
+      onAccept={selectedDecisionAction(snapshot) ? () => onNavigate?.('responses') : onAccept}
+      onPostpone={
+        snapshot.todayDecisionSelection?.resolution === 'accepted'
+          ? () => {
+              void selectTodayDecision(
+                snapshot.todayDecisionSelection!.applicationId,
+                'dismissed',
+              ).catch(() => onRetry());
+            }
+          : onPostpone
+      }
       onNavigate={onNavigate}
       onOpenExpert={onOpenExpert}
       profileDraft={profileDraft}

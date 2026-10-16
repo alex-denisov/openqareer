@@ -68,12 +68,16 @@ function useFirstRunFileUpload(setData: React.Dispatch<React.SetStateAction<Firs
     setUploadedFile({ name: file.name, size: file.size });
     setData((current) => ({ ...current, selectedSource: 'file' }));
     try {
+      if (file.size > 10 * 1024 * 1024)
+        throw new Error('Файл больше 10 МБ. Выберите PDF или DOCX меньшего размера.');
       const result = await ingestion?.readPdf(file);
       if (result) setIngestionNotice(uploadStatus(result));
       else setIngestionError(uploadStatus());
     } catch (error) {
       setIngestionError(
-        error instanceof Error ? error.message : 'Не удалось прочитать PDF. Попробуйте другой файл.',
+        error instanceof Error
+          ? error.message
+          : 'Не удалось прочитать PDF. Попробуйте другой файл.',
       );
     } finally {
       setIsIngesting(false);

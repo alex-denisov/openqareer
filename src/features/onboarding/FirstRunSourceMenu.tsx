@@ -86,13 +86,13 @@ export function FirstRunSourceMenu({
       className="first-run-modal-dim"
       role="dialog"
       aria-modal="true"
-      aria-label="Выбор PDF-резюме"
+      aria-label="Выбор файла резюме"
       data-testid="first-run-source-menu"
     >
       <input
         ref={fileInputRef}
         type="file"
-        accept="application/pdf,.pdf"
+        accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
         className="first-run-native-file-input"
         data-testid="native-file-input"
         onChange={(event) => handleSelectedFile(event, onPickFile, onClose)}
@@ -100,7 +100,7 @@ export function FirstRunSourceMenu({
       <div className="first-run-sheet first-run-source-menu-sheet">
         <div className="first-run-source-menu-heading">
           <b>Загрузить резюме</b>
-          <p>PDF до 20 МБ</p>
+          <p>PDF или DOCX, до 10 МБ</p>
         </div>
         {unavailableAction ? (
           <p className="first-run-source-menu-notice" role="status">

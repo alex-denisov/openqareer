@@ -6,7 +6,13 @@ import {
   LinkedinLogo,
   PencilSimple,
   UploadSimple,
+  LockSimple,
+  Info,
+  SignIn,
+  CaretRight,
+  CaretDown,
 } from '@phosphor-icons/react';
+import { CareerTooltip } from '../shell/CareerTooltip';
 import type { FirstRunData, SourceType, WorkFormat } from './firstRunTypes';
 
 function GoalEditForm({
@@ -19,21 +25,27 @@ function GoalEditForm({
   readonly onSave: () => void;
 }): ReactElement {
   return (
-    <div className="first-run-field">
+    <div className="first-run-field first-run-goal-form">
+      <p className="first-run-goal-lead">
+        Что вы хотите от поиска? Одной фразой, потом её можно изменить.
+      </p>
       <textarea
         className="first-run-textarea"
         rows={2}
         value={goal}
         onChange={(e) => onGoalChange(e.target.value)}
+        aria-label="Ваша цель"
         data-testid="goal-textarea"
       />
       <button
         type="button"
         className="first-run-btn-ghost first-run-btn-save-goal"
         onClick={onSave}
+        disabled={!goal.trim()}
         data-testid="save-goal-btn"
       >
-        Сохранить
+        <span className="first-run-desktop-label">Сохранить</span>
+        <span className="first-run-mobile-label">Далее</span>
       </button>
     </div>
   );
@@ -53,11 +65,14 @@ export function FirstRunGoalCard({
   readonly onSaveEdit: () => void;
 }): ReactElement {
   return (
-    <article className="first-run-stage-card is-done" aria-labelledby="goal-title">
+    <article
+      className={`first-run-stage-card${isEditing ? ' is-active' : ' is-done'}`}
+      aria-labelledby="goal-title"
+    >
       <div className="first-run-stage-head">
         <div className="first-run-stage-title-wrap">
-          <span className="first-run-stage-badge is-done">
-            <Check size={16} />
+          <span className={`first-run-stage-badge${isEditing ? '' : ' is-done'}`}>
+            {isEditing ? '1' : <Check size={16} />}
           </span>
           <h2 id="goal-title" className="first-run-stage-title">
             Цель
@@ -119,14 +134,13 @@ export function SourceOptionRow({
         <b>{title}</b>
         <p>{desc}</p>
       </div>
-      <span
-        className={`first-run-source-action-label${isPicked ? ' is-selected' : ''}`}
-      >
+      <span className={`first-run-source-action-label${isPicked ? ' is-selected' : ''}`}>
+        {isPicked && (type === 'linkedin' || type === 'hh') ? (
+          <SignIn size={18} aria-hidden="true" />
+        ) : null}
         {btnText}
       </span>
-      <span className="first-run-source-check">
-        {isPicked ? <Check size={18} /> : null}
-      </span>
+      <span className="first-run-source-check">{isPicked ? <Check size={18} /> : null}</span>
     </button>
   );
 }
@@ -135,37 +149,39 @@ const SOURCE_ITEMS = [
   {
     type: 'linkedin' as const,
     title: 'LinkedIn',
-    desc: 'Разделы профиля станут доступны после подключения аккаунта',
+    desc: 'Места работы, образование, навыки, языки, проекты, курсы, контакты',
     btnText: 'Подключить',
   },
   {
     type: 'hh' as const,
     title: 'hh.ru',
-    desc: 'Резюме станет доступно после подключения аккаунта',
+    desc: 'Резюме с hh.ru: места работы, навыки, образование',
     btnText: 'Подключить',
   },
   {
     type: 'file' as const,
     title: 'Файл резюме',
-    desc: 'PDF, до 20 МБ',
+    desc: 'PDF или DOCX, до 10 МБ',
     btnText: 'Загрузить',
   },
   {
     type: 'talk' as const,
     title: 'Рассказать консультанту',
-    desc: 'Можно обсудить цель и следующие шаги без подключения источника',
+    desc: 'Без подключений: ответите на вопросы, профиль соберём из ответов',
     btnText: 'Начать',
   },
 ] as const;
 
 function SourceGridList({
   data,
+  isMobile,
   onSelectSource,
   onConnectSource,
   onTriggerFileUpload,
   onTriggerConsultant,
 }: {
   readonly data: FirstRunData;
+  readonly isMobile?: boolean;
   readonly onSelectSource: (s: SourceType) => void;
   readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
   readonly onTriggerFileUpload: () => void;
@@ -183,6 +199,7 @@ function SourceGridList({
           isPicked={data.selectedSource === item.type}
           onPick={() => {
             onSelectSource(item.type);
+            if (isMobile) return;
             if (item.type === 'linkedin' || item.type === 'hh') {
               onConnectSource?.(item.type);
             }
@@ -197,10 +214,14 @@ function SourceGridList({
 
 function SourceCardActions({
   source,
+  label,
+  busy,
   onNext,
   onSkip,
 }: {
   readonly source: SourceType | null;
+  readonly label?: string;
+  readonly busy?: boolean;
   readonly onNext: () => void;
   readonly onSkip: () => void;
 }): ReactElement {
@@ -210,9 +231,19 @@ function SourceCardActions({
         type="button"
         className="first-run-btn-ghost"
         onClick={onNext}
+        disabled={!source || busy}
         data-testid="source-next-btn"
       >
-        {source === 'linkedin' || source === 'hh' ? 'Продолжить без подключения' : 'Продолжить'}
+        {label ??
+          (source === 'linkedin'
+            ? 'Подключить LinkedIn'
+            : source === 'hh'
+              ? 'Подключить hh.ru'
+              : source === 'file'
+                ? 'Продолжить с файлом'
+                : source === 'talk'
+                  ? 'Рассказать консультанту'
+                  : 'Продолжить')}
       </button>
       <button
         type="button"
@@ -244,7 +275,9 @@ function FirstRunUploadStatus({
     <>
       {uploadedFileName ? (
         <div className="first-run-uploaded-file-badge" data-testid="uploaded-file-info">
-          <span>Файл резюме: <b>{uploadedFileName}</b></span>
+          <span>
+            Файл резюме: <b>{uploadedFileName}</b>
+          </span>
         </div>
       ) : null}
       {isIngesting ? (
@@ -275,24 +308,18 @@ function SourceCardHeader(): ReactElement {
           Источник
         </h2>
       </div>
+      <CareerTooltip content="Выберите, откуда взять данные о вас. Подключить можно позже.">
+        <button type="button" className="first-run-source-help" aria-label="Пояснение">
+          <Info size={16} aria-hidden="true" />
+        </button>
+      </CareerTooltip>
     </div>
   );
 }
 
-export function FirstRunSourceCard({
-  data,
-  uploadedFileName,
-  isIngesting,
-  ingestionError,
-  ingestionNotice,
-  onSelectSource,
-  onConnectSource,
-  onTriggerFileUpload,
-  onTriggerConsultant,
-  onNext,
-  onSkip,
-}: {
+interface FirstRunSourceCardProps {
   readonly data: FirstRunData;
+  readonly isMobile?: boolean;
   readonly uploadedFileName?: string;
   readonly isIngesting?: boolean;
   readonly ingestionError?: string | null;
@@ -303,28 +330,72 @@ export function FirstRunSourceCard({
   readonly onTriggerConsultant: () => void;
   readonly onNext: () => void;
   readonly onSkip: () => void;
-}): ReactElement {
+}
+
+function activateSource(
+  props: Pick<
+    FirstRunSourceCardProps,
+    | 'data'
+    | 'uploadedFileName'
+    | 'ingestionError'
+    | 'onConnectSource'
+    | 'onTriggerFileUpload'
+    | 'onTriggerConsultant'
+    | 'onNext'
+  >,
+) {
+  const source = props.data.selectedSource;
+  if (source === 'linkedin' || source === 'hh') props.onConnectSource?.(source);
+  else if (source === 'file' && (!props.uploadedFileName || props.ingestionError))
+    props.onTriggerFileUpload();
+  else if (source === 'talk') props.onTriggerConsultant();
+  else props.onNext();
+}
+
+function SourcePrivacy() {
+  return (
+    <p className="first-run-source-privacy">
+      <LockSimple size={16} aria-hidden="true" />
+      <span>
+        Подключение можно отключить в любой момент. Отправлять что-либо от вашего имени без вашего
+        одобрения мы не будем.
+      </span>
+    </p>
+  );
+}
+
+function SourceCardFooter(props: FirstRunSourceCardProps) {
+  return (
+    <>
+      <FirstRunUploadStatus {...props} />
+      <SourcePrivacy />
+      {props.isMobile ? (
+        <SourceCardActions
+          source={props.data.selectedSource}
+          label={
+            props.data.selectedSource === 'file' &&
+            (!props.uploadedFileName || props.ingestionError)
+              ? 'Загрузить резюме'
+              : undefined
+          }
+          busy={props.isIngesting}
+          onNext={() => activateSource(props)}
+          onSkip={props.onSkip}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function FirstRunSourceCard(props: FirstRunSourceCardProps): ReactElement {
   return (
     <article className="first-run-stage-card is-active" aria-labelledby="source-title">
       <SourceCardHeader />
-      <SourceGridList
-        data={data}
-        onSelectSource={onSelectSource}
-        onConnectSource={onConnectSource}
-        onTriggerFileUpload={onTriggerFileUpload}
-        onTriggerConsultant={onTriggerConsultant}
-      />
-      <FirstRunUploadStatus
-        uploadedFileName={uploadedFileName}
-        isIngesting={isIngesting}
-        ingestionError={ingestionError}
-        ingestionNotice={ingestionNotice}
-      />
-      <SourceCardActions
-        source={data.selectedSource}
-        onNext={onNext}
-        onSkip={onSkip}
-      />
+      <p className="first-run-source-lead">
+        Выберите, откуда взять данные о вас. Подключить можно позже.
+      </p>
+      <SourceGridList {...props} />
+      <SourceCardFooter {...props} />
     </article>
   );
 }
@@ -352,27 +423,42 @@ function CityField({
         onClick={onOpenCitySheet}
         data-testid="context-city-picker-btn"
       >
-        <span>{city}</span>
+        <span>{city || 'Выбрать город'}</span>
         <small className="first-run-city-country">{country}</small>
+        <CaretRight className="first-run-city-caret" size={14} aria-hidden="true" />
       </button>
       {cityPicker}
     </div>
   );
 }
 
-function WorkFormatField({ format, onChange }: {
+function WorkFormatField({
+  format,
+  onChange,
+}: {
   readonly format: WorkFormat;
   readonly onChange: (format: WorkFormat) => void;
 }) {
-  return <div className="first-run-field">
-    <label className="first-run-label" htmlFor="work-format-select">Формат работы</label>
-    <select id="work-format-select" className="first-run-select" value={format}
-      onChange={(e) => onChange(e.target.value as WorkFormat)} data-testid="context-format-select">
-      <option value="Гибрид">Гибрид</option>
-      <option value="Удалённо">Удалённо</option>
-      <option value="Офис">Офис</option>
-    </select>
-  </div>;
+  return (
+    <div className="first-run-field">
+      <label className="first-run-label" htmlFor="work-format-select">
+        Формат работы
+      </label>
+      <select
+        id="work-format-select"
+        className="first-run-select"
+        value={format}
+        onChange={(e) => onChange(e.target.value as WorkFormat)}
+        data-testid="context-format-select"
+      >
+        <option value="">Не указан</option>
+        <option value="Гибрид">Гибрид</option>
+        <option value="Удалённо">Удалённо</option>
+        <option value="Офис">Офис</option>
+      </select>
+      <CaretDown className="first-run-format-caret" size={14} aria-hidden="true" />
+    </div>
+  );
 }
 
 function ContextFormFields({
@@ -389,7 +475,7 @@ function ContextFormFields({
   readonly onRelocationToggle: (val: boolean) => void;
 }): ReactElement {
   return (
-    <>
+    <div className="first-run-context-fields">
       <CityField
         city={data.context.city}
         country={data.context.country}
@@ -408,7 +494,7 @@ function ContextFormFields({
           Готов к релокации
         </label>
       </div>
-    </>
+    </div>
   );
 }
 

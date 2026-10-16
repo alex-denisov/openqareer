@@ -47,10 +47,7 @@ export interface IntakeSourceStepProps {
   readonly hhOpen: boolean;
   readonly onLinkedinOpen: (open: boolean) => void;
   readonly onHhOpen: (open: boolean) => void;
-  readonly onLinkedinImported: (
-    parsed: ParsedResume,
-    url: string,
-  ) => void | Promise<void>;
+  readonly onLinkedinImported: (parsed: ParsedResume, url: string) => void | Promise<void>;
   readonly onProviderConnectionFailure: (message: string) => void;
   /** One resume, already read inside the candidate's own hh.ru session. */
   readonly onHhConnected: (
@@ -87,8 +84,7 @@ function SourceChoiceRow({
   lock,
   onChooseSource,
 }: Pick<IntakeSourceStepProps, 'sourceChoice' | 'lock' | 'onChooseSource'>) {
-  const closed = (choice: SourceChoice) =>
-    lock.lockedTo !== undefined && lock.lockedTo !== choice;
+  const closed = (choice: SourceChoice) => lock.lockedTo !== undefined && lock.lockedTo !== choice;
   return (
     <div className="career-source-choice" role="group" aria-label="Источник опыта">
       {SOURCE_CHOICES.map(([choice, label, icon]) => (
@@ -134,9 +130,7 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
       ) : null}
 
       {sourceChoice === 'none' ? (
-        <p className="career-inline-note">
-          Укажите роль и регион для начала подбора.
-        </p>
+        <p className="career-inline-note">Укажите роль и регион для начала подбора.</p>
       ) : null}
 
       {/* A connected platform card already carries «Отключить», so the plate
@@ -160,13 +154,7 @@ export function IntakeSourceStep(props: IntakeSourceStepProps) {
  * under the LinkedIn and hh.ru cards, and it takes the place the resume picker
  * occupied once that picker has done its job.
  */
-function SourceLockNotice({
-  reason,
-  onRelease,
-}: {
-  reason?: string;
-  onRelease: () => void;
-}) {
+function SourceLockNotice({ reason, onRelease }: { reason?: string; onRelease: () => void }) {
   if (!reason) return null;
   return (
     <div className="career-source-lock" role="status">
@@ -193,14 +181,12 @@ function PdfSource({ ingested, busy, lock, onPickPdf, notice }: IntakeSourceStep
             disabled={locked || busy}
           />
           <FilePdf size={20} />
-          <span>
-            {busy ? 'Разбираем резюме…' : (ingested?.file?.name ?? 'Выбрать PDF')}
-          </span>
+          <span>{busy ? 'Разбираем резюме…' : (ingested?.file?.name ?? 'Выбрать PDF')}</span>
         </label>
         <small>
           {busy
             ? 'Разбор занимает до минуты: читаем структуру, а не ключевые слова.'
-            : ingested?.file
+            : ingested?.file?.pages !== undefined
               ? `${ingested.file.pages} стр.`
               : `PDF до ${megabytes(LOCAL_PDF_MAX_BYTES)} МБ · файл читается в браузере; в профиль отправляется извлечённый текст, исходный файл не сохраняется`}
         </small>
@@ -223,18 +209,16 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
   const restored = props.connectedSource;
   const linkedinReady = Boolean(
     restored?.platform === 'linkedin' ||
-      (props.linkedinConnected &&
-        props.ingested?.source === 'linkedin-pdf' &&
-        props.ingested.imported &&
-        props.ingested.connection),
+    (props.linkedinConnected &&
+      props.ingested?.source === 'linkedin-pdf' &&
+      props.ingested.imported &&
+      props.ingested.connection),
   );
   // Finding a signed-in account/list is not the same outcome as importing one
   // selected resume into the candidate profile.
   const hhReady = Boolean(
     restored?.platform === 'hh' ||
-      (props.ingested?.source === 'hh-pdf' &&
-        props.ingested.imported &&
-        props.ingested.connection),
+    (props.ingested?.source === 'hh-pdf' && props.ingested.imported && props.ingested.connection),
   );
   const otherSourceHolds =
     props.lock.lockedTo !== undefined && props.lock.lockedTo !== 'profile-import';
@@ -269,8 +253,7 @@ function ProfileImportSource(props: IntakeSourceStepProps) {
           (owner report, 2026-08-26). */}
       {props.hhEmptyAccount && !hhReady ? (
         <p className="career-inline-note">
-          В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт
-          текстом.
+          В профиле hh.ru не нашлось резюме. Можно загрузить PDF или описать опыт текстом.
         </p>
       ) : null}
 
@@ -413,13 +396,7 @@ function PlatformCard({
  * says so; when it did not, it says that instead of showing a green tick over
  * nothing.
  */
-function ImportSummary({
-  ingested,
-  notice,
-}: {
-  ingested: IngestedResume;
-  notice?: string;
-}) {
+function ImportSummary({ ingested, notice }: { ingested: IngestedResume; notice?: string }) {
   const { parsed } = ingested;
   return (
     <div
@@ -429,9 +406,7 @@ function ImportSummary({
       <CheckCircle size={26} weight="fill" />
       <div>
         <strong>
-          {ingested.imported
-            ? 'Резюме разобрано и сохранено в профиль'
-            : 'Резюме разобрано'}
+          {ingested.imported ? 'Резюме разобрано и сохранено в профиль' : 'Резюме разобрано'}
         </strong>
         <span>
           {ingested.file ? `«${ingested.file.name}» · ` : ''}
@@ -453,7 +428,11 @@ function countLine(parsed: ParsedResume): string {
       : pluralRu(parsed.skills.length, ['навык', 'навыка', 'навыков']),
     parsed.education.length === 0
       ? null
-      : pluralRu(parsed.education.length, ['запись об учёбе', 'записи об учёбе', 'записей об учёбе']),
+      : pluralRu(parsed.education.length, [
+          'запись об учёбе',
+          'записи об учёбе',
+          'записей об учёбе',
+        ]),
     parsed.courses.length === 0
       ? null
       : pluralRu(parsed.courses.length, ['курс', 'курса', 'курсов']),

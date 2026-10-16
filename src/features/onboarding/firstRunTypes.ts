@@ -19,7 +19,7 @@ export interface FirstRunCity {
   readonly region?: CandidateRegion;
 }
 
-export type WorkFormat = 'Гибрид' | 'Удалённо' | 'Офис';
+export type WorkFormat = '' | 'Гибрид' | 'Удалённо' | 'Офис';
 
 export interface FirstRunContext {
   readonly city: string;
@@ -89,14 +89,13 @@ export const CITY_DIRECTORY: readonly FirstRunCity[] = [
 ];
 
 export const DEFAULT_FIRST_RUN_DATA: FirstRunData = {
-  goal: 'Хочу понять, на какие руководящие роли могу идти. Ищу активно.',
+  goal: '',
   selectedSource: 'linkedin',
   isSourceSkipped: false,
   context: {
-    city: 'Москва',
-    country: 'Россия',
-    region: 'ru',
-    format: 'Гибрид',
+    city: '',
+    country: '',
+    format: '',
     isRelocationReady: false,
   },
 };

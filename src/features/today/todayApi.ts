@@ -1,3 +1,4 @@
+import type { TodayDecisionSelection } from '../../../shared/todayDecision';
 import { apiFetch, readData } from '../coach/apiClient';
 import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 
@@ -112,6 +113,7 @@ export interface SearchMomentum {
 }
 
 export interface TodaySnapshot {
+  readonly todayDecisionSelection?: TodayDecisionSelection;
   readonly digest: TodayDigest;
   readonly queue: readonly TodayQueueItem[];
   readonly followUps: readonly TodayFollowUp[];
@@ -120,12 +122,32 @@ export interface TodaySnapshot {
   readonly momentum?: SearchMomentum;
 }
 
-export async function recordCandidateVisit(signal?: AbortSignal): Promise<{ since: string | null }> {
+export const TODAY_DECISION_CHANGED = 'openqareer:today-decision-changed';
+
+export async function selectTodayDecision(
+  applicationId: string,
+  resolution: 'accepted' | 'dismissed',
+): Promise<TodayDecisionSelection> {
+  const response = await apiFetch('/api/v1/candidate/today/decision', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ applicationId, resolution }),
+  });
+  const selection = await readData<TodayDecisionSelection>(response);
+  window.dispatchEvent(new Event(TODAY_DECISION_CHANGED));
+  return selection;
+}
+
+export async function recordCandidateVisit(
+  signal?: AbortSignal,
+): Promise<{ since: string | null }> {
   const response = await apiFetch('/api/v1/candidate/visits', { method: 'POST', signal });
   return readData<{ since: string | null }>(response);
 }
 
 export async function getTodaySnapshot(tz: string, signal?: AbortSignal): Promise<TodaySnapshot> {
-  const response = await apiFetch(`/api/v1/candidate/today?tz=${encodeURIComponent(tz)}`, { signal });
+  const response = await apiFetch(`/api/v1/candidate/today?tz=${encodeURIComponent(tz)}`, {
+    signal,
+  });
   return readData<TodaySnapshot>(response);
 }

@@ -1,3 +1,5 @@
+import { currentTodayDecision } from '../../shared/todayDecision';
+import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -148,7 +150,13 @@ const handlePatchApplication: Handler = async (deps, request, reply) => {
     config.applicationArchiveStaleDays,
   );
   recordApplicationNotifications(
-    deps, request, candidate.id, applicationId, current?.stage ?? null, patched, body,
+    deps,
+    request,
+    candidate.id,
+    applicationId,
+    current?.stage ?? null,
+    patched,
+    body,
   );
   return { data: patched, meta: { requestId: request.id } };
 };
@@ -329,7 +337,12 @@ function recordFreshVacancyNotification(
 ): void {
   if (!vacancies.length) return;
   const sourceId = createHash('sha256')
-    .update(vacancies.map((vacancy) => vacancy.clusterId).sort().join('\0'))
+    .update(
+      vacancies
+        .map((vacancy) => vacancy.clusterId)
+        .sort()
+        .join('\0'),
+    )
     .digest('hex');
   recordNotificationFromSource(deps, request, candidateId, {
     kind: 'new_vacancies_by_role',
@@ -351,7 +364,7 @@ const handleToday: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, titleParseStore } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  todayQuerySchema.parse(request.query ?? {});
+  const { tz } = todayQuerySchema.parse(request.query ?? {});
 
   const since = candidateStore.getSinceLastVisit(candidate.id);
   const applications = candidateStore.listApplications(candidate.id);
@@ -377,7 +390,17 @@ const handleToday: Handler = async (deps, request, reply) => {
     shortlist: newVacancies,
   });
   recordFreshVacancyNotification(deps, request, candidate.id, freshNewVacancies);
-  return { data: snapshot, meta: { requestId: request.id } };
+  const selection = currentTodayDecision(
+    candidateStore.getCandidateWorkspace(candidate.id)?.todayDecisionSelection,
+    new Date(),
+    tz,
+  );
+  const todayDecisionSelection = snapshot.queue.some(
+    (item) => item.applicationId === selection?.applicationId && item.kind === 'follow_up',
+  )
+    ? selection
+    : undefined;
+  return { data: { ...snapshot, todayDecisionSelection }, meta: { requestId: request.id } };
 };
 
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */
@@ -409,6 +432,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
     withDeps(deps, handleRecordVisit),
   );
+  registerTodayDecisionRoutes(app, deps);
   app.get('/api/v1/candidate/today', withDeps(deps, handleToday));
   registerApplicationMaterialsRoutes(app, deps);
   registerApplicationInterviewRoutes(app, deps);

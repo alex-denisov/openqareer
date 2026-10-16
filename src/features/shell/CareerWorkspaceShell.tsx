@@ -32,7 +32,7 @@ import {
 } from './CareerShellNavigation';
 import { CareerSessionGate } from './CareerSessionGate';
 import { ResponsesAutomationSwitch } from './ResponsesAutomationSwitch';
-import { DesktopCabinetTopbar } from './DesktopCabinetTopbar';
+import { BootstrapNotificationsBell, DesktopCabinetTopbar } from './DesktopCabinetTopbar';
 import {
   DESKTOP_EXPERT_PREFERENCE_KEY,
   closeExpertPanel,
@@ -175,7 +175,8 @@ export function CareerWorkspaceShell({
     setExpertConfig((current) => ({ ...current, open: true }));
   }, [intakeVisible, session?.candidateId, visibleWorkspace]);
 
-  const expertPanelOpen = !accountOpen && (intakeVisible ? expertSheetExpanded : expertConfig.open);
+  const expertPanelOpen =
+    !accountOpen && (intakeVisible && isCompactViewport ? expertSheetExpanded : expertConfig.open);
   const expertPanelVisible = isCompactViewport
     ? expertPanelOpen && expertSheetExpanded
     : expertPanelOpen;
@@ -475,6 +476,8 @@ export function CareerWorkspaceShell({
                   onOpenCenter={openNotificationCenter}
                   onOpenSettings={openNotificationSettings}
                 />
+              ) : sessionPending && isCompactViewport ? (
+                <BootstrapNotificationsBell />
               ) : null
             }
           />
@@ -505,7 +508,7 @@ export function CareerWorkspaceShell({
                   hasAccount={Boolean(session)}
                   onStartedChange={setIntakeStarted}
                   isMobile={isCompactViewport}
-                  showConsultantPanel={!expertPanelOpen}
+                  showConsultantPanel={false}
                   onSignIn={() => openAccount('security', true)}
                   onConnectSource={() => openAccount('connections', true)}
                   onOpenConsultant={openIntakeConsultant}
@@ -771,6 +774,7 @@ export function CareerWorkspaceShell({
               />
             ) : null}
             <CareerExpertPanel
+              intakeMode={intakeVisible}
               collapsed={!expertPanelVisible}
               overlay={expertPanelVisible && (isCompactViewport || !isWideViewport)}
               onExpand={isCompactViewport ? undefined : () => openExpert()}

@@ -23,14 +23,22 @@ describe('FirstRunWizard actions', () => {
     root = createRoot(host);
     await act(async () => {
       root?.render(
-        <FirstRunWizard onOpenConsultant={openConsultant} onConnectSource={connectSource} />,
+        <FirstRunWizard
+          initialStep="source"
+          onOpenConsultant={openConsultant}
+          onConnectSource={connectSource}
+        />,
       );
     });
 
-    await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="source-opt-hh"]')?.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[data-testid="source-opt-hh"]')?.click(),
+    );
     expect(connectSource).toHaveBeenCalledWith('hh');
 
-    await act(async () => host.querySelector<HTMLButtonElement>('[data-testid="source-opt-talk"]')?.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('[data-testid="source-opt-talk"]')?.click(),
+    );
     expect(openConsultant).toHaveBeenCalledTimes(1);
 
     await act(async () => {

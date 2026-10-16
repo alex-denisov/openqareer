@@ -1,3 +1,4 @@
+import { useEscapeLayer } from '../shell/escapeLayers';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Check, MagnifyingGlass } from '@phosphor-icons/react';
 import { filterCities, type FirstRunCity } from './firstRunStorage';
@@ -33,9 +34,7 @@ function CityListItems({
             >
               <div>
                 <b className="first-run-city-name">{item.name}</b>
-                <small className="first-run-city-detail">
-                  {item.country}
-                </small>
+                <small className="first-run-city-detail">{item.country}</small>
               </div>
               {isPicked ? <Check size={16} /> : null}
             </button>
@@ -59,15 +58,17 @@ function CitySearchHeader({
     <>
       <div className="first-run-city-header">
         <h2 className="first-run-city-title">Город</h2>
-        <button type="button" className="first-run-btn-ghost" onClick={onClose} data-testid="city-done-btn">
+        <button
+          type="button"
+          className="first-run-btn-ghost"
+          onClick={onClose}
+          data-testid="city-done-btn"
+        >
           Готово
         </button>
       </div>
       <div className="first-run-city-search-wrap">
-        <MagnifyingGlass
-          size={16}
-          className="first-run-city-search-icon"
-        />
+        <MagnifyingGlass size={16} className="first-run-city-search-icon" />
         <input
           type="search"
           className="first-run-input first-run-city-search-input"
@@ -84,6 +85,7 @@ function CitySearchHeader({
 
 function useCityDialog(isOpen: boolean, isMobile: boolean, onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
+  useEscapeLayer(onClose, isOpen);
   useEffect(() => {
     if (!isOpen) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -96,14 +98,20 @@ function useCityDialog(isOpen: boolean, isMobile: boolean, onClose: () => void) 
     if (!isOpen) return;
     const panel = panelRef.current;
     if (!panel) return;
-    const handleKeyDown = (event: KeyboardEvent) => cityDialogKeyDown(event, panel, isMobile, onClose);
+    const handleKeyDown = (event: KeyboardEvent) =>
+      cityDialogKeyDown(event, panel, isMobile, onClose);
     panel.addEventListener('keydown', handleKeyDown);
     return () => panel.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, isMobile, onClose]);
   return panelRef;
 }
 
-function cityDialogKeyDown(event: KeyboardEvent, panel: HTMLElement, isMobile: boolean, onClose: () => void) {
+function cityDialogKeyDown(
+  event: KeyboardEvent,
+  panel: HTMLElement,
+  isMobile: boolean,
+  onClose: () => void,
+) {
   if (event.key === 'Escape') {
     event.preventDefault();
     event.stopPropagation();
@@ -131,7 +139,9 @@ export function FirstRunCitySheet({
 }: FirstRunCitySheetProps): ReactElement | null {
   const [searchQuery, setSearchQuery] = useState('');
   const panelRef = useCityDialog(isOpen, isMobile, onClose);
-  useEffect(() => { if (isOpen) setSearchQuery(''); }, [isOpen]);
+  useEffect(() => {
+    if (isOpen) setSearchQuery('');
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -160,7 +170,9 @@ export function FirstRunCitySheet({
           }}
         />
         {filtered.length === 0 ? (
-          <p className="first-run-city-section-label" role="status">Город не найден. Проверьте запрос.</p>
+          <p className="first-run-city-section-label" role="status">
+            Город не найден. Проверьте запрос.
+          </p>
         ) : null}
       </div>
     </div>

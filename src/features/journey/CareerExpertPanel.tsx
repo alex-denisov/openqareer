@@ -1,3 +1,4 @@
+import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
   STAGE_TITLE,
@@ -50,6 +51,7 @@ export {
 } from '../shell/CareerWorkspaceShellHelpers';
 interface CareerExpertPanelProps {
   collapsed?: boolean;
+  intakeMode?: boolean;
   overlay?: boolean;
   onExpand?: () => void;
   journey?: CareerJourney;
@@ -73,6 +75,7 @@ interface CareerExpertPanelProps {
 }
 export function CareerExpertPanel({
   collapsed = false,
+  intakeMode = false,
   overlay = false,
   onExpand,
   journey,
@@ -118,6 +121,7 @@ export function CareerExpertPanel({
   const [voiceState, setVoiceState] = useState<VoiceInputState>('idle');
   const [voiceDraft, setVoiceDraft] = useState(false);
   const [sending, setSending] = useState(false);
+  const [decisionProposalCount, setDecisionProposalCount] = useState(0);
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
@@ -344,23 +348,25 @@ export function CareerExpertPanel({
   const latestTurnIdempotencyKey = liveResult
     ? liveTurnIdempotencyKey
     : latestStoredTurn?.idempotencyKey;
-  const { count: proposalCount, refreshProposalCount } = usePendingConsultantProposals(
+  const { count: commandProposalCount, refreshProposalCount } = usePendingConsultantProposals(
     latestResult,
     latestTurnIdempotencyKey,
-    onProposalCountChange,
+    undefined,
     loadingSnapshot,
   );
+  const proposalCount = commandProposalCount + decisionProposalCount;
+  useEffect(() => onProposalCountChange?.(proposalCount), [proposalCount, onProposalCountChange]);
   const voiceActive = voiceState !== 'idle';
   const voiceTextLocked = voiceActive && voiceState !== 'transcribed';
   return (
     <section
       id="career-consultant-sheet"
       ref={panel}
-      className={`career-expert-panel${mobileExpanded ? ' is-mobile-expanded' : ''}${collapsed ? ' consultant-strip' : ''}${overlay ? ' consultant-overlay' : ''}`}
+      className={`career-expert-panel${intakeMode ? ' is-intake' : ''}${turns.length ? ' has-dialogue' : ''}${mobileExpanded ? ' is-mobile-expanded' : ''}${collapsed ? ' consultant-strip' : ''}${overlay ? ' consultant-overlay' : ''}`}
       role={overlay ? 'dialog' : 'complementary'}
       aria-modal={overlay ? true : undefined}
       data-mobile-expanded={mobileExpanded}
-      aria-label={`Консультант · ${STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
+      aria-label={`Консультант · ${intakeMode ? 'Старт' : STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
       {collapsed ? (
         <ConsultantStripButton count={loadingSnapshot ? 0 : proposalCount} onExpand={onExpand} />
@@ -372,7 +378,7 @@ export function CareerExpertPanel({
           </span>
           <div>
             <strong>Консультант</strong>
-            <small>{STAGE_TITLE[stage]}</small>
+            <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
           </div>
         </div>
         <div className="career-expert-panel-controls">
@@ -506,7 +512,7 @@ export function CareerExpertPanel({
         >
           {loadingSession ? (
             <ExpertPanelSkeleton />
-          ) : (
+          ) : !turns.length && !intakeMode ? (
             <div className="career-expert-message">
               <span>AI-сопровождение</span>
               <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
@@ -515,7 +521,7 @@ export function CareerExpertPanel({
                   'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
               </p>
             </div>
-          )}
+          ) : null}
           {!loadingSession && (turns.length || showLiveMessage) ? (
             <div className="career-dialogue-history" aria-label="История диалога">
               {turns.map((message) => (
@@ -563,11 +569,21 @@ export function CareerExpertPanel({
             <div className="career-dialogue-history" aria-label="История диалога">
               <article className="career-dialogue-turn is-assistant">
                 <span>Карьерный консультант</span>
-                <ConsultantMessage text={STAGE_INITIAL_REPLICA[stage]} />
+                <ConsultantMessage
+                  text={
+                    intakeMode
+                      ? 'Начнём с источника. Можно подключить LinkedIn или hh.ru, загрузить резюме или просто рассказать, чем занимаетесь.'
+                      : STAGE_INITIAL_REPLICA[stage]
+                  }
+                />
               </article>
               {user && !loadingSnapshot && !historyOpen && !content.trim() && !sending ? (
                 <ExpertStarterChips
-                  prompts={starterPromptsForStage(stage)}
+                  prompts={
+                    intakeMode
+                      ? ['С чего начать?', 'Что вы читаете в LinkedIn?', 'Можно без LinkedIn?']
+                      : starterPromptsForStage(stage)
+                  }
                   ariaLabel="Темы для начала"
                   onChoose={(prompt) => {
                     setContent(prompt);
@@ -607,6 +623,9 @@ export function CareerExpertPanel({
             </div>
           ) : null}
           {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
+          {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
+            <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
+          ) : null}
           {latestResult ? (
             <CareerIntelligenceSummary
               result={latestResult}

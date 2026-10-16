@@ -18,37 +18,44 @@ const USER = {
 };
 
 async function stubApi(page) {
-  await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {
-    const request = route.request();
-    const { pathname } = new URL(request.url());
-    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: USER } });
-    if (pathname === '/api/v1/candidate/workspace') {
-      if (request.method() === 'PUT') {
-        return route.fulfill({ json: { data: request.postDataJSON()?.workspace ?? null } });
+  await page.route(
+    (url) => url.pathname.startsWith('/api/'),
+    async (route) => {
+      const request = route.request();
+      const { pathname } = new URL(request.url());
+      if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: USER } });
+      if (pathname === '/api/v1/candidate/workspace') {
+        if (request.method() === 'PUT') {
+          return route.fulfill({ json: { data: request.postDataJSON()?.workspace ?? null } });
+        }
+        return route.fulfill({ json: { data: null } });
       }
+      if (pathname === '/api/v1/candidate/connections') {
+        return route.fulfill({
+          json: {
+            data: [
+              { platform: 'linkedin', available: true, status: 'disconnected' },
+              { platform: 'hh', available: true, status: 'disconnected' },
+            ],
+          },
+        });
+      }
+      if (pathname.endsWith('/candidate/me/messages')) return route.fulfill({ json: { data: [] } });
+      if (pathname.endsWith('/candidate/me')) return route.fulfill({ json: { data: null } });
       return route.fulfill({ json: { data: null } });
-    }
-    if (pathname === '/api/v1/candidate/connections') {
-      return route.fulfill({
-        json: {
-          data: [
-            { platform: 'linkedin', available: true, status: 'disconnected' },
-            { platform: 'hh', available: true, status: 'disconnected' },
-          ],
-        },
-      });
-    }
-    if (pathname.endsWith('/candidate/me/messages')) return route.fulfill({ json: { data: [] } });
-    if (pathname.endsWith('/candidate/me')) return route.fulfill({ json: { data: null } });
-    return route.fulfill({ json: { data: null } });
-  });
+    },
+  );
 }
 
 async function captureViewport(browser, baseUrl, viewport) {
-  const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
+  const page = await browser.newPage({
+    viewport: { width: viewport.width, height: viewport.height },
+  });
   await stubApi(page);
   await page.goto(`${baseUrl}app`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+  await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
+  await page.getByTestId('save-goal-btn').click();
   await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}.png` });
   await page.getByTestId('source-skip-btn').click();
   await page.getByTestId('skip-confirm-btn').click();

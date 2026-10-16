@@ -58,6 +58,21 @@ function DesktopTopbarActions(props: DesktopTopbarActionsProps) {
   );
 }
 
+export function BootstrapNotificationsBell() {
+  return (
+    <span
+      className="career-notification-bell career-bootstrap-bell"
+      role="status"
+      aria-label="Уведомления загружаются"
+    >
+      <BellSimple size={18} aria-hidden="true" />
+      <span className="career-notification-badge" aria-hidden="true">
+        …
+      </span>
+    </span>
+  );
+}
+
 function BootStatus({ text }: { readonly text?: string | null }) {
   if (!text) return null;
   return (

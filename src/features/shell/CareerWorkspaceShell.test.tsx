@@ -236,7 +236,8 @@ describe('CareerWorkspaceShell', () => {
     expect(html).toContain('Профиль');
     expect(html).toContain('Вакансии');
     expect(html).toContain('Отклики');
-    expect(html).toContain('first-run-consultant-sidebar');
+    expect(html).not.toContain('first-run-consultant-sidebar');
+    expect(html).toContain('career-expert-panel');
     expect(html).toContain('Консультант');
     expect(html).toContain('aria-label="Открыть аккаунт"');
     expect(html).not.toContain('career-intent-list" role="list');

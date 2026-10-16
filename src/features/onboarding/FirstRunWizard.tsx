@@ -1,3 +1,5 @@
+import { CaretLeft } from '@phosphor-icons/react';
+
 import { useEffect, type ReactElement } from 'react';
 import type { FirstRunData, FirstRunSpecialState, FirstRunStep } from './firstRunTypes';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
@@ -55,7 +57,7 @@ function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstR
     <FirstRunGoalCard
       goal={state.data.goal}
       onGoalChange={state.handleGoalChange}
-      isEditing={state.isGoalEditing}
+      isEditing={state.isGoalEditing || state.step === 'goal'}
       onStartEdit={() => {
         state.setIsGoalEditing(true);
         state.setStep('goal');
@@ -68,6 +70,30 @@ function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstR
   );
 }
 
+function PendingContext({ onContinue }: { readonly onContinue: () => void }) {
+  return (
+    <button
+      type="button"
+      className="first-run-stage-card first-run-pending-context"
+      data-testid="source-skip-btn"
+      onClick={onContinue}
+    >
+      <span className="first-run-stage-badge">3</span>
+      <span className="first-run-stage-title">Контекст</span>
+      <small>после шага 2</small>
+    </button>
+  );
+}
+
+interface WizardMainCardsProps {
+  readonly state: ReturnType<typeof useFirstRunWizardState>;
+  readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
+  readonly ingestionResult?: IngestedResume;
+  readonly onOpenConsultant: (prompt?: string) => void;
+  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
+  readonly isMobile: boolean;
+}
+
 function WizardMainCards({
   state,
   onComplete,
@@ -75,20 +101,14 @@ function WizardMainCards({
   onOpenConsultant,
   onConnectSource,
   isMobile,
-}: {
-  readonly state: ReturnType<typeof useFirstRunWizardState>;
-  readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
-  readonly ingestionResult?: IngestedResume;
-  readonly onOpenConsultant: (prompt?: string) => void;
-  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
-  readonly isMobile: boolean;
-}): ReactElement {
+}: WizardMainCardsProps): ReactElement {
   return (
     <>
       <WizardGoalCard state={state} />
       {state.step === 'source' ? (
         <FirstRunSourceCard
           data={state.data}
+          isMobile={isMobile}
           uploadedFileName={state.uploadedFile?.name}
           isIngesting={state.isIngesting}
           ingestionError={state.ingestionError}
@@ -101,13 +121,20 @@ function WizardMainCards({
           onSkip={() => state.setIsSkipDialogOpen(true)}
         />
       ) : null}
+      {!isMobile && state.step === 'source' ? (
+        <PendingContext
+          onContinue={() =>
+            state.uploadedFile && !state.ingestionError
+              ? state.setStep('context')
+              : state.setIsSkipDialogOpen(true)
+          }
+        />
+      ) : null}
       {state.step === 'context' ? (
         <FirstRunContextCard
           data={state.data}
           onOpenCitySheet={() => state.setIsCitySheetOpen(true)}
-          cityPicker={
-            <WizardCityPicker state={state} isMobile={isMobile} />
-          }
+          cityPicker={<WizardCityPicker state={state} isMobile={isMobile} />}
           onFormatChange={state.handleFormatChange}
           onRelocationToggle={state.handleRelocationToggle}
           onSubmit={() => onComplete?.(state.data, ingestionResult)}
@@ -117,17 +144,22 @@ function WizardMainCards({
   );
 }
 
-function WizardCityPicker({ state, isMobile }: {
+function WizardCityPicker({
+  state,
+  isMobile,
+}: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
   readonly isMobile: boolean;
 }) {
-  return <FirstRunCitySheet
-    isOpen={state.isCitySheetOpen}
-    isMobile={isMobile}
-    selectedCity={state.data.context.city}
-    onClose={() => state.setIsCitySheetOpen(false)}
-    onSelectCity={state.handleSelectCity}
-  />;
+  return (
+    <FirstRunCitySheet
+      isOpen={state.isCitySheetOpen}
+      isMobile={isMobile}
+      selectedCity={state.data.context.city}
+      onClose={() => state.setIsCitySheetOpen(false)}
+      onSelectCity={state.handleSelectCity}
+    />
+  );
 }
 
 function WizardDialogs({
@@ -183,14 +215,30 @@ interface FirstRunScreenProps {
   readonly ingestion: ResumeIngestionState;
 }
 
+function WizardBack({ state }: { readonly state: ReturnType<typeof useFirstRunWizardState> }) {
+  return (
+    <button
+      type="button"
+      className="first-run-back"
+      aria-label="Назад"
+      disabled={state.step === 'goal'}
+      onClick={() => state.setStep(state.step === 'context' ? 'source' : 'goal')}
+    >
+      <CaretLeft size={20} aria-hidden="true" />
+    </button>
+  );
+}
+
 function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
   const { state, specialState, isMobile, hasInternalConsultant, onComplete } = props;
   return (
     <div
       className={`first-run-screen${isMobile ? ' is-mobile' : ''}`}
       data-mobile={isMobile}
+      data-step={state.step}
       data-testid="first-run-wizard"
     >
+      {isMobile ? <WizardBack state={state} /> : null}
       <div className={`first-run-container${hasInternalConsultant ? '' : ' is-shell-panel'}`}>
         <main className="first-run-main">
           {!isMobile ? (
@@ -199,7 +247,9 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
             </header>
           ) : null}
           <StepsBar step={state.step} />
-          <p className="first-run-eyebrow">Находка себя</p>
+          <p className="first-run-eyebrow">
+            Находка себя, шаг {state.step === 'goal' ? 1 : state.step === 'source' ? 2 : 3} из 3
+          </p>
           {specialState === 'empty-sources' ? (
             <FirstRunEmptySources onConsultant={props.onOpenConsultant} />
           ) : null}
@@ -223,7 +273,7 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
 
 export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
   const {
-    initialStep = 'source',
+    initialStep = 'goal',
     specialState = 'normal',
     onComplete,
     onRetry,

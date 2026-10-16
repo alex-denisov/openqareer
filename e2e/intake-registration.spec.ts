@@ -25,7 +25,8 @@ test.describe('S11 FirstRun session continuity', () => {
     });
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('first-run-wizard')).toBeVisible();
-    await expect(page.getByText('Находка себя')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Цель', exact: true })).toBeVisible();
+    await expect(page.getByTestId('goal-textarea')).toBeEmpty();
     await expect(page.getByRole('heading', { name: 'Карьерный кабинет' })).toHaveCount(0);
   });
 

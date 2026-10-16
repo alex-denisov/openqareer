@@ -1,3 +1,4 @@
+import { extractTextDocument } from '../workspace/documentText';
 import { useCallback, useState } from 'react';
 import {
   importCandidateResume,
@@ -19,7 +20,7 @@ export interface IngestedResume {
   readonly draft: ResumeDraft;
   readonly text: string;
   readonly source: ResumeSource;
-  readonly file?: { readonly name: string; readonly pages: number };
+  readonly file?: { readonly name: string; readonly pages?: number };
   /** True once the document has reached the candidate-scoped resume API. */
   readonly imported: boolean;
   readonly factCount?: number;
@@ -80,7 +81,7 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
       text: string,
       source: ResumeSource,
       localParsed: ParsedResume,
-      file?: { name: string; pages: number },
+      file?: { name: string; pages?: number },
       sourceReceipt?: NativeSourceReceipt,
     ): Promise<IngestedResume> => {
       if (!hasAccount) {
@@ -157,15 +158,22 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
       setError(undefined);
       setNotice(undefined);
       try {
+        if (file.name.toLowerCase().endsWith('.docx')) {
+          const text = await extractTextDocument(file);
+          return await ingest(text, 'text', parseResumeContent(text), {
+            name: file.name,
+          });
+        }
         const extracted = await extractPdfResume(file);
         return await ingest(extracted.text, 'pdf', parseResumeContent(extracted.text), {
           name: extracted.fileName,
           pages: extracted.pageCount,
         });
       } catch (reason) {
-        const message = reason instanceof Error
-          ? reason.message
-          : 'Прочитать PDF не удалось. Можно продолжить без файла.';
+        const message =
+          reason instanceof Error
+            ? reason.message
+            : 'Прочитать PDF не удалось. Можно продолжить без файла.';
         setError(message);
         return undefined;
       } finally {
@@ -176,11 +184,7 @@ export function useResumeIngestion(hasAccount: boolean): ResumeIngestionState {
   );
 
   const acceptParsed = useCallback(
-    async (
-      parsed: ParsedResume,
-      source: ResumeSource,
-      sourceReceipt?: NativeSourceReceipt,
-    ) => {
+    async (parsed: ParsedResume, source: ResumeSource, sourceReceipt?: NativeSourceReceipt) => {
       setBusy(true);
       setError(undefined);
       try {

@@ -7,7 +7,12 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from 'react';
-import { getTodaySnapshot, recordCandidateVisit, type TodaySnapshot } from './todayApi';
+import {
+  TODAY_DECISION_CHANGED,
+  getTodaySnapshot,
+  recordCandidateVisit,
+  type TodaySnapshot,
+} from './todayApi';
 import { recordFollowUpSent } from '../applications/applicationsApi';
 
 export interface TodayRead {
@@ -58,7 +63,9 @@ export function useToday(): TodayRead {
   const [snapshot, setSnapshot] = useState<TodaySnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [markingFollowUpIds, setMarkingFollowUpIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [markingFollowUpIds, setMarkingFollowUpIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const requestSequence = useRef(0);
   const hasSnapshot = useRef(false);
   const markingIds = useRef(new Set<string>());
@@ -72,26 +79,32 @@ export function useToday(): TodayRead {
     );
   }, []);
 
-  const markFollowUpSent = useCallback(async (applicationId: string) => {
-    if (markingIds.current.has(applicationId)) return;
-    const nextIds = new Set(markingIds.current).add(applicationId);
-    markingIds.current = nextIds;
-    setMarkingFollowUpIds(nextIds);
-    try {
-      await recordFollowUpSent(applicationId);
-      await load();
-    } finally {
-      const remainingIds = new Set(markingIds.current);
-      remainingIds.delete(applicationId);
-      markingIds.current = remainingIds;
-      setMarkingFollowUpIds(remainingIds);
-    }
-  }, [load]);
+  const markFollowUpSent = useCallback(
+    async (applicationId: string) => {
+      if (markingIds.current.has(applicationId)) return;
+      const nextIds = new Set(markingIds.current).add(applicationId);
+      markingIds.current = nextIds;
+      setMarkingFollowUpIds(nextIds);
+      try {
+        await recordFollowUpSent(applicationId);
+        await load();
+      } finally {
+        const remainingIds = new Set(markingIds.current);
+        remainingIds.delete(applicationId);
+        markingIds.current = remainingIds;
+        setMarkingFollowUpIds(remainingIds);
+      }
+    },
+    [load],
+  );
 
   useEffect(() => {
     const controller = new AbortController();
     void load(controller.signal, true);
+    const refreshDecision = () => void load(controller.signal);
+    window.addEventListener(TODAY_DECISION_CHANGED, refreshDecision);
     return () => {
+      window.removeEventListener(TODAY_DECISION_CHANGED, refreshDecision);
       controller.abort();
       requestSequence.current += 1;
     };

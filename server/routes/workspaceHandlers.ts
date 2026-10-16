@@ -47,9 +47,15 @@ export const handlePutWorkspace: Handler = async (deps, request, reply) => {
  */
 function serverOwnedWorkspaceFields(
   stored: CandidateWorkspaceState | null,
-): Partial<Pick<CandidateWorkspaceState, 'campaign' | 'lastVisitedAt' | 'previousVisitedAt'>> {
-  if (!stored) return {};
+): Partial<
+  Pick<
+    CandidateWorkspaceState,
+    'campaign' | 'lastVisitedAt' | 'previousVisitedAt' | 'todayDecisionSelection'
+  >
+> {
+  if (!stored) return { todayDecisionSelection: undefined };
   return {
+    todayDecisionSelection: stored.todayDecisionSelection,
     ...(stored.campaign ? { campaign: stored.campaign } : {}),
     ...(stored.lastVisitedAt ? { lastVisitedAt: stored.lastVisitedAt } : {}),
     ...(stored.previousVisitedAt ? { previousVisitedAt: stored.previousVisitedAt } : {}),

@@ -1,3 +1,4 @@
+import './approved-bootstrap.css';
 export interface CareerTodaySkeletonProps {
   readonly showHeading?: boolean;
   readonly statusMessage?: string;

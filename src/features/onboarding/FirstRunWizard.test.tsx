@@ -16,6 +16,13 @@ function renderWizard(
 }
 
 describe('FirstRunWizard component tests', () => {
+  it('starts a new candidate with an empty goal instead of demo facts', () => {
+    const html = renderWizard();
+    expect(html).toContain('data-testid="goal-textarea"');
+    expect(html).not.toContain('Хочу понять, на какие руководящие роли');
+    expect(html).not.toContain('data-testid="source-skip-btn"');
+  });
+
   it('renders the source step with all available paths', () => {
     const html = renderWizard({ initialStep: 'source' });
     expect(html).toContain('Находка себя');
@@ -33,7 +40,8 @@ describe('FirstRunWizard component tests', () => {
     const html = renderWizard({ initialStep: 'context' });
     expect(html).toContain('Контекст');
     expect(html).toContain('Город и формат работы нужны для подбора');
-    expect(html).toContain('Москва');
+    expect(html).toContain('Выбрать город');
+    expect(html).toContain('Не указан');
     expect(html).toContain('Гибрид');
     expect(html).toContain('Готов к релокации');
     expect(html).toContain('Собрать профиль');
@@ -71,7 +79,9 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Выбрать в «Файлах»');
     expect(html).toContain('Фото из библиотеки');
     expect(html).toContain('Сканировать документ');
-    expect(html).toContain('accept="application/pdf,.pdf"');
+    expect(html).toContain(
+      'application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx',
+    );
     expect(html).toContain('Отмена');
   });
 
@@ -94,9 +104,7 @@ describe('FirstRunWizard component tests', () => {
     const dialog = renderToStaticMarkup(
       <FirstRunSkipDialog isOpen onCancel={() => undefined} onConfirm={() => undefined} />,
     );
-    const toast = renderToStaticMarkup(
-      <FirstRunSkippedToast isVisible onUndo={() => undefined} />,
-    );
+    const toast = renderToStaticMarkup(<FirstRunSkippedToast isVisible onUndo={() => undefined} />);
     expect(dialog).toContain('Пропустить шаг «Источник»?');
     expect(dialog).toContain('Вернуться');
     expect(dialog).toContain('Пропустить');
@@ -105,7 +113,7 @@ describe('FirstRunWizard component tests', () => {
   });
 
   it('exposes the mobile layout state supplied by the shell media query', () => {
-    const html = renderWizard({ isMobile: true });
+    const html = renderWizard({ isMobile: true, initialStep: 'source' });
     expect(html).toContain('data-mobile="true"');
     expect(html).toContain('Шаг 2 из 3');
     expect(html).toContain('Файл резюме');

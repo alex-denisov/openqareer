@@ -1,4 +1,5 @@
 import './firstRunWizard.css';
+import './first-run-approved.css';
 export { FirstRunWizard, type FirstRunWizardProps } from './FirstRunWizard';
 export { FirstRunSourceMenu, type FirstRunSourceMenuProps } from './FirstRunSourceMenu';
 export { FirstRunCitySheet, type FirstRunCitySheetProps } from './FirstRunCitySheet';

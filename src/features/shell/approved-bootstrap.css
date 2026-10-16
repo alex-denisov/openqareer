@@ -1,0 +1,86 @@
+.career-shell .career-today-skeleton-card.is-decision {
+  border-color: color-mix(in oklch, var(--career-accent) 40%, var(--career-line-strong));
+}
+.career-shell .career-today-skeleton-card {
+  padding: var(--career-space-6);
+  gap: var(--career-space-4);
+}
+.career-shell .career-today-skeleton-primary {
+  gap: var(--career-space-6);
+}
+.career-shell .career-today-skeleton-lines {
+  gap: var(--career-space-4);
+}
+.career-shell .career-today-skeleton-line,
+.career-shell .career-today-skeleton-title,
+.career-shell .career-today-skeleton-actions span,
+.career-shell .career-today-skeleton-queue-row > span {
+  border-radius: var(--career-space-1);
+}
+.career-shell
+  .career-today-skeleton-card:is(.is-decision, .is-queue)
+  > .career-today-skeleton-lines:first-child
+  > .career-today-skeleton-line {
+  inline-size: 40%;
+}
+.career-shell .career-today-skeleton-title {
+  inline-size: 92%;
+  block-size: var(--career-space-8);
+}
+.career-shell
+  .is-decision
+  > .career-today-skeleton-lines:not(:first-child)
+  > .career-today-skeleton-line {
+  inline-size: 70%;
+}
+.career-shell .is-path > .career-today-skeleton-lines > .career-today-skeleton-line {
+  inline-size: 92%;
+}
+.career-shell .career-today-skeleton-actions {
+  gap: var(--career-space-3);
+  margin: 0;
+}
+.career-shell .career-today-skeleton-actions span:first-child {
+  inline-size: calc(var(--career-space-8) * 5);
+  block-size: var(--career-space-8);
+}
+.career-shell .career-today-skeleton-actions span:last-child {
+  inline-size: calc(var(--career-space-8) * 3 + var(--career-space-6));
+  block-size: var(--career-space-8);
+}
+.career-shell .career-today-skeleton-queue-row {
+  grid-template-columns: calc(var(--career-space-8) + var(--career-space-1)) minmax(0, 1fr) 0;
+}
+.career-shell .career-today-skeleton-queue-row > span {
+  block-size: var(--career-space-8);
+}
+.career-shell .career-today-skeleton-queue-row .career-today-skeleton-lines {
+  gap: var(--career-space-3);
+}
+.career-shell .career-today-skeleton-queue-row .career-today-skeleton-line:first-child {
+  inline-size: 92%;
+}
+.career-shell .career-today-skeleton-queue-row .career-today-skeleton-line.is-short {
+  inline-size: 70%;
+}
+@media (max-width: 760px) {
+  .career-shell:has(.career-today-skeleton) .career-main {
+    padding-block-start: var(--career-space-5);
+  }
+  .career-shell .career-today-skeleton-primary {
+    gap: var(--career-space-4);
+  }
+  .career-shell .career-today-skeleton-card:is(.is-decision, .is-queue, .is-path) {
+    padding: var(--career-space-4);
+    border: 0;
+    border-radius: calc(var(--career-space-6) - var(--career-space-1) / 2);
+    min-block-size: 0;
+  }
+  .career-shell .career-today-skeleton-card.is-decision {
+    gap: var(--career-space-3);
+    min-block-size: 0;
+  }
+  .career-shell .is-decision .career-today-skeleton-lines {
+    gap: var(--career-space-3);
+  }
+}

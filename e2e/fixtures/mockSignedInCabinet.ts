@@ -1563,6 +1563,8 @@ export async function mockSignedInCabinet(
         },
       }
     : null;
+  let todayDecisionSelection:
+    import('../../shared/todayDecision').TodayDecisionSelection | undefined;
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
@@ -1753,6 +1755,15 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (path.endsWith('/candidate/today/decision') && route.request().method() === 'POST') {
+      const input = route.request().postDataJSON();
+      todayDecisionSelection = {
+        applicationId: input.applicationId,
+        resolution: input.resolution,
+        updatedAt: new Date().toISOString(),
+      };
+      return route.fulfill({ json: { data: todayDecisionSelection } });
+    }
     if (path.endsWith('/candidate/today')) {
       const existingMomentum =
         'momentum' in todaySnapshot
@@ -1760,6 +1771,7 @@ export async function mockSignedInCabinet(
           : undefined;
       const snapshotWithMomentum = {
         ...todaySnapshot,
+        todayDecisionSelection,
         momentum: existingMomentum ?? {
           calculatedAt: '2026-10-09T12:00:00.000Z',
           windows: {

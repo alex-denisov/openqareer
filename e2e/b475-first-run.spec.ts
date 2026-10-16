@@ -47,9 +47,19 @@ async function openNewCandidate(page: Page) {
 }
 
 async function captureContext(page: Page, width: number): Promise<void> {
-  await page.getByTestId('edit-goal-btn').click();
+  if (await page.getByTestId('edit-goal-btn').isVisible())
+    await page.getByTestId('edit-goal-btn').click();
+  await page
+    .getByTestId('goal-textarea')
+    .fill('Хочу понять, на какие руководящие роли могу идти. Ищу активно.');
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `step-1-goal-${width}.png`) });
   await page.getByTestId('save-goal-btn').click();
+  if (width === 1440) {
+    await expect(
+      page.getByRole('complementary', { name: 'Консультант · Старт', exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText('Начнём с источника.', { exact: false })).toBeVisible();
+  }
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `step-2-source-${width}.png`) });
   await saveRenderedHtml(page, `step-2-source-${width}`);
   await page.getByTestId('source-skip-btn').click();
@@ -99,6 +109,10 @@ test.describe('B475 FirstRun in the live career shell', () => {
 
     await expect(page.getByRole('heading', { name: 'Старт' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Разделы кабинета' })).toBeVisible();
+    await page
+      .getByTestId('goal-textarea')
+      .fill('Хочу понять, на какие руководящие роли могу идти. Ищу активно.');
+    await page.getByTestId('save-goal-btn').click();
     await expect(page.getByTestId('source-opt-linkedin')).toContainText('Подключить');
     await expect(page.getByTestId('source-opt-hh')).toContainText('Подключить');
     await expect(page).toHaveURL(/\/app$/);
@@ -133,10 +147,10 @@ test.describe('B475 FirstRun in the live career shell', () => {
     expect(overflow).toBeLessThanOrEqual(0);
     await page.screenshot({ path: path.join(EVIDENCE_DIR, 'first-run-390.png') });
     await captureContext(page, 390);
-    await page.getByTestId('edit-goal-btn').click();
-    await page.getByTestId('save-goal-btn').click();
+    await page.getByRole('button', { name: 'Назад', exact: true }).click();
 
     await page.getByTestId('source-opt-file').click();
+    await page.getByTestId('source-next-btn').click();
     await page.getByTestId('pick-photo-btn').click();
     await expect(page.locator('.first-run-source-menu-notice')).toContainText(
       'Загрузка фотографий пока недоступна',
@@ -148,6 +162,7 @@ test.describe('B475 FirstRun in the live career shell', () => {
     await page.getByRole('button', { name: 'Отмена' }).click();
 
     await page.getByTestId('source-opt-talk').click();
+    await page.getByTestId('source-next-btn').click();
     await expect(page.locator('.career-expert-panel')).toHaveAttribute(
       'data-mobile-expanded',
       'true',

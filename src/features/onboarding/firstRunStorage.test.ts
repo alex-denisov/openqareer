@@ -88,9 +88,9 @@ describe('firstRunStorage logic and rules', () => {
     expect(input.resumeImported).toBe(true);
     expect(input.resumeFileName).toBe('cv.pdf');
     expect(input.resumePageCount).toBe(2);
-    expect(input.regions).toEqual(['ru']);
-    expect(input.constraints).toContain('Москва');
-    expect(input.constraints).toContain('Гибрид');
+    expect(input.regions).toEqual([]);
+    expect(input.constraints).toBe('');
+    expect(input.currentSituation).toBe('');
   });
 
   it('does not claim a connected platform is an imported resume', () => {

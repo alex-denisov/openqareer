@@ -25,6 +25,8 @@ async function verifySourceActions(page, viewport, baseUrl) {
   await page.setViewportSize({ width: viewport.width, height: viewport.height });
   await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+  await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
+  await page.getByTestId('save-goal-btn').click();
   for (const source of ['linkedin', 'hh', 'file', 'talk']) {
     if ((await page.getByTestId(`source-opt-${source}`).count()) !== 1) {
       throw new Error(`${viewport.name}: missing source option ${source}`);
@@ -32,6 +34,7 @@ async function verifySourceActions(page, viewport, baseUrl) {
   }
   const row = page.getByTestId('source-opt-linkedin');
   await row.click();
+  if (viewport.width <= 760) await page.getByTestId('source-next-btn').click();
   await page.locator('.career-account-screen').waitFor({ timeout: 10_000 });
   const connection =
     viewport.width <= 760
@@ -47,12 +50,44 @@ async function verifySourceActions(page, viewport, baseUrl) {
 async function verifyUploadMenu(page, viewport, baseUrl) {
   await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+  await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
+  await page.getByTestId('save-goal-btn').click();
   await page.getByTestId('source-opt-file').click();
+  if (viewport.width <= 760) await page.getByTestId('source-next-btn').click();
   await page.getByTestId('pick-photo-btn').click();
-  await page.locator('.first-run-source-menu-notice').getByText('Загрузка фотографий пока недоступна').waitFor();
+  await page
+    .locator('.first-run-source-menu-notice')
+    .getByText('Загрузка фотографий пока недоступна')
+    .waitFor();
   await page.getByTestId('scan-doc-btn').click();
-  await page.locator('.first-run-source-menu-notice').getByText('Сканирование пока недоступно').waitFor();
+  await page
+    .locator('.first-run-source-menu-notice')
+    .getByText('Сканирование пока недоступно')
+    .waitFor();
   await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}-file-menu.png` });
+}
+
+async function stubWizardApi(page) {
+  await page.route('**/api/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
+    if (pathname === '/api/v1/candidate/workspace') return route.fulfill({ json: { data: null } });
+    if (pathname === '/api/v1/candidate/connections')
+      return route.fulfill({ json: { data: CONNECTIONS } });
+    if (pathname === '/api/v1/account')
+      return route.fulfill({
+        json: {
+          data: {
+            username: CANDIDATE.username,
+            email: CANDIDATE.email,
+            displayName: CANDIDATE.displayName,
+            profile: { headline: '', location: '', workMode: 'hybrid' },
+            sessions: [],
+          },
+        },
+      });
+    return route.fulfill({ json: { data: null } });
+  });
 }
 
 async function run() {
@@ -65,29 +100,14 @@ async function run() {
   const results = [];
   try {
     for (const viewport of VIEWPORTS) {
-      const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
-      await page.route('**/api/**', async (route) => {
-        const url = new URL(route.request().url());
-        if (url.pathname === '/api/v1/auth/me') return route.fulfill({ json: { data: CANDIDATE } });
-        if (url.pathname === '/api/v1/candidate/workspace') return route.fulfill({ json: { data: null } });
-        if (url.pathname === '/api/v1/candidate/connections') return route.fulfill({ json: { data: CONNECTIONS } });
-        if (url.pathname === '/api/v1/account') {
-          return route.fulfill({
-            json: {
-              data: {
-                username: CANDIDATE.username,
-                email: CANDIDATE.email,
-                displayName: CANDIDATE.displayName,
-                profile: { headline: '', location: '', workMode: 'hybrid' },
-                sessions: [],
-              },
-            },
-          });
-        }
-        return route.fulfill({ json: { data: null } });
+      const page = await browser.newPage({
+        viewport: { width: viewport.width, height: viewport.height },
       });
+      await stubWizardApi(page);
       await page.goto(`${baseUrl}/app`, { waitUntil: 'domcontentloaded' });
       await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
+      await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
+      await page.getByTestId('save-goal-btn').click();
       await verifySourceActions(page, viewport, baseUrl);
       await verifyUploadMenu(page, viewport, baseUrl);
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
