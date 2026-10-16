@@ -558,7 +558,7 @@ test('announces a slow session read after four seconds and retries the same requ
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(
-    page.getByText('Проверяем вход и читаем ваш профиль').filter({ visible: true }),
+    page.getByText('Проверяем вход и читаем ваш профиль').filter({ visible: true }).first(),
   ).toBeVisible();
   await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 15_000 });
   await page.screenshot({
