@@ -11,19 +11,25 @@ export async function captureCareerHarness(
     if (!shell) throw new Error('career_harness_not_found');
     const target = targetSelector ? shell.querySelector<HTMLElement>(targetSelector) : shell;
     if (!target) throw new Error('career_harness_target_not_found');
-    const linkedStyles = Array.from(
-      document.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'),
+    const styles = Array.from(
+      document.querySelectorAll<HTMLLinkElement | HTMLStyleElement>(
+        'link[rel="stylesheet"], style',
+      ),
     );
-    const linkedCss = await Promise.all(
-      linkedStyles.map((style) => fetch(style.href).then((response) => response.text())),
-    );
-    const inlineCss = Array.from(document.querySelectorAll('style')).map(
-      (style) => style.textContent ?? '',
+    const css = await Promise.all(
+      styles.map((style) =>
+        style instanceof HTMLLinkElement
+          ? fetch(style.href).then((response) => response.text())
+          : Promise.resolve(style.textContent ?? ''),
+      ),
     );
     const html = targetSelector
       ? `<div class="career-shell">${target.outerHTML}</div>`
-      : target.outerHTML;
-    return { css: [...inlineCss, ...linkedCss].join('\n'), html, title: document.title };
+      : target.outerHTML +
+        Array.from(document.querySelectorAll('body > .career-token-scope'))
+          .map((layer) => layer.outerHTML)
+          .join('');
+    return { css: css.join('\n'), html, title: document.title };
   }, selector);
   writeFileSync(path, renderPage(rendered.css, rendered.html, rendered.title));
 

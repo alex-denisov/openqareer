@@ -154,13 +154,14 @@ export function CareerWorkspaceShell({
   // exists" and "the wizard is done" are the same fact.
   const careerPictureReady = Boolean(visibleWorkspace);
 
-  const intakeVisible = shouldShowIntake({
+  const intakeRequired = shouldShowIntake({
     sessionPending,
     hasWorkspace: Boolean(visibleWorkspace),
     hasCabinetSession: Boolean(cabinetSession),
     intakeStarted,
-    isTodayView: activeView === 'today',
+    isTodayView: true,
   });
+  const intakeVisible = intakeRequired && activeView === 'today';
 
   useEffect(() => {
     if (
@@ -447,6 +448,7 @@ export function CareerWorkspaceShell({
         </a>
 
         <CareerNavigationRail
+          inactive={intakeVisible}
           session={session}
           sessionPending={sessionPending}
           activeView={activeView}
@@ -493,15 +495,18 @@ export function CareerWorkspaceShell({
             onOpenConsultant={() => openExpert()}
             session={session}
             sessionPending={sessionPending}
-            hidden={accountOpen || intakeVisible}
+            hidden={accountOpen}
             unreadCount={notificationUnreadCount}
             onUnreadCountChange={setNotificationUnreadCount}
             onOpenCenter={openNotificationCenter}
             onOpenSettings={openNotificationSettings}
           />
           <div className="career-main-content">
-            {intakeVisible || (sessionPending && intakeStarted) ? (
-              <div hidden={accountOpen || !intakeVisible}>
+            {intakeRequired || (sessionPending && intakeStarted) ? (
+              <div
+                data-intake-screen={intakeVisible && !accountOpen ? 'visible' : undefined}
+                hidden={accountOpen || !intakeVisible}
+              >
                 <FirstRunWizard
                   key={`intake-${intakeSeed}`}
                   onComplete={completeFirstRun}

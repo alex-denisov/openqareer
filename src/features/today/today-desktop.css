@@ -71,3 +71,215 @@
     justify-content: flex-start;
   }
 }
+
+/* Approved screen 1: card rhythm, queue and six measured funnel stages. */
+.career-today-desktop .career-today-changes {
+  grid-template-columns: var(--career-space-5) minmax(0, 1fr) var(--career-target-min);
+  gap: var(--career-space-3);
+  padding: 0 var(--career-space-2) 0 var(--career-space-4);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+.career-today-desktop .career-today-changes > p {
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+.career-today-desktop .career-today-next-decision,
+.career-today-desktop .career-today-queue-desktop {
+  padding: var(--career-space-6);
+  border-color: var(--career-line-strong);
+}
+.career-today-desktop .career-today-next-decision {
+  border-color: color-mix(in oklch, var(--career-accent) 40%, var(--career-line-strong));
+}
+.career-today-desktop .career-today-next-decision h2 {
+  line-height: 1.3;
+}
+.career-today-desktop .career-today-decision-reasons > li {
+  grid-template-columns: var(--career-space-6) minmax(0, 1fr);
+  gap: var(--career-space-3);
+}
+.career-today-desktop .career-today-decision-reasons > li > span {
+  inline-size: var(--career-space-6);
+  block-size: var(--career-space-6);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+.career-today-desktop .career-today-queue-desktop-head {
+  min-block-size: var(--career-target-min);
+}
+.career-today-desktop .career-today-queue-heading {
+  inline-size: 100%;
+  gap: var(--career-space-3);
+}
+.career-today-desktop .career-today-queue-heading h2 {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.career-today-desktop .career-today-queue-count {
+  display: inline-flex;
+  min-inline-size: 0;
+  min-block-size: 0;
+  padding: calc(var(--career-space-1) / 2) var(--career-space-2);
+  border-radius: var(--career-space-1);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.career-today-desktop .career-today-queue-desktop-row {
+  grid-template-columns:
+    calc(var(--career-space-8) + var(--career-space-1)) minmax(0, 1fr)
+    9.5rem var(--career-space-8);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  min-block-size: 0;
+}
+.career-today-desktop .career-today-queue-desktop-icon {
+  inline-size: calc(var(--career-space-8) + var(--career-space-1));
+  block-size: calc(var(--career-space-8) + var(--career-space-1));
+}
+.career-today-desktop .career-today-queue-desktop-copy,
+.career-today-desktop .career-today-queue-desktop-deadline {
+  gap: calc(var(--career-space-1) / 2);
+}
+.career-today-desktop .career-today-queue-desktop-deadline > span {
+  padding: calc(var(--career-space-1) / 2) var(--career-space-2);
+  border-radius: var(--career-space-1);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.career-today-desktop .career-today-queue-desktop-deadline > strong {
+  white-space: nowrap;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.career-today-desktop .career-today-queue-desktop-deadline.is-late > span,
+.career-today-desktop .career-today-queue-desktop-deadline.is-late > strong {
+  color: var(--career-warning);
+}
+.career-today-desktop .career-today-queue-desktop-deadline.is-late > span {
+  border-color: color-mix(in oklch, var(--career-warning) 50%, var(--career-line-strong));
+}
+.career-today-desktop .career-today-queue-desktop-deadline.is-interview > span {
+  color: var(--career-accent);
+  border-color: color-mix(in oklch, var(--career-accent) 45%, var(--career-line-strong));
+}
+.career-today-desktop .career-today-funnel > header {
+  min-block-size: var(--career-target-min);
+  gap: var(--career-space-3);
+}
+.career-today-desktop .career-today-funnel > header h2 {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.career-today-desktop .career-today-funnel-list {
+  margin-block-start: var(--career-space-4);
+}
+.career-today-desktop .career-today-funnel-list > li {
+  display: grid;
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  min-block-size: 0;
+  gap: var(--career-space-1);
+  border-radius: var(--career-radius-sm);
+}
+.career-today-desktop .career-today-funnel-value {
+  font-size: var(--career-text-xl);
+  font-weight: 600;
+  line-height: 1.1;
+}
+.career-today-desktop .career-today-funnel-label {
+  line-height: 1.5;
+}
+.career-today-desktop .career-today-funnel-track {
+  box-sizing: border-box;
+  padding: 0;
+  display: block;
+  inline-size: 100%;
+  block-size: var(--career-space-1);
+  margin-block-start: var(--career-space-2);
+  border-radius: var(--career-space-1);
+  background: none;
+  overflow: hidden;
+}
+.career-today-funnel-track-bg {
+  fill: var(--career-surface-raised);
+}
+.career-today-funnel-track-fill {
+  fill: var(--career-accent);
+}
+.career-today-desktop .career-today-funnel-list > li.is-current {
+  background: var(--career-accent-soft);
+}
+.career-today-desktop .career-today-funnel-list > li.is-current .career-today-funnel-label {
+  color: var(--career-text);
+  font-weight: 600;
+}
+.career-today-desktop .career-today-funnel-separator {
+  inset-inline-end: calc(var(--career-space-2) * -1 - var(--career-space-1) * 1.25);
+  inline-size: var(--career-space-2);
+  block-size: var(--career-space-2);
+  border: solid var(--career-text-dim);
+  border-width: calc(var(--career-border-width) * 2) calc(var(--career-border-width) * 2) 0 0;
+  transform: translateY(-50%) rotate(45deg);
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .career-today-desktop .career-today-funnel-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .career-today-desktop .career-today-funnel-separator {
+    display: none;
+  }
+}
+
+.career-today-desktop {
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+.career-today-queue-desktop-list > li {
+  position: relative;
+}
+.career-today-queue-discuss {
+  position: absolute;
+  inset-inline-end: calc((var(--career-target-min) - var(--career-space-8)) / -2);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  padding: 0;
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: none;
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+.career-today-queue-discuss:hover {
+  background: var(--career-surface);
+}
+
+.career-today-desktop .career-today-info-button {
+  margin-inline: calc((var(--career-target-min) - var(--career-space-8)) / -2);
+}
+
+.career-today-desktop .career-today-decision-actions .career-btn > svg,
+.career-today-desktop .career-today-decision-effect > svg,
+.career-today-desktop .career-today-profile-action > svg {
+  inline-size: calc(var(--career-text-sm) * 1.25);
+  block-size: calc(var(--career-text-sm) * 1.25);
+}
+.career-today-desktop .career-today-decision-sources {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+.career-today-desktop .career-today-decision-sources > svg {
+  flex: none;
+  inline-size: var(--career-text-sm);
+  block-size: var(--career-text-sm);
+}

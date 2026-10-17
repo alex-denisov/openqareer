@@ -356,6 +356,12 @@ export function CareerExpertPanel({
   );
   const proposalCount = commandProposalCount + decisionProposalCount;
   useEffect(() => onProposalCountChange?.(proposalCount), [proposalCount, onProposalCountChange]);
+  const toggleHistory = () => {
+    if (historyOpen) {
+      ++historyRequest.current;
+      setHistoryOpen(false);
+    } else void loadHistory();
+  };
   const voiceActive = voiceState !== 'idle';
   const voiceTextLocked = voiceActive && voiceState !== 'transcribed';
   return (
@@ -376,10 +382,24 @@ export function CareerExpertPanel({
           <span>
             <Sparkle size={18} weight="regular" />
           </span>
-          <div>
-            <strong>Консультант</strong>
-            <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
-          </div>
+          {overlay && mobileExpanded && !onExpand ? (
+            <button
+              type="button"
+              className="career-expert-mobile-history-title"
+              aria-label="История бесед"
+              aria-pressed={historyOpen}
+              onClick={toggleHistory}
+              disabled={loadingSession || !user}
+            >
+              <strong>Консультант</strong>
+              <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
+            </button>
+          ) : (
+            <div>
+              <strong>Консультант</strong>
+              <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
+            </div>
+          )}
         </div>
         <div className="career-expert-panel-controls">
           <MobileConsultantStagePicker stage={stage} onStageChange={onStageChange} />
@@ -389,14 +409,7 @@ export function CareerExpertPanel({
             aria-label="История бесед"
             aria-pressed={historyOpen}
             disabled={loadingSession || !user}
-            onClick={() => {
-              if (historyOpen) {
-                ++historyRequest.current;
-                setHistoryOpen(false);
-                return;
-              }
-              void loadHistory();
-            }}
+            onClick={toggleHistory}
           >
             <ClockCounterClockwise size="1em" aria-hidden="true" />
           </button>
@@ -572,7 +585,7 @@ export function CareerExpertPanel({
                 <ConsultantMessage
                   text={
                     intakeMode
-                      ? 'Начнём с источника. Можно подключить LinkedIn или hh.ru, загрузить резюме или просто рассказать, чем занимаетесь.'
+                      ? 'Начнём с источника. Подключите LinkedIn или hh.ru, загрузите резюме или просто расскажите, чем занимаетесь.'
                       : STAGE_INITIAL_REPLICA[stage]
                   }
                 />
@@ -584,6 +597,7 @@ export function CareerExpertPanel({
                       ? ['С чего начать?', 'Что вы читаете в LinkedIn?', 'Можно без LinkedIn?']
                       : starterPromptsForStage(stage)
                   }
+                  variantClass={intakeMode ? 'career-expert-starters' : undefined}
                   ariaLabel="Темы для начала"
                   onChoose={(prompt) => {
                     setContent(prompt);

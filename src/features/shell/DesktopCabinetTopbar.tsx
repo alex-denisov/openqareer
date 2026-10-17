@@ -53,6 +53,8 @@ function DesktopTopbarActions(props: DesktopTopbarActionsProps) {
           onOpenCenter={props.onOpenCenter}
           onOpenSettings={props.onOpenSettings}
         />
+      ) : props.showNotifications && props.sessionPending ? (
+        <BootstrapNotificationsBell />
       ) : null}
     </div>
   );

@@ -103,7 +103,7 @@ try {
         );
         const actual = await measure(
           browser,
-          `file://${path.resolve('test-results/evidence', item.folder, `${item.file}-${width}.html`)}`,
+          `file://${path.resolve(out, 'after-complete', `${item.name}-${width}.html`)}`,
           width,
           actualSelector,
           false,

@@ -118,7 +118,9 @@
 
 .first-run-source-opt {
   display: grid;
-  grid-template-columns: var(--career-first-run-source-icon-size) minmax(0, 1fr) auto var(--career-space-5);
+  grid-template-columns: var(--career-first-run-source-icon-size) minmax(0, 1fr) auto var(
+      --career-space-5
+    );
   min-width: 0;
   min-height: var(--career-target-min);
   align-items: center;
@@ -130,7 +132,9 @@
   color: var(--career-text);
   cursor: pointer;
   text-align: start;
-  transition: border-color var(--career-motion-quick), background-color var(--career-motion-quick);
+  transition:
+    border-color var(--career-motion-quick),
+    background-color var(--career-motion-quick);
 }
 .first-run-source-opt:hover {
   border-color: var(--career-line-strong);
@@ -274,7 +278,9 @@
   font-size: var(--career-text-sm);
   font-weight: 600;
   text-decoration: none;
-  transition: background-color var(--career-motion-quick), border-color var(--career-motion-quick);
+  transition:
+    background-color var(--career-motion-quick),
+    border-color var(--career-motion-quick);
 }
 .first-run-btn-primary {
   border: var(--career-border-width) solid var(--career-accent);
@@ -365,7 +371,7 @@
   width: auto;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--career-bg) 78%, transparent);
+  background: var(--career-backdrop);
 }
 .first-run-city-layer.is-mobile .first-run-city-panel {
   width: min(100%, var(--career-first-run-dialog-max));
@@ -625,7 +631,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: color-mix(in srgb, var(--career-bg) 78%, transparent);
+  background: var(--career-backdrop);
 }
 .first-run-modal-dim.is-center {
   align-items: center;

@@ -73,6 +73,7 @@ export const NavigationButton = forwardRef<
 });
 
 interface NavigationStateProps {
+  readonly inactive?: boolean;
   readonly activeView: ShellSection;
   readonly isNavigable: (view: ShellSection) => boolean;
   readonly lockedReason: (view: ShellSection) => string;
@@ -82,6 +83,7 @@ interface NavigationStateProps {
 function RailItems(
   props: NavigationStateProps & {
     readonly onNavigationHintChange?: (hint?: string) => void;
+    readonly inactive?: boolean;
   },
 ) {
   const visibleItems = railNavigation;
@@ -93,8 +95,8 @@ function RailItems(
             label={item.label}
             ariaLabel={item.ariaLabel}
             icon={item.icon}
-            active={item.target === props.activeView}
-            disabled={!props.isNavigable(item.target)}
+            active={!props.inactive && item.target === props.activeView}
+            disabled={props.inactive || !props.isNavigable(item.target)}
             lockedReason={props.lockedReason(item.target)}
             onClick={() => props.onNavigate(item.target)}
             onMouseEnter={() => props.onNavigationHintChange?.(item.label)}
@@ -170,6 +172,7 @@ function RailWalletButton({
 }
 
 export function CareerNavigationRail({
+  inactive = false,
   session,
   sessionPending,
   ariaHidden,
@@ -195,6 +198,7 @@ export function CareerNavigationRail({
     >
       <RailBrandButton onNavigate={onNavigate} />
       <RailItems
+        inactive={inactive}
         activeView={activeView}
         isNavigable={isNavigable}
         lockedReason={lockedReason}

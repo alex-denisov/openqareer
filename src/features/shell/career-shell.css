@@ -1,4 +1,8 @@
-.career-shell {
+.career-shell,
+.career-token-scope {
+  -webkit-font-smoothing: auto;
+  text-rendering: auto;
+  font-synthesis: weight style small-caps;
   --career-bg: oklch(13% 0.016 255);
   --career-font-sans: var(--font-main);
   --career-bg-elevated: oklch(16.5% 0.018 255);
@@ -28,6 +32,8 @@
   --career-first-run-alert-max: 400px;
   --career-first-run-source-icon-size: 40px;
   --career-first-run-avatar-size: 36px;
+  --career-field-edge: color-mix(in srgb, var(--career-text-dim) 70%, var(--career-bg-elevated));
+  --career-backdrop: rgb(0 0 0 / 0.5);
   --career-z-modal: 50;
   --career-z-toast: 70;
   --career-border-width: 1px;
@@ -70,6 +76,9 @@
   );
   --career-motion-quick: 180ms cubic-bezier(0.16, 1, 0.3, 1);
   --career-motion-skeleton: 1.6s ease-in-out;
+}
+
+.career-shell {
   min-height: 100dvh;
   display: grid;
   grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
@@ -190,8 +199,6 @@
   place-items: center;
   border: 0;
 }
-
-
 
 .career-brand-mark {
   width: var(--career-target-min);
@@ -8353,19 +8360,6 @@
 .career-today-digest-basis {
   color: var(--career-text-soft);
   font-size: var(--career-text-aux);
-}
-
-.career-today-pending {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
-  margin: 0;
-  padding: var(--career-space-3) var(--career-space-4);
-  border: 1px solid var(--career-line);
-  border-radius: var(--career-radius-md);
-  background: var(--career-surface-soft);
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
 }
 
 .career-today-panels {

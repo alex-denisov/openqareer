@@ -1,3 +1,4 @@
+import { advanceFirstRunSource } from '../e2e/helpers/advance-first-run-source.mjs';
 import { mkdir } from 'node:fs/promises';
 import { chromium } from 'playwright';
 import { preview } from 'vite';
@@ -57,8 +58,7 @@ async function captureViewport(browser, baseUrl, viewport) {
   await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
   await page.getByTestId('save-goal-btn').click();
   await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}.png` });
-  await page.getByTestId('source-skip-btn').click();
-  await page.getByTestId('skip-confirm-btn').click();
+  await advanceFirstRunSource(page, viewport.width <= 760);
   await page.getByTestId('context-submit-btn').waitFor({ timeout: 10_000 });
   await page.screenshot({ path: `${OUT}/first-run-context-${viewport.name}.png` });
   await page.close();

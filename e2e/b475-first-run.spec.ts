@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { advanceFirstRunSource } from './helpers/advance-first-run-source.mjs';
 import AxeBuilder from '@axe-core/playwright';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
@@ -62,10 +63,9 @@ async function captureContext(page: Page, width: number): Promise<void> {
   }
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `step-2-source-${width}.png`) });
   await saveRenderedHtml(page, `step-2-source-${width}`);
-  await page.getByTestId('source-skip-btn').click();
-  await expect(page.getByTestId('first-run-skip-dialog')).toBeVisible();
-  await page.screenshot({ path: path.join(EVIDENCE_DIR, `skip-source-${width}.png`) });
-  await page.getByTestId('skip-confirm-btn').click();
+  await advanceFirstRunSource(page, width === 390, async () => {
+    await page.screenshot({ path: path.join(EVIDENCE_DIR, `skip-source-${width}.png`) });
+  });
   await expect(page.getByTestId('context-city-picker-btn')).toBeVisible();
   await page.screenshot({ path: path.join(EVIDENCE_DIR, `step-3-context-${width}.png`) });
   const trigger = page.getByTestId('context-city-picker-btn');

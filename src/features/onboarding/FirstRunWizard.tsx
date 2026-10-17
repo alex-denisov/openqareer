@@ -1,4 +1,4 @@
-import { CaretLeft } from '@phosphor-icons/react';
+import { CaretLeft, Check, PencilSimple } from '@phosphor-icons/react';
 
 import { useEffect, type ReactElement } from 'react';
 import type { FirstRunData, FirstRunSpecialState, FirstRunStep } from './firstRunTypes';
@@ -70,18 +70,53 @@ function WizardGoalCard({ state }: { readonly state: ReturnType<typeof useFirstR
   );
 }
 
-function PendingContext({ onContinue }: { readonly onContinue: () => void }) {
+function PendingStep({
+  number,
+  title,
+  after,
+}: {
+  readonly number: number;
+  readonly title: string;
+  readonly after: number;
+}) {
   return (
-    <button
-      type="button"
+    <article
       className="first-run-stage-card first-run-pending-context"
-      data-testid="source-skip-btn"
-      onClick={onContinue}
+      role="group"
+      aria-label={title}
+      aria-disabled="true"
     >
-      <span className="first-run-stage-badge">3</span>
-      <span className="first-run-stage-title">Контекст</span>
-      <small>после шага 2</small>
-    </button>
+      <div className="first-run-stage-head">
+        <span className="first-run-stage-badge">{number}</span>
+        <h2 className="first-run-stage-title">{title}</h2>
+        <small>после шага {after}</small>
+      </div>
+    </article>
+  );
+}
+
+function CompletedSource({ state }: { readonly state: ReturnType<typeof useFirstRunWizardState> }) {
+  const title = state.data.isSourceSkipped
+    ? 'Источник пропущен'
+    : (state.uploadedFile?.name ?? 'Источник выбран');
+  return (
+    <article className="first-run-stage-card is-done" aria-label="Источник">
+      <div className="first-run-stage-head">
+        <span className="first-run-stage-badge is-done">
+          <Check size={16} aria-hidden="true" />
+        </span>
+        <h2 className="first-run-stage-title">Источник</h2>
+        <button
+          className="first-run-btn-ghost"
+          type="button"
+          onClick={() => state.setStep('source')}
+        >
+          <PencilSimple size={14} className="first-run-edit-icon" aria-hidden="true" />
+          Изменить
+        </button>
+      </div>
+      <p className="first-run-goal-text">{title}</p>
+    </article>
   );
 }
 
@@ -121,15 +156,13 @@ function WizardMainCards({
           onSkip={() => state.setIsSkipDialogOpen(true)}
         />
       ) : null}
-      {!isMobile && state.step === 'source' ? (
-        <PendingContext
-          onContinue={() =>
-            state.uploadedFile && !state.ingestionError
-              ? state.setStep('context')
-              : state.setIsSkipDialogOpen(true)
-          }
-        />
+      {!isMobile && state.step === 'goal' ? (
+        <PendingStep number={2} title="Источник" after={1} />
       ) : null}
+      {!isMobile && state.step !== 'context' ? (
+        <PendingStep number={3} title="Контекст" after={2} />
+      ) : null}
+      {!isMobile && state.step === 'context' ? <CompletedSource state={state} /> : null}
       {state.step === 'context' ? (
         <FirstRunContextCard
           data={state.data}

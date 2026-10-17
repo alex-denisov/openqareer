@@ -117,7 +117,7 @@ export function ComposerModeSplit({
         disabled={!canSend || sending}
         aria-label={sendLabel}
       >
-        {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="fill" />}
+        {sending ? <Spinner size={18} /> : <PaperPlaneTilt size={18} weight="regular" />}
       </button>
       {open ? (
         <ModeMenu

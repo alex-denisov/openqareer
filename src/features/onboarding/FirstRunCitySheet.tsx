@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEscapeLayer } from '../shell/escapeLayers';
 import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { Check, MagnifyingGlass } from '@phosphor-icons/react';
@@ -89,11 +90,12 @@ function useCityDialog(isOpen: boolean, isMobile: boolean, onClose: () => void) 
   useEffect(() => {
     if (!isOpen) return;
     const trigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    panelRef.current?.querySelector('input')?.focus();
+    panelRef.current?.querySelector('input')?.focus({ preventScroll: true });
+    if (!isMobile) panelRef.current?.scrollIntoView({ block: 'nearest' });
     return () => {
       trigger?.focus();
     };
-  }, [isOpen]);
+  }, [isOpen, isMobile]);
   useEffect(() => {
     if (!isOpen) return;
     const panel = panelRef.current;
@@ -147,16 +149,17 @@ export function FirstRunCitySheet({
 
   const filtered = filterCities(searchQuery);
 
-  return (
+  const dialog = (
     <div
       ref={panelRef}
-      className={`first-run-city-layer${isMobile ? ' is-mobile' : ''}`}
+      className={`first-run-city-layer${isMobile ? ' is-mobile career-token-scope' : ''}`}
       role="dialog"
       aria-modal={isMobile || undefined}
       aria-label="Выбор города"
       data-testid="first-run-city-sheet"
     >
       <div className="first-run-sheet first-run-city-panel">
+        {isMobile ? <span className="first-run-sheet-grab" aria-hidden="true" /> : null}
         <CitySearchHeader query={searchQuery} onQueryChange={setSearchQuery} onClose={onClose} />
         <p className="first-run-city-section-label">
           {searchQuery ? 'Результаты поиска' : 'Популярные'}
@@ -177,4 +180,5 @@ export function FirstRunCitySheet({
       </div>
     </div>
   );
+  return isMobile ? createPortal(dialog, document.body) : dialog;
 }

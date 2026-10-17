@@ -13,6 +13,10 @@
   line-height: 1.2;
 }
 .first-run-source-help {
+  margin-inline: calc(var(--first-run-hit-gutter) * -1);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.2;
   display: grid;
   place-items: center;
   inline-size: var(--career-target-min);
@@ -24,6 +28,7 @@
   border-radius: var(--career-radius-sm);
 }
 .first-run-screen:not(.is-mobile) .first-run-stage-card.is-active .first-run-stage-badge {
+  border-color: var(--career-accent);
   background: var(--career-accent);
   color: var(--career-accent-ink);
 }
@@ -50,6 +55,8 @@
   display: none;
 }
 .first-run-screen:not(.is-mobile) .first-run-main {
+  padding-block-start: var(--career-space-6);
+  padding-block-end: var(--career-space-8);
   max-width: calc(var(--career-space-8) * 25.75);
 }
 .first-run-screen:not(.is-mobile) .first-run-eyebrow {
@@ -95,23 +102,32 @@
   align-items: center;
   gap: var(--career-space-3);
   inline-size: 100%;
-  color: var(--career-text-soft);
+  color: var(--career-text);
   text-align: start;
-  background: var(--career-bg);
+  background: transparent;
   cursor: pointer;
 }
 .first-run-pending-context small {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
   margin-inline-start: auto;
+  padding: calc(var(--career-space-1) / 2) var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  color: var(--career-text-dim);
   font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.5;
 }
 .first-run-back {
   display: none;
 }
 @media (max-width: 760px) {
-  .career-shell:has(.first-run-screen) .career-mobile-nav {
+  .career-shell:has([data-intake-screen='visible']) .career-mobile-nav {
     display: none;
   }
-  .career-shell:has(.first-run-screen) {
+  .career-shell:has([data-intake-screen='visible']) {
     --career-mobile-nav-height: 0px;
   }
   .first-run-screen.is-mobile .first-run-main {
@@ -350,7 +366,8 @@
     line-height: 1.5;
   }
   .first-run-screen.is-mobile .first-run-context-description {
-    margin: 0 var(--career-space-1) var(--career-space-3);
+    margin: 0 0 var(--career-space-3);
+    padding-inline: var(--career-space-1);
     font-size: var(--career-text-sm);
     line-height: 1.5;
   }
@@ -500,6 +517,163 @@
   }
 }
 
+.first-run-goal-form textarea:focus {
+  outline: none;
+  box-shadow: none;
+  border-color: var(--career-line-strong);
+}
+.first-run-pending-context[aria-disabled='true'] {
+  cursor: default;
+  border-color: var(--career-line);
+}
+.first-run-pending-context .first-run-stage-head {
+  inline-size: 100%;
+  margin: 0;
+}
+.first-run-pending-context .first-run-stage-title,
+.first-run-stage-card.is-done .first-run-stage-title {
+  flex: 1;
+}
+.first-run-screen:not(.is-mobile) .first-run-format-control .first-run-select {
+  appearance: none;
+  min-block-size: var(--career-target-min);
+  padding-inline-end: var(--career-space-8);
+}
+.first-run-screen:not(.is-mobile) .first-run-format-control .first-run-format-caret {
+  display: block;
+  position: absolute;
+  inset-inline-end: var(--career-space-3);
+  inset-block-start: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--career-text-soft);
+  inline-size: calc(var(--career-text-sm) * 1.25);
+  block-size: calc(var(--career-text-sm) * 1.25);
+}
+.first-run-format-control {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+}
+@media (max-width: 760px) {
+  .first-run-screen.is-mobile .first-run-context-fields > .first-run-field {
+    display: grid;
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  }
+  .first-run-screen.is-mobile .first-run-context-fields .first-run-select {
+    inline-size: 100%;
+    max-inline-size: none;
+    padding-inline-end: var(--career-space-5);
+  }
+  .first-run-screen.is-mobile .first-run-context-fields .first-run-pick-btn {
+    inline-size: 100%;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-panel {
+    display: grid;
+    align-content: start;
+    gap: var(--career-space-3);
+    inline-size: 100%;
+    block-size: min(78dvh, calc(var(--career-space-8) * 20.625));
+    max-block-size: none;
+    padding: var(--career-space-2) var(--career-space-4) env(safe-area-inset-bottom, 0px);
+    border: 0;
+    border-radius: calc(var(--career-space-6) + var(--career-space-1) / 2)
+      calc(var(--career-space-6) + var(--career-space-1) / 2) 0 0;
+    background: var(--career-bg-elevated);
+    overflow: auto;
+    box-shadow: none;
+  }
+  .first-run-sheet-grab {
+    justify-self: center;
+    inline-size: calc(var(--career-space-8) + var(--career-space-1));
+    block-size: calc(var(--career-space-1) * 1.25);
+    border-radius: var(--career-radius-pill);
+    background: var(--career-line-strong);
+  }
+  .first-run-city-layer.is-mobile .first-run-city-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0;
+    min-block-size: var(--career-target-min);
+    margin: 0;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-title {
+    font-weight: 600;
+    font-size: var(--career-text-lg);
+    line-height: 1.25;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-header button {
+    line-height: 1.5;
+    padding-inline: var(--career-space-2);
+    border: 0;
+    color: var(--career-accent);
+    background: none;
+    font-size: var(--career-text-md);
+  }
+  .first-run-city-layer.is-mobile .first-run-city-search-wrap {
+    margin: 0;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-search-icon {
+    color: var(--career-text-soft);
+    inline-size: var(--career-space-5);
+    block-size: var(--career-space-5);
+  }
+  .first-run-city-layer.is-mobile .first-run-city-search-input {
+    padding-inline-start: calc(var(--career-space-8) + var(--career-space-2));
+    min-block-size: var(--career-target-min);
+    border: 0;
+    border-radius: var(--career-radius-pill);
+    background: var(--career-surface);
+    font-size: var(--career-text-md);
+  }
+  .first-run-city-layer.is-mobile .first-run-city-section-label {
+    margin: 0;
+    padding-inline: var(--career-space-1);
+    font-weight: 600;
+    color: var(--career-text-soft);
+  }
+  .first-run-city-layer.is-mobile .first-run-city-list {
+    display: block;
+    margin: 0;
+    max-block-size: none;
+    border-radius: calc(var(--career-space-4) + var(--career-space-1) / 2);
+    background: var(--career-surface);
+    overflow: hidden;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-item {
+    min-block-size: calc(var(--career-target-min) + var(--career-space-2));
+    padding: 0 var(--career-space-4);
+    border: 0;
+    border-radius: 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+    background: none;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-list li:first-child button {
+    border-block-start: 0;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-name,
+  .first-run-city-layer.is-mobile .first-run-city-detail {
+    display: block;
+    margin: 0;
+    line-height: 1.5;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-name {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+  }
+  .first-run-city-layer.is-mobile .first-run-city-item svg {
+    color: var(--career-accent);
+    inline-size: var(--career-space-5);
+    block-size: var(--career-space-5);
+  }
+}
+.first-run-screen:not(.is-mobile) .first-run-source-opt:not(.is-picked) {
+  background: transparent;
+  border-color: var(--career-line-strong);
+}
+.first-run-screen:not(.is-mobile) .first-run-source-opt.is-picked .first-run-source-ico {
+  color: var(--career-text-soft);
+}
 .first-run-source-action-label.is-selected svg {
   inline-size: calc(var(--career-text-sm) * 1.25);
   block-size: calc(var(--career-text-sm) * 1.25);
@@ -521,6 +695,147 @@
   font-size: var(--career-text-xs);
 }
 .first-run-screen:not(.is-mobile) .first-run-edit-icon {
+  margin: 0;
   inline-size: calc(var(--career-text-xs) * 1.25);
   block-size: calc(var(--career-text-xs) * 1.25);
+}
+
+.career-token-scope {
+  color: var(--career-text);
+  font-family: var(--career-font-sans);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+.career-token-scope,
+.career-token-scope * {
+  box-sizing: border-box;
+}
+:where(.career-token-scope) :where(button, input) {
+  font: inherit;
+}
+
+.first-run-goal-mirror {
+  display: none;
+}
+@media (max-width: 760px) {
+  .first-run-screen.is-mobile .first-run-goal-input {
+    display: grid;
+    padding-inline: var(--career-space-4);
+    border-radius: calc(var(--career-space-6) - var(--career-space-1) / 2);
+    background: var(--career-bg-elevated);
+  }
+  .first-run-screen.is-mobile .first-run-goal-form textarea,
+  .first-run-screen.is-mobile .first-run-goal-mirror {
+    grid-area: 1 / 1;
+    min-block-size: calc(var(--career-space-8) * 3);
+    max-block-size: calc(var(--career-space-8) * 8.25);
+    padding: var(--career-space-3) 0;
+    border: 0;
+    background: none;
+    font-size: var(--career-text-md);
+    line-height: 1.5;
+  }
+  .first-run-screen.is-mobile .first-run-goal-mirror {
+    display: block;
+    visibility: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow: hidden;
+  }
+  .first-run-screen.is-mobile .first-run-goal-form textarea {
+    inline-size: 100%;
+    block-size: 100%;
+    border-radius: 0;
+    resize: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .first-run-screen.is-mobile .first-run-steps-bar {
+    margin-block-end: var(--career-space-3);
+  }
+  .first-run-screen.is-mobile .first-run-stage-head {
+    margin-block-end: var(--career-space-3);
+  }
+  .first-run-screen.is-mobile .first-run-stage-title {
+    line-height: 1.25;
+  }
+  .first-run-screen.is-mobile .first-run-goal-form textarea,
+  .first-run-screen.is-mobile .first-run-goal-mirror {
+    line-height: 1.4;
+  }
+  .first-run-screen.is-mobile .first-run-context-fields > .first-run-field {
+    border-block-end: 0;
+  }
+  .first-run-screen.is-mobile .first-run-context-fields > .first-run-field + .first-run-field,
+  .first-run-screen.is-mobile .first-run-relocation-row {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+  .first-run-screen.is-mobile .first-run-context-fields .first-run-pick-btn {
+    align-self: start;
+    gap: var(--career-space-1);
+  }
+  .first-run-screen.is-mobile .first-run-format-control {
+    align-self: start;
+    inline-size: calc(100% + (var(--career-target-min) - var(--career-space-8)) / 2);
+  }
+  .first-run-screen.is-mobile .first-run-context-fields .first-run-select {
+    line-height: var(--career-target-min);
+  }
+  .first-run-screen.is-mobile .first-run-relocation-label {
+    font-weight: 400;
+    gap: var(--career-space-3);
+  }
+  .first-run-screen.is-mobile .first-run-relocation-label input {
+    inline-size: calc(
+      var(--career-target-min) + var(--career-space-2) - var(--career-border-width)
+    );
+    block-size: calc(var(--career-space-8) - var(--career-border-width));
+  }
+  .first-run-screen.is-mobile .first-run-relocation-label input::before {
+    inline-size: calc(var(--career-space-7) - var(--career-border-width));
+    block-size: calc(var(--career-space-7) - var(--career-border-width));
+  }
+}
+
+.first-run-stage-badge {
+  border: var(--career-border-width) solid var(--first-run-field-edge);
+  background: none;
+}
+.first-run-stage-badge.is-done {
+  border-color: var(--career-success);
+  background: var(--career-success-soft);
+}
+
+.first-run-source-help svg {
+  inline-size: calc(var(--career-text-xs) * 1.25);
+  block-size: calc(var(--career-text-xs) * 1.25);
+}
+
+@media (max-width: 760px) {
+  .first-run-screen.is-mobile .first-run-source-help {
+    margin-inline: 0;
+    font-size: var(--career-text-sm);
+  }
+  .first-run-screen.is-mobile .first-run-source-help svg {
+    inline-size: calc(var(--career-text-sm) * 1.25);
+    block-size: calc(var(--career-text-sm) * 1.25);
+  }
+}
+
+.first-run-screen:not(.is-mobile) .first-run-pending-context .first-run-stage-head {
+  margin: 0;
+}
+.first-run-pending-context .first-run-stage-title {
+  color: var(--career-text-soft);
+}
+.first-run-main > .first-run-stage-card:last-child {
+  margin-block-end: 0;
+}
+.first-run-city-layer.is-mobile .first-run-city-detail {
+  color: var(--career-text-soft);
+}
+
+.career-shell .first-run-desktop-header {
+  display: none;
 }

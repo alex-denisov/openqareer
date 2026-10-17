@@ -45,22 +45,3 @@
     border-radius: 0 3px 3px 0;
   }
 }
-.career-today-funnel-list > li {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  border-radius: var(--career-radius-sm);
-}
-.career-today-funnel-value {
-  font-size: var(--career-text-xl);
-  font-weight: 600;
-  line-height: 1.1;
-}
-.career-today-funnel-track {
-  box-sizing: content-box;
-  height: var(--career-space-1);
-  margin-block-start: auto;
-  padding-block-start: var(--career-space-2);
-  background: var(--career-surface-raised);
-  background-clip: content-box;
-}

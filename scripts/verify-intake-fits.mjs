@@ -1,3 +1,4 @@
+import { advanceFirstRunSource } from '../e2e/helpers/advance-first-run-source.mjs';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 import { chromium } from 'playwright';
@@ -78,9 +79,7 @@ async function walkFirstRun(page, baseUrl, viewport, results) {
   results.push(await measure(page, `${viewport.name}-source`));
   await page.screenshot({ path: `${OUT}/first-run-${viewport.name}-source.png` });
 
-  await page.getByTestId('source-skip-btn').click();
-  await page.getByTestId('first-run-skip-dialog').waitFor();
-  await page.getByTestId('skip-confirm-btn').click();
+  await advanceFirstRunSource(page, viewport.width <= 760);
   await page.getByTestId('context-city-picker-btn').waitFor();
   results.push(await measure(page, `${viewport.name}-context`));
   await page.screenshot({ path: `${OUT}/first-run-${viewport.name}-context.png` });

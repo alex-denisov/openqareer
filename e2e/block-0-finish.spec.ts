@@ -134,7 +134,7 @@ test('first run reads a real DOCX document and retains its text for completion',
   await expect(page.getByText(/Резюме прочитано/).first()).toBeVisible();
   await capture(page, 'docx-read');
   if (page.viewportSize()!.width === 390) await page.getByTestId('source-next-btn').click();
-  else await page.getByTestId('source-skip-btn').click();
+  else await page.getByTestId('source-opt-file').click();
   await expect(page.getByTestId('context-submit-btn')).toBeVisible();
   await page.getByTestId('context-submit-btn').click();
   await expect.poll(() => savedWorkspace?.resumeText).toBe(text);

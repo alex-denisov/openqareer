@@ -29,14 +29,19 @@ function GoalEditForm({
       <p className="first-run-goal-lead">
         Что вы хотите от поиска? Одной фразой, потом её можно изменить.
       </p>
-      <textarea
-        className="first-run-textarea"
-        rows={2}
-        value={goal}
-        onChange={(e) => onGoalChange(e.target.value)}
-        aria-label="Ваша цель"
-        data-testid="goal-textarea"
-      />
+      <div className="first-run-goal-input">
+        <div className="first-run-goal-mirror" aria-hidden="true">
+          {goal + ' '}
+        </div>
+        <textarea
+          className="first-run-textarea"
+          rows={2}
+          value={goal}
+          onChange={(e) => onGoalChange(e.target.value)}
+          aria-label="Ваша цель"
+          data-testid="goal-textarea"
+        />
+      </div>
       <button
         type="button"
         className="first-run-btn-ghost first-run-btn-save-goal"
@@ -106,6 +111,7 @@ export function SourceOptionRow({
   btnText,
   isPicked,
   onPick,
+  disabled = false,
 }: {
   readonly type: SourceType;
   readonly title: string;
@@ -113,6 +119,7 @@ export function SourceOptionRow({
   readonly btnText: string;
   readonly isPicked: boolean;
   readonly onPick: () => void;
+  readonly disabled?: boolean;
 }): ReactElement {
   const icons: Record<SourceType, ReactElement> = {
     linkedin: <LinkedinLogo size={24} />,
@@ -126,6 +133,7 @@ export function SourceOptionRow({
       type="button"
       className={`first-run-source-opt ${isPicked ? 'is-picked' : ''}`}
       aria-pressed={isPicked}
+      disabled={disabled}
       onClick={onPick}
       data-testid={`source-opt-${type}`}
     >
@@ -172,21 +180,7 @@ const SOURCE_ITEMS = [
   },
 ] as const;
 
-function SourceGridList({
-  data,
-  isMobile,
-  onSelectSource,
-  onConnectSource,
-  onTriggerFileUpload,
-  onTriggerConsultant,
-}: {
-  readonly data: FirstRunData;
-  readonly isMobile?: boolean;
-  readonly onSelectSource: (s: SourceType) => void;
-  readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
-  readonly onTriggerFileUpload: () => void;
-  readonly onTriggerConsultant: () => void;
-}): ReactElement {
+function SourceGridList(props: FirstRunSourceCardProps): ReactElement {
   return (
     <div className="first-run-source-grid">
       {SOURCE_ITEMS.map((item) => (
@@ -195,16 +189,20 @@ function SourceGridList({
           type={item.type}
           title={item.title}
           desc={item.desc}
-          btnText={item.btnText}
-          isPicked={data.selectedSource === item.type}
+          btnText={
+            item.type === 'file' &&
+            props.uploadedFileName &&
+            !props.ingestionError &&
+            !props.isIngesting
+              ? 'Продолжить'
+              : item.btnText
+          }
+          isPicked={props.data.selectedSource === item.type}
+          disabled={props.isIngesting}
           onPick={() => {
-            onSelectSource(item.type);
-            if (isMobile) return;
-            if (item.type === 'linkedin' || item.type === 'hh') {
-              onConnectSource?.(item.type);
-            }
-            if (item.type === 'file') onTriggerFileUpload();
-            if (item.type === 'talk') onTriggerConsultant();
+            props.onSelectSource(item.type);
+            if (!props.isMobile)
+              activateSource({ ...props, data: { ...props.data, selectedSource: item.type } });
           }}
         />
       ))}
@@ -444,19 +442,23 @@ function WorkFormatField({
       <label className="first-run-label" htmlFor="work-format-select">
         Формат работы
       </label>
-      <select
-        id="work-format-select"
-        className="first-run-select"
-        value={format}
-        onChange={(e) => onChange(e.target.value as WorkFormat)}
-        data-testid="context-format-select"
-      >
-        <option value="">Не указан</option>
-        <option value="Гибрид">Гибрид</option>
-        <option value="Удалённо">Удалённо</option>
-        <option value="Офис">Офис</option>
-      </select>
-      <CaretDown className="first-run-format-caret" size={14} aria-hidden="true" />
+      <span className="first-run-format-control">
+        <select
+          id="work-format-select"
+          className="first-run-select"
+          value={format}
+          onChange={(e) => onChange(e.target.value as WorkFormat)}
+          data-testid="context-format-select"
+        >
+          <option value="" disabled hidden>
+            Не указан
+          </option>
+          <option value="Гибрид">Гибрид</option>
+          <option value="Удалённо">Удалённо</option>
+          <option value="Офис">Офис</option>
+        </select>
+        <CaretDown className="first-run-format-caret" size={14} aria-hidden="true" />
+      </span>
     </div>
   );
 }
