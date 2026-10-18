@@ -133,7 +133,7 @@ function AccountRailButton({
         onFocus={() => onNavigationHintChange?.('Настройки')}
         onBlur={() => onNavigationHintChange?.()}
       >
-        <GearSix size="1em" aria-hidden="true" />
+        <GearSix size={24} aria-hidden="true" />
       </button>
     </CareerTooltip>
   );
@@ -330,10 +330,17 @@ function MobileTopbarContent({
     <>
       <div className="career-mobile-topbar-notifications">
         {onBack ? (
-          <button type="button" className="career-mobile-back-trigger" aria-label="Назад" onClick={onBack}>
+          <button
+            type="button"
+            className="career-mobile-back-trigger"
+            aria-label="Назад"
+            onClick={onBack}
+          >
             <CaretLeft size={20} aria-hidden="true" />
           </button>
-        ) : notificationsSlot}
+        ) : (
+          notificationsSlot
+        )}
       </div>
       <h1 className="career-mobile-page-title">{title}</h1>
       <button

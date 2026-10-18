@@ -220,10 +220,14 @@ export function CareerExpertPanel({
     return () => element?.removeEventListener('keydown', trap);
   }, [overlay, onExpand]);
 
+  // The docked desktop panel is part of the page on load: it must not steal focus (and draw
+  // a focus ring) before the candidate acts. A sheet or an explicit expand still moves focus in.
+  const panelMounted = useRef(false);
   useEffect(() => {
     const returnFocusTo =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    if (!collapsed) closeButton.current?.focus();
+    if (!collapsed && (overlay || panelMounted.current)) closeButton.current?.focus();
+    panelMounted.current = true;
     return () => returnFocusTo?.focus();
   }, [onClose, collapsed, overlay]);
   useEffect(() => {

@@ -10,6 +10,8 @@ import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../server/data/sqliteCandidateReputationRepository';
 import { historicalAudit } from './fixtures/block-a-footprint-fixture';
 import { seedBlockAToday } from './fixtures/block-a-today-seed';
+import { seedMockupToday } from './fixtures/mockup-today-seed';
+import { SqliteCandidateDraftRepository } from '../server/candidate/sqliteCandidateDraftRepository';
 import type { SessionAuth } from '../server/auth/authService';
 import type { ServerConfig } from '../server/config';
 import { buildResumeStudioProjection } from '../server/domain/resumeStudio';
@@ -53,6 +55,8 @@ const candidateStore = new SqliteCandidateStore({
 });
 const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
 seedBlockAToday(candidateStore, candidate.id, config.applicationArchiveStaleDays);
+const candidateDraftRepository = new SqliteCandidateDraftRepository({ databasePath: ':memory:' });
+seedMockupToday(candidateStore, candidateDraftRepository, candidate.id);
 candidateStore.importResumeEvidence(candidate.id, {
   sourceLabel: 'Синтетический локальный набор блока A. Не данные реального кандидата.',
   entries: syntheticResumeMemory.map((fact) => ({
@@ -151,6 +155,7 @@ const routedCandidateStore = createCandidateStoreRouter(
 const app = await buildApp({
   config,
   candidateStore: routedCandidateStore,
+  candidateDraftRepository,
   candidateReputationRepo,
   authService,
   searchVacancies: async () => {

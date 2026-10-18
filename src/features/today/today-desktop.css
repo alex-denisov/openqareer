@@ -184,7 +184,11 @@
   line-height: 1.25;
 }
 .career-today-desktop .career-today-funnel-list {
-  margin-block-start: var(--career-space-4);
+  margin-block-start: 0;
+}
+.career-today-desktop .career-today-funnel-basis > svg {
+  margin-inline-end: var(--career-space-1);
+  vertical-align: -0.125em;
 }
 .career-today-desktop .career-today-funnel-list > li {
   display: grid;

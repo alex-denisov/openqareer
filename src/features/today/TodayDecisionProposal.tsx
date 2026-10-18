@@ -1,7 +1,12 @@
 import './today-decision-proposal.css';
 import { useEffect, useRef, useState } from 'react';
 import { Check, X } from '@phosphor-icons/react';
-import { getTodaySnapshot, selectTodayDecision, type TodaySnapshot } from './todayApi';
+import {
+  getTodaySnapshot,
+  selectTodayDecision,
+  type TodayQueueItem,
+  type TodaySnapshot,
+} from './todayApi';
 import { queueActionTitle } from './todayFormat';
 
 /** A suggestion is grounded in the candidate's current follow-up queue, never in demo copy. */
@@ -57,7 +62,7 @@ export function TodayDecisionProposal({
     <section className="career-expert-proposal" aria-label="Заменить решение дня" aria-busy={busy}>
       <p className="career-expert-proposal-title">Заменить решение дня</p>
       <p>
-        {queueActionTitle(item)}. {item.eyebrow ?? 'Задача из вашей очереди дня.'}
+        {queueActionTitle(item)}. {proposalReason(item)}
       </p>
       <div className="career-expert-actions">
         <button
@@ -82,4 +87,13 @@ export function TodayDecisionProposal({
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );
+}
+
+/** Почему замена: для просроченного напоминания — так, как в макете. */
+function proposalReason(item: TodayQueueItem): string {
+  if (item.kind === 'follow_up' && item.dueAt && Date.parse(item.dueAt) < Date.now())
+    return 'Срок ответа уже прошёл.';
+  const detail = item.eyebrow?.trim();
+  if (!detail) return 'Задача из вашей очереди дня.';
+  return `${detail.charAt(0).toLocaleUpperCase('ru-RU')}${detail.slice(1)}.`;
 }

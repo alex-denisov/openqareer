@@ -451,6 +451,13 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
   const waitingApplications = input.applications.filter(
     (application) => application.whoseTurn === 'candidate',
   );
+  // Очередь — только то, что ждёт ответа или имеет срок: избранная вакансия без материалов
+  // в неё не идёт, а сохранённая с черновиком письма идёт как «одобрить письмо».
+  const queueApplications = input.applications.filter((application) =>
+    application.stage === 'saved'
+      ? application.materials.coverLetter
+      : application.whoseTurn === 'candidate',
+  );
   const upcomingInterviews = upcomingInterviewsOf(input.applications);
   const applicationsWaitingOver7Days = countApplicationsWaitingOver7Days(input.applications, now);
   const nearestInterview = nextInterviewOf(upcomingInterviews[0]);
@@ -473,7 +480,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       applicationsWaitingOver7Days,
     },
     queue: buildQueue(
-      waitingApplications,
+      queueApplications,
       input.newVacancies,
       shortlistToReview(input),
       input.pendingLinkedinPosts ?? [],

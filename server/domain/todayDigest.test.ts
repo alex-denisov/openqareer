@@ -639,9 +639,12 @@ describe('today queue order and copy (block 0 mockup)', () => {
       applications: [
         application({
           id: 'draft',
+          stage: 'saved',
+          whoseTurn: 'company',
           vacancy: { title: 'CTO', company: 'Гринкод', url: '', source: '' },
           materials: { coverLetter: true, resume: false },
         }),
+        application({ id: 'favorite', stage: 'saved', whoseTurn: 'candidate' }),
         application({
           id: 'interview',
           stage: 'interview',
@@ -680,7 +683,9 @@ describe('LinkedIn posts waiting for approval in the queue (block 0 mockup)', ()
     const snapshot = buildTodaySnapshot({
       ...BASE_INPUT,
       newVacancies: [],
-      applications: [application({ materials: { coverLetter: true, resume: false } })],
+      applications: [
+        application({ stage: 'saved', materials: { coverLetter: true, resume: false } }),
+      ],
       pendingLinkedinPosts: [{ id: 'post-1', topic: 'Миграция платформы' }],
     });
     expect(snapshot.queue.at(-1)).toEqual({

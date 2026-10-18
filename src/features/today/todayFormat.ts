@@ -246,7 +246,10 @@ export function queueActionTitle(item: {
   if (item.kind === 'follow_up')
     return named ? `Напомнить компании ${named}` : 'Напомнить компании';
   if (item.kind === 'interview') return 'Подготовиться к интервью';
-  if (item.kind === 'linkedin_post') return `Одобрить пост «${item.title}»`;
+  if (item.kind === 'linkedin_post')
+    return /^(о|об|про)\s/u.test(item.title)
+      ? `Одобрить пост ${item.title}`
+      : `Одобрить пост «${item.title}»`;
   if (item.kind === 'candidate_turn' && item.material === 'cover_letter')
     return named ? `Одобрить письмо в «${named}»` : 'Одобрить письмо';
   if (item.kind === 'candidate_turn') return `Ваш ход: ${item.title}`;
