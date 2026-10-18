@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { saveFirstRunGoal } from './helpers/firstRunGoal';
 
 test.beforeEach(async ({ page }) => {
   // B334: лендинг спрашивает, опубликована ли сборка для macOS.
@@ -69,6 +70,7 @@ test('built career workspace is ready, operable and free of critical accessibili
     timeout: 15_000,
   });
   await expect(page.getByText('Загружаем рабочее пространство')).toHaveCount(0);
+  await saveFirstRunGoal(page);
   await expect(page.getByTestId('source-opt-file')).toBeEnabled();
 
   if ((page.viewportSize()?.width ?? 1440) <= 760) {

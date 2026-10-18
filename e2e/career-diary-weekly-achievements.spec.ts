@@ -571,6 +571,10 @@ test('routes a diary achievement through profile approval and rollback', async (
       .getByRole('button', { name: 'Профиль' })
       .click();
   }
+  if (testInfo.project.name === 'mobile-390') {
+    // 390 (mockup 2, iOS list): the home row names the pending edit and opens «Обо мне».
+    await page.getByRole('button', { name: /Консультант предложил 1 правку/u }).click();
+  }
   const suggestion = page.getByRole('region', { name: 'Предложение карьерного консультанта' });
   await expect(suggestion).toContainText('Предложение из карьерного дневника');
   await suggestion.getByRole('button', { name: 'Принять' }).click();

@@ -15,8 +15,12 @@ async function openAssessment(page: Page, width: number): Promise<void> {
   } else {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
+  await openSkillCheckFromProfile(page, width);
+}
+
+// The approved mockups open the check from the skills tab, not from a consultant card.
+async function openSkillCheckFromProfile(page: Page, width: number): Promise<void> {
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  // The approved mockups open the check from the skills tab, not from a consultant card.
   if (width <= 760) {
     await page
       .locator('.career-profile-mobile .pm-row')
@@ -104,16 +108,7 @@ async function resumeSavedDialogue(page: Page): Promise<void> {
   await expect(page.getByText(assessmentQuestionTwo)).toBeVisible();
   await page.getByRole('button', { name: 'Назад к профилю' }).click();
   await expect(page.getByTestId('role-skill-assessment')).toHaveCount(0);
-  const consultant = page.locator('.career-expert-panel');
-  if (!(await consultant.isVisible())) {
-    await page
-      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
-      .first()
-      .click();
-  }
-  const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
-  if (await expand.isVisible()) await expand.click();
-  await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
+  await openSkillCheckFromProfile(page, page.viewportSize()?.width ?? 1440);
   await expect(
     page.getByText('Я отвечал за запуск платёжного направления и координировал команду.'),
   ).toBeVisible();
@@ -195,16 +190,7 @@ async function discussAndEvaluateFirstCase(page: Page, width: number): Promise<v
 }
 
 async function reopenAssessment(page: Page): Promise<void> {
-  const consultant = page.locator('.career-expert-panel');
-  if (!(await consultant.isVisible())) {
-    await page
-      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
-      .first()
-      .click();
-  }
-  const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
-  if (await expand.isVisible()) await expand.click();
-  await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
+  await openSkillCheckFromProfile(page, page.viewportSize()?.width ?? 1440);
   await expect(page.getByText('Кейс 1 из 3')).toBeVisible();
 }
 
@@ -230,16 +216,7 @@ async function finishRemainingCases(page: Page, width: number): Promise<void> {
 
 async function refreshStaleResult(page: Page, width: number): Promise<void> {
   await page.getByRole('button', { name: 'Назад к профилю' }).click();
-  const consultant = page.locator('.career-expert-panel');
-  if (!(await consultant.isVisible())) {
-    await page
-      .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
-      .first()
-      .click();
-  }
-  const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
-  if (await expand.isVisible()) await expand.click();
-  await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
+  await openSkillCheckFromProfile(page, page.viewportSize()?.width ?? 1440);
   await expect(page.getByText('Результат устарел.', { exact: false })).toBeVisible();
   await capture(page, `${width}-stale-result`);
   const consent = page.getByLabel('Согласен передать ответы модели для новой проверки.');

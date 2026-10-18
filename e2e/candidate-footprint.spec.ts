@@ -141,7 +141,23 @@ async function openFootprint(
     .getByRole('tab', { name: /^(Цифровой след|След)/u })
     .first()
     .click();
-  await expect(page.locator('#profile-footprint-step-title')).toBeVisible();
+  // 390 hides the step header on the findings step; the step panel itself is always shown.
+  await expect(page.getByTestId('profile-footprint-active-step')).toBeVisible();
+}
+
+const OWNERSHIP = 'Подтверждаю, что выбранные ссылки, никнеймы и почта принадлежат мне.';
+
+// The tab is a four-step flow (mockup 2-profil.html?tab=trace): each step button is named
+// «N Label» followed by its status, so the number and label identify it.
+function footprintStep(page: Page, index: number, label: string) {
+  return page
+    .getByRole('navigation', { name: 'Шаги цифрового следа' })
+    .getByRole('button', { name: new RegExp(`^${index} ${label}`, 'u') });
+}
+
+async function openPrivacyControls(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^Находки видите только вы/u }).click();
+  await expect(page.getByRole('region', { name: 'Управление согласием и данными' })).toBeVisible();
 }
 
 async function captureFootprint(page: Page, filename: string): Promise<void> {
@@ -174,12 +190,13 @@ test('B367 keeps launch disabled until the consent text is approved', async ({ p
     return route.fulfill({ status: 409, json: { error: { code: 'consent_text_not_approved' } } });
   });
 
-  const launch = page.getByRole('button', { name: 'Скоро: ждёт утверждения текста согласия' });
-  await expect(launch).toBeDisabled();
-  await expect(page.getByText('подготовлено, не подключено').first()).toBeVisible();
-  await expect(
-    page.getByLabel('Подтверждаю, что выбранные ссылки, никнеймы и почта принадлежат мне.'),
-  ).toHaveCount(0);
+  // Until the consent text is approved the flow stays on step 1 and the scan step cannot open,
+  // so no launch control is reachable.
+  await expect(page.getByText('Скоро: ждёт утверждения текста согласия.')).toBeVisible();
+  await expect(footprintStep(page, 1, 'Согласие')).toContainText('Ожидает утверждения');
+  await expect(footprintStep(page, 2, 'Сканирование')).toBeDisabled();
+  await expect(page.getByRole('button', { name: /Запустить выбранные проверки/u })).toHaveCount(0);
+  await expect(page.getByLabel(OWNERSHIP)).toHaveCount(0);
   await expect
     .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth))
     .toBe(true);
@@ -265,14 +282,16 @@ test('B367 reviews a mocked background run, records identity feedback, and delet
   await unchecked.uncheck();
   await page.getByRole('checkbox', { name: PLAN[3]!.preview }).uncheck();
   await page.getByRole('checkbox', { name: PLAN[4]!.preview }).uncheck();
-  await page
-    .getByLabel('Подтверждаю, что выбранные ссылки, никнеймы и почта принадлежат мне.')
-    .check();
+  await footprintStep(page, 1, 'Согласие').click();
+  await page.getByLabel(OWNERSHIP).check();
+  await footprintStep(page, 2, 'Сканирование').click();
   await page.getByRole('button', { name: 'Запустить выбранные проверки' }).click();
   await expect(
     page.getByText('Источники проверяются в фоне. Страница остаётся доступной.'),
   ).toBeVisible();
-  await expect(page.getByText('GitHub', { exact: true })).toBeVisible({ timeout: 10_000 });
+  await expect(footprintStep(page, 3, 'Находки')).toBeEnabled({ timeout: 10_000 });
+  await footprintStep(page, 3, 'Находки').click();
+  await expect(page.getByText('GitHub', { exact: true })).toBeVisible();
 
   expect(startBody?.confirmedOwnership).toBe(true);
   expect(startBody?.selectedQueryIds).toContain(PLAN[0]!.id);
@@ -281,20 +300,32 @@ test('B367 reviews a mocked background run, records identity feedback, and delet
   expect(startBody?.selectedQueryIds).not.toContain(PLAN[4]!.id);
   await captureFootprint(page, `footprint-findings-${page.viewportSize()?.width ?? 0}.png`);
 
-  await page.getByRole('button', { name: 'Не я' }).click();
-  await expect(page.getByText('Вы отметили «не я»')).toBeVisible();
+  // The decision is the pressed segment; 390 hides the duplicate status text beside it.
+  const decision = page.getByRole('group', { name: 'Отметить находку' });
+  await decision.getByRole('button', { name: 'Не я' }).click();
+  await expect(decision.getByRole('button', { name: 'Не я' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(reviewed).toBe('not_self');
   await page.getByRole('button', { name: 'Скрыть' }).click();
   await expect(page.getByText('Скрытые находки (1)')).toBeVisible();
   await page.getByText('Скрытые находки (1)').click();
   await page.getByRole('button', { name: 'Показать' }).click();
-  await expect(page.getByText('Нужно проверить')).toBeVisible();
-  await page.getByRole('button', { name: 'Это я' }).click();
-  await expect(page.getByText('Подтверждено вами')).toBeVisible();
+  await expect(page.getByText('Скрытые находки (1)')).toHaveCount(0);
+  await decision.getByRole('button', { name: 'Это я' }).click();
+  await expect(decision.getByRole('button', { name: 'Это я' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(reviewed).toBe('confirmed_self');
+  await openPrivacyControls(page);
   await page.getByRole('button', { name: 'Удалить сохранённые находки' }).click();
   await expect(page.getByText(/Удалить все сохранённые находки и историю проверок/u)).toBeVisible();
   await page.getByRole('button', { name: 'Удалить все находки' }).click();
   await expect(page.getByText('Сохранённые находки удалены.')).toBeVisible();
   expect(deleted).toBe(1);
+  await footprintStep(page, 1, 'Согласие').click();
   await page.getByRole('button', { name: 'Отозвать согласие' }).click();
   await expect(
     page.getByText('Согласие отозвано. Проверка остановлена, сохранённые находки удалены.'),
@@ -335,6 +366,7 @@ test('B367 keeps consent and findings visible when revocation fails', async ({ p
   });
 
   await expect(page.getByText('GitHub', { exact: true })).toBeVisible();
+  await openPrivacyControls(page);
   await page.getByRole('button', { name: 'Отозвать согласие' }).click();
 
   await expect(page.getByRole('alert')).toBeVisible();
@@ -396,6 +428,7 @@ test('B367 ignores a late poll response after consent revocation deletes finding
   );
 
   await pollStarted;
+  await footprintStep(page, 1, 'Согласие').click();
   await page.getByRole('button', { name: 'Отозвать согласие' }).click();
   await expect(
     page.getByText('Согласие отозвано. Проверка остановлена, сохранённые находки удалены.'),
@@ -420,7 +453,7 @@ test('B375: план цифрового следа включает nick, Waybac
           data: {
             plan: PLAN,
             sourceAvailability: SOURCE_AVAILABILITY,
-            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
             audit: null,
           },
         },
@@ -469,7 +502,7 @@ test('B375: нормализация работодателей: блок «Не
               'Corporate University of a Top-Tier Financial Institution',
             ],
             sourceAvailability: SOURCE_AVAILABILITY,
-            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
             audit: null,
           },
         },
@@ -518,7 +551,7 @@ test('B375: состояние источников отображает ада�
           data: {
             plan: PLAN,
             sourceAvailability: SOURCE_AVAILABILITY,
-            consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
+            consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
             audit: null,
           },
         },
