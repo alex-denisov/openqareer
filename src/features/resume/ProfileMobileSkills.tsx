@@ -1,6 +1,14 @@
 import { useState, type FormEvent } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
-import { CheckCircle, Circle, ListChecks, Plus, Question, CaretRight } from '@phosphor-icons/react';
+import {
+  CheckCircle,
+  Circle,
+  ListChecks,
+  Plus,
+  Target,
+  Question,
+  CaretRight,
+} from '@phosphor-icons/react';
 import { addSkill } from './resumeStudioModel';
 import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
@@ -80,6 +88,15 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
           title="Добавить навык"
           onClick={() => props.open({ page: 'skilladd' })}
         />
+        {/* Temporary 390 entry: the mockup puts it in «Карьера», which is not built yet (block B). */}
+        {props.onOpenRoleSkillAssessment ? (
+          <ProfileMobileRow
+            icon={Target}
+            title="Проверка навыков роли"
+            detail="Вопросы по навыкам выбранной роли"
+            onClick={props.onOpenRoleSkillAssessment}
+          />
+        ) : null}
       </ProfileMobileGroup>
       <button
         className="pm-cta"

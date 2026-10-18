@@ -112,11 +112,7 @@
     { "prefix": "src/features/appUpdate/", "specs": ["b469-app-update"] },
     {
       "prefix": "src/features/onboarding/",
-      "specs": [
-        "b475-first-run",
-        "onboarding-first-selection",
-        "intake-registration"
-      ]
+      "specs": ["b475-first-run", "onboarding-first-selection", "intake-registration"]
     },
     { "prefix": "src/features/diagnostic/", "specs": ["b475-first-run", "intake-registration"] },
     {

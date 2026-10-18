@@ -1,8 +1,6 @@
 import { mergeImportedSources } from '../connectors/nativeSourceConnection';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import type {
   AssessmentId,
   AssessmentResult,
@@ -68,7 +66,11 @@ import type { SqliteStarPrepRepository } from './sqliteStarPrepRepository';
 import type { SqliteInterviewSimulatorRepository } from './sqliteInterviewSimulatorRepository';
 import type { SqliteStarStoriesRepository } from './sqliteStarStoriesRepository';
 import type { SqliteRoleSkillAssessmentRepository } from './sqliteRoleSkillAssessmentRepository';
-import { SqliteManualExperienceFactRepository } from './sqliteManualExperienceFactRepository';
+import {
+  createMemoryMethods,
+  openCandidateDatabase,
+  type MemoryMethods,
+} from './sqliteCandidateStoreMemoryMethods';
 import type { SqliteWorkspaceRepository } from './sqliteWorkspaceRepository';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type { SqliteCareerCommandRepository } from './sqliteCareerCommandRepository';
@@ -165,14 +167,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly applicationTracker: ApplicationTrackerController;
 
   constructor(options: SqliteStoreOptions) {
-    if (options.databasePath !== ':memory:') {
-      mkdirSync(dirname(options.databasePath), { recursive: true, mode: 0o700 });
-    }
-    this.database = new DatabaseSync(options.databasePath, {
-      timeout: 5_000,
-      enableForeignKeyConstraints: true,
-      defensive: true,
-    });
+    this.database = openCandidateDatabase(options.databasePath);
     this.sealedText = new SealedText(options.encryptionKey);
     ({
       assessmentsRepository: this.assessmentsRepository,
@@ -227,6 +222,15 @@ export class SqliteCandidateStore implements CandidateStore {
   private installExportMethods(): void {
     Object.assign(
       this,
+      createMemoryMethods({
+        database: this.database,
+        sealedText: this.sealedText,
+        conversations: this.conversations,
+        requireCandidate: (candidateId) => this.requireCandidate(candidateId),
+        transaction: (operation) => this.transaction(operation),
+        getSnapshot: this.getSnapshot.bind(this),
+        saveResumeDraft: this.saveResumeDraft.bind(this),
+      }),
       createSqliteCandidateStoreExportMethods({
         getSnapshot: (candidateId) => this.getSnapshot(candidateId),
         sourceConnections: this.sourceConnections,
@@ -768,68 +772,8 @@ export class SqliteCandidateStore implements CandidateStore {
     return this.conversations.changeMemory(candidateId, memoryId, change);
   }
 
-  addManualExperienceFact(
-    candidateId: string,
-    memoryId: string,
-    statement: string,
-    experienceId?: string,
-  ): StoredMemory {
-    this.requireCandidate(candidateId);
-    return this.transaction(() => {
-      const snapshot = this.getSnapshot(candidateId);
-      const draft = snapshot.resume?.draft;
-      if (experienceId && !draft?.experience.some((entry) => entry.id === experienceId)) {
-        throw new CandidateStoreConflictError();
-      }
-      const existingFact = snapshot.memory.some((item) => item.id === memoryId);
-      const existingExperienceId = draft?.experience.find((entry) =>
-        entry.bulletMemoryIds.includes(memoryId),
-      )?.id;
-      if (existingFact && existingExperienceId !== experienceId) {
-        throw new CandidateStoreConflictError();
-      }
-      const memory = new SqliteManualExperienceFactRepository(
-        this.database,
-        this.sealedText,
-      ).add(candidateId, memoryId, statement);
-      if (experienceId && draft) {
-        const experience = draft.experience.map((entry) =>
-          entry.id === experienceId && !entry.bulletMemoryIds.includes(memoryId)
-            ? { ...entry, bulletMemoryIds: [...entry.bulletMemoryIds, memoryId] }
-            : entry,
-        );
-        this.saveResumeDraft(
-          candidateId,
-          { ...draft, experience },
-          snapshot.resume?.evidenceSnapshot ?? [],
-        );
-      }
-      return memory;
-    });
-  }
-
-  reviewMemories(
-    candidateId: string,
-    memoryIds: readonly string[],
-    action: 'confirm' | 'delete',
-  ): number | null {
-    this.requireCandidate(candidateId);
-    return this.transaction(() => {
-      const known = new Set(
-        this.conversations.snapshotParts(candidateId).memory.map((item) => item.id),
-      );
-      // A stale client must not half-review a dossier: either the whole batch
-      // is a decision the candidate could actually see, or none of it applies.
-      if (memoryIds.some((memoryId) => !known.has(memoryId))) return null;
-      // The count is what the candidate is told they decided, so a repeated id
-      // must not inflate it.
-      const distinct = [...new Set(memoryIds)];
-      for (const memoryId of distinct) {
-        this.conversations.changeMemory(candidateId, memoryId, { action });
-      }
-      return distinct.length;
-    });
-  }
+  declare addManualExperienceFact: MemoryMethods['addManualExperienceFact'];
+  declare reviewMemories: MemoryMethods['reviewMemories'];
 
   deleteCandidate(candidateId: string): boolean {
     const result = this.transaction(() => {

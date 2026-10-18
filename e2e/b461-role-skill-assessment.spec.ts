@@ -16,24 +16,18 @@ async function openAssessment(page: Page, width: number): Promise<void> {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  const consultant = page.locator('.career-expert-panel');
-  if (!(await consultant.isVisible())) {
-    const desktopTrigger = page
-      .locator('.career-desktop-topbar')
-      .getByRole('button', { name: 'Открыть консультанта', exact: true });
-    if (await desktopTrigger.isVisible()) {
-      await desktopTrigger.click();
-    } else {
-      await page
-        .getByRole('button', { name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u })
-        .first()
-        .click();
-    }
+  // The approved mockups open the check from the skills tab, not from a consultant card.
+  if (width <= 760) {
+    await page
+      .locator('.career-profile-mobile .pm-row')
+      .filter({ hasText: 'Проверка навыков роли' })
+      .click();
+  } else {
+    await page
+      .locator('.profile-desktop-assessment')
+      .getByRole('button', { name: /^(Начать|Продолжить|Открыть результат)$/u })
+      .click();
   }
-  await expect(consultant).toBeVisible();
-  const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
-  if (await expand.isVisible()) await expand.click();
-  await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
   await expect(page.getByTestId('role-skill-assessment')).toBeVisible();
 }
 

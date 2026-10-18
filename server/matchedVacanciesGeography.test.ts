@@ -133,7 +133,8 @@ async function login(app: Awaited<ReturnType<typeof buildApp>>) {
  * стоят после остальных.
  */
 describe('GET /api/v1/candidate/matched-vacancies (PRB-040)', () => {
-  const at = '2026-09-17T00:00:00.000Z';
+  // Dated relative to now: a fixed date ages out of the freshness window and empties the pool.
+  const at = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const cluster = (id: string, title: string, location: string, isRemote = false): VacancyCluster => ({
     id,
     canonicalTitle: title,

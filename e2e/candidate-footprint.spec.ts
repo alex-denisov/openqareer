@@ -136,11 +136,12 @@ async function openFootprint(
   const profile = page.locator('button[aria-label="Профиль"]:visible').first();
   await expect(profile).toBeEnabled({ timeout: 15_000 });
   await profile.click();
+  // 1440 names the tab «Цифровой след N», 390 calls it «След»; both open the step flow.
   await page
-    .locator('.career-profile-screen-tabs')
-    .getByRole('tab', { name: /^Цифровой след/ })
+    .getByRole('tab', { name: /^(Цифровой след|След)/u })
+    .first()
     .click();
-  await expect(page.getByRole('heading', { name: 'Как вас видят', exact: true })).toBeVisible();
+  await expect(page.locator('#profile-footprint-step-title')).toBeVisible();
 }
 
 async function captureFootprint(page: Page, filename: string): Promise<void> {
