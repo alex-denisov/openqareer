@@ -1,7 +1,11 @@
 import { ArrowsClockwise, CheckCircle, Circle, MapTrifold } from '@phosphor-icons/react';
 import { ProfileMobileSources } from './ProfileMobileHome';
 import { ProfileMobileGroup, ProfileMobileRow } from './ProfileMobileElements';
-import { profileRelocationSummaryDetail, profileRelocationSummaryLabel } from './ProfileSideRail';
+import {
+  profileRelocationSummaryDetail,
+  profileRelocationSummaryLabel,
+  type ProfileRelocationSummaryStatus,
+} from './ProfileSideRail';
 import { TopcardEditForm } from './ProfileTopcard';
 import { WorkPreferencesRailPanel } from './ProfileSideRail';
 import { patchTopcard } from './profileEditing';
@@ -29,6 +33,12 @@ export function ProfileMobileSourceDetails(props: ProfileMobileDataProps) {
   );
 }
 
+function mobileRelocationTitle(status: ProfileRelocationSummaryStatus): string {
+  if (status === 'prepared') return 'Релокация подготовлена';
+  if (status === 'not_enabled') return 'Релокация не включена';
+  return `Релокация: ${profileRelocationSummaryLabel(status).toLocaleLowerCase('ru-RU')}`;
+}
+
 export function ProfileMobileRelocation(props: ProfileMobileDataProps) {
   const status = props.relocationSummary ?? 'unknown';
   const enabled = status === 'enabled';
@@ -37,9 +47,7 @@ export function ProfileMobileRelocation(props: ProfileMobileDataProps) {
       <ProfileMobileGroup>
         <ProfileMobileRow
           icon={enabled ? CheckCircle : Circle}
-          title={
-            enabled ? 'Релокация включена' : `Релокация: ${profileRelocationSummaryLabel(status)}`
-          }
+          title={enabled ? 'Релокация включена' : mobileRelocationTitle(status)}
           detail={enabled ? 'Видите только вы' : profileRelocationSummaryDetail(status)}
           onClick={props.onOpenRelocation}
         />

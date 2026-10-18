@@ -231,6 +231,9 @@ function SuggestionRow({
     >
       <span className="profile-experience-suggestions__employer">{group.employer}</span>
       <span className="profile-experience-suggestions__change">
+        {suggestion.field ? (
+          <span>{suggestion.field === 'endDate' ? 'окончание: ' : 'начало: '}</span>
+        ) : null}
         {suggestion.currentText !== undefined ? (
           <>
             <span className="career-sr-only">Сейчас: </span>

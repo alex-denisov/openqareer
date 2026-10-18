@@ -22,6 +22,12 @@ interface ExperienceProps extends ProfileMobileDataProps, ProfileMobileNavigatio
   readonly route: ProfileMobileRoute;
 }
 
+/** The list says «с 03.2021» for the current place; the place page keeps «— по н. в.». */
+function listPeriod(entry: Parameters<typeof periodLabel>[0]): string {
+  const period = periodLabel(entry);
+  return entry.current ? period.replace(/^(.+) — по н\. в\.$/u, 'с $1') : period;
+}
+
 export function ProfileMobileExperienceList(props: ExperienceProps) {
   const entries = [...props.draft.experience].sort((left, right) =>
     (right.startDate ?? '').localeCompare(left.startDate ?? ''),
@@ -36,7 +42,7 @@ export function ProfileMobileExperienceList(props: ExperienceProps) {
             key={entry.id}
             icon={Briefcase}
             title={entry.employer || 'Компания не указана'}
-            detail={[entry.title, periodLabel(entry)].filter(Boolean).join(' · ')}
+            detail={[entry.title, listPeriod(entry)].filter(Boolean).join(' · ')}
             onClick={() => props.open({ page: 'job', entryId: entry.id })}
           />
         ))}

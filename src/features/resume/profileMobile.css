@@ -241,7 +241,9 @@
     color: var(--career-text-soft);
     white-space: nowrap;
   }
-  .pm-row.is-warn .pm-val {
+  .pm-row.is-warn .pm-val,
+  .pm-row.is-warn .pm-ico,
+  .pm-row.is-warn .pm-main small {
     color: var(--career-warning);
   }
   .pm-chev {

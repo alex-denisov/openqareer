@@ -123,12 +123,31 @@ function MobileEducationRow({
   );
 }
 
+/** «2022-01» → «01.2022», as on the 1440 project tile. */
+function projectPeriod(start?: string, end?: string): string {
+  return [start, end]
+    .map((value) => value?.replace(/^(\d{4})-(\d{2})$/u, '$2.$1'))
+    .filter(Boolean)
+    .join(' — ');
+}
+
+/** «Курсы не найдены ни в LinkedIn, ни в hh.ru» names only the sources actually imported. */
+function coursesNote(sources: ProfileMobileDataProps['importedSources']): string {
+  const names = (sources ?? []).map((item) =>
+    item.platform === 'linkedin' ? 'LinkedIn' : 'hh.ru',
+  );
+  if (!names.length) return 'Курсы не указаны в профиле.';
+  if (names.length === 1) return `Курсы не найдены в ${names[0]}.`;
+  return `Курсы не найдены ни в ${names.slice(0, -1).join(', ни в ')}, ни в ${names.at(-1)}.`;
+}
+
 function MobileEducationList({
   draft,
+  importedSources,
   onEducation,
   onCourse,
   onAdd,
-}: Pick<ProfileMobileDataProps, 'draft'> & {
+}: Pick<ProfileMobileDataProps, 'draft' | 'importedSources'> & {
   readonly onEducation: (entry: ResumeEducationInput) => void;
   readonly onCourse: (entry: ResumeCourseInput) => void;
   readonly onAdd: () => void;
@@ -153,7 +172,7 @@ function MobileEducationList({
       {!draft.courses?.length ? (
         <p className="pm-note">
           <Info size="1em" aria-hidden="true" />
-          Курсы не указаны в профиле. Добавьте вручную или расскажите консультанту.
+          {coursesNote(importedSources)} Добавьте вручную или расскажите консультанту.
         </p>
       ) : null}
     </>
@@ -193,6 +212,7 @@ export function ProfileMobileEducation(
   return (
     <MobileEducationList
       draft={props.draft}
+      importedSources={props.importedSources}
       onEducation={state.education.edit}
       onCourse={state.course.edit}
       onAdd={() => state.setChoosing(true)}
@@ -229,7 +249,7 @@ export function ProfileMobileProjects(
           key={entry.id}
           icon={Target}
           title={entry.name || 'Название не указано'}
-          detail={[entry.employer, [entry.startDate, entry.endDate].filter(Boolean).join(' — ')]
+          detail={[entry.description, entry.employer, projectPeriod(entry.startDate, entry.endDate)]
             .filter(Boolean)
             .join(' · ')}
           onClick={() => editor.edit(entry)}

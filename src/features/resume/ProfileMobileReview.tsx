@@ -94,6 +94,10 @@ export function ProfileMobileReview(props: ProfileMobileDataProps & ProfileMobil
   const blocks = profileResumeReviewBlocks(props.view, props.draft, props.memory);
   const confirmations = blocks.find((block) => block.id === 'confirmations');
   const pending = confirmations?.issueCount ?? confirmations?.issues.length ?? 0;
+  // Same count as «N фактов ждут подтверждения» on the 1440 top card.
+  const proposed = (props.memory ?? []).filter(
+    (item) => item.kind === 'fact' && item.status === 'proposed',
+  ).length;
   const discuss = props.onFillQuestionnaire
     ? () => props.onFillQuestionnaire?.('Проверка резюме')
     : props.onOpenExpert;
@@ -107,15 +111,26 @@ export function ProfileMobileReview(props: ProfileMobileDataProps & ProfileMobil
             <ReviewBlockRow key={block.id} block={block} open={props.open} />
           ))}
       </ProfileMobileGroup>
-      {pending ? (
+      {pending || proposed ? (
         <ProfileMobileGroup title="Ждут подтверждения">
-          <ProfileMobileRow
-            icon={Question}
-            title={pluralRu(pending, ['факт', 'факта', 'фактов'])}
-            detail="Подтверждаете вы, мы работодателя не проверяем"
-            value="Проверить"
-            onClick={discuss}
-          />
+          {proposed ? (
+            <ProfileMobileRow
+              icon={Question}
+              title={`${pluralRu(proposed, ['факт', 'факта', 'фактов'])} из импорта`}
+              detail="Подтверждаете вы, мы работодателя не проверяем"
+              value="Проверить"
+              onClick={discuss}
+            />
+          ) : null}
+          {pending ? (
+            <ProfileMobileRow
+              icon={Question}
+              title={pluralRu(pending, ['факт', 'факта', 'фактов'])}
+              detail="Подтверждаете вы, мы работодателя не проверяем"
+              value="Проверить"
+              onClick={discuss}
+            />
+          ) : null}
         </ProfileMobileGroup>
       ) : null}
       <button type="button" className="pm-cta" disabled={!discuss} onClick={discuss}>

@@ -21,7 +21,7 @@ function MobileMasterResume({ draft }: Pick<ProfileMobileDataProps, 'draft'>) {
       </span>
       <span className="pm-main">
         <b>Мастер-резюме</b>
-        <small>{dateSummary(draft)}</small>
+        <small>{dateSummary(draft).replace(/\.$/u, '')}</small>
       </span>
       <span className="pm-val">PDF</span>
       <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
@@ -71,10 +71,10 @@ function MobileVersionList({
             title={formatTargetedVersionTitle(version.title)}
             detail={
               version.status === 'draft'
-                ? 'Черновик'
-                : version.status === 'approved'
-                  ? 'Одобренный снимок'
-                  : 'Статус отправки не подтверждён'
+                ? 'Черновик ждёт вашего одобрения'
+                : `Снимок, ${version.status === 'sent' ? 'отправлено' : 'одобрено'} ${new Date(
+                    version.updatedAt,
+                  ).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })}`
             }
             value={active.loadingVersionId === version.id ? 'Загружаем…' : undefined}
             onClick={active.loadingVersionId ? undefined : () => void active.open(version.id)}
