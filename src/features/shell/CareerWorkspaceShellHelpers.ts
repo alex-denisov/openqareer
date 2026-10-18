@@ -138,16 +138,20 @@ export function matchesMedia(query: string): boolean {
   );
 }
 
+// The consultant docks beside the page only from 1280 px; a narrower desktop window keeps
+// the page columns and opens the consultant as an overlay over the strip.
+export const DOCKED_CONSULTANT_QUERY = '(min-width: 1280px)';
+
 export function hasClosedDesktopExpertPreference(): boolean {
   return (
-    matchesMedia('(min-width: 1280px)') &&
+    matchesMedia(DOCKED_CONSULTANT_QUERY) &&
     ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')
   );
 }
 
 export function initialExpertPanelOpen(sessionPending: boolean, _initialView: ShellView): boolean {
   if (typeof window === 'undefined') return false;
-  const desktop = matchesMedia('(min-width: 1280px)');
+  const desktop = matchesMedia(DOCKED_CONSULTANT_QUERY);
   if (desktop && ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')) return false;
   // While the session is checked the panel stays on the phone sheet and a wide desktop; a
   // narrowed desktop window keeps its columns until the candidate opens the consultant.

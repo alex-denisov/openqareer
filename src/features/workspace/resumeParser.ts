@@ -390,6 +390,23 @@ function extractAbout(text: string): string | undefined {
 }
 
 
+/**
+ * «Компания, город — должность» on one line names the whole place. Read as an employer alone,
+ * it left the title to the next place's header, so every place got its neighbour's role.
+ */
+function splitOneLineHeader(
+  line: string,
+): { employer: string; title: string; location?: string } | null {
+  const match = line.match(/^(.+?)\s+[—–]\s+(.+)$/u);
+  if (!match) return null;
+  const [, place, title] = match;
+  const comma = place.lastIndexOf(',');
+  const employer = (comma > 0 ? place.slice(0, comma) : place).trim();
+  const location = comma > 0 ? place.slice(comma + 1).trim() : undefined;
+  if (!employer || !title.trim()) return null;
+  return { employer, title: title.trim(), ...(location ? { location } : {}) };
+}
+
 // eslint-disable-next-line max-lines-per-function
 function extractExperience(text: string): ParsedResumeExperience[] {
   const lines = text
@@ -446,6 +463,7 @@ function extractExperience(text: string): ParsedResumeExperience[] {
     let employer = entry.employer;
     let title = entry.inlineTitle;
     let bodyStartIdx = entry.lineIdx + 1 + entry.skipLines;
+    let headerLocation: string | undefined;
 
     if (!employer || !title) {
       const headerLines: string[] = [];
@@ -475,7 +493,12 @@ function extractExperience(text: string): ParsedResumeExperience[] {
         if (!employer) employer = headerLines[0];
         if (!title) title = headerLines[1];
       } else if (headerLines.length === 1) {
-        if (!employer) employer = headerLines[0];
+        const oneLine = !employer && !title ? splitOneLineHeader(headerLines[0]) : null;
+        if (oneLine) {
+          employer = oneLine.employer;
+          title = oneLine.title;
+          headerLocation = oneLine.location;
+        } else if (!employer) employer = headerLines[0];
       }
     }
 
@@ -558,7 +581,7 @@ function extractExperience(text: string): ParsedResumeExperience[] {
       }
     }
 
-    let location: string | undefined;
+    let location: string | undefined = headerLocation;
     const bullets: string[] = [];
     const achievements: string[] = [];
 

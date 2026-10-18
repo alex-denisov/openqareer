@@ -60,7 +60,9 @@ function useVersionCount(candidateId: string) {
       const current = request;
       void getResumeVersions({ limit: 1, signal: current.signal }).then(
         (list) => {
-          if (!current.signal.aborted) setCount(1 + list.totalCount);
+          // The master resume counts as one version; a malformed total shows «—», never NaN.
+          if (!current.signal.aborted)
+            setCount(Number.isFinite(list.totalCount) ? 1 + list.totalCount : undefined);
         },
         () => {
           if (!current.signal.aborted) setCount(undefined);

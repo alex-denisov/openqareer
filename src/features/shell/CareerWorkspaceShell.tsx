@@ -43,6 +43,7 @@ import {
   hasClosedDesktopExpertPreference,
   initialExpertPanelOpen,
   matchesMedia,
+  DOCKED_CONSULTANT_QUERY,
   pageNames,
   SESSION_GATE_DELAY_MS,
   stageForView,
@@ -122,7 +123,7 @@ export function CareerWorkspaceShell({
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [pendingProposalCount, setPendingProposalCount] = useState(0);
-  const [isWideViewport, setIsWideViewport] = useState(() => matchesMedia('(min-width: 901px)'));
+  const [isWideViewport, setIsWideViewport] = useState(() => matchesMedia(DOCKED_CONSULTANT_QUERY));
   const [isCompactViewport, setIsCompactViewport] = useState(() =>
     matchesMedia('(max-width: 760px)'),
   );
@@ -174,7 +175,7 @@ export function CareerWorkspaceShell({
   useEffect(() => {
     if (
       autoOpenedExpert.current ||
-      !matchesMedia('(min-width: 901px)') ||
+      !matchesMedia(DOCKED_CONSULTANT_QUERY) ||
       intakeVisible ||
       !session?.candidateId ||
       visibleWorkspace
@@ -342,7 +343,7 @@ export function CareerWorkspaceShell({
     (section: AccountSection = 'security', returnToIntake = false) => {
       setExpertSheetExpanded(false);
       const shouldOpenDesktopExpert =
-        typeof window !== 'undefined' && window.matchMedia('(min-width: 901px)').matches;
+        typeof window !== 'undefined' && window.matchMedia(DOCKED_CONSULTANT_QUERY).matches;
       setExpertConfig((previous) => ({
         ...previous,
         open: previous.open || shouldOpenDesktopExpert,
@@ -427,7 +428,7 @@ export function CareerWorkspaceShell({
   }, []);
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const media = window.matchMedia('(min-width: 901px)');
+    const media = window.matchMedia(DOCKED_CONSULTANT_QUERY);
     const onChange = () => {
       setIsWideViewport(media.matches);
       const open = expertPanelOpenOnWidthChange(media.matches);
@@ -443,7 +444,7 @@ export function CareerWorkspaceShell({
       : pageNames[activeView];
 
   useEffect(() => {
-    if (!matchesMedia('(min-width: 901px)')) return;
+    if (!matchesMedia(DOCKED_CONSULTANT_QUERY)) return;
     try {
       window.localStorage.setItem(
         DESKTOP_EXPERT_PREFERENCE_KEY,

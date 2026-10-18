@@ -322,9 +322,22 @@ function suggestionTopics(pending: readonly InlineSuggestionItem[]): string {
   return [...topics].sort((a) => (a === 'даты' ? 1 : -1)).join(' и ');
 }
 
+/** The pending edits lead to one nested page: «Опыт» when it has any, otherwise «Обо мне». */
+function pendingSuggestionTarget(pending: readonly InlineSuggestionItem[]) {
+  return pending.some((item) => item.section === 'experience')
+    ? { page: 'exp' as const, block: 'Опыт' }
+    : { page: 'about' as const, block: 'Обо мне' };
+}
+
 export function ProfileMobileResumeHome(props: HomeProps) {
   const pending = (props.suggestions ?? []).filter(
-    (suggestion) => suggestion.section === 'experience' && !suggestion.applied,
+    (suggestion) =>
+      (suggestion.section === 'experience' || suggestion.section === 'about') &&
+      !suggestion.applied,
+  );
+  const target = pendingSuggestionTarget(pending);
+  const targetPending = pending.filter((item) =>
+    target.page === 'exp' ? item.section === 'experience' : item.section === 'about',
   );
   return (
     <div
@@ -334,11 +347,21 @@ export function ProfileMobileResumeHome(props: HomeProps) {
       aria-labelledby="profile-mobile-tab-resume"
     >
       {pending.length ? (
-        <button type="button" className="pm-focus" onClick={() => props.open({ page: 'exp' })}>
+        <button
+          type="button"
+          className="pm-focus"
+          onClick={() => props.open({ page: target.page })}
+        >
           <Sparkle size="1em" aria-hidden="true" />
           <span>
-            <b>Консультант предложил {pluralRu(pending.length, ['правку', 'правки', 'правок'])}</b>
-            <small>Блок «Опыт»: {suggestionTopics(pending)}</small>
+            <b>
+              Консультант предложил {pluralRu(targetPending.length, ['правку', 'правки', 'правок'])}
+            </b>
+            <small>
+              {target.page === 'exp'
+                ? `Блок «Опыт»: ${suggestionTopics(targetPending)}`
+                : 'Блок «Обо мне»: текст раздела'}
+            </small>
           </span>
           <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
         </button>

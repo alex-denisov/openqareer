@@ -53,6 +53,27 @@ function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
   );
 }
 
+function ProfileMobileSkillActions(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
+  return (
+    <ProfileMobileGroup>
+      <ProfileMobileRow
+        icon={Plus}
+        title="Добавить навык"
+        onClick={() => props.open({ page: 'skilladd' })}
+      />
+      {/* Temporary 390 entry: the mockup puts it in «Карьера», which is not built yet (block B). */}
+      {props.onOpenRoleSkillAssessment ? (
+        <ProfileMobileRow
+          icon={Target}
+          title="Проверка навыков роли"
+          detail="Вопросы по навыкам выбранной роли"
+          onClick={props.onOpenRoleSkillAssessment}
+        />
+      ) : null}
+    </ProfileMobileGroup>
+  );
+}
+
 export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
   const skills = props.draft.skills ?? [];
   const [all, setAll] = useState(false);
@@ -82,22 +103,7 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
           </p>
         )}
       </section>
-      <ProfileMobileGroup>
-        <ProfileMobileRow
-          icon={Plus}
-          title="Добавить навык"
-          onClick={() => props.open({ page: 'skilladd' })}
-        />
-        {/* Temporary 390 entry: the mockup puts it in «Карьера», which is not built yet (block B). */}
-        {props.onOpenRoleSkillAssessment ? (
-          <ProfileMobileRow
-            icon={Target}
-            title="Проверка навыков роли"
-            detail="Вопросы по навыкам выбранной роли"
-            onClick={props.onOpenRoleSkillAssessment}
-          />
-        ) : null}
-      </ProfileMobileGroup>
+      <ProfileMobileSkillActions {...props} />
       <button
         className="pm-cta"
         type="button"

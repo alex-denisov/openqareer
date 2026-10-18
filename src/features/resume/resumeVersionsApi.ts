@@ -1,4 +1,4 @@
-import { apiFetch, readData } from '../coach/apiClient';
+import { apiFetch, malformedResponseError, readData, readDataObject } from '../coach/apiClient';
 import type { ResumeAtsAssessment } from '../../../server/domain/resumeAtsAssessment';
 import type {
   ResumeVersionSummary,
@@ -48,7 +48,11 @@ export async function getResumeVersions(
   const response = await apiFetch('/api/v1/candidate/resume/versions?' + query.toString(), {
     signal: input.signal,
   });
-  return readData<ResumeVersionList>(response);
+  // An empty or malformed page must reach the caller's error state, not crash the cabinet
+  // inside a state updater that reads `items`.
+  const list = await readDataObject<ResumeVersionList>(response);
+  if (!Array.isArray(list.items)) throw malformedResponseError();
+  return list;
 }
 
 export async function createResumeVersion(
