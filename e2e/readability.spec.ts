@@ -667,7 +667,14 @@ test.describe('B232 readability gate', () => {
     await expect(title).toHaveText('Профиль');
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
     await expect(page.getByText('FinCloud').locator('visible=true').first()).toBeVisible();
-    await expect(page.getByText('Head of Product').first()).toBeVisible();
+    // 390 shows the role line under the name (2-profil.html); 1440 also lists vacancy titles.
+    await expect(
+      page
+        .getByText(
+          (page.viewportSize()?.width ?? 1440) <= 760 ? 'Руководитель продукта' : 'Head of Product',
+        )
+        .first(),
+    ).toBeVisible();
   });
 
   test('capture C52 screenshots: fixed rail, focus tooltip and path', async ({ page }) => {
@@ -809,7 +816,7 @@ test.describe('B232 readability gate', () => {
     await page.screenshot({ path: 'output/playwright/B336/languages-1176.png' });
 
     await page.getByRole('tab', { name: /^Цифровой след/ }).click();
-    const sourcesHeading = page.getByRole('heading', { name: 'Как вас видят', exact: true });
+    const sourcesHeading = page.locator('#profile-footprint-step-title');
     await expect(sourcesHeading).toBeVisible();
     await sourcesHeading.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'output/playwright/B336/sources-1176.png' });

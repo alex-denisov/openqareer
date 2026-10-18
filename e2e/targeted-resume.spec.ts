@@ -10,6 +10,8 @@ import { waitForCareerShell } from './helpers/waitForCareerShell';
 test('builds a targeted resume from vacancy requirements and prints only that slice', async ({
   page,
 }, testInfo) => {
+  // The ATS Plain Text slice is a 1440 tool; on 390 versions start from «Создать версию под вакансию» (b476).
+  test.skip(testInfo.project.name === 'mobile-390', 'desktop-only slice editor, as in the mockups');
   const browserErrors: string[] = [];
   const fixtureSnapshot = {
     ...candidateSnapshot,

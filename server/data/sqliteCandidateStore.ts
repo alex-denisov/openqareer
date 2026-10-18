@@ -1,3 +1,4 @@
+import { mergeImportedSources } from '../connectors/nativeSourceConnection';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -387,15 +388,15 @@ export class SqliteCandidateStore implements CandidateStore {
 
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
+    const parts = this.conversations.snapshotParts(candidateId, stage);
     return {
       candidate,
-      importedSources: this.sourceConnections.list(candidateId).map((connection) => ({
-        platform: connection.platform,
-        connectedAt: connection.connectedAt,
-        lastImportedAt: connection.lastImportedAt,
-        factCount: connection.receipt.factCount,
-      })),
-      ...this.conversations.snapshotParts(candidateId, stage),
+      importedSources: mergeImportedSources(
+        this.sourceConnections.list(candidateId),
+        parts.messages,
+        parts.memory,
+      ),
+      ...parts,
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: this.resumeRepository.get(candidateId),

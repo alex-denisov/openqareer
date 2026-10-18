@@ -1,3 +1,4 @@
+import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
 import {
@@ -315,6 +316,12 @@ export function ProfileMobileEmptyResume({
   );
 }
 
+/** What the pending edits touch, as far as the command says: dates or experience bullets. */
+function suggestionTopics(pending: readonly InlineSuggestionItem[]): string {
+  const topics = new Set(pending.map((item) => (item.field ? 'даты' : 'пункты опыта')));
+  return [...topics].sort((a) => (a === 'даты' ? 1 : -1)).join(' и ');
+}
+
 export function ProfileMobileResumeHome(props: HomeProps) {
   const pending = (props.suggestions ?? []).filter(
     (suggestion) => suggestion.section === 'experience' && !suggestion.applied,
@@ -331,7 +338,7 @@ export function ProfileMobileResumeHome(props: HomeProps) {
           <Sparkle size="1em" aria-hidden="true" />
           <span>
             <b>Консультант предложил {pluralRu(pending.length, ['правку', 'правки', 'правок'])}</b>
-            <small>Правки блока «Опыт»</small>
+            <small>Блок «Опыт»: {suggestionTopics(pending)}</small>
           </span>
           <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
         </button>

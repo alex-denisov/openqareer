@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   deriveImportedFactSources,
+  summarizeImportedFactSources,
   listCandidateConnectionViews,
 } from './nativeSourceConnection';
 
@@ -9,9 +10,10 @@ describe('listCandidateConnectionViews', () => {
   // previously read as a bare "disconnected" platform, contradicting the
   // profile the dossier already carries.
   it('распознаёт импортированный без подключения профиль LinkedIn', () => {
-    const views = listCandidateConnectionViews([], [
-      { platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' },
-    ]);
+    const views = listCandidateConnectionViews(
+      [],
+      [{ platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' }],
+    );
 
     const linkedin = views.find((view) => view.platform === 'linkedin');
     expect(linkedin).toEqual({
@@ -25,9 +27,10 @@ describe('listCandidateConnectionViews', () => {
   });
 
   it('оставляет hh «не подключено», когда фактов импорта нет', () => {
-    const views = listCandidateConnectionViews([], [
-      { platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' },
-    ]);
+    const views = listCandidateConnectionViews(
+      [],
+      [{ platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' }],
+    );
 
     const hh = views.find((view) => view.platform === 'hh');
     expect(hh).toEqual({
@@ -73,9 +76,7 @@ describe('deriveImportedFactSources', () => {
       ],
     );
 
-    expect(sources).toEqual([
-      { platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' },
-    ]);
+    expect(sources).toEqual([{ platform: 'linkedin', importedAt: '2026-09-10T09:00:00.000Z' }]);
   });
 
   it('не считает источником PDF-резюме без привязки к площадке', () => {
@@ -99,5 +100,36 @@ describe('deriveImportedFactSources', () => {
     );
 
     expect(sources).toEqual([]);
+  });
+});
+
+describe('summarizeImportedFactSources', () => {
+  it('считает факты каждой площадки и берёт дату последнего импорта', () => {
+    const summaries = summarizeImportedFactSources(
+      [
+        { id: 'li', content: 'Импорт: профиль LinkedIn' },
+        { id: 'hh', content: 'Импорт: резюме hh.ru' },
+      ],
+      [
+        { sourceMessageIds: ['li'], createdAt: '2026-09-12T09:00:00.000Z' },
+        { sourceMessageIds: ['li'], createdAt: '2026-09-12T09:00:01.000Z' },
+        { sourceMessageIds: ['hh'], createdAt: '2026-10-07T09:00:00.000Z' },
+      ],
+    );
+
+    expect(summaries).toEqual([
+      {
+        platform: 'linkedin',
+        connectedAt: '2026-09-12T09:00:01.000Z',
+        lastImportedAt: '2026-09-12T09:00:01.000Z',
+        factCount: 2,
+      },
+      {
+        platform: 'hh',
+        connectedAt: '2026-10-07T09:00:00.000Z',
+        lastImportedAt: '2026-10-07T09:00:00.000Z',
+        factCount: 1,
+      },
+    ]);
   });
 });

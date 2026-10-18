@@ -56,7 +56,9 @@ test.describe('B376 skill quiz dialogue & verification', () => {
           .click();
       }
       await page.getByRole('tab', { name: /^Навыки/ }).click();
-      await expect(page.locator('#sec-skills')).toBeVisible();
+      await expect(
+        vp.width <= 640 ? page.locator('.profile-mobile-skills-list') : page.locator('#sec-skills'),
+      ).toBeVisible();
 
       // The approved mockups start the quiz from the skills tab, not from a consultant card.
       await expect(page.locator('.career-expert-skill-quiz-prompt')).toHaveCount(0);

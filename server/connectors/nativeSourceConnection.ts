@@ -40,9 +40,7 @@ export interface ImportedConnectionView {
 }
 
 export type CandidateConnectionView =
-  | NativeSourceConnectionView
-  | ImportedConnectionView
-  | DisconnectedConnectionView;
+  NativeSourceConnectionView | ImportedConnectionView | DisconnectedConnectionView;
 
 export interface ImportedFactSource {
   platform: SupportedPlatform;
@@ -119,9 +117,7 @@ export function listCandidateConnectionViews(
   const nativeByPlatform = new Map(
     native.map((connection) => [connection.platform, nativeSourceConnectionView(connection)]),
   );
-  const importedByPlatform = new Map(
-    importedFacts.map((source) => [source.platform, source]),
-  );
+  const importedByPlatform = new Map(importedFacts.map((source) => [source.platform, source]));
   return SUPPORTED_PLATFORMS.map((platform) => {
     const connected = nativeByPlatform.get(platform);
     if (connected) return connected;
@@ -144,4 +140,68 @@ export function listCandidateConnectionViews(
       importsCareerHistory: true,
     };
   });
+}
+
+export interface ImportedFactSourceSummary {
+  readonly platform: SupportedPlatform;
+  readonly connectedAt: string;
+  readonly lastImportedAt: string;
+  readonly factCount: number;
+}
+
+/**
+ * The same label cross-reference as `deriveImportedFactSources`, with the number of
+ * dossier facts each platform contributed — so a resume imported by label (no live
+ * session connection) still shows «N фактов · дата» rather than «Не импортировано».
+ */
+export function summarizeImportedFactSources(
+  messages: ReadonlyArray<{ id: string; content: string }>,
+  memory: ReadonlyArray<{ sourceMessageIds: readonly string[]; createdAt: string }>,
+): ImportedFactSourceSummary[] {
+  const platformByMessageId = new Map<string, SupportedPlatform>();
+  for (const message of messages) {
+    const platform = platformForImportLabel(message.content);
+    if (platform) platformByMessageId.set(message.id, platform);
+  }
+  const totals = new Map<SupportedPlatform, { count: number; latest: string }>();
+  for (const entry of memory) {
+    const platform = entry.sourceMessageIds
+      .map((id) => platformByMessageId.get(id))
+      .find((value): value is SupportedPlatform => Boolean(value));
+    if (!platform) continue;
+    const current = totals.get(platform);
+    totals.set(platform, {
+      count: (current?.count ?? 0) + 1,
+      latest: !current || entry.createdAt > current.latest ? entry.createdAt : current.latest,
+    });
+  }
+  return Array.from(totals.entries()).map(([platform, total]) => ({
+    platform,
+    connectedAt: total.latest,
+    lastImportedAt: total.latest,
+    factCount: total.count,
+  }));
+}
+
+/** Native connections win; a label import fills in only a platform without one. */
+export function mergeImportedSources(
+  connections: ReadonlyArray<{
+    platform: SupportedPlatform;
+    connectedAt: string;
+    lastImportedAt: string;
+    receipt: { factCount: number };
+  }>,
+  messages: ReadonlyArray<{ id: string; content: string }>,
+  memory: ReadonlyArray<{ sourceMessageIds: readonly string[]; createdAt: string }>,
+): ImportedFactSourceSummary[] {
+  const native = connections.map((connection) => ({
+    platform: connection.platform,
+    connectedAt: connection.connectedAt,
+    lastImportedAt: connection.lastImportedAt,
+    factCount: connection.receipt.factCount,
+  }));
+  const byLabel = summarizeImportedFactSources(messages, memory).filter(
+    (summary) => !native.some((connection) => connection.platform === summary.platform),
+  );
+  return [...native, ...byLabel];
 }

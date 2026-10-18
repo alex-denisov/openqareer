@@ -35,7 +35,17 @@ test('syncs a legacy decision profile once after sign-in', async ({ page }) => {
       ? page.getByRole('navigation', { name: 'Разделы' })
       : page.getByRole('navigation', { name: 'Разделы кабинета' });
   await profileNavigation.getByRole('button', { name: 'Профиль', exact: true }).click();
-  await expect(page.locator('.career-profile-screen-view')).toBeVisible();
+  await expect(
+    page.locator(
+      (page.viewportSize()?.width ?? 1440) <= 760
+        ? '.career-profile-mobile'
+        : '.career-profile-screen-view',
+    ),
+  ).toBeVisible();
+  if ((page.viewportSize()?.width ?? 1440) <= 760) {
+    // On 390 the preferences panel lives on the «Контакты» page.
+    await page.getByRole('button', { name: 'Изменить основные данные профиля' }).click();
+  }
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem('openqareer.decision-profile.v1:synced')))
     .toBe('1');

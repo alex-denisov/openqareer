@@ -355,6 +355,8 @@ async function stubSession(
   omitCandidateMemory = false,
 ): Promise<{ resumeRequest: () => unknown }> {
   let followUpSent = false;
+  // The server keeps «Отложить до завтра»; the mock does the same so a remount reads it back.
+  let actionDeferral: { actionId: string; deferredThroughDate: string } | undefined;
   let linkedinStatus = initialLinkedinStatus;
   let resumeRequest: unknown = null;
   await page.route('**/api/v1/**', async (route) => {
@@ -418,8 +420,14 @@ async function stubSession(
       followUpSent = true;
       return route.fulfill({ json: { data: { id: 'app-1' } } });
     }
+    if (request.method() === 'POST' && pathname === '/api/v1/candidate/today/action-defer') {
+      const { actionId } = request.postDataJSON() as { actionId: string };
+      const today = new Date().toISOString().slice(0, 10);
+      actionDeferral = { actionId, deferredThroughDate: today };
+      return route.fulfill({ json: { data: actionDeferral } });
+    }
     if (pathname === '/api/v1/candidate/today') {
-      const data = followUpSent
+      const base = followUpSent
         ? {
             ...todaySnapshot,
             digest: { ...todaySnapshot.digest, followUpsDueToday: 0, followUpCaptions: [] },
@@ -429,6 +437,7 @@ async function stubSession(
             followUps: [],
           }
         : todaySnapshot;
+      const data = actionDeferral ? { ...base, todayActionDeferral: actionDeferral } : base;
       return route.fulfill({ json: { data } });
     }
     return route.fulfill({ json: { data: null } });

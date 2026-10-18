@@ -164,7 +164,11 @@ test.describe('B384: Candidate Decision Profile', () => {
       .getByRole('navigation', { name: 'Разделы' })
       .getByRole('button', { name: 'Профиль', exact: true })
       .click();
-    await expect(page.locator('.career-profile-screen-view')).toBeVisible();
+    // 390 is the native list layout; preferences live on the «Контакты» page as in the mockup.
+    const mobileProfile = page.locator('.career-profile-mobile');
+    await expect(mobileProfile).toBeVisible();
+    await page.getByRole('button', { name: 'Изменить основные данные профиля' }).click();
+    await expect(mobileProfile).toHaveAttribute('data-mobile-profile-page', 'contacts');
 
     // Verify no horizontal overflow on mobile
     const profileOverflow = await page.evaluate(
