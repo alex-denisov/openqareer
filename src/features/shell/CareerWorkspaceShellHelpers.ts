@@ -140,14 +140,14 @@ export function matchesMedia(query: string): boolean {
 
 export function hasClosedDesktopExpertPreference(): boolean {
   return (
-    matchesMedia('(min-width: 901px)') &&
+    matchesMedia('(min-width: 1280px)') &&
     ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')
   );
 }
 
 export function initialExpertPanelOpen(sessionPending: boolean, _initialView: ShellView): boolean {
   if (typeof window === 'undefined') return false;
-  const desktop = matchesMedia('(min-width: 901px)');
+  const desktop = matchesMedia('(min-width: 1280px)');
   if (desktop && ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')) return false;
   // While the session is checked the panel stays on the phone sheet and a wide desktop; a
   // narrowed desktop window keeps its columns until the candidate opens the consultant.

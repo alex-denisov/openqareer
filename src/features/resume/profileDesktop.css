@@ -496,20 +496,32 @@
     background: var(--career-surface-raised);
   }
   .career-profile-screen-view .career-profile-screen-ats-fill {
+    --ats-fill: var(--career-accent);
+    appearance: none;
     display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: var(--career-accent);
+    inline-size: 100%;
+    border: 0;
+  }
+  .career-profile-screen-view .career-profile-screen-ats-fill::-webkit-progress-bar {
+    background: var(--career-surface-raised);
+  }
+  .career-profile-screen-view .career-profile-screen-ats-fill::-webkit-progress-value {
+    border-radius: var(--career-space-1);
+    background: var(--ats-fill);
+  }
+  .career-profile-screen-view .career-profile-screen-ats-fill::-moz-progress-bar {
+    border-radius: var(--career-space-1);
+    background: var(--ats-fill);
   }
   .career-profile-screen-view
     .career-profile-screen-ats-dimension.is-ok
     .career-profile-screen-ats-fill {
-    background: var(--career-success);
+    --ats-fill: var(--career-success);
   }
   .career-profile-screen-view
     .career-profile-screen-ats-dimension.is-low
     .career-profile-screen-ats-fill {
-    background: var(--career-warning);
+    --ats-fill: var(--career-warning);
   }
   .career-profile-screen-view .career-profile-screen-ats-dimension-value {
     min-width: 0;

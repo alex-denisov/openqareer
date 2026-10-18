@@ -21,7 +21,9 @@ CREATE INDEX IF NOT EXISTS profile_revisions_command ON profile_revisions(comman
 `;
 
 
-export const PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION = `
+// Carries MIGRATION_37 so the referenced table exists before the first candidate delete,
+// even when the revision repository has not been constructed yet.
+export const PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION = `${MIGRATION_37}
 CREATE TABLE IF NOT EXISTS profile_revision_experience_links (
   revision_id TEXT PRIMARY KEY REFERENCES profile_revisions(id) ON DELETE CASCADE,
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,

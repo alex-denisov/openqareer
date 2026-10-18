@@ -108,14 +108,16 @@ function AtsDimensionRow({
     <details className={`career-profile-screen-ats-dimension ${tone}`}>
       <summary>
         <span>{item.label}</span>
-        <span className="career-profile-screen-ats-track" aria-hidden="true">
-          {ratio === null ? null : (
-            <span
-              className="career-profile-screen-ats-fill"
-              style={{ inlineSize: `${Math.min(100, Math.max(0, ratio * 100))}%` }}
-            />
-          )}
-        </span>
+        {ratio === null ? (
+          <span className="career-profile-screen-ats-track" aria-hidden="true" />
+        ) : (
+          <progress
+            className="career-profile-screen-ats-track career-profile-screen-ats-fill"
+            aria-hidden="true"
+            max={item.maximum}
+            value={Math.min(item.maximum, Math.max(0, dimension?.score ?? 0))}
+          />
+        )}
         <span className="career-profile-screen-ats-dimension-value">
           {dimension?.score == null ? `—/${item.maximum}` : `${dimension.score}/${item.maximum}`}
         </span>
