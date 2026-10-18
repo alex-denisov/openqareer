@@ -2,6 +2,30 @@
   --consultant-strip-width: calc(var(--career-space-8) + var(--career-space-6));
   --consultant-dot-size: calc(var(--career-space-2) + var(--career-space-1) / 2);
 }
+@media (min-width: 761px) and (max-width: 900px) {
+  .career-shell.consultant-desktop.consultant-is-overlay.expert-is-open {
+    grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
+  }
+  .career-shell.consultant-desktop.consultant-is-overlay .consultant-scrim {
+    display: none;
+  }
+  .career-shell.consultant-desktop.consultant-is-overlay.expert-is-open .career-main {
+    block-size: 40dvh;
+    min-block-size: 0;
+    max-block-size: 40dvh;
+    padding-block-end: var(--career-space-4);
+  }
+  .career-shell.consultant-is-overlay .career-expert-panel.consultant-overlay {
+    inset-inline: var(--career-rail-width) 0;
+    inset-block: auto 0;
+    inline-size: auto;
+    width: auto;
+    block-size: 60dvh;
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-block-end: 0;
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  }
+}
 .consultant-strip-button,
 .career-expert-panel .consultant-desktop-sheet-toggle {
   display: none;
@@ -178,5 +202,123 @@
   .consultant-history button:focus-visible {
     outline: var(--career-border-width) solid var(--career-accent);
     outline-offset: calc(-1 * var(--career-space-1));
+  }
+}
+
+.consultant-strip-stage {
+  display: none;
+}
+@media (min-width: 761px) and (max-width: 900px) {
+  .career-shell.consultant-desktop .career-main-content,
+  .career-shell.consultant-desktop .career-desktop-topbar {
+    padding-inline: var(--career-space-4);
+  }
+  .career-shell.consultant-desktop.consultant-is-strip {
+    grid-template-columns: var(--career-rail-width) minmax(0, 1fr);
+  }
+  .career-shell.consultant-desktop.consultant-is-strip .career-main {
+    padding-block-end: calc(var(--career-space-8) * 2 + var(--career-space-4));
+  }
+  .career-shell.consultant-desktop .career-expert-panel.consultant-strip {
+    position: fixed;
+    inset-inline: var(--career-rail-width) 0;
+    inset-block: auto 0;
+    inline-size: auto;
+    width: auto;
+    block-size: calc(var(--career-space-8) * 2);
+    min-block-size: 0;
+    border: var(--career-border-width) solid var(--career-line-strong);
+    border-block-end: 0;
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+  }
+  .career-shell.consultant-desktop .consultant-strip .consultant-strip-button {
+    display: grid;
+    grid-template-columns: var(--career-space-8) minmax(0, 1fr) var(--career-space-6);
+    grid-template-rows: repeat(2, var(--career-space-4));
+    align-content: center;
+    column-gap: var(--career-space-3);
+    row-gap: 0;
+    padding: var(--career-space-4);
+    text-align: start;
+  }
+  .career-shell.consultant-desktop .consultant-strip-icon {
+    grid-row: 1 / 3;
+    width: var(--career-space-8);
+    height: var(--career-space-8);
+  }
+  .career-shell.consultant-desktop .consultant-strip-title {
+    grid-column: 2;
+    grid-row: 1;
+    writing-mode: horizontal-tb;
+    transform: none;
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    letter-spacing: normal;
+  }
+  .career-shell.consultant-desktop .consultant-strip-stage {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+  .career-shell.consultant-desktop .consultant-strip-caret {
+    grid-column: 3;
+    grid-row: 1 / 3;
+    margin: 0;
+    transform: rotate(-90deg);
+  }
+  .career-shell.consultant-desktop .consultant-strip-count {
+    position: absolute;
+    inset-inline-end: calc(var(--career-space-8) + var(--career-space-6));
+    inset-block-start: var(--career-space-4);
+  }
+}
+
+@media (max-width: 760px) {
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
+    > .panel-col
+    .career-expert-panel:not(.is-intake)
+    .career-expert-composer {
+    border-block-start: 0;
+    padding-block: calc(var(--career-space-2) + var(--career-border-width) * 2)
+      var(--career-space-1);
+  }
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
+    > .panel-col
+    .career-expert-panel:not(.is-intake)
+    .career-expert-input-row {
+    position: static;
+  }
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
+    > .panel-col
+    .career-expert-panel:not(.is-intake)
+    .career-expert-composer
+    textarea {
+    padding-block: calc(var(--career-space-2) + var(--career-border-width) * 2);
+    padding-inline-end: calc(var(--career-target-min) + var(--career-space-2));
+    background: var(--career-surface);
+  }
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
+    > .panel-col
+    .career-expert-panel:not(.is-intake)
+    .career-composer-split {
+    inset-inline-end: var(--career-space-4);
+  }
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
+    > .panel-col
+    .career-expert-panel:not(.is-intake)
+    .career-composer-send:disabled {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 761px) {
+  .career-shell:is([data-shell-view='today'], [data-shell-view='profile']):not(
+      :has([data-intake-screen='visible'])
+    )
+    .career-desktop-topbar
+    > h1 {
+    line-height: 1.25;
   }
 }

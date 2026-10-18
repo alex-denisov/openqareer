@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildTodaySnapshot, computeSearchMomentum, countApplicationsWaitingOver7Days, type TodayNewVacancy } from './todayDigest';
+import {
+  buildTodaySnapshot,
+  computeSearchMomentum,
+  countApplicationsWaitingOver7Days,
+  type TodayNewVacancy,
+} from './todayDigest';
 import type { ApplicationView } from './applicationDerivedFields';
 
 function application(overrides: Partial<ApplicationView> = {}): ApplicationView {
@@ -23,6 +28,9 @@ function application(overrides: Partial<ApplicationView> = {}): ApplicationView 
     whoseTurn: 'candidate',
     materials: { coverLetter: false, resume: false },
     nearestInterview: null,
+    deliveryReceipt: null,
+    deliveryReceiptRecordedAt: null,
+    interviewScheduledAt: [],
     ...overrides,
   };
 }
@@ -341,7 +349,8 @@ describe('today queue from the shortlist (B266)', () => {
       .map((item) => item.clusterId);
     expect(fromShortlist).not.toContain('cluster-0');
     expect(fromShortlist).not.toContain('cluster-1');
-    expect(snapshot.queue.length).toBeLessThanOrEqual(5);
+    expect(fromShortlist).toHaveLength(10);
+    expect(snapshot.queue).toHaveLength(12);
   });
 
   it('surfaces follow_up reminder for interview stage application when deadline is due (B393)', () => {
@@ -386,30 +395,35 @@ describe('computeSearchMomentum (B397)', () => {
       id: 'app-3d',
       stage: 'applied',
       stageChangedAt: '2026-10-06T12:00:00.000Z',
+      deliveryReceiptRecordedAt: '2026-10-06T12:00:00.000Z',
       deliveryReceipt: { kind: 'auto_reply', value: 'confirmed' },
     });
     const appDeliveredExact7d = application({
       id: 'app-7d',
       stage: 'applied',
       stageChangedAt: '2026-10-02T12:00:00.000Z', // exactly 7 days ago -> inclusive
+      deliveryReceiptRecordedAt: '2026-10-02T12:00:00.000Z',
       deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/1' },
     });
     const appDelivered15d = application({
       id: 'app-15d',
       stage: 'applied',
       stageChangedAt: '2026-09-24T12:00:00.000Z',
+      deliveryReceiptRecordedAt: '2026-09-24T12:00:00.000Z',
       deliveryReceipt: { kind: 'screenshot', value: 's3://proof' },
     });
     const appDeliveredExact30d = application({
       id: 'app-30d',
       stage: 'applied',
       stageChangedAt: '2026-09-09T12:00:00.000Z', // exactly 30 days ago -> inclusive
+      deliveryReceiptRecordedAt: '2026-09-09T12:00:00.000Z',
       deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/2' },
     });
     const appDelivered31d = application({
       id: 'app-31d',
       stage: 'applied',
       stageChangedAt: '2026-09-08T11:59:59.000Z', // 31 days ago -> outside 30d
+      deliveryReceiptRecordedAt: '2026-09-08T11:59:59.000Z',
       deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/3' },
     });
     // Not delivered (attempted without receipt, or failed)
@@ -417,12 +431,14 @@ describe('computeSearchMomentum (B397)', () => {
       id: 'app-attempted',
       stage: 'applied',
       stageChangedAt: '2026-10-07T12:00:00.000Z',
+      deliveryReceiptRecordedAt: null,
       deliveryReceipt: null,
     });
     const appFailed = application({
       id: 'app-failed',
       stage: 'applied',
       stageChangedAt: '2026-10-07T12:00:00.000Z',
+      deliveryReceiptRecordedAt: '2026-10-07T12:00:00.000Z',
       deliveryReceipt: { kind: 'failure_note', value: 'rejected' },
     });
 
@@ -445,6 +461,80 @@ describe('computeSearchMomentum (B397)', () => {
     expect(momentum.windows['30d'].applied).toBe(4);
   });
 
+  it('uses persisted receipt and interview dates, not application stage dates, for 30-day counts', () => {
+    const receiptAt = (overrides: Partial<ApplicationView>, recordedAt: string | null) =>
+      Object.assign(application(overrides), { deliveryReceiptRecordedAt: recordedAt });
+    const firstDelivered = receiptAt(
+      {
+        id: 'receipt-in-window-1',
+        stageChangedAt: '2026-08-01T12:00:00.000Z',
+        createdAt: '2026-08-01T12:00:00.000Z',
+        deliveryReceipt: { kind: 'auto_reply', value: 'confirmed' },
+      },
+      '2026-10-06T12:00:00.000Z',
+    );
+    const secondDelivered = receiptAt(
+      {
+        id: 'receipt-in-window-2',
+        stageChangedAt: '2026-08-01T12:00:00.000Z',
+        createdAt: '2026-08-01T12:00:00.000Z',
+        deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/2' },
+      },
+      '2026-10-02T12:00:00.000Z',
+    );
+    const staleReceipt = receiptAt(
+      {
+        id: 'receipt-outside-window',
+        stageChangedAt: '2026-10-06T12:00:00.000Z',
+        deliveryReceipt: { kind: 'confirmation_url', value: 'https://test/3' },
+      },
+      '2026-09-08T11:59:59.000Z',
+    );
+    const scheduledInterviews = Object.assign(
+      application({ id: 'interviews', stage: 'applied', stageChangedAt: NOW }),
+      { interviewScheduledAt: ['2026-10-05T12:00:00.000Z', '2026-09-20T12:00:00.000Z'] },
+    );
+
+    const momentum = computeSearchMomentum(
+      [firstDelivered, secondDelivered, staleReceipt, scheduledInterviews],
+      NOW,
+    );
+
+    expect(momentum.windows['30d'].applied).toBe(2);
+    expect(momentum.windows['30d'].interviews).toBe(2);
+    expect(momentum).toHaveProperty('evidence.30d.startAt', '2026-09-09T12:00:00.000Z');
+    expect(momentum).toHaveProperty('evidence.30d.endAt', NOW);
+    expect(momentum).toHaveProperty(
+      'evidence.30d.applied.source',
+      'application_events.recorded_at',
+    );
+    expect(momentum).toHaveProperty('evidence.30d.applied.sampleSize', 2);
+    expect(momentum).toHaveProperty(
+      'evidence.30d.interviews.source',
+      'candidate_interview_schedules.scheduled_at',
+    );
+    expect(momentum).toHaveProperty('evidence.30d.interviews.sampleSize', 2);
+  });
+
+  it('keeps delivered receipts unknown when no persisted receipt timestamp exists', () => {
+    const unplacedReceipt = Object.assign(
+      application({
+        stageChangedAt: NOW,
+        createdAt: NOW,
+        deliveryReceipt: { kind: 'auto_reply', value: 'confirmed' },
+      }),
+      { deliveryReceiptRecordedAt: null },
+    );
+
+    const momentum = computeSearchMomentum([unplacedReceipt], NOW);
+
+    expect(momentum.windows['30d'].applied).toBe('unknown');
+    expect(momentum).toHaveProperty(
+      'evidence.30d.applied.unknownReason',
+      'receipt_timestamp_unavailable',
+    );
+  });
+
   it('returns unknown for metrics without platform data source (Criterion 2)', () => {
     const momentum = computeSearchMomentum([], NOW);
     expect(momentum.windows['7d'].views).toBe('unknown');
@@ -459,6 +549,7 @@ describe('computeSearchMomentum (B397)', () => {
         id: `app-burnout-${i}`,
         stage: 'applied',
         stageChangedAt: '2026-10-01T12:00:00.000Z',
+        deliveryReceiptRecordedAt: '2026-10-01T12:00:00.000Z',
         deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
       }),
     );
@@ -474,6 +565,7 @@ describe('computeSearchMomentum (B397)', () => {
         id: 'app-burnout-30',
         stage: 'applied',
         stageChangedAt: '2026-10-01T12:00:00.000Z',
+        deliveryReceiptRecordedAt: '2026-10-01T12:00:00.000Z',
         deliveryReceipt: { kind: 'auto_reply', value: 'ok' },
       }),
     ];
@@ -496,6 +588,7 @@ describe('computeSearchMomentum (B397)', () => {
           prepStatus: 'none',
           round: 1,
         },
+        interviewScheduledAt: ['2026-10-08T10:00:00.000Z'],
       }),
     ];
 
@@ -504,4 +597,3 @@ describe('computeSearchMomentum (B397)', () => {
     expect(momentum30WithInterview.burnoutNotice).toBe(false);
   });
 });
-

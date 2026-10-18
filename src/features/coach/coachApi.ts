@@ -298,6 +298,7 @@ export interface CareerCommand {
   };
   executionTarget?: {
     targetType?: 'resume_block';
+    field?: 'startDate' | 'endDate';
     section?: 'headline' | 'about' | 'experience';
     experienceId?: string;
     memoryId?: string;

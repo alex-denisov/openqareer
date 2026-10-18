@@ -47,6 +47,7 @@ export interface ResumeExperience {
   readonly startDate: ResumeAssertion | null;
   readonly endDate: ResumeAssertion | null;
   readonly current: ResumeAssertion<boolean>;
+  readonly description?: ResumeAssertion | null;
   readonly bullets: readonly ResumeAssertion[];
 }
 
@@ -62,6 +63,8 @@ export interface ResumeLanguage {
   readonly id: string;
   readonly name: ResumeAssertion | null;
   readonly cefr: ResumeAssertion<CefrLevel> | null;
+  /** Explicit native-level evidence kept separate from CEFR. */
+  readonly native?: ResumeAssertion<'native'>;
 }
 
 export interface ResumeProject {

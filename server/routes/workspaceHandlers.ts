@@ -50,12 +50,17 @@ function serverOwnedWorkspaceFields(
 ): Partial<
   Pick<
     CandidateWorkspaceState,
-    'campaign' | 'lastVisitedAt' | 'previousVisitedAt' | 'todayDecisionSelection'
+    | 'campaign'
+    | 'lastVisitedAt'
+    | 'previousVisitedAt'
+    | 'todayDecisionSelection'
+    | 'todayActionDeferral'
   >
 > {
   if (!stored) return { todayDecisionSelection: undefined };
   return {
     todayDecisionSelection: stored.todayDecisionSelection,
+    ...(stored.todayActionDeferral ? { todayActionDeferral: stored.todayActionDeferral } : {}),
     ...(stored.campaign ? { campaign: stored.campaign } : {}),
     ...(stored.lastVisitedAt ? { lastVisitedAt: stored.lastVisitedAt } : {}),
     ...(stored.previousVisitedAt ? { previousVisitedAt: stored.previousVisitedAt } : {}),

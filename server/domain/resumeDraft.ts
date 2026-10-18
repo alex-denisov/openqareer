@@ -39,6 +39,8 @@ export interface ResumeExperienceInput {
   readonly endDate?: string;
   readonly current: boolean;
   readonly bulletMemoryIds: readonly string[];
+  /** v2: candidate-owned evidence linked as the role description. */
+  readonly descriptionMemoryId?: string;
   /** v2 */
   readonly employmentType?: string;
   /** v2 */
@@ -303,6 +305,7 @@ export const resumeDraftSchema = z
             endDate: chronologyDateSchema.optional(),
             current: z.boolean(),
             bulletMemoryIds: z.array(memoryIdSchema).max(20),
+            descriptionMemoryId: memoryIdSchema.optional(),
             employmentType: labelSchema.optional(),
             workplaceType: workplaceTypeSchema.optional(),
             skills: skillListSchema.optional(),

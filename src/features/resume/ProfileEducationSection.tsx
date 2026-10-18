@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { Info } from '@phosphor-icons/react';
+import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { addEducation, removeEducation, updateEducation } from './resumeStudioModel';
 import {
   SectionAddButton,
@@ -12,11 +14,13 @@ import type { ResumeDraft, ResumeEducationInput } from './resumeTypes';
 interface SectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onAddCourse?: () => void;
+  readonly onConsultCourses?: () => void;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
 
 // eslint-disable-next-line max-lines-per-function
-function EducationEditForm({
+export function EducationEditForm({
   entry,
   saving,
   onCancel,
@@ -25,8 +29,11 @@ function EducationEditForm({
   readonly entry: ResumeEducationInput;
   readonly saving?: boolean;
   readonly onCancel: () => void;
-  readonly onSave: (patch: Partial<ResumeEducationInput>) => void;
+  readonly onSave: (patch: Partial<ResumeEducationInput>) => ProfileEntrySaveResult;
 }) {
+  const submit = useProfileEntrySave(onSave, (patch: Partial<ResumeEducationInput>) =>
+    patch.institution?.trim() ? undefined : 'Укажите учебное заведение.',
+  );
   const [institution, setInstitution] = useState(entry.institution ?? '');
   const [qualification, setQualification] = useState(entry.qualification ?? '');
   const [startDate, setStartDate] = useState(entry.startDate ?? '');
@@ -61,10 +68,17 @@ function EducationEditForm({
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
+      {submit.error ? (
+        <p className="career-resume-error" role="alert">
+          {submit.error}
+        </p>
+      ) : null}
       <SectionEditActions
-        saving={saving}
+        saving={saving || submit.busy}
         onCancel={onCancel}
-        onSave={() => onSave({ institution, qualification, startDate, endDate, description })}
+        onSave={() => {
+          void submit.save({ institution, qualification, startDate, endDate, description });
+        }}
       />
     </div>
   );
@@ -78,7 +92,7 @@ function EducationRow({
 }: {
   readonly entry: ResumeEducationInput;
   readonly saving?: boolean;
-  readonly onSave: (patch: Partial<ResumeEducationInput>) => void;
+  readonly onSave: (patch: Partial<ResumeEducationInput>) => ProfileEntrySaveResult;
   readonly onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -89,9 +103,10 @@ function EducationRow({
         entry={entry}
         saving={saving}
         onCancel={() => setEditing(false)}
-        onSave={(patch) => {
-          onSave(patch);
-          setEditing(false);
+        onSave={async (patch) => {
+          const result = await onSave(patch);
+          if (result !== false) setEditing(false);
+          return result;
         }}
       />
     );
@@ -104,16 +119,47 @@ function EducationRow({
         <SectionPencilButton label="Изменить образование" onClick={() => setEditing(true)} />
         <SectionRemoveButton label="Удалить образование" onClick={onRemove} />
       </div>
-      <div className="career-profile-screen-edu-meta">
-        {entry.qualification}
-      </div>
+      <div className="career-profile-screen-edu-meta">{entry.qualification}</div>
       {entry.description ? <p>{entry.description}</p> : null}
     </div>
   );
 }
 
-export function ProfileEducationSection({ draft, saving, onSectionSave }: SectionProps) {
-  const addItem = () => onSectionSave(addEducation(draft, `manual-${Date.now()}`));
+function EducationCoursesNotice({
+  draft,
+  onAddCourse,
+  onConsultCourses,
+}: Pick<SectionProps, 'draft' | 'onAddCourse' | 'onConsultCourses'>) {
+  if (draft.courses?.length) return null;
+  return (
+    <div className="profile-education-courses-note">
+      <Info size={16} aria-hidden="true" />
+      <p>
+        Курсы пока не добавлены.{' '}
+        {onAddCourse ? (
+          <button type="button" onClick={onAddCourse}>
+            Добавьте вручную
+          </button>
+        ) : null}
+        {onConsultCourses ? (
+          <>
+            {' '}
+            или{' '}
+            <button type="button" onClick={onConsultCourses}>
+              расскажите консультанту
+            </button>
+          </>
+        ) : null}
+      </p>
+    </div>
+  );
+}
+
+export function ProfileEducationSection(props: SectionProps) {
+  const { draft, saving, onSectionSave } = props;
+  const [newEntry, setNewEntry] = useState<ResumeEducationInput>();
+  const addItem = () =>
+    setNewEntry(addEducation(draft, `manual-${crypto.randomUUID()}`).education.at(-1));
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section"
@@ -123,10 +169,23 @@ export function ProfileEducationSection({ draft, saving, onSectionSave }: Sectio
       <SectionHead
         id="sec-education-title"
         title="Образование"
-        count={draft.education.length ? String(draft.education.length) : undefined}
-        imported={draft.education.length > 0}
         action={<SectionAddButton label="Добавить образование" onClick={addItem} />}
       />
+      {newEntry ? (
+        <EducationEditForm
+          entry={newEntry}
+          saving={saving}
+          onCancel={() => setNewEntry(undefined)}
+          onSave={async (patch) => {
+            const result = await onSectionSave({
+              ...draft,
+              education: [...draft.education, { ...newEntry, ...patch }],
+            });
+            if (result !== false) setNewEntry(undefined);
+            return result;
+          }}
+        />
+      ) : null}
       {!draft.education.length ? (
         <p className="career-profile-screen-empty-note">Образование ещё не добавлено.</p>
       ) : (
@@ -140,6 +199,7 @@ export function ProfileEducationSection({ draft, saving, onSectionSave }: Sectio
           />
         ))
       )}
+      <EducationCoursesNotice {...props} />
     </section>
   );
 }

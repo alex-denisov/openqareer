@@ -182,13 +182,23 @@ function documentFactTexts(document: ResumeDocument): string[] {
     ...document.experience.flatMap(experienceFactTexts),
     ...(document.projects ?? []).flatMap(projectFactTexts),
     ...(document.skills ?? []).map((skill) => skill.name),
-    ...document.education.flatMap((item) => assertionTexts([
-      item.institution,
-      item.qualification,
-      item.startDate,
-      item.endDate,
-    ])),
-    ...document.languages.flatMap((item) => assertionTexts([item.name, item.cefr])),
+    ...document.education.flatMap((item) =>
+      assertionTexts([item.institution, item.qualification, item.startDate, item.endDate]),
+    ),
+    ...document.languages.flatMap((item) => {
+      const native = item.native?.value === 'native';
+      const name = item.name?.value.trim();
+      const nativeFacts = native
+        ? [
+            'native',
+            'родной',
+            ...(name
+              ? [`${name} native`, `native ${name}`, `${name} родной`, `родной ${name}`]
+              : []),
+          ]
+        : [];
+      return [...assertionTexts([item.name, item.cefr]), ...nativeFacts];
+    }),
     ...(document.courses ?? []).flatMap((item) => [item.name, item.provider, item.institution]),
     ...(document.tests ?? []).flatMap((item) => [item.name, item.provider, item.score]),
     ...(document.recommendations ?? []).flatMap((item) => [
@@ -213,20 +223,13 @@ function experienceFactTexts(experience: ResumeExperience): string[] {
 }
 
 function projectFactTexts(project: ResumeProject): string[] {
-  return assertionTexts([
-    project.name,
-    project.description,
-    project.employer,
-    ...project.skills,
-  ]);
+  return assertionTexts([project.name, project.description, project.employer, ...project.skills]);
 }
 
 function assertionTexts(
   assertions: readonly ({ readonly value: string | boolean } | null)[],
 ): string[] {
-  return assertions.flatMap((item) =>
-    item && typeof item.value === 'string' ? [item.value] : [],
-  );
+  return assertions.flatMap((item) => (item && typeof item.value === 'string' ? [item.value] : []));
 }
 
 function targetedLength(

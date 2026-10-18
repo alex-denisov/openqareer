@@ -35,6 +35,8 @@ import {
   MIGRATION_38,
   MIGRATION_39,
 } from '../sqliteSchema';
+import { RESUME_VERSION_MIGRATION } from '../resumeVersionSchema';
+import { PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION } from '../profileRevisionSchema';
 import { MIGRATION_40 } from '../consultantHistorySchema';
 import { MIGRATION_BILLING } from '../../billing/billingSchema';
 import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequestSchema';
@@ -42,7 +44,7 @@ import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAss
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
 import { MIGRATION_49 as MIGRATION_INTERVIEW_SIMULATOR } from '../interviewSimulatorSchema';
 
-const MIGRATIONS = [
+export const MIGRATIONS = [
   MIGRATION_1,
   MIGRATION_2,
   MIGRATION_3,
@@ -89,11 +91,15 @@ const MIGRATIONS = [
   MIGRATION_ROLE_SKILL_ASSESSMENT,
   MIGRATION_STAR_STORIES,
   MIGRATION_INTERVIEW_SIMULATOR,
-];
+  // Resume-version storage is appended to preserve all existing index-assigned migration ids.
+  RESUME_VERSION_MIGRATION,
+  PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION,
+] as const;
 
 export function applyMigrations(
   database: DatabaseSync,
   inTransaction: (operation: () => void) => void,
+  migrations: readonly string[] = MIGRATIONS,
 ): void {
   database.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -104,7 +110,7 @@ export function applyMigrations(
   const row = database
     .prepare('SELECT MAX(version) AS version FROM schema_migrations')
     .get() as { version: number | null };
-  MIGRATIONS.forEach((migration, index) => {
+  migrations.forEach((migration, index) => {
     const version = index + 1;
     if ((row.version ?? 0) < version) {
       inTransaction(() => {

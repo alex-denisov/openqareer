@@ -275,10 +275,16 @@ function projectExperience(
     const chronology = resolveEvidence(role.chronologyMemoryId, context, role.id);
     if (!chronology) return [];
     addRoleUnknowns(role, context.unknowns);
-    const bullets = role.bulletMemoryIds.flatMap((memoryId) => {
-      const evidence = resolveEvidence(memoryId, context, role.id);
-      return evidence ? [claimAssertion(evidence)] : [];
-    });
+    const descriptionEvidence = role.descriptionMemoryId
+      ? resolveEvidence(role.descriptionMemoryId, context, role.id)
+      : null;
+    const description = descriptionEvidence ? claimAssertion(descriptionEvidence) : null;
+    const bullets = role.bulletMemoryIds
+      .filter((memoryId) => memoryId !== role.descriptionMemoryId)
+      .flatMap((memoryId) => {
+        const evidence = resolveEvidence(memoryId, context, role.id);
+        return evidence ? [claimAssertion(evidence)] : [];
+      });
     if (bullets.length === 0) {
       context.unknowns.push(
         makeUnknown(
@@ -288,13 +294,14 @@ function projectExperience(
         ),
       );
     }
-    return [experienceFrom(role, chronology, bullets)];
+    return [experienceFrom(role, chronology, description, bullets)];
   });
 }
 
 function experienceFrom(
   role: ResumeExperienceInput,
   evidence: NormalizedEvidence,
+  description: ResumeAssertion | null,
   bullets: readonly ResumeAssertion[],
 ): ResumeExperience {
   return {
@@ -305,6 +312,7 @@ function experienceFrom(
     startDate: optionalAssertion(role.startDate, evidence),
     endDate: role.current ? null : optionalAssertion(role.endDate, evidence),
     current: assertion(role.current, evidence),
+    description,
     bullets,
   };
 }
@@ -397,12 +405,14 @@ function projectLanguages(
     const evidence = resolveEvidence(item.evidenceMemoryId, context, item.id);
     if (!evidence) return [];
     if (!clean(item.name)) {
-      context.unknowns.push(
-        makeUnknown('missing-language-name', 'Укажите язык.', item.id),
-      );
+      context.unknowns.push(makeUnknown('missing-language-name', 'Укажите язык.', item.id));
     }
     const cefr = validCefr(item.cefr);
-    if (!cefr) {
+    const native =
+      !cefr && item.sourceLabel?.trim() === 'родной'
+        ? assertion('native' as const, evidence)
+        : undefined;
+    if (!cefr && !native) {
       context.unknowns.push(
         makeUnknown(
           'missing-language-level',
@@ -416,6 +426,7 @@ function projectLanguages(
         id: item.id,
         name: optionalAssertion(item.name, evidence),
         cefr: cefr ? assertion(cefr, evidence) : null,
+        ...(native ? { native } : {}),
       },
     ];
   });
@@ -436,8 +447,7 @@ function projectProjects(
         employer: optionalAssertion(project.employer, evidence),
         startDate: optionalAssertion(project.startDate, evidence),
         endDate: optionalAssertion(project.endDate, evidence),
-        current:
-          project.current === undefined ? null : assertion(project.current, evidence),
+        current: project.current === undefined ? null : assertion(project.current, evidence),
         url: optionalAssertion(project.url, evidence),
         skills: (project.skills ?? []).map((skill) => assertion(skill, evidence)),
       },

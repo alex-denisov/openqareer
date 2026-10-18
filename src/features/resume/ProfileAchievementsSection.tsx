@@ -1,9 +1,6 @@
 import { useState } from 'react';
-import {
-  addAchievement,
-  removeAchievement,
-  updateAchievement,
-} from './profileEntryEditing';
+import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
+import { addAchievement, removeAchievement, updateAchievement } from './profileEntryEditing';
 import {
   SectionAddButton,
   SectionEditActions,
@@ -16,7 +13,7 @@ import type { ResumeAchievementInput, ResumeDraft } from './resumeTypes';
 interface SectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
 
 const ACHIEVEMENT_GROUP_LABEL: Record<ResumeAchievementInput['kind'], string> = {
@@ -36,8 +33,11 @@ function AchievementEditForm({
   readonly entry: ResumeAchievementInput;
   readonly saving?: boolean;
   readonly onCancel: () => void;
-  readonly onSave: (patch: Partial<ResumeAchievementInput>) => void;
+  readonly onSave: (patch: Partial<ResumeAchievementInput>) => ProfileEntrySaveResult;
 }) {
+  const submit = useProfileEntrySave(onSave, (patch: Partial<ResumeAchievementInput>) =>
+    patch.title?.trim() ? undefined : 'Укажите название достижения.',
+  );
   const [title, setTitle] = useState(entry.title);
   const [issuer, setIssuer] = useState(entry.issuer ?? '');
   const [date, setDate] = useState(entry.date ?? '');
@@ -57,10 +57,17 @@ function AchievementEditForm({
           <input value={date} onChange={(event) => setDate(event.target.value)} />
         </label>
       </div>
+      {submit.error ? (
+        <p className="career-resume-error" role="alert">
+          {submit.error}
+        </p>
+      ) : null}
       <SectionEditActions
-        saving={saving}
+        saving={saving || submit.busy}
         onCancel={onCancel}
-        onSave={() => onSave({ title, issuer, date })}
+        onSave={() => {
+          void submit.save({ title, issuer, date });
+        }}
       />
     </div>
   );
@@ -74,7 +81,7 @@ function AchievementItem({
 }: {
   readonly entry: ResumeAchievementInput;
   readonly saving?: boolean;
-  readonly onSave: (patch: Partial<ResumeAchievementInput>) => void;
+  readonly onSave: (patch: Partial<ResumeAchievementInput>) => ProfileEntrySaveResult;
   readonly onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -84,9 +91,10 @@ function AchievementItem({
         entry={entry}
         saving={saving}
         onCancel={() => setEditing(false)}
-        onSave={(patch) => {
-          onSave(patch);
-          setEditing(false);
+        onSave={async (patch) => {
+          const result = await onSave(patch);
+          if (result !== false) setEditing(false);
+          return result;
         }}
       />
     );
@@ -101,13 +109,46 @@ function AchievementItem({
   );
 }
 
-export function ProfileAchievementsSection({ draft, saving, onSectionSave }: SectionProps) {
-  const achievements = draft.achievements ?? [];
+function NewAchievementForm({
+  draft,
+  entry,
+  saving,
+  onSectionSave,
+  onCancel,
+}: SectionProps & { readonly entry: ResumeAchievementInput; readonly onCancel: () => void }) {
+  return (
+    <AchievementEditForm
+      entry={entry}
+      saving={saving}
+      onCancel={onCancel}
+      onSave={async (patch) => {
+        const result = await onSectionSave({
+          ...draft,
+          achievements: [...(draft.achievements ?? []), { ...entry, ...patch }],
+        });
+        if (result !== false) onCancel();
+        return result;
+      }}
+    />
+  );
+}
+
+function groupAchievements(
+  achievements: readonly ResumeAchievementInput[],
+): Map<ResumeAchievementInput['kind'], ResumeAchievementInput[]> {
   const groups = new Map<ResumeAchievementInput['kind'], ResumeAchievementInput[]>();
   achievements.forEach((achievement) => {
     const bucket = groups.get(achievement.kind) ?? [];
     groups.set(achievement.kind, [...bucket, achievement]);
   });
+  return groups;
+}
+
+export function ProfileAchievementsSection({ draft, saving, onSectionSave }: SectionProps) {
+  const achievements = draft.achievements ?? [];
+  const [newEntry, setNewEntry] = useState<ResumeAchievementInput>();
+  const groups = groupAchievements(achievements);
+  const addItem = () => setNewEntry(addAchievement(draft).achievements?.at(-1));
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section"
@@ -117,15 +158,18 @@ export function ProfileAchievementsSection({ draft, saving, onSectionSave }: Sec
       <SectionHead
         id="sec-achievements-title"
         title="Достижения"
-        imported={achievements.length > 0}
-        action={
-          <SectionAddButton
-            label="Добавить достижение"
-            onClick={() => onSectionSave(addAchievement(draft))}
-          />
-        }
+        action={<SectionAddButton label="Добавить достижение" onClick={addItem} />}
       />
-      {!achievements.length ? (
+      {newEntry ? (
+        <NewAchievementForm
+          draft={draft}
+          entry={newEntry}
+          saving={saving}
+          onSectionSave={onSectionSave}
+          onCancel={() => setNewEntry(undefined)}
+        />
+      ) : null}
+      {!achievements.length && !newEntry ? (
         <p className="career-profile-screen-empty-note">Достижений пока нет.</p>
       ) : (
         [...groups.entries()].map(([kind, items]) => (

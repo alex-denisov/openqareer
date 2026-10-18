@@ -42,6 +42,7 @@ function ProfileTabButton({
   index,
   selected,
   count,
+  disabled,
   register,
   onClick,
   onKeyDown,
@@ -50,6 +51,7 @@ function ProfileTabButton({
   readonly index: number;
   readonly selected: boolean;
   readonly count?: number;
+  readonly disabled: boolean;
   readonly register: (index: number, node: HTMLButtonElement | null) => void;
   readonly onClick: () => void;
   readonly onKeyDown: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
@@ -63,8 +65,9 @@ function ProfileTabButton({
       aria-controls={`profile-panel-${item.id}`}
       aria-selected={selected}
       aria-label={count === undefined ? item.label : `${item.label}, ${count}`}
-      tabIndex={selected ? 0 : -1}
+      tabIndex={disabled || !selected ? -1 : 0}
       className={selected ? 'is-active' : ''}
+      disabled={disabled}
       onClick={onClick}
       onKeyDown={(event) => onKeyDown(event, index)}
     >
@@ -82,10 +85,12 @@ export function ProfileTabs({
   tab,
   onTab,
   skillsCount,
+  disabled = false,
 }: {
   readonly tab: ProfileTab;
   readonly onTab: (tab: ProfileTab) => void;
   readonly skillsCount?: number;
+  readonly disabled?: boolean;
 }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const handleKeyDown = useTabKeyboard(tabRefs, onTab);
@@ -104,6 +109,7 @@ export function ProfileTabs({
             index={index}
             selected={tab === item.id}
             count={count}
+            disabled={disabled}
             register={register}
             onClick={() => onTab(item.id)}
             onKeyDown={handleKeyDown}

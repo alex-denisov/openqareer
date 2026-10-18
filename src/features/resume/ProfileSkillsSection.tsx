@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { categorizeSkills } from './profileGrouping';
 import { addSkill, removeSkill } from './resumeStudioModel';
 import { SectionEditActions, SectionPencilButton } from './ProfileSectionEdit';
@@ -8,19 +9,22 @@ import type { ResumeDraft } from './resumeTypes';
 interface SectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
 }
 
-function SkillsEditForm({
-  draft,
-  saving,
-  onCancel,
-  onSectionSave,
-}: SectionProps & { readonly onCancel: () => void }) {
-  const [newSkill, setNewSkill] = useState('');
-  const skills = draft.skills ?? [];
+function SkillEditFields({
+  skills,
+  newSkill,
+  onNewSkill,
+  onRemove,
+}: {
+  readonly skills: NonNullable<ResumeDraft['skills']>;
+  readonly newSkill: string;
+  readonly onNewSkill: (value: string) => void;
+  readonly onRemove: (skillId: string) => void;
+}) {
   return (
-    <div className="career-profile-screen-edit-body">
+    <>
       <div className="career-profile-screen-group-chips">
         {skills.map((skill) => (
           <span key={skill.id} className="career-profile-screen-tag is-removable">
@@ -28,7 +32,7 @@ function SkillsEditForm({
             <button
               type="button"
               aria-label={`Удалить навык ${skill.name}`}
-              onClick={() => onSectionSave(removeSkill(draft, skill.id))}
+              onClick={() => onRemove(skill.id)}
             >
               ×
             </button>
@@ -38,14 +42,48 @@ function SkillsEditForm({
       <div className="career-profile-screen-field-grid">
         <label className="career-profile-screen-field">
           <span>Новый навык</span>
-          <input value={newSkill} onChange={(event) => setNewSkill(event.target.value)} />
+          <input value={newSkill} onChange={(event) => onNewSkill(event.target.value)} />
         </label>
       </div>
-      <SectionEditActions
-        saving={saving}
-        onCancel={onCancel}
-        onSave={() => onSectionSave(newSkill.trim() ? addSkill(draft, newSkill.trim()) : draft)}
+    </>
+  );
+}
+
+export function SkillsEditForm({
+  draft,
+  saving,
+  onCancel,
+  onSectionSave,
+}: SectionProps & { readonly onCancel: () => void }) {
+  const [workingDraft, setWorkingDraft] = useState(draft);
+  const [newSkill, setNewSkill] = useState('');
+  const skills = workingDraft.skills ?? [];
+  const submit = useProfileEntrySave(onSectionSave, (next: ResumeDraft) => {
+    const originalSkills = draft.skills ?? [];
+    const nextSkills = next.skills ?? [];
+    const unchanged =
+      originalSkills.length === nextSkills.length &&
+      originalSkills.every((skill, index) => skill.id === nextSkills[index]?.id);
+    return unchanged ? 'Добавьте навык или удалите существующий.' : undefined;
+  });
+  const save = () => {
+    const clean = newSkill.trim();
+    void submit.save(clean ? addSkill(workingDraft, clean) : workingDraft);
+  };
+  return (
+    <div className="career-profile-screen-edit-body">
+      <SkillEditFields
+        skills={skills}
+        newSkill={newSkill}
+        onNewSkill={setNewSkill}
+        onRemove={(skillId) => setWorkingDraft((current) => removeSkill(current, skillId))}
       />
+      {submit.error ? (
+        <p className="career-resume-error" role="alert">
+          {submit.error}
+        </p>
+      ) : null}
+      <SectionEditActions saving={saving || submit.busy} onCancel={onCancel} onSave={save} />
     </div>
   );
 }
@@ -57,12 +95,15 @@ function SkillChip({ skill }: { readonly skill: NonNullable<ResumeDraft['skills'
       : skill.status === 'не подтверждён'
         ? 'is-unverified'
         : '';
+  const source = skill.source?.trim() || 'Источник не указан';
+  const details = [source, skill.verifiedAt].filter(Boolean).join(' · ');
   return (
     <span key={skill.id} className={`career-profile-screen-tag ${verifiedClass}`}>
       {skill.name}
       {skill.status ? (
         <span className="career-profile-screen-skill-meta">
-          {' '}· {skill.status} ({skill.source ?? 'Банк квизов'} · {skill.verifiedAt ?? ''})
+          {' '}
+          · {skill.status} ({details})
         </span>
       ) : null}
     </span>
@@ -100,14 +141,17 @@ export function ProfileSkillsSection({ draft, saving, onSectionSave }: SectionPr
         id="sec-skills-title"
         title="Навыки"
         count={skills.length ? String(skills.length) : undefined}
-        imported={skills.length > 0}
         action={<SectionPencilButton label="Изменить навыки" onClick={() => setEditing(true)} />}
       />
       {editing ? (
         <SkillsEditForm
           draft={draft}
           saving={saving}
-          onSectionSave={(next) => onSectionSave(next)}
+          onSectionSave={async (next) => {
+            const result = await onSectionSave(next);
+            if (result !== false) setEditing(false);
+            return result;
+          }}
           onCancel={() => setEditing(false)}
         />
       ) : skills.length ? (

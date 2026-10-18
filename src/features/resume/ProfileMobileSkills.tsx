@@ -1,0 +1,172 @@
+import { useState, type FormEvent } from 'react';
+import { pluralRu } from '../../../shared/pluralRu';
+import { CheckCircle, Circle, ListChecks, Plus, Question, CaretRight } from '@phosphor-icons/react';
+import { addSkill } from './resumeStudioModel';
+import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './ProfileMobileElements';
+import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
+import type { ResumeSkillInput } from './resumeTypes';
+
+function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+  const verified = skill.status === 'подтверждён';
+  const rejected = skill.status === 'не подтверждён';
+  const Icon = verified ? CheckCircle : rejected ? Question : Circle;
+  const status = skill.status || 'Не проверен';
+  const source = skill.source || 'Источник не указан';
+  const date = profileMobileDate(skill.verifiedAt);
+  return (
+    <details className="profile-mobile-skill">
+      <summary className={`pm-row${rejected ? ' is-warn' : ''}`}>
+        <span className="pm-ico">
+          <Icon size="1em" aria-hidden="true" />
+        </span>
+        <span className="pm-main">
+          <b>{skill.name}</b>
+          <small>{[status, source, date].filter(Boolean).join(' · ')}</small>
+        </span>
+        <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
+      </summary>
+      <dl className="pm-find">
+        <div>
+          <dt>Статус</dt>
+          <dd>{status}</dd>
+        </div>
+        <div>
+          <dt>Источник</dt>
+          <dd>{source}</dd>
+        </div>
+        {date ? (
+          <div>
+            <dt>Дата проверки</dt>
+            <dd>{date}</dd>
+          </div>
+        ) : null}
+      </dl>
+    </details>
+  );
+}
+
+export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
+  const skills = props.draft.skills ?? [];
+  const [all, setAll] = useState(false);
+  const visible = all ? skills : skills.slice(0, 5);
+  return (
+    <>
+      <section className="pm-group">
+        <h3 className="pm-cap">{pluralRu(skills.length, ['навык', 'навыка', 'навыков'])}</h3>
+        <div className="pm-list profile-mobile-skills-list" aria-label="Все навыки профиля">
+          {visible.map((skill) => (
+            <MobileSkillRow key={skill.id} skill={skill} />
+          ))}
+        </div>
+        {skills.length > 5 ? (
+          <button
+            type="button"
+            className="pm-foot profile-skill-disclosure"
+            aria-expanded={all}
+            aria-label={all ? 'Свернуть список навыков' : 'Показать все навыки'}
+            onClick={() => setAll((current) => !current)}
+          >
+            Показано {visible.length} из {skills.length}
+          </button>
+        ) : (
+          <p className="pm-foot">
+            Показано {skills.length} из {skills.length}
+          </p>
+        )}
+      </section>
+      <ProfileMobileGroup>
+        <ProfileMobileRow
+          icon={Plus}
+          title="Добавить навык"
+          onClick={() => props.open({ page: 'skilladd' })}
+        />
+      </ProfileMobileGroup>
+      <button
+        className="pm-cta"
+        type="button"
+        disabled={!props.onOpenSkillQuizBank}
+        onClick={props.onOpenSkillQuizBank}
+      >
+        <ListChecks size="1em" aria-hidden="true" />
+        Пройти квиз по навыкам
+      </button>
+    </>
+  );
+}
+
+function useMobileSkillAdd(
+  props: ProfileMobileDataProps & Pick<ProfileMobileNavigationProps, 'back'>,
+) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const value = name.trim();
+    if (!value || busy) return;
+    if (
+      props.draft.skills?.some(
+        (skill) => skill.name.trim().toLocaleLowerCase('ru') === value.toLocaleLowerCase('ru'),
+      )
+    ) {
+      setError('Такой навык уже есть в профиле.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const next = addSkill(props.draft, value);
+      const skills = next.skills?.map((skill, index, all) =>
+        index === all.length - 1 ? { ...skill, source: 'со слов кандидата' } : skill,
+      );
+      if ((await props.onSectionSave({ ...next, skills })) === false) return;
+      props.back();
+    } catch {
+      setError('Не сохранилось: нет связи с сервером. Текст остался в поле.');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { name, setName, error, busy, submit };
+}
+
+export function ProfileMobileSkillAdd(
+  props: ProfileMobileDataProps & Pick<ProfileMobileNavigationProps, 'back'>,
+) {
+  const { name, setName, error, busy, submit } = useMobileSkillAdd(props);
+  return (
+    <form className="pm-view profile-mobile-skill-form" onSubmit={(event) => void submit(event)}>
+      <ProfileMobileGroup>
+        <label className="pm-field">
+          <span>Навык</span>
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Например, Terraform"
+            autoComplete="off"
+            required
+            maxLength={160}
+          />
+        </label>
+      </ProfileMobileGroup>
+      <p className="pm-foot">
+        Навык попадёт в профиль с пометкой «со слов кандидата». Подтвердить его можно квизом.
+      </p>
+      {error ? (
+        <p className="career-resume-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="pm-savebar">
+        <button
+          className="pm-cta"
+          type="submit"
+          disabled={!name.trim() || busy || props.saving}
+          aria-busy={busy || undefined}
+        >
+          Добавить
+        </button>
+      </div>
+    </form>
+  );
+}

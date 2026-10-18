@@ -1,4 +1,4 @@
-import { currentTodayDecision } from '../../shared/todayDecision';
+import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -264,7 +264,19 @@ const ianaTimezoneSchema = z
     }
   }, 'invalid_timezone');
 
-const todayQuerySchema = z.object({ tz: ianaTimezoneSchema });
+const todayQuerySchema = z
+  .object({
+    tz: ianaTimezoneSchema,
+    queueOffset: z.coerce.number().int().min(5).max(10_000).optional(),
+    queueRevision: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/u)
+      .optional(),
+  })
+  .refine(
+    (query) => (query.queueOffset === undefined) === (query.queueRevision === undefined),
+    'queue_pagination_requires_offset_and_revision',
+  );
 
 /**
  * Тот же отпечаток снимка, что и у самого подбора (уровень включительно), но
@@ -352,6 +364,53 @@ function recordFreshVacancyNotification(
   });
 }
 
+const TODAY_QUEUE_INITIAL_COUNT = 5;
+
+async function readTodaySnapshot(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  candidateId: string,
+  now: Date,
+) {
+  const { candidateStore, titleParseStore } = deps;
+  const since = candidateStore.getSinceLastVisit(candidateId);
+  const applications = candidateStore.listApplications(candidateId);
+  const { matched, targetRoles, targetLevel } = await readTodayMatchedVacancies(deps, candidateId);
+  const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore) ?? [];
+  const freshNewVacancies = newVacancies.filter(
+    (vacancy) => vacancy.fit.role !== 'none' && (since === null || vacancy.firstObservedAt > since),
+  );
+  const snapshot = buildTodaySnapshot({
+    applications,
+    newVacancies: freshNewVacancies,
+    since,
+    closedVacanciesSinceVisit:
+      since === null ? 0 : candidateStore.countSystemClosuresSince(candidateId, since),
+    campaignRole: targetRoles[0] ?? null,
+    companyEventsSinceVisit:
+      since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
+    shortlist: newVacancies,
+    now: now.toISOString(),
+  });
+  recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
+  return { snapshot, workspace: candidateStore.getCandidateWorkspace(candidateId) };
+}
+
+function todayQueuePage(
+  queue: ReturnType<typeof buildTodaySnapshot>['queue'],
+  offset: number | undefined,
+  requestedRevision: string | undefined,
+) {
+  const revision = createHash('sha256').update(JSON.stringify(queue)).digest('hex');
+  if (offset !== undefined && requestedRevision !== revision) return null;
+  return {
+    queue: offset === undefined ? queue.slice(0, TODAY_QUEUE_INITIAL_COUNT) : queue.slice(offset),
+    queueTotal: queue.length,
+    queueRevision: revision,
+    queueOffset: offset ?? 0,
+  };
+}
+
 /**
  * `GET /today` (architecture.md §4, §57, §97; C55): дайджест дня. Подбор
  * читается тем же асинхронным путём, что и «Вакансии» (`readMatchedSnapshot`)
@@ -361,46 +420,38 @@ function recordFreshVacancyNotification(
  * силе — считаем один раз на снимок, а не на каждый запрос).
  */
 const handleToday: Handler = async (deps, request, reply) => {
-  const { authService, candidateStore, config, titleParseStore } = deps;
+  const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const { tz } = todayQuerySchema.parse(request.query ?? {});
-
-  const since = candidateStore.getSinceLastVisit(candidate.id);
-  const applications = candidateStore.listApplications(candidate.id);
-
-  const { matched, targetRoles, targetLevel } = await readTodayMatchedVacancies(deps, candidate.id);
-  const newVacancies = todayNewVacancies(matched, targetLevel, titleParseStore) ?? [];
-  const freshNewVacancies = newVacancies.filter(
-    (vacancy) => vacancy.fit.role !== 'none' && (since === null || vacancy.firstObservedAt > since),
-  );
-
-  const closedVacanciesSinceVisit =
-    since === null ? 0 : candidateStore.countSystemClosuresSince(candidate.id, since);
-  const companyEventsSinceVisit =
-    since === null ? 0 : candidateStore.countCompanyEventsSince(candidate.id, since);
-
-  const snapshot = buildTodaySnapshot({
-    applications,
-    newVacancies: freshNewVacancies,
-    since,
-    closedVacanciesSinceVisit,
-    campaignRole: targetRoles[0] ?? null,
-    companyEventsSinceVisit,
-    shortlist: newVacancies,
-  });
-  recordFreshVacancyNotification(deps, request, candidate.id, freshNewVacancies);
-  const selection = currentTodayDecision(
-    candidateStore.getCandidateWorkspace(candidate.id)?.todayDecisionSelection,
-    new Date(),
+  const {
     tz,
-  );
+    queueOffset,
+    queueRevision: requestedRevision,
+  } = todayQuerySchema.parse(request.query ?? {});
+  const now = new Date();
+  const { snapshot, workspace } = await readTodaySnapshot(deps, request, candidate.id, now);
+  const selection = currentTodayDecision(workspace?.todayDecisionSelection, now, tz);
   const todayDecisionSelection = snapshot.queue.some(
     (item) => item.applicationId === selection?.applicationId && item.kind === 'follow_up',
   )
     ? selection
     : undefined;
-  return { data: { ...snapshot, todayDecisionSelection }, meta: { requestId: request.id } };
+  const todayActionDeferral = isTodayActionDeferred(workspace?.todayActionDeferral, now, tz)
+    ? workspace?.todayActionDeferral
+    : undefined;
+  const queuePage = todayQueuePage(snapshot.queue, queueOffset, requestedRevision);
+  if (!queuePage) {
+    return reply.code(409).send({
+      error: {
+        code: 'today_queue_changed',
+        message: 'Очередь изменилась. Обновите экран и попробуйте ещё раз.',
+      },
+    });
+  }
+  return {
+    data: { ...snapshot, ...queuePage, todayDecisionSelection, todayActionDeferral },
+    meta: { requestId: request.id },
+  };
 };
 
 /** Трекер откликов (B251, S1–S2, architecture.md §4). */

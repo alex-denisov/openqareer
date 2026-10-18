@@ -57,6 +57,7 @@ import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { NotificationsScreen } from '../notifications/NotificationsScreen';
 import { RoleSkillAssessmentScreen } from '../skills/RoleSkillAssessmentScreen';
+import type { ProfileMobileScene } from '../resume/profileMobileNavigation';
 
 interface CareerWorkspaceShellProps {
   workspace?: CandidateWorkspace;
@@ -101,6 +102,9 @@ export function CareerWorkspaceShell({
     return initialView;
   });
   const [roleSkillAssessmentOpen, setRoleSkillAssessmentOpen] = useState(false);
+  const [profileMobileScene, setProfileMobileScene] = useState<ProfileMobileScene | null>(null);
+  const [returnToProfileSkills, setReturnToProfileSkills] = useState(false);
+  const [skillQuizBankRequest, setSkillQuizBankRequest] = useState(0);
   const [expertConfig, setExpertConfig] = useState<ExpertPanelConfig>({
     open: initialExpertPanelOpen(sessionPending, initialView),
     stage: stageForView(initialView),
@@ -109,12 +113,16 @@ export function CareerWorkspaceShell({
   const autoOpenedExpert = useRef(sessionPending || hasClosedDesktopExpertPreference());
   const [railHint, setRailHint] = useState<string | null>(null);
   const [cabinetRevision, setCabinetRevision] = useState(0);
+  const cabinetMountRevision = useRef(cabinetRevision);
+  // Keep the same cabinet when entering Profile so a vacancy's pending
+  // requirement survives navigation; refresh its data without remounting.
+  if (activeView !== 'profile') cabinetMountRevision.current = cabinetRevision;
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountReturnToIntake, setAccountReturnToIntake] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSection>('security');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [pendingProposalCount, setPendingProposalCount] = useState(0);
-  const [isWideViewport, setIsWideViewport] = useState(() => matchesMedia('(min-width: 1280px)'));
+  const [isWideViewport, setIsWideViewport] = useState(() => matchesMedia('(min-width: 901px)'));
   const [isCompactViewport, setIsCompactViewport] = useState(() =>
     matchesMedia('(max-width: 760px)'),
   );
@@ -166,7 +174,7 @@ export function CareerWorkspaceShell({
   useEffect(() => {
     if (
       autoOpenedExpert.current ||
-      !matchesMedia('(min-width: 1280px)') ||
+      !matchesMedia('(min-width: 901px)') ||
       intakeVisible ||
       !session?.candidateId ||
       visibleWorkspace
@@ -244,6 +252,10 @@ export function CareerWorkspaceShell({
 
   function navigate(view: ShellView, options?: NavigationOptions) {
     setRoleSkillAssessmentOpen(false);
+    if (view !== 'profile') {
+      setProfileMobileScene(null);
+      setReturnToProfileSkills(false);
+    }
     if (!isNavigable(view)) return;
     setAccountOpen(false);
     setAccountSection('security');
@@ -301,10 +313,18 @@ export function CareerWorkspaceShell({
   );
 
   const openRoleSkillAssessment = useCallback(() => {
+    setProfileMobileScene(null);
+    setReturnToProfileSkills(activeView === 'profile');
     setExpertConfig((previous) => ({ ...previous, open: false }));
     setExpertSheetExpanded(false);
     setRoleSkillAssessmentOpen(true);
-  }, []);
+  }, [activeView]);
+
+  const openSkillQuizBank = useCallback(() => {
+    setRoleSkillAssessmentOpen(false);
+    openExpert('profile');
+    setSkillQuizBankRequest((request) => request + 1);
+  }, [openExpert]);
 
   const closeRoleSkillAssessment = useCallback(() => {
     setRoleSkillAssessmentOpen(false);
@@ -322,7 +342,7 @@ export function CareerWorkspaceShell({
     (section: AccountSection = 'security', returnToIntake = false) => {
       setExpertSheetExpanded(false);
       const shouldOpenDesktopExpert =
-        typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches;
+        typeof window !== 'undefined' && window.matchMedia('(min-width: 901px)').matches;
       setExpertConfig((previous) => ({
         ...previous,
         open: previous.open || shouldOpenDesktopExpert,
@@ -407,7 +427,7 @@ export function CareerWorkspaceShell({
   }, []);
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
-    const media = window.matchMedia('(min-width: 1280px)');
+    const media = window.matchMedia('(min-width: 901px)');
     const onChange = () => {
       setIsWideViewport(media.matches);
       const open = expertPanelOpenOnWidthChange(media.matches);
@@ -423,7 +443,7 @@ export function CareerWorkspaceShell({
       : pageNames[activeView];
 
   useEffect(() => {
-    if (!matchesMedia('(min-width: 1280px)')) return;
+    if (!matchesMedia('(min-width: 901px)')) return;
     try {
       window.localStorage.setItem(
         DESKTOP_EXPERT_PREFERENCE_KEY,
@@ -461,7 +481,20 @@ export function CareerWorkspaceShell({
         {activeView === 'opportunities' ? null : (
           <CareerMobileTopbar
             activeView={activeView}
-            title={accountOpen ? 'Аккаунт' : desktopPageTitle}
+            title={
+              accountOpen
+                ? 'Аккаунт'
+                : profileMobileScene && activeView === 'profile'
+                  ? profileMobileScene.title
+                  : desktopPageTitle
+            }
+            onBack={
+              !accountOpen && roleSkillAssessmentOpen
+                ? closeRoleSkillAssessment
+                : !accountOpen && activeView === 'profile'
+                  ? profileMobileScene?.onBack
+                  : undefined
+            }
             pendingProposalCount={pendingProposalCount}
             expertOpen={expertPanelVisible}
             onOpenConsultant={() => (intakeVisible ? openIntakeConsultant() : openExpert())}
@@ -470,7 +503,6 @@ export function CareerWorkspaceShell({
               !sessionPending &&
               !accountOpen &&
               !intakeVisible &&
-              !expertPanelVisible &&
               isCompactViewport ? (
                 <NotificationsBell
                   unreadCount={notificationUnreadCount}
@@ -610,8 +642,10 @@ export function CareerWorkspaceShell({
                 !roleSkillAssessmentOpen &&
                 (activeView !== 'diary' || diaryAccess.isVisible) ? (
                   <CareerCabinet
-                    key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetRevision}`}
+                    key={`${cabinetSession.candidateId}:${cabinetSession.displayName ?? ''}:${cabinetSession.email ?? ''}:${cabinetMountRevision.current}`}
+                    refreshRevision={activeView === 'profile' ? cabinetRevision : undefined}
                     view={activeView as CareerCabinetView}
+                    initialProfileTab={returnToProfileSkills ? 'skills' : undefined}
                     navigationOptions={navigationOptions}
                     session={cabinetSession}
                     workspace={visibleWorkspace}
@@ -621,6 +655,9 @@ export function CareerWorkspaceShell({
                     onOpenConnections={openConnections}
                     onOpenNotifications={openNotifications}
                     onOpenExpert={openExpert}
+                    onOpenSkillQuizBank={openSkillQuizBank}
+                    onOpenRoleSkillAssessment={openRoleSkillAssessment}
+                    onMobileSceneChange={setProfileMobileScene}
                     onUpdateWorkspace={onUpdateWorkspace}
                   />
                 ) : null}
@@ -797,6 +834,7 @@ export function CareerWorkspaceShell({
               onIdentityChange={resetForAccount}
               onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
               onOpenRoleSkillAssessment={openRoleSkillAssessment}
+              skillQuizBankRequest={skillQuizBankRequest}
               onEscape={handleExpertEscape}
               onStageChange={(stage) => updateExpertStage(setExpertConfig, stage)}
               onClose={closeExpert}

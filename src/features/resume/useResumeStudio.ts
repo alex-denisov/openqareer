@@ -28,8 +28,9 @@ export interface ResumeStudioState {
  * the evidence snapshot the documents were built from, so autosaving would
  * quietly stand behind facts on the candidate's behalf.
  */
-export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
-  const { view, draft, loading, error, setView, setDraft, setLoading, load } = useResumeLoader();
+export function useResumeStudio(onSaved?: () => void, refreshKey?: number): ResumeStudioState {
+  const { view, draft, loading, error, setView, setDraft, setLoading, load } =
+    useResumeLoader(refreshKey);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string>();
 
@@ -76,7 +77,7 @@ export function useResumeStudio(onSaved?: () => void): ResumeStudioState {
   };
 }
 
-function useResumeLoader() {
+function useResumeLoader(refreshKey?: number) {
   const [view, setView] = useState<ResumeStudioView>();
   const [draft, setDraft] = useState<ResumeDraft>();
   const [loading, setLoading] = useState(true);
@@ -103,7 +104,7 @@ function useResumeLoader() {
   useEffect(() => {
     setLoading(true);
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return { view, draft, loading, error, setView, setDraft, setLoading, load };
 }

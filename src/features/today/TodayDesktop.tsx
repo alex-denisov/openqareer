@@ -7,24 +7,26 @@ import {
   Target,
   Clock,
   Briefcase,
-  CalendarBlank,
   ChatCircleDots,
   CheckCircle,
-  EnvelopeSimple,
-  GraduationCap,
   Info,
   ListChecks,
-  Plus,
   X,
 } from '@phosphor-icons/react';
 import './today-desktop.css';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
-import { profileCompleteness } from '../resume/profileCompleteness';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
-import type { TodayQueueItem, TodaySinceLastVisit, TodaySnapshot } from './todayApi';
+import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
+import {
+  todayMomentumMetricValue,
+  type TodayProfileFocus,
+  type TodayQueueItem,
+  type TodaySinceLastVisit,
+  type TodaySnapshot,
+} from './todayApi';
 import {
   buildReturningDigestItems,
   consultantTargetView,
@@ -35,64 +37,85 @@ import {
   queueKey,
 } from './todayFormat';
 
-export interface TodayFunnelContext {
-  readonly found?: number;
-  readonly favorites?: number;
-  readonly responses?: number;
-  readonly offers?: number;
-  readonly catalogObservedAt?: string;
-}
-
 interface TodayDesktopContentProps {
   readonly snapshot: TodaySnapshot;
   readonly profileDraft?: ResumeDraft;
-  readonly funnelContext?: TodayFunnelContext;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onDiscuss?: () => void;
-  readonly onPostpone: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy?: boolean;
+  readonly postponeError?: string;
   readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
+  readonly queueRemainderLoading?: boolean;
+  readonly queueRemainderFailed?: boolean;
+  readonly onLoadQueueRemainder?: () => Promise<void>;
 }
 
-export function TodayDesktopContent({
-  snapshot,
-  profileDraft,
-  funnelContext,
-  activeAction,
-  onAccept,
-  onDiscuss,
-  onPostpone,
-  onNavigate,
-}: TodayDesktopContentProps) {
+export function TodayDesktopContent(props: TodayDesktopContentProps) {
   const [noticeDismissed, setNoticeDismissed] = useState(false);
   return (
     <div className="career-today-desktop">
       {!noticeDismissed ? (
         <TodayChangesNotice
-          sinceLastVisit={snapshot.sinceLastVisit}
+          sinceLastVisit={props.snapshot.sinceLastVisit}
           onDismiss={() => setNoticeDismissed(true)}
         />
       ) : null}
-      {profileDraft ? <TodayProfileProgress draft={profileDraft} onNavigate={onNavigate} /> : null}
-      {activeAction ? (
-        <TodayNextDecision
-          action={activeAction}
-          onAccept={onAccept}
-          onDiscuss={onDiscuss}
-          onPostpone={onPostpone}
-          onNavigate={onNavigate}
+      {props.profileDraft ? (
+        <TodayProfileProgressView
+          draft={props.profileDraft}
+          onNavigate={props.onNavigate}
+          onNavigateProfileTarget={props.onNavigateProfileTarget}
         />
-      ) : (
-        <TodayNextDecisionUnavailable onDiscuss={onDiscuss} />
-      )}
+      ) : null}
+      <TodayDecisionSection {...props} />
       <TodayQueueDesktop
-        pending={snapshot.vacanciesPending}
-        queue={snapshot.queue}
-        onNavigate={onNavigate}
-        onDiscuss={onDiscuss}
+        pending={props.snapshot.vacanciesPending}
+        queue={props.snapshot.queue}
+        queueTotal={props.snapshot.queueTotal ?? props.snapshot.queue.length}
+        queueRemainderLoading={props.queueRemainderLoading}
+        queueRemainderFailed={props.queueRemainderFailed}
+        onLoadQueueRemainder={props.onLoadQueueRemainder}
+        onNavigate={props.onNavigate}
+        onDiscussQueueItem={props.onDiscussQueueItem}
       />
-      <TodayFunnel momentum={snapshot.momentum} context={funnelContext} />
+      <TodayFunnel momentum={props.snapshot.momentum} />
     </div>
+  );
+}
+
+function TodayDecisionSection({
+  activeAction,
+  onAccept,
+  onDiscuss,
+  onPostpone,
+  postponeBusy = false,
+  postponeError,
+  onNavigate,
+}: Pick<
+  TodayDesktopContentProps,
+  | 'activeAction'
+  | 'onAccept'
+  | 'onDiscuss'
+  | 'onPostpone'
+  | 'postponeBusy'
+  | 'postponeError'
+  | 'onNavigate'
+>) {
+  if (!activeAction) return <TodayNextDecisionUnavailable onDiscuss={onDiscuss} />;
+  return (
+    <TodayNextDecision
+      action={activeAction}
+      onAccept={onAccept}
+      onDiscuss={onDiscuss}
+      onPostpone={onPostpone}
+      postponeBusy={postponeBusy}
+      postponeError={postponeError}
+      onNavigate={onNavigate}
+    />
   );
 }
 
@@ -176,79 +199,6 @@ function TodayChangesNotice({
   );
 }
 
-interface TodayProfileProgressAction {
-  readonly label: string;
-  readonly section: string;
-}
-
-function profileProgressActions(draft: ResumeDraft): readonly TodayProfileProgressAction[] {
-  const completeness = profileCompleteness(draft);
-  const incompleteDates = draft.experience.find(
-    (entry) => !entry.startDate || (!entry.current && !entry.endDate),
-  );
-  return completeness.missingSections.map((section) => {
-    if (section === 'Контакты') return { label: 'Указать контакты', section };
-    if (section === 'Опыт') {
-      return {
-        label: incompleteDates?.employer ? `Даты: ${incompleteDates.employer}` : 'Добавить опыт',
-        section,
-      };
-    }
-    if (section === 'Курсы') return { label: 'Добавить курсы', section };
-    return { label: `Добавить ${section.toLowerCase()}`, section };
-  });
-}
-
-function ProfileActionIcon({ section }: { readonly section: string }) {
-  if (section === 'Контакты') return <EnvelopeSimple size={16} aria-hidden="true" />;
-  if (section === 'Опыт') return <CalendarBlank size={16} aria-hidden="true" />;
-  if (section === 'Курсы') return <GraduationCap size={16} aria-hidden="true" />;
-  return <Plus size={16} aria-hidden="true" />;
-}
-
-function TodayProfileProgress({
-  draft,
-  onNavigate,
-}: {
-  readonly draft: ResumeDraft;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
-}) {
-  const completeness = profileCompleteness(draft);
-  if (!completeness.missingSections.length) return null;
-  const actions = profileProgressActions(draft);
-  const percent = Math.round((completeness.completedCount / completeness.totalCount) * 100);
-  return (
-    <section className="career-today-profile-progress" aria-label="Полнота профиля">
-      <div className="career-today-profile-progress-main">
-        <p>
-          Профиль готов на <strong>{percent} %</strong>:{' '}
-          {pluralRu(actions.length, ['действие', 'действия', 'действий'])}
-        </p>
-        <progress
-          className="career-today-profile-meter"
-          max={completeness.totalCount}
-          value={completeness.completedCount}
-          aria-label={`Профиль готов на ${percent} процентов`}
-        />
-      </div>
-      <div className="career-today-profile-actions" aria-label="Что заполнить">
-        {actions.map((action) => (
-          <button
-            key={action.section}
-            type="button"
-            className="career-btn career-btn-secondary career-btn-sm career-today-profile-action"
-            onClick={() => onNavigate?.('profile')}
-            disabled={!onNavigate}
-          >
-            <ProfileActionIcon section={action.section} />
-            {action.label}
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function actionDestinationLabel(action: ReasonedCareerAction): string {
   if (action.destination === 'career' || action.destination === 'search') return 'Карьера';
   if (action.destination === 'coach') return 'Консультант';
@@ -311,11 +261,15 @@ function DecisionActions({
   onAccept,
   onDiscuss,
   onPostpone,
+  postponeBusy,
+  postponeError,
 }: {
   readonly action: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onDiscuss?: () => void;
-  readonly onPostpone: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
 }) {
   const coachAction = action.destination === 'coach';
   const acceptLabel = coachAction
@@ -324,7 +278,7 @@ function DecisionActions({
       ? 'Подтвердить факт'
       : action.label;
   return (
-    <div className="career-today-decision-actions">
+    <div className="career-today-decision-actions" aria-busy={postponeBusy || undefined}>
       {!coachAction || onDiscuss ? (
         <button type="button" className="career-btn career-btn-primary" onClick={onAccept}>
           <CheckCircle size="1em" aria-hidden="true" />
@@ -337,9 +291,15 @@ function DecisionActions({
           Обсудить
         </button>
       ) : null}
-      <button type="button" className="career-today-decision-postpone" onClick={onPostpone}>
-        Отложить до завтра
+      <button
+        type="button"
+        className="career-today-decision-postpone"
+        disabled={postponeBusy}
+        onClick={() => void onPostpone()}
+      >
+        {postponeBusy ? 'Сохраняем…' : 'Отложить до завтра'}
       </button>
+      {postponeError ? <p role="alert">{postponeError}</p> : null}
     </div>
   );
 }
@@ -369,16 +329,24 @@ function TodayNextDecision({
   onAccept,
   onDiscuss,
   onPostpone,
+  postponeBusy,
+  postponeError,
   onNavigate,
 }: {
   readonly action: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onDiscuss?: () => void;
-  readonly onPostpone: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }) {
   return (
-    <section className="career-today-next-decision" aria-label="Следующее решение">
+    <section
+      className="career-today-next-decision"
+      aria-label="Следующее решение"
+      aria-busy={postponeBusy || undefined}
+    >
       <p className="career-today-eyebrow">Следующее решение</p>
       <h2 id="today-next-decision-title">{action.headline}</h2>
       <DecisionReason action={action} onDiscuss={onDiscuss} onNavigate={onNavigate} />
@@ -388,6 +356,8 @@ function TodayNextDecision({
         onAccept={onAccept}
         onDiscuss={onDiscuss}
         onPostpone={onPostpone}
+        postponeBusy={postponeBusy}
+        postponeError={postponeError}
       />
       <p className="career-today-decision-sources">
         <Clock size="1em" aria-hidden="true" />
@@ -437,11 +407,11 @@ function queueDeadlineClass(label: string, kind: TodayQueueItem['kind']) {
 function TodayQueueDesktopRow({
   item,
   onNavigate,
-  onDiscuss,
+  onDiscussQueueItem,
 }: {
   readonly item: TodayQueueItem;
   readonly onNavigate?: (view: CareerCabinetView) => void;
-  readonly onDiscuss?: () => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
   const ItemIcon = queueIcon(item.kind);
   const title = formatQueueTitle(item.company, item.title);
@@ -476,8 +446,8 @@ function TodayQueueDesktopRow({
         type="button"
         className="career-today-queue-discuss"
         aria-label={`Обсудить: ${actionTitle}`}
-        disabled={!onDiscuss}
-        onClick={onDiscuss}
+        disabled={!onDiscussQueueItem}
+        onClick={() => onDiscussQueueItem?.(item)}
       >
         <ChatCircleDots size="1em" aria-hidden="true" />
       </button>
@@ -487,50 +457,122 @@ function TodayQueueDesktopRow({
 
 function TodayQueueDesktop({
   queue,
+  queueTotal,
   pending,
+  queueRemainderLoading,
+  queueRemainderFailed,
+  onLoadQueueRemainder,
   onNavigate,
-  onDiscuss,
+  onDiscussQueueItem,
 }: {
   readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal: number;
   readonly pending?: boolean;
+  readonly queueRemainderLoading?: boolean;
+  readonly queueRemainderFailed?: boolean;
+  readonly onLoadQueueRemainder?: () => Promise<void>;
   readonly onNavigate?: (view: CareerCabinetView) => void;
-  readonly onDiscuss?: () => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
-  const rowHandlers = { onNavigate, onDiscuss };
+  const remaining = Math.max(0, queueTotal - queue.length);
   return (
     <section
       id="today-queue"
       className="career-today-queue-desktop"
       aria-label="Очередь дня"
-      aria-busy={pending || undefined}
+      aria-busy={pending || queueRemainderLoading || undefined}
     >
-      <header className="career-today-queue-desktop-head">
-        <div className="career-today-queue-heading">
-          <h2>Очередь дня</h2>
-          <span className="career-today-queue-count">{queue.length}</span>
-          <CareerTooltip content="Решения, которые ждут вашего действия.">
-            <button
-              type="button"
-              className="career-today-info-button"
-              aria-label="О составе очереди дня"
-            >
-              <Info size="1em" aria-hidden="true" />
-            </button>
-          </CareerTooltip>
-        </div>
-      </header>
+      <TodayQueueHeader queueTotal={queueTotal} />
       {queue.length ? (
-        <ul className="career-today-queue-desktop-list">
-          {queue.map((item) => (
-            <TodayQueueDesktopRow key={queueKey(item)} item={item} {...rowHandlers} />
-          ))}
-        </ul>
+        <TodayQueueRows
+          queue={queue}
+          onNavigate={onNavigate}
+          onDiscussQueueItem={onDiscussQueueItem}
+        />
       ) : (
         <p className="career-today-queue-desktop-empty">
           {pending ? 'Загружаем очередь дня…' : 'Очередь дня пуста. Новые задачи появятся здесь.'}
         </p>
       )}
+      <TodayQueueRemainderControl
+        remaining={remaining}
+        loading={queueRemainderLoading}
+        failed={queueRemainderFailed}
+        onLoad={onLoadQueueRemainder}
+      />
     </section>
+  );
+}
+
+function TodayQueueHeader({ queueTotal }: { readonly queueTotal: number }) {
+  return (
+    <header className="career-today-queue-desktop-head">
+      <div className="career-today-queue-heading">
+        <h2>Очередь дня</h2>
+        <span className="career-today-queue-count">{queueTotal}</span>
+        <CareerTooltip content="Решения, которые ждут вашего действия.">
+          <button
+            type="button"
+            className="career-today-info-button"
+            aria-label="О составе очереди дня"
+          >
+            <Info size="1em" aria-hidden="true" />
+          </button>
+        </CareerTooltip>
+      </div>
+    </header>
+  );
+}
+
+function TodayQueueRows({
+  queue,
+  onNavigate,
+  onDiscussQueueItem,
+}: {
+  readonly queue: readonly TodayQueueItem[];
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
+}) {
+  return (
+    <ul className="career-today-queue-desktop-list">
+      {queue.slice(0, 5).map((item) => (
+        <TodayQueueDesktopRow
+          key={queueKey(item)}
+          item={item}
+          onNavigate={onNavigate}
+          onDiscussQueueItem={onDiscussQueueItem}
+        />
+      ))}
+    </ul>
+  );
+}
+
+function TodayQueueRemainderControl({
+  remaining,
+  loading,
+  failed,
+  onLoad,
+}: {
+  readonly remaining: number;
+  readonly loading?: boolean;
+  readonly failed?: boolean;
+  readonly onLoad?: () => Promise<void>;
+}) {
+  return (
+    <>
+      {remaining > 0 ? (
+        <button
+          type="button"
+          className="career-btn career-btn-secondary career-btn-sm"
+          data-testid="today-desktop-queue-more"
+          disabled={!onLoad || loading}
+          onClick={() => void onLoad?.()}
+        >
+          {loading ? 'Загружаем…' : `Показать остальные ${remaining}`}
+        </button>
+      ) : null}
+      {failed ? <p role="alert">Не удалось загрузить остальные карточки очереди.</p> : null}
+    </>
   );
 }
 
@@ -570,21 +612,18 @@ function TodayFunnelMetric({
   );
 }
 
-function TodayFunnel({
-  momentum,
-  context,
-}: {
-  readonly momentum: TodaySnapshot['momentum'];
-  readonly context?: TodayFunnelContext;
-}) {
-  const metrics = momentum?.windows['30d'];
+function TodayFunnel({ momentum }: { readonly momentum: TodaySnapshot['momentum'] }) {
+  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
+  const screenings = todayMomentumMetricValue(momentum, '30d', 'screenings');
+  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
+  const sampleCount = typeof applied === 'number' ? applied : undefined;
   const items: readonly { label: string; value: number | 'unknown' }[] = [
-    { label: 'Найдено', value: context?.found ?? 'unknown' },
-    { label: 'В избранном', value: context?.favorites ?? 'unknown' },
-    { label: 'Откликов', value: metrics?.applied ?? 'unknown' },
-    { label: 'Ответов', value: context?.responses ?? metrics?.screenings ?? 'unknown' },
-    { label: 'Интервью', value: metrics?.interviews ?? 'unknown' },
-    { label: 'Офферов', value: context?.offers ?? 'unknown' },
+    { label: 'Найдено', value: 'unknown' },
+    { label: 'В избранном', value: 'unknown' },
+    { label: 'Откликов', value: applied },
+    { label: 'Ответов', value: screenings },
+    { label: 'Интервью', value: interviews },
+    { label: 'Офферов', value: 'unknown' },
   ];
   const scale = Math.max(
     1,
@@ -596,7 +635,12 @@ function TodayFunnel({
   );
   return (
     <section className="career-today-funnel" aria-label="Воронка за 30 дней">
-      <TodayFunnelHeader momentum={momentum} catalogObservedAt={context?.catalogObservedAt} />
+      <TodayFunnelHeader momentum={momentum} />
+      {sampleCount !== undefined && sampleCount < 10 ? (
+        <p className="career-today-funnel-low-sample" role="status">
+          Мало данных: меньше 10 откликов за 30 дней. Выводов о конверсии нет.
+        </p>
+      ) : null}
       <ol className="career-today-funnel-list">
         {items.map((item, index) => (
           <TodayFunnelMetric
@@ -613,35 +657,39 @@ function TodayFunnel({
   );
 }
 
-function TodayFunnelHeader({
-  momentum,
-  catalogObservedAt,
-}: {
-  readonly momentum: TodaySnapshot['momentum'];
-  readonly catalogObservedAt?: string;
-}) {
-  const metrics = momentum?.windows['30d'];
-  const sampleCount = typeof metrics?.applied === 'number' ? metrics.applied : undefined;
-  const calculationDate = shortDateTime(momentum?.calculatedAt);
-  const catalogDate = shortDateTime(catalogObservedAt);
+function TodayFunnelHeader({ momentum }: { readonly momentum: TodaySnapshot['momentum'] }) {
+  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
+  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
+  const evidence = momentum?.evidence?.['30d'];
+  const startLabel = shortDateTime(evidence?.startAt);
+  const endLabel = shortDateTime(evidence?.endAt);
   const basis =
     [
-      sampleCount === undefined
-        ? undefined
-        : `n = ${sampleCount} откликов${calculationDate ? `, ${calculationDate}` : ''}`,
-      catalogDate ? `каталог на ${catalogDate}` : undefined,
+      startLabel && endLabel ? `Период ${startLabel} — ${endLabel}` : undefined,
+      typeof applied === 'number'
+        ? `отклики: подтверждения отправки, n = ${evidence?.applied.sampleSize}`
+        : 'отклики: нет проверенного времени подтверждения',
+      typeof interviews === 'number'
+        ? `интервью: сохранённые даты встреч, n = ${evidence?.interviews.sampleSize}`
+        : 'интервью: нет проверенных дат',
     ]
       .filter(Boolean)
       .join(' · ') || 'Нет проверенных данных';
   return (
     <header>
       <h2>Воронка за 30 дней</h2>
-      <CareerTooltip content="Часть метрик пока не имеет проверенного источника и показана как неизвестная.">
-        <button type="button" className="career-today-info-button" aria-label="О данных воронки">
+      <CareerTooltip content="Отклики считаются по времени записи подтверждения доставки. Интервью — по сохранённым датам встреч. Для остальных этапов нет проверенного источника.">
+        <button
+          type="button"
+          className="career-today-info-button"
+          aria-label="Об источнике данных воронки"
+        >
           <Info size="1em" aria-hidden="true" />
         </button>
       </CareerTooltip>
-      <span className="career-today-funnel-basis">{basis}</span>
+      <span className="career-today-funnel-basis" title={basis}>
+        {basis}
+      </span>
     </header>
   );
 }

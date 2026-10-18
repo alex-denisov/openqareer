@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { CoachResult } from '../coach/coachApi';
@@ -220,6 +223,29 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('Консультант · Профиль');
     expect(html).toContain('Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn');
     expect(html).toContain('Пройти квиз по навыку');
+  });
+
+
+  it('opens the existing quiz bank when Profile requests it', async () => {
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(
+        <CareerExpertPanel
+          stage="profile"
+          initialUser={null}
+          onClose={() => undefined}
+          skillQuizBankRequest={1}
+        />,
+      );
+    });
+
+    expect(container.querySelector('.career-quiz-modal-card')).not.toBeNull();
+    expect(container.textContent).toContain('Верификация навыков: hh.ru и LinkedIn');
+
+    await act(async () => root.unmount());
+    container.remove();
   });
 });
 

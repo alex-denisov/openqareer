@@ -61,9 +61,12 @@ function PrintExperience({ document, draft }: { document: ResumeDocument; draft:
       period: projected
         ? formatExperiencePeriod(projected)
         : draftPeriod(entry.startDate, entry.endDate, entry.current),
+      description: clean(projected?.description?.value),
       bullets: (projected?.bullets ?? []).map((b) => clean(b.value)).filter(Boolean),
     }))
-    .filter((entry) => entry.heading || entry.period || entry.bullets.length > 0);
+    .filter(
+      (entry) => entry.heading || entry.period || entry.description || entry.bullets.length > 0,
+    );
   if (entries.length === 0) return null;
   return (
     <PrintSection title="Опыт работы">
@@ -71,6 +74,7 @@ function PrintExperience({ document, draft }: { document: ResumeDocument; draft:
         <article key={entry.id} className="career-resume-print-entry">
           {entry.heading ? <h3>{entry.heading}</h3> : null}
           {entry.period ? <p className="career-resume-print-period">{entry.period}</p> : null}
+          {entry.description ? <p>{entry.description}</p> : null}
           {entry.bullets.length > 0 ? (
             <ul>
               {entry.bullets.map((bullet, index) => (
@@ -126,10 +130,16 @@ export function ResumePrintDocument({ document, draft }: ResumePrintDocumentProp
     (document.skills ?? []).map((skill) => skill.name),
     ', ',
   );
+  const nativeLanguageIds = new Set(
+    document.languages
+      .filter((language) => language.native?.value === 'native')
+      .map((language) => language.id),
+  );
   const languages = joined(
-    mergeLanguages(draft, document).map((lang) =>
-      lang.name ? joined([lang.name, lang.cefr ? `(${lang.cefr})` : ''], ' ') : '',
-    ),
+    mergeLanguages(draft, document).map((lang) => {
+      const level = lang.cefr ? `(${lang.cefr})` : nativeLanguageIds.has(lang.id) ? '(родной)' : '';
+      return lang.name ? joined([lang.name, level], ' ') : '';
+    }),
     ', ',
   );
   const courses = (document.courses ?? [])

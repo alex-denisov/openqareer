@@ -49,7 +49,7 @@ export class ConsultantRejectionStore {
     const rejectedKeys = new Set(this.list(candidateId).map((r) => r.proposalKey));
     return proposals.filter((p) => {
       if (p.kind === 'resume.revise' && p.resumeRevision) {
-        const key = computeProposalKey(p.resumeRevision.section, p.resumeRevision.proposedText);
+        const key = computeProposalKey(p.resumeRevision.section, p.resumeRevision.proposedText, p.resumeRevision.field);
         return !rejectedKeys.has(key);
       }
       return true;

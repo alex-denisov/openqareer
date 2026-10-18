@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { CandidateSnapshot, CandidateStore } from '../data/candidateStore';
+import { createCandidateExperienceChronologyEvidence } from '../domain/resumeExperienceEvidence';
+import { buildResumeStudioProjection } from '../domain/resumeStudio';
 import {
   applyConnectorReceipt,
   createConnectorAction,
@@ -18,6 +20,11 @@ import { CareerCommandNotFoundError } from '../data/sqliteCareerCommandRepositor
 import { currentSkillText, writeSkillState } from './skillRevision';
 import { EMPTY_RESUME_DRAFT, type ResumeDraft } from '../domain/resumeDraft';
 import type { CareerCommandRecord, ResumeReviseExecutionTarget } from './careerCommandPlanner';
+
+type ExperienceChronologyRevisionLinks = {
+  readonly previousChronologyMemoryId: string;
+  readonly appliedChronologyMemoryId: string;
+};
 
 interface CareerCommandDispatcherOptions {
   store: CandidateStore;
@@ -166,9 +173,22 @@ export class CareerCommandDispatcher {
     if (previousText === null || previousText !== target.currentText) {
       throw new ResumeRevisionConflictError();
     }
-    this.applyResumeRevision(candidateId, command, target, currentDraft, snapshot);
+    const chronologyLinks = this.applyResumeRevision(
+      candidateId,
+      command,
+      target,
+      currentDraft,
+      snapshot,
+    );
     const finishedAt = this.now().toISOString();
-    this.recordResumeRevision(candidateId, command, target, previousText, finishedAt);
+    this.recordResumeRevision(
+      candidateId,
+      command,
+      target,
+      previousText,
+      finishedAt,
+      chronologyLinks,
+    );
     return this.finishProfileRevision(candidateId, command, action, finishedAt);
   }
 
@@ -192,8 +212,11 @@ export class CareerCommandDispatcher {
     target: ResumeReviseExecutionTarget,
     currentDraft: ResumeDraft,
     snapshot: CandidateSnapshot,
-  ): void {
-    if (target.memoryId) {
+  ): ExperienceChronologyRevisionLinks | undefined {
+    let chronologyLinks: ExperienceChronologyRevisionLinks | undefined;
+    if (target.field) {
+      chronologyLinks = applyExperienceDateRevision(this.store, candidateId, currentDraft, target);
+    } else if (target.memoryId) {
       const revised = this.store.changeMemory(candidateId, target.memoryId, {
         action: 'correct',
         statement: target.proposedText,
@@ -206,8 +229,10 @@ export class CareerCommandDispatcher {
         snapshot.resume?.evidenceSnapshot ?? [],
       );
     }
-    const evidenceSnapshot = target.memoryId ? this.store.getSnapshot(candidateId) : snapshot;
+    const evidenceSnapshot =
+      target.memoryId || target.field ? this.store.getSnapshot(candidateId) : snapshot;
     this.confirmEvidenceFacts(candidateId, evidenceSnapshot, command.proposal.evidenceRefs);
+    return chronologyLinks;
   }
 
   private finishProfileRevision(
@@ -236,6 +261,7 @@ export class CareerCommandDispatcher {
     target: ResumeReviseExecutionTarget,
     previousText: string,
     finishedAt: string,
+    chronologyLinks?: ExperienceChronologyRevisionLinks,
   ): void {
     this.store.profileRevisionRepo.recordRevision({
       id: randomUUID(),
@@ -245,6 +271,7 @@ export class CareerCommandDispatcher {
       experienceId: target.experienceId ?? null,
       previousText,
       appliedText: target.proposedText,
+      ...(chronologyLinks ?? {}),
       createdAt: finishedAt,
     });
   }
@@ -263,6 +290,54 @@ export class CareerCommandDispatcher {
     }
   }
 
+  private restoreProfileRevision(
+    candidateId: string,
+    command: CareerCommandRecord,
+    revision: ProfileRevisionRecord,
+    target: ResumeReviseExecutionTarget,
+    currentDraft: ResumeDraft,
+    snapshot: CandidateSnapshot,
+  ): void {
+    if (target.memoryId) {
+      const reverted = this.store.changeMemory(candidateId, target.memoryId, {
+        action: 'correct',
+        statement: revision.previousText,
+      });
+      if (!reverted) throw new ResumeRevisionConflictError();
+      this.confirmEvidenceFacts(
+        candidateId,
+        this.store.getSnapshot(candidateId),
+        command.proposal.evidenceRefs,
+      );
+      return;
+    }
+    if (target.field) {
+      this.restoreExperienceDateRevision(candidateId, currentDraft, revision, target.field);
+      return;
+    }
+    const revertedDraft = revertDraftRevision(currentDraft, revision);
+    this.store.saveResumeDraft(candidateId, revertedDraft, snapshot.resume?.evidenceSnapshot ?? []);
+  }
+
+  private restoreExperienceDateRevision(
+    candidateId: string,
+    currentDraft: ResumeDraft,
+    revision: ProfileRevisionRecord,
+    field: NonNullable<ResumeReviseExecutionTarget['field']>,
+  ): void {
+    if (!revision.appliedChronologyMemoryId) throw new ResumeRevisionConflictError();
+    this.store.changeMemory(candidateId, revision.appliedChronologyMemoryId, {
+      action: 'delete',
+    });
+    const revertedDraft = revertDraftRevision(currentDraft, revision, field);
+    const latest = this.store.getSnapshot(candidateId);
+    const projection = buildResumeStudioProjection({
+      ...revertedDraft,
+      evidence: latest.memory,
+    });
+    this.store.saveResumeDraft(candidateId, revertedDraft, projection.evidenceSnapshot);
+  }
+
   async revert(candidateId: string, commandId: string): Promise<CareerCommandRecord> {
     const command = this.store.getCareerCommand(candidateId, commandId);
     if (!command) throw new CareerCommandNotFoundError();
@@ -273,7 +348,6 @@ export class CareerCommandDispatcher {
       );
       if (!revision) throw new ProfileRevisionNotFoundError();
       if (revision.revertedAt) throw new ProfileRevisionAlreadyRevertedError();
-
       const snapshot = this.store.getSnapshot(candidateId);
       const currentDraft = snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT;
       const target = command.executionTarget as ResumeReviseExecutionTarget;
@@ -281,25 +355,21 @@ export class CareerCommandDispatcher {
       if (currentText === null || currentText !== revision.appliedText) {
         throw new ResumeRevisionConflictError();
       }
-      if (target.memoryId) {
-        const reverted = this.store.changeMemory(candidateId, target.memoryId, {
-          action: 'correct',
-          statement: revision.previousText,
-        });
-        if (!reverted) throw new ResumeRevisionConflictError();
-        this.confirmEvidenceFacts(
-          candidateId,
-          this.store.getSnapshot(candidateId),
-          command.proposal.evidenceRefs,
+      if (target.field) {
+        const currentExperience = currentDraft.experience.find(
+          (entry) => entry.id === target.experienceId,
         );
-      } else {
-        const revertedDraft = revertDraftRevision(currentDraft, revision);
-        this.store.saveResumeDraft(
-          candidateId,
-          revertedDraft,
-          snapshot.resume?.evidenceSnapshot ?? [],
-        );
+        if (
+          !revision.previousChronologyMemoryId ||
+          !revision.appliedChronologyMemoryId ||
+          currentExperience?.chronologyMemoryId !== revision.appliedChronologyMemoryId ||
+          !snapshot.memory.some((memory) => memory.id === revision.appliedChronologyMemoryId) ||
+          !snapshot.memory.some((memory) => memory.id === revision.previousChronologyMemoryId)
+        ) {
+          throw new ResumeRevisionConflictError();
+        }
       }
+      this.restoreProfileRevision(candidateId, command, revision, target, currentDraft, snapshot);
       this.store.profileRevisionRepo.markReverted(candidateId, commandId, this.now().toISOString());
       return command;
     });
@@ -315,15 +385,54 @@ export class CareerCommandDispatcher {
   }
 }
 
+function applyExperienceDateRevision(
+  store: CandidateStore,
+  candidateId: string,
+  currentDraft: ResumeDraft,
+  target: ResumeReviseExecutionTarget,
+): ExperienceChronologyRevisionLinks {
+  if (target.section !== 'experience' || !target.experienceId || !target.field || target.memoryId) {
+    throw new ResumeRevisionConflictError();
+  }
+  const index = currentDraft.experience.findIndex((entry) => entry.id === target.experienceId);
+  if (index < 0) throw new ResumeRevisionConflictError();
+  const previous = currentDraft.experience[index]!;
+  const updated = { ...previous, [target.field]: target.proposedText };
+  const appliedChronologyMemoryId = createCandidateExperienceChronologyEvidence(
+    store,
+    candidateId,
+    updated,
+  );
+  if (!appliedChronologyMemoryId || appliedChronologyMemoryId === previous.chronologyMemoryId) {
+    throw new ResumeRevisionConflictError();
+  }
+  const experience = currentDraft.experience.map((entry, itemIndex) =>
+    itemIndex === index ? { ...updated, chronologyMemoryId: appliedChronologyMemoryId } : entry,
+  );
+  const revisedDraft = { ...currentDraft, experience };
+  const latest = store.getSnapshot(candidateId);
+  const projection = buildResumeStudioProjection({
+    ...revisedDraft,
+    evidence: latest.memory,
+  });
+  store.saveResumeDraft(candidateId, revisedDraft, projection.evidenceSnapshot);
+  return {
+    previousChronologyMemoryId: previous.chronologyMemoryId,
+    appliedChronologyMemoryId,
+  };
+}
+
 export function currentTextForResumeRevision(
   draft: ResumeDraft,
   target: {
     readonly section: ResumeReviseExecutionTarget['section'];
     readonly experienceId?: string | null;
     readonly memoryId?: string | null;
+    readonly field?: ResumeReviseExecutionTarget['field'];
   },
   memory: CandidateSnapshot['memory'] = [],
 ): string | null {
+  if (target.field && (target.section !== 'experience' || target.memoryId)) return null;
   if (target.section === 'headline') {
     return draft.candidate.headline ?? '';
   }
@@ -336,6 +445,10 @@ export function currentTextForResumeRevision(
   if (!target.experienceId) return null;
   const experience = draft.experience.find((entry) => entry.id === target.experienceId);
   if (!experience) return null;
+  if (target.field) {
+    if (target.field === 'endDate' && experience.current) return null;
+    return experience[target.field] ?? null;
+  }
   if (!target.memoryId) return experience.title ?? '';
   if (!experience.bulletMemoryIds.includes(target.memoryId)) return null;
   const fact = memory.find((item) => item.id === target.memoryId);
@@ -363,7 +476,30 @@ function applyRevisionToDraft(
   return { ...draft, experience: experiences };
 }
 
-function revertDraftRevision(draft: ResumeDraft, revision: ProfileRevisionRecord): ResumeDraft {
+function revertDraftRevision(
+  draft: ResumeDraft,
+  revision: ProfileRevisionRecord,
+  field?: ResumeReviseExecutionTarget['field'],
+): ResumeDraft {
+  if (field) {
+    if (
+      revision.section !== 'experience' ||
+      !revision.experienceId ||
+      !revision.previousChronologyMemoryId ||
+      !revision.appliedChronologyMemoryId
+    ) {
+      throw new ResumeRevisionConflictError();
+    }
+    const experiences = [...draft.experience];
+    const index = experiences.findIndex((entry) => entry.id === revision.experienceId);
+    if (index < 0) throw new ResumeRevisionConflictError();
+    experiences[index] = {
+      ...experiences[index],
+      [field]: revision.previousText,
+      chronologyMemoryId: revision.previousChronologyMemoryId,
+    };
+    return { ...draft, experience: experiences };
+  }
   if (revision.section === 'headline') {
     return { ...draft, candidate: { ...draft.candidate, headline: revision.previousText } };
   }

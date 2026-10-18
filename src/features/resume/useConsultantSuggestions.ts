@@ -25,7 +25,10 @@ function commandToSuggestion(command: CareerCommand): InlineSuggestionItem | nul
     commandId: command.commandId,
     section: target.section,
     experienceId: target.experienceId,
-    title: sourceFromDiary ? 'Предложение из карьерного дневника' : 'Предложение карьерного консультанта',
+    field: target.field,
+    title: sourceFromDiary
+      ? 'Предложение из карьерного дневника'
+      : 'Предложение карьерного консультанта',
     rationale: command.proposal.objective,
     proposedText: target.proposedText,
     currentText: target.currentText ?? target.previousText,
@@ -33,7 +36,7 @@ function commandToSuggestion(command: CareerCommand): InlineSuggestionItem | nul
   };
 }
 
-function useSuggestionsCommands(candidateId: string) {
+function useSuggestionsCommands(candidateId: string, refreshKey?: number) {
   const [commands, setCommands] = useState<CareerCommand[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -51,47 +54,66 @@ function useSuggestionsCommands(candidateId: string) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshKey]);
 
   return { commands, loading, load };
+}
+
+async function applySuggestionCommand(suggestion: InlineSuggestionItem): Promise<void> {
+  if (!suggestion.commandId) {
+    throw new Error('Не удалось принять предложение: отсутствует идентификатор команды.');
+  }
+  const command = await approveCareerCommand(suggestion.commandId);
+  if (command.status !== 'completed_with_receipt') {
+    throw new Error(`Предложение не применено: команда завершилась со статусом ${command.status}.`);
+  }
+}
+
+async function rejectSuggestionProposal(suggestion: InlineSuggestionItem): Promise<void> {
+  const key = computeProposalKey(suggestion.section, suggestion.proposedText, suggestion.field);
+  const result = await rejectCoachProposal({ proposalKey: key });
+  if (!result.ok || result.proposalKey !== key) {
+    throw new Error('Сервер не подтвердил отклонение предложения. Карточка остаётся доступной.');
+  }
+}
+
+async function revertSuggestionCommand(suggestion: InlineSuggestionItem): Promise<void> {
+  if (!suggestion.commandId) {
+    throw new Error('Не удалось откатить правку: отсутствует идентификатор команды.');
+  }
+  const command = await revertCareerCommand(suggestion.commandId);
+  if (!command.profileRevisionReverted) {
+    throw new Error('Откат не подтверждён сервером. Правка остаётся применённой.');
+  }
 }
 
 export function useConsultantSuggestions(
   candidateId: string,
   onProfileUpdated?: () => Promise<void> | void,
+  refreshKey?: number,
 ) {
-  const { commands, loading, load } = useSuggestionsCommands(candidateId);
+  const { commands, loading, load } = useSuggestionsCommands(candidateId, refreshKey);
   const [dismissedIds, setDismissedIds] = useState<Set<string>>(new Set());
 
   const acceptSuggestion = useCallback(
     async (suggestion: InlineSuggestionItem) => {
-      if (!suggestion.commandId) return;
-      await approveCareerCommand(suggestion.commandId);
+      await applySuggestionCommand(suggestion);
       await load();
-      onProfileUpdated?.();
+      await onProfileUpdated?.();
     },
     [load, onProfileUpdated],
   );
 
-  const dismissSuggestion = useCallback(
-    async (suggestion: InlineSuggestionItem) => {
-      setDismissedIds((prev) => new Set([...prev, suggestion.id]));
-      const key = computeProposalKey(suggestion.section, suggestion.proposedText);
-      try {
-        await rejectCoachProposal({ proposalKey: key });
-      } catch {
-        // Safe against transient error: dismissedIds keeps UI clean
-      }
-    },
-    [],
-  );
+  const dismissSuggestion = useCallback(async (suggestion: InlineSuggestionItem) => {
+    await rejectSuggestionProposal(suggestion);
+    setDismissedIds((prev) => new Set([...prev, suggestion.id]));
+  }, []);
 
   const revertSuggestion = useCallback(
     async (suggestion: InlineSuggestionItem) => {
-      if (!suggestion.commandId) return;
-      await revertCareerCommand(suggestion.commandId);
+      await revertSuggestionCommand(suggestion);
       await load();
-      onProfileUpdated?.();
+      await onProfileUpdated?.();
     },
     [load, onProfileUpdated],
   );

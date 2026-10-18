@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { buildTargetedResumeSlice } from '../../../server/domain/resumeStudio';
+import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
 import type { ResumeDocument } from './resumeTypes';
 import {
   exportResumeAsJson,
   exportResumeAsPlainText,
+  formatResumeAsAtsText,
   formatTargetedResumeAsAtsText,
   resumeExportFileName,
   resumeTargetedExportFileName,
@@ -169,6 +171,90 @@ describe('resumeExport', () => {
     expect(text).toContain('Kubernetes, Terraform, Go');
     expect(text).toContain('ЯЗЫКИ');
     expect(text).toContain('Английский (C1)');
+  });
+
+  it('exports an explicitly native language without inferring CEFR', () => {
+    const doc = minimalDocument({
+      languages: [
+        {
+          id: 'native-ru',
+          name: {
+            value: 'Русский',
+            memoryId: 'memory-russian',
+            sourceMessageIds: ['source-russian'],
+            reviewFlags: [],
+          },
+          cefr: null,
+          native: {
+            value: 'native',
+            memoryId: 'memory-russian',
+            sourceMessageIds: ['source-russian'],
+            reviewFlags: [],
+          },
+        },
+      ],
+    });
+
+    const plainText = exportResumeAsPlainText(doc);
+    const atsText = formatResumeAsAtsText(doc, EMPTY_RESUME_DRAFT);
+
+    expect(plainText).toContain('Русский (родной)');
+    expect(atsText).toContain('Русский (родной)');
+    expect(plainText).not.toContain('Русский (C2)');
+    expect(atsText).not.toContain('Русский (C2)');
+  });
+
+  it('keeps role descriptions in ATS and plain-text exports as separate claims', () => {
+    const description = {
+      value: 'Managed the release planning across multiple teams.',
+      memoryId: 'description-memory',
+      sourceMessageIds: ['source-description'],
+      reviewFlags: [],
+    };
+    const achievement = {
+      value: 'Reduced lead time by 30%.',
+      memoryId: 'achievement-memory',
+      sourceMessageIds: ['source-achievement'],
+      reviewFlags: [],
+    };
+    const doc = minimalDocument({
+      experience: [
+        {
+          id: 'role',
+          title: {
+            value: 'Engineering Manager',
+            memoryId: 'role-memory',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
+          employer: {
+            value: 'Example GmbH',
+            memoryId: 'role-memory',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
+          location: null,
+          startDate: {
+            value: '2022',
+            memoryId: 'role-memory',
+            sourceMessageIds: [],
+            reviewFlags: [],
+          },
+          endDate: null,
+          current: { value: true, memoryId: 'role-memory', sourceMessageIds: [], reviewFlags: [] },
+          description,
+          bullets: [achievement],
+        },
+      ],
+    });
+
+    const plainText = exportResumeAsPlainText(doc);
+    const atsText = formatResumeAsAtsText(doc, EMPTY_RESUME_DRAFT);
+    for (const text of [plainText, atsText]) {
+      expect(text).toContain(description.value);
+      expect(text.indexOf(description.value)).toBeLessThan(text.indexOf(achievement.value));
+      expect(text).not.toContain(`- ${description.value}`);
+    }
   });
 
   it('exports structured JSON with indentation', () => {

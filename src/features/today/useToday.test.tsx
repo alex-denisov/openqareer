@@ -104,7 +104,9 @@ describe('useToday', () => {
       todayReads += 1;
       return todayReads === 1
         ? new Response(JSON.stringify({ data: snapshot }), { status: 200 })
-        : new Response(JSON.stringify({ error: { message: 'temporary failure' } }), { status: 503 });
+        : new Response(JSON.stringify({ error: { message: 'temporary failure' } }), {
+            status: 503,
+          });
     });
 
     await act(async () => {
@@ -213,6 +215,84 @@ describe('useToday', () => {
       await firstMark;
     });
     expect(latest?.markingFollowUpIds.has('app-1')).toBe(false);
+  });
+
+  it('loads the remaining desktop queue from the server for the current revision', async () => {
+    const queueRevision = 'a'.repeat(64);
+    const initialSnapshot = {
+      digest: {
+        waitingForYou: 0,
+        newVacancies: 6,
+        followUpsDueToday: 0,
+        followUpsOverdue: 0,
+        closedVacancies: 0,
+        interviewsAhead: 0,
+        nextInterview: null,
+        newVacanciesCaption: null,
+        followUpCaptions: [],
+      },
+      queue: [
+        {
+          kind: 'new_vacancy' as const,
+          clusterId: 'cluster-1',
+          title: 'Инженер данных 1',
+          company: 'Компания',
+          eyebrow: 'сегодня',
+          dueAt: null,
+          fit: null,
+        },
+      ],
+      queueTotal: 2,
+      queueRevision,
+      queueOffset: 0,
+      followUps: [],
+      sinceLastVisit: { since: null, items: [] },
+      vacanciesPending: false,
+    };
+    const remainder = {
+      queue: [
+        {
+          kind: 'new_vacancy' as const,
+          clusterId: 'cluster-2',
+          title: 'Инженер данных 2',
+          company: 'Компания',
+          eyebrow: 'сегодня',
+          dueAt: null,
+          fit: null,
+        },
+      ],
+      queueTotal: 2,
+      queueRevision,
+      queueOffset: 1,
+    };
+    const queueRequests: string[] = [];
+    vi.spyOn(apiClient, 'apiFetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('/visits')) {
+        return new Response(JSON.stringify({ data: { since: null } }), { status: 200 });
+      }
+      if (url.includes('queueOffset=')) {
+        queueRequests.push(url);
+        return new Response(JSON.stringify({ data: remainder }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ data: initialSnapshot }), { status: 200 });
+    });
+
+    await act(async () => {
+      root.render(<Probe />);
+    });
+    await act(async () => {
+      await latest?.loadQueueRemainder();
+    });
+
+    expect(queueRequests).toHaveLength(1);
+    expect(queueRequests[0]).toContain('queueOffset=1');
+    expect(latest?.snapshot?.queue.map((item) => item.clusterId)).toEqual([
+      'cluster-1',
+      'cluster-2',
+    ]);
+    expect(latest?.queueRemainderLoading).toBe(false);
+    expect(latest?.queueRemainderFailed).toBe(false);
   });
 
   it('marks failed when the server rejects', async () => {

@@ -8,19 +8,26 @@ import { PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 export function SectionPencilButton({
   label,
   onClick,
+  visibleText,
 }: {
   readonly label: string;
+  readonly visibleText?: string;
   readonly onClick: () => void;
 }) {
   return (
     <button
       type="button"
-      className="career-profile-screen-icon-button"
+      className={
+        visibleText
+          ? 'career-quiet-button career-btn-sm profile-position-edit-control'
+          : 'career-profile-screen-icon-button'
+      }
       aria-label={label}
       title={label}
       onClick={onClick}
     >
-      <PencilSimple size={14} />
+      <PencilSimple size={14} aria-hidden="true" />
+      {visibleText ? <span>{visibleText}</span> : null}
     </button>
   );
 }
@@ -35,12 +42,13 @@ export function SectionAddButton({
   return (
     <button
       type="button"
-      className="career-profile-screen-icon-button"
+      className="career-secondary-button career-btn-sm career-profile-section-add-button"
       aria-label={label}
       title={label}
       onClick={onClick}
     >
       <Plus size={14} />
+      <span>Добавить</span>
     </button>
   );
 }

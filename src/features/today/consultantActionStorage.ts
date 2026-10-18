@@ -5,6 +5,23 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
  * Принятое или отклонённое предложение не возвращается в очередь кандидата.
  */
 
+export function todayActionId(action: ReasonedCareerAction): string {
+  const identity = JSON.stringify({
+    revision: action.revision,
+    type: action.type,
+    destination: action.destination,
+    findingIds: [...action.findingIds].sort(),
+    roleIds: [...action.roleIds].sort(),
+    marketIds: [...action.marketIds].sort(),
+  });
+  let hash = 0xcbf29ce484222325n;
+  for (const byte of new TextEncoder().encode(identity)) {
+    hash ^= BigInt(byte);
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
 function actionStorageKey(candidateId: string | undefined, action: ReasonedCareerAction): string {
   const scope = candidateId?.trim() || 'anonymous';
   return `career-today-consultant-resolved:${scope}:${action.headline}`;

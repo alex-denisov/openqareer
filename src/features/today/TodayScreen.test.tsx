@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { queueItemTarget, TodayScreen } from './TodayScreen';
+import { todayActionId } from './consultantActionStorage';
 import type { TodaySnapshot } from './todayApi';
 
 const snapshot: TodaySnapshot = {
@@ -104,13 +105,6 @@ describe('TodayScreen (ACC-A-1)', () => {
         consultantAction: action,
         onNavigate: vi.fn(),
         onOpenExpert: vi.fn(),
-        funnelContext: {
-          found: 214,
-          favorites: 18,
-          responses: 3,
-          offers: 0,
-          catalogObservedAt: '2026-10-07T09:12:00.000Z',
-        },
       }),
     );
 
@@ -124,6 +118,25 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(html).toContain('Воронка за 30 дней');
     expect(html).toContain('Избранное');
     expect(html).toContain('Дополнить профиль');
+  });
+
+  it('hides the current consultant action when the server snapshot says it is deferred', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        consultantAction: action,
+        snapshot: {
+          ...snapshot,
+          todayActionDeferral: {
+            actionId: todayActionId(action),
+            deferredThroughDate: '2026-10-17',
+          },
+        },
+      }),
+    );
+
+    expect(html).toContain('Нет проверенного следующего шага');
+    expect(html).not.toContain('Подтвердите размер команды');
+    expect(html).not.toContain('Отложить до завтра');
   });
 
   it('does not display a recruiter name as the company in a mobile queue row', () => {
@@ -205,18 +218,29 @@ describe('TodayScreen (ACC-A-1)', () => {
           momentum: {
             calculatedAt: '2026-10-07T09:12:00.000Z',
             windows: {
-              '7d': { applied: 2, views: 3, screenings: 1, interviews: 0 },
-              '30d': { applied: 7, views: 14, screenings: 3, interviews: 2 },
+              '7d': { applied: 2, views: 'unknown', screenings: 'unknown', interviews: 0 },
+              '30d': { applied: 7, views: 'unknown', screenings: 'unknown', interviews: 2 },
+            },
+            evidence: {
+              '7d': {
+                startAt: '2026-09-30T09:12:00.000Z',
+                endAt: '2026-10-07T09:12:00.000Z',
+                applied: { source: 'application_events.recorded_at', sampleSize: 2 },
+                views: { source: 'unavailable', sampleSize: 0, unknownReason: 'no_source' },
+                screenings: { source: 'unavailable', sampleSize: 0, unknownReason: 'no_source' },
+                interviews: { source: 'candidate_interview_schedules.scheduled_at', sampleSize: 0 },
+              },
+              '30d': {
+                startAt: '2026-09-07T09:12:00.000Z',
+                endAt: '2026-10-07T09:12:00.000Z',
+                applied: { source: 'application_events.recorded_at', sampleSize: 7 },
+                views: { source: 'unavailable', sampleSize: 0, unknownReason: 'no_source' },
+                screenings: { source: 'unavailable', sampleSize: 0, unknownReason: 'no_source' },
+                interviews: { source: 'candidate_interview_schedules.scheduled_at', sampleSize: 2 },
+              },
             },
             burnoutNotice: false,
           },
-        },
-        funnelContext: {
-          found: 214,
-          favorites: 18,
-          responses: 3,
-          offers: 0,
-          catalogObservedAt: '2026-10-07T09:12:00.000Z',
         },
       }),
     );
@@ -225,9 +249,33 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(funnel).toContain('class="is-here"');
     expect(funnel).toContain('aria-current="step"');
     expect(funnel).toContain('n = 7');
-    expect(funnel).toContain('Найдено в каталоге: 214');
-    expect(funnel).toContain('Офферов пока 0');
-    expect(funnel).toContain('Данные на');
+    expect(funnel).toContain('Мало данных: меньше 10 откликов за 30 дней');
+    expect(funnel).toContain('Период');
+    expect(funnel).toContain('Подтверждения отправки: n = 7');
+    expect(funnel).toContain('Сохранённые даты встреч: n = 2');
+    expect(funnel).not.toContain('Найдено в каталоге:');
+    expect(funnel).not.toContain('Офферов пока 0');
+  });
+
+  it('ignores the legacy point-in-time catalog number on mobile', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        funnelContext: {
+          found: 214,
+          favorites: 18,
+          responses: 3,
+          offers: 0,
+          catalogObservedAt: '2026-10-07T09:12:00.000Z',
+        },
+      } as never),
+    );
+    const funnel = html.slice(html.indexOf('class="tm-funnel"'));
+
+    expect(funnel).not.toContain('214');
+    expect(
+      [...html.matchAll(/<b class="num">([^<]+)<\/b>/gu)].map((match) => match[1]),
+    ).not.toContain('18');
+    expect(funnel).toContain('Нет проверенных данных');
   });
 
   it('shows dashes and an explicit unknown state for metrics without verified data', () => {

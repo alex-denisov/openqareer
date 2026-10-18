@@ -100,11 +100,34 @@ export interface MomentumMetrics {
   readonly interviews: MomentumMetricValue;
 }
 
+export type MomentumMetricSource =
+  'application_events.recorded_at' | 'candidate_interview_schedules.scheduled_at' | 'unavailable';
+
+export interface MomentumMetricEvidence {
+  readonly source: MomentumMetricSource;
+  /** Number of source records included in this window's count. */
+  readonly sampleSize: number;
+  readonly unknownReason?: string;
+}
+
+export interface MomentumWindowEvidence {
+  readonly startAt: string;
+  readonly endAt: string;
+  readonly applied: MomentumMetricEvidence;
+  readonly views: MomentumMetricEvidence;
+  readonly screenings: MomentumMetricEvidence;
+  readonly interviews: MomentumMetricEvidence;
+}
+
 export interface SearchMomentum {
   readonly calculatedAt: string;
   readonly windows: {
     readonly '7d': MomentumMetrics;
     readonly '30d': MomentumMetrics;
+  };
+  readonly evidence: {
+    readonly '7d': MomentumWindowEvidence;
+    readonly '30d': MomentumWindowEvidence;
   };
   readonly burnoutNotice: boolean;
 }
@@ -137,8 +160,6 @@ export interface BuildTodaySnapshotInput {
 }
 
 const MAX_FOLLOW_UPS = 5;
-/** Очередь дня — решения на сегодня, а не весь список (B266). */
-const MAX_QUEUE_ITEMS = 5;
 const MAX_FOLLOW_UP_CAPTIONS = 2;
 
 function eyebrowFor(application: ApplicationView): string | null {
@@ -231,43 +252,96 @@ export function countApplicationsWaitingOver7Days(
   }).length;
 }
 
-function calculateWindowMetrics(
+interface MomentumWindowResult {
+  readonly metrics: MomentumMetrics;
+  readonly evidence: MomentumWindowEvidence;
+}
+
+interface WindowActivityCount {
+  readonly applied: number;
+  readonly missingReceiptTimestamp: boolean;
+  readonly interviews: number;
+  readonly missingInterviewTimestamp: boolean;
+}
+
+function countWindowActivity(
   applications: readonly ApplicationView[],
-  days: number,
-  nowMs: number,
-): MomentumMetrics {
-  const windowStartMs = nowMs - days * 86_400_000;
-  let appliedCount = 0;
-  let interviewsCount = 0;
+  windowStartMs: number,
+  windowEndMs: number,
+): WindowActivityCount {
+  let applied = 0;
+  let missingReceiptTimestamp = false;
+  let interviews = 0;
+  let missingInterviewTimestamp = false;
 
   for (const app of applications) {
-    const eventTimeStr = app.stageChangedAt || app.createdAt;
-    const eventTimeMs = Date.parse(eventTimeStr);
-    const inWindow =
-      !Number.isNaN(eventTimeMs) && eventTimeMs >= windowStartMs && eventTimeMs <= nowMs;
-
-    if (inWindow && deliveryState(app.stage, app.deliveryReceipt ?? null) === 'delivered') {
-      appliedCount += 1;
+    if (deliveryState(app.stage, app.deliveryReceipt ?? null) === 'delivered') {
+      const receiptMs = Date.parse(app.deliveryReceiptRecordedAt ?? '');
+      if (Number.isNaN(receiptMs)) {
+        missingReceiptTimestamp = true;
+      } else if (receiptMs >= windowStartMs && receiptMs <= windowEndMs) {
+        applied += 1;
+      }
     }
 
-    if (!isClosedApplicationStage(app.stage)) {
-      if (app.nearestInterview?.scheduledAt) {
-        const intMs = Date.parse(app.nearestInterview.scheduledAt);
-        if (!Number.isNaN(intMs) && intMs >= windowStartMs && intMs <= nowMs) {
-          interviewsCount += 1;
-        }
-      } else if (app.stage === 'interview' && inWindow) {
-        interviewsCount += 1;
+    if (!app.interviewScheduledAt) {
+      missingInterviewTimestamp = true;
+      continue;
+    }
+    for (const scheduledAt of app.interviewScheduledAt) {
+      const interviewMs = Date.parse(scheduledAt);
+      if (Number.isNaN(interviewMs)) {
+        missingInterviewTimestamp = true;
+      } else if (interviewMs >= windowStartMs && interviewMs <= windowEndMs) {
+        interviews += 1;
       }
     }
   }
 
-  return {
-    applied: appliedCount,
+  return { applied, missingReceiptTimestamp, interviews, missingInterviewTimestamp };
+}
+
+function calculateWindowMetrics(
+  applications: readonly ApplicationView[],
+  days: number,
+  nowMs: number,
+): MomentumWindowResult {
+  const windowStartMs = nowMs - days * 86_400_000;
+  const counts = countWindowActivity(applications, windowStartMs, nowMs);
+  const metrics: MomentumMetrics = {
+    applied: counts.missingReceiptTimestamp ? 'unknown' : counts.applied,
     views: 'unknown',
     screenings: 'unknown',
-    interviews: interviewsCount,
+    interviews: counts.missingInterviewTimestamp ? 'unknown' : counts.interviews,
   };
+  const evidence: MomentumWindowEvidence = {
+    startAt: new Date(windowStartMs).toISOString(),
+    endAt: new Date(nowMs).toISOString(),
+    applied: {
+      source: 'application_events.recorded_at',
+      sampleSize: counts.applied,
+      ...(counts.missingReceiptTimestamp ? { unknownReason: 'receipt_timestamp_unavailable' } : {}),
+    },
+    views: {
+      source: 'unavailable',
+      sampleSize: 0,
+      unknownReason: 'candidate_view_events_are_not_recorded',
+    },
+    screenings: {
+      source: 'unavailable',
+      sampleSize: 0,
+      unknownReason: 'candidate_response_events_are_not_recorded',
+    },
+    interviews: {
+      source: 'candidate_interview_schedules.scheduled_at',
+      sampleSize: counts.interviews,
+      ...(counts.missingInterviewTimestamp
+        ? { unknownReason: 'interview_timestamp_unavailable' }
+        : {}),
+    },
+  };
+
+  return { metrics, evidence };
 }
 
 /**
@@ -298,15 +372,19 @@ export function computeSearchMomentum(
   const metrics30d = calculateWindowMetrics(applications, 30, nowMs);
 
   const burnoutNotice =
-    typeof metrics30d.applied === 'number' &&
-    metrics30d.applied >= 30 &&
-    metrics30d.interviews === 0;
+    typeof metrics30d.metrics.applied === 'number' &&
+    metrics30d.metrics.applied >= 30 &&
+    metrics30d.metrics.interviews === 0;
 
   return {
     calculatedAt: now,
     windows: {
-      '7d': metrics7d,
-      '30d': metrics30d,
+      '7d': metrics7d.metrics,
+      '30d': metrics30d.metrics,
+    },
+    evidence: {
+      '7d': metrics7d.evidence,
+      '30d': metrics30d.evidence,
     },
     burnoutNotice,
   };
@@ -404,7 +482,7 @@ function buildQueue(
       location: vacancy.location,
       fit: vacancy.fit,
     })),
-  ].slice(0, Math.max(MAX_QUEUE_ITEMS, waitingApplications.length));
+  ];
 }
 
 function upcomingInterviewsOf(applications: readonly ApplicationView[]): ApplicationView[] {

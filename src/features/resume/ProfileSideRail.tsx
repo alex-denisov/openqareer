@@ -2,6 +2,35 @@ import { EnvelopeSimple, Globe, PaperPlaneTilt, Phone } from '@phosphor-icons/re
 import type { ResumeDraft } from './resumeTypes';
 import { WorkPreferencesPanel } from '../cabinet/WorkPreferencesPanel';
 import { useWorkPreferences } from '../cabinet/useWorkPreferences';
+import type { RelocationQuestionnaireResponse } from '../relocation/relocationApi';
+
+export type ProfileRelocationSummaryStatus =
+  'loading' | 'enabled' | 'prepared' | 'not_enabled' | 'unknown';
+
+export function profileRelocationSummaryStatusFromResponse(
+  response: RelocationQuestionnaireResponse,
+): ProfileRelocationSummaryStatus {
+  if (response.consent.granted) return 'enabled';
+  if (response.consent.status === 'revoked') return 'not_enabled';
+  if (response.consentTextStatus === 'pending_dpo_review') return 'prepared';
+  return 'not_enabled';
+}
+
+export function profileRelocationSummaryLabel(status: ProfileRelocationSummaryStatus): string {
+  if (status === 'enabled') return 'Включено';
+  if (status === 'prepared') return 'Подготовлено';
+  if (status === 'not_enabled') return 'Не включено';
+  if (status === 'loading') return 'Проверяем статус…';
+  return 'Статус неизвестен';
+}
+
+export function profileRelocationSummaryDetail(status: ProfileRelocationSummaryStatus): string {
+  if (status === 'enabled') return 'Данные о переезде доступны только вам.';
+  if (status === 'prepared') return 'Согласие ожидает проверки и пока не может быть принято.';
+  if (status === 'not_enabled') return 'Согласие отозвано или ещё не выдано.';
+  if (status === 'loading') return 'Проверяем согласие и данные о переезде.';
+  return 'Не удалось загрузить статус релокации.';
+}
 
 function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
   const contact = draft.candidate.contact;
@@ -29,20 +58,24 @@ function ContactsPanel({ draft }: { readonly draft: ResumeDraft }) {
   );
 }
 
-function WorkPreferencesRailPanel() {
+export function WorkPreferencesRailPanel() {
   const state = useWorkPreferences();
   return <WorkPreferencesPanel state={state} />;
+}
+
+interface ProfileSideRailProps {
+  readonly draft: ResumeDraft;
+  readonly desktopLayout?: boolean;
+  readonly onOpenRelocation?: () => void;
+  readonly relocationSummary?: ProfileRelocationSummaryStatus;
 }
 
 export function ProfileSideRail({
   draft,
   desktopLayout = false,
   onOpenRelocation,
-}: {
-  readonly draft: ResumeDraft;
-  readonly desktopLayout?: boolean;
-  readonly onOpenRelocation?: () => void;
-}) {
+  relocationSummary = 'unknown',
+}: ProfileSideRailProps) {
   if (desktopLayout) {
     return (
       <section
@@ -52,6 +85,9 @@ export function ProfileSideRail({
       >
         <div className="career-profile-screen-relocation-head">
           <h2 id="career-profile-screen-relocation-title">Релокация</h2>
+          <span className="career-profile-screen-relocation-note">
+            {profileRelocationSummaryLabel(relocationSummary)}
+          </span>
           <span className="career-profile-screen-relocation-note">Видите только вы</span>
           {onOpenRelocation ? (
             <button type="button" className="career-quiet-button" onClick={onOpenRelocation}>
@@ -60,8 +96,7 @@ export function ProfileSideRail({
           ) : null}
         </div>
         <p className="career-profile-screen-relocation-summary">
-          Страны, сравнение, экономика и ваши данные для переезда собраны в разделе «Страны и
-          релокация». Здесь только вход в него.
+          {profileRelocationSummaryDetail(relocationSummary)}
         </p>
         <details className="career-profile-screen-relocation-prefs">
           <summary>Ограничения и предпочтения для подбора</summary>

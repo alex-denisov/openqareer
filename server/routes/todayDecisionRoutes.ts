@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { RouteDeps } from './deps';
 import { authenticateCandidate, csrfError, hasSafeMutationOrigin } from './helpers';
+import { candidateCalendarDate, todayActionDeferralInputSchema } from '../../shared/todayDecision';
 import { buildTodaySnapshot } from '../domain/todayDigest';
 
 const selectionInput = z
@@ -12,6 +13,11 @@ const selectionInput = z
   .strict();
 
 export function registerTodayDecisionRoutes(app: FastifyInstance, deps: RouteDeps) {
+  registerTodayDecisionSelectionRoute(app, deps);
+  registerTodayActionDeferralRoute(app, deps);
+}
+
+function registerTodayDecisionSelectionRoute(app: FastifyInstance, deps: RouteDeps): void {
   app.post('/api/v1/candidate/today/decision', async (request, reply) => {
     if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
     const candidate = authenticateCandidate(
@@ -53,4 +59,37 @@ export function registerTodayDecisionRoutes(app: FastifyInstance, deps: RouteDep
     });
     return { data: selection, meta: { requestId: request.id } };
   });
+}
+
+function registerTodayActionDeferralRoute(app: FastifyInstance, deps: RouteDeps): void {
+  app.post(
+    '/api/v1/candidate/today/action-defer',
+    { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } },
+    async (request, reply) => {
+      if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+      const candidate = authenticateCandidate(
+        request,
+        reply,
+        deps.candidateStore,
+        deps.authService,
+        deps.config,
+      );
+      if (!candidate) return undefined;
+      const body = todayActionDeferralInputSchema.parse(request.body);
+      const workspace = deps.candidateStore.getCandidateWorkspace(candidate.id);
+      if (!workspace)
+        return reply.code(409).send({
+          error: { code: 'workspace_required', message: 'Сначала завершите первый запуск.' },
+        });
+      const deferral = {
+        actionId: body.actionId,
+        deferredThroughDate: candidateCalendarDate(new Date(), body.tz),
+      };
+      deps.candidateStore.saveCandidateWorkspace(candidate.id, {
+        ...workspace,
+        todayActionDeferral: deferral,
+      });
+      return { data: deferral, meta: { requestId: request.id } };
+    },
+  );
 }

@@ -9,6 +9,14 @@ import type {
 } from '../domain/assessment';
 import type { ResumeEvidenceSnapshot } from '../domain/resumeStudio';
 import type { ResumeDraft } from '../domain/resumeDraft';
+import type {
+  ResumeVersionContent,
+  ResumeVersionCreateResult,
+  ResumeVersionCursor,
+  ResumeVersionPage,
+  ResumeVersionUpdateResult,
+  StoredResumeVersion,
+} from '../domain/resumeVersions';
 import type { CoachMessage, CoachTurnInput, CoachTurnStage } from '../domain/coach';
 import type {
   CandidateCredentials,
@@ -41,6 +49,7 @@ import { SealedText } from './sealedText';
 import type { SqliteAssessmentRepository } from './sqliteAssessmentRepository';
 import type { SqliteMarketRepository } from './sqliteMarketRepository';
 import type { SqliteResumeRepository } from './sqliteResumeRepository';
+import type { SqliteResumeVersionRepository } from './sqliteResumeVersionRepository';
 import type {
   SqliteCandidateMediaRepository,
   StoredCandidateMedia,
@@ -140,6 +149,7 @@ export class SqliteCandidateStore implements CandidateStore {
   private readonly assessmentsRepository: SqliteAssessmentRepository;
   private readonly marketRepository: SqliteMarketRepository;
   private readonly resumeRepository: SqliteResumeRepository;
+  private readonly resumeVersionRepository: SqliteResumeVersionRepository;
   private readonly workspaceRepository: SqliteWorkspaceRepository;
   private readonly careerCommandRepository: SqliteCareerCommandRepository;
   private readonly documentRepository: SqliteDocumentRepository;
@@ -167,6 +177,7 @@ export class SqliteCandidateStore implements CandidateStore {
       assessmentsRepository: this.assessmentsRepository,
       marketRepository: this.marketRepository,
       resumeRepository: this.resumeRepository,
+      resumeVersionRepository: this.resumeVersionRepository,
       workspaceRepository: this.workspaceRepository,
       careerCommandRepository: this.careerCommandRepository,
       documentRepository: this.documentRepository,
@@ -532,6 +543,50 @@ export class SqliteCandidateStore implements CandidateStore {
       this.candidateMediaRepository.pruneUnreferenced(candidateId, referencedMediaIds(draft));
       return saved;
     });
+  }
+
+  createResumeVersion(
+    candidateId: string,
+    versionId: string,
+    sourceMasterRevision: string,
+    content: ResumeVersionContent,
+  ): ResumeVersionCreateResult {
+    this.requireCandidate(candidateId);
+    return this.transaction(() =>
+      this.resumeVersionRepository.create(candidateId, versionId, sourceMasterRevision, content),
+    );
+  }
+
+  getResumeVersion(candidateId: string, versionId: string): StoredResumeVersion | null {
+    this.requireCandidate(candidateId);
+    return this.resumeVersionRepository.get(candidateId, versionId);
+  }
+
+  listResumeVersions(
+    candidateId: string,
+    options: { readonly limit: number; readonly cursor: ResumeVersionCursor | null },
+  ): ResumeVersionPage {
+    this.requireCandidate(candidateId);
+    return this.resumeVersionRepository.list(candidateId, options);
+  }
+
+  updateResumeVersion(
+    candidateId: string,
+    versionId: string,
+    expectedRevision: number,
+    expectedMasterRevision: string,
+    content: ResumeVersionContent,
+  ): ResumeVersionUpdateResult {
+    this.requireCandidate(candidateId);
+    return this.transaction(() =>
+      this.resumeVersionRepository.update(
+        candidateId,
+        versionId,
+        expectedRevision,
+        expectedMasterRevision,
+        content,
+      ),
+    );
   }
 
   getCandidateMedia(candidateId: string, mediaId: string): StoredCandidateMedia | null {

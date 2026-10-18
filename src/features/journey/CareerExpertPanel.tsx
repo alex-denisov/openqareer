@@ -67,6 +67,7 @@ interface CareerExpertPanelProps {
   onCommandPrepared?: () => void;
   onProposalCountChange?: (count: number) => void;
   onOpenRoleSkillAssessment?: () => void;
+  skillQuizBankRequest?: number;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
   onEscape?: () => void;
@@ -91,6 +92,7 @@ export function CareerExpertPanel({
   onCommandPrepared,
   onProposalCountChange,
   onOpenRoleSkillAssessment,
+  skillQuizBankRequest = 0,
   mobileExpanded = false,
   onToggleMobileExpanded,
   onEscape,
@@ -125,6 +127,7 @@ export function CareerExpertPanel({
   const [pendingQuestion, setPendingQuestion] = useState<string>();
   const [error, setError] = useState<string>();
   const [skillQuizOpen, setSkillQuizOpen] = useState(false);
+  const lastSkillQuizBankRequest = useRef(0);
   const [skillQuizApplying, setSkillQuizApplying] = useState(false);
   const [skillQuizApplyError, setSkillQuizApplyError] = useState<string>();
   const [appliedSkillQuiz, setAppliedSkillQuiz] =
@@ -173,6 +176,13 @@ export function CareerExpertPanel({
     setContent(initialPrompt ?? '');
     pendingOperation.current = undefined;
   }, [initialPrompt]);
+
+  useEffect(() => {
+    if (!skillQuizBankRequest || lastSkillQuizBankRequest.current === skillQuizBankRequest) return;
+    lastSkillQuizBankRequest.current = skillQuizBankRequest;
+    setSkillQuizApplyError(undefined);
+    setSkillQuizOpen(true);
+  }, [skillQuizBankRequest]);
   const panel = useRef<HTMLElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const historyEndRef = useRef<HTMLDivElement>(null);
@@ -186,7 +196,7 @@ export function CareerExpertPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   useEscapeLayer(onEscape ?? onClose, !collapsed);
   useEffect(() => {
-    if (!overlay) return;
+    if (!overlay || onExpand) return;
     const element = panel.current;
     const trap = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
@@ -208,7 +218,7 @@ export function CareerExpertPanel({
     };
     element?.addEventListener('keydown', trap);
     return () => element?.removeEventListener('keydown', trap);
-  }, [overlay]);
+  }, [overlay, onExpand]);
 
   useEffect(() => {
     const returnFocusTo =
@@ -369,13 +379,17 @@ export function CareerExpertPanel({
       id="career-consultant-sheet"
       ref={panel}
       className={`career-expert-panel${intakeMode ? ' is-intake' : ''}${turns.length ? ' has-dialogue' : ''}${mobileExpanded ? ' is-mobile-expanded' : ''}${collapsed ? ' consultant-strip' : ''}${overlay ? ' consultant-overlay' : ''}`}
-      role={overlay ? 'dialog' : 'complementary'}
-      aria-modal={overlay ? true : undefined}
+      role={overlay && !onExpand ? 'dialog' : 'complementary'}
+      aria-modal={overlay && !onExpand ? true : undefined}
       data-mobile-expanded={mobileExpanded}
       aria-label={`Консультант · ${intakeMode ? 'Старт' : STAGE_TITLE[stage]}${subjectTitle ? ` · ${subjectTitle}` : ''}`}
     >
       {collapsed ? (
-        <ConsultantStripButton count={loadingSnapshot ? 0 : proposalCount} onExpand={onExpand} />
+        <ConsultantStripButton
+          count={loadingSnapshot ? 0 : proposalCount}
+          stageTitle={intakeMode ? 'Старт' : STAGE_TITLE[stage]}
+          onExpand={onExpand}
+        />
       ) : null}
       <header>
         <div className="career-expert-identity">

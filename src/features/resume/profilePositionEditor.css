@@ -1,0 +1,222 @@
+.career-profile-screen-place-editor.profile-position-editor {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-accent);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+}
+
+.profile-position-editor__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+}
+
+.profile-position-editor__header h3 {
+  min-inline-size: 0;
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+}
+
+.profile-position-editor__field-pair {
+  align-items: start;
+  min-inline-size: 0;
+}
+
+.profile-position-editor__field-pair > .career-profile-screen-field {
+  align-content: start;
+}
+
+.profile-position-editor__end-date-field {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.profile-position-editor__current-role {
+  padding-inline-start: var(--career-space-1);
+}
+
+.career-profile-screen-place-editor .profile-position-editor__workplace-field {
+  align-content: start;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.profile-position-editor__workplace-field legend {
+  margin-block-end: var(--career-space-1);
+  padding: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
+}
+
+.profile-position-editor__segments {
+  display: flex;
+  min-inline-size: 0;
+  overflow: hidden;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+}
+
+.profile-position-editor__segments > .career-btn {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  justify-content: center;
+  gap: var(--career-space-2);
+  padding-inline: var(--career-space-3);
+  border: 0;
+  border-radius: 0;
+  color: var(--career-text-soft);
+  background: transparent;
+  font-size: var(--career-text-sm);
+  white-space: normal;
+}
+
+.profile-position-editor__segments > .career-btn + .career-btn {
+  border-inline-start: var(--career-border-width) solid var(--career-line);
+}
+
+.profile-position-editor__segments > .career-btn:hover:not(:disabled) {
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+}
+
+.profile-position-editor__segments > .career-btn:active:not(:disabled) {
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.profile-position-editor__segments > .career-btn[aria-pressed='true'] {
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.profile-position-editor__segments > .career-btn:focus-visible {
+  position: relative;
+  z-index: 1;
+}
+
+.profile-position-editor__segments > .career-btn svg {
+  flex: none;
+  inline-size: var(--career-space-4);
+  block-size: var(--career-space-4);
+}
+
+.profile-position-editor__description {
+  min-inline-size: 0;
+}
+
+.career-profile-screen-place-editor .profile-position-editor__achievements {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.career-profile-screen-place-editor .profile-position-editor__achievements legend {
+  padding: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-aux);
+}
+
+.profile-position-editor__linked-facts {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.profile-position-editor__achievement-list {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.profile-position-editor__achievement-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--career-target-min);
+  align-items: center;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.career-profile-screen-place-editor .profile-position-editor__achievement-input {
+  width: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-sm);
+}
+
+.career-profile-screen-place-editor .profile-position-editor__achievement-input:focus-visible,
+.career-profile-screen-place-editor .career-profile-screen-field input:focus-visible,
+.career-profile-screen-place-editor .career-profile-screen-field textarea:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.profile-position-editor__remove-achievement {
+  inline-size: var(--career-target-min);
+  justify-content: center;
+  padding: 0;
+}
+
+.profile-position-editor__remove-achievement svg,
+.profile-position-editor__add-achievement svg,
+.profile-position-editor__actions svg {
+  flex: none;
+  inline-size: var(--career-space-4);
+  block-size: var(--career-space-4);
+}
+
+.profile-position-editor__add-achievement {
+  justify-self: start;
+}
+
+.profile-position-editor__actions {
+  align-items: center;
+}
+
+.profile-position-editor__actions-note {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+@media (max-width: 760px) {
+  .career-profile-screen-place-editor.profile-position-editor {
+    padding: var(--career-space-3);
+  }
+
+  .profile-position-editor__field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .profile-position-editor__segments > .career-btn {
+    flex-direction: column;
+    gap: var(--career-space-1);
+    padding-inline: var(--career-space-2);
+    font-size: var(--career-text-xs);
+  }
+
+  .profile-position-editor__actions-note {
+    flex-basis: 100%;
+  }
+}

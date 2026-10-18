@@ -5,6 +5,7 @@ import {
   formatInterviewDate,
   formatQueueTitle,
   nextInterviewBasis,
+  queueDiscussionContext,
   queueActionTitle,
   queueCompanyLabel,
 } from './todayFormat';
@@ -178,6 +179,23 @@ describe('queueActionTitle', () => {
     expect(queueActionTitle({ ...base, kind: 'follow_up' })).toBe('Напомнить компании Вектор Банк');
     expect(queueActionTitle({ ...base, kind: 'interview' })).toBe('Подготовиться к интервью');
     expect(queueActionTitle({ ...base, kind: 'candidate_turn' })).toBe('Ваш ход: Head of Platform');
+  });
+
+  it('builds discussion context only from the selected queue item fields', () => {
+    const context = queueDiscussionContext({
+      kind: 'follow_up',
+      applicationId: 'app-123',
+      title: 'Head of Platform',
+      company: 'Вектор Банк',
+      eyebrow: 'Ответа нет 6 дней',
+      dueAt: '2026-10-17T09:00:00.000Z',
+      fit: null,
+    });
+
+    expect(context).toContain('Напомнить компании Вектор Банк');
+    expect(context).toContain('Head of Platform');
+    expect(context).toContain('Ответа нет 6 дней');
+    expect(context).toContain('app-123');
   });
 
   it('never uses a recruiter name as the company', () => {

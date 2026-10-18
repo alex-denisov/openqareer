@@ -26,7 +26,7 @@ const MONTH_PREFIX: Readonly<Record<string, string>> = {
 
 export function monthInputValue(value?: string): string {
   if (!value) return '';
-  if (/^\d{4}-\d{2}$/u.test(value)) return value;
+  if (/^\d{4}-\d{2}(?:-\d{2})?$/u.test(value)) return value.slice(0, 7);
   if (/^\d{4}$/u.test(value)) return `${value}-01`;
   const match = value.trim().match(/^([а-яё.]+)\s+(\d{4})$/iu);
   const month = match?.[1]?.replace(/\.$/u, '').toLocaleLowerCase('ru');

@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { todayDecisionSelectionSchema } from '../../shared/todayDecision';
+import {
+  todayActionDeferralSchema,
+  todayDecisionSelectionSchema,
+} from '../../shared/todayDecision';
 import {
   CANDIDATE_REGIONS,
   normalizeCandidateRegions,
@@ -30,6 +33,7 @@ const campaignRoleProposalSchema = z
 export const candidateWorkspaceSchema = z
   .object({
     todayDecisionSelection: todayDecisionSelectionSchema.optional(),
+    todayActionDeferral: todayActionDeferralSchema.optional(),
     careerGoal: z.enum(['find-job', 'choose-role', 'positioning', 'market']).optional(),
     resumeText: z.string().max(200_000),
     resumeSource: z.enum(['pdf', 'linkedin-pdf', 'hh-pdf', 'text']),

@@ -1,4 +1,4 @@
-import type { TodayDecisionSelection } from '../../../shared/todayDecision';
+import type { TodayActionDeferral, TodayDecisionSelection } from '../../../shared/todayDecision';
 import { apiFetch, readData } from '../coach/apiClient';
 import type { VacancyLevelMatch } from '../../../shared/vacancyMatchOrder';
 
@@ -49,6 +49,29 @@ export interface TodayQueueItem {
   readonly location?: string;
   readonly fit: TodayFit | null;
 }
+
+export type TodayProfileFocus =
+  | {
+      readonly section:
+        | 'name'
+        | 'contacts'
+        | 'education'
+        | 'projects'
+        | 'skills'
+        | 'languages'
+        | 'courses'
+        | 'certifications'
+        | 'recommendations'
+        | 'achievements';
+    }
+  | {
+      readonly section: 'experience';
+      readonly experienceId?: string;
+      readonly employer?: string;
+      readonly title?: string;
+      readonly field?: 'startDate' | 'endDate' | 'teamSize';
+      readonly findingId?: string;
+    };
 
 export interface TodayNextInterview {
   readonly company: string | null;
@@ -103,23 +126,96 @@ export interface MomentumMetrics {
   readonly interviews: MomentumMetricValue;
 }
 
+export type MomentumMetricSource =
+  'application_events.recorded_at' | 'candidate_interview_schedules.scheduled_at' | 'unavailable';
+
+export interface MomentumMetricEvidence {
+  readonly source: MomentumMetricSource;
+  readonly sampleSize: number;
+  readonly unknownReason?: string;
+}
+
+export interface MomentumWindowEvidence {
+  readonly startAt: string;
+  readonly endAt: string;
+  readonly applied: MomentumMetricEvidence;
+  readonly views: MomentumMetricEvidence;
+  readonly screenings: MomentumMetricEvidence;
+  readonly interviews: MomentumMetricEvidence;
+}
+
 export interface SearchMomentum {
   readonly calculatedAt: string;
   readonly windows: {
     readonly '7d': MomentumMetrics;
     readonly '30d': MomentumMetrics;
   };
+  readonly evidence: {
+    readonly '7d': MomentumWindowEvidence;
+    readonly '30d': MomentumWindowEvidence;
+  };
   readonly burnoutNotice: boolean;
+}
+
+export function todayMomentumMetricValue(
+  momentum: SearchMomentum | undefined,
+  window: '7d' | '30d',
+  metric: keyof MomentumMetrics,
+): MomentumMetricValue {
+  const windowEvidence = momentum?.evidence?.[window];
+  const evidence = windowEvidence?.[metric];
+  const value = momentum?.windows?.[window]?.[metric];
+  const expectedDuration = window === '7d' ? 7 : 30;
+  const startAt = Date.parse(windowEvidence?.startAt ?? '');
+  const endAt = Date.parse(windowEvidence?.endAt ?? '');
+  const validWindow =
+    !Number.isNaN(startAt) &&
+    !Number.isNaN(endAt) &&
+    endAt - startAt === expectedDuration * 86_400_000 &&
+    windowEvidence?.endAt === momentum?.calculatedAt;
+  const expectedSource: MomentumMetricSource =
+    metric === 'applied'
+      ? 'application_events.recorded_at'
+      : metric === 'interviews'
+        ? 'candidate_interview_schedules.scheduled_at'
+        : 'unavailable';
+
+  if (
+    !validWindow ||
+    !evidence ||
+    evidence.source !== expectedSource ||
+    evidence.unknownReason ||
+    !Number.isSafeInteger(evidence.sampleSize) ||
+    evidence.sampleSize < 0 ||
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    evidence.sampleSize < value
+  ) {
+    return 'unknown';
+  }
+  return value;
 }
 
 export interface TodaySnapshot {
   readonly todayDecisionSelection?: TodayDecisionSelection;
+  readonly todayActionDeferral?: TodayActionDeferral;
   readonly digest: TodayDigest;
   readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal?: number;
+  readonly queueRevision?: string;
+  readonly queueOffset?: number;
   readonly followUps: readonly TodayFollowUp[];
   readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
   readonly momentum?: SearchMomentum;
+}
+
+export interface TodayQueueRemainder {
+  readonly queue: readonly TodayQueueItem[];
+  readonly queueTotal: number;
+  readonly queueRevision: string;
+  readonly queueOffset: number;
 }
 
 export const TODAY_DECISION_CHANGED = 'openqareer:today-decision-changed';
@@ -136,6 +232,30 @@ export async function selectTodayDecision(
   const selection = await readData<TodayDecisionSelection>(response);
   window.dispatchEvent(new Event(TODAY_DECISION_CHANGED));
   return selection;
+}
+
+export async function deferTodayAction(actionId: string, tz: string): Promise<TodayActionDeferral> {
+  const response = await apiFetch('/api/v1/candidate/today/action-defer', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ actionId, tz }),
+  });
+  const deferral = await readData<TodayActionDeferral>(response);
+  window.dispatchEvent(new Event(TODAY_DECISION_CHANGED));
+  return deferral;
+}
+
+export async function getTodayQueueRemainder(
+  tz: string,
+  offset: number,
+  revision: string,
+  signal?: AbortSignal,
+): Promise<TodayQueueRemainder> {
+  const response = await apiFetch(
+    `/api/v1/candidate/today?tz=${encodeURIComponent(tz)}&queueOffset=${offset}&queueRevision=${encodeURIComponent(revision)}`,
+    { signal },
+  );
+  return readData<TodayQueueRemainder>(response);
 }
 
 export async function recordCandidateVisit(

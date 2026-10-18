@@ -5,6 +5,7 @@ import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
 
 const URL = '/api/v1/candidate/today/decision';
+const DEFER_URL = '/api/v1/candidate/today/action-defer';
 const workspace = {
   resumeText: '',
   resumeSource: 'text' as const,
@@ -97,6 +98,98 @@ describe('candidate-owned Today decision', () => {
       expect(response.statusCode).toBe(409);
       expect(response.json().error.code).toBe('decision_stale');
     }
+  });
+
+  it('persists a candidate-local deferral through a fresh Today request', async () => {
+    const { app, store, owner, other, headers } = await setup();
+    const actionId = 'a'.repeat(16);
+    const payload = { actionId, tz: 'Europe/Moscow' };
+    const deferred = await app.inject({
+      method: 'POST',
+      url: DEFER_URL,
+      headers,
+      payload,
+    });
+
+    expect(deferred.statusCode, deferred.body).toBe(200);
+    const deferredThroughDate = new Intl.DateTimeFormat('en-CA', {
+      timeZone: payload.tz,
+    }).format(new Date());
+    expect(store.getCandidateWorkspace(owner.id)?.todayActionDeferral).toEqual({
+      actionId,
+      deferredThroughDate,
+    });
+
+    const reloaded = await app.inject({
+      url: '/api/v1/candidate/today?tz=Europe/Moscow',
+      headers,
+    });
+    expect(reloaded.statusCode, reloaded.body).toBe(200);
+    expect(reloaded.json().data.todayActionDeferral).toEqual({ actionId, deferredThroughDate });
+
+    const otherToday = await app.inject({
+      url: '/api/v1/candidate/today?tz=Europe/Moscow',
+      headers: { authorization: `Bearer ${other.accessToken}` },
+    });
+    expect(otherToday.statusCode, otherToday.body).toBe(200);
+    expect(otherToday.json().data.todayActionDeferral).toBeUndefined();
+
+    // A stale workspace form cannot erase the server-owned deferral.
+    await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/workspace',
+      headers,
+      payload: { workspace },
+    });
+    expect(store.getCandidateWorkspace(owner.id)?.todayActionDeferral).toEqual({
+      actionId,
+      deferredThroughDate,
+    });
+  });
+
+  it('requires authentication, safe origin and a valid timezone for deferral', async () => {
+    const { app, headers } = await setup();
+    const payload = { actionId: 'a'.repeat(16), tz: 'Europe/Moscow' };
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: DEFER_URL,
+          headers: { origin: 'http://localhost:3000' },
+          payload,
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: DEFER_URL,
+          headers: { origin: 'https://attacker.invalid' },
+          payload,
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: DEFER_URL,
+          headers,
+          payload: { ...payload, tz: 'Not/AZone' },
+        })
+      ).statusCode,
+    ).toBe(422);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: DEFER_URL,
+          headers,
+          payload: { ...payload, actionId: 'not-an-id' },
+        })
+      ).statusCode,
+    ).toBe(422);
   });
 
   it('requires authentication, safe origin and a valid resolution', async () => {

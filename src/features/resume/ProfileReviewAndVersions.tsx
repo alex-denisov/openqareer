@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react';
-import { ArrowRight, Info, Plus, Sparkle } from '@phosphor-icons/react';
+import { useMemo } from 'react';
+import { ArrowRight, Sparkle, CheckCircle, Question, Warning, Info } from '@phosphor-icons/react';
+import { CareerTooltip } from '../shell/CareerTooltip';
 import { pluralRu } from '../../../shared/pluralRu';
 import { profileCompleteness } from './profileCompleteness';
-import { CareerTooltip } from '../shell/CareerTooltip';
 import type { CandidateMemory } from '../coach/coachApi';
 import { aboutFinding, experienceFinding } from './reviewFindings';
-import { ResumeAtsView } from './ResumeAtsView';
-import { ResumePrintAction } from './ResumePrintAction';
-import { ResumePrintDocument } from './ResumePrintDocument';
 import { orderUnknowns, previewProjection, selectDocument } from './resumeStudioModel';
+import {
+  ProfileAtsAssessment as ProfileAtsAssessmentContent,
+  type ProfileAtsAssessmentProps,
+} from './ProfileAtsAssessment';
+import { ProfileResumeVersions as ProfileResumeVersionsContent } from './ProfileResumeVersions';
+export type { ProfileAtsAssessmentProps } from './ProfileAtsAssessment';
 import type { ResumeDraft, ResumeStudioView, ResumeUnknown } from './resumeTypes';
 
 export interface ProfileReviewAndVersionsProps {
@@ -16,29 +19,9 @@ export interface ProfileReviewAndVersionsProps {
   readonly memory: readonly CandidateMemory[];
   readonly view?: ResumeStudioView;
   readonly onOpenExpert?: () => void;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
   readonly onTabChange?: (tab: 'resume' | 'skills' | 'trace') => void;
   readonly desktopLayout?: boolean;
-}
-
-interface TargetedVersion {
-  readonly id: string;
-  readonly name: string;
-  readonly status: string;
-  readonly createdAt: string;
-}
-
-const ATS_DIMENSIONS: readonly { readonly label: string; readonly maximum: number }[] = [
-  { label: 'Структура', maximum: 25 },
-  { label: 'Ключевые слова', maximum: 30 },
-  { label: 'Даты', maximum: 20 },
-  { label: 'Формат', maximum: 25 },
-];
-
-function hasCompleteDates(draft: ResumeDraft): boolean {
-  return draft.experience.every((entry) =>
-    Boolean(entry.startDate && (entry.current || entry.endDate)),
-  );
 }
 
 function ReviewIssueList({ issues }: { readonly issues: readonly ResumeUnknown[] }) {
@@ -56,10 +39,10 @@ function ReviewIssueList({ issues }: { readonly issues: readonly ResumeUnknown[]
   );
 }
 
-type ReviewBlockId =
+export type ReviewBlockId =
   'experience' | 'about' | 'education' | 'projects' | 'languages' | 'confirmations';
 
-interface ReviewBlock {
+export interface ReviewBlock {
   readonly id: ReviewBlockId;
   readonly label: string;
   readonly issues: readonly ResumeUnknown[];
@@ -206,6 +189,25 @@ function distinctReviewIssues(issues: readonly ResumeUnknown[]): ResumeUnknown[]
   );
 }
 
+/** Returns the saved master's deduplicated review issue count when loaded. */
+export function profileResumeReviewIssueCount(view?: ResumeStudioView): number | undefined {
+  if (!view) return undefined;
+  return distinctReviewIssues(selectDocument(view.projection, 'master').unknowns).length;
+}
+
+/** Uses the same master-document review projection and block rules as the Review card. */
+export function profileResumeReviewBlocks(
+  view: ResumeStudioView | undefined,
+  draft: ResumeDraft,
+  memory: readonly CandidateMemory[] = [],
+): ReviewBlock[] {
+  const projection = previewProjection(draft, memory);
+  const document = selectDocument(projection, 'master');
+  const issues = distinctReviewIssues(document.unknowns);
+  const staleCount = view?.evidenceFreshness.stale.length ?? 0;
+  return buildReviewBlocks(draft, issues, staleCount, memory);
+}
+
 function actionableIssues(block: ReviewBlock): readonly ResumeUnknown[] {
   return block.issues.filter((issue) => {
     if (issue.code === 'missing-role-chronology' && !block.hasData) return false;
@@ -245,7 +247,16 @@ function ReviewBlockRows({ blocks }: { readonly blocks: readonly ReviewBlock[] }
               <strong>{block.label}</strong>
               <p>{reviewDescription(block)}</p>
             </div>
-            <span className={`career-profile-screen-review-badge is-${statusKind}`}>{status}</span>
+            <span className={`career-profile-screen-review-badge is-${statusKind}`}>
+              {statusKind === 'clear' ? (
+                <CheckCircle size={14} aria-hidden="true" />
+              ) : statusKind === 'unknown' ? (
+                <Question size={14} aria-hidden="true" />
+              ) : (
+                <Warning size={14} aria-hidden="true" />
+              )}
+              {status}
+            </span>
           </div>
         );
       })}
@@ -268,28 +279,30 @@ function focusElement(targetId: string): void {
 function questionnaireTarget(
   draft: ResumeDraft,
   desktopLayout: boolean,
-): { readonly targetId: string; readonly tab?: 'skills' } {
-  const firstMissing = profileCompleteness(draft).missingSections[0];
-  if (firstMissing === 'Опыт') return { targetId: 'sec-experience' };
-  if (firstMissing === 'Образование') return { targetId: 'sec-education' };
-  if (firstMissing === 'Проекты') return { targetId: 'sec-projects' };
-  if (firstMissing === 'Языки') return { targetId: 'sec-languages' };
-  if (firstMissing === 'Навыки') return { targetId: 'sec-skills', tab: 'skills' };
-  if (desktopLayout && firstMissing === 'Курсы') return { targetId: 'sec-courses', tab: 'skills' };
-  if (desktopLayout && firstMissing === 'Сертификаты') {
-    return { targetId: 'sec-certificates', tab: 'skills' };
+): { readonly targetId: string; readonly sectionTitle: string; readonly tab?: 'skills' } {
+  const sectionTitle = profileCompleteness(draft).missingSections[0] ?? 'Профиль';
+  if (sectionTitle === 'Опыт') return { targetId: 'sec-experience', sectionTitle };
+  if (sectionTitle === 'Образование') return { targetId: 'sec-education', sectionTitle };
+  if (sectionTitle === 'Проекты') return { targetId: 'sec-projects', sectionTitle };
+  if (sectionTitle === 'Языки') return { targetId: 'sec-languages', sectionTitle };
+  if (sectionTitle === 'Навыки') return { targetId: 'sec-skills', sectionTitle, tab: 'skills' };
+  if (desktopLayout && sectionTitle === 'Курсы') {
+    return { targetId: 'sec-courses', sectionTitle, tab: 'skills' };
   }
-  if (desktopLayout && firstMissing === 'Рекомендации') {
-    return { targetId: 'sec-recommendations', tab: 'skills' };
+  if (desktopLayout && sectionTitle === 'Сертификаты') {
+    return { targetId: 'sec-certificates', sectionTitle, tab: 'skills' };
   }
-  if (desktopLayout && firstMissing === 'Достижения') {
-    return { targetId: 'sec-achievements', tab: 'skills' };
+  if (desktopLayout && sectionTitle === 'Рекомендации') {
+    return { targetId: 'sec-recommendations', sectionTitle, tab: 'skills' };
   }
-  if (firstMissing === 'Курсы') return { targetId: 'sec-courses' };
-  if (firstMissing === 'Сертификаты') return { targetId: 'sec-certificates' };
-  if (firstMissing === 'Рекомендации') return { targetId: 'sec-recommendations' };
-  if (firstMissing === 'Достижения') return { targetId: 'sec-achievements' };
-  return { targetId: 'career-profile-screen-topcard' };
+  if (desktopLayout && sectionTitle === 'Достижения') {
+    return { targetId: 'sec-achievements', sectionTitle, tab: 'skills' };
+  }
+  if (sectionTitle === 'Курсы') return { targetId: 'sec-courses', sectionTitle };
+  if (sectionTitle === 'Сертификаты') return { targetId: 'sec-certificates', sectionTitle };
+  if (sectionTitle === 'Рекомендации') return { targetId: 'sec-recommendations', sectionTitle };
+  if (sectionTitle === 'Достижения') return { targetId: 'sec-achievements', sectionTitle };
+  return { targetId: 'career-profile-screen-topcard', sectionTitle };
 }
 
 function QuestionnaireAction({
@@ -299,7 +312,7 @@ function QuestionnaireAction({
   desktopLayout,
 }: {
   readonly draft: ResumeDraft;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
   readonly onTabChange?: (tab: 'resume' | 'skills' | 'trace') => void;
   readonly desktopLayout: boolean;
 }) {
@@ -318,7 +331,7 @@ function QuestionnaireAction({
     } else {
       focusElement(target.targetId);
     }
-    onFillQuestionnaire?.();
+    onFillQuestionnaire?.(target.sectionTitle);
   };
 
   return (
@@ -347,7 +360,7 @@ function ReviewActions({
 }: {
   readonly draft: ResumeDraft;
   readonly onOpenExpert?: () => void;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
   readonly onTabChange?: (tab: 'resume' | 'skills' | 'trace') => void;
   readonly desktopLayout: boolean;
 }) {
@@ -424,6 +437,23 @@ function ResumeReviewContent({
   );
 }
 
+function ResumeReviewHeader() {
+  return (
+    <h2 id="sec-check-title">
+      Проверка резюме
+      <CareerTooltip content="Читаемость: длина, цифры, структура. Корректность: совпадение источников и непроверенные факты.">
+        <button
+          type="button"
+          className="career-quiet-button career-btn-sm career-profile-screen-info-button"
+          aria-label="Пояснение проверки резюме"
+        >
+          <Info size={16} aria-hidden="true" />
+        </button>
+      </CareerTooltip>
+    </h2>
+  );
+}
+
 function ResumeReviewCard({
   draft,
   memory,
@@ -437,7 +467,7 @@ function ResumeReviewCard({
   readonly memory: readonly CandidateMemory[];
   readonly staleCount: number;
   readonly onOpenExpert?: () => void;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
   readonly onTabChange?: (tab: 'resume' | 'skills' | 'trace') => void;
   readonly desktopLayout: boolean;
 }) {
@@ -451,7 +481,7 @@ function ResumeReviewCard({
       id="sec-check"
       aria-labelledby="sec-check-title"
     >
-      <h2 id="sec-check-title">Проверка резюме</h2>
+      <ResumeReviewHeader />
       <ResumeReviewContent
         desktopLayout={desktopLayout}
         blocks={blocks}
@@ -470,249 +500,23 @@ function ResumeReviewCard({
   );
 }
 
-function AtsDesktopGuidance() {
+export function ProfileResumeReview(props: ProfileReviewAndVersionsProps) {
+  const staleCount = props.view?.evidenceFreshness?.stale?.length ?? 0;
   return (
-    <>
-      <div
-        className="career-profile-screen-ats-dimensions"
-        role="group"
-        aria-label="Категории оценки ATS"
-      >
-        {ATS_DIMENSIONS.map(({ label, maximum }) => (
-          <div className="career-profile-screen-ats-dimension" key={label}>
-            <span>{label}</span>
-            <span className="career-profile-screen-ats-track" aria-hidden="true" />
-            <span className="career-profile-screen-ats-dimension-value">—/{maximum}</span>
-          </div>
-        ))}
-      </div>
-      <div className="career-profile-screen-ats-guidance">
-        <strong>Что оптимизировать</strong>
-        <p>Расчёт для конкретной вакансии не проводился, поэтому оценка неизвестна.</p>
-      </div>
-      <a className="career-profile-screen-ats-link" href="#sec-documents">
-        К резюме и версиям
-      </a>
-    </>
+    <ResumeReviewCard
+      draft={props.draft}
+      memory={props.memory}
+      staleCount={staleCount}
+      onOpenExpert={props.onOpenExpert}
+      onFillQuestionnaire={props.onFillQuestionnaire}
+      onTabChange={props.onTabChange}
+      desktopLayout={props.desktopLayout ?? false}
+    />
   );
 }
 
-function AtsMobileGuidance() {
-  return (
-    <>
-      <p className="career-profile-screen-quality-note">
-        Нет расчёта для конкретной вакансии. Откройте ATS-текст в разделе «Резюме и версии».
-      </p>
-      <a className="career-profile-screen-ats-link" href="#sec-documents">
-        К резюме и версиям
-      </a>
-    </>
-  );
-}
-
-function AtsStatusDetails({ desktopLayout }: { readonly desktopLayout: boolean }) {
-  return desktopLayout ? <AtsDesktopGuidance /> : <AtsMobileGuidance />;
-}
-
-function AtsStatusCard({ desktopLayout }: { readonly desktopLayout: boolean }) {
-  return (
-    <section
-      className="career-profile-screen-panel career-profile-screen-quality-card career-profile-screen-ats-card"
-      id="sec-ats"
-      aria-labelledby="sec-ats-title"
-    >
-      <h2 id="sec-ats-title">
-        Прохождение ATS
-        <CareerTooltip content="Оценка не гарантирует прохождение отбора: системы и настройки работодателей различаются.">
-          <button
-            className="career-profile-screen-info-button"
-            type="button"
-            aria-label="Ограничения оценки ATS"
-          >
-            <Info size={16} aria-hidden="true" />
-          </button>
-        </CareerTooltip>
-      </h2>
-      <strong className="career-profile-screen-ats-value">Не рассчитано</strong>
-      <AtsStatusDetails desktopLayout={desktopLayout} />
-    </section>
-  );
-}
-
-function dateSummary(draft: ResumeDraft): string {
-  const count = draft.experience.length;
-  if (!count) return 'Места работы ещё не добавлены.';
-  return hasCompleteDates(draft)
-    ? `${pluralRu(count, ['место', 'места', 'мест'])}, без пропусков по датам.`
-    : 'Проверьте даты начала и окончания мест работы.';
-}
-
-function TargetedVersionForm({
-  onSubmit,
-  onCancel,
-}: {
-  readonly onSubmit: (name: string) => void;
-  readonly onCancel: () => void;
-}) {
-  const [name, setName] = useState('');
-  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const inputEl = event.currentTarget.elements.namedItem(
-      'targeted-version-input',
-    ) as HTMLInputElement | null;
-    const finalName = inputEl?.value?.trim() || name.trim();
-    if (finalName) onSubmit(finalName);
-  };
-  return (
-    <form className="career-profile-screen-version-form" onSubmit={handleSubmit}>
-      <div className="career-profile-screen-form-field">
-        <label htmlFor="targeted-version-input" className="career-field-label">
-          Название вакансии
-        </label>
-        <input
-          id="targeted-version-input"
-          name="targeted-version-input"
-          type="text"
-          className="career-input"
-          data-testid="targeted-version-input"
-          placeholder="Например, Вектор Банк"
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          onInput={(event) => setName((event.target as HTMLInputElement).value)}
-        />
-      </div>
-      <div className="career-profile-screen-form-actions">
-        <button
-          type="submit"
-          className="career-primary-button career-btn-sm"
-          data-testid="submit-targeted-version-btn"
-        >
-          Создать
-        </button>
-        <button type="button" className="career-secondary-button career-btn-sm" onClick={onCancel}>
-          Отмена
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function TargetedVersionList({ versions }: { readonly versions: readonly TargetedVersion[] }) {
-  if (!versions.length) {
-    return (
-      <p className="career-profile-screen-quality-note">
-        Сохранённых снимков резюме под вакансию пока нет.
-      </p>
-    );
-  }
-  return (
-    <div className="career-profile-screen-targeted-versions">
-      {versions.map((version) => (
-        <div key={version.id} className="career-profile-screen-versions-row">
-          <div>
-            <strong>Под вакансию «{version.name}»</strong>
-            <p className="career-profile-screen-quality-note">{version.status}</p>
-          </div>
-          <button type="button" className="career-secondary-button career-btn-sm">
-            Открыть
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ResumeVersionsCardHead({
-  isCreating,
-  onStartCreate,
-}: {
-  readonly isCreating: boolean;
-  readonly onStartCreate: () => void;
-}) {
-  return (
-    <div className="career-profile-screen-section-head">
-      <h2 id="sec-documents-title">Резюме и версии</h2>
-      {!isCreating && (
-        <button
-          type="button"
-          className="career-secondary-button career-btn-sm"
-          data-testid="create-targeted-version-btn"
-          onClick={onStartCreate}
-        >
-          <Plus size={16} aria-hidden="true" />
-          <span>Создать версию под вакансию</span>
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ResumeVersionsCard({
-  draft,
-  memory,
-}: {
-  readonly draft: ResumeDraft;
-  readonly memory: readonly CandidateMemory[];
-}) {
-  const [isCreating, setIsCreating] = useState(false);
-  const [versions, setVersions] = useState<readonly TargetedVersion[]>([]);
-  const projection = useMemo(() => previewProjection(draft, memory), [draft, memory]);
-  const document = useMemo(() => selectDocument(projection, 'master'), [projection]);
-
-  const handleCreate = (name: string) => {
-    setVersions((prev) => [
-      ...prev,
-      {
-        id: `ver-${Date.now()}`,
-        name,
-        status: 'Черновик ждёт вашего одобрения',
-        createdAt: new Date().toLocaleDateString('ru-RU'),
-      },
-    ]);
-    setIsCreating(false);
-  };
-
-  return (
-    <section
-      className="career-profile-screen-panel career-profile-screen-section career-profile-screen-versions"
-      id="sec-documents"
-      aria-labelledby="sec-documents-title"
-    >
-      <ResumeVersionsCardHead isCreating={isCreating} onStartCreate={() => setIsCreating(true)} />
-      <div className="career-profile-screen-versions-row">
-        <div>
-          <strong>Мастер-резюме</strong>
-          <p className="career-profile-screen-quality-note">{dateSummary(draft)}</p>
-        </div>
-        <ResumePrintAction />
-      </div>
-      {isCreating ? (
-        <TargetedVersionForm onSubmit={handleCreate} onCancel={() => setIsCreating(false)} />
-      ) : null}
-      <TargetedVersionList versions={versions} />
-      <AtsPlainTextDetails document={document} draft={draft} />
-      <ResumePrintDocument document={document} draft={draft} />
-    </section>
-  );
-}
-
-function AtsPlainTextDetails({
-  document,
-  draft,
-}: {
-  readonly document: ReturnType<typeof selectDocument>;
-  readonly draft: ResumeDraft;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <details
-      className="career-profile-screen-ats-details"
-      onToggle={(event) => setOpen(event.currentTarget.open)}
-    >
-      <summary>Открыть ATS Plain Text и подготовить целевой срез</summary>
-      {open ? <ResumeAtsView document={document} draft={draft} /> : null}
-    </details>
-  );
+export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
+  return <ProfileAtsAssessmentContent {...props} />;
 }
 
 export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
@@ -738,19 +542,19 @@ export function ProfileReviewAndVersions(props: ProfileReviewAndVersionsProps) {
           onTabChange={onTabChange}
           desktopLayout={desktopLayout}
         />
-        <AtsStatusCard desktopLayout={desktopLayout} />
+        <ProfileAtsAssessment desktopLayout={desktopLayout} enabled={Boolean(view)} />
       </div>
-      {!desktopLayout ? <ResumeVersionsCard draft={draft} memory={memory} /> : null}
+      {!desktopLayout && view ? (
+        <ProfileResumeVersions draft={draft} memory={memory} view={view} />
+      ) : null}
     </>
   );
 }
 
-export function ProfileResumeVersions({
-  draft,
-  memory,
-}: {
+export function ProfileResumeVersions(props: {
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
+  readonly view?: ResumeStudioView;
 }) {
-  return <ResumeVersionsCard draft={draft} memory={memory} />;
+  return <ProfileResumeVersionsContent {...props} />;
 }

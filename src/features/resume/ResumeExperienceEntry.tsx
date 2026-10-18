@@ -22,14 +22,10 @@ interface ResumeExperienceEntryProps {
   readonly editor?: ResumeDocumentEditor;
 }
 
-export function ResumeExperienceEntry({
+function ExperienceEntryHeader({
   entry,
   projected,
-  anchor,
-  unknowns,
-  available,
-  editor,
-}: ResumeExperienceEntryProps) {
+}: Pick<ResumeExperienceEntryProps, 'entry' | 'projected'>) {
   const title = projected?.title?.value ?? entry.title;
   const employer = projected?.employer?.value ?? entry.employer;
   const start = projected?.startDate?.value ?? entry.startDate;
@@ -39,20 +35,54 @@ export function ResumeExperienceEntry({
   const period = start && end ? `${start} — ${end}` : (start || end);
 
   return (
+    <header className="career-resume-stanford-entry-header">
+      <div className="career-resume-stanford-role-dates">
+        <strong className="career-resume-stanford-title">{title || 'Должность не указана'}</strong>
+        {period ? <span className="career-resume-stanford-dates">{period}</span> : null}
+      </div>
+      <div className="career-resume-stanford-employer-location">
+        <span className="career-resume-stanford-employer">{employer || 'Работодатель не указан'}</span>
+        {entry.location ? (
+          <span className="career-resume-stanford-location">{entry.location}</span>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+function ExperienceDescription({
+  description,
+}: {
+  readonly description: NonNullable<ResumeExperience['description']>;
+}) {
+  return (
+    <div
+      data-memory-id={description.memoryId}
+      data-source-message-ids={description.sourceMessageIds.join(' ')}
+    >
+      <p>{description.value}</p>
+      <div className="career-resume-bullet-meta">
+        <EvidenceChip memoryId={description.memoryId} />
+      </div>
+    </div>
+  );
+}
+
+export function ResumeExperienceEntry({
+  entry,
+  projected,
+  anchor,
+  unknowns,
+  available,
+  editor,
+}: ResumeExperienceEntryProps) {
+  return (
     <div className="career-resume-entry">
-      <header className="career-resume-stanford-entry-header">
-        <div className="career-resume-stanford-role-dates">
-          <strong className="career-resume-stanford-title">{title || 'Должность не указана'}</strong>
-          {period ? <span className="career-resume-stanford-dates">{period}</span> : null}
-        </div>
-        <div className="career-resume-stanford-employer-location">
-          <span className="career-resume-stanford-employer">{employer || 'Работодатель не указан'}</span>
-          {entry.location ? (
-            <span className="career-resume-stanford-location">{entry.location}</span>
-          ) : null}
-        </div>
-      </header>
+      <ExperienceEntryHeader entry={entry} projected={projected} />
       <ExperienceFields entry={entry} editor={editor} />
+      {projected?.description ? (
+        <ExperienceDescription description={projected.description} />
+      ) : null}
       {anchor ? <p className="career-resume-anchor">Опора роли: {anchor}</p> : null}
       <ExperienceBullets entry={entry} projected={projected} editor={editor} />
       <EntryUnknowns unknowns={unknowns} />

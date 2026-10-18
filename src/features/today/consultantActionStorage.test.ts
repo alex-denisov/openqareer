@@ -3,6 +3,7 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import {
   clearConsultantActionResolution,
   deferConsultantActionUntilTomorrow,
+  todayActionId,
   isConsultantActionResolved,
   resolveConsultantAction,
 } from './consultantActionStorage';
@@ -26,6 +27,14 @@ describe('consultantActionStorage (C57)', () => {
   beforeEach(() => {
     clearConsultantActionResolution('candidate-test-1', mockAction);
     clearConsultantActionResolution('candidate-test-2', mockAction);
+  });
+
+  it('uses a stable action identity based on provenance IDs, not copy', () => {
+    const id = todayActionId(mockAction);
+    expect(id).toMatch(/^[a-f0-9]{16}$/u);
+    expect(todayActionId({ ...mockAction, rationale: 'Обновлённое объяснение.' })).toBe(id);
+    expect(todayActionId({ ...mockAction, roleIds: [...mockAction.roleIds].reverse() })).toBe(id);
+    expect(todayActionId({ ...mockAction, findingIds: ['different-finding'] })).not.toBe(id);
   });
 
   it('reports action as not resolved initially', () => {

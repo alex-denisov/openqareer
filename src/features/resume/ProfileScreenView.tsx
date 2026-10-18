@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowClockwise, ListChecks, WarningCircle } from '@phosphor-icons/react';
+import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import {
   getConnections,
   type CandidateConnection,
@@ -14,8 +14,11 @@ import { ProfileEducationSection } from './ProfileEducationSection';
 import { ProfileExperienceSection } from './ProfileExperienceSection';
 import { ProfileLanguagesSection } from './ProfileLanguagesSection';
 import { ProfileRecommendationsSection } from './ProfileRecommendationsSection';
-import { ProfileSideRail } from './ProfileSideRail';
-import { ProfileSkillsSection } from './ProfileSkillsSection';
+import {
+  ProfileSideRail,
+  profileRelocationSummaryStatusFromResponse,
+  type ProfileRelocationSummaryStatus,
+} from './ProfileSideRail';
 import { ProfileCertificatesSection, ProfileProjectsSection } from './ProfileTileSections';
 import { ProfileTopcard } from './ProfileTopcard';
 import { ProfileTabs, type ProfileTab } from './profileTabs';
@@ -26,7 +29,17 @@ import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 import { ProfileResumeVersions, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import { getRelocationQuestionnaire } from '../relocation/relocationApi';
+import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNavigation';
+import { ProfileMobileScreen } from './ProfileMobileScreen';
+import { ProfileDataDialog } from './ProfileDataDialog';
+import { ProfileDesktopSkills } from './ProfileDesktopSkills';
+import { useProfileDataDialog } from './useProfileDataDialog';
+import { ProfileRefreshNotice } from './ProfileRefreshNotice';
+import { ProfileScreenLoadingState } from './ProfileScreenLoadingState';
 import './profileScreen.css';
+import './profileDesktop.css';
+import './profileStates.css';
 
 const ANCHORS: readonly { id: string; label: string }[] = [
   { id: 'sec-check', label: 'Проверка' },
@@ -52,19 +65,6 @@ function ProfileAnchorNav() {
   );
 }
 
-function ProfileLoadingState() {
-  return (
-    <div className="career-profile-screen-state" role="status" aria-live="polite">
-      <span className="career-cabinet-skeleton" aria-hidden="true">
-        <span className="career-skeleton-line is-wide" />
-        <span className="career-skeleton-line" />
-        <span className="career-skeleton-line is-short" />
-      </span>
-      <p>Загружаем профиль…</p>
-    </div>
-  );
-}
-
 function ProfileErrorState({
   message,
   onRetry,
@@ -84,35 +84,82 @@ function ProfileErrorState({
   );
 }
 
-function ProfileEmptyState() {
+function ProfileEmptyState({
+  onOpenConnections,
+  onFillManually,
+}: {
+  readonly onOpenConnections?: () => void;
+  readonly onFillManually: () => void;
+}) {
   return (
     <div className="career-profile-screen-state">
       <p>Профиль пока пуст. Подключите источник резюме или заполните разделы вручную.</p>
+      <div className="career-profile-screen-review-actions">
+        {onOpenConnections ? (
+          <button type="button" className="career-primary-button" onClick={onOpenConnections}>
+            Подключить источник
+          </button>
+        ) : null}
+        <button type="button" className="career-quiet-button" onClick={onFillManually}>
+          Заполнить профиль вручную
+        </button>
+      </div>
     </div>
   );
 }
 
 function isDraftEmpty(draft: ResumeDraft, memory: readonly CandidateMemory[]): boolean {
-  return (
-    !draft.candidate.fullName?.trim() &&
-    !draft.experience.length &&
-    !draft.education.length &&
-    !(draft.skills?.length ?? 0) &&
-    !memory.some((item) => item.status === 'confirmed' && item.domain === 'responsibility')
+  const candidate = draft.candidate;
+  const candidateText = [
+    candidate.fullName,
+    candidate.photoUrl,
+    candidate.photoMediaId,
+    candidate.headline,
+    candidate.about,
+    candidate.contact?.email,
+    candidate.contact?.phone,
+    candidate.contact?.telegram,
+    candidate.contact?.location,
+    candidate.contact?.linkedinUrl,
+    draft.targetRole,
+    draft.additional?.citizenship,
+    draft.additional?.workSchedule,
+    draft.additional?.relocation,
+    draft.additional?.driversLicense,
+  ];
+  const hasCandidateText = candidateText.some((value) => Boolean(value?.trim()));
+  const hasContactLinks = candidate.contact?.links?.some((value) => Boolean(value.trim())) ?? false;
+  const hasDraftSections =
+    draft.experience.length > 0 ||
+    draft.education.length > 0 ||
+    draft.languages.length > 0 ||
+    (draft.skills?.length ?? 0) > 0 ||
+    (draft.courses?.length ?? 0) > 0 ||
+    (draft.tests?.length ?? 0) > 0 ||
+    (draft.recommendations?.length ?? 0) > 0 ||
+    (draft.certifications?.length ?? 0) > 0 ||
+    (draft.projects?.length ?? 0) > 0 ||
+    (draft.achievements?.length ?? 0) > 0;
+  const hasConfirmedProfileMemory = memory.some(
+    (item) =>
+      item.status === 'confirmed' &&
+      ['responsibility', 'outcome', 'skill', 'role-evidence'].includes(item.domain),
   );
+
+  return !hasCandidateText && !hasContactLinks && !hasDraftSections && !hasConfirmedProfileMemory;
 }
 
 function useDesktopProfileLayout(): boolean {
   const [desktopLayout, setDesktopLayout] = useState(
     () =>
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(min-width: 1024px)').matches,
+      typeof window === 'undefined' ||
+      typeof window.matchMedia !== 'function' ||
+      window.matchMedia('(min-width: 761px)').matches,
   );
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const query = window.matchMedia('(min-width: 1024px)');
+    const query = window.matchMedia('(min-width: 761px)');
     const update = () => setDesktopLayout(query.matches);
     update();
     query.addEventListener('change', update);
@@ -142,8 +189,18 @@ export interface ProfileScreenSurfaceProps {
    *  the read has not landed. */
   readonly connections?: readonly CandidateConnection[];
   readonly onOpenExpert?: () => void;
+  readonly onOpenSkillQuizBank?: () => void;
+  readonly onOpenRoleSkillAssessment?: () => void;
+  readonly onSuggestAboutWithConsultant?: () => void;
+  readonly onCollectExperienceFact?: (
+    target: Extract<ProfileFocusRequest, { readonly section: 'experience' }>,
+  ) => void;
   readonly onOpenRelocation?: () => void;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
+  readonly relocationSummary?: ProfileRelocationSummaryStatus;
+  readonly profileFocusRequest?: ProfileFocusRequest;
+  readonly onProfileFocusHandled?: () => void;
+  readonly onMobileSceneChange?: (scene: ProfileMobileScene | null) => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
@@ -168,6 +225,11 @@ export interface ProfileScreenSurfaceProps {
 // eslint-disable-next-line max-lines-per-function
 export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
   const desktopProfileLayout = useDesktopProfileLayout();
+  const dataDialog = useProfileDataDialog(props, desktopProfileLayout);
+  useDesktopProfileFocus(
+    props,
+    desktopProfileLayout && !dataDialog.open && !dataDialog.managedRequest,
+  );
   const {
     candidateId,
     draft,
@@ -185,24 +247,34 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     tab = 'resume',
   } = props;
 
-  if (loading) {
-    return (
-      <div className="career-profile-screen-view">
-        <ProfileLoadingState />
-      </div>
-    );
-  }
-  if (error || !draft) {
+  if (loading && !draft) return <ProfileScreenLoadingState mobile={!desktopProfileLayout} />;
+  if (!draft) {
     return (
       <div className="career-profile-screen-view">
         <ProfileErrorState message={error} onRetry={onRetry} />
       </div>
     );
   }
-  if (isDraftEmpty(draft, memory)) {
+  const draftIsEmpty = isDraftEmpty(draft, memory);
+  if (!desktopProfileLayout)
+    return <ProfileMobileScreen {...props} draft={draft} isDraftEmpty={draftIsEmpty} />;
+  const dialog = dataDialog.open ? (
+    <ProfileDataDialog
+      {...props}
+      draft={draft}
+      section={dataDialog.section}
+      onSelect={dataDialog.select}
+      onClose={dataDialog.close}
+    />
+  ) : null;
+  if (draftIsEmpty) {
     return (
       <div className="career-profile-screen-view">
-        <ProfileEmptyState />
+        {dialog}
+        <ProfileEmptyState
+          onOpenConnections={onOpenConnections}
+          onFillManually={() => dataDialog.select()}
+        />
         {props.vacancyRequirement ? (
           <ProfileExperienceSection
             candidateId={candidateId}
@@ -221,7 +293,13 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
   }
 
   return (
-    <div className="career-profile-screen-view" data-profile-tab={tab}>
+    <div
+      className="career-profile-screen-view"
+      data-profile-tab={tab}
+      aria-busy={loading || saving || undefined}
+    >
+      {dialog}
+      <ProfileRefreshNotice error={error} onRetry={onRetry} />
       <div className="career-profile-screen-header-row">
         <ProfileTopcard
           draft={draft}
@@ -235,6 +313,8 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           connections={connections}
           onOpenConnections={onOpenConnections}
           memory={memory}
+          onEdit={() => dataDialog.select('name')}
+          onOpenData={() => dataDialog.select()}
         />
       </div>
       {saveError ? (
@@ -255,40 +335,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
           aria-labelledby="profile-tab-skills"
           tabIndex={0}
         >
-          <div className="career-profile-screen-panel career-profile-screen-skill-tab">
-            <ProfileSkillsSection draft={draft} saving={saving} onSectionSave={onSectionSave} />
-            {desktopProfileLayout ? (
-              <>
-                <ProfileCoursesSection
-                  draft={draft}
-                  saving={saving}
-                  onSectionSave={onSectionSave}
-                  importedLabel={importedSource?.label}
-                />
-                <ProfileCertificatesSection
-                  draft={draft}
-                  saving={saving}
-                  onSectionSave={onSectionSave}
-                />
-                <ProfileRecommendationsSection
-                  draft={draft}
-                  saving={saving}
-                  onSectionSave={onSectionSave}
-                />
-                <ProfileAchievementsSection
-                  draft={draft}
-                  saving={saving}
-                  onSectionSave={onSectionSave}
-                />
-              </>
-            ) : null}
-            {props.onOpenExpert ? (
-              <button type="button" className="career-quiet-button" onClick={props.onOpenExpert}>
-                <ListChecks size={16} aria-hidden="true" />
-                Пройти квиз по навыкам
-              </button>
-            ) : null}
-          </div>
+          <ProfileDesktopSkills {...props} draft={draft} />
         </div>
       ) : tab === 'trace' ? (
         <div
@@ -330,6 +377,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onAcceptSuggestion={props.onAcceptSuggestion}
                 onDismissSuggestion={props.onDismissSuggestion}
                 onRevertSuggestion={props.onRevertSuggestion}
+                onSuggestWithConsultant={props.onSuggestAboutWithConsultant}
               />
               <ProfileExperienceSection
                 candidateId={candidateId}
@@ -347,6 +395,10 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
                 onManualExperienceFactAdded={props.onManualExperienceFactAdded}
               />
               <ProfileEducationSection
+                onAddCourse={() => dataDialog.select('courses')}
+                onConsultCourses={
+                  props.onFillQuestionnaire ? () => props.onFillQuestionnaire?.('Курсы') : undefined
+                }
                 draft={draft}
                 saving={saving}
                 onSectionSave={onSectionSave}
@@ -390,9 +442,12 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
             <ProfileSideRail
               draft={draft}
               desktopLayout={desktopProfileLayout}
+              relocationSummary={props.relocationSummary}
               onOpenRelocation={props.onOpenRelocation}
             />
-            {desktopProfileLayout ? <ProfileResumeVersions draft={draft} memory={memory} /> : null}
+            {desktopProfileLayout ? (
+              <ProfileResumeVersions draft={draft} memory={memory} view={props.view} />
+            ) : null}
           </div>
         </div>
       )}
@@ -402,13 +457,23 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
 
 interface ProfileScreenViewProps {
   readonly candidateId: string;
+  readonly refreshKey?: number;
   readonly memory: readonly CandidateMemory[];
   readonly importedSources?: readonly ImportedSourceSummary[];
   readonly onRefreshFacts?: () => Promise<void> | void;
   readonly onOpenConnections?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onOpenSkillQuizBank?: () => void;
+  readonly onOpenRoleSkillAssessment?: () => void;
+  readonly onSuggestAboutWithConsultant?: () => void;
+  readonly onCollectExperienceFact?: (
+    target: Extract<ProfileFocusRequest, { readonly section: 'experience' }>,
+  ) => void;
   readonly onOpenRelocation?: () => void;
-  readonly onFillQuestionnaire?: () => void;
+  readonly onFillQuestionnaire?: (sectionTitle: string) => void;
+  readonly profileFocusRequest?: ProfileFocusRequest;
+  readonly onProfileFocusHandled?: () => void;
+  readonly onMobileSceneChange?: (scene: ProfileMobileScene | null) => void;
   readonly onTabChange?: (tab: ProfileTab) => void;
   readonly tab?: ProfileTab;
   readonly vacancyRequirement?: VacancyProfileRequirementRequest;
@@ -421,7 +486,7 @@ interface ProfileScreenViewProps {
  * rather than blocking the profile — the chip still opens the real panel to
  * retry (mirrors `AccountConnectionsManager`'s own fallback).
  */
-function useConnectionStatuses(): readonly CandidateConnection[] | undefined {
+function useConnectionStatuses(refreshKey?: number): readonly CandidateConnection[] | undefined {
   const [connections, setConnections] = useState<CandidateConnection[]>();
   useEffect(() => {
     let current = true;
@@ -435,36 +500,213 @@ function useConnectionStatuses(): readonly CandidateConnection[] | undefined {
     return () => {
       current = false;
     };
-  }, []);
+  }, [refreshKey]);
   return connections;
 }
 
 function useSectionSaveHandler(state: ReturnType<typeof useResumeStudio>) {
-  return useCallback(
-    async (next: ResumeDraft) => {
-      state.setDraft(next);
-      return state.save(next);
-    },
-    [state],
+  return useCallback(async (next: ResumeDraft) => state.save(next), [state]);
+}
+
+function useProfileRelocationSummary(
+  candidateId: string,
+  refreshKey?: number,
+): ProfileRelocationSummaryStatus {
+  const [status, setStatus] = useState<ProfileRelocationSummaryStatus>('loading');
+
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setStatus('loading');
+    void getRelocationQuestionnaire(controller.signal)
+      .then((response) => {
+        if (active) setStatus(profileRelocationSummaryStatusFromResponse(response));
+      })
+      .catch(() => {
+        if (active) setStatus('unknown');
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [candidateId, refreshKey]);
+
+  return status;
+}
+
+function profileFocusDestination(
+  request: ProfileFocusRequest,
+  desktopLayout: boolean,
+): { readonly tab: ProfileTab; readonly targetId: string } {
+  if (request.section === 'ats') return { tab: 'resume', targetId: 'sec-ats' };
+  if (request.section === 'review') return { tab: 'resume', targetId: 'sec-check' };
+  if (request.section === 'name' || request.section === 'contacts') {
+    return { tab: 'resume', targetId: 'career-profile-screen-topcard' };
+  }
+  if (request.section === 'experience') {
+    return { tab: 'resume', targetId: 'sec-experience' };
+  }
+  const sections: Record<
+    Exclude<ProfileFocusRequest['section'], 'ats' | 'review' | 'name' | 'contacts' | 'experience'>,
+    string
+  > = {
+    education: 'sec-education',
+    projects: 'sec-projects',
+    skills: 'sec-skills',
+    languages: 'sec-languages',
+    courses: 'sec-courses',
+    certifications: 'sec-certificates',
+    recommendations: 'sec-recommendations',
+    achievements: 'sec-achievements',
+  };
+  return {
+    tab:
+      desktopLayout &&
+      ['skills', 'courses', 'certifications', 'recommendations', 'achievements'].includes(
+        request.section,
+      )
+        ? 'skills'
+        : 'resume',
+    targetId: sections[request.section],
+  };
+}
+
+function focusSectionTarget(targetId: string): boolean {
+  const section = document.getElementById(targetId);
+  if (!section) return false;
+  const control = section.querySelector<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex="0"]',
   );
+  if (control) {
+    control.focus();
+    return true;
+  }
+  section.tabIndex = -1;
+  section.focus();
+  return true;
+}
+
+function focusTopcardInput(section: 'name' | 'contacts'): boolean {
+  const topcard = document.getElementById('career-profile-screen-topcard');
+  const fieldName = section === 'name' ? 'Имя' : 'Email';
+  const input = Array.from(topcard?.querySelectorAll<HTMLLabelElement>('label') ?? [])
+    .find((label) => label.querySelector('span')?.textContent?.trim() === fieldName)
+    ?.querySelector<HTMLInputElement>('input');
+  input?.focus();
+  return Boolean(input);
+}
+
+function focusTopcardField(section: 'name' | 'contacts'): boolean {
+  const topcard = document.getElementById('career-profile-screen-topcard');
+  if (!topcard) return false;
+  const editButton = Array.from(topcard.querySelectorAll('button')).find((button) =>
+    button.textContent?.trim().includes('Изменить'),
+  );
+  if (editButton && !topcard.querySelector('.career-profile-screen-edit-body')) {
+    editButton.click();
+    window.requestAnimationFrame(() => focusTopcardInput(section));
+    return true;
+  }
+  return focusTopcardInput(section) || focusSectionTarget('career-profile-screen-topcard');
+}
+
+function focusExperienceDate(
+  experienceId: string | undefined,
+  field: 'startDate' | 'endDate',
+): boolean {
+  const position = Array.from(document.querySelectorAll<HTMLElement>('[data-experience-id]')).find(
+    (element) => element.dataset.experienceId === experienceId,
+  );
+  if (!position) return focusSectionTarget('sec-experience');
+  const input = position.querySelector<HTMLInputElement>(`input[name="${field}"]:not([disabled])`);
+  if (input) {
+    input.focus();
+    return true;
+  }
+  const editButton = position.querySelector<HTMLButtonElement>(
+    'button[aria-label^="Редактировать место целиком:"]',
+  );
+  if (!editButton) return focusSectionTarget('sec-experience');
+  editButton.click();
+  window.requestAnimationFrame(() => {
+    position.querySelector<HTMLInputElement>(`input[name="${field}"]:not([disabled])`)?.focus();
+  });
+  return true;
+}
+
+function focusDesktopProfileRequest(
+  request: ProfileFocusRequest,
+  target: { readonly tab: ProfileTab; readonly targetId: string },
+  onCollectExperienceFact?: ProfileScreenSurfaceProps['onCollectExperienceFact'],
+): boolean {
+  if (request.section === 'experience' && request.field === 'teamSize') {
+    if (!onCollectExperienceFact) return false;
+    onCollectExperienceFact(request);
+    return true;
+  }
+  if (request.section === 'name' || request.section === 'contacts') {
+    return focusTopcardField(request.section);
+  }
+  if (
+    request.section === 'experience' &&
+    (request.field === 'startDate' || request.field === 'endDate')
+  ) {
+    return focusExperienceDate(request.experienceId, request.field);
+  }
+  return focusSectionTarget(target.targetId);
+}
+
+function useDesktopProfileFocus(props: ProfileScreenSurfaceProps, desktopLayout: boolean): void {
+  const {
+    profileFocusRequest,
+    draft,
+    tab,
+    onCollectExperienceFact,
+    onProfileFocusHandled,
+    onTabChange,
+  } = props;
+  useEffect(() => {
+    const request = profileFocusRequest;
+    if (!desktopLayout || !request || !draft) return;
+    const destination = profileFocusDestination(request, desktopLayout);
+    if ((tab ?? 'resume') !== destination.tab) {
+      onTabChange?.(destination.tab);
+      return;
+    }
+    window.requestAnimationFrame(() => {
+      if (focusDesktopProfileRequest(request, destination, onCollectExperienceFact)) {
+        onProfileFocusHandled?.();
+      }
+    });
+  }, [
+    desktopLayout,
+    draft,
+    onCollectExperienceFact,
+    onProfileFocusHandled,
+    onTabChange,
+    profileFocusRequest,
+    tab,
+  ]);
 }
 
 function useProfileScreenController(props: ProfileScreenViewProps) {
   const { candidateId, onRefreshFacts } = props;
-  const state = useResumeStudio(onRefreshFacts);
-  const connections = useConnectionStatuses();
+  const state = useResumeStudio(onRefreshFacts, props.refreshKey);
+  const connections = useConnectionStatuses(props.refreshKey);
   const onSectionSave = useSectionSaveHandler(state);
   const reloadResume = state.reload;
   const refreshProfile = useCallback(async () => {
     await reloadResume();
     await onRefreshFacts?.();
   }, [onRefreshFacts, reloadResume]);
-  const consultant = useConsultantSuggestions(candidateId, refreshProfile);
+  const consultant = useConsultantSuggestions(candidateId, refreshProfile, props.refreshKey);
+  const relocationSummary = useProfileRelocationSummary(candidateId, props.refreshKey);
   return {
     state,
     connections,
     onSectionSave,
     refreshProfile,
+    relocationSummary,
     consultant,
   };
 }
@@ -499,6 +741,7 @@ function useVacancySuggestionReveal(
   return revealSuggestion;
 }
 
+// eslint-disable-next-line max-lines-per-function -- Keep controller-to-surface props explicit for review.
 function ProfileScreenSurfaceWithController({
   props,
   controller,
@@ -508,7 +751,8 @@ function ProfileScreenSurfaceWithController({
   readonly controller: ReturnType<typeof useProfileScreenController>;
   readonly onVacancySuggestionPrepared: (commandId: string) => Promise<void>;
 }) {
-  const { state, connections, onSectionSave, refreshProfile, consultant } = controller;
+  const { state, connections, onSectionSave, refreshProfile, relocationSummary, consultant } =
+    controller;
   return (
     <ProfileScreenSurface
       candidateId={props.candidateId}
@@ -527,7 +771,15 @@ function ProfileScreenSurfaceWithController({
       connections={connections}
       importedSources={props.importedSources}
       onOpenExpert={props.onOpenExpert}
+      onOpenSkillQuizBank={props.onOpenSkillQuizBank}
+      onOpenRoleSkillAssessment={props.onOpenRoleSkillAssessment}
+      onSuggestAboutWithConsultant={props.onSuggestAboutWithConsultant}
+      onCollectExperienceFact={props.onCollectExperienceFact}
       onOpenRelocation={props.onOpenRelocation}
+      relocationSummary={relocationSummary}
+      profileFocusRequest={props.profileFocusRequest}
+      onProfileFocusHandled={props.onProfileFocusHandled}
+      onMobileSceneChange={props.onMobileSceneChange}
       onFillQuestionnaire={props.onFillQuestionnaire}
       onTabChange={props.onTabChange}
       tab={props.tab}

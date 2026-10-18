@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { CandidateFootprintAuditSurfaceProps } from './CandidateFootprintAuditSurface';
@@ -49,19 +52,45 @@ function baseProps(
   };
 }
 
+async function renderAtStep(
+  props: CandidateFootprintAuditSurfaceProps,
+  stepLabel: string,
+): Promise<string> {
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(<CandidateFootprintAuditSurface {...props} />);
+  });
+  try {
+    const step = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes(stepLabel),
+    );
+    if (!step || step.disabled) throw new Error(`Step is unavailable: ${stepLabel}`);
+    await act(async () => {
+      step.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    return container.innerHTML;
+  } finally {
+    act(() => root.unmount());
+  }
+}
+
 describe('CandidateFootprintAuditSurface', () => {
   it('shows the exact disabled consent gate and labels sources without implying a scan', () => {
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...baseProps()} />);
 
-    expect(html).toContain('<h2>Как вас видят</h2>');
+    expect(html).toContain('role="region" aria-label="Цифровой след"');
+    expect(html).toContain('aria-label="Шаги цифрового следа"');
+    expect(html).not.toContain('<h2>Как вас видят</h2>');
     expect(html).toContain('Скоро: ждёт утверждения текста согласия');
-    expect(html).toContain('подготовлено, не подключено');
-    expect(html).toContain('не запускалось');
+    expect(html).toContain('<strong>2 Сканирование</strong><span>Не запускалась</span>');
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('Запустить выбранные проверки');
     expect(html).not.toContain('Безопасно');
     expect(html).not.toContain('100 / 100');
   });
 
-  it('shows source, observation time and candidate review actions for a completed finding', () => {
+  it('shows source, observation time and candidate review actions for a completed finding', async () => {
     const audit: NonNullable<CandidateFootprintAuditSurfaceProps['audit']> = {
       id: 'audit-1',
       candidateId: 'candidate-1',
@@ -97,48 +126,47 @@ describe('CandidateFootprintAuditSurface', () => {
       startedAt: '2026-10-04T12:00:00.000Z',
       completedAt: '2026-10-04T12:00:02.000Z',
     };
-    const html = renderToStaticMarkup(
-      <CandidateFootprintAuditSurface
-        {...baseProps({
-          audit,
-          consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
-          ownershipConfirmed: true,
-        })}
-      />,
-    );
+    const completedProps = baseProps({
+      audit,
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      ownershipConfirmed: true,
+    });
+    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...completedProps} />);
 
     expect(html).toContain('GitHub');
     expect(html).toContain('4 окт. 2026 г.');
     expect(html).toContain('Источники: sherlock');
-    expect(html).toContain('Отозвать согласие');
+    const consentHtml = await renderAtStep(completedProps, '1 Согласие');
+    expect(consentHtml).toContain('Отозвать согласие');
     expect(html).toContain('Это я');
     expect(html).toContain('Не я');
     expect(html).toContain('Скрыть');
   });
 
-  it('keeps sources without keys marked not connected after an audit skips them', () => {
-    const html = renderToStaticMarkup(
-      <CandidateFootprintAuditSurface
-        {...baseProps({
-          audit: {
-            id: 'audit-skipped-sources',
-            candidateId: 'candidate-1',
-            state: 'completed',
-            selectedQueryIds: ['0123456789abcdef0123'],
-            adapterStatuses: [
-              { adapterId: 'sherlock', state: 'checked', sourcesChecked: 1, findingsCount: 0 },
-              { adapterId: 'maigret', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
-              { adapterId: 'hibp', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
-              { adapterId: 'wayback', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
-              { adapterId: 'exa', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
-            ],
-            findings: [],
-            ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
-            startedAt: '2026-10-04T12:00:00.000Z',
-            completedAt: '2026-10-04T12:00:02.000Z',
-          },
-        })}
-      />,
+  it('keeps sources without keys marked not connected after an audit skips them', async () => {
+    const html = await renderAtStep(
+      baseProps({
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        ownershipConfirmed: true,
+        audit: {
+          id: 'audit-skipped-sources',
+          candidateId: 'candidate-1',
+          state: 'completed',
+          selectedQueryIds: ['0123456789abcdef0123'],
+          adapterStatuses: [
+            { adapterId: 'sherlock', state: 'checked', sourcesChecked: 1, findingsCount: 0 },
+            { adapterId: 'maigret', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
+            { adapterId: 'hibp', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
+            { adapterId: 'wayback', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
+            { adapterId: 'exa', state: 'not_run', sourcesChecked: 0, findingsCount: 0 },
+          ],
+          findings: [],
+          ownershipConfirmedAt: '2026-10-04T11:59:00.000Z',
+          startedAt: '2026-10-04T12:00:00.000Z',
+          completedAt: '2026-10-04T12:00:02.000Z',
+        },
+      }),
+      '2 Сканирование',
     );
 
     expect(html.match(/подготовлено, не подключено/gu)).toHaveLength(3);
@@ -203,8 +231,14 @@ describe('CandidateFootprintAuditSurface', () => {
     expect(html).toContain('Показать');
   });
 
-  it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', () => {
-    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...baseProps()} />);
+  it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', async () => {
+    const html = await renderAtStep(
+      baseProps({
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        ownershipConfirmed: true,
+      }),
+      '2 Сканирование',
+    );
     expect(html).toContain('Метаданные файлов');
     expect(html).toContain('Секреты в коде');
     expect(html).toContain('подготовлено');
@@ -230,7 +264,7 @@ describe('CandidateFootprintAuditSurface', () => {
     expect(futureHtml).toContain('в планах');
   });
 
-  it('B375: отображает блок «Не удалось определить компанию» с кнопкой «Ввести вручную» при наличии неопределённых работодателей', () => {
+  it('B375: отображает блок «Не удалось определить компанию» с кнопкой «Ввести вручную» при наличии неопределённых работодателей', async () => {
     const props = baseProps({
       unidentifiedEmployers: [
         'Enterprise Public Cloud Platform (IaaS / PaaS)',
@@ -239,7 +273,14 @@ describe('CandidateFootprintAuditSurface', () => {
       onAddManualEmployer: vi.fn(),
     });
 
-    const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
+    const html = await renderAtStep(
+      {
+        ...props,
+        consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+        ownershipConfirmed: true,
+      },
+      '2 Сканирование',
+    );
     expect(html).toContain('Не удалось определить компанию');
     expect(html).toContain('Enterprise Public Cloud Platform (IaaS / PaaS)');
     expect(html).toContain('Corporate University of a Top-Tier Financial Institution');

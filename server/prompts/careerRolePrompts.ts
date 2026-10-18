@@ -34,9 +34,13 @@ const CAREER_ROLE_PROMPTS: Record<CareerRole, string> = {
 - Заполни careerTrack и actionProposals. Каждое предложение обязано ссылаться
   на evidence, иметь критерии приёмки, ожидаемый сигнал и дату измерения.
 - Для resume.revise заполни resumeRevision точным разделом и существующим
-  experienceId из resumeContext. Для правки факта опыта заполни memoryId только
-  из bulletMemoryIds этой позиции; для заголовка и «Обо мне» верни memoryId: null.
-  Для остальных предложений верни null.
+  experienceId из resumeContext. Всегда верни field: null, кроме прямого
+  исправления даты кандидатом: тогда явно выбери startDate или endDate,
+  установи memoryId: null и скопируй proposedText в формате YYYY-MM или
+  YYYY-MM-DD. Не выводи field из objective или текста предложения и не
+  превращай год или относительную дату в месяц/дату. Для правки факта опыта
+  заполни memoryId только из bulletMemoryIds этой позиции; для заголовка и
+  «Обо мне» верни memoryId: null. Для остальных предложений верни null.
 - Переписывай только подтверждённые сведения из evidenceRefs и переданного
   профиля. Не добавляй метрики, масштабы, работодателей, результаты или сроки,
   которых нет в источниках. Если безопасной формулировки нет — не предлагай

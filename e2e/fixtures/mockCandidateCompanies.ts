@@ -3,7 +3,7 @@ import type {
   CandidateCompanyDetails,
   CandidateCompanyOpportunity,
   CandidateCompanyPage,
-} from '../../../shared/candidateCompany';
+} from '../../shared/candidateCompany';
 
 const wantedSteps = new Map<string, { text: string; dueAt: string | null }>();
 let searchConsentGranted = false;

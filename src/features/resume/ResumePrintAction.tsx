@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Printer } from '@phosphor-icons/react';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { saveResumeAsPdf, triggerResumePrint } from './resumeExport';
 
-export function ResumePrintAction() {
+function useResumePrintAction() {
   const [message, setMessage] = useState('');
   const [canSavePdf, setCanSavePdf] = useState(false);
 
@@ -29,11 +29,27 @@ export function ResumePrintAction() {
     }
   }
 
+  return { message, canSavePdf, print, savePdf };
+}
+
+export function ResumePrintAction({
+  children,
+  className,
+}: { readonly children?: ReactNode; readonly className?: string } = {}) {
+  const { message, canSavePdf, print, savePdf } = useResumePrintAction();
   return (
     <>
-      <button type="button" className="career-resume-export-button" onClick={() => void print()}>
-        <Printer size={15} />
-        Печать / PDF
+      <button
+        type="button"
+        className={`career-resume-export-button${className ? ` ${className}` : ''}`}
+        onClick={() => void print()}
+      >
+        {children ?? (
+          <>
+            <Printer size={15} />
+            Печать / PDF
+          </>
+        )}
       </button>
       {canSavePdf ? (
         <button

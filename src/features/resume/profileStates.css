@@ -1,0 +1,110 @@
+.career-profile-screen-loading {
+  display: grid;
+  gap: var(--career-space-5);
+}
+
+.career-profile-screen-loading-summary {
+  display: grid;
+  align-items: center;
+  gap: var(--career-space-4);
+}
+
+.career-profile-screen-loading .career-profile-screen-loading-avatar {
+  border: var(--career-border-width) solid var(--career-line);
+  background: var(--career-surface-raised);
+  color: transparent;
+}
+
+.career-profile-screen-loading-copy {
+  display: grid;
+  min-inline-size: 0;
+  gap: var(--career-space-2);
+}
+
+.career-profile-screen-loading-meta {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: var(--career-space-2);
+}
+
+.career-profile-screen-loading-line {
+  display: block;
+  block-size: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-profile-screen-loading-line.is-wide {
+  inline-size: 100%;
+}
+
+.career-profile-screen-loading-line.is-long {
+  inline-size: 80%;
+}
+
+.career-profile-screen-loading-line.is-medium {
+  inline-size: 60%;
+}
+
+.career-profile-screen-loading-score {
+  display: block;
+  inline-size: var(--career-target-min);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--career-surface-raised);
+}
+
+.career-profile-screen-loading-content {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-profile-screen-loading-bars {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-profile-screen-loading-bar {
+  display: block;
+  inline-size: 100%;
+  block-size: var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+}
+
+.career-profile-screen-loading-bar.is-tall {
+  block-size: var(--career-space-5);
+}
+
+.career-profile-screen-loading-bar.is-long {
+  inline-size: 100%;
+}
+
+.career-profile-screen-loading-bar.is-medium {
+  inline-size: 60%;
+}
+
+.career-profile-screen-loading-content > p {
+  margin: 0;
+  color: var(--career-text-soft);
+}
+
+@media (max-width: 760px) {
+  .career-profile-mobile.career-profile-screen-loading {
+    display: grid;
+    gap: var(--career-space-5);
+  }
+
+  .career-profile-mobile .career-profile-screen-loading-summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .career-profile-mobile .career-profile-screen-loading-avatar {
+    aspect-ratio: 1;
+    border-radius: 50%;
+  }
+
+  .career-profile-mobile .career-profile-screen-loading-content {
+    margin-block-start: var(--career-space-3);
+  }
+}

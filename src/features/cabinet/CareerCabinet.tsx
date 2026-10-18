@@ -1,5 +1,9 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import {
+  profileConsultantPrompt,
+  experienceFactConsultantContext,
+} from './profileConsultantContext';
 import { ArrowClockwise, WarningCircle } from '@phosphor-icons/react';
 import {
   updateAccountProfile,
@@ -10,12 +14,15 @@ import {
 import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
-import { TodayScreen, type TodayFunnelContext } from '../today/TodayScreen';
+import { TodayScreen } from '../today/TodayScreen';
+import { queueActionTitle, queueDiscussionContext } from '../today/todayFormat';
+import type { TodayProfileFocus, TodayQueueItem } from '../today/todayApi';
 import { useToday } from '../today/useToday';
 import { ResumeStudio } from '../resume/ResumeStudio';
 import { ProfileScreenView } from '../resume/ProfileScreenView';
 import { RelocationScreen } from '../relocation/RelocationScreen';
 import type { ProfileTab } from '../resume/profileTabs';
+import type { ProfileFocusRequest, ProfileMobileScene } from '../resume/profileMobileNavigation';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { VacanciesPoolScreen } from '../vacancies/VacanciesPoolScreen';
 import { useMatchedPool } from '../vacancies/useMatchedPool';
@@ -53,6 +60,12 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 
 export type { CareerCabinetView } from './cabinetViews';
 
+function profileFocusForAction(action: ReasonedCareerAction): ProfileFocusRequest | undefined {
+  const findingId = action.findingIds[0];
+  if (!findingId) return undefined;
+  return { section: findingId.startsWith('ats-layout-') ? 'ats' : 'review', findingId };
+}
+
 function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
   switch (view) {
     case 'profile':
@@ -71,6 +84,8 @@ function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
 
 interface CareerCabinetProps {
   view: CareerCabinetView;
+  refreshRevision?: number;
+  initialProfileTab?: ProfileTab;
   navigationOptions?: NavigationOptions;
   session: AuthUser & { candidateId: string };
   workspace?: CandidateWorkspace;
@@ -85,6 +100,9 @@ interface CareerCabinetProps {
     subjectTitle?: string,
     initialPrompt?: string,
   ) => void;
+  onOpenSkillQuizBank?: () => void;
+  onOpenRoleSkillAssessment?: () => void;
+  onMobileSceneChange?: (scene: ProfileMobileScene | null) => void;
   onUpdateWorkspace: (workspace: CandidateWorkspace) => void;
 }
 
@@ -110,6 +128,10 @@ export function CareerCabinet(props: CareerCabinetProps) {
     onUpdateWorkspace,
   } = props;
   const data = useCareerCabinetData(session.candidateId);
+  const refreshData = data.refresh;
+  useEffect(() => {
+    if (props.refreshRevision !== undefined && props.refreshRevision > 0) void refreshData();
+  }, [props.refreshRevision, refreshData]);
   // Карьерная картина вошедшего кандидата: анкета плюс факты с сервера.
   // Без неё «ATS-читаемость» и «Следующее действие» показывали пустые
   // состояния тому, у кого разобрано резюме (B103, B105).
@@ -253,7 +275,24 @@ export function CareerCabinet(props: CareerCabinetProps) {
     },
     [data, onUpdateWorkspace, pool, targetDirection, workspace],
   );
-  const [profileTab, setProfileTab] = useState<ProfileTab>('resume');
+  const [profileTab, setProfileTab] = useState<ProfileTab>(props.initialProfileTab ?? 'resume');
+  const [profileFocusRequest, setProfileFocusRequest] = useState<ProfileFocusRequest | null>(null);
+  const onProfileFocusHandled = useCallback(() => setProfileFocusRequest(null), []);
+  const onNavigateProfileTarget = useCallback(
+    (target: TodayProfileFocus) => {
+      setProfileFocusRequest(target);
+      onNavigate('profile');
+    },
+    [onNavigate],
+  );
+  const onNavigateProfileAction = useCallback(
+    (action: ReasonedCareerAction) => {
+      if (action.destination !== 'profile') return;
+      setProfileFocusRequest(profileFocusForAction(action) ?? null);
+      onNavigate('profile');
+    },
+    [onNavigate],
+  );
   const [vacancyProfileRequest, setVacancyProfileRequest] =
     useState<VacancyProfileRequirementRequest | null>(null);
   const openProfileRequirement = useCallback(
@@ -264,6 +303,10 @@ export function CareerCabinet(props: CareerCabinetProps) {
     [onNavigate],
   );
   const clearProfileRequirement = useCallback(() => setVacancyProfileRequest(null), []);
+  useEffect(() => {
+    if (view !== 'profile') setProfileFocusRequest(null);
+  }, [view]);
+
   const showsVacanciesScreen = view === 'opportunities';
   const showsDiaryScreen = view === 'diary';
   // B248 §2 — the same path indicator the anonymous wizard shows
@@ -321,6 +364,7 @@ export function CareerCabinet(props: CareerCabinetProps) {
           <CareerTodaySkeleton showHeading={false} />
         ) : (
           <CabinetSection
+            refreshRevision={props.refreshRevision}
             view={view}
             session={session}
             workspace={workspace}
@@ -335,6 +379,13 @@ export function CareerCabinet(props: CareerCabinetProps) {
             data={data}
             profileTab={profileTab}
             onProfileTabChange={setProfileTab}
+            profileFocusRequest={profileFocusRequest ?? undefined}
+            onProfileFocusHandled={onProfileFocusHandled}
+            onNavigateProfileTarget={onNavigateProfileTarget}
+            onNavigateProfileAction={onNavigateProfileAction}
+            onOpenSkillQuizBank={props.onOpenSkillQuizBank}
+            onOpenRoleSkillAssessment={props.onOpenRoleSkillAssessment}
+            onMobileSceneChange={props.onMobileSceneChange}
             vacancyProfileRequest={vacancyProfileRequest}
             consultantAction={journey?.reasonedAction}
             navigationOptions={navigationOptions}
@@ -356,39 +407,30 @@ export function CareerCabinet(props: CareerCabinetProps) {
 
 /** «Сегодня» reads its own digest through `useToday` — the cabinet's
  * `useCareerCabinetData` snapshot has no queue or digest fields of its own. */
-function TodaySection({
-  onOpenTariffs,
-  candidateId,
-  consultantAction,
-  onNavigate,
-  profileDraft,
-  funnelContext,
-  onOpenExpert,
-}: {
+function TodaySection(props: {
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
+  onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
+  onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
+  onDiscussQueueItem?: (item: TodayQueueItem) => void;
   onOpenTariffs?: () => void;
   profileDraft?: ResumeDraft;
-  funnelContext?: TodayFunnelContext;
   onOpenExpert?: () => void;
 }) {
-  const { snapshot, loading, failed, refresh, markFollowUpSent, markingFollowUpIds } = useToday();
+  const today = useToday();
   return (
     <TodayScreen
-      onOpenTariffs={onOpenTariffs}
-      snapshot={snapshot}
-      loading={loading}
-      failed={failed}
-      onRetry={() => void refresh()}
-      onMarkFollowUpSent={markFollowUpSent}
-      markingFollowUpIds={markingFollowUpIds}
-      candidateId={candidateId}
-      consultantAction={consultantAction}
-      onNavigate={onNavigate}
-      profileDraft={profileDraft}
-      funnelContext={funnelContext}
-      onOpenExpert={onOpenExpert}
+      {...props}
+      snapshot={today.snapshot}
+      loading={today.loading}
+      failed={today.failed}
+      onRetry={() => void today.refresh()}
+      onMarkFollowUpSent={today.markFollowUpSent}
+      markingFollowUpIds={today.markingFollowUpIds}
+      onLoadQueueRemainder={today.loadQueueRemainder}
+      queueRemainderLoading={today.queueRemainderLoading}
+      queueRemainderFailed={today.queueRemainderFailed}
     />
   );
 }
@@ -396,6 +438,7 @@ function TodaySection({
 // One component, one JSX tree: splitting further would scatter the markup.
 // eslint-disable-next-line max-lines-per-function
 function CabinetSection({
+  refreshRevision,
   view,
   session,
   workspace,
@@ -410,6 +453,13 @@ function CabinetSection({
   data,
   profileTab,
   onProfileTabChange,
+  profileFocusRequest,
+  onProfileFocusHandled,
+  onNavigateProfileTarget,
+  onNavigateProfileAction,
+  onOpenSkillQuizBank,
+  onOpenRoleSkillAssessment,
+  onMobileSceneChange,
   vacancyProfileRequest,
   consultantAction,
   navigationOptions,
@@ -423,6 +473,7 @@ function CabinetSection({
   onOpenAutomation,
   onOpenExpert,
 }: {
+  refreshRevision?: number;
   view: CareerCabinetView;
   navigationOptions?: NavigationOptions;
   session: AuthUser & { candidateId: string };
@@ -442,6 +493,13 @@ function CabinetSection({
   data: ReturnType<typeof useCareerCabinetData>;
   profileTab: ProfileTab;
   onProfileTabChange: (tab: ProfileTab) => void;
+  profileFocusRequest?: ProfileFocusRequest;
+  onProfileFocusHandled: () => void;
+  onNavigateProfileTarget: (target: TodayProfileFocus) => void;
+  onNavigateProfileAction: (action: ReasonedCareerAction) => void;
+  onOpenSkillQuizBank?: () => void;
+  onOpenRoleSkillAssessment?: () => void;
+  onMobileSceneChange?: (scene: ProfileMobileScene | null) => void;
   vacancyProfileRequest: VacancyProfileRequirementRequest | null;
   consultantAction?: ReasonedCareerAction;
   onNavigate: (view: CareerCabinetView, options?: NavigationOptions) => void;
@@ -468,11 +526,20 @@ function CabinetSection({
         candidateId={session.candidateId}
         consultantAction={consultantAction}
         onNavigate={onNavigate}
+        onNavigateProfileTarget={onNavigateProfileTarget}
+        onNavigateProfileAction={onNavigateProfileAction}
+        onDiscussQueueItem={
+          onOpenExpert
+            ? (item) =>
+                onOpenExpert(
+                  'today',
+                  undefined,
+                  queueActionTitle(item),
+                  queueDiscussionContext(item),
+                )
+            : undefined
+        }
         profileDraft={data.resume?.draft ?? undefined}
-        funnelContext={{
-          found: pool.facets?.catalogSummary?.roleLevelMatches,
-          catalogObservedAt: pool.facets?.catalogSummary?.observedAt,
-        }}
         onOpenExpert={
           onOpenExpert
             ? () =>
@@ -506,6 +573,7 @@ function CabinetSection({
   if (view === 'profile') {
     return (
       <ProfileScreenView
+        refreshKey={refreshRevision}
         candidateId={session.candidateId}
         memory={data.snapshot?.memory ?? []}
         importedSources={data.snapshot?.importedSources}
@@ -519,6 +587,44 @@ function CabinetSection({
         tab={profileTab}
         onTabChange={onProfileTabChange}
         onOpenExpert={onOpenExpert ? () => onOpenExpert('profile') : undefined}
+        onOpenSkillQuizBank={onOpenSkillQuizBank}
+        onOpenRoleSkillAssessment={onOpenRoleSkillAssessment}
+        onSuggestAboutWithConsultant={
+          onOpenExpert
+            ? () =>
+                onOpenExpert(
+                  'profile',
+                  undefined,
+                  'Обо мне',
+                  profileConsultantPrompt('Обо мне', true),
+                )
+            : undefined
+        }
+        onFillQuestionnaire={
+          onOpenExpert
+            ? (sectionTitle) =>
+                onOpenExpert(
+                  'profile',
+                  undefined,
+                  `Раздел: ${sectionTitle}`,
+                  profileConsultantPrompt(sectionTitle),
+                )
+            : undefined
+        }
+        onCollectExperienceFact={
+          onOpenExpert
+            ? (target) => {
+                const context = experienceFactConsultantContext(
+                  target,
+                  data.resume?.draft ?? undefined,
+                );
+                onOpenExpert('profile', undefined, context.subjectTitle, context.initialPrompt);
+              }
+            : undefined
+        }
+        profileFocusRequest={profileFocusRequest}
+        onProfileFocusHandled={onProfileFocusHandled}
+        onMobileSceneChange={onMobileSceneChange}
         onOpenRelocation={() => setRelocationOpen(true)}
       />
     );

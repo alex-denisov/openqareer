@@ -18,12 +18,18 @@ const PROFILE_BLOCKS: readonly {
       return Boolean(
         contact?.email?.trim() ||
         contact?.phone?.trim() ||
-        contact?.location?.trim() ||
         contact?.links?.some((link) => link.trim()),
       );
     },
   },
-  { label: 'Опыт', hasValue: (draft) => draft.experience.length > 0 },
+  {
+    label: 'Опыт',
+    hasValue: (draft) =>
+      draft.experience.length > 0 &&
+      draft.experience.every((entry) =>
+        Boolean(entry.startDate && (entry.current || entry.endDate)),
+      ),
+  },
   { label: 'Образование', hasValue: (draft) => draft.education.length > 0 },
   { label: 'Проекты', hasValue: (draft) => Boolean(draft.projects?.length) },
   { label: 'Навыки', hasValue: (draft) => Boolean(draft.skills?.length) },

@@ -111,7 +111,12 @@ async function createApp(options?: {
   });
   apps.push(app);
   stores.push(candidateStore);
-  return { app, authorization: `Bearer ${candidate.accessToken}` };
+  return {
+    app,
+    authorization: `Bearer ${candidate.accessToken}`,
+    candidateStore,
+    candidateId: candidate.id,
+  };
 }
 
 const TODAY_URL = '/api/v1/candidate/today';
@@ -138,7 +143,64 @@ describe('GET /candidate/today', () => {
     expect(body.digest.newVacancies).toBe(1);
   });
 
-  it('excludes vacancies without a role match from today\'s new-vacancy digest and queue', async () => {
+  it('returns only persisted receipt and scheduled-interview counts for the server 30-day window', async () => {
+    const { app, authorization, candidateStore, candidateId } = await createApp();
+    const oldStageDate = new Date(Date.now() - 41 * 86_400_000).toISOString();
+    const application = candidateStore.createApplication(candidateId, {
+      stage: 'applied',
+      occurredAt: oldStageDate,
+      vacancy: { title: 'Инженер данных', company: 'FinCloud', url: '', source: '' },
+    });
+    candidateStore.patchApplication(candidateId, application.id, {
+      expectedVersion: application.version,
+      occurredAt: oldStageDate,
+      deliveryReceipt: { kind: 'auto_reply', value: 'Подтверждение отправки' },
+    });
+    candidateStore.createApplicationInterview(candidateId, application.id, {
+      round: 1,
+      scheduledAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+    });
+    candidateStore.createApplicationInterview(candidateId, application.id, {
+      round: 2,
+      scheduledAt: new Date(Date.now() - 31 * 86_400_000).toISOString(),
+    });
+
+    const response = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const momentum = response.json().data.momentum;
+    expect(momentum.windows['30d'].applied).toBe(1);
+    expect(momentum.windows['30d'].interviews).toBe(1);
+    expect(momentum.evidence['30d'].endAt).toBe(momentum.calculatedAt);
+    expect(
+      Date.parse(momentum.evidence['30d'].endAt) - Date.parse(momentum.evidence['30d'].startAt),
+    ).toBe(30 * 86_400_000);
+    expect(momentum.evidence['30d'].applied).toMatchObject({
+      source: 'application_events.recorded_at',
+      sampleSize: 1,
+    });
+    expect(momentum.evidence['30d'].interviews).toMatchObject({
+      source: 'candidate_interview_schedules.scheduled_at',
+      sampleSize: 1,
+    });
+
+    const otherCandidate = candidateStore.createCandidate({
+      dataClass: 'synthetic',
+      locale: 'ru-RU',
+    });
+    const isolated = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization: `Bearer ${otherCandidate.accessToken}` },
+    });
+    expect(isolated.statusCode).toBe(200);
+    expect(isolated.json().data.momentum.windows['30d'].applied).toBe(0);
+    expect(isolated.json().data.momentum.windows['30d'].interviews).toBe(0);
+  });
+
+  it("excludes vacancies without a role match from today's new-vacancy digest and queue", async () => {
     const { app, authorization } = await createApp({
       withMatchingEngine: true,
       roleMatches: ['target', 'partial', 'none'],
@@ -235,6 +297,41 @@ describe('GET /candidate/today', () => {
     });
 
     expect(response.statusCode).toBe(422);
+  });
+
+  it('returns five items first and the real remainder for the same queue revision', async () => {
+    const roleMatches = Array.from({ length: 12 }, () => 'target' as const);
+    const { app, authorization } = await createApp({ withMatchingEngine: true, roleMatches });
+    const headers = { authorization };
+    const first = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers,
+    });
+
+    expect(first.statusCode, first.body).toBe(200);
+    const firstPage = first.json().data;
+    expect(firstPage.queue).toHaveLength(5);
+    expect(firstPage.queueTotal).toBe(12);
+    expect(firstPage.queueRevision).toMatch(/^[a-f0-9]{64}$/u);
+
+    const remaining = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow&queueOffset=5&queueRevision=${firstPage.queueRevision}`,
+      headers,
+    });
+    expect(remaining.statusCode, remaining.body).toBe(200);
+    expect(remaining.json().data.queue).toHaveLength(7);
+    expect(
+      [...firstPage.queue, ...remaining.json().data.queue].map(
+        (item: { clusterId?: string }) => item.clusterId,
+      ),
+    ).toEqual(Array.from({ length: 12 }, (_, index) => `cluster-${index + 1}`));
+
+    const stale = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow&queueOffset=5&queueRevision=${'0'.repeat(64)}`,
+      headers,
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json().error.code).toBe('today_queue_changed');
   });
 
   it('requires an authenticated candidate', async () => {

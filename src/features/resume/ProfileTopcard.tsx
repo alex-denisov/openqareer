@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ProfileImportLive } from './ProfileImportLive';
+import { useLinkedInImportProgress } from '../connections/linkedinImportProgress';
 import {
   ArrowClockwise,
   CaretDown,
@@ -11,7 +12,7 @@ import {
   PaperPlaneTilt,
   PencilSimple,
   Phone,
-  PlugsConnected,
+  Plus,
 } from '@phosphor-icons/react';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
 import { resumeSourceCoverage, type ImportedSource } from './resumeSourceCoverage';
@@ -39,6 +40,8 @@ interface ProfileTopcardProps {
   readonly memory?: readonly CandidateMemory[];
   /** Opens «Аккаунт → Подключения» (C54 п.11) — no chip without it. */
   readonly onOpenConnections?: () => void;
+  readonly onEdit?: () => void;
+  readonly onOpenData?: () => void;
 }
 
 /**
@@ -128,7 +131,7 @@ function ContactRow({ draft }: { readonly draft: ResumeDraft }) {
 }
 
 // eslint-disable-next-line max-lines-per-function
-function TopcardEditForm({
+export function TopcardEditForm({
   draft,
   onSave,
   onCancel,
@@ -151,23 +154,35 @@ function TopcardEditForm({
       <div className="career-profile-screen-field-grid">
         <label className="career-profile-screen-field">
           <span>Имя</span>
-          <input value={fullName} onChange={(event) => setFullName(event.target.value)} />
+          <input
+            name="fullName"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
         </label>
         <label className="career-profile-screen-field">
           <span>Роль (headline)</span>
-          <input value={headline} onChange={(event) => setHeadline(event.target.value)} />
+          <input
+            name="headline"
+            value={headline}
+            onChange={(event) => setHeadline(event.target.value)}
+          />
         </label>
         <label className="career-profile-screen-field">
           <span>Город</span>
-          <input value={location} onChange={(event) => setLocation(event.target.value)} />
+          <input
+            name="location"
+            value={location}
+            onChange={(event) => setLocation(event.target.value)}
+          />
         </label>
         <label className="career-profile-screen-field">
           <span>Email</span>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} />
+          <input name="email" value={email} onChange={(event) => setEmail(event.target.value)} />
         </label>
         <label className="career-profile-screen-field">
           <span>Телефон</span>
-          <input value={phone} onChange={(event) => setPhone(event.target.value)} />
+          <input name="phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
         </label>
       </div>
       <div className="career-profile-screen-edit-actions">
@@ -296,6 +311,7 @@ function SourceChip({
       : connectionStatusLabel(connection?.status);
   const contents = (
     <span className="career-profile-screen-source-visual">
+      {platform === 'linkedin' ? <LinkedinLogo size={14} aria-hidden="true" /> : null}
       <span className="career-profile-screen-source-name">{PLATFORM_LABELS[platform]}</span>
       <span aria-hidden="true">·</span>
       <span className="career-profile-screen-source-detail">{detail}</span>
@@ -323,6 +339,7 @@ function ProfileSourceActions({
   readonly hasImports: boolean;
   readonly onOpenConnections?: () => void;
 }) {
+  const importRunning = Boolean(useLinkedInImportProgress());
   if (!onOpenConnections) return null;
   return (
     <>
@@ -331,10 +348,10 @@ function ProfileSourceActions({
         type="button"
         onClick={onOpenConnections}
       >
-        <PlugsConnected size={16} aria-hidden="true" />
+        <Plus size={16} aria-hidden="true" />
         Источник
       </button>
-      {hasImports ? (
+      {hasImports && !importRunning ? (
         <button
           className="career-quiet-button career-profile-screen-import-again"
           type="button"
@@ -407,12 +424,45 @@ function ProfileCoverageDetails({ draft }: { readonly draft: ResumeDraft }) {
   );
 }
 
+function CompletenessCount({
+  value,
+  onOpenData,
+}: {
+  readonly value: ReturnType<typeof profileCompleteness>;
+  readonly onOpenData?: () => void;
+}) {
+  const count = (
+    <>
+      <span className="career-profile-screen-numeric">{value.completedCount}</span> из{' '}
+      <span className="career-profile-screen-numeric">{value.totalCount}</span> блоков
+    </>
+  );
+  return (
+    <strong>
+      {onOpenData ? (
+        <button
+          type="button"
+          className="profile-completeness-control"
+          aria-label="Открыть данные профиля"
+          onClick={onOpenData}
+        >
+          {count}
+        </button>
+      ) : (
+        count
+      )}
+    </strong>
+  );
+}
+
 function ProfileCompletenessSummary({
   draft,
   memory,
+  onOpenData,
 }: {
   readonly draft: ResumeDraft;
   readonly memory: readonly CandidateMemory[];
+  readonly onOpenData?: () => void;
 }) {
   const completeness = profileCompleteness(draft);
   const proposedFactCount = memory.filter(
@@ -422,15 +472,12 @@ function ProfileCompletenessSummary({
     <div className="career-profile-screen-completion">
       <div>
         <span>Резюме собрано</span>{' '}
-        <strong>
-          <span className="career-profile-screen-numeric">{completeness.completedCount}</span> из{' '}
-          <span className="career-profile-screen-numeric">{completeness.totalCount}</span> блоков
-        </strong>
+        <CompletenessCount value={completeness} onOpenData={onOpenData} />
       </div>
       <progress
         className="career-profile-screen-completion-progress"
-        value={completeness.completedCount}
-        max={completeness.totalCount}
+        value={Math.round((completeness.completedCount / completeness.totalCount) * 100)}
+        max={100}
         aria-label={`Резюме собрано ${completeness.completedCount} из ${completeness.totalCount} блоков`}
       />
       <p className="career-profile-screen-proposed-facts">
@@ -439,6 +486,55 @@ function ProfileCompletenessSummary({
       </p>
       {completeness.missingSections.length ? (
         <p>Не заполнено: {completeness.missingSections.join(', ').toLowerCase()}.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TopcardName({ name, onEdit }: { readonly name?: string; readonly onEdit?: () => void }) {
+  return (
+    <div className="career-profile-screen-name-row">
+      <h1 aria-label={name || 'Имя не указано'}>
+        {onEdit ? (
+          <button
+            type="button"
+            className="profile-name-control"
+            aria-label="Изменить основные данные профиля"
+            onClick={onEdit}
+          >
+            {name || 'Имя не указано'}
+          </button>
+        ) : (
+          name || 'Имя не указано'
+        )}
+      </h1>
+    </div>
+  );
+}
+
+function TopcardProfileMeta({ draft }: { readonly draft: ResumeDraft }) {
+  const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
+  const employer = draft.experience.find((entry) => entry.current)?.employer?.trim();
+  const location = draft.candidate.contact?.location?.trim();
+  return (
+    <div className="career-profile-screen-profile-meta">
+      {headline || employer ? (
+        <p className="career-profile-screen-headline">
+          {[headline, employer].filter(Boolean).join(', ')}
+        </p>
+      ) : null}
+      {location ? (
+        <>
+          {headline || employer ? (
+            <span className="career-profile-screen-meta-separator" aria-hidden="true">
+              ·
+            </span>
+          ) : null}
+          <span className="career-profile-screen-inline-location">
+            <MapPin size={14} aria-hidden="true" />
+            {location}
+          </span>
+        </>
       ) : null}
     </div>
   );
@@ -454,33 +550,18 @@ function TopcardProfileCopy({
   readonly onToggleDetails: () => void;
 }) {
   const { draft, updatedAt } = props;
-  const fullName = draft.candidate.fullName?.trim();
-  const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
   const location = draft.candidate.contact?.location?.trim();
   const hasDetails = Boolean(location || updatedAt || draft.candidate.contact);
   return (
     <>
       <div className="career-profile-screen-id-main">
-        <div className="career-profile-screen-name-row">
-          <h1>{fullName || 'Имя не указано'}</h1>
-        </div>
-        <div className="career-profile-screen-profile-meta">
-          {headline ? <p className="career-profile-screen-headline">{headline}</p> : null}
-          {location ? (
-            <>
-              {headline ? (
-                <span className="career-profile-screen-meta-separator" aria-hidden="true">
-                  ·
-                </span>
-              ) : null}
-              <span className="career-profile-screen-inline-location">
-                <MapPin size={14} aria-hidden="true" />
-                {location}
-              </span>
-            </>
-          ) : null}
-        </div>
-        <ProfileCompletenessSummary draft={draft} memory={props.memory ?? []} />
+        <TopcardName name={draft.candidate.fullName?.trim()} onEdit={props.onEdit} />
+        <TopcardProfileMeta draft={draft} />
+        <ProfileCompletenessSummary
+          draft={draft}
+          memory={props.memory ?? []}
+          onOpenData={props.onOpenData}
+        />
         {hasDetails ? (
           <ProfileDetailsToggle isOpen={detailsOpen} onToggle={onToggleDetails} />
         ) : null}
@@ -510,12 +591,14 @@ export function ProfileTopcard(props: ProfileTopcardProps) {
           detailsOpen={detailsOpen}
           onToggleDetails={() => setDetailsOpen((value) => !value)}
         />
-        <TopcardEdit
-          draft={props.draft}
-          onDraftChange={props.onDraftChange}
-          onSectionSave={props.onSectionSave}
-          saving={props.saving}
-        />
+        {!props.onEdit ? (
+          <TopcardEdit
+            draft={props.draft}
+            onDraftChange={props.onDraftChange}
+            onSectionSave={props.onSectionSave}
+            saving={props.saving}
+          />
+        ) : null}
       </div>
       <ProfileStatusRow props={props} />
     </section>
@@ -587,7 +670,7 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
         <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
-      <ProfileImportLive />
+      <ProfileImportLive onReimport={props.onOpenConnections} />
     </div>
   );
 }

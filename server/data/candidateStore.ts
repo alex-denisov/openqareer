@@ -1,4 +1,12 @@
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
+import type {
+  ResumeVersionContent,
+  ResumeVersionCreateResult,
+  ResumeVersionCursor,
+  ResumeVersionPage,
+  ResumeVersionUpdateResult,
+  StoredResumeVersion,
+} from '../domain/resumeVersions';
 import type { CareerStrategy } from '../../shared/careerStrategy';
 import type { RoleSkillAssessmentRun } from '../domain/roleSkillAssessment';
 import type { InterviewSession } from '../domain/interviewSimulator';
@@ -760,6 +768,24 @@ export interface CandidateStore {
     draft: ResumeDraft,
     evidenceSnapshot: readonly ResumeEvidenceSnapshot[],
   ): StoredResumeDraft;
+  createResumeVersion(
+    candidateId: string,
+    versionId: string,
+    sourceMasterRevision: string,
+    content: ResumeVersionContent,
+  ): ResumeVersionCreateResult;
+  getResumeVersion(candidateId: string, versionId: string): StoredResumeVersion | null;
+  listResumeVersions(
+    candidateId: string,
+    options: { readonly limit: number; readonly cursor: ResumeVersionCursor | null },
+  ): ResumeVersionPage;
+  updateResumeVersion(
+    candidateId: string,
+    versionId: string,
+    expectedRevision: number,
+    expectedMasterRevision: string,
+    content: ResumeVersionContent,
+  ): ResumeVersionUpdateResult;
   /** Serves a cached photo/logo only to the candidate it belongs to (B265 §4). */
   getCandidateMedia(candidateId: string, mediaId: string): StoredCandidateMedia | null;
   saveCareerCommand(command: CareerCommandRecord): CareerCommandRecord;

@@ -25,7 +25,8 @@ describe('ProfileImportLive', () => {
     expect(html).toContain('role="status"');
     expect(html).toMatch(/<li class="is-done">.*места работы/u);
     expect(html).toMatch(/<li>.*образование/u);
-    expect(html).toContain('value="1"');
-    expect(html).toContain('max="3"');
+    expect(html).toContain('value="33"');
+    expect(html).toContain('max="100"');
+    expect(html).toContain('Прочитано разделов: 1 из 3, 33 %');
   });
 });

@@ -31,6 +31,10 @@ export interface ApplicationDerivedFields {
   readonly materials: { readonly coverLetter: boolean; readonly resume: boolean };
   readonly nearestInterview: ApplicationInterviewSummary | null;
   readonly deliveryReceipt?: DeliveryReceipt | null;
+  /** Server record time attached to the latest persisted delivery receipt event. */
+  readonly deliveryReceiptRecordedAt?: string | null;
+  /** All persisted appointment dates; Today filters these against its server window. */
+  readonly interviewScheduledAt?: readonly string[];
 }
 
 export interface DeriveApplicationFieldsInput {
@@ -84,10 +88,27 @@ export function deriveApplicationFields(
           round: nearestInterview.round,
         }
       : null,
-    deliveryReceipt:
-      [...input.events].reverse().find((event) => event.deliveryReceipt !== undefined)
-        ?.deliveryReceipt ?? null,
+    ...deliveryReceiptEvidence(input.events),
+    interviewScheduledAt: interviewScheduleDates(input.interviews),
   };
+}
+
+function deliveryReceiptEvidence(events: readonly StoredApplicationEvent[]) {
+  const latestReceiptEvent = [...events]
+    .reverse()
+    .find((event) => event.deliveryReceipt !== undefined);
+  return {
+    deliveryReceipt: latestReceiptEvent?.deliveryReceipt ?? null,
+    deliveryReceiptRecordedAt: latestReceiptEvent?.deliveryReceipt
+      ? latestReceiptEvent.recordedAt
+      : null,
+  };
+}
+
+function interviewScheduleDates(interviews: readonly StoredApplicationInterview[]): string[] {
+  return interviews
+    .flatMap((interview) => (interview.scheduledAt ? [interview.scheduledAt] : []))
+    .sort();
 }
 
 /** The first move to `applied` anchors the fixed 5/8-day reminder schedule. */

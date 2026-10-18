@@ -1,0 +1,15 @@
+export const RESUME_VERSION_MIGRATION = [
+  'CREATE TABLE IF NOT EXISTS candidate_resume_versions (',
+  '  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,',
+  '  version_id TEXT NOT NULL,',
+  '  revision INTEGER NOT NULL CHECK(revision > 0),',
+  '  source_master_revision TEXT NOT NULL,',
+  '  content_cipher TEXT NOT NULL,',
+  '  created_at TEXT NOT NULL,',
+  '  updated_at TEXT NOT NULL,',
+  '  PRIMARY KEY(candidate_id, version_id)',
+  ') STRICT;',
+  '',
+  'CREATE INDEX IF NOT EXISTS candidate_resume_versions_by_candidate_updated',
+  '  ON candidate_resume_versions(candidate_id, updated_at DESC, version_id DESC);',
+].join('\n');

@@ -3,14 +3,16 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { describe, expect, it, vi } from 'vitest';
 import { ProfileAboutSection } from './ProfileAboutSection';
-import { ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import { ProfileResumeReview, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
+import { ProfileResumeVersions } from './ProfileReviewAndVersions';
 import type { ResumeDraft } from './resumeTypes';
 
+import { renderToStaticMarkup } from 'react-dom/server';
 const MOCK_DRAFT: ResumeDraft = {
   candidate: {
     fullName: 'Алексей Денисов',
     headline: 'Engineering Director / VP',
-    contact: { location: 'Москва' },
+    contact: { location: 'Москва', email: 'candidate@example.test' },
     about: 'Руковожу инженерией финтех-платформ. Ищу роль CTO в продуктовой компании.',
   },
   experience: [
@@ -36,7 +38,9 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    act(() => root.render(<ProfileAboutSection draft={MOCK_DRAFT} onSectionSave={onSave} />));
+    act(() =>
+      root.render(<ProfileAboutSection draft={MOCK_DRAFT} onSectionSave={onSave} detailView />),
+    );
 
     const editBtn = container.querySelector(
       '[data-testid="about-edit-text-btn"]',
@@ -54,10 +58,20 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
 
   it('ProfileAboutSection displays "Предложить вариант с консультантом" and activates suggestion', () => {
     const onSave = vi.fn();
+    const onSuggestWithConsultant = vi.fn();
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = createRoot(container);
-    act(() => root.render(<ProfileAboutSection draft={MOCK_DRAFT} onSectionSave={onSave} />));
+    act(() =>
+      root.render(
+        <ProfileAboutSection
+          detailView
+          draft={MOCK_DRAFT}
+          onSectionSave={onSave}
+          onSuggestWithConsultant={onSuggestWithConsultant}
+        />,
+      ),
+    );
 
     const suggestBtn = container.querySelector(
       '[data-testid="about-consultant-suggest-btn"]',
@@ -66,7 +80,9 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
     expect(suggestBtn.textContent).toContain('Предложить вариант с консультантом');
 
     act(() => suggestBtn.click());
-    expect(container.textContent).toMatch(/Принять/i);
+    expect(onSuggestWithConsultant).toHaveBeenCalledTimes(1);
+    expect(container.querySelector('.career-consultant-suggestion')).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
 
     act(() => root.unmount());
     container.remove();
@@ -103,43 +119,27 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
     expect(questBtn).not.toBeNull();
     expect(questBtn.textContent).toContain('Заполнить анкету');
     act(() => questBtn.click());
-    expect(onFillQuestionnaire).toHaveBeenCalled();
+    expect(onFillQuestionnaire).toHaveBeenCalledWith('Образование');
 
     act(() => root.unmount());
     container.remove();
   });
 
-  it('ResumeVersionsCard renders "Создать версию под вакансию" and creates targeted version', () => {
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    const root = createRoot(container);
-    act(() => root.render(<ProfileReviewAndVersions draft={MOCK_DRAFT} memory={[]} />));
+  it('exports the review card as a standalone Profile detail', () => {
+    const html = renderToStaticMarkup(
+      <ProfileResumeReview draft={MOCK_DRAFT} memory={[]} onOpenExpert={() => undefined} />,
+    );
 
-    const createBtn = container.querySelector(
-      '[data-testid="create-targeted-version-btn"]',
-    ) as HTMLButtonElement;
-    expect(createBtn).not.toBeNull();
-    expect(createBtn.textContent).toContain('Создать версию под вакансию');
-    act(() => createBtn.click());
+    expect(html).toContain('Проверка резюме');
+    expect(html).toContain('Собрать факты с консультантом');
+  });
 
-    const input = container.querySelector(
-      '[data-testid="targeted-version-input"]',
-    ) as HTMLInputElement;
-    expect(input).not.toBeNull();
-    act(() => {
-      input.value = 'Вектор Банк';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+  it('ResumeVersionsCard shows the persistent version entry point without local fake rows', () => {
+    const html = renderToStaticMarkup(<ProfileResumeVersions draft={MOCK_DRAFT} memory={[]} />);
 
-    const submitBtn = container.querySelector(
-      '[data-testid="submit-targeted-version-btn"]',
-    ) as HTMLButtonElement;
-    act(() => submitBtn.click());
-
-    expect(container.textContent).toContain('Под вакансию «Вектор Банк»');
-    expect(container.textContent).toContain('Черновик ждёт вашего одобрения');
-
-    act(() => root.unmount());
-    container.remove();
+    expect(html).toContain('Создать версию под вакансию');
+    expect(html).toContain('Сохранённых снимков резюме под вакансию пока нет');
+    expect(html).not.toContain('вер-');
+    expect(html).not.toContain('Черновик ждёт вашего одобрения');
   });
 });

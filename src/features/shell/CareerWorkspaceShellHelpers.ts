@@ -140,14 +140,14 @@ export function matchesMedia(query: string): boolean {
 
 export function hasClosedDesktopExpertPreference(): boolean {
   return (
-    matchesMedia('(min-width: 1280px)') &&
+    matchesMedia('(min-width: 901px)') &&
     ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')
   );
 }
 
 export function initialExpertPanelOpen(sessionPending: boolean, _initialView: ShellView): boolean {
   if (typeof window === 'undefined') return false;
-  const desktop = matchesMedia('(min-width: 1280px)');
+  const desktop = matchesMedia('(min-width: 901px)');
   if (desktop && ['closed', 'strip'].includes(readDesktopExpertPreference() ?? '')) return false;
   // While the session is checked the panel stays on the phone sheet and a wide desktop; a
   // narrowed desktop window keeps its columns until the candidate opens the consultant.
@@ -164,9 +164,11 @@ export function expertPanelOpenOnWidthChange(wide: boolean): boolean {
 
 export function ConsultantStripButton({
   count,
+  stageTitle,
   onExpand,
 }: {
   count: number;
+  stageTitle?: string;
   onExpand?: () => void;
 }) {
   return createElement(
@@ -188,6 +190,7 @@ export function ConsultantStripButton({
       : null,
     count > 0 ? createElement('span', { className: 'consultant-strip-count' }, count) : null,
     createElement('span', { className: 'consultant-strip-title' }, 'Консультант'),
+    createElement('span', { className: 'consultant-strip-stage' }, stageTitle),
     createElement(CaretDoubleLeft, {
       className: 'consultant-strip-caret',
       size: 20,

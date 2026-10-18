@@ -16,18 +16,20 @@ import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import {
-  deferConsultantActionUntilTomorrow,
   isConsultantActionResolved,
   resolveConsultantAction,
+  todayActionId,
 } from './consultantActionStorage';
 import {
+  deferTodayAction,
   selectTodayDecision,
+  todayMomentumMetricValue,
   type TodayFollowUp,
+  type TodayProfileFocus,
   type TodayQueueItem,
   type TodaySnapshot,
 } from './todayApi';
-import { TodayDesktopContent, actionSourceSummary, type TodayFunnelContext } from './TodayDesktop';
-export type { TodayFunnelContext } from './TodayDesktop';
+import { TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
   consultantTargetView,
   followUpStatusLabel,
@@ -63,55 +65,123 @@ export interface TodayScreenProps {
   readonly candidateId?: string;
   readonly consultantAction?: ReasonedCareerAction;
   readonly profileDraft?: ResumeDraft;
-  readonly funnelContext?: TodayFunnelContext;
+  readonly queueRemainderLoading?: boolean;
+  readonly queueRemainderFailed?: boolean;
+  readonly onLoadQueueRemainder?: () => Promise<void>;
   readonly onOpenTariffs?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
+  readonly onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
 }
 
 function useTodayConsultantAction({
   candidateId,
+  snapshot,
   consultantAction,
   onNavigate,
   onOpenExpert,
+  onNavigateProfileAction,
 }: {
   candidateId?: string;
+  snapshot: TodaySnapshot | null;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView) => void;
   onOpenExpert?: () => void;
+  onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
 }) {
   const [resolvedActionKey, setResolvedActionKey] = useState<string | null>(null);
-  const currentActionKey = consultantAction?.headline ?? null;
-  const isResolved =
-    !consultantAction ||
-    resolvedActionKey === currentActionKey ||
-    isConsultantActionResolved(candidateId, consultantAction);
-  const activeAction = isResolved ? undefined : consultantAction;
+  const [postponeBusy, setPostponeBusy] = useState(false);
+  const [postponeError, setPostponeError] = useState<string>();
+  const actionKey = consultantAction ? todayActionId(consultantAction) : null;
+  const activeAction = visibleConsultantAction(
+    candidateId,
+    snapshot,
+    consultantAction,
+    actionKey,
+    resolvedActionKey,
+  );
 
-  const onAccept = () => {
-    if (!consultantAction) return;
-    if (consultantAction.destination === 'coach') {
-      onOpenExpert?.();
-      return;
-    }
-    resolveConsultantAction(candidateId, consultantAction, 'accepted');
-    setResolvedActionKey(consultantAction.headline);
-    onNavigate?.(consultantTargetView(consultantAction.destination));
+  const onAccept = () =>
+    acceptConsultantAction(
+      candidateId,
+      consultantAction,
+      actionKey,
+      onNavigate,
+      onOpenExpert,
+      onNavigateProfileAction,
+      setResolvedActionKey,
+    );
+  const onDismiss = () =>
+    dismissConsultantAction(candidateId, consultantAction, actionKey, setResolvedActionKey);
+  const onPostpone = async () => {
+    if (!consultantAction || !actionKey || postponeBusy) return;
+    setPostponeBusy(true);
+    setPostponeError(undefined);
+    const saved = await saveTodayActionDeferral(actionKey);
+    if (saved) setResolvedActionKey(actionKey);
+    else setPostponeError('Не удалось сохранить перенос. Повторите попытку.');
+    setPostponeBusy(false);
   };
 
-  const onDismiss = () => {
-    if (!consultantAction) return;
-    resolveConsultantAction(candidateId, consultantAction, 'dismissed');
-    setResolvedActionKey(consultantAction.headline);
-  };
+  return { activeAction, onAccept, onDismiss, onPostpone, postponeBusy, postponeError };
+}
 
-  const onPostpone = () => {
-    if (!consultantAction) return;
-    deferConsultantActionUntilTomorrow(candidateId, consultantAction);
-    setResolvedActionKey(consultantAction.headline);
-  };
+function visibleConsultantAction(
+  candidateId: string | undefined,
+  snapshot: TodaySnapshot | null,
+  action: ReasonedCareerAction | undefined,
+  actionKey: string | null,
+  resolvedActionKey: string | null,
+): ReasonedCareerAction | undefined {
+  if (!action || !actionKey || resolvedActionKey === actionKey) return undefined;
+  if (isConsultantActionResolved(candidateId, action)) return undefined;
+  return snapshot?.todayActionDeferral?.actionId === actionKey ? undefined : action;
+}
 
-  return { activeAction, onAccept, onDismiss, onPostpone };
+function acceptConsultantAction(
+  candidateId: string | undefined,
+  action: ReasonedCareerAction | undefined,
+  actionKey: string | null,
+  onNavigate: ((view: CareerCabinetView) => void) | undefined,
+  onOpenExpert: (() => void) | undefined,
+  onNavigateProfileAction: ((action: ReasonedCareerAction) => void) | undefined,
+  setResolvedActionKey: (key: string | null) => void,
+): void {
+  if (!action || !actionKey) return;
+  if (action.destination === 'coach') {
+    onOpenExpert?.();
+    return;
+  }
+  resolveConsultantAction(candidateId, action, 'accepted');
+  setResolvedActionKey(actionKey);
+  if (action.destination === 'profile' && onNavigateProfileAction) {
+    onNavigateProfileAction(action);
+    return;
+  }
+  onNavigate?.(consultantTargetView(action.destination));
+}
+
+function dismissConsultantAction(
+  candidateId: string | undefined,
+  action: ReasonedCareerAction | undefined,
+  actionKey: string | null,
+  setResolvedActionKey: (key: string | null) => void,
+): void {
+  if (!action || !actionKey) return;
+  resolveConsultantAction(candidateId, action, 'dismissed');
+  setResolvedActionKey(actionKey);
+}
+
+async function saveTodayActionDeferral(actionKey: string): Promise<boolean> {
+  try {
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    await deferTodayAction(actionKey, timeZone);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function selectedDecisionAction(snapshot: TodaySnapshot): ReasonedCareerAction | undefined {
@@ -138,61 +208,69 @@ function selectedDecisionAction(snapshot: TodaySnapshot): ReasonedCareerAction |
   };
 }
 
-export function TodayScreen({
-  snapshot,
-  loading,
-  failed,
-  onRetry,
-  candidateId,
-  consultantAction,
-  profileDraft,
-  funnelContext,
-  onNavigate,
-  onOpenExpert,
-}: TodayScreenProps) {
-  const { activeAction, onAccept, onPostpone } = useTodayConsultantAction({
-    candidateId,
-    consultantAction,
-    onNavigate,
-    onOpenExpert,
+export function TodayScreen(props: TodayScreenProps) {
+  const actionState = useTodayConsultantAction({
+    candidateId: props.candidateId,
+    snapshot: props.snapshot,
+    consultantAction: props.consultantAction,
+    onNavigate: props.onNavigate,
+    onOpenExpert: props.onOpenExpert,
+    onNavigateProfileAction: props.onNavigateProfileAction,
   });
 
-  if (failed) return <TodayError onRetry={onRetry} />;
-  if (loading && !snapshot) return <TodaySkeleton />;
-  if (!snapshot) return null;
+  if (props.failed) return <TodayError onRetry={props.onRetry} />;
+  if (props.loading && !props.snapshot) return <TodaySkeleton />;
+  const contentProps = todayContentProps(props, actionState);
+  return contentProps ? <TodayContent {...contentProps} /> : null;
+}
 
-  return (
-    <TodayContent
-      snapshot={snapshot}
-      activeAction={selectedDecisionAction(snapshot) ?? activeAction}
-      onAccept={selectedDecisionAction(snapshot) ? () => onNavigate?.('responses') : onAccept}
-      onPostpone={
-        snapshot.todayDecisionSelection?.resolution === 'accepted'
-          ? () => {
-              void selectTodayDecision(
-                snapshot.todayDecisionSelection!.applicationId,
-                'dismissed',
-              ).catch(() => onRetry());
-            }
-          : onPostpone
-      }
-      onNavigate={onNavigate}
-      onOpenExpert={onOpenExpert}
-      profileDraft={profileDraft}
-      funnelContext={funnelContext}
-    />
-  );
+function todayContentProps(
+  props: TodayScreenProps,
+  actionState: ReturnType<typeof useTodayConsultantAction>,
+): TodayContentProps | null {
+  const { snapshot } = props;
+  if (!snapshot) return null;
+  const selectedAction = selectedDecisionAction(snapshot);
+  return {
+    snapshot,
+    activeAction: selectedAction ?? actionState.activeAction,
+    onAccept: selectedAction ? () => props.onNavigate?.('responses') : actionState.onAccept,
+    onPostpone: selectedAction
+      ? () => {
+          void selectTodayDecision(
+            snapshot.todayDecisionSelection!.applicationId,
+            'dismissed',
+          ).catch(() => props.onRetry());
+        }
+      : actionState.onPostpone,
+    postponeBusy: selectedAction ? false : actionState.postponeBusy,
+    postponeError: selectedAction ? undefined : actionState.postponeError,
+    queueRemainderLoading: props.queueRemainderLoading,
+    queueRemainderFailed: props.queueRemainderFailed,
+    onLoadQueueRemainder: props.onLoadQueueRemainder,
+    onNavigate: props.onNavigate,
+    onOpenExpert: props.onOpenExpert,
+    onDiscussQueueItem: props.onDiscussQueueItem,
+    onNavigateProfileTarget: props.onNavigateProfileTarget,
+    profileDraft: props.profileDraft,
+  };
 }
 
 interface TodayContentProps {
   readonly snapshot: TodaySnapshot;
   readonly profileDraft?: ResumeDraft;
-  readonly funnelContext?: TodayFunnelContext;
   readonly onOpenExpert?: () => void;
+  readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
-  readonly onPostpone: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
+  readonly queueRemainderLoading?: boolean;
+  readonly queueRemainderFailed?: boolean;
+  readonly onLoadQueueRemainder?: () => Promise<void>;
   readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
 }
 
 function TodayContent(props: TodayContentProps) {
@@ -202,12 +280,18 @@ function TodayContent(props: TodayContentProps) {
       <TodayDesktopContent
         snapshot={props.snapshot}
         profileDraft={props.profileDraft}
-        funnelContext={props.funnelContext}
         activeAction={props.activeAction}
         onAccept={props.onAccept}
         onDiscuss={props.onOpenExpert}
         onPostpone={props.onPostpone}
+        postponeBusy={props.postponeBusy}
+        postponeError={props.postponeError}
         onNavigate={props.onNavigate}
+        onNavigateProfileTarget={props.onNavigateProfileTarget}
+        onDiscussQueueItem={props.onDiscussQueueItem}
+        queueRemainderLoading={props.queueRemainderLoading}
+        queueRemainderFailed={props.queueRemainderFailed}
+        onLoadQueueRemainder={props.onLoadQueueRemainder}
       />
     </div>
   );
@@ -218,20 +302,22 @@ function TodayMobileContent({
   activeAction,
   onAccept,
   onPostpone,
+  postponeBusy,
+  postponeError,
   onOpenExpert,
   onNavigate,
   profileDraft,
-  funnelContext,
 }: Pick<
   TodayContentProps,
   | 'snapshot'
   | 'activeAction'
   | 'onAccept'
   | 'onPostpone'
+  | 'postponeBusy'
+  | 'postponeError'
   | 'onOpenExpert'
   | 'onNavigate'
   | 'profileDraft'
-  | 'funnelContext'
 >) {
   return (
     <div className="career-today-mobile pm tm">
@@ -239,6 +325,8 @@ function TodayMobileContent({
         action={activeAction}
         onAccept={onAccept}
         onPostpone={onPostpone}
+        postponeBusy={postponeBusy}
+        postponeError={postponeError}
         onOpenExpert={onOpenExpert}
       />
       <TodayMobileQueue
@@ -246,7 +334,7 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
-      <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
+      <TodayMobileFunnel snapshot={snapshot} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>
   );
@@ -278,42 +366,36 @@ function TodayMobileDecision({
   action,
   onAccept,
   onPostpone,
+  postponeBusy,
+  postponeError,
   onOpenExpert,
 }: {
   readonly action?: ReasonedCareerAction;
   readonly onAccept: () => void;
-  readonly onPostpone: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
   readonly onOpenExpert?: () => void;
 }) {
-  const [reasonsOpen, setReasonsOpen] = useState(false);
-  const reasonsId = useId();
   return (
-    <section className="tm-hero" aria-label="Следующее решение">
+    <section
+      className="tm-hero"
+      aria-label="Следующее решение"
+      aria-busy={postponeBusy || undefined}
+    >
       <p className="tm-eyebrow">Следующее решение</p>
       <h2>{action?.headline ?? 'Нет проверенного следующего шага'}</h2>
       <p className="tm-effect">
         {action?.expectedChange ?? 'В текущих данных нет основания предложить конкретное действие.'}
       </p>
       {action ? (
-        <>
-          <button className="pm-cta tm-main" type="button" onClick={onAccept}>
-            <CheckCircle aria-hidden="true" weight="regular" />
-            {action.label}
-          </button>
-          <button className="pm-text tm-later" type="button" onClick={onPostpone}>
-            Отложить до завтра
-          </button>
-          <button
-            className="tm-why"
-            type="button"
-            aria-expanded={reasonsOpen}
-            aria-controls={reasonsId}
-            onClick={() => setReasonsOpen((open) => !open)}
-          >
-            Почему это решение <CaretDown aria-hidden="true" weight="regular" />
-          </button>
-          <TodayMobileReasons action={action} open={reasonsOpen} id={reasonsId} />
-        </>
+        <TodayMobileDecisionActions
+          action={action}
+          onAccept={onAccept}
+          onPostpone={onPostpone}
+          postponeBusy={postponeBusy}
+          postponeError={postponeError}
+        />
       ) : onOpenExpert ? (
         <button className="tm-why" type="button" onClick={onOpenExpert}>
           Обсудить <CaretRight aria-hidden="true" weight="regular" />
@@ -322,6 +404,54 @@ function TodayMobileDecision({
         <p className="pm-foot">Источники: нет проверенных данных</p>
       )}
     </section>
+  );
+}
+
+function TodayMobileDecisionActions({
+  action,
+  onAccept,
+  onPostpone,
+  postponeBusy,
+  postponeError,
+}: {
+  readonly action: ReasonedCareerAction;
+  readonly onAccept: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
+}) {
+  const [reasonsOpen, setReasonsOpen] = useState(false);
+  const reasonsId = useId();
+  return (
+    <>
+      <button className="pm-cta tm-main" type="button" onClick={onAccept}>
+        <CheckCircle aria-hidden="true" weight="regular" />
+        {action.label}
+      </button>
+      <button
+        className="pm-text tm-later"
+        type="button"
+        disabled={postponeBusy}
+        onClick={() => void onPostpone()}
+      >
+        {postponeBusy ? 'Сохраняем…' : 'Отложить до завтра'}
+      </button>
+      {postponeError ? (
+        <p className="pm-foot" role="alert">
+          {postponeError}
+        </p>
+      ) : null}
+      <button
+        className="tm-why"
+        type="button"
+        aria-expanded={reasonsOpen}
+        aria-controls={reasonsId}
+        onClick={() => setReasonsOpen((open) => !open)}
+      >
+        Почему это решение <CaretDown aria-hidden="true" weight="regular" />
+      </button>
+      <TodayMobileReasons action={action} open={reasonsOpen} id={reasonsId} />
+    </>
   );
 }
 
@@ -442,27 +572,17 @@ interface TodayMobileFunnelMetric {
   readonly value: number | 'unknown';
 }
 
-function todayMobileFunnelMetrics(
-  snapshot: TodaySnapshot,
-  context?: TodayFunnelContext,
-): readonly TodayMobileFunnelMetric[] {
-  const metrics = snapshot.momentum?.windows['30d'];
+function todayMobileFunnelMetrics(snapshot: TodaySnapshot): readonly TodayMobileFunnelMetric[] {
   return [
-    { label: 'Избранное', value: context?.favorites ?? 'unknown' },
-    { label: 'Отклики', value: metrics?.applied ?? 'unknown' },
-    { label: 'Ответы', value: context?.responses ?? metrics?.screenings ?? 'unknown' },
-    { label: 'Интервью', value: metrics?.interviews ?? 'unknown' },
+    { label: 'Избранное', value: 'unknown' },
+    { label: 'Отклики', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'applied') },
+    { label: 'Ответы', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'screenings') },
+    { label: 'Интервью', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'interviews') },
   ];
 }
 
-function TodayMobileFunnel({
-  snapshot,
-  context,
-}: {
-  readonly snapshot: TodaySnapshot;
-  readonly context?: TodayFunnelContext;
-}) {
-  const items = todayMobileFunnelMetrics(snapshot, context);
+function TodayMobileFunnel({ snapshot }: { readonly snapshot: TodaySnapshot }) {
+  const items = todayMobileFunnelMetrics(snapshot);
   const currentStage = items.reduce(
     (last, item, index) => (typeof item.value === 'number' && item.value > 0 ? index : last),
     -1,
@@ -488,28 +608,41 @@ function TodayMobileFunnel({
           </div>
         ))}
       </div>
-      <p className="pm-foot">{todayMobileFunnelBasis(snapshot, context, items)}</p>
+      <p className="pm-foot">{todayMobileFunnelBasis(snapshot, items)}</p>
     </section>
   );
 }
 
 function todayMobileFunnelBasis(
   snapshot: TodaySnapshot,
-  context: TodayFunnelContext | undefined,
   items: readonly TodayMobileFunnelMetric[],
 ): string {
-  const applications = snapshot.momentum?.windows['30d'].applied ?? 'unknown';
+  const momentum = snapshot.momentum;
+  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
+  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
+  const evidence = momentum?.evidence?.['30d'];
   const missing = items.filter((item) => item.value === 'unknown').map((item) => item.label);
-  if (context?.found === undefined) missing.push('каталог');
-  if (context?.offers === undefined) missing.push('офферы');
-  const catalogDate = formatTodayMobileDate(context?.catalogObservedAt) ?? 'дата неизвестна';
-  const calculationDate =
-    formatTodayMobileDate(snapshot.momentum?.calculatedAt) ?? 'дата неизвестна';
-  const sample = typeof applications === 'number' ? ` (n = ${applications})` : '';
+  const startLabel = formatTodayMobileDate(evidence?.startAt);
+  const endLabel = formatTodayMobileDate(evidence?.endAt);
+  const period = startLabel && endLabel ? `Период ${startLabel} — ${endLabel}.` : '';
+  const applicationBasis =
+    typeof applied === 'number'
+      ? `Подтверждения отправки: n = ${evidence?.applied.sampleSize}.`
+      : 'Нет проверенного времени подтверждения отклика.';
+  const interviewBasis =
+    typeof interviews === 'number'
+      ? `Сохранённые даты встреч: n = ${evidence?.interviews.sampleSize}.`
+      : 'Нет проверенных дат интервью.';
+  const lowSample =
+    typeof applied === 'number' && applied < 10
+      ? ' Мало данных: меньше 10 откликов за 30 дней; выводов о конверсии нет.'
+      : '';
   return [
-    `Найдено в каталоге: ${metricText(context?.found)}. Офферов пока ${metricText(context?.offers)}; каталог на ${catalogDate}.`,
-    `Откликов: ${metricText(applications)}${sample}. Данные на ${calculationDate}.`,
+    period,
+    applicationBasis,
+    interviewBasis,
     missing.length ? `Нет проверенных данных: ${[...new Set(missing)].join(', ')}.` : '',
+    lowSample,
   ]
     .filter(Boolean)
     .join(' ');

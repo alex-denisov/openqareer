@@ -249,6 +249,19 @@ export function queueActionTitle(item: {
   return `Новая вакансия: ${item.title}`;
 }
 
+export function queueDiscussionContext(item: TodayQueueItem): string {
+  return [
+    `Задача из очереди «Сегодня»: ${queueActionTitle(item)}.`,
+    `Карточка: ${formatQueueTitle(item.company, item.title)}.`,
+    item.eyebrow?.trim() ? `Детали из очереди: ${item.eyebrow.trim()}.` : undefined,
+    item.dueAt ? `Срок из очереди: ${item.dueAt}.` : undefined,
+    item.applicationId ? `ID отклика: ${item.applicationId}.` : undefined,
+    item.clusterId ? `ID вакансии: ${item.clusterId}.` : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
 /** Компания строки очереди; имя рекрутера в роли компании не показываем. */
 export function queueCompanyLabel(company: string | null | undefined): string {
   const clean = company?.trim();

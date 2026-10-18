@@ -1,0 +1,436 @@
+.profile-footprint-step-nav {
+  min-inline-size: 0;
+}
+
+.profile-footprint-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-footprint-steps > li {
+  min-inline-size: 0;
+}
+
+.profile-footprint-step {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--career-space-1);
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: var(--career-space-3);
+  background: var(--career-surface);
+  text-align: start;
+  white-space: normal;
+}
+
+.profile-footprint-step strong,
+.profile-footprint-step span {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.profile-footprint-step strong {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.profile-footprint-step span {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.4;
+}
+
+.profile-footprint-step[aria-current='step'] {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.profile-footprint-step[aria-current='step'] span {
+  color: var(--career-text-soft);
+}
+
+.profile-footprint-step:disabled {
+  cursor: not-allowed;
+}
+
+.profile-footprint-step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface);
+}
+
+.profile-footprint-step-panel-header {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.profile-footprint-step-panel-header h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  font-weight: 700;
+}
+
+.profile-footprint-step-panel-header p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
+.profile-footprint-step-content,
+.profile-footprint-consent-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.profile-footprint-consent-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  list-style: none;
+}
+
+.profile-footprint-consent-items li {
+  min-inline-size: 0;
+  padding-inline-start: var(--career-space-4);
+  overflow-wrap: anywhere;
+}
+
+.profile-footprint-step-panel--scan .career-footprint-plan,
+.profile-footprint-step-panel--scan .career-footprint-status-section,
+.profile-footprint-step-panel .career-footprint-consent:not(.is-pending) {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.profile-footprint-step-panel--scan .career-footprint-status-section {
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  padding-block-start: var(--career-space-4);
+}
+
+.profile-footprint-step-panel--scan .career-footprint-disclosure {
+  margin: 0;
+}
+
+.profile-footprint-step-panel--findings .career-footprint-findings {
+  gap: 0;
+  order: 1;
+}
+
+.profile-footprint-step-panel--findings .career-footprint-findings > h3,
+.profile-footprint-step-panel--findings .profile-footprint-step-panel-header p {
+  display: none;
+}
+
+.profile-footprint-step-panel--findings .profile-footprint-privacy-trigger {
+  order: 2;
+}
+
+.profile-footprint-step-panel--findings .profile-footprint-privacy-controls {
+  order: 3;
+}
+
+.profile-footprint-finding-evidence-mobile {
+  display: none;
+}
+
+.profile-footprint-finding-evidence-mobile > div {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.profile-footprint-finding-evidence-mobile summary {
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.profile-footprint-finding-evidence-mobile summary:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+  border-radius: var(--career-radius-sm);
+}
+
+.profile-footprint-step-panel--findings .career-footprint-finding {
+  border: 0;
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.profile-footprint-step-panel--findings
+  .career-footprint-finding-group:last-child
+  .career-footprint-finding:last-child {
+  border-block-end: 0;
+}
+
+.profile-footprint-checklist {
+  display: grid;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.profile-footprint-checklist-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.profile-footprint-checklist-heading h4 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.profile-footprint-checklist-heading > span {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.profile-footprint-checklist-list {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-footprint-checklist-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.profile-footprint-checklist-copy {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.profile-footprint-checklist-copy strong {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-footprint-checklist-copy span,
+.profile-footprint-checklist-copy small {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  overflow-wrap: anywhere;
+}
+
+.profile-footprint-checklist-action {
+  justify-self: end;
+}
+
+.profile-footprint-review-segments {
+  display: contents;
+}
+
+.profile-footprint-privacy-trigger {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  inline-size: 100%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: 0;
+  border: 0;
+  color: var(--career-text-soft);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+}
+
+.profile-footprint-privacy-trigger svg {
+  flex: 0 0 auto;
+  color: var(--career-text-dim);
+}
+
+.profile-footprint-privacy-trigger:hover {
+  color: var(--career-text);
+}
+
+.profile-footprint-privacy-trigger:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+  border-radius: var(--career-radius-sm);
+}
+
+.profile-footprint-privacy-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface-raised);
+}
+
+@media (max-width: 900px) {
+  .profile-footprint-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .profile-footprint-step-panel {
+    padding: var(--career-space-4);
+  }
+
+  .profile-footprint-step {
+    padding: var(--career-space-2);
+  }
+
+  .profile-footprint-checklist-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .profile-footprint-checklist-action {
+    justify-self: stretch;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    > .career-footprint-header,
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    > .profile-footprint-step-nav {
+    display: none;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    > .profile-footprint-step-panel {
+    gap: var(--career-space-4);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-step-panel-header {
+    display: none;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .career-footprint-finding-group
+    > h4 {
+    display: none;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-privacy-trigger {
+    order: 1;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-step-panel--findings
+    .career-footprint-findings {
+    gap: var(--career-space-4);
+    order: 2;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-step-panel--findings
+    .career-footprint-finding-heading
+    .career-footprint-finding-status,
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-step-panel--findings
+    .career-footprint-finding-heading
+    .career-footprint-finding-date,
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-finding-evidence-desktop {
+    display: none;
+  }
+
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-finding-evidence-mobile {
+    display: block;
+  }
+
+  .profile-footprint-review-actions--segmented {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--career-space-2);
+  }
+
+  .profile-footprint-review-segments {
+    display: flex;
+    gap: var(--career-space-1);
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--career-space-1);
+    border-radius: var(--career-radius-pill);
+    background: var(--career-surface-raised);
+  }
+
+  .career-footprint-review-actions .profile-footprint-review-segments button {
+    flex: 1 1 0;
+    min-inline-size: 0;
+    border-color: transparent;
+    border-radius: var(--career-radius-pill);
+    background: transparent;
+    text-align: center;
+  }
+
+  .career-footprint-review-actions .profile-footprint-review-segments button[aria-pressed='true'] {
+    border-color: transparent;
+    background: var(--career-bg-elevated);
+  }
+
+  .career-footprint-review-actions .profile-footprint-review-hide {
+    min-block-size: var(--career-target-min);
+    padding-inline: var(--career-space-2);
+    border: 0;
+    color: var(--career-text-dim);
+    background: transparent;
+    font-size: var(--career-text-xs);
+    text-decoration: underline;
+    text-underline-offset: var(--career-space-1);
+  }
+
+  .profile-footprint-step-panel--findings .career-footprint-finding {
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-lg);
+    padding: var(--career-space-4);
+    background: var(--career-surface);
+  }
+}

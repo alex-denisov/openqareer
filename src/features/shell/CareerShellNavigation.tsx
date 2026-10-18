@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from 'react';
 import {
+  CaretLeft,
   CaretRight,
   DotsThree,
   GearSix,
@@ -276,6 +277,7 @@ interface CareerMobileTopbarProps {
   readonly activeView: ShellSection;
   readonly title?: string;
   readonly ariaHidden?: boolean;
+  readonly onBack?: () => void;
   readonly pendingProposalCount?: number;
   readonly expertOpen?: boolean;
   readonly onOpenConsultant: () => void;
@@ -310,6 +312,7 @@ function ResponsesMobileTopbar(props: CareerMobileTopbarProps) {
 }
 
 function MobileTopbarContent({
+  onBack,
   title,
   pendingProposalCount = 0,
   expertOpen,
@@ -317,6 +320,7 @@ function MobileTopbarContent({
   notificationsSlot,
 }: {
   readonly title: string;
+  readonly onBack?: () => void;
   readonly pendingProposalCount?: number;
   readonly expertOpen?: boolean;
   readonly onOpenConsultant: () => void;
@@ -324,7 +328,13 @@ function MobileTopbarContent({
 }) {
   return (
     <>
-      <div className="career-mobile-topbar-notifications">{notificationsSlot}</div>
+      <div className="career-mobile-topbar-notifications">
+        {onBack ? (
+          <button type="button" className="career-mobile-back-trigger" aria-label="Назад" onClick={onBack}>
+            <CaretLeft size={20} aria-hidden="true" />
+          </button>
+        ) : notificationsSlot}
+      </div>
       <h1 className="career-mobile-page-title">{title}</h1>
       <button
         className="career-mobile-consultant-trigger"
@@ -347,6 +357,7 @@ function DefaultMobileTopbar(props: CareerMobileTopbarProps) {
   return (
     <MobileTopbarContent
       title={props.title ?? 'Сегодня'}
+      onBack={props.onBack}
       pendingProposalCount={props.pendingProposalCount}
       expertOpen={props.expertOpen}
       onOpenConsultant={props.onOpenConsultant}

@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { materializeManualResumeEvidence } from './manualResumeEvidence';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -30,6 +31,7 @@ import { registerCandidateExperienceFactRoutes } from './candidateExperienceFact
 import { registerCandidateConsultantHistoryRoutes } from './candidateConsultantHistoryRoutes';
 import { registerCandidateMediaRoutes } from './candidateMediaRoutes';
 import { registerCandidateDocumentRoutes } from './candidateDocumentRoutes';
+import { registerCandidateResumeVersionRoutes } from './candidateResumeVersionRoutes';
 import { rebuildCampaignRoles } from '../vacancies/rebuildCampaignRoles';
 import { resumeStructurerForCandidate, resumeStructurerForRequest } from './resumeLlmAccess';
 import { parseResumeContent } from '../../src/features/workspace/resumeParser';
@@ -169,7 +171,10 @@ const handleGetSnapshot: Handler = async (
   const { memoryOffset, stage } = snapshotQuerySchema.parse(request.query);
   // Целиком снимок до браузера не доезжает — маршрут рвёт ответ примерно на
   // 20 460 байт (INC-030). Экран получает голову снимка и дочитывает память.
-  const { data, meta } = buildSnapshotHead(candidateStore.getSnapshot(candidate.id, stage), memoryOffset);
+  const { data, meta } = buildSnapshotHead(
+    candidateStore.getSnapshot(candidate.id, stage),
+    memoryOffset,
+  );
   return { data, meta: { requestId: request.id, ...meta } };
 };
 
@@ -185,7 +190,12 @@ const handleGetMemory: Handler = async (
   const page = buildMemoryPage(candidateStore.getSnapshot(candidate.id).memory, offset);
   return {
     data: page.items,
-    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
   };
 };
 
@@ -197,7 +207,12 @@ const handleGetTurns: Handler = async ({ authService, candidateStore, config }, 
   const page = buildTurnPage(candidateStore.getSnapshot(candidate.id).turns, offset);
   return {
     data: page.items,
-    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
   };
 };
 
@@ -214,7 +229,12 @@ const handleGetMessages: Handler = async (
   const page = buildMessagePage(messages, offset);
   return {
     data: page.items,
-    meta: { requestId: request.id, total: page.total, offset: page.offset, nextOffset: page.nextOffset },
+    meta: {
+      requestId: request.id,
+      total: page.total,
+      offset: page.offset,
+      nextOffset: page.nextOffset,
+    },
   };
 };
 
@@ -251,8 +271,7 @@ const handleExportCandidate: Handler = async (
       // Keep the singular key for clients that have not migrated yet.
       reputationAudit:
         candidateReputationRepo?.getLatestAudit(candidate.id, { trustedOnly: true }) ?? null,
-      footprintAudits:
-        candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
+      footprintAudits: candidateReputationRepo?.listFootprintAudits(candidate.id) ?? [],
     },
     meta: { requestId: request.id, exportedAt: new Date().toISOString() },
   };
@@ -368,7 +387,8 @@ async function importResumeIntoDossier(
     candidate.id,
     resumeImportCommit(candidate.id, body, plan, read.reader),
   );
-  recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', resumeDocumentDigest(candidate.id, body.source, body.text));
+  const documentDigest = resumeDocumentDigest(candidate.id, body.source, body.text);
+  recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', documentDigest);
   void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
   });
@@ -504,11 +524,30 @@ const handlePutResume: Handler = async (deps, request, reply) => {
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
   const draft = resumeDraftSchema.parse(request.body);
-  // A stored v2 draft carries fields a pre-B265 client has never heard of.
-  // Saving that client's payload as-is would silently drop them, so an old
-  // build is refused outright instead of quietly losing data (architecture §1).
-  const storedDraft = candidateStore.getSnapshot(candidate.id).resume?.draft;
-  if (storedDraft?.schemaVersion === 2 && draft.schemaVersion !== 2) {
+  const saveResult = candidateStore.transaction(() => {
+    const snapshot = candidateStore.getSnapshot(candidate.id);
+    const storedDraft = snapshot.resume?.draft;
+    // A stored v2 draft carries fields a pre-B265 client has never heard of.
+    // Refuse it before any evidence materialization so stale clients cannot
+    // silently erase fields or cause otherwise unrelated facts to be confirmed.
+    if (storedDraft?.schemaVersion === 2 && draft.schemaVersion !== 2) {
+      return { outdated: true } as const;
+    }
+
+    const boundDraft = materializeManualResumeEvidence(
+      candidateStore,
+      candidate.id,
+      draft,
+      storedDraft,
+      new Set(snapshot.memory.map((memory) => memory.id)),
+    );
+    const evidence = candidateStore.getSnapshot(candidate.id).memory;
+    const projection = buildResumeStudioProjection({ ...boundDraft, evidence });
+    candidateStore.saveResumeDraft(candidate.id, boundDraft, projection.evidenceSnapshot);
+    return { outdated: false } as const;
+  });
+
+  if (saveResult.outdated) {
     return sendError(
       reply,
       request,
@@ -518,11 +557,6 @@ const handlePutResume: Handler = async (deps, request, reply) => {
       false,
     );
   }
-  const projection = buildResumeStudioProjection({
-    ...draft,
-    evidence: candidateStore.getSnapshot(candidate.id).memory,
-  });
-  candidateStore.saveResumeDraft(candidate.id, draft, projection.evidenceSnapshot);
   return { data: resumeStudioView(candidateStore, candidate.id), meta: { requestId: request.id } };
 };
 
@@ -629,5 +663,6 @@ export async function registerCandidateRoutes(
   await registerCandidateConsultantHistoryRoutes(app, deps);
   await registerCandidateExperienceFactRoutes(app, deps);
   await registerResumeEndpoints(app, deps);
+  await registerCandidateResumeVersionRoutes(app, deps);
   registerCandidateDocumentRoutes(app, deps);
 }

@@ -30,7 +30,8 @@ describe('ProfileLanguagesSection', () => {
     const html = renderToStaticMarkup(
       <ProfileLanguagesSection draft={baseDraft} onSectionSave={() => undefined} />,
     );
-    expect(html).toContain('Английский — свободный (C1)');
+    expect(html).toContain('career-profile-screen-lang-name">Английский</div>');
+    expect(html).toContain('career-profile-screen-lang-level">свободный (C1)');
     expect(html.match(/career-profile-screen-lang-meter/g)).toHaveLength(2);
     expect(html.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(5);
     expect(html).toContain('Источник: импортированный профиль');

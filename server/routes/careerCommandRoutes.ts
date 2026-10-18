@@ -104,9 +104,13 @@ function resolveExecutionTarget(
       message: 'В предложении нет проверяемого раздела профиля и новой формулировки.',
     };
   }
+  const normalizedRevision = {
+    ...proposal.resumeRevision,
+    field: proposal.resumeRevision.field ?? undefined,
+  };
   const currentText = currentTextForResumeRevision(
     snapshot.resume?.draft ?? EMPTY_RESUME_DRAFT,
-    proposal.resumeRevision,
+    normalizedRevision,
     snapshot.memory,
   );
   if (currentText === null) {
@@ -119,7 +123,7 @@ function resolveExecutionTarget(
   }
   return {
     ok: true,
-    executionTarget: bindResumeRevisionTarget(proposal.resumeRevision, currentText),
+    executionTarget: bindResumeRevisionTarget(normalizedRevision, currentText),
   };
 }
 

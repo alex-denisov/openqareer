@@ -6,6 +6,7 @@ import { SqliteCandidateMediaRepository } from './sqliteCandidateMediaRepository
 import { SqliteDocumentRepository } from './sqliteDocumentRepository';
 import { SqliteMarketRepository } from './sqliteMarketRepository';
 import { SqliteResumeRepository } from './sqliteResumeRepository';
+import { SqliteResumeVersionRepository } from './sqliteResumeVersionRepository';
 import { SqliteVacancyApplicationRepository } from './sqliteVacancyApplicationRepository';
 import { SqliteVacancyRepository } from './sqliteVacancyRepository';
 import { SqliteWorkPreferenceRepository } from './sqliteWorkPreferenceRepository';
@@ -33,6 +34,7 @@ export function createSqliteCandidateStoreRepositories(
     assessmentsRepository: new SqliteAssessmentRepository(database, sealedText),
     marketRepository: new SqliteMarketRepository(database, sealedText),
     resumeRepository: new SqliteResumeRepository(database, sealedText),
+    resumeVersionRepository: new SqliteResumeVersionRepository(database, sealedText),
     workspaceRepository,
     careerCommandRepository: new SqliteCareerCommandRepository(database, sealedText, transaction),
     documentRepository,

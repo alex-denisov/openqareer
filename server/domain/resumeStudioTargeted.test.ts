@@ -146,6 +146,33 @@ function documentFacts(document: ResumeDocument): string[] {
 }
 
 describe('buildTargetedResumeSlice', () => {
+  it('counts a source-backed native language when matching requirements', () => {
+    const nativeMaster: ResumeDocument = {
+      ...master,
+      languages: [
+        {
+          id: 'native-russian',
+          name: fact('Русский', 'language-russian'),
+          cefr: null,
+          native: fact<'native'>('native', 'language-russian'),
+        },
+      ],
+    };
+
+    const result = buildTargetedResumeSlice(nativeMaster, {
+      title: 'Инженер платформы',
+      requirements: ['Русский родной'],
+    });
+
+    expect(result.matchedRequirements).toEqual(['Русский родной']);
+    expect(result.missingRequirements).toEqual([]);
+    expect(result.document.languages[0]?.native).toMatchObject({
+      value: 'native',
+      memoryId: 'language-russian',
+      sourceMessageIds: ['message-language-russian'],
+    });
+  });
+
   it('prioritizes supported facts, compresses other roles, and keeps unsupported requirements visible', () => {
     const result = buildTargetedResumeSlice(master, {
       title: 'Инженер платформы',
@@ -160,9 +187,7 @@ describe('buildTargetedResumeSlice', () => {
     expect(result.document.experience[0]?.bullets).toEqual(master.experience[1]?.bullets);
     expect(result.document.experience[1]?.bullets).toEqual(master.experience[0]?.bullets);
     expect(result.document.experience[2]?.bullets).toEqual([]);
-    expect(result.document.projects?.map((project) => project.id)).toEqual([
-      'cluster-migration',
-    ]);
+    expect(result.document.projects?.map((project) => project.id)).toEqual(['cluster-migration']);
     expect(result.document.skills?.map((skill) => skill.name)).toEqual([
       'Kubernetes',
       'PostgreSQL',

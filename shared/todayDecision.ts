@@ -8,6 +8,30 @@ export const todayDecisionSelectionSchema = z
   })
   .strict();
 
+export const todayActionIdSchema = z.string().regex(/^[a-f0-9]{16}$/u);
+
+export const todayActionDeferralSchema = z
+  .object({
+    actionId: todayActionIdSchema,
+    deferredThroughDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u)
+      .refine((date) => {
+        const parsed = new Date(`${date}T00:00:00.000Z`);
+        return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+      }),
+  })
+  .strict();
+
+export type TodayActionDeferral = z.infer<typeof todayActionDeferralSchema>;
+
+export const todayActionDeferralInputSchema = z
+  .object({
+    actionId: todayActionIdSchema,
+    tz: z.string().trim().min(1).max(100).refine(isIanaTimeZone),
+  })
+  .strict();
+
 export type TodayDecisionSelection = z.infer<typeof todayDecisionSelectionSchema>;
 
 export function currentTodayDecision(
@@ -20,4 +44,27 @@ export function currentTodayDecision(
   return calendar.format(new Date(selection.updatedAt)) === calendar.format(now)
     ? selection
     : undefined;
+}
+
+export function candidateCalendarDate(now: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(now);
+}
+
+export function isTodayActionDeferred(
+  deferral: TodayActionDeferral | undefined,
+  now = new Date(),
+  timeZone = 'UTC',
+): boolean {
+  return (
+    deferral !== undefined && deferral.deferredThroughDate >= candidateCalendarDate(now, timeZone)
+  );
+}
+
+function isIanaTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
 }

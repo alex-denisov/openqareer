@@ -341,7 +341,7 @@
   accent-color: var(--career-accent);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 761px) {
   .career-profile-screen-topcard {
     display: grid;
     gap: var(--career-space-4);
@@ -526,7 +526,7 @@
     border: 1px solid var(--career-line);
     border-radius: var(--career-radius-lg);
     color: var(--career-text-dim);
-    background: var(--career-surface-muted);
+    background: var(--career-surface);
     font-size: var(--career-text-xs);
     white-space: nowrap;
   }
@@ -779,7 +779,7 @@
 }
 
 /* B430 экран 2, 1440: секции плотными строками — название, подпись, годы справа, правка. */
-@media (min-width: 1024px) {
+@media (min-width: 761px) {
   .career-profile-screen-view .career-profile-screen-company-logo {
     display: none;
   }
@@ -839,12 +839,14 @@
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 761px) {
   .career-profile-screen-view .career-profile-screen-position-title-row {
     align-items: center;
   }
 
-  .career-profile-screen-view .career-profile-screen-position-title-row .career-profile-screen-position-dates {
+  .career-profile-screen-view
+    .career-profile-screen-position-title-row
+    .career-profile-screen-position-dates {
     margin-inline-start: auto;
     font-size: var(--career-text-xs);
     font-variant-numeric: tabular-nums;
@@ -861,7 +863,7 @@
 }
 
 /* Узкая колонка (окно приложения): дата и годы под названием, кнопки правки остаются рядом с ним. */
-@media (min-width: 1024px) {
+@media (min-width: 761px) {
   .career-profile-screen-view .career-profile-screen-position,
   .career-profile-screen-view .career-profile-screen-edu-item {
     container-type: inline-size;
@@ -879,5 +881,80 @@
       flex-basis: 100%;
       margin-inline-start: 0;
     }
+  }
+}
+
+/* B430 approved desktop Profile geometry. */
+@media (min-width: 761px) {
+  .career-profile-screen-view {
+    --font-mono: var(--font-main);
+    --career-profile-ats-width: 22rem;
+  }
+  .career-profile-screen-view .career-profile-screen-topcard {
+    padding: var(--career-space-6);
+  }
+  .career-profile-screen-view .career-profile-screen-id-row {
+    grid-template-columns: calc(var(--career-space-6) * 2) minmax(0, 1fr) auto;
+    gap: var(--career-space-4);
+  }
+  .career-profile-screen-view .career-profile-screen-avatar {
+    width: calc(var(--career-space-6) * 2);
+    height: calc(var(--career-space-6) * 2);
+    border: 0;
+    background: var(--career-accent-soft);
+    color: var(--career-accent);
+    font-weight: 600;
+  }
+  .career-profile-screen-view .career-profile-screen-name-row h1 {
+    font-size: var(--career-text-lg);
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .career-profile-screen-view .career-profile-screen-headline {
+    font-size: var(--career-text-sm);
+  }
+  .career-profile-screen-view .career-profile-screen-tabs {
+    display: flex;
+    gap: var(--career-space-1);
+    padding: 0;
+    border: 0;
+    border-block-end: var(--career-border-width) solid var(--career-line-strong);
+    border-radius: 0;
+    background: transparent;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .career-profile-screen-view .career-profile-screen-tabs button {
+    justify-content: start;
+    border-radius: 0;
+    border: 0;
+    border-block-end: calc(var(--career-border-width) * 2) solid transparent;
+    margin-block-end: calc(var(--career-border-width) * -1);
+    background: transparent;
+    color: var(--career-text-soft);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .career-profile-screen-view .career-profile-screen-tabs button.is-active {
+    border-block-end-color: var(--career-accent);
+    color: var(--career-text);
+    background: transparent;
+  }
+  .career-profile-screen-view .career-profile-screen-tab-count {
+    min-width: 0;
+    min-height: 0;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    font-weight: 400;
+  }
+  .career-profile-screen-view .career-profile-screen-review-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, var(--career-profile-ats-width));
+  }
+}
+
+@media (min-width: 761px) and (max-width: 1100px) {
+  .career-profile-screen-view .career-profile-screen-review-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

@@ -40,6 +40,7 @@ const document: ResumeDocument = {
       startDate: assertion('2021-10'),
       endDate: assertion('2024-08'),
       current: assertion(false),
+      description: assertion('Построила платформу обработки платежей.'),
       bullets: [assertion('Снизила время реакции.'), assertion('  ')],
     },
     {
@@ -88,7 +89,28 @@ describe('ResumePrintDocument', () => {
     const html = render();
     expect(html).toContain('Technical Product Manager — Kaspersky');
     expect(html).toContain('2021-10 — 2024-08');
+    expect(html).toContain('<p>Построила платформу обработки платежей.</p>');
+    expect(html).not.toContain('<li>Построила платформу обработки платежей.</li>');
     expect(html).toContain('Снизила время реакции.');
+  });
+
+  it('prints a source-backed native language without inferring CEFR', () => {
+    const nativeDocument: ResumeDocument = {
+      ...document,
+      languages: [
+        {
+          id: 'ru-native',
+          name: assertion('Русский'),
+          cefr: null,
+          native: assertion<'native'>('native'),
+        },
+      ],
+    };
+
+    const html = render(nativeDocument);
+
+    expect(html).toContain('Русский (родной)');
+    expect(html).not.toContain('Русский (C2)');
   });
 
   it('prints the city once, in the role line', () => {

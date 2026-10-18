@@ -53,6 +53,7 @@ function v2Draft() {
         skills: ['Python', 'Go'],
         employerLogoMediaId: 'media-logo-1',
         employerGroupKey: 'group-example-gmbh',
+        descriptionMemoryId: 'memory-description-1',
       },
     ],
     education: [
@@ -160,12 +161,21 @@ describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => 
       skills: ['Python', 'Go'],
       employerLogoMediaId: 'media-logo-1',
       employerGroupKey: 'group-example-gmbh',
+      descriptionMemoryId: 'memory-description-1',
     });
     expect(draft.education[0]?.description).toBe('Focused on distributed systems.');
     expect(draft.certifications?.[0]?.name).toBe('AWS Certified Solutions Architect');
     expect(draft.projects?.[0]?.name).toBe('Internal platform migration');
     expect(draft.achievements?.[0]?.kind).toBe('honor');
     expect(draft.sourceSuggestions?.openToWork?.roles).toEqual(['VP of Engineering']);
+  });
+
+  it('rejects an invalid experience description memory reference', () => {
+    const draft = {
+      ...v2Draft(),
+      experience: [{ ...v2Draft().experience[0], descriptionMemoryId: 'x'.repeat(81) }],
+    };
+    expect(() => resumeDraftSchema.parse(draft)).toThrow();
   });
 
   it('accepts a v1 draft unchanged (no schemaVersion)', () => {

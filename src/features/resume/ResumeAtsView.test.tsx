@@ -121,10 +121,26 @@ const mockDocument: ResumeDocument = {
 };
 
 describe('ResumeAtsView', () => {
-  it('renders standard uppercase section markers for ATS parsers', () => {
+  it('renders a source-backed native language without presenting a CEFR level', () => {
+    const nativeLanguage = {
+      id: 'ru-native',
+      name: assertion('Русский', 'mem-ru'),
+      cefr: null,
+      native: assertion<'native'>('native', 'mem-ru'),
+    };
     const html = renderToStaticMarkup(
-      <ResumeAtsView document={mockDocument} draft={mockDraft} />,
+      <ResumeAtsView
+        document={{ ...mockDocument, languages: [...mockDocument.languages, nativeLanguage] }}
+        draft={mockDraft}
+      />,
     );
+
+    expect(html).toContain('Русский (родной)');
+    expect(html).not.toContain('Русский (C2)');
+  });
+
+  it('renders standard uppercase section markers for ATS parsers', () => {
+    const html = renderToStaticMarkup(<ResumeAtsView document={mockDocument} draft={mockDraft} />);
 
     expect(html).toMatch(/=== SUMMARY ===/u);
     expect(html).toMatch(/=== WORK EXPERIENCE ===/u);

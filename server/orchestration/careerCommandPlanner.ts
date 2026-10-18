@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   careerActionProposalSchema,
+  resumeExperienceDateTextSchema,
   type CareerActionProposal,
   type ResumeRevisionProposal,
 } from '../domain/coach';
@@ -28,6 +29,7 @@ export const resumeReviseExecutionTargetSchema = z
     section: z.enum(['headline', 'about', 'experience', 'skills']),
     experienceId: z.string().optional(),
     memoryId: z.string().optional(),
+    field: z.enum(['startDate', 'endDate']).optional(),
     currentText: z.string().max(10_000),
     proposedText: z.string().min(1).max(10_000),
     previousText: z.string().optional(),
@@ -53,6 +55,24 @@ export const resumeReviseExecutionTargetSchema = z
         message: 'only experience revisions have a fact id',
       });
     }
+    if (target.field && target.section !== 'experience') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions have a date field',
+      });
+    }
+    if (target.field && target.memoryId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience date revisions cannot target a memory fact',
+      });
+    }
+    if (target.field && !resumeExperienceDateTextSchema.safeParse(target.proposedText).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience date revisions need a canonical ISO month or date',
+      });
+    }
   });
 
 export type ResumeReviseExecutionTarget = z.infer<typeof resumeReviseExecutionTargetSchema>;
@@ -66,6 +86,7 @@ export function bindResumeRevisionTarget(
     ...proposal,
     experienceId: proposal.experienceId ?? undefined,
     memoryId: proposal.memoryId ?? undefined,
+    field: proposal.field ?? undefined,
     currentText,
   });
 }

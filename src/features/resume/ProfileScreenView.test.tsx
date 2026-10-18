@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
+import { ProfileDataDialog } from './ProfileDataDialog';
 import { describe, expect, it, vi } from 'vitest';
 import { ProfileScreenSurface, type ProfileScreenSurfaceProps } from './ProfileScreenView';
+import { profileRelocationSummaryStatusFromResponse, ProfileSideRail } from './ProfileSideRail';
+import type { RelocationQuestionnaireResponse } from '../relocation/relocationApi';
 import type { ResumeDraft } from './resumeTypes';
 
 const baseProps: ProfileScreenSurfaceProps = {
@@ -43,10 +46,15 @@ const populatedDraft: ResumeDraft = {
 };
 
 describe('ProfileScreenSurface — states', () => {
-  it('shows a loading state and no sections while the draft has not arrived', () => {
+  it('keeps the summary and disabled tabs in place while the content is loading', () => {
     const html = renderToStaticMarkup(<ProfileScreenSurface {...baseProps} loading />);
     expect(html).toContain('Загружаем профиль');
-    expect(html).not.toContain('career-profile-screen-topcard');
+    expect(html).toContain('career-profile-screen-loading-summary');
+    expect(html).toContain('career-profile-screen-tabs');
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain('disabled=""');
+    expect(html).not.toContain('Марина Соколова');
+    expect(html).not.toContain('career-profile-screen-tab-count');
   });
 
   it('shows a retry action on error, never a blank screen', () => {
@@ -72,14 +80,27 @@ describe('ProfileScreenSurface — states', () => {
     const html = renderToStaticMarkup(
       <ProfileScreenSurface {...baseProps} draft={populatedDraft} />,
     );
+    const skillsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="skills" />,
+    );
     expect(html).toContain('Марина Соколова');
     expect(html).toContain('VP of Engineering');
     expect(html).toContain('FinNova Bank');
     expect(html).toContain('Technical University of Munich');
     expect(html).toContain('Kubernetes');
-    expect(html).toContain('sec-courses');
-    expect(html).toContain('Если курсы у вас есть, добавьте их вручную.');
     expect(html).toContain('career-profile-screen-coverage');
+    expect(skillsHtml).toContain('Открыть данные профиля');
+    const coursesHtml = renderToStaticMarkup(
+      <ProfileDataDialog
+        {...baseProps}
+        draft={populatedDraft}
+        section="courses"
+        onSelect={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    expect(coursesHtml).toContain('sec-courses');
+    expect(coursesHtml).toContain('Если курсы у вас есть, добавьте их вручную.');
   });
 
   it('names a model reader and leaves an older import without an unverified claim (B184)', () => {
@@ -124,7 +145,7 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('career-profile-screen-topcard');
   });
 
-  it('shows a short "about" excerpt and an expansion action for longer text', () => {
+  it('retains the complete About source for responsive three-line clamping', () => {
     const longAbout = Array.from({ length: 6 }, (_, i) => `Абзац номер ${i + 1}. `.repeat(20)).join(
       '\n\n',
     );
@@ -134,9 +155,9 @@ describe('ProfileScreenSurface — states', () => {
         draft={{ ...populatedDraft, candidate: { ...populatedDraft.candidate, about: longAbout } }}
       />,
     );
-    expect(html).toContain('Показать полностью');
+    expect(html).toContain('profile-about-text is-clamped');
     const about = html.match(/<section[^>]*id="sec-about"[\s\S]*?<\/section>/u)?.[0] ?? '';
-    expect(about).not.toContain('Абзац номер 6');
+    expect(about).toContain('Абзац номер 6');
   });
 
   // Owner remark #6: a heading paragraph followed by "- bullet" lines must
@@ -221,15 +242,85 @@ describe('ProfileScreenSurface — states', () => {
     expect(profileHtml).toContain('id="profile-panel-resume"');
     expect(profileHtml).toContain('sec-experience');
 
-    const skillsHtml = renderToStaticMarkup(
+    const skillsWithoutQuizHandler = renderToStaticMarkup(
       <ProfileScreenSurface {...baseProps} draft={populatedDraft} tab="skills" />,
     );
-    expect(skillsHtml).toContain('id="profile-panel-skills"');
-    expect(skillsHtml).not.toContain('sec-experience');
-    expect(skillsHtml).toContain('Пройти квиз по навыкам');
+    expect(skillsWithoutQuizHandler).toContain('id="profile-panel-skills"');
+    expect(skillsWithoutQuizHandler).not.toContain('Пройти квиз по навыкам');
+    expect(skillsWithoutQuizHandler).not.toContain('sec-experience');
+
+    const skillsWithQuizHandler = renderToStaticMarkup(
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={populatedDraft}
+        tab="skills"
+        onOpenSkillQuizBank={() => undefined}
+      />,
+    );
+    expect(skillsWithQuizHandler).toContain('Пройти квиз');
+    expect(skillsWithQuizHandler).not.toMatch(/disabled=""[^>]*>[^<]*Пройти квиз/u);
     expect(profileHtml).toContain('career-profile-screen-ats-card');
-    expect(profileHtml).toContain('Не рассчитано');
+    expect(profileHtml).toContain('aria-label="Оценка ATS неизвестна"');
+    expect(profileHtml).toContain('из 100');
     expect(profileHtml).not.toContain('>JSON<');
+  });
+
+  it('shows relocation consent status from the API state and keeps missing state unknown', () => {
+    const preparedHtml = renderToStaticMarkup(
+      <ProfileSideRail
+        draft={populatedDraft}
+        desktopLayout
+        relocationSummary="prepared"
+        onOpenRelocation={() => undefined}
+      />,
+    );
+    const unknownHtml = renderToStaticMarkup(
+      <ProfileSideRail draft={populatedDraft} desktopLayout relocationSummary="unknown" />,
+    );
+
+    expect(preparedHtml).toContain('Подготовлено');
+    expect(preparedHtml).toContain('Видите только вы');
+    expect(preparedHtml).toContain('Открыть');
+    expect(unknownHtml).toContain('Статус неизвестен');
+  });
+
+  it('maps only candidate consent data into relocation status labels', () => {
+    const notGranted: RelocationQuestionnaireResponse = {
+      profile: null,
+      consent: {
+        status: 'not_granted',
+        granted: false,
+        versionId: null,
+        grantedAt: null,
+        revokedAt: null,
+      },
+      consentTextStatus: 'pending_dpo_review',
+      alerts: [],
+    };
+
+    expect(profileRelocationSummaryStatusFromResponse(notGranted)).toBe('prepared');
+    expect(
+      profileRelocationSummaryStatusFromResponse({
+        ...notGranted,
+        consent: {
+          ...notGranted.consent,
+          status: 'revoked',
+          revokedAt: '2026-10-17T00:00:00.000Z',
+        },
+      }),
+    ).toBe('not_enabled');
+    expect(
+      profileRelocationSummaryStatusFromResponse({
+        ...notGranted,
+        consent: {
+          status: 'granted',
+          granted: true,
+          versionId: 'relocation-v1',
+          grantedAt: '2026-10-17T00:00:00.000Z',
+          revokedAt: null,
+        },
+      }),
+    ).toBe('enabled');
   });
 
   it('switches to the digital footprint audit on the trace tab', () => {
@@ -285,6 +376,9 @@ describe('ProfileScreenSurface — states', () => {
     const html = renderToStaticMarkup(
       <ProfileScreenSurface {...baseProps} draft={draftWithCertsAndLangs} />,
     );
+    const skillsHtml = renderToStaticMarkup(
+      <ProfileScreenSurface {...baseProps} draft={draftWithCertsAndLangs} tab="skills" />,
+    );
 
     // Languages: check name and CEFR badge
     expect(html).toContain('Английский');
@@ -292,14 +386,32 @@ describe('ProfileScreenSurface — states', () => {
     expect(html).toContain('свободный (C1)');
     expect(html).toContain('выше среднего (B2)');
 
-    // Certifications: separate section with id="sec-certificates"
-    expect(html).toContain('id="sec-certificates"');
-    expect(html).toContain('AWS Certified Solutions Architect');
-    expect(html).toContain('Amazon Web Services');
-
-    // Courses: separate section with id="sec-courses"
-    expect(html).toContain('id="sec-courses"');
-    expect(html).toContain('Cloud Operations Mastery');
-    expect(html).toContain('Tech Academy');
+    expect(skillsHtml).toContain('Открыть данные профиля');
+    const certificatesHtml = renderToStaticMarkup(
+      <ProfileDataDialog
+        {...baseProps}
+        draft={draftWithCertsAndLangs}
+        section="certifications"
+        onSelect={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    const coursesHtml = renderToStaticMarkup(
+      <ProfileDataDialog
+        {...baseProps}
+        draft={draftWithCertsAndLangs}
+        section="courses"
+        onSelect={() => undefined}
+        onClose={() => undefined}
+      />,
+    );
+    expect(certificatesHtml).toContain('id="sec-certificates"');
+    expect(certificatesHtml).toContain('AWS Certified Solutions Architect');
+    expect(certificatesHtml).toContain('Amazon Web Services');
+    expect(certificatesHtml).not.toContain('Cloud Operations Mastery');
+    expect(coursesHtml).toContain('id="sec-courses"');
+    expect(coursesHtml).toContain('Cloud Operations Mastery');
+    expect(coursesHtml).toContain('Tech Academy');
+    expect(coursesHtml).not.toContain('AWS Certified Solutions Architect');
   });
 });

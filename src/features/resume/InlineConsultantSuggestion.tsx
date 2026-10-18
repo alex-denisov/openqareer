@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Spinner } from '@phosphor-icons/react';
 
 export interface InlineSuggestionItem {
   readonly id: string;
   readonly section: 'headline' | 'about' | 'experience';
   readonly experienceId?: string;
+  readonly field?: 'startDate' | 'endDate';
   readonly title?: string;
   readonly rationale?: string;
   readonly currentText?: string;
@@ -17,8 +18,8 @@ export interface InlineSuggestionItem {
 
 export interface InlineConsultantSuggestionProps {
   readonly suggestion: InlineSuggestionItem;
-  readonly onAccept: (suggestion: InlineSuggestionItem) => Promise<void> | void;
-  readonly onDismiss: (suggestion: InlineSuggestionItem) => void;
+  readonly onAccept?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
+  readonly onDismiss?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onRevert?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly loading?: boolean;
 }
@@ -35,9 +36,7 @@ function SuggestionComparison({
       {currentText !== undefined ? (
         <div className="career-consultant-suggestion-col is-current">
           <span className="career-consultant-suggestion-col-label">Сейчас</span>
-          <p className="career-consultant-suggestion-text">
-            {currentText || 'Раздел пока пуст.'}
-          </p>
+          <p className="career-consultant-suggestion-text">{currentText || 'Раздел пока пуст.'}</p>
         </div>
       ) : null}
       <div className="career-consultant-suggestion-col is-proposed">
@@ -82,8 +81,8 @@ function PendingActions({
 }: {
   readonly busy: boolean;
   readonly loading?: boolean;
-  readonly onAccept: () => void;
-  readonly onDismiss: () => void;
+  readonly onAccept?: () => void;
+  readonly onDismiss?: () => void;
 }) {
   return (
     <div className="career-consultant-suggestion-actions">
@@ -91,7 +90,7 @@ function PendingActions({
         type="button"
         className="career-primary-button"
         onClick={onAccept}
-        disabled={busy || loading}
+        disabled={busy || loading || !onAccept}
         aria-busy={busy || loading || undefined}
       >
         {busy ? <Spinner size={16} aria-hidden="true" /> : null}
@@ -101,7 +100,7 @@ function PendingActions({
         type="button"
         className="career-quiet-button"
         onClick={onDismiss}
-        disabled={busy || loading}
+        disabled={busy || loading || !onDismiss}
         aria-busy={busy || loading || undefined}
       >
         Отклонить
@@ -123,29 +122,50 @@ function SuggestionHead({
         {title ?? 'Предложение карьерного консультанта'}
       </span>
       {rationale ? (
-        <span className="career-consultant-suggestion-rationale">
-          {rationale}
-        </span>
+        <span className="career-consultant-suggestion-rationale">{rationale}</span>
       ) : null}
     </div>
   );
 }
 
+function useAppliedSuggestion(appliedValue: boolean | undefined) {
+  const [applied, setApplied] = useState(Boolean(appliedValue));
+  useEffect(() => {
+    setApplied(Boolean(appliedValue));
+  }, [appliedValue]);
+  return { applied, setApplied };
+}
+
 function useSuggestionActionState(
   suggestion: InlineSuggestionItem,
-  onAccept: (suggestion: InlineSuggestionItem) => Promise<void> | void,
+  onAccept?: (suggestion: InlineSuggestionItem) => Promise<void> | void,
+  onDismiss?: (suggestion: InlineSuggestionItem) => Promise<void> | void,
   onRevert?: (suggestion: InlineSuggestionItem) => Promise<void> | void,
 ) {
   const [busy, setBusy] = useState(false);
-  const [applied, setApplied] = useState(Boolean(suggestion.applied));
+  const { applied, setApplied } = useAppliedSuggestion(suggestion.applied);
   const [error, setError] = useState<string>();
 
   const handleAccept = async () => {
+    if (!onAccept) return;
     setBusy(true);
     setError(undefined);
     try {
       await onAccept(suggestion);
       setApplied(true);
+    } catch (reason) {
+      setError(actionErrorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDismiss = async () => {
+    if (!onDismiss) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await onDismiss(suggestion);
     } catch (reason) {
       setError(actionErrorMessage(reason));
     } finally {
@@ -167,7 +187,7 @@ function useSuggestionActionState(
     }
   };
 
-  return { busy, applied, error, handleAccept, handleRevert };
+  return { busy, applied, error, handleAccept, handleDismiss, handleRevert };
 }
 
 function actionErrorMessage(reason: unknown): string {
@@ -182,11 +202,8 @@ export function InlineConsultantSuggestion({
   onRevert,
   loading,
 }: InlineConsultantSuggestionProps) {
-  const { busy, applied, error, handleAccept, handleRevert } = useSuggestionActionState(
-    suggestion,
-    onAccept,
-    onRevert,
-  );
+  const { busy, applied, error, handleAccept, handleDismiss, handleRevert } =
+    useSuggestionActionState(suggestion, onAccept, onDismiss, onRevert);
 
   return (
     <div
@@ -207,8 +224,8 @@ export function InlineConsultantSuggestion({
         <PendingActions
           busy={busy}
           loading={loading}
-          onAccept={handleAccept}
-          onDismiss={() => onDismiss(suggestion)}
+          onAccept={onAccept ? handleAccept : undefined}
+          onDismiss={onDismiss ? handleDismiss : undefined}
         />
       )}
       {error ? (

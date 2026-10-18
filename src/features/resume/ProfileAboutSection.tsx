@@ -1,8 +1,9 @@
-import { useCallback, useState } from 'react';
-import { PencilSimple, Sparkle } from '@phosphor-icons/react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
+import { CaretDown, Link, PencilSimple, Sparkle } from '@phosphor-icons/react';
 import { parseAboutContent } from './profileAbout';
 import { updateAbout } from './profileEntryEditing';
-import { SectionEditActions, SectionPencilButton } from './ProfileSectionEdit';
+import { SectionEditActions } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
 import {
   InlineConsultantSuggestion,
@@ -13,12 +14,13 @@ import type { ResumeDraft } from './resumeTypes';
 export interface ProfileAboutSectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onAcceptSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (suggestion: InlineSuggestionItem) => void;
   readonly onRevertSuggestion?: (suggestion: InlineSuggestionItem) => Promise<void> | void;
   readonly onSuggestWithConsultant?: () => void;
+  readonly detailView?: boolean;
 }
 
 function AboutEditForm({
@@ -27,6 +29,7 @@ function AboutEditForm({
   onCancel,
   onSectionSave,
 }: ProfileAboutSectionProps & { readonly onCancel: () => void }) {
+  const submit = useProfileEntrySave(onSectionSave, () => undefined);
   const [about, setAbout] = useState(draft.candidate.about ?? '');
   return (
     <div className="career-profile-screen-edit-body">
@@ -39,42 +42,85 @@ function AboutEditForm({
         onChange={(event) => setAbout(event.target.value)}
         placeholder={'Абзацы через пустую строку, буллеты — с "-" в начале строки'}
       />
+      {submit.error ? (
+        <p className="career-resume-error" role="alert">
+          {submit.error}
+        </p>
+      ) : null}
       <SectionEditActions
-        saving={saving}
+        saving={saving || submit.busy}
         onCancel={onCancel}
-        onSave={() => onSectionSave(updateAbout(draft, about))}
+        onSave={() => {
+          void submit.save(updateAbout(draft, about));
+        }}
       />
     </div>
   );
 }
 
-/** Renders paragraphs and bullet lists separately (B265 owner remark #6). */
-function AboutContent({ about }: { readonly about: string }) {
+function useClampedAbout(about: string, detailView: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [canExpand, setCanExpand] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || detailView) return;
+    let active = true;
+    const measure = () => {
+      if (!active) return;
+      const line = Number.parseFloat(getComputedStyle(element).lineHeight);
+      setCanExpand(Number.isFinite(line) && element.scrollHeight > line * 3 + 1);
+    };
+    measure();
+    void document.fonts?.ready.then(measure);
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener('resize', measure);
+    return () => {
+      active = false;
+      observer?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [about, detailView]);
+  return { ref, canExpand };
+}
+
+/** Keep the full source in the DOM; the approved excerpt clamps rendered lines. */
+function AboutContent({
+  about,
+  detailView = false,
+}: {
+  readonly about: string;
+  readonly detailView?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const lines = about.split(/\r?\n/u);
-  const truncated = lines.length > 3;
-  const shownAbout = truncated && !expanded ? lines.slice(0, 3).join('\n') : about;
-  const blocks = parseAboutContent(shownAbout);
+  const { ref, canExpand } = useClampedAbout(about, detailView);
+  const blocks = parseAboutContent(about);
   return (
     <div className="career-profile-screen-about-content">
-      {blocks.map((block, index) =>
-        block.type === 'paragraph' ? (
-          <p key={index}>{block.text}</p>
-        ) : (
-          <ul key={index}>
-            {block.items.map((item, itemIndex) => (
-              <li key={itemIndex}>{item}</li>
-            ))}
-          </ul>
-        ),
-      )}
-      {truncated ? (
+      <div
+        ref={ref}
+        className={`profile-about-text ${expanded || detailView ? 'is-open' : 'is-clamped'}`}
+      >
+        {blocks.map((block, index) =>
+          block.type === 'paragraph' ? (
+            <p key={index}>{block.text}</p>
+          ) : (
+            <ul key={index}>
+              {block.items.map((item, itemIndex) => (
+                <li key={itemIndex}>{item}</li>
+              ))}
+            </ul>
+          ),
+        )}
+      </div>
+      {canExpand && !detailView ? (
         <button
           type="button"
-          className="career-quiet-button"
+          className="career-quiet-button career-btn-sm profile-about-expand"
           aria-expanded={expanded}
           onClick={() => setExpanded((value) => !value)}
         >
+          <CaretDown size="1em" aria-hidden="true" />
           {expanded ? 'Свернуть' : 'Показать полностью'}
         </button>
       ) : null}
@@ -106,13 +152,25 @@ function AboutSuggestionsList({
           key={suggestion.id}
           suggestion={suggestion}
           onAccept={
-            onAcceptSuggestion ?? ((s) => onSectionSave(updateAbout(draft, s.proposedText)))
+            onAcceptSuggestion ??
+            (async (s) => {
+              if ((await onSectionSave(updateAbout(draft, s.proposedText))) === false)
+                throw new Error('Не удалось сохранить правку. Повторите попытку.');
+            })
           }
-          onDismiss={onDismissSuggestion ?? (() => {})}
+          onDismiss={onDismissSuggestion}
           onRevert={
             onRevertSuggestion ??
             (suggestion.currentText !== undefined
-              ? () => onSectionSave(updateAbout(draft, suggestion.currentText ?? ''))
+              ? async () => {
+                  if (draft.candidate.about !== suggestion.proposedText)
+                    throw new Error('Текст уже изменился. Обновите профиль перед откатом.');
+                  if (
+                    (await onSectionSave(updateAbout(draft, suggestion.currentText ?? ''))) ===
+                    false
+                  )
+                    throw new Error('Не удалось откатить правку. Повторите попытку.');
+                }
               : undefined)
           }
         />
@@ -126,6 +184,7 @@ function AboutViewBody({
   about,
   draft,
   saving,
+  detailView,
   onSectionSave,
   onCancel,
 }: {
@@ -133,7 +192,8 @@ function AboutViewBody({
   readonly about?: string;
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly detailView?: boolean;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
   readonly onCancel: () => void;
 }) {
   if (editing) {
@@ -147,7 +207,7 @@ function AboutViewBody({
     );
   }
   if (about) {
-    return <AboutContent about={about} />;
+    return <AboutContent about={about} detailView={detailView} />;
   }
   return <p className="career-profile-screen-empty-note">Раздел «Обо мне» ещё не заполнен.</p>;
 }
@@ -157,7 +217,7 @@ function AboutActionButtons({
   onSuggest,
 }: {
   readonly onEdit: () => void;
-  readonly onSuggest: () => void;
+  readonly onSuggest?: () => void;
 }) {
   return (
     <div className="career-profile-about-actions">
@@ -170,50 +230,31 @@ function AboutActionButtons({
         <PencilSimple size={16} aria-hidden="true" />
         Изменить текст
       </button>
-      <button
-        type="button"
-        className="career-quiet-button"
-        onClick={onSuggest}
-        data-testid="about-consultant-suggest-btn"
-      >
-        <Sparkle size={16} aria-hidden="true" />
-        Предложить вариант с консультантом
-      </button>
+      {onSuggest ? (
+        <button
+          type="button"
+          className="career-quiet-button"
+          onClick={onSuggest}
+          data-testid="about-consultant-suggest-btn"
+        >
+          <Sparkle size={16} aria-hidden="true" />
+          Предложить вариант с консультантом
+        </button>
+      ) : null}
     </div>
   );
 }
 
 function useProfileAboutSuggestions({
-  about,
   suggestions,
   onSuggestWithConsultant,
 }: {
-  readonly about?: string;
   readonly suggestions?: readonly InlineSuggestionItem[];
   readonly onSuggestWithConsultant?: () => void;
 }) {
-  const [localSuggestions, setLocalSuggestions] = useState<readonly InlineSuggestionItem[]>([]);
-  const handleSuggest = () => {
-    if (onSuggestWithConsultant) {
-      onSuggestWithConsultant();
-      return;
-    }
-    const suggestion: InlineSuggestionItem = {
-      id: `about-sugg-${Date.now()}`,
-      section: 'about',
-      currentText: about ?? '',
-      proposedText: `${about ? `${about}\n` : ''}Руковожу инженерией продуктовых платформ, развиваю распределенные команды и масштабирую сервисную архитектуру.`,
-      rationale: 'Консультант сформулировал управленческий масштаб и стек.',
-    };
-    setLocalSuggestions((prev) => [...prev, suggestion]);
-  };
-  const dismissLocal = (id: string) => {
-    setLocalSuggestions((prev) => prev.filter((item) => item.id !== id));
-  };
   return {
-    allSuggestions: [...(suggestions ?? []), ...localSuggestions],
-    handleSuggest,
-    dismissLocal,
+    allSuggestions: suggestions ?? [],
+    handleSuggest: onSuggestWithConsultant,
   };
 }
 
@@ -222,40 +263,36 @@ function useProfileAboutHandlers({
   onSectionSave,
   onAcceptSuggestion,
   onDismissSuggestion,
-  dismissLocal,
 }: {
   readonly draft: ResumeDraft;
-  readonly onSectionSave: (draft: ResumeDraft) => void;
+  readonly onSectionSave: (draft: ResumeDraft) => ProfileEntrySaveResult;
   readonly onAcceptSuggestion?: (s: InlineSuggestionItem) => Promise<void> | void;
   readonly onDismissSuggestion?: (s: InlineSuggestionItem) => void;
-  readonly dismissLocal: (id: string) => void;
 }) {
   const handleAccept = useCallback(
     async (s: InlineSuggestionItem) => {
       if (onAcceptSuggestion) await onAcceptSuggestion(s);
-      else onSectionSave(updateAbout(draft, s.proposedText));
-      dismissLocal(s.id);
+      else if ((await onSectionSave(updateAbout(draft, s.proposedText))) === false)
+        throw new Error('Не удалось сохранить правку. Повторите попытку.');
     },
-    [draft, onSectionSave, onAcceptSuggestion, dismissLocal],
+    [draft, onSectionSave, onAcceptSuggestion],
   );
 
   const handleDismiss = useCallback(
     (s: InlineSuggestionItem) => {
-      onDismissSuggestion?.(s);
-      dismissLocal(s.id);
+      return onDismissSuggestion?.(s);
     },
-    [onDismissSuggestion, dismissLocal],
+    [onDismissSuggestion],
   );
 
-  return { handleAccept, handleDismiss };
+  return { handleAccept, handleDismiss: onDismissSuggestion ? handleDismiss : undefined };
 }
 
 function useProfileAboutView(props: ProfileAboutSectionProps) {
   const { draft, onSectionSave, suggestions } = props;
   const [editing, setEditing] = useState(false);
   const about = draft.candidate.about?.trim();
-  const { allSuggestions, handleSuggest, dismissLocal } = useProfileAboutSuggestions({
-    about,
+  const { allSuggestions, handleSuggest } = useProfileAboutSuggestions({
     suggestions,
     onSuggestWithConsultant: props.onSuggestWithConsultant,
   });
@@ -264,9 +301,38 @@ function useProfileAboutView(props: ProfileAboutSectionProps) {
     onSectionSave,
     onAcceptSuggestion: props.onAcceptSuggestion,
     onDismissSuggestion: props.onDismissSuggestion,
-    dismissLocal,
   });
   return { editing, setEditing, about, allSuggestions, handleSuggest, handleAccept, handleDismiss };
+}
+
+function AboutSectionHead({
+  about,
+  onEdit,
+}: {
+  readonly about?: string;
+  readonly onEdit: () => void;
+}) {
+  return (
+    <SectionHead
+      id="sec-about-title"
+      title="Обо мне"
+      action={
+        <button
+          type="button"
+          className="profile-about-source-control"
+          aria-label="Изменить «Обо мне»"
+          onClick={onEdit}
+        >
+          {about ? (
+            <Link size="1em" aria-hidden="true" />
+          ) : (
+            <PencilSimple size="1em" aria-hidden="true" />
+          )}
+          {about ? 'со слов кандидата' : 'Добавить текст'}
+        </button>
+      }
+    />
+  );
 }
 
 export function ProfileAboutSection(props: ProfileAboutSectionProps) {
@@ -280,24 +346,21 @@ export function ProfileAboutSection(props: ProfileAboutSectionProps) {
       id="sec-about"
       aria-labelledby="sec-about-title"
     >
-      <SectionHead
-        id="sec-about-title"
-        title="Обо мне"
-        imported={Boolean(about)}
-        action={<SectionPencilButton label="Изменить «Обо мне»" onClick={() => setEditing(true)} />}
-      />
+      <AboutSectionHead about={about} onEdit={() => setEditing(true)} />
       <AboutViewBody
         editing={editing}
         about={about}
         draft={draft}
         saving={saving}
-        onSectionSave={(next) => {
-          onSectionSave(next);
-          setEditing(false);
+        detailView={props.detailView}
+        onSectionSave={async (next) => {
+          const result = await onSectionSave(next);
+          if (result !== false) setEditing(false);
+          return result;
         }}
         onCancel={() => setEditing(false)}
       />
-      {!editing ? (
+      {!editing && props.detailView ? (
         <AboutActionButtons onEdit={() => setEditing(true)} onSuggest={handleSuggest} />
       ) : null}
       <AboutSuggestionsList

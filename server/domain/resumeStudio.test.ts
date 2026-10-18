@@ -114,6 +114,66 @@ const completeInput = (): ResumeStudioInput => ({
 });
 
 describe('Resume Studio canonical projection', () => {
+  it('projects a role description separately from bullets with evidence provenance', () => {
+    const input = completeInput();
+    const statement = 'Led the migration of the reporting platform.';
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [...input.evidence, evidence('description-current', statement)],
+      experience: input.experience.map((role) =>
+        role.id === 'current-role'
+          ? {
+              ...role,
+              descriptionMemoryId: 'description-current',
+              bulletMemoryIds: ['outcome-current', 'description-current'],
+            }
+          : role,
+      ),
+    });
+    const role = projection.master.experience.find((item) => item.id === 'current-role');
+
+    expect(role?.description).toMatchObject({
+      value: statement,
+      memoryId: 'description-current',
+      sourceMessageIds: ['message-description-current'],
+    });
+    expect(role?.bullets.map((bullet) => bullet.memoryId)).toEqual(['outcome-current']);
+  });
+
+  it('leaves an absent description unknown even when another experience fact exists', () => {
+    const input = completeInput();
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [
+        ...input.evidence,
+        evidence('unlinked-description', 'A text fact that was never linked as a description.'),
+      ],
+    });
+    const role = projection.master.experience.find((item) => item.id === 'current-role');
+
+    expect(role?.description).toBeNull();
+    expect(role?.bullets.map((bullet) => bullet.memoryId)).not.toContain('unlinked-description');
+  });
+
+  it('rejects an ineligible description association and preserves the reason', () => {
+    const input = completeInput();
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [
+        ...input.evidence,
+        evidence('proposed-description', 'A proposed description.', { status: 'proposed' }),
+      ],
+      experience: input.experience.map((role) =>
+        role.id === 'current-role' ? { ...role, descriptionMemoryId: 'proposed-description' } : role,
+      ),
+    });
+    const role = projection.master.experience.find((item) => item.id === 'current-role');
+
+    expect(role?.description).toBeNull();
+    expect(projection.master.unknowns).toContainEqual(
+      expect.objectContaining({ code: 'ineligible-evidence', memoryId: 'proposed-description' }),
+    );
+  });
   it('builds master and Germany role variants only from confirmed factual evidence', () => {
     const projection = buildResumeStudioProjection(completeInput());
 
@@ -213,6 +273,110 @@ describe('Resume Studio canonical projection', () => {
     expect(JSON.stringify(projection.master)).not.toContain('Миграция GraphQL');
   });
 
+  it('projects an explicitly native language without claiming a CEFR level', () => {
+    const input = completeInput();
+    const nativeEvidence = evidence(
+      'language-russian-native',
+      'Кандидат подтвердил русский язык как родной.',
+    );
+    const projection = buildResumeStudioProjection({
+      ...input,
+      evidence: [...input.evidence, nativeEvidence],
+      languages: [
+        {
+          id: 'russian',
+          evidenceMemoryId: 'language-russian-native',
+          name: 'Русский',
+          sourceLabel: ' родной ',
+        },
+      ],
+    });
+    const language = projection.master.languages.find((item) => item.id === 'russian');
+
+    expect(language).toMatchObject({
+      name: {
+        value: 'Русский',
+        memoryId: 'language-russian-native',
+        sourceMessageIds: ['message-language-russian-native'],
+        reviewFlags: [],
+      },
+      cefr: null,
+      native: {
+        value: 'native',
+        memoryId: 'language-russian-native',
+        sourceMessageIds: ['message-language-russian-native'],
+        reviewFlags: [],
+      },
+    });
+    expect(
+      projection.master.unknowns.some(
+        (issue) => issue.code === 'missing-language-level' && issue.entryId === 'russian',
+      ),
+    ).toBe(false);
+    expect(Object.hasOwn(language ?? {}, 'native')).toBe(true);
+  });
+
+  it('keeps unknown native labels as missing CEFR and honors an explicit CEFR', () => {
+    const input = completeInput();
+    const unknownEvidence = evidence(
+      'language-russian-unknown',
+      'В источнике указан русский язык без точного уровня.',
+    );
+    const unknownProjection = buildResumeStudioProjection({
+      ...input,
+      evidence: [...input.evidence, unknownEvidence],
+      languages: [
+        {
+          id: 'russian-unknown',
+          evidenceMemoryId: 'language-russian-unknown',
+          name: 'Русский',
+          sourceLabel: 'почти родной',
+        },
+      ],
+    });
+    const unknownLanguage = unknownProjection.master.languages.find(
+      (item) => item.id === 'russian-unknown',
+    );
+    expect(unknownLanguage?.native).toBeUndefined();
+    expect(Object.hasOwn(unknownLanguage ?? {}, 'native')).toBe(false);
+    expect(unknownProjection.master.unknowns).toContainEqual(
+      expect.objectContaining({
+        code: 'missing-language-level',
+        entryId: 'russian-unknown',
+      }),
+    );
+
+    const cefrEvidence = evidence(
+      'language-russian-cefr',
+      'Кандидат подтвердил русский язык на уровне B2.',
+    );
+    const explicitCefrProjection = buildResumeStudioProjection({
+      ...input,
+      evidence: [...input.evidence, cefrEvidence],
+      languages: [
+        {
+          id: 'russian-cefr',
+          evidenceMemoryId: 'language-russian-cefr',
+          name: 'Русский',
+          cefr: 'B2',
+          sourceLabel: 'родной',
+        },
+      ],
+    });
+    const explicitCefr = explicitCefrProjection.master.languages.find(
+      (item) => item.id === 'russian-cefr',
+    );
+    expect(explicitCefr?.cefr?.value).toBe('B2');
+    expect(explicitCefr?.native).toBeUndefined();
+    expect(Object.hasOwn(explicitCefr ?? {}, 'native')).toBe(false);
+    expect(explicitCefrProjection.master.unknowns).not.toContainEqual(
+      expect.objectContaining({
+        code: 'missing-language-level',
+        entryId: 'russian-cefr',
+      }),
+    );
+  });
+
   it('keeps missing identity, contact, chronology, education and CEFR explicit', () => {
     const projection = buildResumeStudioProjection({
       candidate: {},
@@ -257,9 +421,9 @@ describe('Resume Studio canonical projection', () => {
         'chronology-conflict',
       ]),
     );
-    expect(
-      projection.germanyVariant.unknowns.map((item) => item.code),
-    ).toContain('missing-target-role');
+    expect(projection.germanyVariant.unknowns.map((item) => item.code)).toContain(
+      'missing-target-role',
+    );
     expect(projection.master.languages[0]?.cefr).toBeNull();
     expect(JSON.stringify(projection)).not.toContain('B3');
   });

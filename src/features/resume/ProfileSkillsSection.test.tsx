@@ -46,4 +46,19 @@ describe('ProfileSkillsSection (B376)', () => {
 
     expect(html).toContain('React');
   });
+
+  it('does not infer a quiz source for a legacy skill with missing provenance', () => {
+    const draft = {
+      ...EMPTY_RESUME_DRAFT,
+      skills: [{ id: 'sk-unknown', name: 'Kubernetes', status: 'подтверждён' }],
+    };
+    const html = renderToStaticMarkup(
+      <ProfileSkillsSection draft={draft} onSectionSave={() => undefined} />,
+    );
+
+    expect(html).toContain('Kubernetes');
+    expect(html).toContain('подтверждён');
+    expect(html).toContain('Источник не указан');
+    expect(html).not.toContain('Банк квизов');
+  });
 });

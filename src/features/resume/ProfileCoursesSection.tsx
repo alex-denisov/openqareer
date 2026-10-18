@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import { BookOpen } from '@phosphor-icons/react';
 import { updateCourse } from './profileEntryEditing';
 import { addCourse, removeCourse } from './resumeStudioModel';
@@ -14,11 +15,11 @@ import type { ResumeCourseInput, ResumeDraft } from './resumeTypes';
 interface SectionProps {
   readonly draft: ResumeDraft;
   readonly saving?: boolean;
-  readonly onSectionSave: (next: ResumeDraft) => void;
+  readonly onSectionSave: (next: ResumeDraft) => ProfileEntrySaveResult;
   readonly importedLabel?: string;
 }
 
-function CourseEditForm({
+export function CourseEditForm({
   entry,
   saving,
   onCancel,
@@ -27,8 +28,11 @@ function CourseEditForm({
   readonly entry: ResumeCourseInput;
   readonly saving?: boolean;
   readonly onCancel: () => void;
-  readonly onSave: (patch: Partial<ResumeCourseInput>) => void;
+  readonly onSave: (patch: Partial<ResumeCourseInput>) => ProfileEntrySaveResult;
 }) {
+  const submit = useProfileEntrySave(onSave, (patch: Partial<ResumeCourseInput>) =>
+    patch.name?.trim() ? undefined : 'Укажите название курса.',
+  );
   const [name, setName] = useState(entry.name);
   const [institution, setInstitution] = useState(entry.institution ?? '');
   return (
@@ -43,10 +47,17 @@ function CourseEditForm({
           <input value={institution} onChange={(event) => setInstitution(event.target.value)} />
         </label>
       </div>
+      {submit.error ? (
+        <p className="career-resume-error" role="alert">
+          {submit.error}
+        </p>
+      ) : null}
       <SectionEditActions
-        saving={saving}
+        saving={saving || submit.busy}
         onCancel={onCancel}
-        onSave={() => onSave({ name, institution })}
+        onSave={() => {
+          void submit.save({ name, institution });
+        }}
       />
     </div>
   );
@@ -60,7 +71,7 @@ function CourseTile({
 }: {
   readonly entry: ResumeCourseInput;
   readonly saving?: boolean;
-  readonly onSave: (patch: Partial<ResumeCourseInput>) => void;
+  readonly onSave: (patch: Partial<ResumeCourseInput>) => ProfileEntrySaveResult;
   readonly onRemove: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -70,9 +81,10 @@ function CourseTile({
         entry={entry}
         saving={saving}
         onCancel={() => setEditing(false)}
-        onSave={(patch) => {
-          onSave(patch);
-          setEditing(false);
+        onSave={async (patch) => {
+          const result = await onSave(patch);
+          if (result !== false) setEditing(false);
+          return result;
         }}
       />
     );
@@ -98,6 +110,40 @@ function CourseTile({
  * «пусто в источнике»") — the section still renders, saying so plainly, and
  * still offers a working add action instead of vanishing.
  */
+function NewCourseEntryForm({
+  draft,
+  entry,
+  saving,
+  onSectionSave,
+  onCancel,
+}: SectionProps & { readonly entry: ResumeCourseInput; readonly onCancel: () => void }) {
+  return (
+    <CourseEditForm
+      entry={entry}
+      saving={saving}
+      onCancel={onCancel}
+      onSave={async (patch) => {
+        const result = await onSectionSave({
+          ...draft,
+          courses: [...(draft.courses ?? []), { ...entry, ...patch }],
+        });
+        if (result !== false) onCancel();
+        return result;
+      }}
+    />
+  );
+}
+
+function EmptyCourses({ importedLabel }: Pick<SectionProps, 'importedLabel'>) {
+  return (
+    <div className="career-profile-screen-state-block">
+      <BookOpen size={22} />
+      <h3>{importedLabel ? 'В импортированных данных курсы не найдены' : 'Курсы не заполнены'}</h3>
+      <p>Если курсы у вас есть, добавьте их вручную.</p>
+    </div>
+  );
+}
+
 export function ProfileCoursesSection({
   draft,
   saving,
@@ -105,7 +151,8 @@ export function ProfileCoursesSection({
   importedLabel,
 }: SectionProps) {
   const courses = draft.courses ?? [];
-  const addItem = () => onSectionSave(addCourse(draft, ''));
+  const [newEntry, setNewEntry] = useState<ResumeCourseInput>();
+  const addItem = () => setNewEntry(addCourse(draft, '').courses?.at(-1));
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section"
@@ -116,17 +163,19 @@ export function ProfileCoursesSection({
         id="sec-courses-title"
         title="Курсы"
         emptyTag={!courses.length}
-        imported={courses.length > 0}
         action={<SectionAddButton label="Добавить курс" onClick={addItem} />}
       />
+      {newEntry ? (
+        <NewCourseEntryForm
+          draft={draft}
+          entry={newEntry}
+          saving={saving}
+          onSectionSave={onSectionSave}
+          onCancel={() => setNewEntry(undefined)}
+        />
+      ) : null}
       {!courses.length ? (
-        <div className="career-profile-screen-state-block">
-          <BookOpen size={22} />
-          <h3>
-            {importedLabel ? 'В импортированных данных курсы не найдены' : 'Курсы не заполнены'}
-          </h3>
-          <p>Если курсы у вас есть, добавьте их вручную.</p>
-        </div>
+        <EmptyCourses importedLabel={importedLabel} />
       ) : (
         <div className="career-profile-screen-tile-grid">
           {courses.map((course) => (

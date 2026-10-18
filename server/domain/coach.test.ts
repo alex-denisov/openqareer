@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { coachTurnInputSchema, coachTurnResultSchema, serializeCoachInput } from './coach';
+import {
+  COACH_TURN_JSON_SCHEMA,
+  careerActionProposalSchema,
+  coachTurnInputSchema,
+  coachTurnResultSchema,
+  serializeCoachInput,
+} from './coach';
 
 describe('career coach domain contract', () => {
   it('validates a bounded dialogue and serializes untrusted content as data', () => {
@@ -197,5 +203,59 @@ describe('career coach domain contract', () => {
     expect(serialized.phase).toBe('interview');
     expect(serialized.stageContext).toBe('Вакансия: Tech Lead\nКомпания: FinTech');
     expect(serialized.rejectedProposals).toEqual(['Отклонено: headline — не совпадает стиль']);
+  });
+
+  it('accepts only explicit canonical experience dates and keeps legacy proposals fieldless', () => {
+    const legacy = {
+      kind: 'resume.revise' as const,
+      objective: 'Уточнить блок о себе',
+      evidenceRefs: ['message-1'],
+      acceptanceCriteria: ['Текст опирается на кандидата'],
+      expectedSignal: 'В профиле точная информация',
+      measureAfter: '2026-10-17',
+      risk: 'candidate_data_write' as const,
+      resumeRevision: {
+        section: 'about' as const,
+        experienceId: null,
+        memoryId: null,
+        proposedText: 'Руководитель платформ',
+      },
+    };
+    expect(careerActionProposalSchema.parse(legacy).resumeRevision?.field).toBeUndefined();
+
+    const endDate = {
+      ...legacy,
+      resumeRevision: {
+        section: 'experience' as const,
+        experienceId: 'experience-1',
+        memoryId: null,
+        field: 'endDate' as const,
+        proposedText: '2021-01',
+      },
+    };
+    expect(careerActionProposalSchema.parse(endDate).resumeRevision?.field).toBe('endDate');
+    expect(() =>
+      careerActionProposalSchema.parse({
+        ...endDate,
+        resumeRevision: { ...endDate.resumeRevision, section: 'about' },
+      }),
+    ).toThrow();
+    expect(() =>
+      careerActionProposalSchema.parse({
+        ...endDate,
+        resumeRevision: { ...endDate.resumeRevision, memoryId: 'bullet-1' },
+      }),
+    ).toThrow();
+    expect(() =>
+      careerActionProposalSchema.parse({
+        ...endDate,
+        resumeRevision: { ...endDate.resumeRevision, proposedText: '2021-02-30' },
+      }),
+    ).toThrow();
+
+    const resumeRevisionSchema =
+      COACH_TURN_JSON_SCHEMA.properties.actionProposals.items.properties.resumeRevision.anyOf[0];
+    expect(resumeRevisionSchema.required).toContain('field');
+    expect(resumeRevisionSchema.properties.field.anyOf[0].enum).toEqual(['startDate', 'endDate']);
   });
 });

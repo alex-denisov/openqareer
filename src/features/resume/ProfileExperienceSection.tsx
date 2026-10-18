@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react';
+import { Info } from '@phosphor-icons/react';
+import { CareerTooltip } from '../shell/CareerTooltip';
 import type { CandidateMemory } from '../coach/coachApi';
 import { groupExperienceByEmployer } from './profileGrouping';
 import { addExperience, removeExperience, updateExperience } from './resumeStudioModel';
 import { SectionAddButton, SectionPencilButton, SectionRemoveButton } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
 import { useCandidateMediaSrc } from './candidateMediaSrc';
-import {
-  InlineConsultantSuggestion,
-  type InlineSuggestionItem,
-} from './InlineConsultantSuggestion';
+import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
+import { ProfileExperienceSuggestions } from './ProfileExperienceSuggestions';
 import { PositionEditForm } from './ProfileExperienceEditor';
 import { monthOrder } from './experienceDate';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
@@ -37,7 +37,7 @@ export interface ProfileExperienceSectionProps {
  * responsibility text, in the order the position lists the ids (mockup
  * "Отвечал за платёжную стратегию…" bullets under every job).
  */
-function responsibilityBullets(
+export function responsibilityBullets(
   entry: ResumeExperienceInput,
   memory: readonly CandidateMemory[],
 ): readonly string[] {
@@ -60,10 +60,16 @@ type ExperiencePatchHandler = (
   patch: Partial<ResumeExperienceInput>,
 ) => Promise<boolean | void> | boolean | void;
 
-function periodLabel(entry: ResumeExperienceInput): string {
+function displayExperienceMonth(value: string): string {
+  const month = /^(\d{4})-(\d{2})(?:-\d{2})?$/u.exec(value);
+  return month ? `${month[2]}.${month[1]}` : value;
+}
+
+export function periodLabel(entry: ResumeExperienceInput): string {
   if (!entry.startDate) return '';
-  const end = entry.current ? 'по настоящее время' : (entry.endDate ?? '');
-  return end ? `${entry.startDate} — ${end}` : entry.startDate;
+  const start = displayExperienceMonth(entry.startDate);
+  const end = entry.current ? 'по н. в.' : displayExperienceMonth(entry.endDate ?? '');
+  return end ? `${start} — ${end}` : start;
 }
 
 function CompanyMark({
@@ -109,20 +115,32 @@ function PositionSummary({
   readonly onRemove: () => void;
 }) {
   return (
-    <div className="career-profile-screen-position">
+    <div className="career-profile-screen-position" data-experience-id={entry.id}>
       <div className="career-profile-screen-position-title-row">
-        <b>{entry.title || 'Должность не указана'}</b>
+        <div className="profile-position-identity">
+          <b>{entry.employer || 'Работодатель не указан'}</b>
+          <p>{entry.title || 'Должность не указана'}</p>
+        </div>
         {periodLabel(entry) ? (
           <span className="career-profile-screen-position-dates">{periodLabel(entry)}</span>
         ) : null}
         <SectionPencilButton
+          visibleText="Редактировать место"
           label={`Редактировать место целиком: ${entry.employer || 'работодатель не указан'}`}
           onClick={onEdit}
         />
         <SectionRemoveButton label="Удалить должность" onClick={onRemove} />
       </div>
       <PositionEvidenceBadge entry={entry} memory={memory} />
-      <PositionDetails entry={entry} bullets={bullets} />
+      <PositionDetails
+        entry={entry}
+        bullets={bullets}
+        description={
+          entry.descriptionMemoryId
+            ? memory.find((fact) => fact.id === entry.descriptionMemoryId)?.statement
+            : undefined
+        }
+      />
     </div>
   );
 }
@@ -169,12 +187,15 @@ function PositionEvidenceBadge({
 function PositionDetails({
   entry,
   bullets,
+  description,
 }: {
   readonly entry: ResumeExperienceInput;
   readonly bullets: readonly string[];
+  readonly description?: string;
 }) {
   return (
     <>
+      {description ? <p className="career-profile-position-description">{description}</p> : null}
       {bullets.length ? (
         <ul className="career-profile-screen-position-bullets">
           {bullets.map((bullet) => (
@@ -292,54 +313,18 @@ function CompanyGroup({
   );
 }
 
-function ExperienceSuggestionsList({
-  draft,
-  suggestions,
-  onSectionSave,
-  onAcceptSuggestion,
-  onDismissSuggestion,
-  onRevertSuggestion,
-}: Pick<
-  ProfileExperienceSectionProps,
-  | 'draft'
-  | 'suggestions'
-  | 'onSectionSave'
-  | 'onAcceptSuggestion'
-  | 'onDismissSuggestion'
-  | 'onRevertSuggestion'
->) {
-  const expSuggestions = (suggestions ?? []).filter((s) => s.section === 'experience');
-  return (
-    <>
-      {expSuggestions.map((suggestion) => (
-        <InlineConsultantSuggestion
-          key={suggestion.id}
-          suggestion={suggestion}
-          onAccept={
-            onAcceptSuggestion ??
-            ((s) => {
-              if (s.experienceId) {
-                onSectionSave(updateExperience(draft, s.experienceId, { title: s.proposedText }));
-              }
-            })
-          }
-          onDismiss={onDismissSuggestion ?? (() => {})}
-          onRevert={
-            onRevertSuggestion ??
-            (suggestion.currentText !== undefined && suggestion.experienceId
-              ? async () => {
-                  await onSectionSave(
-                    updateExperience(draft, suggestion.experienceId!, {
-                      title: suggestion.currentText,
-                    }),
-                  );
-                }
-              : undefined)
-          }
-        />
-      ))}
-    </>
-  );
+export function ExperienceSuggestionsList(
+  props: Pick<
+    ProfileExperienceSectionProps,
+    | 'draft'
+    | 'suggestions'
+    | 'onSectionSave'
+    | 'onAcceptSuggestion'
+    | 'onDismissSuggestion'
+    | 'onRevertSuggestion'
+  >,
+) {
+  return <ProfileExperienceSuggestions {...props} />;
 }
 
 function ExperienceGroupsList({
@@ -473,7 +458,7 @@ function NewExperienceForm({
   );
 }
 
-function ExperienceVacancyRequirement({
+export function ExperienceVacancyRequirement({
   props,
 }: {
   readonly props: ProfileExperienceSectionProps;
@@ -572,6 +557,14 @@ function ExperienceSectionLists(props: ExperienceSectionListsProps) {
   } = props;
   return (
     <>
+      <ExperienceSuggestionsList
+        draft={draft}
+        suggestions={suggestions}
+        onSectionSave={onSectionSave}
+        onAcceptSuggestion={onAcceptSuggestion}
+        onDismissSuggestion={onDismissSuggestion}
+        onRevertSuggestion={onRevertSuggestion}
+      />
       <ExperienceGroupsList
         candidateId={candidateId}
         groups={groups}
@@ -583,14 +576,6 @@ function ExperienceSectionLists(props: ExperienceSectionListsProps) {
         onManualExperienceFactAdded={onManualExperienceFactAdded}
       />
       <AdditionalExperienceFacts facts={additionalFacts} />
-      <ExperienceSuggestionsList
-        draft={draft}
-        suggestions={suggestions}
-        onSectionSave={onSectionSave}
-        onAcceptSuggestion={onAcceptSuggestion}
-        onDismissSuggestion={onDismissSuggestion}
-        onRevertSuggestion={onRevertSuggestion}
-      />
     </>
   );
 }
@@ -599,7 +584,16 @@ function additionalExperienceFacts(
   draft: ResumeDraft,
   memory: readonly CandidateMemory[],
 ): readonly CandidateMemory[] {
-  const linkedMemoryIds = new Set(draft.experience.flatMap((entry) => entry.bulletMemoryIds));
+  const linkedMemoryIds = new Set(
+    [
+      ...draft.experience.flatMap((entry) => [
+        ...entry.bulletMemoryIds,
+        entry.descriptionMemoryId,
+        entry.chronologyMemoryId,
+      ]),
+      ...(draft.projects ?? []).map((entry) => entry.evidenceMemoryId),
+    ].filter((id): id is string => Boolean(id)),
+  );
   return memory.filter(
     (item) =>
       item.status === 'confirmed' &&
@@ -625,14 +619,20 @@ function ExperienceSectionHeading({
     <SectionHead
       id="sec-experience-title"
       title="Опыт"
-      count={
-        draft.experience.length
-          ? `${draft.experience.length} позиции · ${groupCount} компании`
-          : undefined
-      }
-      imported={draft.experience.length > 0}
+      count={draft.experience.length ? String(draft.experience.length) : undefined}
       action={
-        onAdd ? <SectionAddButton label="Добавить место работы" onClick={onAdd} /> : undefined
+        <>
+          <CareerTooltip content={`${draft.experience.length} позиции · ${groupCount} компании`}>
+            <button
+              type="button"
+              className="career-quiet-button career-btn-sm career-profile-screen-info-button"
+              aria-label="Сведения об опыте"
+            >
+              <Info size={16} aria-hidden="true" />
+            </button>
+          </CareerTooltip>
+          {onAdd ? <SectionAddButton label="Добавить место работы" onClick={onAdd} /> : null}
+        </>
       }
     />
   );

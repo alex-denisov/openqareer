@@ -57,4 +57,46 @@ describe('SqliteProfileRevisionRepository', () => {
     expect(repo.listRevisions('cand-1')).toEqual([]);
     db.close();
   });
+
+  it('stores the previous and applied chronology evidence for experience date revisions', () => {
+    const db = new DatabaseSync(':memory:');
+    db.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE candidates (id TEXT PRIMARY KEY) STRICT;
+      INSERT INTO candidates (id) VALUES ('cand-date');
+    `);
+    const repo = new SqliteProfileRevisionRepository(db, new SealedText(Buffer.alloc(32, 9)));
+
+    const revision = repo.recordRevision({
+      id: 'rev-date',
+      candidateId: 'cand-date',
+      commandId: 'cmd-date',
+      section: 'experience',
+      experienceId: 'exp-1',
+      previousText: '2021-02',
+      appliedText: '2021-01',
+      previousChronologyMemoryId: 'chronology-old',
+      appliedChronologyMemoryId: 'chronology-new',
+      createdAt: '2026-10-17T00:00:00.000Z',
+    });
+
+    expect(revision).toMatchObject({
+      previousChronologyMemoryId: 'chronology-old',
+      appliedChronologyMemoryId: 'chronology-new',
+    });
+    expect(repo.getRevisionByCommandId('cand-date', 'cmd-date')).toMatchObject({
+      previousText: '2021-02',
+      appliedText: '2021-01',
+      previousChronologyMemoryId: 'chronology-old',
+      appliedChronologyMemoryId: 'chronology-new',
+    });
+    expect(
+      db.prepare('SELECT candidate_id, previous_chronology_memory_id, applied_chronology_memory_id FROM profile_revision_experience_links WHERE revision_id = ?').get('rev-date'),
+    ).toMatchObject({
+      candidate_id: 'cand-date',
+      previous_chronology_memory_id: 'chronology-old',
+      applied_chronology_memory_id: 'chronology-new',
+    });
+    db.close();
+  });
 });

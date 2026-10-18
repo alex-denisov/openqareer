@@ -55,11 +55,17 @@ const CAREER_ACTION_KINDS = [
   'connection.request',
 ] as const;
 
+export const resumeExperienceDateTextSchema = z.union([
+  z.string().regex(/^\d{4}-(?:0[1-9]|1[0-2])$/),
+  z.string().date(),
+]);
+
 export const resumeRevisionProposalSchema = z
   .object({
     section: z.enum(['headline', 'about', 'experience', 'skills']),
     experienceId: z.string().min(1).max(80).nullable(),
     memoryId: z.string().min(1).max(80).nullable(),
+    field: z.enum(['startDate', 'endDate']).nullable().optional(),
     proposedText: z.string().trim().min(1).max(10_000),
   })
   .strict()
@@ -81,6 +87,24 @@ export const resumeRevisionProposalSchema = z
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'only experience revisions can target a fact',
+      });
+    }
+    if (target.field && target.section !== 'experience') {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'only experience revisions can target a date field',
+      });
+    }
+    if (target.field && target.memoryId) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience date revisions cannot target a bullet fact',
+      });
+    }
+    if (target.field && !resumeExperienceDateTextSchema.safeParse(target.proposedText).success) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'experience date revisions need a canonical ISO month or date',
       });
     }
   });
@@ -551,9 +575,12 @@ export const COACH_TURN_JSON_SCHEMA = {
                   memoryId: {
                     anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
                   },
+                  field: {
+                    anyOf: [{ type: 'string', enum: ['startDate', 'endDate'] }, { type: 'null' }],
+                  },
                   proposedText: { type: 'string', minLength: 1, maxLength: 10_000 },
                 },
-                required: ['section', 'experienceId', 'memoryId', 'proposedText'],
+                required: ['section', 'experienceId', 'memoryId', 'field', 'proposedText'],
                 additionalProperties: false,
               },
               { type: 'null' },

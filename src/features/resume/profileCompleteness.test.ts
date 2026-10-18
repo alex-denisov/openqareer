@@ -14,6 +14,7 @@ const populatedDraft: ResumeDraft = {
       chronologyMemoryId: 'memory-1',
       title: 'VP of Engineering',
       employer: 'FinNova Bank',
+      startDate: '2021-01-01',
       current: true,
       bulletMemoryIds: ['memory-2'],
     },
@@ -35,6 +36,36 @@ describe('profileCompleteness', () => {
       totalCount: 11,
       missingSections: ['Курсы'],
     });
+  });
+
+  it('requires a way to contact the candidate rather than only a city', () => {
+    expect(
+      profileCompleteness({
+        ...populatedDraft,
+        candidate: { ...populatedDraft.candidate, contact: { location: 'Москва', links: [] } },
+      }).missingSections,
+    ).toContain('Контакты');
+    expect(
+      profileCompleteness({
+        ...populatedDraft,
+        candidate: { ...populatedDraft.candidate, contact: { phone: '+7 000 000-00-00' } },
+      }).missingSections,
+    ).not.toContain('Контакты');
+  });
+
+  it('counts missing experience dates as an incomplete profile block', () => {
+    const experience = populatedDraft.experience[0]!;
+    const missingStartDate = profileCompleteness({
+      ...populatedDraft,
+      experience: [{ ...experience, startDate: undefined }],
+    });
+    const missingEndDate = profileCompleteness({
+      ...populatedDraft,
+      experience: [{ ...experience, current: false, endDate: undefined }],
+    });
+
+    expect(missingStartDate.missingSections).toContain('Опыт');
+    expect(missingEndDate.missingSections).toContain('Опыт');
   });
 
   it('treats empty and absent optional arrays as incomplete without inventing values', () => {

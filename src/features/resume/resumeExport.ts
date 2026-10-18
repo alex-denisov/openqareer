@@ -1,7 +1,6 @@
 import type { ResumeDocument, ResumeDraft, ResumeExperience, ResumeEducation } from './resumeTypes';
 import { sanitizeForThirdPartyExport } from '../../../shared/workPreferences';
-import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
-import type { ResumeProject, TargetedResumeSlice } from './resumeTypes';
+import type { TargetedResumeSlice } from './resumeTypes';
 
 /**
  * Generates clean, ATS-optimized plain text from a ResumeDocument.
@@ -12,6 +11,11 @@ import type { ResumeProject, TargetedResumeSlice } from './resumeTypes';
  * - Standard hyphen bullet points.
  * - Contacts and location on single lines.
  */
+import {
+  formatResumeAsAtsText as formatResumeAsAtsTextCore,
+  formatTargetedResumeAsAtsText as formatTargetedResumeAsAtsTextCore,
+} from '../../../server/domain/resumeAtsText';
+
 export function exportResumeAsPlainText(doc: ResumeDocument): string {
   const sections: string[] = [];
 
@@ -77,12 +81,13 @@ function buildExperienceSection(experiences: readonly ResumeExperience[]): strin
       const headerParts = [exp.title?.value?.trim(), exp.employer?.value?.trim()].filter(Boolean);
       const titleLine = headerParts.join(' — ');
       const period = formatExperiencePeriod(exp);
+      const description = exp.description?.value.trim();
       const bullets = exp.bullets
         .map((b) => b.value?.trim())
         .filter(Boolean)
         .map((b) => `- ${b}`);
 
-      const parts = [titleLine, period, ...bullets].filter(Boolean);
+      const parts = [titleLine, period, description, ...bullets].filter(Boolean);
       return parts.join('\n');
     })
     .filter(Boolean);
@@ -120,11 +125,12 @@ function buildEducationSection(education: readonly ResumeEducation[]): string {
 function buildLanguagesSection(doc: ResumeDocument): string {
   if (!doc.languages.length) return '';
   const items = doc.languages
-    .map((l) => {
-      const name = l.name?.value?.trim();
-      const cefr = l.cefr?.value?.trim();
+    .map((language) => {
+      const name = language.name?.value?.trim();
+      const cefr = language.cefr?.value?.trim();
       if (!name) return '';
-      return cefr ? `${name} (${cefr})` : name;
+      if (cefr) return `${name} (${cefr})`;
+      return language.native?.value === 'native' ? `${name} (родной)` : name;
     })
     .filter(Boolean);
 
@@ -299,165 +305,11 @@ export async function saveResumeAsPdf(
  * back to the older human-readable export.
  */
 export function formatResumeAsAtsText(doc: ResumeDocument, draft: ResumeDraft): string {
-  const sections: string[] = [];
-
-  const header = formatAtsHeader(doc, draft);
-  if (header) sections.push(header);
-
-  const about = (doc.about ?? draft.candidate.about ?? '').trim();
-  if (about) sections.push(`=== SUMMARY ===\n${about}`);
-
-  const experienceBlocks = formatAtsExperience(doc.experience);
-  if (experienceBlocks) sections.push(`=== WORK EXPERIENCE ===\n\n${experienceBlocks}`);
-
-  const skillsList = (doc.skills ?? draft.skills ?? [])
-    .map((s) => s.name?.trim())
-    .filter((s): s is string => Boolean(s));
-  if (skillsList.length > 0) sections.push(`=== SKILLS ===\n${skillsList.join(', ')}`);
-
-  const educationBlocks = formatAtsEducation(doc.education);
-  if (educationBlocks) sections.push(`=== EDUCATION ===\n\n${educationBlocks}`);
-
-  const languages = formatAtsLanguages(doc, draft);
-  if (languages) sections.push(languages);
-
-  const courses = formatAtsCourses(doc, draft);
-  if (courses) sections.push(courses);
-
-  const projects = formatAtsProjects(doc.projects ?? []);
-  if (projects) sections.push(projects);
-
-  return sections.join('\n\n');
+  return formatResumeAsAtsTextCore(doc, draft);
 }
 
 export function formatTargetedResumeAsAtsText(slice: TargetedResumeSlice): string {
-  const sections = [formatResumeAsAtsText(slice.document, EMPTY_RESUME_DRAFT)];
-  if (slice.missingRequirements.length > 0) {
-    const gaps = slice.missingRequirements
-      .map((requirement) => `- ${requirement} - не найдено в мастер-резюме`)
-      .join('\n');
-    sections.push(`=== REQUIREMENT GAPS ===\n${gaps}`);
-  }
-  return sections.filter(Boolean).join('\n\n');
+  return formatTargetedResumeAsAtsTextCore(slice);
 }
 
-function formatAtsHeader(doc: ResumeDocument, draft: ResumeDraft): string | null {
-  const fullName = (doc.contact.fullName ?? draft.candidate.fullName ?? '').trim();
-  const targetRole = (doc.targetRole ?? draft.targetRole ?? '').trim();
-  const contactParts = [
-    doc.contact.location ?? draft.candidate.contact?.location,
-    doc.contact.phone ?? draft.candidate.contact?.phone,
-    doc.contact.email ?? draft.candidate.contact?.email,
-    draft.candidate.contact?.telegram,
-    doc.contact.links?.[0] ?? draft.candidate.contact?.links?.[0],
-  ]
-    .map((item) => item?.trim())
-    .filter((item): item is string => Boolean(item));
-
-  const headerLines: string[] = [];
-  if (fullName) headerLines.push(fullName.toUpperCase());
-  if (targetRole) headerLines.push(targetRole);
-  if (contactParts.length > 0) headerLines.push(contactParts.join(' | '));
-  return headerLines.length > 0 ? headerLines.join('\n') : null;
-}
-
-function formatAtsLanguages(doc: ResumeDocument, draft: ResumeDraft): string | null {
-  const languagesList = (doc.languages.length > 0 ? doc.languages : (draft.languages ?? []))
-    .map((l) => {
-      const name =
-        'name' in l && typeof l.name === 'object' && l.name !== null
-          ? l.name.value
-          : (l as { name?: string }).name;
-      const cefr =
-        'cefr' in l && typeof l.cefr === 'object' && l.cefr !== null
-          ? l.cefr.value
-          : (l as { cefr?: string }).cefr;
-      const trimmedName = name?.trim();
-      if (!trimmedName) return '';
-      return cefr ? `${trimmedName} (${cefr})` : trimmedName;
-    })
-    .filter(Boolean);
-
-  return languagesList.length > 0 ? `=== LANGUAGES ===\n${languagesList.join(', ')}` : null;
-}
-
-function formatAtsCourses(doc: ResumeDocument, draft: ResumeDraft): string | null {
-  const coursesList = (doc.courses ?? draft.courses ?? [])
-    .map((c) => {
-      const parts = [
-        c.name?.trim(),
-        (c.provider ?? c.institution)?.trim(),
-        c.year ? String(c.year) : '',
-      ].filter(Boolean);
-      return parts.join(' | ');
-    })
-    .filter(Boolean);
-
-  return coursesList.length > 0
-    ? `=== COURSES AND CERTIFICATIONS ===\n${coursesList.join('\n')}`
-    : null;
-}
-
-function formatAtsProjects(projects: readonly ResumeProject[]): string | null {
-  const blocks = projects
-    .map((project) => {
-      const name = project.name.value.trim();
-      const employer = project.employer?.value.trim();
-      const heading = [name, employer].filter(Boolean).join(' | ');
-      const start = project.startDate?.value.trim();
-      const end = project.current?.value ? 'настоящее время' : project.endDate?.value.trim();
-      const period = start && end ? `${start} — ${end}` : (start ?? end ?? '');
-      const description = project.description?.value.trim();
-      const skills = project.skills
-        .map((skill) => skill.value.trim())
-        .filter(Boolean)
-        .join(', ');
-      return [heading, period, description, skills ? `Навыки проекта: ${skills}` : '']
-        .filter(Boolean)
-        .join('\n');
-    })
-    .filter(Boolean);
-  return blocks.length > 0 ? `=== PROJECTS ===\n\n${blocks.join('\n\n')}` : null;
-}
-
-function formatAtsExperience(experiences: readonly ResumeExperience[]): string {
-  if (!experiences.length) return '';
-  return experiences
-    .map((exp) => {
-      const title = exp.title?.value?.trim() ?? '';
-      const employer = exp.employer?.value?.trim() ?? '';
-      const location = exp.location?.value?.trim() ?? '';
-      const headerLine = [title, employer, location].filter(Boolean).join(' | ');
-
-      const start = exp.startDate?.value?.trim();
-      const isCurrent = exp.current?.value;
-      const end = isCurrent ? 'Present' : exp.endDate?.value?.trim();
-      const periodLine = start && end ? `${start} - ${end}` : (start ?? end ?? '');
-
-      const bullets = exp.bullets
-        .map((b) => b.value?.trim())
-        .filter(Boolean)
-        .map((b) => `- ${b}`);
-
-      return [headerLine, periodLine, ...bullets].filter(Boolean).join('\n');
-    })
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function formatAtsEducation(education: readonly ResumeEducation[]): string {
-  if (!education.length) return '';
-  return education
-    .map((edu) => {
-      const inst = edu.institution?.value?.trim();
-      const qual = edu.qualification?.value?.trim();
-      const start = edu.startDate?.value?.trim();
-      const end = edu.endDate?.value?.trim();
-      const period = start && end ? `${start} - ${end}` : (start ?? end ?? '');
-
-      return [inst, qual, period].filter(Boolean).join(' | ');
-    })
-    .filter(Boolean)
-    .join('\n');
-}
 import { isTauriEnvironment, invokeDesktopCommand } from '../../services/desktop/desktopBridge';
