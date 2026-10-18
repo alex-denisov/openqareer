@@ -5,6 +5,9 @@ import { profileCompleteness } from '../resume/profileCompleteness';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import type { TodayProfileFocus } from './todayApi';
 
+/** Макет: полоса профиля в одну строку — три первых действия, остальные в «Профиле». */
+const VISIBLE_PROFILE_ACTIONS = 3;
+
 interface TodayProfileProgressAction {
   readonly label: string;
   readonly section: string;
@@ -95,7 +98,7 @@ export function TodayProfileProgress({
         />
       </div>
       <div className="career-today-profile-actions" aria-label="Что заполнить">
-        {actions.map((action) => (
+        {actions.slice(0, VISIBLE_PROFILE_ACTIONS).map((action) => (
           <button
             key={action.section}
             type="button"

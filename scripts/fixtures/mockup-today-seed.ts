@@ -151,3 +151,28 @@ export function seedMockupToday(
     localDate: now.toISOString().slice(0, 10),
   });
 }
+
+/**
+ * «Профиль готов на 73 %: 3 действия» (8 из 11 блоков): рекомендация и достижение есть,
+ * контактов, курсов и сертификатов нет. Даты «Маркет Софт» остаются, как в макете «Профиля».
+ */
+export function mockupResumeDraft<T extends object>(draft: T): T {
+  return {
+    ...draft,
+    recommendations: [
+      {
+        id: 'mockup-recommendation',
+        author: 'Ирина Котова',
+        position: 'CTO, Финтех Лаб',
+        text: 'Собрал платформенную команду и вывел релизы на еженедельный цикл.',
+      },
+    ],
+    achievements: [
+      {
+        id: 'mockup-achievement',
+        kind: 'publication',
+        title: 'Доклад «Платёжная платформа без простоя», HighLoad++',
+      },
+    ],
+  };
+}

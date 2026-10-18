@@ -10,7 +10,7 @@ import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../server/data/sqliteCandidateReputationRepository';
 import { historicalAudit } from './fixtures/block-a-footprint-fixture';
 import { seedBlockAToday } from './fixtures/block-a-today-seed';
-import { seedMockupToday } from './fixtures/mockup-today-seed';
+import { mockupResumeDraft, seedMockupToday } from './fixtures/mockup-today-seed';
 import { SqliteCandidateDraftRepository } from '../server/candidate/sqliteCandidateDraftRepository';
 import type { SessionAuth } from '../server/auth/authService';
 import type { ServerConfig } from '../server/config';
@@ -70,8 +70,9 @@ for (const fact of syntheticResumeMemory) {
     candidateStore.changeMemory(candidate.id, fact.id, { action: 'confirm' });
 }
 const memory = candidateStore.getSnapshot(candidate.id)?.memory ?? [];
-const projection = buildResumeStudioProjection({ ...syntheticResumeDraft, evidence: memory });
-candidateStore.saveResumeDraft(candidate.id, syntheticResumeDraft, projection.evidenceSnapshot);
+const resumeDraft = mockupResumeDraft(syntheticResumeDraft);
+const projection = buildResumeStudioProjection({ ...resumeDraft, evidence: memory });
+candidateStore.saveResumeDraft(candidate.id, resumeDraft, projection.evidenceSnapshot);
 candidateStore.saveCandidateWorkspace(candidate.id, {
   careerGoal: 'find-job',
   resumeText: '',
