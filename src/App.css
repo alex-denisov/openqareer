@@ -27,8 +27,10 @@
     var(--brand-core) 55%,
     var(--brand-deep)
   );
-  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
-    sans-serif;
+  /* Roboto/Liberation Sans/Arial keep Android and Linux close to the SF metrics the mockups are
+     drawn in; Linux `system-ui` (DejaVu) is ~10 % wider and spilled the 390 nav captions. */
+  --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Liberation Sans", Arial,
+    system-ui, sans-serif;
   /* «SFMono-Regular» — не имя семейства, и Chromium падал в Courier;
      ui-monospace даёт системный моноширинный на macOS/iOS (B232). */
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono",

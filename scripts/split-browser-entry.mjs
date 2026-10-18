@@ -531,7 +531,7 @@ export function buildSplitDelivery({
   if (!nextHtml.includes('role="status"')) {
     nextHtml = nextHtml.replace(
       '<div id="root"></div>',
-      '<div id="root"><main class="bootstrap-loading"><p role="status">Загружаем рабочее пространство…</p></main></div>',
+      '<div id="root"><main class="bootstrap-loading"><p role="status" data-split-load-status>Загружаем рабочее пространство…</p></main></div>',
     );
   }
   writeFileSync(indexPath, nextHtml);
