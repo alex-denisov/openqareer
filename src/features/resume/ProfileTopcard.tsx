@@ -514,8 +514,15 @@ function TopcardName({ name, onEdit }: { readonly name?: string; readonly onEdit
 
 function TopcardProfileMeta({ draft }: { readonly draft: ResumeDraft }) {
   const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
-  const employer = draft.experience.find((entry) => entry.current)?.employer?.trim();
-  const location = draft.candidate.contact?.location?.trim();
+  const contains = (text: string | undefined, part: string | undefined) =>
+    Boolean(
+      text && part && text.toLocaleLowerCase('ru-RU').includes(part.toLocaleLowerCase('ru-RU')),
+    );
+  // An imported headline often already carries the company and city; never say them twice.
+  const currentEmployer = draft.experience.find((entry) => entry.current)?.employer?.trim();
+  const employer = contains(headline, currentEmployer) ? undefined : currentEmployer;
+  const rawLocation = draft.candidate.contact?.location?.trim();
+  const location = contains(headline, rawLocation) ? undefined : rawLocation;
   return (
     <div className="career-profile-screen-profile-meta">
       {headline || employer ? (

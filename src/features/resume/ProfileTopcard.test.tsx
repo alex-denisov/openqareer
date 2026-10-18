@@ -224,4 +224,24 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
       container.remove();
     });
   });
+
+  it('does not repeat the company and city already in an imported headline', () => {
+    const html = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={{
+          ...draft,
+          candidate: {
+            ...draft.candidate,
+            headline: 'PM, Acme · Москва',
+            contact: { location: 'Москва' },
+          },
+        }}
+        onDraftChange={() => {}}
+        reader={null}
+      />,
+    );
+    expect(html).toContain('PM, Acme · Москва');
+    expect(html).not.toContain('PM, Acme · Москва, Acme');
+    expect(html).not.toContain('career-profile-screen-inline-location');
+  });
 });

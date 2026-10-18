@@ -65,7 +65,8 @@ describe('apiClient', () => {
   it('resolves relative base URL in normal web environment and remote backend for tauri', () => {
     expect(getApiBaseUrl()).toBe('');
 
-    (globalThis as unknown as { window: { location: { origin: string } } }).window.location.origin = 'tauri://localhost';
+    (globalThis as unknown as { window: { location: { origin: string } } }).window.location.origin =
+      'tauri://localhost';
     expect(getApiBaseUrl()).toBe('https://openqareer.com');
   });
 
@@ -115,7 +116,7 @@ describe('apiClient', () => {
    * (INC-027, owner report 2026-08-26).
    */
   describe('a response that is not JSON', () => {
-    it('becomes a typed API error instead of the engine\'s own words', async () => {
+    it("becomes a typed API error instead of the engine's own words", async () => {
       const response = new Response('<!doctype html><title>502</title>', {
         status: 200,
         headers: { 'Content-Type': 'text/html' },
@@ -146,8 +147,9 @@ describe('apiClient', () => {
   describe('an unauthorized response (PRB-038)', () => {
     it('announces the expired session once for the whole app', async () => {
       const dispatched: string[] = [];
-      (globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }).window
-        .dispatchEvent = (event: Event) => {
+      (
+        globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }
+      ).window.dispatchEvent = (event: Event) => {
         dispatched.push(event.type);
         return true;
       };
@@ -162,8 +164,9 @@ describe('apiClient', () => {
 
     it('stays silent for other failures', async () => {
       const dispatched: string[] = [];
-      (globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }).window
-        .dispatchEvent = (event: Event) => {
+      (
+        globalThis as unknown as { window: { dispatchEvent: (event: Event) => boolean } }
+      ).window.dispatchEvent = (event: Event) => {
         dispatched.push(event.type);
         return true;
       };
@@ -192,6 +195,17 @@ describe('apiClient', () => {
     await expect(readData(response)).rejects.toMatchObject({
       code: 'application_version_conflict',
       details: { currentVersion: 2 },
+    });
+  });
+
+  it('never shows the internal missing-route text to the candidate', async () => {
+    const response = new Response(
+      JSON.stringify({ error: { code: 'route_not_found', message: 'Такого API-маршрута нет.' } }),
+      { status: 404, headers: { 'Content-Type': 'application/json' } },
+    );
+    await expect(readData(response)).rejects.toMatchObject({
+      code: 'route_not_found',
+      message: 'Эта функция пока недоступна. Попробуйте позже.',
     });
   });
 });

@@ -1,7 +1,4 @@
-import {
-  desktopNativeFetch,
-  isTauriEnvironment,
-} from '../../services/desktop/desktopBridge';
+import { desktopNativeFetch, isTauriEnvironment } from '../../services/desktop/desktopBridge';
 import { mirrorDesktopSessionToken } from '../../services/desktop/desktopSessionToken';
 
 /**
@@ -114,17 +111,14 @@ export function getApiBaseUrl(): string {
   return '';
 }
 
-export async function apiFetch(
-  input: string,
-  init: RequestInit = {},
-): Promise<Response> {
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const baseUrl = getApiBaseUrl();
   const fullUrl = input.startsWith('http') ? input : `${baseUrl}${input}`;
   const token = getStoredSessionToken();
   const method = (init.method ?? 'GET').toUpperCase();
-  const signal = init.signal ?? (
-    method === 'GET' || method === 'HEAD' ? AbortSignal.timeout(API_READ_TIMEOUT_MS) : undefined
-  );
+  const signal =
+    init.signal ??
+    (method === 'GET' || method === 'HEAD' ? AbortSignal.timeout(API_READ_TIMEOUT_MS) : undefined);
   if (signal?.aborted) throw networkError();
 
   const headers: Record<string, string> = {
@@ -246,8 +240,7 @@ export function apiErrorMessage(reason: unknown, fallback: string): string {
   return reason instanceof CoachApiError ? reason.message : fallback;
 }
 
-const MALFORMED_RESPONSE_MESSAGE =
-  'Сервис вернул ответ неожиданной формы. Повторите запрос.';
+const MALFORMED_RESPONSE_MESSAGE = 'Сервис вернул ответ неожиданной формы. Повторите запрос.';
 
 function malformedResponseError(): CoachApiError {
   return new CoachApiError(MALFORMED_RESPONSE_MESSAGE, 'malformed_response', true);
@@ -284,8 +277,13 @@ export async function throwApiError(response: Response): Promise<never> {
   if (response.status === 401 && typeof window !== 'undefined') {
     window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   }
+  // A missing route means this client is newer than the server; the raw text is internal.
+  const message =
+    envelope.error?.code === 'route_not_found'
+      ? 'Эта функция пока недоступна. Попробуйте позже.'
+      : envelope.error?.message;
   throw new CoachApiError(
-    envelope.error?.message ?? 'Сервис не завершил действие. Попробуйте ещё раз.',
+    message ?? 'Сервис не завершил действие. Попробуйте ещё раз.',
     envelope.error?.code ?? `http_${response.status}`,
     envelope.error?.retryable ?? response.status >= 500,
     envelope.error?.fields ?? {},
