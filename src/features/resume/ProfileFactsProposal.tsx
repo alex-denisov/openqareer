@@ -8,6 +8,13 @@ const FACT_TOPICS = 'команда, бюджет, результат релиз
 const FACT_QUESTION_COUNT = 4;
 const DISMISSED_KEY = 'openqareer.profile-facts-proposal-dismissed';
 
+/** A short non-reversible tag, so the employer name never lands in browser storage. */
+function employerTag(employer: string): string {
+  let hash = 0;
+  for (const char of employer) hash = (Math.imul(hash, 31) + char.codePointAt(0)!) | 0;
+  return (hash >>> 0).toString(36);
+}
+
 function readDismissed(): string | null {
   try {
     return sessionStorage.getItem(DISMISSED_KEY);
@@ -18,7 +25,7 @@ function readDismissed(): string | null {
 
 function writeDismissed(employer: string): void {
   try {
-    sessionStorage.setItem(DISMISSED_KEY, employer);
+    sessionStorage.setItem(DISMISSED_KEY, employerTag(employer));
   } catch {
     // Storage can be blocked; the card then hides only until the next mount.
   }
@@ -53,7 +60,7 @@ function useCurrentEmployer(): string | undefined {
 export function ProfileFactsProposal({ onStart }: { readonly onStart: (prompt: string) => void }) {
   const employer = useCurrentEmployer();
   const [dismissed, setDismissed] = useState(readDismissed);
-  if (!employer || dismissed === employer) return null;
+  if (!employer || dismissed === employerTag(employer)) return null;
   const title = `Собрать факты по «${employer}»`;
   return (
     <section className="career-expert-proposal" aria-label={title}>
@@ -75,7 +82,7 @@ export function ProfileFactsProposal({ onStart }: { readonly onStart: (prompt: s
           className="career-quiet-button"
           onClick={() => {
             writeDismissed(employer);
-            setDismissed(employer);
+            setDismissed(employerTag(employer));
           }}
         >
           <X size={16} aria-hidden="true" />
