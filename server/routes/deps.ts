@@ -35,6 +35,7 @@ export interface RuntimeMemoryReport {
 }
 
 export interface RouteDeps {
+  bulkLlmRuntime?: import('../providers/bulkLlmRuntime').BulkLlmRuntime;
   /** Черновики LinkedIn: очередь «Сегодня» показывает посты, ждущие одобрения. */
   candidateDraftRepository?: Pick<
     import('../candidate/sqliteCandidateDraftRepository').SqliteCandidateDraftRepository,

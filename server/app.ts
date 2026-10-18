@@ -72,7 +72,11 @@ import { createRobokassaGateway } from './billing/robokassaProtocol';
 import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
 
+import { createBulkLlmRuntime } from './providers/bulkLlmRuntime';
+import { registerBulkLlmSpendRoutes } from './routes/bulkLlmSpendRoutes';
+
 interface BuildAppOptions {
+  bulkLlmRuntime?: RouteDeps['bulkLlmRuntime'];
   config: ServerConfig;
   coachProvider: CoachProvider;
   candidateStore: CandidateStore;
@@ -286,6 +290,7 @@ async function registerApiRoutes(
   deps: CandidateDraftRouteDeps,
 ): Promise<void> {
   await registerAdminRoutes(app, deps);
+  await registerBulkLlmSpendRoutes(app, deps);
   await registerAuthRoutes(app, deps);
   await registerConnectorRoutes(app, deps);
   await registerCandidateRoutes(app, deps);
@@ -509,10 +514,13 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     titleParseStore: options.titleParseStore,
   });
   const deps = assembleRouteDeps(options, services);
+  deps.bulkLlmRuntime =
+    options.bulkLlmRuntime ?? createBulkLlmRuntime({ databasePath: config.databasePath });
   const app = await createFastifyBase(config, logDestination);
   const stopBillingScheduler = registerBillingRenewalScheduler(app, config, deps);
   app.addHook('onClose', () => {
     stopBillingScheduler();
+    if (!options.bulkLlmRuntime) deps.bulkLlmRuntime?.close();
     services.titleParseStore.close();
     deps.capabilityConsentStore?.close();
     if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
