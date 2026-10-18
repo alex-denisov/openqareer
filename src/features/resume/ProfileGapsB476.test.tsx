@@ -137,7 +137,7 @@ describe('B476: Profile gaps mechanics (About & Review & Versions)', () => {
   it('ResumeVersionsCard shows the persistent version entry point without local fake rows', () => {
     const html = renderToStaticMarkup(<ProfileResumeVersions draft={MOCK_DRAFT} memory={[]} />);
 
-    expect(html).toContain('Создать версию под вакансию');
+    expect(html).toContain('aria-controls="docs-more"');
     expect(html).toContain('Сохранённых снимков резюме под вакансию пока нет');
     expect(html).not.toContain('вер-');
     expect(html).not.toContain('Черновик ждёт вашего одобрения');

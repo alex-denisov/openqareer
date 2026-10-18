@@ -378,12 +378,15 @@ function ReviewActions({
           <span>Собрать факты с консультантом</span>
         </button>
       ) : null}
-      <QuestionnaireAction
-        draft={draft}
-        onFillQuestionnaire={onFillQuestionnaire}
-        onTabChange={onTabChange}
-        desktopLayout={desktopLayout}
-      />
+      {/* The approved 1440 mockup keeps one action here; the questionnaire stays on 390. */}
+      {desktopLayout && onOpenExpert ? null : (
+        <QuestionnaireAction
+          draft={draft}
+          onFillQuestionnaire={onFillQuestionnaire}
+          onTabChange={onTabChange}
+          desktopLayout={desktopLayout}
+        />
+      )}
     </div>
   );
 }

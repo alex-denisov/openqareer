@@ -85,11 +85,13 @@ export function ProfileTabs({
   tab,
   onTab,
   skillsCount,
+  traceCount,
   disabled = false,
 }: {
   readonly tab: ProfileTab;
   readonly onTab: (tab: ProfileTab) => void;
   readonly skillsCount?: number;
+  readonly traceCount?: number;
   readonly disabled?: boolean;
 }) {
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -101,7 +103,8 @@ export function ProfileTabs({
   return (
     <div className="career-profile-screen-tabs" role="tablist" aria-label="Профиль">
       {PROFILE_TABS.map((item, index) => {
-        const count = item.id === 'skills' ? skillsCount : undefined;
+        const count =
+          item.id === 'skills' ? skillsCount : item.id === 'trace' ? traceCount : undefined;
         return (
           <ProfileTabButton
             key={item.id}

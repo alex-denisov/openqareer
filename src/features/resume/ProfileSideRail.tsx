@@ -1,4 +1,12 @@
-import { EnvelopeSimple, Globe, PaperPlaneTilt, Phone } from '@phosphor-icons/react';
+import {
+  ArrowRight,
+  CheckCircle,
+  EnvelopeSimple,
+  Eye,
+  Globe,
+  PaperPlaneTilt,
+  Phone,
+} from '@phosphor-icons/react';
 import type { ResumeDraft } from './resumeTypes';
 import { WorkPreferencesPanel } from '../cabinet/WorkPreferencesPanel';
 import { useWorkPreferences } from '../cabinet/useWorkPreferences';
@@ -63,6 +71,34 @@ export function WorkPreferencesRailPanel() {
   return <WorkPreferencesPanel state={state} />;
 }
 
+function RelocationHead({
+  summary,
+  onOpen,
+}: {
+  readonly summary: ProfileRelocationSummaryStatus;
+  readonly onOpen?: () => void;
+}) {
+  return (
+    <div className="career-profile-screen-relocation-head">
+      <h2 id="career-profile-screen-relocation-title">Релокация</h2>
+      <span className={`career-profile-screen-tag${summary === 'enabled' ? ' is-verified' : ''}`}>
+        {summary === 'enabled' ? <CheckCircle size={14} aria-hidden="true" /> : null}
+        {profileRelocationSummaryLabel(summary)}
+      </span>
+      <span className="career-profile-screen-tag">
+        <Eye size={14} aria-hidden="true" />
+        Видите только вы
+      </span>
+      {onOpen ? (
+        <button type="button" className="career-secondary-button career-btn-sm" onClick={onOpen}>
+          <ArrowRight size={16} aria-hidden="true" />
+          <span>Открыть</span>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 interface ProfileSideRailProps {
   readonly draft: ResumeDraft;
   readonly desktopLayout?: boolean;
@@ -83,20 +119,13 @@ export function ProfileSideRail({
         className="career-profile-screen-panel career-profile-screen-relocation"
         aria-labelledby="career-profile-screen-relocation-title"
       >
-        <div className="career-profile-screen-relocation-head">
-          <h2 id="career-profile-screen-relocation-title">Релокация</h2>
-          <span className="career-profile-screen-relocation-note">
-            {profileRelocationSummaryLabel(relocationSummary)}
-          </span>
-          <span className="career-profile-screen-relocation-note">Видите только вы</span>
-          {onOpenRelocation ? (
-            <button type="button" className="career-quiet-button" onClick={onOpenRelocation}>
-              <span>Открыть</span>
-            </button>
-          ) : null}
-        </div>
+        <RelocationHead summary={relocationSummary} onOpen={onOpenRelocation} />
         <p className="career-profile-screen-relocation-summary">
           {profileRelocationSummaryDetail(relocationSummary)}
+        </p>
+        <p className="career-profile-screen-quality-note">
+          Документы, образование и сроки хранятся в разделе «Страны и релокация», вкладка «Мои
+          данные». Здесь только сводка.
         </p>
         <details className="career-profile-screen-relocation-prefs">
           <summary>Ограничения и предпочтения для подбора</summary>

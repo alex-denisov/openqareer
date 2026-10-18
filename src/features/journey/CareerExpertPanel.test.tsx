@@ -215,16 +215,14 @@ describe('CareerExpertPanel copy', () => {
     expect(html).toContain('Как уточнить цель?');
   });
 
-  it('renders skill quiz verification prompt when stage is profile (B376)', () => {
+  it('keeps the skill quiz out of the profile consultant, as in the approved mockup', () => {
     const html = renderToStaticMarkup(
       <CareerExpertPanel stage="profile" initialUser={null} onClose={() => undefined} />,
     );
 
     expect(html).toContain('Консультант · Профиль');
-    expect(html).toContain('Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn');
-    expect(html).toContain('Пройти квиз по навыку');
+    expect(html).not.toContain('Пройти квиз по навыку');
   });
-
 
   it('opens the existing quiz bank when Profile requests it', async () => {
     const container = document.createElement('div');

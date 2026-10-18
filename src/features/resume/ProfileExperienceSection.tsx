@@ -1,5 +1,14 @@
 import { useRef, useState } from 'react';
-import { Info } from '@phosphor-icons/react';
+import {
+  Buildings,
+  CheckCircle,
+  Circle,
+  House,
+  Info,
+  Laptop,
+  MapPin,
+  type Icon,
+} from '@phosphor-icons/react';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import type { CandidateMemory } from '../coach/coachApi';
 import { groupExperienceByEmployer } from './profileGrouping';
@@ -48,6 +57,12 @@ export function responsibilityBullets(
     return statement ? [statement] : [];
   });
 }
+
+const WORKPLACE_ICON: Record<string, Icon> = {
+  on_site: Buildings,
+  hybrid: House,
+  remote: Laptop,
+};
 
 const WORKPLACE_LABEL: Record<string, string> = {
   on_site: 'Офис',
@@ -145,6 +160,26 @@ function PositionSummary({
   );
 }
 
+function PositionPlace({ entry }: { readonly entry: ResumeExperienceInput }) {
+  const WorkplaceIcon = entry.workplaceType ? WORKPLACE_ICON[entry.workplaceType] : undefined;
+  return (
+    <>
+      {entry.location ? (
+        <span className="career-profile-screen-company-span">
+          <MapPin size={14} aria-hidden="true" />
+          {entry.location}
+        </span>
+      ) : null}
+      {entry.workplaceType ? (
+        <span className="career-profile-screen-company-span">
+          {WorkplaceIcon ? <WorkplaceIcon size={14} aria-hidden="true" /> : null}
+          {WORKPLACE_LABEL[entry.workplaceType]?.toLocaleLowerCase('ru-RU')}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
 function PositionEvidenceBadge({
   entry,
   memory,
@@ -164,22 +199,25 @@ function PositionEvidenceBadge({
     );
   return (
     <div className="career-profile-screen-position-tags">
-      <span
-        className={`career-profile-screen-tag ${confirmedByCandidate ? 'is-verified' : 'is-unverified'}`}
-        title="Работодатель не проверяется; подтверждение относится к фактам профиля."
-        aria-label={`${confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}. Работодатель не проверяется.`}
-      >
-        {confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}
-      </span>
-      {entry.location ? (
-        <span className="career-profile-screen-company-span">{entry.location}</span>
+      {entry.current ? (
+        <span className="career-profile-screen-tag is-accent">Работаю здесь</span>
       ) : null}
+      <PositionPlace entry={entry} />
       {entry.employmentType ? (
         <span className="career-profile-screen-tag">{entry.employmentType}</span>
       ) : null}
-      {entry.workplaceType ? (
-        <span className="career-profile-screen-tag">{WORKPLACE_LABEL[entry.workplaceType]}</span>
-      ) : null}
+      <span
+        className={`career-profile-screen-tag${confirmedByCandidate ? ' is-verified' : ''}`}
+        title="Работодатель не проверяется; подтверждение относится к фактам профиля."
+        aria-label={`${confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}. Работодатель не проверяется.`}
+      >
+        {confirmedByCandidate ? (
+          <CheckCircle size={14} aria-hidden="true" />
+        ) : (
+          <Circle size={14} aria-hidden="true" />
+        )}
+        {confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}
+      </span>
     </div>
   );
 }

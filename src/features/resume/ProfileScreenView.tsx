@@ -24,6 +24,7 @@ import { ProfileTopcard } from './ProfileTopcard';
 import { ProfileTabs, type ProfileTab } from './profileTabs';
 import { importedSourceOf, type ImportedSource } from './resumeSourceCoverage';
 import { useResumeStudio } from './useResumeStudio';
+import { useFootprintFindingCount } from './useFootprintFindingCount';
 import { useConsultantSuggestions } from './useConsultantSuggestions';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
@@ -246,6 +247,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     connections,
     tab = 'resume',
   } = props;
+  const traceCount = useFootprintFindingCount(candidateId);
 
   if (loading && !draft) return <ProfileScreenLoadingState mobile={!desktopProfileLayout} />;
   if (!draft) {
@@ -326,6 +328,7 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
         tab={tab}
         onTab={props.onTabChange ?? (() => undefined)}
         skillsCount={draft.skills?.length ?? 0}
+        traceCount={traceCount}
       />
       {tab === 'skills' ? (
         <div

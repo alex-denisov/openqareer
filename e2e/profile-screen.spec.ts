@@ -666,9 +666,8 @@ test.describe('B441 Profile screen from mockup 2', () => {
       review.getByRole('button', { name: /Собрать факты с консультантом/u }),
     ).toBeVisible();
     await expect(review.locator('button.career-primary-button')).toHaveCount(1);
-    await expect(review.getByRole('button', { name: 'Заполнить анкету', exact: true })).toHaveCSS(
-      'background-color',
-      'rgba(0, 0, 0, 0)',
+    await expect(review.getByRole('button', { name: 'Заполнить анкету', exact: true })).toHaveCount(
+      0,
     );
 
     await expect(page.locator('.career-profile-screen-otw')).toHaveCount(0);
@@ -689,6 +688,7 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await captureS10Profile(page, `profile-${page.viewportSize()?.width ?? 'unknown'}`);
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-resume`));
 
+    await page.locator('#sec-documents button[aria-controls="docs-more"]').click();
     await page.locator('.career-profile-screen-ats-details summary').click();
     await expect(page.locator('.career-resume-ats-view')).toBeVisible();
     await expect(page.getByLabel('Требования вакансии')).toBeVisible();

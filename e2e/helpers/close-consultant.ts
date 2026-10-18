@@ -10,6 +10,8 @@ export async function closeConsultant(page: Page): Promise<void> {
       .click();
     return;
   }
+  // Below 1280 the approved layout already keeps the consultant folded into its strip.
+  if (await panel.getByRole('button', { name: 'Развернуть консультанта' }).isVisible()) return;
   await panel
     .getByRole('button', {
       name: /^(Закрыть карьерного консультанта|Свернуть консультанта в полосу)$/u,

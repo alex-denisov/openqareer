@@ -13425,6 +13425,9 @@
 }
 
 .career-profile-screen-company-span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }

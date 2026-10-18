@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from '@phosphor-icons/react';
+import { CaretDown, FileText, Info, Plus } from '@phosphor-icons/react';
+import { CareerTooltip } from '../shell/CareerTooltip';
+import { SectionHead } from './ProfileSectionHead';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CandidateMemory } from '../coach/coachApi';
 import type {
@@ -17,7 +19,6 @@ import {
   announceVersionCollectionChange,
   resumeVersionErrorMessage,
   useUpdateResumeVersion,
-  versionStatus,
   versionSummary,
 } from './ProfileResumeVersionDetail';
 export { ActiveVersionPanel };
@@ -35,7 +36,22 @@ export function formatTargetedVersionTitle(title: string): string {
 
 function formatVersionDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'дата неизвестна' : date.toLocaleDateString('ru-RU');
+  return Number.isNaN(date.getTime())
+    ? 'дата неизвестна'
+    : date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+}
+
+function versionRowTitle(version: TargetedVersion): string {
+  const title = formatTargetedVersionTitle(version.title);
+  return version.status === 'draft'
+    ? `${title}, черновик`
+    : `${title}, ${formatVersionDate(version.updatedAt)}`;
+}
+
+function versionRowNote(version: TargetedVersion): string {
+  if (version.status === 'draft') return 'Ждёт вашего одобрения';
+  const verb = version.status === 'sent' ? 'отправлено' : 'одобрено';
+  return `Снимок версии, ${verb} ${formatVersionDate(version.updatedAt)}`;
 }
 
 function createVersionIdempotencyKey(): string {
@@ -83,28 +99,38 @@ function AtsPlainTextDetails({
   );
 }
 
-function ResumeVersionsCardHead({
-  isCreating,
-  onStartCreate,
-}: {
-  readonly isCreating: boolean;
-  readonly onStartCreate: () => void;
-}) {
+function ResumeVersionsCardHead({ count }: { readonly count: number }) {
   return (
-    <div className="career-profile-screen-section-head">
-      <h2 id="sec-documents-title">Резюме и версии</h2>
-      {!isCreating ? (
-        <button
-          type="button"
-          className="career-secondary-button career-btn-sm"
-          data-testid="create-targeted-version-btn"
-          onClick={onStartCreate}
-        >
-          <Plus size={16} aria-hidden="true" />
-          <span>Создать версию под вакансию</span>
-        </button>
-      ) : null}
-    </div>
+    <SectionHead
+      id="sec-documents-title"
+      title="Резюме и версии"
+      count={String(count)}
+      action={
+        <CareerTooltip content="Мастер-резюме — полный профиль. Версия под вакансию — снимок с правками, мастер не меняется.">
+          <button
+            type="button"
+            className="career-quiet-button career-btn-sm career-profile-screen-info-button"
+            aria-label="Пояснение"
+          >
+            <Info size={16} aria-hidden="true" />
+          </button>
+        </CareerTooltip>
+      }
+    />
+  );
+}
+
+function CreateVersionButton({ onStartCreate }: { readonly onStartCreate: () => void }) {
+  return (
+    <button
+      type="button"
+      className="career-quiet-button career-btn-sm"
+      data-testid="create-targeted-version-btn"
+      onClick={onStartCreate}
+    >
+      <Plus size={16} aria-hidden="true" />
+      <span>Создать версию под вакансию</span>
+    </button>
   );
 }
 
@@ -308,21 +334,24 @@ function TargetedVersionList({
     <div className="career-profile-screen-targeted-versions">
       {versions.map((version) => (
         <div key={version.id} className="career-profile-screen-versions-row">
+          <FileText size={18} aria-hidden="true" />
           <div>
-            <strong>{formatTargetedVersionTitle(version.title)}</strong>
-            <p className="career-profile-screen-quality-note">
-              {versionStatus(version.status)} · обновлено {formatVersionDate(version.updatedAt)}
-            </p>
+            <strong>{versionRowTitle(version)}</strong>
+            <p className="career-profile-screen-quality-note">{versionRowNote(version)}</p>
           </div>
           <button
             type="button"
-            className="career-secondary-button career-btn-sm"
+            className="career-quiet-button career-btn-sm"
             aria-label={`Открыть версию ${formatTargetedVersionTitle(version.title)}`}
             data-testid={`open-targeted-version-${version.id}`}
             onClick={() => onOpen(version.id)}
             disabled={loadingVersionId !== null}
           >
-            {loadingVersionId === version.id ? 'Открываем…' : 'Открыть'}
+            {loadingVersionId === version.id
+              ? 'Открываем…'
+              : version.status === 'draft'
+                ? 'Править'
+                : 'Открыть'}
           </button>
         </div>
       ))}
@@ -553,11 +582,16 @@ function VersionListPanel(props: {
 function MasterResumeRow({ draft }: { readonly draft: ResumeDraft }) {
   return (
     <div className="career-profile-screen-versions-row">
+      <FileText size={18} aria-hidden="true" />
       <div>
         <strong>Мастер-резюме</strong>
-        <p className="career-profile-screen-quality-note">{dateSummary(draft)}</p>
+        <p className="career-profile-screen-quality-note">
+          Опыт: {dateSummary(draft).replace(/\.$/u, '')}
+        </p>
       </div>
-      <ResumePrintAction />
+      <ResumePrintAction className="career-secondary-button career-btn-sm">
+        Скачать PDF
+      </ResumePrintAction>
     </div>
   );
 }
@@ -607,31 +641,80 @@ export function useProfileResumeVersionsState(
   return { isCreating, setIsCreating, document, list, assessment, active, create, update };
 }
 
-function VersionCollectionPanel({ state }: { readonly state: ResumeVersionsScreenState }) {
-  const { isCreating, setIsCreating, list, active, create } = state;
+const VISIBLE_TARGETED_VERSIONS = 1;
+
+function VersionsFold({
+  hiddenCount,
+  children,
+}: {
+  readonly hiddenCount: number;
+  readonly children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <VersionCreatePanel
-        isCreating={isCreating}
-        onCreate={create.create}
-        onCancel={() => {
-          setIsCreating(false);
-          create.setError(null);
-        }}
-        saving={create.saving}
-        canCreate={Boolean(list.currentMasterRevision) && !list.loadingVersions}
-        error={create.error}
-      />
+      {open ? <div id="docs-more">{children}</div> : null}
+      <button
+        type="button"
+        className="career-quiet-button career-btn-sm profile-about-expand"
+        aria-expanded={open}
+        aria-controls="docs-more"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <CaretDown size="1em" aria-hidden="true" />
+        {open ? 'Свернуть' : hiddenCount ? `Показать ещё ${hiddenCount}` : 'Показать ещё'}
+      </button>
+    </>
+  );
+}
+
+function VersionCollectionPanel({
+  state,
+  draft,
+}: {
+  readonly state: ResumeVersionsScreenState;
+  readonly draft: ResumeDraft;
+}) {
+  const { isCreating, setIsCreating, list, active, create, document } = state;
+  const listProps = {
+    loading: list.loadingVersions,
+    loadingVersionId: active.loadingVersionId,
+    onOpen: (id: string) => void active.open(id),
+    onRetry: () => void list.loadVersions(),
+    onLoadMore: () => void list.loadVersions(list.nextCursor, true),
+  };
+  const hidden = list.versions.slice(VISIBLE_TARGETED_VERSIONS);
+  return (
+    <>
       <VersionListPanel
-        versions={list.versions}
-        loading={list.loadingVersions}
-        loadingVersionId={active.loadingVersionId}
+        {...listProps}
+        versions={list.versions.slice(0, VISIBLE_TARGETED_VERSIONS)}
         listError={list.listError}
-        nextCursor={list.nextCursor}
-        onOpen={(id) => void active.open(id)}
-        onRetry={() => void list.loadVersions()}
-        onLoadMore={() => void list.loadVersions(list.nextCursor, true)}
+        nextCursor={null}
       />
+      <VersionsFold hiddenCount={hidden.length}>
+        {hidden.length ? (
+          <VersionListPanel
+            {...listProps}
+            versions={hidden}
+            listError={null}
+            nextCursor={list.nextCursor}
+          />
+        ) : null}
+        <VersionCreatePanel
+          isCreating={isCreating}
+          onCreate={create.create}
+          onCancel={() => {
+            setIsCreating(false);
+            create.setError(null);
+          }}
+          saving={create.saving}
+          canCreate={Boolean(list.currentMasterRevision) && !list.loadingVersions}
+          error={create.error}
+        />
+        {!isCreating ? <CreateVersionButton onStartCreate={() => setIsCreating(true)} /> : null}
+        <AtsPlainTextDetails document={document} draft={draft} />
+      </VersionsFold>
     </>
   );
 }
@@ -643,16 +726,16 @@ function ResumeVersionsCard({
   readonly draft: ResumeDraft;
   readonly state: ResumeVersionsScreenState;
 }) {
-  const { isCreating, setIsCreating, document, active, assessment, update } = state;
+  const { document, active, assessment, update } = state;
   return (
     <section
       className="career-profile-screen-panel career-profile-screen-section career-profile-screen-versions"
       id="sec-documents"
       aria-labelledby="sec-documents-title"
     >
-      <ResumeVersionsCardHead isCreating={isCreating} onStartCreate={() => setIsCreating(true)} />
+      <ResumeVersionsCardHead count={1 + state.list.versions.length} />
       <MasterResumeRow draft={draft} />
-      <VersionCollectionPanel state={state} />
+      <VersionCollectionPanel state={state} draft={draft} />
       {active.version ? (
         <ActiveVersionPanel
           version={active.version}
@@ -669,7 +752,6 @@ function ResumeVersionsCard({
           onApprove={update.approve}
         />
       ) : null}
-      <AtsPlainTextDetails document={document} draft={draft} />
       <ResumePrintDocument document={document} draft={draft} />
     </section>
   );

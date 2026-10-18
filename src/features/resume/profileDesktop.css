@@ -66,10 +66,13 @@
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--career-text-soft);
+  color: inherit;
   font: inherit;
-  text-decoration: underline;
+  text-decoration: none;
   cursor: pointer;
+}
+.profile-education-courses-note button:hover {
+  color: var(--career-accent);
 }
 
 @media (min-width: 761px) {

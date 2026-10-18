@@ -326,6 +326,9 @@ describe('ProfileResumeVersions persistence handlers', () => {
 
     let mounted = mount(<ProfileResumeVersions draft={TARGET_DRAFT} memory={[]} />);
     await flushAsyncWork();
+    act(() =>
+      (mounted.querySelector('button[aria-controls="docs-more"]') as HTMLButtonElement).click(),
+    );
 
     const createButton = mounted.querySelector(
       '[data-testid="create-targeted-version-btn"]',

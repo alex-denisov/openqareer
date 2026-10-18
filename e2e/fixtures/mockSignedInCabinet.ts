@@ -2223,6 +2223,14 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (path.endsWith('/candidate/resume/ats-assessment')) {
+      return route.fulfill({ json: { data: { assessment: null } } });
+    }
+    if (path.endsWith('/candidate/resume/versions') && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: { data: { items: [], nextCursor: null, currentMasterRevision: 'mock-master-1' } },
+      });
+    }
     if (path.endsWith('/candidate/footprint')) {
       return route.fulfill({ json: { data: { audit: null } } });
     }

@@ -833,7 +833,6 @@ export function CareerWorkspaceShell({
               onProposalCountChange={setPendingProposalCount}
               onIdentityChange={resetForAccount}
               onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
-              onOpenRoleSkillAssessment={openRoleSkillAssessment}
               skillQuizBankRequest={skillQuizBankRequest}
               onEscape={handleExpertEscape}
               onStageChange={(stage) => updateExpertStage(setExpertConfig, stage)}

@@ -4,7 +4,7 @@ import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 test.describe('B376 skill quiz dialogue & verification', () => {
-  test('opens skill quiz from consultant, completes questions and accepts verification', async ({
+  test('opens skill quiz from the skills tab, completes questions and accepts verification', async ({
     page,
   }, info) => {
     test.skip(info.project.name !== 'desktop-1440', 'single runner drives viewports');
@@ -58,40 +58,12 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       await page.getByRole('tab', { name: /^Навыки/ }).click();
       await expect(page.locator('#sec-skills')).toBeVisible();
 
-      // Open consultant
-      const expertPanel = page.locator('.career-expert-panel');
-      if (!(await expertPanel.isVisible())) {
-        const desktopTrigger = page
-          .locator('.career-desktop-topbar')
-          .getByRole('button', { name: 'Открыть консультанта', exact: true });
-        if (await desktopTrigger.isVisible()) {
-          await desktopTrigger.click();
-        } else {
-          await page
-            .getByRole('button', {
-              name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/,
-            })
-            .first()
-            .click();
-        }
-      }
-      await expect(expertPanel).toBeVisible();
-      await expect(expertPanel.locator('header small')).toContainText('Профиль');
-
-      // На 390 лист открывается свёрнутым (два положения): разворачиваем.
-      const expand = expertPanel.getByRole('button', { name: 'Развернуть консультанта' });
-      if (await expand.isVisible()) await expand.click();
-
-      // Verify quiz prompt is present
-      const quizPrompt = expertPanel.locator('.career-expert-skill-quiz-prompt');
-      await expect(quizPrompt).toBeVisible();
-      await expect(quizPrompt).toContainText(
-        'Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn',
-      );
-
-      // Open quiz simulator
-      const startQuizBtn = quizPrompt.getByRole('button', { name: 'Пройти квиз по навыку' });
-      await startQuizBtn.click();
+      // The approved mockups start the quiz from the skills tab, not from a consultant card.
+      await expect(page.locator('.career-expert-skill-quiz-prompt')).toHaveCount(0);
+      await page
+        .getByRole('button', { name: /^Пройти квиз/u })
+        .first()
+        .click();
 
       const modal = page.locator('.career-quiz-modal-card');
       await expect(modal).toBeVisible();
@@ -148,6 +120,7 @@ test.describe('B376 skill quiz dialogue & verification', () => {
       expect(applied.data.commandId).toBeTruthy();
       await expect(modal).not.toBeVisible();
 
+      const expertPanel = page.locator('.career-expert-panel');
       const appliedCard = expertPanel.locator('.career-expert-skill-quiz-result');
       await expect(appliedCard).toContainText('Навык обновлён: TypeScript');
       await appliedCard.getByRole('button', { name: 'Откатить' }).click();

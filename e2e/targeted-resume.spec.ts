@@ -49,6 +49,7 @@ test('builds a targeted resume from vacancy requirements and prints only that sl
     .getByRole('button', { name: 'Профиль', exact: true })
     .click();
   await expect(page.locator('.career-profile-screen-view')).toBeVisible();
+  await page.locator('#sec-documents button[aria-controls="docs-more"]').click();
   await page.getByText('Открыть ATS Plain Text и подготовить целевой срез').click();
 
   await page.getByLabel('Название вакансии', { exact: true }).fill('Head of Product, Payments');

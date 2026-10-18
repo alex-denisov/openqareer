@@ -248,8 +248,8 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
       const fixWithConsultantBtn = page.locator('[data-testid="review-fix-with-consultant-btn"]');
       await expect(fixWithConsultantBtn).toBeVisible();
 
-      const fillQuestionnaireBtn = page.locator('[data-testid="review-fill-questionnaire-btn"]');
-      await expect(fillQuestionnaireBtn).toBeVisible();
+      // The approved 1440 mockup has one review action; the questionnaire lives on 390.
+      await expect(page.locator('[data-testid="review-fill-questionnaire-btn"]')).toHaveCount(0);
 
       const aboutEditBtn = page.getByRole('button', { name: 'Изменить «Обо мне»', exact: true });
       await expect(aboutEditBtn).toBeVisible();
@@ -267,6 +267,10 @@ test.describe('B476: Profile gaps mechanics (About, Review, Versions)', () => {
       });
     }
 
+    if (!isMobile) {
+      // 1440 shows the versions as in the mockup; creation sits behind «Показать ещё».
+      await page.locator('#sec-documents button[aria-controls="docs-more"]').click();
+    }
     const createVersionBtn = isMobile
       ? page.getByRole('button', { name: 'Создать версию под вакансию', exact: true })
       : page.locator('[data-testid="create-targeted-version-btn"]');

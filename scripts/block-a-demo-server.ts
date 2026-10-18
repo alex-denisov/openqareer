@@ -57,14 +57,25 @@ const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', local
 seedBlockAToday(candidateStore, candidate.id, config.applicationArchiveStaleDays);
 const candidateDraftRepository = new SqliteCandidateDraftRepository({ databasePath: ':memory:' });
 seedMockupToday(candidateStore, candidateDraftRepository, candidate.id);
-candidateStore.importResumeEvidence(candidate.id, {
-  sourceLabel: 'Синтетический локальный набор блока A. Не данные реального кандидата.',
-  entries: syntheticResumeMemory.map((fact) => ({
-    memoryId: fact.id,
-    domain: fact.domain,
-    statement: fact.statement,
-  })),
-});
+// Two imports, as in the approved Profile mockup: LinkedIn and hh.ru each own their facts,
+// so the source chips and provenance read real import labels, not a synthetic one.
+const fromHh = (fact: (typeof syntheticResumeMemory)[number]) => /marketing/u.test(fact.id);
+for (const [sourceLabel, facts] of [
+  [
+    'Импорт: профиль LinkedIn (синтетический набор блока A)',
+    syntheticResumeMemory.filter((f) => !fromHh(f)),
+  ],
+  ['Импорт: резюме hh.ru (синтетический набор блока A)', syntheticResumeMemory.filter(fromHh)],
+] as const) {
+  candidateStore.importResumeEvidence(candidate.id, {
+    sourceLabel,
+    entries: facts.map((fact) => ({
+      memoryId: fact.id,
+      domain: fact.domain,
+      statement: fact.statement,
+    })),
+  });
+}
 for (const fact of syntheticResumeMemory) {
   if (fact.status === 'confirmed')
     candidateStore.changeMemory(candidate.id, fact.id, { action: 'confirm' });

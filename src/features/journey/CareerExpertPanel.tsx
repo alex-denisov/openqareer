@@ -1,3 +1,4 @@
+import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -66,7 +67,6 @@ interface CareerExpertPanelProps {
   onIdentityChange?: (user: AuthUser) => void;
   onCommandPrepared?: () => void;
   onProposalCountChange?: (count: number) => void;
-  onOpenRoleSkillAssessment?: () => void;
   skillQuizBankRequest?: number;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
@@ -91,7 +91,6 @@ export function CareerExpertPanel({
   onIdentityChange = () => undefined,
   onCommandPrepared,
   onProposalCountChange,
-  onOpenRoleSkillAssessment,
   skillQuizBankRequest = 0,
   mobileExpanded = false,
   onToggleMobileExpanded,
@@ -543,7 +542,7 @@ export function CareerExpertPanel({
         >
           {loadingSession ? (
             <ExpertPanelSkeleton />
-          ) : !turns.length && !intakeMode ? (
+          ) : !turns.length && !intakeMode && stage !== 'profile' ? (
             <div className="career-expert-message">
               <span>AI-сопровождение</span>
               <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
@@ -608,7 +607,12 @@ export function CareerExpertPanel({
                   }
                 />
               </article>
-              {user && !loadingSnapshot && !historyOpen && !content.trim() && !sending ? (
+              {user &&
+              stage !== 'profile' &&
+              !loadingSnapshot &&
+              !historyOpen &&
+              !content.trim() &&
+              !sending ? (
                 <ExpertStarterChips
                   prompts={
                     intakeMode
@@ -625,36 +629,10 @@ export function CareerExpertPanel({
               ) : null}
             </div>
           ) : null}
-          {stage === 'profile' ? (
-            <div className="career-expert-skill-quiz-prompt" aria-label="Подтверждение навыков">
-              <span>Проверка навыков со стратегом</span>
-              <strong>Подтвердите заявленные навыки по банку квизов hh.ru и LinkedIn</strong>
-              <p>
-                3–5 вопросов квиза зафиксируют статус факта («подтверждён» или «не подтверждено») с
-                источником и датой. Никаких субъективных оценок.
-              </p>
-              <button
-                type="button"
-                className="career-quiet-button"
-                onClick={() => {
-                  setSkillQuizApplyError(undefined);
-                  setSkillQuizOpen(true);
-                }}
-              >
-                <Sparkle size={16} weight="fill" /> Пройти квиз по навыку
-              </button>
-              {user && onOpenRoleSkillAssessment ? (
-                <button
-                  type="button"
-                  className="career-quiet-button"
-                  onClick={onOpenRoleSkillAssessment}
-                >
-                  <ArrowRight size={16} /> Проверить навыки роли
-                </button>
-              ) : null}
-            </div>
-          ) : null}
           {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
+          {stage === 'profile' && user && !loadingSnapshot ? (
+            <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
+          ) : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
           ) : null}

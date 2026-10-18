@@ -225,6 +225,22 @@
 .career-profile-screen-versions-row > div {
   display: grid;
   gap: var(--career-space-1);
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* 2-profil.html `.doc-row`: rows separated by hairlines, the fold button hugs the start. */
+.career-profile-screen-versions .career-profile-screen-versions-row {
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-profile-screen-versions .career-profile-screen-section-head + .career-profile-screen-versions-row {
+  border-block-start: 0;
+}
+
+.career-profile-screen-versions > .profile-about-expand {
+  justify-self: start;
 }
 
 .career-profile-screen-ats-details {
