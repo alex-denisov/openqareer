@@ -2,6 +2,10 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test, type Page, type Route, type TestInfo } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import {
+  checkGeneratedTextFacts,
+  generatedTextFactNotices,
+} from '../server/domain/generatedTextFactGate';
 
 type ConnectionMode = 'rich' | 'none' | 'error' | 'slow';
 type PitchMode = 'rich' | 'few' | 'english' | 'error' | 'slow';
@@ -507,6 +511,45 @@ async function releasePitch(state: LetterRouteState, mode: PitchMode = 'rich'): 
 }
 
 test.describe('B449 — письмо под вакансию', () => {
+  test('B528 shows the fact confirmation notice beside a safe letter', async ({
+    page,
+  }, testInfo) => {
+    const state = createRouteState();
+    await installLetterMocks(page, state);
+    const check = checkGeneratedTextFacts('Я увеличил выручку на 90%.', []);
+    const [notice] = generatedTextFactNotices('ru', [], check);
+    await page.route('**/api/v1/candidate/vacancies/*/pitch', async (route) => {
+      const response = pitchResponse('synthetic-b528', 'rich', {});
+      response.data.notices = [notice];
+      await route.fulfill({ json: response });
+    });
+    await openLetter(page);
+    await waitForLetter(page);
+    const letter = page.locator('.career-letter-screen');
+    await expect(letter.getByText(notice, { exact: true })).toBeVisible();
+    const noticeHtml = await page.evaluate(() => {
+      const css = Array.from(document.styleSheets)
+        .flatMap((sheet) => Array.from(sheet.cssRules, (rule) => rule.cssText))
+        .join('\n');
+      const notices = document.querySelector('.career-letter-notice');
+      if (!notices) throw new Error('B528 notice must exist before capturing its harness');
+      return (
+        '<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>B528 notice</title><style>' +
+        css +
+        '</style></head><body>' +
+        (notices?.outerHTML ?? '') +
+        '</body></html>'
+      );
+    });
+    await writeFile(testInfo.outputPath('b528-notice.html'), noticeHtml);
+    await expect(page.getByRole('textbox', { name: 'Текст письма' })).not.toHaveValue(/90%/u);
+    await letter.getByText(notice, { exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: testInfo.outputPath('b528-confirmation-notice.png'),
+      fullPage: true,
+    });
+  });
+
   test('shows circle and letter loading states, then a fact-backed draft', async ({
     page,
   }, testInfo) => {

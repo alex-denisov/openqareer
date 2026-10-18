@@ -20,6 +20,7 @@ import {
   withDeps,
 } from './helpers';
 import { pitchRankingContext } from './pitchRankingContext';
+import { checkGeneratedTextFacts, checkPitchOutputFacts, generatedTextFactNotices, type GeneratedTextFactCheck } from '../domain/generatedTextFactGate';
 
 type Handler = (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
 
@@ -108,7 +109,7 @@ async function writeCoverLetterBody(
   tone: PitchTone,
   rankingContext: PitchFactRankingContext | undefined,
   contextMs: number,
-): Promise<{ body?: string; stage?: string }> {
+): Promise<{ body?: string; stage?: string; factCheck?: GeneratedTextFactCheck }> {
   const { coverLetterWriter } = deps;
   if (!coverLetterWriter || !candidateHasLlmAccess(deps, candidateId)) return {};
   const writing = coverLetterWriter.writeCoverLetter({
@@ -135,7 +136,11 @@ async function writeCoverLetterBody(
     totalMs: contextMs + providerMs,
     ...(stage ? { stage } : {}),
   });
-  return outcome.body ? { body: outcome.body, stage: outcome.stage } : {};
+  if (!outcome.body) return {};
+  const factCheck = checkGeneratedTextFacts(outcome.body, facts);
+  return factCheck.status === 'checked'
+    ? { body: outcome.body, stage: outcome.stage, factCheck }
+    : { factCheck };
 }
 
 function resolvePitchVacancy(
@@ -223,7 +228,9 @@ async function writeVacancyPitch(
     rankingContext,
     contextMs,
   );
-  return { pitch, written, atsCoverLetter: written.body ?? pitch.atsCoverLetter, candidateWorkplaces };
+  const atsCoverLetter = written.body ?? pitch.atsCoverLetter;
+  const outputFactChecks = checkPitchOutputFacts(pitch, atsCoverLetter, facts);
+  return { pitch, written, atsCoverLetter, candidateWorkplaces, outputFactChecks };
 }
 
 function saveGeneratedCoverLetter(
@@ -285,6 +292,11 @@ const handleGenerateVacancyPitch: Handler = async (deps, request, reply) => {
       ...result.pitch,
       atsCoverLetter: result.atsCoverLetter,
       candidateWorkplaces: result.candidateWorkplaces,
+      outputFactChecks: result.outputFactChecks,
+      ...(result.written.factCheck ? { factCheck: result.written.factCheck } : {}),
+      notices: [...result.pitch.notices, ...generatedTextFactNotices(
+        result.pitch.language, Object.values(result.outputFactChecks), result.written.factCheck,
+      )],
       bodySource: result.written.body ? ('model' as const) : ('template' as const),
       ...(result.written.body && result.written.stage ? { stage: result.written.stage } : {}),
     },
