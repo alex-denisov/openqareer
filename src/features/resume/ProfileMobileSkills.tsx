@@ -14,13 +14,27 @@ import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './Profi
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
 
-function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+// Mockup 2 (390): «Подтверждён», «Не проверен» or «Без квиза»; an unknown status code is never
+// shown as is. The source and its date read as one phrase: «из LinkedIn, 12.09».
+export function mobileSkillLabels(skill: ResumeSkillInput) {
   const verified = skill.status === 'подтверждён';
   const rejected = skill.status === 'не подтверждён';
-  const Icon = verified ? CheckCircle : rejected ? Question : Circle;
-  const status = skill.status || 'Не проверен';
+  const status = verified ? 'Подтверждён' : rejected ? 'Не проверен' : 'Без квиза';
   const source = skill.source || 'Источник не указан';
   const date = profileMobileDate(skill.verifiedAt);
+  return {
+    verified,
+    rejected,
+    status,
+    source,
+    date,
+    origin: [source, date].filter(Boolean).join(', '),
+  };
+}
+
+function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+  const { verified, rejected, status, source, date, origin } = mobileSkillLabels(skill);
+  const Icon = verified ? CheckCircle : rejected ? Question : Circle;
   return (
     <details className="profile-mobile-skill">
       <summary className={`pm-row${rejected ? ' is-warn' : ''}`}>
@@ -29,7 +43,9 @@ function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
         </span>
         <span className="pm-main">
           <b>{skill.name}</b>
-          <small>{[status, source, date].filter(Boolean).join(' · ')}</small>
+          <small>
+            {status} · {origin}
+          </small>
         </span>
         <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
       </summary>

@@ -8,12 +8,14 @@ import { SkillsEditForm } from './ProfileSkillsSection';
 import type { ProfileMobileDataProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
 
-function skillVerification(skill: ResumeSkillInput) {
+export function skillVerification(skill: ResumeSkillInput) {
   if (skill.status === 'подтверждён')
     return { label: 'Подтверждено', tone: 'is-ok', Icon: CheckCircle };
   if (skill.status === 'не подтверждён')
     return { label: 'Не подтверждено', tone: 'is-warn', Icon: Question };
-  return { label: skill.status || 'Нет данных о квизе', tone: 'is-dim', Icon: Circle };
+  // Mockup 2 (1440): a skill without a quiz verdict reads «Квиз не пройден»; an unknown status
+  // code is never shown as is.
+  return { label: 'Квиз не пройден', tone: 'is-dim', Icon: Circle };
 }
 
 function DesktopSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {

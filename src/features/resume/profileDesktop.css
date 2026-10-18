@@ -624,6 +624,17 @@
     align-items: center;
     gap: var(--career-space-3);
     padding-block: var(--career-space-3);
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+  /* Mockup 2 (.section-head in a .card): the card gap alone separates the head from its body,
+     and the head is one 44 px control high. */
+  .profile-desktop-skills > .career-profile-screen-section-head,
+  .profile-desktop-assessment > .career-profile-screen-section-head {
+    margin-block-end: 0;
+  }
+  .profile-desktop-skills .career-profile-screen-section-head .career-primary-button {
+    min-block-size: var(--career-target-min);
+    block-size: var(--career-target-min);
   }
   .profile-desktop-assessment-row b {
     font-size: var(--career-text-sm);

@@ -308,11 +308,8 @@ test('B367 reviews a mocked background run, records identity feedback, and delet
     'true',
   );
   expect(reviewed).toBe('not_self');
-  await page.getByRole('button', { name: 'Скрыть' }).click();
-  await expect(page.getByText('Скрытые находки (1)')).toBeVisible();
-  await page.getByText('Скрытые находки (1)').click();
-  await page.getByRole('button', { name: 'Показать' }).click();
-  await expect(page.getByText('Скрытые находки (1)')).toHaveCount(0);
+  // Mockup 2 has no hiding: a finding is answered with «Это я» or «Не я» only.
+  await expect(page.getByRole('button', { name: 'Скрыть' })).toHaveCount(0);
   await decision.getByRole('button', { name: 'Это я' }).click();
   await expect(decision.getByRole('button', { name: 'Это я' })).toHaveAttribute(
     'aria-pressed',

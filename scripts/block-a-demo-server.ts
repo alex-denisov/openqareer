@@ -117,6 +117,8 @@ const candidateReputationRepo = new SqliteCandidateReputationRepository({
 candidateReputationRepo.saveFootprintAudit(historicalAudit(candidate.id));
 const principal = {
   id: 'block-a-local',
+  // Consent reads key on the user id; without it «Цифровой след» answered 500 on the demo.
+  userId: 'block-a-local',
   username: 'block-a.local',
   displayName: 'Локальная проверка блока A',
   email: 'block-a@example.test',
