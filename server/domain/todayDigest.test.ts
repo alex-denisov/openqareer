@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildTodaySnapshot,
   computeSearchMomentum,
+  computeTodayFunnel,
   countApplicationsWaitingOver7Days,
   type TodayNewVacancy,
 } from './todayDigest';
@@ -118,7 +119,7 @@ describe('buildTodaySnapshot (B251, S4/S4b, architecture.md §57)', () => {
     const snapshot = buildTodaySnapshot({ ...BASE_INPUT, applications: [stale], newVacancies: [] });
 
     expect(snapshot.queue[0].kind).toBe('follow_up');
-    expect(snapshot.queue[0].eyebrow).toBe('6 дней без ответа');
+    expect(snapshot.queue[0].eyebrow).toBe('ответа нет 6 дней');
     expect(snapshot.followUps).toEqual([
       {
         applicationId: 'app-1',
@@ -595,5 +596,101 @@ describe('computeSearchMomentum (B397)', () => {
     const momentum30WithInterview = computeSearchMomentum(apps30WithInterview, NOW);
     expect(momentum30WithInterview.windows['30d'].interviews).toBe(1);
     expect(momentum30WithInterview.burnoutNotice).toBe(false);
+  });
+});
+
+describe('computeTodayFunnel (block 0 funnel stages)', () => {
+  const now = '2026-10-07T09:12:00.000Z';
+  it('counts saved, answered and offered applications from their stages', () => {
+    const recent = '2026-10-01T00:00:00.000Z';
+    const funnel = computeTodayFunnel(
+      [
+        application({ id: 's1', stage: 'saved', stageChangedAt: '2026-01-01T00:00:00.000Z' }),
+        application({ id: 's2', stage: 'saved' }),
+        application({ id: 'r1', stage: 'responded', stageChangedAt: recent }),
+        application({ id: 'i1', stage: 'interview', stageChangedAt: recent }),
+        application({ id: 'o1', stage: 'offer', stageChangedAt: recent }),
+        application({ id: 'old', stage: 'responded', stageChangedAt: '2026-08-01T00:00:00.000Z' }),
+        application({ id: 'a1', stage: 'applied', stageChangedAt: recent }),
+      ],
+      now,
+    );
+    expect(funnel).toEqual({ favorites: 2, responses: 3, offers: 1 });
+  });
+
+  it('is part of the Today snapshot', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      now,
+      applications: [application({ stage: 'saved' })],
+      newVacancies: [],
+    });
+    expect(snapshot.funnel).toEqual({ favorites: 1, responses: 0, offers: 0 });
+  });
+});
+
+describe('today queue order and copy (block 0 mockup)', () => {
+  const now = '2026-10-07T09:12:00.000Z';
+  it('puts the overdue reminder first, then interviews, then drafts waiting for approval', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      now,
+      newVacancies: [],
+      applications: [
+        application({
+          id: 'draft',
+          vacancy: { title: 'CTO', company: 'Гринкод', url: '', source: '' },
+          materials: { coverLetter: true, resume: false },
+        }),
+        application({
+          id: 'interview',
+          stage: 'interview',
+          whoseTurn: 'candidate',
+          vacancy: { title: 'VP Engineering', company: 'Арка Холдинг', url: '', source: '' },
+          nearestInterview: { scheduledAt: '2026-10-10T09:00:00.000Z' } as never,
+        }),
+        application({
+          id: 'overdue',
+          vacancy: { title: 'Head of Engineering', company: 'Вектор Банк', url: '', source: '' },
+          followUp: {
+            dueAt: '2026-10-02T09:00:00.000Z',
+            urgency: 'overdue',
+            source: 'standard_schedule',
+            daysSinceContact: 6,
+          },
+        }),
+      ],
+    });
+    expect(snapshot.queue.map((item) => item.applicationId)).toEqual([
+      'overdue',
+      'interview',
+      'draft',
+    ]);
+    expect(snapshot.queue[1].eyebrow).toBeNull();
+    expect(snapshot.queue[2]).toMatchObject({
+      kind: 'candidate_turn',
+      material: 'cover_letter',
+      eyebrow: 'Черновик, ничего не отправлено',
+    });
+  });
+});
+
+describe('LinkedIn posts waiting for approval in the queue (block 0 mockup)', () => {
+  it('adds each unapproved post draft after the application rows', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      newVacancies: [],
+      applications: [application({ materials: { coverLetter: true, resume: false } })],
+      pendingLinkedinPosts: [{ id: 'post-1', topic: 'Миграция платформы' }],
+    });
+    expect(snapshot.queue.at(-1)).toEqual({
+      kind: 'linkedin_post',
+      draftId: 'post-1',
+      title: 'Миграция платформы',
+      company: 'LinkedIn',
+      eyebrow: 'сам не опубликуется',
+      dueAt: null,
+      fit: null,
+    });
   });
 });

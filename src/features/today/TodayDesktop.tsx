@@ -10,18 +10,17 @@ import {
   ChatCircleDots,
   CheckCircle,
   Info,
+  LinkedinLogo,
   ListChecks,
   X,
 } from '@phosphor-icons/react';
 import './today-desktop.css';
-import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
 import {
-  todayMomentumMetricValue,
   type TodayProfileFocus,
   type TodayQueueItem,
   type TodaySinceLastVisit,
@@ -32,14 +31,19 @@ import {
   consultantTargetView,
   formatQueueTitle,
   queueActionTitle,
-  queueCompanyLabel,
-  queueItemTarget,
+  queueDateLabel,
+  queueDesktopSubtitle,
   queueKey,
 } from './todayFormat';
+import { todayFunnelBasis, todayFunnelStages, type TodayFunnelContext } from './todayFunnelData';
+import { useCanOpenQueueItem, useOpenQueueItem } from './todayQueueOpen';
+
+export type { TodayFunnelContext } from './todayFunnelData';
 
 interface TodayDesktopContentProps {
   readonly snapshot: TodaySnapshot;
   readonly profileDraft?: ResumeDraft;
+  readonly funnelContext?: TodayFunnelContext;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onDiscuss?: () => void;
@@ -82,7 +86,7 @@ export function TodayDesktopContent(props: TodayDesktopContentProps) {
         onNavigate={props.onNavigate}
         onDiscussQueueItem={props.onDiscussQueueItem}
       />
-      <TodayFunnel momentum={props.snapshot.momentum} />
+      <TodayFunnel snapshot={props.snapshot} context={props.funnelContext} />
     </div>
   );
 }
@@ -367,28 +371,10 @@ function TodayNextDecision({
   );
 }
 
-function queueDateLabel(value: string | null, kind: TodayQueueItem['kind']): string {
-  if (!value) return kind === 'candidate_turn' ? 'ждёт вас' : 'срок не указан';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'дата неизвестна';
-  const dateLabel = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(
-    date,
-  );
-  const delta = date.getTime() - Date.now();
-  if (delta < 0) return `до ${dateLabel}, просрочено`;
-  if (kind === 'interview') {
-    const days = Math.ceil(delta / 86_400_000);
-    return days === 0
-      ? `${dateLabel}, сегодня`
-      : `${dateLabel}, через ${pluralRu(days, ['день', 'дня', 'дней'])}`;
-  }
-  return `до ${dateLabel}`;
-}
-
 function queueBadgeLabel(kind: TodayQueueItem['kind']): string {
   if (kind === 'follow_up') return 'Срок ответа';
   if (kind === 'interview') return 'Интервью';
-  if (kind === 'candidate_turn') return 'Одобрение';
+  if (kind === 'candidate_turn' || kind === 'linkedin_post') return 'Одобрение';
   return 'Вакансия';
 }
 
@@ -396,6 +382,7 @@ function queueIcon(kind: TodayQueueItem['kind']) {
   if (kind === 'follow_up') return Bell;
   if (kind === 'interview') return ChatsCircle;
   if (kind === 'candidate_turn') return PaperPlaneTilt;
+  if (kind === 'linkedin_post') return LinkedinLogo;
   if (kind === 'shortlist') return ListChecks;
   return Briefcase;
 }
@@ -414,25 +401,25 @@ function TodayQueueDesktopRow({
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
   const ItemIcon = queueIcon(item.kind);
-  const title = formatQueueTitle(item.company, item.title);
+  const openItem = useOpenQueueItem(onNavigate);
+  const canOpen = useCanOpenQueueItem(item, onNavigate);
   const actionTitle = queueActionTitle(item);
-  const subtitle = item.eyebrow?.replace(/follow-up/giu, 'Напоминание компании');
   const dateLabel = queueDateLabel(item.dueAt, item.kind);
   return (
     <li key={queueKey(item)}>
       <button
         type="button"
         className="career-today-queue-desktop-row"
-        aria-label={`Открыть: ${title}`}
-        disabled={!onNavigate}
-        onClick={() => onNavigate?.(queueItemTarget(item))}
+        aria-label={`Открыть: ${formatQueueTitle(item.company, item.title)}`}
+        disabled={!canOpen}
+        onClick={() => openItem?.(item)}
       >
         <span className="career-today-queue-desktop-icon">
           <ItemIcon size="1em" aria-hidden="true" />
         </span>
         <span className="career-today-queue-desktop-copy">
           <strong>{actionTitle}</strong>
-          <small>{[queueCompanyLabel(item.company), subtitle].filter(Boolean).join(' · ')}</small>
+          <small>{queueDesktopSubtitle(item)}</small>
         </span>
         <span
           className={`career-today-queue-desktop-deadline${queueDeadlineClass(dateLabel, item.kind)}`}
@@ -612,84 +599,52 @@ function TodayFunnelMetric({
   );
 }
 
-function TodayFunnel({ momentum }: { readonly momentum: TodaySnapshot['momentum'] }) {
-  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
-  const screenings = todayMomentumMetricValue(momentum, '30d', 'screenings');
-  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
-  const sampleCount = typeof applied === 'number' ? applied : undefined;
-  const items: readonly { label: string; value: number | 'unknown' }[] = [
-    { label: 'Найдено', value: 'unknown' },
-    { label: 'В избранном', value: 'unknown' },
-    { label: 'Откликов', value: applied },
-    { label: 'Ответов', value: screenings },
-    { label: 'Интервью', value: interviews },
-    { label: 'Офферов', value: 'unknown' },
-  ];
+function TodayFunnel({
+  snapshot,
+  context,
+}: {
+  readonly snapshot: TodaySnapshot;
+  readonly context?: TodayFunnelContext;
+}) {
+  const stages = todayFunnelStages(snapshot, context);
   const scale = Math.max(
     1,
-    ...items.map((item) => (typeof item.value === 'number' ? item.value : 0)),
+    ...stages.map((stage) => (typeof stage.value === 'number' ? stage.value : 0)),
   );
-  const currentIndex = items.reduce(
-    (last, item, index) => (typeof item.value === 'number' && item.value > 0 ? index : last),
+  const currentIndex = stages.reduce(
+    (last, stage, index) => (typeof stage.value === 'number' && stage.value > 0 ? index : last),
     -1,
   );
   return (
     <section className="career-today-funnel" aria-label="Воронка за 30 дней">
-      <TodayFunnelHeader momentum={momentum} />
-      {sampleCount !== undefined && sampleCount < 10 ? (
-        <p className="career-today-funnel-low-sample" role="status">
-          Мало данных: меньше 10 откликов за 30 дней. Выводов о конверсии нет.
-        </p>
-      ) : null}
+      <header>
+        <h2>Воронка за 30 дней</h2>
+        <CareerTooltip content="Отклики — по подтверждениям отправки, интервью — по сохранённым датам встреч, ответы и офферы — по стадиям откликов за 30 дней, найдено — по каталогу подбора.">
+          <button
+            type="button"
+            className="career-today-info-button"
+            aria-label="Об источнике данных воронки"
+          >
+            <Info size="1em" aria-hidden="true" />
+          </button>
+        </CareerTooltip>
+        <span className="career-today-funnel-basis">
+          <Clock size="1em" aria-hidden="true" />
+          {todayFunnelBasis(snapshot, stages)}
+        </span>
+      </header>
       <ol className="career-today-funnel-list">
-        {items.map((item, index) => (
+        {stages.map((stage, index) => (
           <TodayFunnelMetric
-            key={item.label}
-            label={item.label}
-            value={item.value}
-            last={index === items.length - 1}
+            key={stage.key}
+            label={stage.label}
+            value={stage.value}
+            last={index === stages.length - 1}
             current={index === currentIndex}
-            ratio={typeof item.value === 'number' ? (item.value / scale) * 100 : undefined}
+            ratio={typeof stage.value === 'number' ? (stage.value / scale) * 100 : undefined}
           />
         ))}
       </ol>
     </section>
-  );
-}
-
-function TodayFunnelHeader({ momentum }: { readonly momentum: TodaySnapshot['momentum'] }) {
-  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
-  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
-  const evidence = momentum?.evidence?.['30d'];
-  const startLabel = shortDateTime(evidence?.startAt);
-  const endLabel = shortDateTime(evidence?.endAt);
-  const basis =
-    [
-      startLabel && endLabel ? `Период ${startLabel} — ${endLabel}` : undefined,
-      typeof applied === 'number'
-        ? `отклики: подтверждения отправки, n = ${evidence?.applied.sampleSize}`
-        : 'отклики: нет проверенного времени подтверждения',
-      typeof interviews === 'number'
-        ? `интервью: сохранённые даты встреч, n = ${evidence?.interviews.sampleSize}`
-        : 'интервью: нет проверенных дат',
-    ]
-      .filter(Boolean)
-      .join(' · ') || 'Нет проверенных данных';
-  return (
-    <header>
-      <h2>Воронка за 30 дней</h2>
-      <CareerTooltip content="Отклики считаются по времени записи подтверждения доставки. Интервью — по сохранённым датам встреч. Для остальных этапов нет проверенного источника.">
-        <button
-          type="button"
-          className="career-today-info-button"
-          aria-label="Об источнике данных воронки"
-        >
-          <Info size="1em" aria-hidden="true" />
-        </button>
-      </CareerTooltip>
-      <span className="career-today-funnel-basis" title={basis}>
-        {basis}
-      </span>
-    </header>
   );
 }

@@ -207,7 +207,7 @@ describe('TodayScreen (ACC-A-1)', () => {
     );
 
     expect(html).toContain('class="pm-row is-warn"');
-    expect(html).toContain('просрочен');
+    expect(html).toContain('Срок вышел');
   });
 
   it('shows funnel counts with their source date and sample size', () => {
@@ -248,34 +248,29 @@ describe('TodayScreen (ACC-A-1)', () => {
 
     expect(funnel).toContain('class="is-here"');
     expect(funnel).toContain('aria-current="step"');
-    expect(funnel).toContain('n = 7');
-    expect(funnel).toContain('Мало данных: меньше 10 откликов за 30 дней');
-    expect(funnel).toContain('Период');
-    expect(funnel).toContain('Подтверждения отправки: n = 7');
-    expect(funnel).toContain('Сохранённые даты встреч: n = 2');
-    expect(funnel).not.toContain('Найдено в каталоге:');
-    expect(funnel).not.toContain('Офферов пока 0');
+    expect(funnel).toContain('Откликов меньше 10 (n = 7): выводов о конверсии нет.');
+    expect(funnel).toMatch(/Данные на \d{2}\.\d{2} \d{2}:\d{2}\./u);
+    expect(funnel).toContain('Нет проверенных данных: найдено, в избранном, ответов, офферов.');
   });
 
-  it('ignores the legacy point-in-time catalog number on mobile', () => {
+  it('follows the approved mobile funnel copy when every stage has a source', () => {
     const html = mobileTodayMarkup(
       renderTodayScreen({
-        funnelContext: {
-          found: 214,
-          favorites: 18,
-          responses: 3,
-          offers: 0,
-          catalogObservedAt: '2026-10-07T09:12:00.000Z',
+        funnelContext: { found: 214 },
+        snapshot: {
+          ...snapshot,
+          funnel: { favorites: 18, responses: 3, offers: 0 },
         },
       } as never),
     );
     const funnel = html.slice(html.indexOf('class="tm-funnel"'));
-
-    expect(funnel).not.toContain('214');
-    expect(
-      [...html.matchAll(/<b class="num">([^<]+)<\/b>/gu)].map((match) => match[1]),
-    ).not.toContain('18');
-    expect(funnel).toContain('Нет проверенных данных');
+    expect([...funnel.matchAll(/<b class="num">([^<]+)<\/b>/gu)].map((match) => match[1])).toEqual([
+      '18',
+      '—',
+      '3',
+      '—',
+    ]);
+    expect(funnel).toContain('Найдено в каталоге: 214. Офферов пока 0.');
   });
 
   it('shows dashes and an explicit unknown state for metrics without verified data', () => {

@@ -67,17 +67,29 @@ describe('LinkedinDraftCard', () => {
     vi.restoreAllMocks();
   });
   async function render(pipeline = false) {
-    await act(async () => root.render(<LinkedinDraftCard variant={pipeline ? 'pipeline' : 'compact'} onOpenTariffs={vi.fn()} />));
+    await act(async () =>
+      root.render(
+        <LinkedinDraftCard variant={pipeline ? 'pipeline' : 'compact'} onOpenTariffs={vi.fn()} />,
+      ),
+    );
   }
   async function prepare() {
     const input = host.querySelector('textarea[aria-label="Тема"]') as HTMLTextAreaElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'Тема');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        'Тема',
+      );
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await act(async () => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
   }
-  const button = (text: string) => [...host.querySelectorAll('button')].find((b) => b.textContent === text)!;
+  const button = (text: string) =>
+    [...host.querySelectorAll('button')].find((b) => b.textContent === text)!;
   it('does not crash the cabinet when the drafts list comes back in an unexpected shape', async () => {
     vi.mocked(api.listDrafts).mockResolvedValue(null as unknown as api.LinkedinDraft[]);
     await render();
@@ -124,7 +136,9 @@ describe('LinkedinDraftCard', () => {
     expect(host.textContent).toContain('отклонён');
   });
   it.each([429, 503])('shows server message for status %s', async (status) => {
-    vi.mocked(api.createDraft).mockRejectedValue(new api.DraftApiError(status, 'Сообщение сервера'));
+    vi.mocked(api.createDraft).mockRejectedValue(
+      new api.DraftApiError(status, 'Сообщение сервера'),
+    );
     await render();
     await prepare();
     expect(host.textContent).toContain('Сообщение сервера');
@@ -169,7 +183,9 @@ describe('LinkedinDraftCard', () => {
     await act(async () => button('Возобновить вручную').click());
     expect(safetyApi.resumeLinkedinActions).toHaveBeenCalledOnce();
     expect(host.textContent).not.toContain('Действия LinkedIn приостановлены');
-    expect(host.textContent).toContain('Пауза снята. Следующий запуск потребует вашего подтверждения.');
+    expect(host.textContent).toContain(
+      'Пауза снята. Следующий запуск потребует вашего подтверждения.',
+    );
   });
   it('keeps the stop visible when manual resume fails', async () => {
     vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockResolvedValue({
@@ -188,7 +204,9 @@ describe('LinkedinDraftCard', () => {
     expect(host.textContent).not.toContain('private detail');
   });
   it('does not hide an unavailable safety status behind an empty state', async () => {
-    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockRejectedValue(new Error('private detail'));
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockRejectedValue(
+      new Error('private detail'),
+    );
 
     await render();
 
@@ -196,7 +214,9 @@ describe('LinkedinDraftCard', () => {
     expect(host.textContent).not.toContain('private detail');
   });
   it('shows that the safety status is still being checked', async () => {
-    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(safetyApi.getLinkedinActionSafetyStatus).mockReturnValue(
+      new Promise(() => undefined),
+    );
 
     await render();
 
@@ -222,26 +242,42 @@ describe('LinkedinDraftCard', () => {
     await render(true);
     const input = host.querySelector('textarea[aria-label="Тема"]') as HTMLTextAreaElement;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(input, 'Готовый текст кандидата.');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        input,
+        'Готовый текст кандидата.',
+      );
       input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    for (const [index, value] of [[0, 'text'], [1, 'expert'], [2, 'short']] as const) {
+    for (const [index, value] of [
+      [0, 'text'],
+      [1, 'expert'],
+      [2, 'short'],
+    ] as const) {
       const select = host.querySelectorAll('select')[index];
       await act(async () => {
-        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value);
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(
+          select,
+          value,
+        );
         select.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
     await act(async () => button('Пост').click());
-    await act(async () => host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
-    expect(api.createDraft).toHaveBeenCalledWith(expect.objectContaining({
-      kind: 'post',
-      topic: 'Готовый текст кандидата',
-      sourceText: 'Готовый текст кандидата.',
-      inputType: 'text',
-      tone: 'expert',
-      length: 'short',
-    }));
+    await act(async () =>
+      host
+        .querySelector('form')!
+        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(api.createDraft).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'post',
+        topic: 'Готовый текст кандидата',
+        sourceText: 'Готовый текст кандидата.',
+        inputType: 'text',
+        tone: 'expert',
+        length: 'short',
+      }),
+    );
   });
 
   it('dismisses a topic through the candidate API', async () => {
@@ -257,7 +293,10 @@ describe('LinkedinDraftCard', () => {
     await act(async () => button('Править').click());
     const editor = host.querySelector('textarea[aria-label="Текст черновика"]')!;
     await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(editor, 'Исправленный текст.');
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(
+        editor,
+        'Исправленный текст.',
+      );
       editor.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await act(async () => button('Сохранить правку').click());
@@ -267,7 +306,11 @@ describe('LinkedinDraftCard', () => {
     expect(api.updateDraft).toHaveBeenCalledWith('one', { status: 'approved' });
     const openLinkedin = vi.spyOn(window, 'open').mockImplementation(() => null);
     await act(async () => button('Скопировать и открыть LinkedIn').click());
-    expect(openLinkedin).toHaveBeenCalledWith('https://www.linkedin.com/feed/', '_blank', 'noopener,noreferrer');
+    expect(openLinkedin).toHaveBeenCalledWith(
+      'https://www.linkedin.com/feed/',
+      '_blank',
+      'noopener,noreferrer',
+    );
     expect(api.updateDraft).not.toHaveBeenCalledWith('one', { status: 'published' });
 
     await act(async () => button('Отметить опубликованным').click());

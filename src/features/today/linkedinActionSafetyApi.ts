@@ -30,9 +30,11 @@ export async function getLinkedinActionSafetyStatus(): Promise<LinkedinActionSaf
 }
 
 export async function resumeLinkedinActions(): Promise<LinkedinActionSafetyStatus> {
-  return readSafetyStatus(await apiFetch('/api/v1/candidate/actions/kill-switch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ active: false, platform: 'linkedin' }),
-  }));
+  return readSafetyStatus(
+    await apiFetch('/api/v1/candidate/actions/kill-switch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: false, platform: 'linkedin' }),
+    }),
+  );
 }

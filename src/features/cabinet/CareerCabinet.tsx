@@ -14,7 +14,7 @@ import {
 import { saveCandidateCampaign } from '../coach/matchedVacancyApi';
 import type { CandidateWorkspace } from '../workspace/workspaceStorage';
 import { visibleTargetDirection } from '../workspace/workspacePresentation';
-import { TodayScreen } from '../today/TodayScreen';
+import { TodayScreen, type TodayFunnelContext } from '../today/TodayScreen';
 import { queueActionTitle, queueDiscussionContext } from '../today/todayFormat';
 import type { TodayProfileFocus, TodayQueueItem } from '../today/todayApi';
 import { useToday } from '../today/useToday';
@@ -415,7 +415,9 @@ function TodaySection(props: {
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
   onDiscussQueueItem?: (item: TodayQueueItem) => void;
   onOpenTariffs?: () => void;
+  onOpenAutomation?: () => void;
   profileDraft?: ResumeDraft;
+  funnelContext?: TodayFunnelContext;
   onOpenExpert?: () => void;
 }) {
   const today = useToday();
@@ -523,6 +525,7 @@ function CabinetSection({
     return (
       <TodaySection
         onOpenTariffs={onOpenTariffs}
+        onOpenAutomation={onOpenAutomation}
         candidateId={session.candidateId}
         consultantAction={consultantAction}
         onNavigate={onNavigate}
@@ -540,6 +543,10 @@ function CabinetSection({
             : undefined
         }
         profileDraft={data.resume?.draft ?? undefined}
+        funnelContext={{
+          found: pool.facets?.catalogSummary?.roleLevelMatches,
+          catalogObservedAt: pool.facets?.catalogSummary?.observedAt,
+        }}
         onOpenExpert={
           onOpenExpert
             ? () =>

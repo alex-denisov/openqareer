@@ -38,7 +38,10 @@ export interface TodayNewVacancy {
 }
 
 export interface TodayQueueItem {
-  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
+  readonly kind:
+    'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview' | 'linkedin_post';
+  readonly material?: 'cover_letter';
+  readonly draftId?: string;
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;
@@ -209,6 +212,14 @@ export interface TodaySnapshot {
   readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
   readonly momentum?: SearchMomentum;
+  readonly funnel?: TodayFunnelCounts;
+}
+
+/** Этапы воронки из стадий откликов (сервер, `computeTodayFunnel`). */
+export interface TodayFunnelCounts {
+  readonly favorites: number;
+  readonly responses: number;
+  readonly offers: number;
 }
 
 export interface TodayQueueRemainder {

@@ -89,7 +89,7 @@ export function queueItemTarget(item: TodayQueueItem): CareerCabinetView {
 }
 
 export function queueKey(item: TodayQueueItem): string {
-  return item.applicationId ?? item.clusterId ?? item.title;
+  return item.applicationId ?? item.clusterId ?? item.draftId ?? item.title;
 }
 
 const RUSSIAN_PATRONYMIC = /^[А-ЯЁ][а-яё]+(?:овна|евна|ична|инична|ович|евич|ич)$/u;
@@ -235,7 +235,9 @@ export function isPersonName(value: string | null | undefined): boolean {
  */
 /** Строка очереди по макету: действие — объект, а не «компания — вакансия». */
 export function queueActionTitle(item: {
-  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
+  readonly kind:
+    'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview' | 'linkedin_post';
+  readonly material?: 'cover_letter';
   readonly company: string | null;
   readonly title: string;
 }): string {
@@ -244,6 +246,9 @@ export function queueActionTitle(item: {
   if (item.kind === 'follow_up')
     return named ? `Напомнить компании ${named}` : 'Напомнить компании';
   if (item.kind === 'interview') return 'Подготовиться к интервью';
+  if (item.kind === 'linkedin_post') return `Одобрить пост «${item.title}»`;
+  if (item.kind === 'candidate_turn' && item.material === 'cover_letter')
+    return named ? `Одобрить письмо в «${named}»` : 'Одобрить письмо';
   if (item.kind === 'candidate_turn') return `Ваш ход: ${item.title}`;
   if (item.kind === 'shortlist') return `Из подборки: ${item.title}`;
   return `Новая вакансия: ${item.title}`;
@@ -341,4 +346,49 @@ export function buildReturningDigestItems(input: {
   }
 
   return items;
+}
+
+/** Срок строки очереди (правая колонка 1440, подпись интервью на 390). */
+export function queueDateLabel(
+  value: string | null,
+  kind: TodayQueueItem['kind'],
+  now = Date.now(),
+): string {
+  if (!value)
+    return kind === 'candidate_turn' || kind === 'linkedin_post' ? 'ждёт вас' : 'срок не указан';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'срок не указан';
+  const dateLabel = new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(
+    date,
+  );
+  const delta = date.getTime() - now;
+  if (delta < 0) return `до ${dateLabel}, просрочено`;
+  if (kind === 'interview') {
+    const days = Math.ceil(delta / 86_400_000);
+    return days === 0
+      ? `${dateLabel}, сегодня`
+      : `${dateLabel}, через ${pluralRu(days, ['день', 'дня', 'дней'])}`;
+  }
+  return `до ${dateLabel}`;
+}
+
+function queueDetail(item: TodayQueueItem): string | undefined {
+  return item.eyebrow?.replace(/follow-up/giu, 'Напоминание компании').trim() || undefined;
+}
+
+/** Подпись строки 1440 по макету: компания в заголовке письма не повторяется. */
+export function queueDesktopSubtitle(item: TodayQueueItem): string {
+  if (item.material === 'cover_letter') return queueDetail(item) ?? 'Черновик';
+  return [queueCompanyLabel(item.company), queueDetail(item)].filter(Boolean).join(' · ');
+}
+
+/** Подпись строки 390 по макету: короче, срок интервью и «срок вышел» прямо в строке. */
+export function queueMobileSubtitle(item: TodayQueueItem, overdue: boolean): string {
+  const company = queueCompanyLabel(item.company);
+  if (item.material === 'cover_letter') return 'Черновик, ждёт вашего одобрения';
+  if (item.kind === 'linkedin_post') return 'LinkedIn · ждёт вашего одобрения';
+  if (item.kind === 'candidate_turn') return `${company} · ждёт вашего ответа`;
+  if (item.kind === 'interview') return `${company} · ${queueDateLabel(item.dueAt, item.kind)}`;
+  const line = [company, queueDetail(item)].filter(Boolean).join(' · ');
+  return item.kind === 'follow_up' && overdue ? `${line}. Срок вышел` : line;
 }

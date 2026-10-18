@@ -32,7 +32,12 @@ export interface TodayNewVacancy {
 }
 
 export interface TodayQueueItem {
-  readonly kind: 'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview';
+  readonly kind:
+    'candidate_turn' | 'new_vacancy' | 'shortlist' | 'follow_up' | 'interview' | 'linkedin_post';
+  /** Черновик поста LinkedIn, который ждёт одобрения. */
+  readonly draftId?: string;
+  /** Материал, который ждёт одобрения кандидата (черновик письма). */
+  readonly material?: 'cover_letter';
   readonly applicationId?: string;
   readonly clusterId?: string;
   readonly title: string;
@@ -139,6 +144,38 @@ export interface TodaySnapshot {
   readonly sinceLastVisit: TodaySinceLastVisit;
   readonly vacanciesPending: boolean;
   readonly momentum: SearchMomentum;
+  readonly funnel: TodayFunnel;
+}
+
+/**
+ * Этапы воронки «Сегодня», у которых есть проверяемый источник — стадия отклика:
+ * избранное — сохранённые сейчас, ответы и офферы — переход в стадию за 30 дней.
+ */
+export interface TodayFunnel {
+  readonly favorites: number;
+  readonly responses: number;
+  readonly offers: number;
+}
+
+const FUNNEL_WINDOW_MS = 30 * 86_400_000;
+const ANSWERED_STAGES = new Set(['responded', 'interview', 'offer']);
+
+export function computeTodayFunnel(
+  applications: readonly ApplicationView[],
+  now = new Date().toISOString(),
+): TodayFunnel {
+  const windowStart = Date.parse(now) - FUNNEL_WINDOW_MS;
+  const inWindow = (application: ApplicationView) =>
+    Date.parse(application.stageChangedAt) >= windowStart;
+  return {
+    favorites: applications.filter((application) => application.stage === 'saved').length,
+    responses: applications.filter(
+      (application) => ANSWERED_STAGES.has(application.stage) && inWindow(application),
+    ).length,
+    offers: applications.filter(
+      (application) => application.stage === 'offer' && inWindow(application),
+    ).length,
+  };
 }
 
 export interface BuildTodaySnapshotInput {
@@ -157,6 +194,13 @@ export interface BuildTodaySnapshotInput {
    * без отклика добирают очередь дня, когда новых с прошлого визита нет.
    */
   readonly shortlist?: readonly TodayNewVacancy[];
+  /** Черновики постов LinkedIn со статусом «черновик»: публикует только кандидат. */
+  readonly pendingLinkedinPosts?: readonly TodayPendingPost[];
+}
+
+export interface TodayPendingPost {
+  readonly id: string;
+  readonly topic: string;
 }
 
 const MAX_FOLLOW_UPS = 5;
@@ -165,19 +209,27 @@ const MAX_FOLLOW_UP_CAPTIONS = 2;
 function eyebrowFor(application: ApplicationView): string | null {
   if (application.followUp && ['due', 'overdue', 'stale'].includes(application.followUp.urgency)) {
     const days = application.followUp.daysSinceContact;
-    return `${pluralRu(days, ['день', 'дня', 'дней'])} без ответа`;
+    return `ответа нет ${pluralRu(days, ['день', 'дня', 'дней'])}`;
   }
-  if (application.nearestInterview?.scheduledAt) {
-    const days = daysUntil(application.nearestInterview.scheduledAt);
-    if (days !== null) return days <= 0 ? 'сегодня' : `через ${days} дня`;
-  }
+  // Дата интервью стоит в правой колонке строки; подпись её не повторяет.
+  if (application.nearestInterview?.scheduledAt) return null;
+  if (application.materials.coverLetter) return 'Черновик, ничего не отправлено';
   return null;
 }
 
-function daysUntil(iso: string, now = new Date().toISOString()): number | null {
-  const diffMs = new Date(iso).getTime() - new Date(now).getTime();
-  if (Number.isNaN(diffMs)) return null;
-  return Math.round(diffMs / 86_400_000);
+/** Порядок строк из откликов: просроченный ответ, затем интервью по дате, затем черновики. */
+function queueRank(application: ApplicationView): number {
+  const kind = queueKindFor(application);
+  if (kind === 'follow_up') return application.followUp?.urgency === 'due' ? 1 : 0;
+  return kind === 'interview' ? 2 : 3;
+}
+
+function byQueueUrgency(left: ApplicationView, right: ApplicationView): number {
+  const rank = queueRank(left) - queueRank(right);
+  if (rank !== 0) return rank;
+  const leftAt = left.followUp?.dueAt ?? left.nearestInterview?.scheduledAt ?? '';
+  const rightAt = right.followUp?.dueAt ?? right.nearestInterview?.scheduledAt ?? '';
+  return leftAt.localeCompare(rightAt);
 }
 
 function queueKindFor(application: ApplicationView): 'follow_up' | 'interview' | 'candidate_turn' {
@@ -420,7 +472,12 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
       followUpCaptions: followUpCaptionsFor(input.applications),
       applicationsWaitingOver7Days,
     },
-    queue: buildQueue(waitingApplications, input.newVacancies, shortlistToReview(input)),
+    queue: buildQueue(
+      waitingApplications,
+      input.newVacancies,
+      shortlistToReview(input),
+      input.pendingLinkedinPosts ?? [],
+    ),
     followUps: buildFollowUps(input.applications),
     sinceLastVisit: {
       since: input.since,
@@ -431,6 +488,7 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     },
     vacanciesPending: input.newVacancies === undefined,
     momentum: computeSearchMomentum(input.applications, now),
+    funnel: computeTodayFunnel(input.applications, now),
   };
 }
 
@@ -445,14 +503,30 @@ function shortlistToReview(input: BuildTodaySnapshotInput): readonly TodayNewVac
   return (input.shortlist ?? []).filter((vacancy) => !taken.has(vacancy.clusterId));
 }
 
+function postQueueItem(post: TodayPendingPost): TodayQueueItem {
+  return {
+    kind: 'linkedin_post',
+    draftId: post.id,
+    title: post.topic,
+    company: 'LinkedIn',
+    eyebrow: 'сам не опубликуется',
+    dueAt: null,
+    fit: null,
+  };
+}
+
 function buildQueue(
   waitingApplications: readonly ApplicationView[],
   newVacancies: BuildTodaySnapshotInput['newVacancies'],
   shortlist: readonly TodayNewVacancy[],
+  pendingPosts: readonly TodayPendingPost[],
 ): TodayQueueItem[] {
   return [
-    ...waitingApplications.map((application) => ({
+    ...[...waitingApplications].sort(byQueueUrgency).map((application) => ({
       kind: queueKindFor(application),
+      ...(queueKindFor(application) === 'candidate_turn' && application.materials.coverLetter
+        ? { material: 'cover_letter' as const }
+        : {}),
       applicationId: application.id,
       title: application.vacancy?.title ?? '',
       company: companyOf(application),
@@ -460,6 +534,7 @@ function buildQueue(
       dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
       fit: null,
     })),
+    ...pendingPosts.map(postQueueItem),
     ...(newVacancies ?? []).map((vacancy) => ({
       kind: 'new_vacancy' as const,
       clusterId: vacancy.clusterId,

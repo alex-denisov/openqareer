@@ -23,7 +23,6 @@ import {
 import {
   deferTodayAction,
   selectTodayDecision,
-  todayMomentumMetricValue,
   type TodayFollowUp,
   type TodayProfileFocus,
   type TodayQueueItem,
@@ -31,11 +30,23 @@ import {
 } from './todayApi';
 import { TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
+  todayFunnelFootnote,
+  todayFunnelStages,
+  type TodayFunnelContext,
+  type TodayFunnelStage,
+} from './todayFunnelData';
+import {
+  TodayOpenAutomationProvider,
+  useCanOpenQueueItem,
+  useOpenQueueItem,
+} from './todayQueueOpen';
+
+export type { TodayFunnelContext } from './todayFunnelData';
+import {
   consultantTargetView,
-  followUpStatusLabel,
+  queueMobileSubtitle,
   formatQueueTitle,
   queueActionTitle,
-  queueItemTarget,
   queueKey,
 } from './todayFormat';
 export { consultantTargetView, queueItemTarget } from './todayFormat';
@@ -65,10 +76,12 @@ export interface TodayScreenProps {
   readonly candidateId?: string;
   readonly consultantAction?: ReasonedCareerAction;
   readonly profileDraft?: ResumeDraft;
+  readonly funnelContext?: TodayFunnelContext;
   readonly queueRemainderLoading?: boolean;
   readonly queueRemainderFailed?: boolean;
   readonly onLoadQueueRemainder?: () => Promise<void>;
   readonly onOpenTariffs?: () => void;
+  readonly onOpenAutomation?: () => void;
   readonly onOpenExpert?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
@@ -221,7 +234,11 @@ export function TodayScreen(props: TodayScreenProps) {
   if (props.failed) return <TodayError onRetry={props.onRetry} />;
   if (props.loading && !props.snapshot) return <TodaySkeleton />;
   const contentProps = todayContentProps(props, actionState);
-  return contentProps ? <TodayContent {...contentProps} /> : null;
+  return contentProps ? (
+    <TodayOpenAutomationProvider value={props.onOpenAutomation}>
+      <TodayContent {...contentProps} />
+    </TodayOpenAutomationProvider>
+  ) : null;
 }
 
 function todayContentProps(
@@ -253,12 +270,14 @@ function todayContentProps(
     onDiscussQueueItem: props.onDiscussQueueItem,
     onNavigateProfileTarget: props.onNavigateProfileTarget,
     profileDraft: props.profileDraft,
+    funnelContext: props.funnelContext,
   };
 }
 
 interface TodayContentProps {
   readonly snapshot: TodaySnapshot;
   readonly profileDraft?: ResumeDraft;
+  readonly funnelContext?: TodayFunnelContext;
   readonly onOpenExpert?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly activeAction?: ReasonedCareerAction;
@@ -280,6 +299,7 @@ function TodayContent(props: TodayContentProps) {
       <TodayDesktopContent
         snapshot={props.snapshot}
         profileDraft={props.profileDraft}
+        funnelContext={props.funnelContext}
         activeAction={props.activeAction}
         onAccept={props.onAccept}
         onDiscuss={props.onOpenExpert}
@@ -307,6 +327,7 @@ function TodayMobileContent({
   onOpenExpert,
   onNavigate,
   profileDraft,
+  funnelContext,
 }: Pick<
   TodayContentProps,
   | 'snapshot'
@@ -318,6 +339,7 @@ function TodayMobileContent({
   | 'onOpenExpert'
   | 'onNavigate'
   | 'profileDraft'
+  | 'funnelContext'
 >) {
   return (
     <div className="career-today-mobile pm tm">
@@ -334,7 +356,7 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
-      <TodayMobileFunnel snapshot={snapshot} />
+      <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>
   );
@@ -497,6 +519,8 @@ function TodayMobileQueueRow({
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }) {
   const isWarn = isOverdueMobileQueueItem(item, followUps);
+  const openItem = useOpenQueueItem(onNavigate);
+  const canOpen = useCanOpenQueueItem(item, onNavigate);
   return (
     <li>
       <button
@@ -504,15 +528,15 @@ function TodayMobileQueueRow({
         type="button"
         aria-label={`Открыть: ${formatQueueTitle(item.company, item.title)}`}
         data-testid="today-mobile-queue-row"
-        disabled={!onNavigate}
-        onClick={() => onNavigate?.(queueItemTarget(item))}
+        disabled={!canOpen}
+        onClick={() => openItem?.(item)}
       >
         <span className="pm-ico">
           <TodayMobileQueueIcon item={item} />
         </span>
         <span className="pm-main">
           <b>{queueActionTitle(item)}</b>
-          <small>{todayMobileQueueSubtitle(item, followUps)}</small>
+          <small>{queueMobileSubtitle(item, isWarn)}</small>
         </span>
         <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />
       </button>
@@ -530,26 +554,8 @@ function isOverdueMobileQueueItem(
   return Number.isFinite(dueAt) && dueAt < Date.now();
 }
 
-function todayMobileQueueSubtitle(
-  item: TodayQueueItem,
-  followUps: readonly TodayFollowUp[],
-): string {
-  const followUp = followUps.find((entry) => entry.applicationId === item.applicationId);
-  const status = followUp ? followUpStatusLabel(followUp.status) : undefined;
-  const eyebrow = item.eyebrow?.replace(/follow-up/giu, 'Напоминание компании');
-  const detail = eyebrow ?? queueKindLabel(item);
-  return [todayMobileQueueCompany(item), detail, status].filter(Boolean).join(' · ');
-}
-
-function todayMobileQueueCompany(item: TodayQueueItem): string {
-  const title = formatQueueTitle(item.company, item.title);
-  const suffix = ` — ${item.title}`;
-  return title.endsWith(suffix) ? title.slice(0, -suffix.length) : 'Компания не указана';
-}
-
 function TodayMobileQueueIcon({ item }: { readonly item: TodayQueueItem }) {
-  const sourceText = `${item.company ?? ''} ${item.eyebrow ?? ''}`.toLocaleLowerCase();
-  if (sourceText.includes('linkedin')) {
+  if (item.kind === 'linkedin_post') {
     return <LinkedinLogo aria-hidden="true" weight="regular" />;
   }
   if (item.kind === 'follow_up') return <Bell aria-hidden="true" weight="regular" />;
@@ -559,30 +565,25 @@ function TodayMobileQueueIcon({ item }: { readonly item: TodayQueueItem }) {
   return <Briefcase aria-hidden="true" weight="regular" />;
 }
 
-function queueKindLabel(item: TodayQueueItem): string {
-  if (item.kind === 'new_vacancy') return 'Новая вакансия';
-  if (item.kind === 'shortlist') return 'Из подборки';
-  if (item.kind === 'follow_up') return 'Напоминание компании';
-  if (item.kind === 'interview') return 'Интервью';
-  return 'Ваш ход';
-}
+const MOBILE_FUNNEL_LABELS: Partial<Record<TodayFunnelStage['key'], string>> = {
+  favorites: 'Избранное',
+  applied: 'Отклики',
+  responses: 'Ответы',
+  interviews: 'Интервью',
+};
 
-interface TodayMobileFunnelMetric {
-  readonly label: string;
-  readonly value: number | 'unknown';
-}
-
-function todayMobileFunnelMetrics(snapshot: TodaySnapshot): readonly TodayMobileFunnelMetric[] {
-  return [
-    { label: 'Избранное', value: 'unknown' },
-    { label: 'Отклики', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'applied') },
-    { label: 'Ответы', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'screenings') },
-    { label: 'Интервью', value: todayMomentumMetricValue(snapshot.momentum, '30d', 'interviews') },
-  ];
-}
-
-function TodayMobileFunnel({ snapshot }: { readonly snapshot: TodaySnapshot }) {
-  const items = todayMobileFunnelMetrics(snapshot);
+function TodayMobileFunnel({
+  snapshot,
+  context,
+}: {
+  readonly snapshot: TodaySnapshot;
+  readonly context?: TodayFunnelContext;
+}) {
+  const stages = todayFunnelStages(snapshot, context);
+  const items = stages.flatMap((stage) => {
+    const label = MOBILE_FUNNEL_LABELS[stage.key];
+    return label ? [{ label, value: stage.value }] : [];
+  });
   const currentStage = items.reduce(
     (last, item, index) => (typeof item.value === 'number' && item.value > 0 ? index : last),
     -1,
@@ -599,69 +600,18 @@ function TodayMobileFunnel({ snapshot }: { readonly snapshot: TodaySnapshot }) {
             aria-current={index === currentStage ? 'step' : undefined}
             aria-label={
               item.value === 'unknown'
-                ? `${item.label}: Нет проверенных данных`
+                ? `${item.label}: нет проверенных данных`
                 : `${item.label}: ${item.value}`
             }
           >
-            <b className="num">{metricText(item.value)}</b>
+            <b className="num">{typeof item.value === 'number' ? item.value : '—'}</b>
             <span>{item.label}</span>
           </div>
         ))}
       </div>
-      <p className="pm-foot">{todayMobileFunnelBasis(snapshot, items)}</p>
+      <p className="pm-foot">{todayFunnelFootnote(snapshot, stages)}</p>
     </section>
   );
-}
-
-function todayMobileFunnelBasis(
-  snapshot: TodaySnapshot,
-  items: readonly TodayMobileFunnelMetric[],
-): string {
-  const momentum = snapshot.momentum;
-  const applied = todayMomentumMetricValue(momentum, '30d', 'applied');
-  const interviews = todayMomentumMetricValue(momentum, '30d', 'interviews');
-  const evidence = momentum?.evidence?.['30d'];
-  const missing = items.filter((item) => item.value === 'unknown').map((item) => item.label);
-  const startLabel = formatTodayMobileDate(evidence?.startAt);
-  const endLabel = formatTodayMobileDate(evidence?.endAt);
-  const period = startLabel && endLabel ? `Период ${startLabel} — ${endLabel}.` : '';
-  const applicationBasis =
-    typeof applied === 'number'
-      ? `Подтверждения отправки: n = ${evidence?.applied.sampleSize}.`
-      : 'Нет проверенного времени подтверждения отклика.';
-  const interviewBasis =
-    typeof interviews === 'number'
-      ? `Сохранённые даты встреч: n = ${evidence?.interviews.sampleSize}.`
-      : 'Нет проверенных дат интервью.';
-  const lowSample =
-    typeof applied === 'number' && applied < 10
-      ? ' Мало данных: меньше 10 откликов за 30 дней; выводов о конверсии нет.'
-      : '';
-  return [
-    period,
-    applicationBasis,
-    interviewBasis,
-    missing.length ? `Нет проверенных данных: ${[...new Set(missing)].join(', ')}.` : '',
-    lowSample,
-  ]
-    .filter(Boolean)
-    .join(' ');
-}
-
-function metricText(value: number | 'unknown' | undefined): string {
-  return typeof value === 'number' ? String(value) : '—';
-}
-
-function formatTodayMobileDate(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
 }
 
 function TodayMobileProfileRow({

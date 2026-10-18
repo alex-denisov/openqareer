@@ -15,7 +15,7 @@ export function useLinkedinActionSafetyStop() {
   useEffect(() => {
     let active = true;
     void getLinkedinActionSafetyStatus().then(
-      value => {
+      (value) => {
         if (!active) return;
         setStatus(value);
         setLoading(false);
@@ -26,7 +26,9 @@ export function useLinkedinActionSafetyStop() {
         setLoading(false);
       },
     );
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function resumeManually() {

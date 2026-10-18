@@ -47,18 +47,28 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     try {
       return await readData<T>(response);
     } catch (error) {
-      throw new DraftApiError(response.status, error instanceof Error ? error.message : 'Не удалось завершить действие');
+      throw new DraftApiError(
+        response.status,
+        error instanceof Error ? error.message : 'Не удалось завершить действие',
+      );
     }
   }
   return readData<T>(response);
 }
 
-export const listDrafts = (limit = 20) => request<LinkedinDraft[]>(`/api/v1/candidate/drafts?limit=${limit}`);
+export const listDrafts = (limit = 20) =>
+  request<LinkedinDraft[]>(`/api/v1/candidate/drafts?limit=${limit}`);
 
-export const listDraftTopics = (limit = 3, offset = 0) => request<LinkedinDraftTopicPage>(`/api/v1/candidate/drafts/topics?limit=${limit}&offset=${offset}`);
+export const listDraftTopics = (limit = 3, offset = 0) =>
+  request<LinkedinDraftTopicPage>(
+    `/api/v1/candidate/drafts/topics?limit=${limit}&offset=${offset}`,
+  );
 
 export const dismissDraftTopic = (id: string) =>
-  request<{ id: string; decision: 'dismissed' }>(`/api/v1/candidate/drafts/topics/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+  request<{ id: string; decision: 'dismissed' }>(
+    `/api/v1/candidate/drafts/topics/${encodeURIComponent(id)}/dismiss`,
+    { method: 'POST' },
+  );
 
 export const createDraft = (input: {
   kind: LinkedinDraft['kind'];
@@ -75,7 +85,10 @@ export const createDraft = (input: {
     body: JSON.stringify(input),
   });
 
-export const updateDraft = (id: string, update: { status: 'copied' | 'rejected' | 'approved' | 'published' } | { text: string }) =>
+export const updateDraft = (
+  id: string,
+  update: { status: 'copied' | 'rejected' | 'approved' | 'published' } | { text: string },
+) =>
   request<LinkedinDraft>(`/api/v1/candidate/drafts/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

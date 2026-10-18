@@ -58,8 +58,8 @@ describe('CompanyReminderModal', () => {
   it('copies draft text to clipboard and shows copied feedback', async () => {
     await renderModal();
 
-    const copyBtn = [...host.querySelectorAll('button')].find(
-      (b) => b.textContent?.includes('Скопировать черновик'),
+    const copyBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Скопировать черновик'),
     )!;
     expect(copyBtn).toBeDefined();
 
@@ -75,8 +75,8 @@ describe('CompanyReminderModal', () => {
     const onMarkSent = vi.fn().mockResolvedValue(undefined);
     await renderModal({ ...defaultProps, onMarkSent });
 
-    const markBtn = [...host.querySelectorAll('button')].find(
-      (b) => b.textContent?.includes('Отметить отправленным'),
+    const markBtn = [...host.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('Отметить отправленным'),
     )!;
     expect(markBtn).toBeDefined();
 

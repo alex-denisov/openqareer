@@ -1,4 +1,13 @@
-import { useEffect, useId, useRef, useState, type Dispatch, type FormEvent, type RefObject, type SetStateAction } from 'react';
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type Dispatch,
+  type FormEvent,
+  type RefObject,
+  type SetStateAction,
+} from 'react';
 import { WarningCircle } from '@phosphor-icons/react';
 import { PaywallModal } from '../tariffs/PaywallModal';
 import {
@@ -149,7 +158,8 @@ async function loadInitialDrafts(active: { current: boolean }, setState: DraftCa
     const drafts = await listDrafts();
     if (active.current) patchDraftCard(setState, { drafts: Array.isArray(drafts) ? drafts : [] });
   } catch {
-    if (active.current) patchDraftCard(setState, { draftsError: 'Не получилось загрузить последние черновики.' });
+    if (active.current)
+      patchDraftCard(setState, { draftsError: 'Не получилось загрузить последние черновики.' });
   }
 }
 
@@ -164,7 +174,8 @@ async function loadInitialTopics(active: { current: boolean }, setState: DraftCa
         hasMoreTopics: page.items.length < page.total,
       });
   } catch {
-    if (active.current) patchDraftCard(setState, { topicsError: 'Не получилось загрузить темы по данным профиля.' });
+    if (active.current)
+      patchDraftCard(setState, { topicsError: 'Не получилось загрузить темы по данным профиля.' });
   }
 }
 
@@ -183,16 +194,29 @@ function removeTopic(setState: DraftCardSetter, topicId: string) {
   }));
 }
 
-async function createDraftFromInput(state: DraftCardState, setState: DraftCardSetter, event: FormEvent | null, selectedTopic?: LinkedinDraftTopic) {
+async function createDraftFromInput(
+  state: DraftCardState,
+  setState: DraftCardSetter,
+  event: FormEvent | null,
+  selectedTopic?: LinkedinDraftTopic,
+) {
   event?.preventDefault();
   const value = selectedTopic?.title ?? state.topicText.trim();
   if (!value || state.busy) return;
   patchDraftCard(setState, { busy: true, error: '', notice: '' });
   try {
-    const sourceText = state.inputType === 'topic' ? (selectedTopic ? undefined : state.kind === 'comment' ? state.sourceText.trim() : undefined) : value;
+    const sourceText =
+      state.inputType === 'topic'
+        ? selectedTopic
+          ? undefined
+          : state.kind === 'comment'
+            ? state.sourceText.trim()
+            : undefined
+        : value;
     const draft = await createDraft({
       kind: selectedTopic ? 'post' : state.kind,
-      topic: state.inputType === 'topic' || selectedTopic ? value.slice(0, 200) : topicForText(value),
+      topic:
+        state.inputType === 'topic' || selectedTopic ? value.slice(0, 200) : topicForText(value),
       ...(selectedTopic ? { topicId: selectedTopic.id } : {}),
       ...(sourceText ? { sourceText } : {}),
       inputType: selectedTopic ? 'topic' : state.inputType,
@@ -210,14 +234,23 @@ async function createDraftFromInput(state: DraftCardState, setState: DraftCardSe
 }
 
 function handleGenerationError(setState: DraftCardSetter, error: unknown) {
-  if (error instanceof DraftApiError && error.status === 402) patchDraftCard(setState, { paywall: true });
+  if (error instanceof DraftApiError && error.status === 402)
+    patchDraftCard(setState, { paywall: true });
   else
     patchDraftCard(setState, {
-      error: error instanceof DraftApiError && [429, 503].includes(error.status) ? error.message : GENERATION_ERROR,
+      error:
+        error instanceof DraftApiError && [429, 503].includes(error.status)
+          ? error.message
+          : GENERATION_ERROR,
     });
 }
 
-async function updateDraftStatus(state: DraftCardState, setState: DraftCardSetter, draft: LinkedinDraft, status: 'copied' | 'rejected' | 'approved') {
+async function updateDraftStatus(
+  state: DraftCardState,
+  setState: DraftCardSetter,
+  draft: LinkedinDraft,
+  status: 'copied' | 'rejected' | 'approved',
+) {
   if (state.busyDraftId) return;
   patchDraftCard(setState, { busyDraftId: draft.id, error: '', notice: '' });
   try {
@@ -225,18 +258,30 @@ async function updateDraftStatus(state: DraftCardState, setState: DraftCardSette
     const updated = await updateDraft(draft.id, { status });
     rememberDraft(setState, updated);
     patchDraftCard(setState, {
-      notice: status === 'approved' ? 'Черновик одобрен. Публикуете вы сами.' : status === 'copied' ? 'Текст скопирован.' : 'Черновик отклонён.',
+      notice:
+        status === 'approved'
+          ? 'Черновик одобрен. Публикуете вы сами.'
+          : status === 'copied'
+            ? 'Текст скопирован.'
+            : 'Черновик отклонён.',
     });
   } catch {
     patchDraftCard(setState, {
-      error: status === 'copied' ? 'Не получилось скопировать и сохранить статус. Попробуйте ещё раз.' : 'Не получилось обновить черновик. Попробуйте ещё раз.',
+      error:
+        status === 'copied'
+          ? 'Не получилось скопировать и сохранить статус. Попробуйте ещё раз.'
+          : 'Не получилось обновить черновик. Попробуйте ещё раз.',
     });
   } finally {
     patchDraftCard(setState, { busyDraftId: null });
   }
 }
 
-async function saveDraftEdit(state: DraftCardState, setState: DraftCardSetter, draft: LinkedinDraft) {
+async function saveDraftEdit(
+  state: DraftCardState,
+  setState: DraftCardSetter,
+  draft: LinkedinDraft,
+) {
   if (state.busyDraftId || !state.editText.trim()) return;
   patchDraftCard(setState, { busyDraftId: draft.id, error: '' });
   try {
@@ -253,7 +298,11 @@ async function saveDraftEdit(state: DraftCardState, setState: DraftCardSetter, d
   }
 }
 
-async function openApprovedDraft(state: DraftCardState, setState: DraftCardSetter, draft: LinkedinDraft) {
+async function openApprovedDraft(
+  state: DraftCardState,
+  setState: DraftCardSetter,
+  draft: LinkedinDraft,
+) {
   if (!state.cadence.canPublish || draft.status !== 'approved') return;
   patchDraftCard(setState, { busyDraftId: draft.id, error: '' });
   try {
@@ -284,7 +333,9 @@ async function confirmManualPublication(state: DraftCardState, setState: DraftCa
   } catch (error) {
     patchDraftCard(setState, {
       error:
-        error instanceof DraftApiError && error.status === 409 ? error.message : 'Не получилось отметить публикацию. Проверьте журнал и повторите попытку.',
+        error instanceof DraftApiError && error.status === 409
+          ? error.message
+          : 'Не получилось отметить публикацию. Проверьте журнал и повторите попытку.',
     });
   } finally {
     patchDraftCard(setState, { busyDraftId: null });
@@ -364,7 +415,8 @@ function useLinkedinDraftCard() {
     ...state,
     ...safetyStop,
     setKind: (kind: LinkedinDraft['kind']) => patchDraftCard(setState, { kind }),
-    setInputType: (inputType: DraftCardState['inputType']) => patchDraftCard(setState, { inputType }),
+    setInputType: (inputType: DraftCardState['inputType']) =>
+      patchDraftCard(setState, { inputType }),
     setTone: (tone: DraftCardState['tone']) => patchDraftCard(setState, { tone }),
     setLength: (length: DraftCardState['length']) => patchDraftCard(setState, { length }),
     setTopicText: (topicText: string) => patchDraftCard(setState, { topicText }),
@@ -372,10 +424,13 @@ function useLinkedinDraftCard() {
     setEditText: (editText: string) => patchDraftCard(setState, { editText }),
     setEditingId: (editingId: string | null) => patchDraftCard(setState, { editingId }),
     setPaywall: (paywall: boolean) => patchDraftCard(setState, { paywall }),
-    setPublishDraft: (publishDraft: LinkedinDraft | null) => patchDraftCard(setState, { publishDraft }),
+    setPublishDraft: (publishDraft: LinkedinDraft | null) =>
+      patchDraftCard(setState, { publishDraft }),
     prepare: (event: FormEvent) => void createDraftFromInput(state, setState, event),
-    startTopic: (topic: LinkedinDraftTopic) => void createDraftFromInput(state, setState, null, topic),
-    changeStatus: (draft: LinkedinDraft, status: 'copied' | 'rejected' | 'approved') => void updateDraftStatus(state, setState, draft, status),
+    startTopic: (topic: LinkedinDraftTopic) =>
+      void createDraftFromInput(state, setState, null, topic),
+    changeStatus: (draft: LinkedinDraft, status: 'copied' | 'rejected' | 'approved') =>
+      void updateDraftStatus(state, setState, draft, status),
     saveEdit: (draft: LinkedinDraft) => void saveDraftEdit(state, setState, draft),
     openLinkedin: (draft: LinkedinDraft) => void openApprovedDraft(state, setState, draft),
     markPublished: () => void confirmManualPublication(state, setState),
@@ -398,10 +453,23 @@ function cadenceCopy(nextAllowedAt: string | null, timezone: string): string {
 
 type LinkedinDraftCardController = ReturnType<typeof useLinkedinDraftCard>;
 
-export function LinkedinDraftCard({ onOpenTariffs, variant = 'compact' }: { readonly onOpenTariffs?: () => void; readonly variant?: 'compact' | 'pipeline' }) {
+export function LinkedinDraftCard({
+  onOpenTariffs,
+  variant = 'compact',
+}: {
+  readonly onOpenTariffs?: () => void;
+  readonly variant?: 'compact' | 'pipeline';
+}) {
   const id = useId();
   const controller = useLinkedinDraftCard();
-  return <LinkedinDraftCardView id={id} controller={controller} expanded={variant === 'pipeline'} onOpenTariffs={onOpenTariffs} />;
+  return (
+    <LinkedinDraftCardView
+      id={id}
+      controller={controller}
+      expanded={variant === 'pipeline'}
+      onOpenTariffs={onOpenTariffs}
+    />
+  );
 }
 
 function LinkedinDraftCardView({
@@ -431,20 +499,38 @@ function LinkedinDraftCardView({
       ) : (
         <RecentDrafts drafts={controller.drafts} controller={controller} />
       )}
-      <PaywallModal isOpen={controller.paywall} onClose={() => controller.setPaywall(false)} onNavigate={() => onOpenTariffs?.()} />
+      <PaywallModal
+        isOpen={controller.paywall}
+        onClose={() => controller.setPaywall(false)}
+        onNavigate={() => onOpenTariffs?.()}
+      />
     </section>
   );
 }
 
-function DraftCardHeader({ id, controller, expanded }: { readonly id: string; readonly controller: LinkedinDraftCardController; readonly expanded: boolean }) {
+function DraftCardHeader({
+  id,
+  controller,
+  expanded,
+}: {
+  readonly id: string;
+  readonly controller: LinkedinDraftCardController;
+  readonly expanded: boolean;
+}) {
   return (
     <>
       <h2 id={`${id}-title`}>Черновики для LinkedIn</h2>
       <p>Готовим текст — публикуете вы сами</p>
       {expanded ? (
         <>
-          <PipelineSummary topics={controller.topicTotal} drafts={controller.drafts} generating={controller.busy} />
-          <p className="career-drafts-cadence">{cadenceCopy(controller.cadence.nextAllowedAt, controller.cadence.timezone)}</p>
+          <PipelineSummary
+            topics={controller.topicTotal}
+            drafts={controller.drafts}
+            generating={controller.busy}
+          />
+          <p className="career-drafts-cadence">
+            {cadenceCopy(controller.cadence.nextAllowedAt, controller.cadence.timezone)}
+          </p>
         </>
       ) : null}
     </>
@@ -496,14 +582,23 @@ function DraftCardMessages({ controller }: { readonly controller: LinkedinDraftC
   );
 }
 
-function PipelineSummary({ topics, drafts, generating }: { readonly topics: number; readonly drafts: readonly LinkedinDraft[]; readonly generating: boolean }) {
-  const count = (status: LinkedinDraftStatus) => drafts.filter((draft) => draft.status === status).length;
+function PipelineSummary({
+  topics,
+  drafts,
+  generating,
+}: {
+  readonly topics: number;
+  readonly drafts: readonly LinkedinDraft[];
+  readonly generating: boolean;
+}) {
+  const count = (status: LinkedinDraftStatus) =>
+    drafts.filter((draft) => draft.status === status).length;
   return (
     <div className="career-drafts-recent" aria-label="Сводка конвейера">
       <p>Темы по подтверждённым данным профиля: {topics}</p>
       <p>
-        В последних {drafts.length} черновиках: {count('draft')} ждут правки, {count('approved')} одобрено, {count('published')} опубликовано по вашему
-        подтверждению.
+        В последних {drafts.length} черновиках: {count('draft')} ждут правки, {count('approved')}{' '}
+        одобрено, {count('published')} опубликовано по вашему подтверждению.
       </p>
       {generating ? <p role="status">Консультант готовит черновик…</p> : null}
     </div>
@@ -528,7 +623,13 @@ function ChoiceSelect({
   return (
     <>
       <label htmlFor={id}>{label}</label>
-      <select id={id} className="career-select" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
+      <select
+        id={id}
+        className="career-select"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {choices.map((choice) => (
           <option key={choice.value} value={choice.value}>
             {choice.label}
@@ -539,7 +640,15 @@ function ChoiceSelect({
   );
 }
 
-function DraftForm({ id, controller, expanded }: { readonly id: string; readonly controller: LinkedinDraftCardController; readonly expanded: boolean }) {
+function DraftForm({
+  id,
+  controller,
+  expanded,
+}: {
+  readonly id: string;
+  readonly controller: LinkedinDraftCardController;
+  readonly expanded: boolean;
+}) {
   const inputChoices = [
     { value: 'topic', label: 'Только тему' },
     { value: 'text', label: 'Готовый текст' },
@@ -568,7 +677,13 @@ function DraftForm({ id, controller, expanded }: { readonly id: string; readonly
   </form>;
 }
 
-function RecentDrafts({ drafts, controller }: { readonly drafts: readonly LinkedinDraft[]; readonly controller: LinkedinDraftCardController }) {
+function RecentDrafts({
+  drafts,
+  controller,
+}: {
+  readonly drafts: readonly LinkedinDraft[];
+  readonly controller: LinkedinDraftCardController;
+}) {
   const latest = drafts[0];
   return latest ? (
     <div className="career-drafts-result">
@@ -576,11 +691,19 @@ function RecentDrafts({ drafts, controller }: { readonly drafts: readonly Linked
       {latest.status === 'draft' || latest.status === 'copied' ? (
         <div className="career-drafts-kinds">
           {latest.status === 'draft' ? (
-            <ActionButton label="Скопировать" disabled={controller.busyDraftId === latest.id} onClick={() => controller.changeStatus(latest, 'copied')} />
+            <ActionButton
+              label="Скопировать"
+              disabled={controller.busyDraftId === latest.id}
+              onClick={() => controller.changeStatus(latest, 'copied')}
+            />
           ) : (
             <ActionButton label="Скопировано" disabled />
           )}
-          <ActionButton label="Отклонить" disabled={controller.busyDraftId === latest.id} onClick={() => controller.changeStatus(latest, 'rejected')} />
+          <ActionButton
+            label="Отклонить"
+            disabled={controller.busyDraftId === latest.id}
+            onClick={() => controller.changeStatus(latest, 'rejected')}
+          />
         </div>
       ) : null}
       <ul className="career-drafts-recent" aria-label="Последние черновики">
@@ -606,7 +729,13 @@ function ActionButton({
   readonly onClick?: () => void;
 }) {
   return (
-    <button className="career-btn career-btn-secondary" type="button" disabled={disabled} aria-pressed={pressed} onClick={onClick}>
+    <button
+      className="career-btn career-btn-secondary"
+      type="button"
+      disabled={disabled}
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
       {label}
     </button>
   );
@@ -625,7 +754,12 @@ function TopicsSection({ controller }: { readonly controller: LinkedinDraftCardC
           Загружаем темы…
         </p>
       ) : null}
-      {!topicsLoading && !topics.length ? <p>Подтверждённых фактов для тем пока нет. Добавьте данные в профиле или предложите свою тему.</p> : null}
+      {!topicsLoading && !topics.length ? (
+        <p>
+          Подтверждённых фактов для тем пока нет. Добавьте данные в профиле или предложите свою
+          тему.
+        </p>
+      ) : null}
       {topics.length ? (
         <ul className="career-drafts-recent" aria-label="Темы от консультанта">
           {topics.map((item) => (
@@ -633,19 +767,39 @@ function TopicsSection({ controller }: { readonly controller: LinkedinDraftCardC
           ))}
         </ul>
       ) : null}
-      {hasMoreTopics ? <ActionButton label="Показать ещё темы" disabled={topicsLoading} onClick={controller.showMoreTopics} /> : null}
+      {hasMoreTopics ? (
+        <ActionButton
+          label="Показать ещё темы"
+          disabled={topicsLoading}
+          onClick={controller.showMoreTopics}
+        />
+      ) : null}
       {topicTotal ? <p>Доступно тем по данным профиля: {topicTotal}.</p> : null}
     </section>
   );
 }
 
-function TopicRow({ topic, controller }: { readonly topic: LinkedinDraftTopic; readonly controller: LinkedinDraftCardController }) {
+function TopicRow({
+  topic,
+  controller,
+}: {
+  readonly topic: LinkedinDraftTopic;
+  readonly controller: LinkedinDraftCardController;
+}) {
   return (
     <li>
       <strong>{topic.title}</strong> · <span>{topic.source}</span>
       <div className="career-drafts-kinds">
-        <ActionButton label="Взять в работу" disabled={controller.busyTopicId === topic.id || controller.busy} onClick={() => controller.startTopic(topic)} />
-        <ActionButton label="Скрыть тему" disabled={controller.busyTopicId === topic.id || controller.busy} onClick={() => controller.dismissTopic(topic)} />
+        <ActionButton
+          label="Взять в работу"
+          disabled={controller.busyTopicId === topic.id || controller.busy}
+          onClick={() => controller.startTopic(topic)}
+        />
+        <ActionButton
+          label="Скрыть тему"
+          disabled={controller.busyTopicId === topic.id || controller.busy}
+          onClick={() => controller.dismissTopic(topic)}
+        />
       </div>
     </li>
   );
@@ -663,7 +817,9 @@ function DraftsSection({ controller }: { readonly controller: LinkedinDraftCardC
           Загружаем черновики…
         </p>
       ) : null}
-      {!controller.draftsLoading && !visibleDrafts.length ? <p>Черновиков пока нет. Выберите тему или предложите свою.</p> : null}
+      {!controller.draftsLoading && !visibleDrafts.length ? (
+        <p>Черновиков пока нет. Выберите тему или предложите свою.</p>
+      ) : null}
       {visibleDrafts.length ? (
         <ul className="career-drafts-recent" aria-label="Черновики и публикация">
           {visibleDrafts.map((draft) => (
@@ -677,7 +833,11 @@ function DraftsSection({ controller }: { readonly controller: LinkedinDraftCardC
         </p>
       ) : null}
       {controller.drafts.length > controller.visibleDraftCount ? (
-        <ActionButton label="Показать ещё черновики" disabled={controller.draftsLoading} onClick={controller.showMoreDrafts} />
+        <ActionButton
+          label="Показать ещё черновики"
+          disabled={controller.draftsLoading}
+          onClick={controller.showMoreDrafts}
+        />
       ) : null}
       {!controller.cadence.canPublish && controller.cadence.nextAllowedAt ? (
         <p>{cadenceCopy(controller.cadence.nextAllowedAt, controller.cadence.timezone)}</p>
@@ -686,7 +846,13 @@ function DraftsSection({ controller }: { readonly controller: LinkedinDraftCardC
   );
 }
 
-function DraftRow({ draft, controller }: { readonly draft: LinkedinDraft; readonly controller: LinkedinDraftCardController }) {
+function DraftRow({
+  draft,
+  controller,
+}: {
+  readonly draft: LinkedinDraft;
+  readonly controller: LinkedinDraftCardController;
+}) {
   const editing = controller.editingId === draft.id;
   return (
     <li>
@@ -697,7 +863,13 @@ function DraftRow({ draft, controller }: { readonly draft: LinkedinDraft; readon
   );
 }
 
-function DraftActions({ draft, controller }: { readonly draft: LinkedinDraft; readonly controller: LinkedinDraftCardController }) {
+function DraftActions({
+  draft,
+  controller,
+}: {
+  readonly draft: LinkedinDraft;
+  readonly controller: LinkedinDraftCardController;
+}) {
   const busy = controller.busyDraftId === draft.id;
   const editable = !['published', 'rejected'].includes(draft.status);
   // prettier-ignore
@@ -714,7 +886,13 @@ function DraftActions({ draft, controller }: { readonly draft: LinkedinDraft; re
   </div>;
 }
 
-function DraftEditor({ draft, controller }: { readonly draft: LinkedinDraft; readonly controller: LinkedinDraftCardController }) {
+function DraftEditor({
+  draft,
+  controller,
+}: {
+  readonly draft: LinkedinDraft;
+  readonly controller: LinkedinDraftCardController;
+}) {
   return (
     <div className="career-drafts-result">
       <label htmlFor={`linkedin-draft-edit-${draft.id}`}>Текст черновика</label>
@@ -733,21 +911,33 @@ function DraftEditor({ draft, controller }: { readonly draft: LinkedinDraft; rea
           disabled={controller.busyDraftId === draft.id || !controller.editText.trim()}
           onClick={() => controller.saveEdit(draft)}
         />
-        <ActionButton label="Отмена" disabled={controller.busyDraftId === draft.id} onClick={() => controller.setEditingId(null)} />
+        <ActionButton
+          label="Отмена"
+          disabled={controller.busyDraftId === draft.id}
+          onClick={() => controller.setEditingId(null)}
+        />
       </div>
     </div>
   );
 }
 
-function useDialogFocus(dialogRef: RefObject<HTMLElement | null>, open: boolean, onCancel: () => void) {
+function useDialogFocus(
+  dialogRef: RefObject<HTMLElement | null>,
+  open: boolean,
+  onCancel: () => void,
+) {
   const cancelRef = useRef(onCancel);
   const previousFocus = useRef<HTMLElement | null>(null);
   cancelRef.current = onCancel;
   useEffect(() => {
     if (!open) return;
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const frame = window.requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus());
-    const onKeyDown = (event: KeyboardEvent) => trapDialogKeyboard(event, dialogRef, cancelRef.current);
+    previousFocus.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const frame = window.requestAnimationFrame(() =>
+      dialogRef.current?.querySelector<HTMLElement>('button:not(:disabled)')?.focus(),
+    );
+    const onKeyDown = (event: KeyboardEvent) =>
+      trapDialogKeyboard(event, dialogRef, cancelRef.current);
     document.addEventListener('keydown', onKeyDown);
     return () => {
       window.cancelAnimationFrame(frame);
@@ -757,7 +947,11 @@ function useDialogFocus(dialogRef: RefObject<HTMLElement | null>, open: boolean,
   }, [dialogRef, open]);
 }
 
-function trapDialogKeyboard(event: KeyboardEvent, dialogRef: RefObject<HTMLElement | null>, onCancel: () => void) {
+function trapDialogKeyboard(
+  event: KeyboardEvent,
+  dialogRef: RefObject<HTMLElement | null>,
+  onCancel: () => void,
+) {
   if (event.key === 'Escape') {
     event.preventDefault();
     onCancel();
@@ -779,11 +973,19 @@ function trapDialogKeyboard(event: KeyboardEvent, dialogRef: RefObject<HTMLEleme
 
 function PublishConfirmation({ controller }: { readonly controller: LinkedinDraftCardController }) {
   const dialogRef = useRef<HTMLElement>(null);
-  useDialogFocus(dialogRef, Boolean(controller.publishDraft), () => controller.setPublishDraft(null));
+  useDialogFocus(dialogRef, Boolean(controller.publishDraft), () =>
+    controller.setPublishDraft(null),
+  );
   if (!controller.publishDraft) return null;
   return (
     <div className="career-modal-backdrop">
-      <section ref={dialogRef} className="career-modal-card" role="dialog" aria-modal="true" aria-labelledby="linkedin-publish-confirm-title">
+      <section
+        ref={dialogRef}
+        className="career-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="linkedin-publish-confirm-title"
+      >
         <header className="career-modal-header">
           <h2 id="linkedin-publish-confirm-title">Подтверждение публикации</h2>
         </header>
@@ -791,8 +993,16 @@ function PublishConfirmation({ controller }: { readonly controller: LinkedinDraf
           <p>Вы уже опубликовали этот текст в LinkedIn? Платформа не публикует его за вас.</p>
         </div>
         <footer className="career-modal-footer">
-          <ActionButton label="Да, отметить" disabled={controller.busyDraftId === controller.publishDraft.id} onClick={controller.markPublished} />
-          <ActionButton label="Ещё нет" disabled={controller.busyDraftId === controller.publishDraft.id} onClick={() => controller.setPublishDraft(null)} />
+          <ActionButton
+            label="Да, отметить"
+            disabled={controller.busyDraftId === controller.publishDraft.id}
+            onClick={controller.markPublished}
+          />
+          <ActionButton
+            label="Ещё нет"
+            disabled={controller.busyDraftId === controller.publishDraft.id}
+            onClick={() => controller.setPublishDraft(null)}
+          />
         </footer>
       </section>
     </div>
@@ -819,7 +1029,13 @@ function SafetyStopNotice({
         </p>
         <p>{linkedinStopCopy(reason)}</p>
         {canResume ? (
-          <button type="button" className="career-btn career-btn-secondary" disabled={resuming} aria-busy={resuming} onClick={onResume}>
+          <button
+            type="button"
+            className="career-btn career-btn-secondary"
+            disabled={resuming}
+            aria-busy={resuming}
+            onClick={onResume}
+          >
             {resuming ? 'Снимаем паузу…' : 'Возобновить вручную'}
           </button>
         ) : null}

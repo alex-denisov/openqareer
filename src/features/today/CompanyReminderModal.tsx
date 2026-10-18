@@ -107,15 +107,11 @@ function ReminderHeader({
           Напоминание компании
         </h2>
         <p className="career-reminder-modal-subtitle">
-          {positionTitle}{company ? ` · ${company}` : ''}
+          {positionTitle}
+          {company ? ` · ${company}` : ''}
         </p>
       </div>
-      <button
-        type="button"
-        className="career-btn-icon"
-        onClick={onClose}
-        aria-label="Закрыть"
-      >
+      <button type="button" className="career-btn-icon" onClick={onClose} aria-label="Закрыть">
         <X size={18} aria-hidden="true" />
       </button>
     </header>
@@ -127,7 +123,8 @@ function ReminderNotice() {
     <div className="career-reminder-notice">
       <PaperPlaneTilt size={18} aria-hidden="true" />
       <span>
-        OpenQareer не отправляет сообщения без вашего ведома. Скопируйте готовый черновик и отправьте работодателю в подходящий канал связи.
+        OpenQareer не отправляет сообщения без вашего ведома. Скопируйте готовый черновик и
+        отправьте работодателю в подходящий канал связи.
       </span>
     </div>
   );
@@ -171,11 +168,7 @@ function ReminderActions({
 }) {
   return (
     <div className="career-reminder-modal-actions">
-      <button
-        type="button"
-        className="career-btn career-btn-secondary"
-        onClick={onClose}
-      >
+      <button type="button" className="career-btn career-btn-secondary" onClick={onClose}>
         Закрыть
       </button>
       <button

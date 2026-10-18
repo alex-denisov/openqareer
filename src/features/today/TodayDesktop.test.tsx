@@ -7,10 +7,9 @@ import { EMPTY_RESUME_DRAFT } from '../../../server/domain/resumeDraft';
 import { todaySnapshot } from '../../../e2e/fixtures/readabilityWorkspace';
 import { TodayDesktopContent } from './TodayDesktop';
 
-function funnel(context?: unknown, applications = 7) {
-  const root = document.createElement('div');
+function funnelMomentum(applications: number) {
   const endAt = '2026-10-16T09:00:00.000Z';
-  const momentum = {
+  return {
     calculatedAt: endAt,
     windows: {
       '7d': {
@@ -52,6 +51,11 @@ function funnel(context?: unknown, applications = 7) {
     },
     burnoutNotice: false,
   };
+}
+
+function funnel(context?: unknown, applications = 7) {
+  const root = document.createElement('div');
+  const momentum = funnelMomentum(applications);
   const props = {
     snapshot: { ...todaySnapshot, queue: [], followUps: [], momentum },
     ...(context === undefined ? {} : { funnelContext: context }),
@@ -175,26 +179,41 @@ describe('Today funnel values', () => {
     expect(root.querySelector('#today-queue')?.getAttribute('aria-busy')).toBe('true');
     expect(root.querySelector('#today-queue')?.textContent).toContain('Загружаем очередь дня');
   });
-  it('shows the approved low-sample state only below ten delivered applications', () => {
-    expect(funnel().querySelector('.career-today-funnel-low-sample')?.textContent).toContain(
-      'меньше 10 откликов',
+  it('keeps the approved desktop caption short; the low-sample note lives on mobile', () => {
+    const element = funnel();
+    expect(element.querySelector('.career-today-funnel-low-sample')).toBeNull();
+    expect(element.querySelector('.career-today-funnel-basis')?.textContent).toMatch(
+      /^n = 7 откликов, \d{2}\.\d{2} \d{2}:\d{2}$/u,
     );
-    expect(funnel(undefined, 10).querySelector('.career-today-funnel-low-sample')).toBeNull();
   });
 
-  it('draws proportions only from verified window counts and shows their source, sample and period', () => {
-    const element = funnel({ found: 214, favorites: 18, responses: 3, offers: 0 });
+  it('draws all six approved stages from their verified sources', () => {
+    const root = document.createElement('div');
+    const props = {
+      snapshot: {
+        ...todaySnapshot,
+        queue: [],
+        followUps: [],
+        momentum: funnelMomentum(7),
+        funnel: { favorites: 18, responses: 3, offers: 0 },
+      },
+      funnelContext: { found: 214 },
+      onAccept: () => undefined,
+      onPostpone: () => undefined,
+    };
+    root.innerHTML = renderToStaticMarkup(
+      <TodayDesktopContent {...(props as Parameters<typeof TodayDesktopContent>[0])} />,
+    );
+    const element = root.querySelector('.career-today-funnel')!;
+    const values = [...element.querySelectorAll('.career-today-funnel-value')].map(
+      (e) => e.textContent,
+    );
+    expect(values).toEqual(['214', '18', '7', '3', '2', '0']);
     const bars = [...element.querySelectorAll('.career-today-funnel-track-fill')].map((e) =>
       Number(e.getAttribute('width')),
     );
-    expect(bars).toHaveLength(2);
     expect(bars[0]).toBe(100);
-    expect(bars[1]).toBeCloseTo((2 / 7) * 100);
-    expect(element.textContent).not.toContain('214');
-    expect(element.textContent).not.toContain('18');
-    expect(element.textContent).toContain('Период');
-    expect(element.textContent).toContain('подтверждения отправки, n = 7');
-    expect(element.textContent).toContain('сохранённые даты встреч, n = 2');
+    expect(bars[2]).toBeCloseTo((7 / 214) * 100);
     expect(element.querySelector('[style]')).toBeNull();
     expect(element.querySelector('.is-current .career-today-funnel-label')?.textContent).toBe(
       'Интервью',

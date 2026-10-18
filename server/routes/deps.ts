@@ -35,6 +35,11 @@ export interface RuntimeMemoryReport {
 }
 
 export interface RouteDeps {
+  /** Черновики LinkedIn: очередь «Сегодня» показывает посты, ждущие одобрения. */
+  candidateDraftRepository?: Pick<
+    import('../candidate/sqliteCandidateDraftRepository').SqliteCandidateDraftRepository,
+    'listRecent'
+  >;
   /** Disabled until merchant credentials and recurring approval are configured. */
   robokassaGateway?: RobokassaGateway;
   billingRepository?: SqliteBillingRepository;

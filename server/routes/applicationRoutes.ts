@@ -366,6 +366,13 @@ function recordFreshVacancyNotification(
 
 const TODAY_QUEUE_INITIAL_COUNT = 5;
 
+/** Посты LinkedIn в статусе черновика: кандидат одобряет и публикует сам. */
+function pendingLinkedinPosts(deps: RouteDeps, candidateId: string) {
+  return (deps.candidateDraftRepository?.listRecent(candidateId, 20) ?? [])
+    .filter((draft) => draft.kind === 'post' && draft.status === 'draft')
+    .map((draft) => ({ id: draft.id, topic: draft.topic }));
+}
+
 async function readTodaySnapshot(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -390,6 +397,7 @@ async function readTodaySnapshot(
     companyEventsSinceVisit:
       since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
     shortlist: newVacancies,
+    pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
     now: now.toISOString(),
   });
   recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
