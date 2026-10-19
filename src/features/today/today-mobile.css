@@ -29,7 +29,6 @@
     padding: var(--career-space-4) var(--career-space-4) var(--career-space-2);
     border-radius: var(--career-radius-lg);
     background: var(--career-surface);
-    box-shadow: inset 0 0 0 var(--career-border-width) var(--career-line);
   }
 
   .career-today-mobile .tm-eyebrow {

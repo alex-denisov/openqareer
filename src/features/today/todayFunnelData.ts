@@ -88,7 +88,9 @@ export function todayFunnelFootnote(
     applied !== 'unknown' && applied < LOW_SAMPLE
       ? `Откликов меньше ${LOW_SAMPLE} (n = ${applied}): выводов о конверсии нет.`
       : undefined,
-    unknown.length ? `Нет проверенных данных: ${unknown.join(', ').toLowerCase()}.` : undefined,
+    unknown.length
+      ? `Нет проверенных данных по ${unknown.length === 1 ? 'этапу' : 'этапам'}: ${unknown.map((label) => `«${label}»`).join(', ')}.`
+      : undefined,
     date ? `Данные на ${date}.` : undefined,
   ]
     .filter(Boolean)

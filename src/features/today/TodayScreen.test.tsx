@@ -250,7 +250,9 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(funnel).toContain('aria-current="step"');
     expect(funnel).toContain('Откликов меньше 10 (n = 7): выводов о конверсии нет.');
     expect(funnel).toMatch(/Данные на \d{2}\.\d{2} \d{2}:\d{2}\./u);
-    expect(funnel).toContain('Нет проверенных данных: найдено, в избранном, ответов, офферов.');
+    expect(funnel).toContain(
+      'Нет проверенных данных по этапам: «Найдено», «В избранном», «Ответов», «Офферов».',
+    );
   });
 
   it('follows the approved mobile funnel copy when every stage has a source', () => {
