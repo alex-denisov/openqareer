@@ -79,7 +79,7 @@ export function CareerExpertPanel({
   intakeMode = false,
   overlay = false,
   onExpand,
-  journey,
+  journey: _journey,
   marketQuery,
   stage = 'today',
   subject,
@@ -540,18 +540,7 @@ export function CareerExpertPanel({
         <div
           className={historicalConversation ? 'consultant-current-hidden' : 'consultant-current'}
         >
-          {loadingSession ? (
-            <ExpertPanelSkeleton />
-          ) : !turns.length && !intakeMode && stage !== 'profile' ? (
-            <div className="career-expert-message">
-              <span>AI-сопровождение</span>
-              <strong>{journey?.nextAction.headline ?? 'Задайте вопрос о вашей карьере'}</strong>
-              <p>
-                {journey?.nextAction.reason ??
-                  'Помогу оценить рыночные возможности, разобрать стратегию или адаптировать резюме.'}
-              </p>
-            </div>
-          ) : null}
+          {loadingSession ? <ExpertPanelSkeleton /> : null}
           {!loadingSession && (turns.length || showLiveMessage) ? (
             <div className="career-dialogue-history" aria-label="История диалога">
               {turns.map((message) => (

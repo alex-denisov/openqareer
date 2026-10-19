@@ -262,3 +262,10 @@
     background-color: var(--career-accent-soft);
   }
 }
+/* Mockups 1–2: consultant replicas carry no author label and use the full panel width. */
+.career-expert-panel .career-dialogue-turn > span {
+  display: none;
+}
+.career-expert-panel .career-dialogue-turn.is-assistant {
+  max-width: 100%;
+}

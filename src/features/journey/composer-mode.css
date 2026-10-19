@@ -80,14 +80,10 @@
 }
 .career-expert-chip-group {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--career-space-2);
-  overflow-x: auto;
+  min-inline-size: 0;
   padding-block-end: var(--career-space-1);
-  scrollbar-width: none;
-}
-
-.career-expert-chip-group::-webkit-scrollbar {
-  display: none;
 }
 
 .career-expert-quick-replies {
