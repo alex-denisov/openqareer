@@ -74,6 +74,8 @@ async function installSpeechStub(page: Page): Promise<void> {
 }
 
 async function openPreparation(page: Page, width: number): Promise<void> {
+  // Фикстуры датированы сентябрём–октябрём 2026: окно «30 дней» считается от этой даты, а не от часов машины.
+  await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
   await installSpeechStub(page);
   await mockSignedInCabinet(page);
   await page.route('**/api/v1/candidate/applications*', (route) =>
@@ -568,6 +570,7 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
+      await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
       await mockSignedInCabinet(page);
       await installManyStories(page);
       await page.route('**/api/v1/candidate/applications*', (route) =>
