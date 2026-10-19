@@ -69,7 +69,7 @@ export class VacancyMechanicsRuntime {
         return assessments;
       } } : undefined;
       const result = await assessVacancyFit(resolved, assessor);
-      if (result.reason === 'assessment_unavailable' && !assessmentReturned) {
+      if (client && result.reason === 'assessment_unavailable' && !assessmentReturned) {
         this.fit.fail(job, { retry: Boolean(client) && !staleProfile && job.attempts < 3 });
       } else this.fit.complete(job, result, undefined, resolved);
     } catch { this.fit.fail(job, { retry: job.attempts < 3 }); }

@@ -29,21 +29,19 @@ describe('background vacancy mechanics with real SQLite', () => {
     return runtime;
   }
 
-  it('enqueues idempotently, extracts in worker and marks fit unavailable without a model instead of a fabricated percentage', async () => {
+  it('enqueues idempotently, extracts in worker and caches an honest unavailable result without a model instead of a fabricated percentage', async () => {
     const runtime = setup(); const source = input();
     runtime.enqueue(source); runtime.enqueue(source);
     expect(runtime.view(source).state).toBe('processing');
     expect(await runtime.runNext(null)).toBe(true);
     const view = runtime.view(source);
-    // Без модели оценить требования нечем: расчёт недоступен, числа нет.
-    expect(view.state).toBe('failed');
+    // Модель выключена: оценить требования нечем, повтор ничего не изменит — честный итог без числа.
+    expect(view.state).toBe('ready');
     expect(view.requirements[0].sourceQuote).toBe('TypeScript required');
-    expect(view.result?.coveragePercent ?? null).toBeNull();
+    expect(view.result).toMatchObject({ status: 'unknown', coveragePercent: null, reason: 'assessment_unavailable' });
     expect(await runtime.runNext(null)).toBe(false);
     runtime.enqueue(source);
-    await runtime.runNext(null);
     expect(await runtime.runNext(null)).toBe(false);
-    expect(runtime.view(source).state).toBe('failed');
   });
 
   it('isolates candidate caches and invalidates after profile or description changes', async () => {
