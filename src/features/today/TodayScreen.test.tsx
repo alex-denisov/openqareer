@@ -99,6 +99,19 @@ describe('TodayScreen (ACC-A-1)', () => {
     approvalBoundary: 'Изменения требуют подтверждения.',
   };
 
+  it('names a profile decision «Подтвердить факт» on 390 as on 1440 (mockup 1)', () => {
+    const html = mobileTodayMarkup(
+      renderTodayScreen({
+        consultantAction: { ...action, destination: 'evidence', label: 'Проверить факты' },
+        onNavigate: vi.fn(),
+        onOpenExpert: vi.fn(),
+      }),
+    );
+
+    expect(html).toContain('Подтвердить факт');
+    expect(html).not.toContain('Проверить факты');
+  });
+
   it('renders the approved decision, queue, funnel and profile shortcut', () => {
     const html = mobileTodayMarkup(
       renderTodayScreen({

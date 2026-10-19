@@ -30,7 +30,12 @@ import {
 } from './todayApi';
 import { TodayLinkedinNote } from './TodayLinkedinNote';
 import { todayDecisionOverride, type TodayDiaryDecisionProp } from './todayDecisionOverride';
-import { TODAY_NOTHING_TO_DECIDE, TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
+import {
+  TODAY_NOTHING_TO_DECIDE,
+  TodayDesktopContent,
+  actionSourceSummary,
+  decisionAcceptLabel,
+} from './TodayDesktop';
 import {
   todayFunnelFootnote,
   todayFunnelStages,
@@ -504,7 +509,7 @@ function TodayMobileDecisionActions({
     <>
       <button className="pm-cta tm-main" type="button" onClick={onAccept}>
         <CheckCircle aria-hidden="true" weight="regular" />
-        {action.label}
+        {decisionAcceptLabel(action)}
       </button>
       <button
         className="pm-text tm-later"

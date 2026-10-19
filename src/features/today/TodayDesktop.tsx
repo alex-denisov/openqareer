@@ -226,6 +226,14 @@ function actionDestinationLabel(action: ReasonedCareerAction): string {
   return 'Профиль';
 }
 
+/** One name for the decision's action on 1440 and 390, as in mockup 1. */
+export function decisionAcceptLabel(action: ReasonedCareerAction): string {
+  if (action.destination === 'profile' || action.destination === 'evidence') {
+    return 'Подтвердить факт';
+  }
+  return action.label;
+}
+
 export function actionSourceSummary(action: ReasonedCareerAction): string {
   if (action.rationale === TODAY_DIARY_FOOTNOTE) return 'карьерный дневник';
   const sources = [
@@ -294,11 +302,7 @@ function DecisionActions({
   readonly postponeError?: string;
 }) {
   const coachAction = action.destination === 'coach';
-  const acceptLabel = coachAction
-    ? action.label
-    : action.destination === 'profile' || action.destination === 'evidence'
-      ? 'Подтвердить факт'
-      : action.label;
+  const acceptLabel = decisionAcceptLabel(action);
   return (
     <div className="career-today-decision-actions" aria-busy={postponeBusy || undefined}>
       {!coachAction || onDiscuss ? (
