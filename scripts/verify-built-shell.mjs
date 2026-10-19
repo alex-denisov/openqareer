@@ -1412,9 +1412,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
   );
   // B250 identifies the feed row by its source and last observation date.
   // The approved screen does not make an age claim beside the row.
+  // Строка подписывает дату по Москве (VacancyScreenRowCells): около полуночи UTC
+  // часы раннера CI показывают другой день.
   const expectedHhDate = new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
     month: '2-digit',
+    timeZone: 'Europe/Moscow',
   }).format(new Date(Date.now() - 2 * 86_400_000));
   await page
     .locator('.vac-sub')
