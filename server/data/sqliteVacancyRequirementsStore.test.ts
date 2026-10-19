@@ -28,6 +28,40 @@ describe('durable public vacancy requirement queue', () => {
     expect(store.getLatest('v1')?.descriptionHash).toBe(store.get(input)?.descriptionHash);
   });
 
+  it('never serves a different extractor version through the runtime latest lookup', () => {
+    const { store } = setup();
+    const old = { ...input, extractorVersion: 'obsolete-extractor' };
+    store.enqueue(old);
+    store.complete(store.claim('old', 1)!, extractVacancyRequirements(old), 2);
+    expect(store.getLatest(input.vacancyId)).toBeNull();
+    const hash = extractVacancyRequirements(input).descriptionHash;
+    expect(store.getLatest(input.vacancyId, hash)).toBeNull();
+    expect(store.getLatest(input.vacancyId, hash, 'obsolete-extractor')?.extractorVersion).toBe('obsolete-extractor');
+    store.enqueue(input);
+    store.complete(store.claim('current', 3)!, extractVacancyRequirements(input), 4);
+    expect(store.getLatest(input.vacancyId, hash)?.extractorVersion).toBe(extractVacancyRequirements(input).extractorVersion);
+  });
+
+  it('retains the worker lease through the bounded provider timeout and retry window', async () => {
+    const { store, db } = setup();
+    const other = new SqliteVacancyRequirementsStore(db);
+    store.enqueue(input);
+    let clock = 1000;
+    const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    let replacement: ReturnType<typeof other.claim> = null;
+    try {
+      const result = await store.runNext('slow-provider', async (source) => {
+        // Three permitted 60-second requests and two maximum 5-second retry pauses.
+        clock += 190000;
+        replacement = other.claim('competing-worker', clock);
+        return extractVacancyRequirements(source);
+      }, clock);
+      expect(replacement).toBeNull();
+      expect(result?.status).toBe('extracted');
+      expect(store.get(input)?.status).toBe('extracted');
+    } finally { dateNow.mockRestore(); }
+  });
+
   it('invalidates by description, version and cluster', () => {
     const { store } = setup();
     const job = store.enqueue(input);

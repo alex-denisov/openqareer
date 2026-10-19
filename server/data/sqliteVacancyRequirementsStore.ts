@@ -49,10 +49,10 @@ export class SqliteVacancyRequirementsStore {
     return cluster ? { ...cluster, vacancyId: input.vacancyId } : null;
   }
 
-  getLatest(vacancyId: string, descriptionHash?: string): VacancyRequirementsResult | null {
+  getLatest(vacancyId: string, descriptionHash?: string, extractorVersion = VACANCY_REQUIREMENTS_EXTRACTOR_VERSION): VacancyRequirementsResult | null {
     const row = this.db.prepare(`SELECT result_json FROM vacancy_requirements_cache
-      WHERE vacancy_id=? ${descriptionHash ? 'AND description_hash=?' : ''} ORDER BY updated_at DESC,rowid DESC LIMIT 1`)
-      .get(...(descriptionHash ? [vacancyId, descriptionHash] : [vacancyId])) as { result_json: string } | undefined;
+      WHERE vacancy_id=? AND extractor_version=? ${descriptionHash ? 'AND description_hash=?' : ''} ORDER BY updated_at DESC,rowid DESC LIMIT 1`)
+      .get(...(descriptionHash ? [vacancyId, extractorVersion, descriptionHash] : [vacancyId, extractorVersion])) as { result_json: string } | undefined;
     return row ? JSON.parse(row.result_json) as VacancyRequirementsResult : null;
   }
 
@@ -135,7 +135,9 @@ export class SqliteVacancyRequirementsStore {
 
   async runNext(workerId: string, extract: (input: VacancyRequirementsInput) => Promise<VacancyRequirementsResult>, now = Date.now()): Promise<VacancyRequirementsResult | null> {
     const startedAt = Date.now();
-    const job = this.claim(workerId, now);
+    // Provider work is bounded by three 60-second attempts plus two 5-second pauses.
+    // Keep the lease beyond that complete retry window, not just one request.
+    const job = this.claim(workerId, now, 300000);
     if (!job) return null;
     try {
       const result = this.get(job.input) ?? await extract(job.input);
