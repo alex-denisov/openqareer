@@ -147,4 +147,28 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(complete).not.toHaveBeenCalled();
     expect(runtime.view(source).state).toBe('failed');
   });
+
+  it('bounds automatic retries and lets an explicit request retry a failed job after recovery', async () => {
+    const runtime = setup(); const original = input();
+    const source: VacancyFitInput = { ...original, gates: {
+      role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
+      region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
+    } };
+    const complete = vi.fn().mockRejectedValue(new Error('provider_timeout'));
+    const client = { complete } as unknown as BulkLlmClient;
+    runtime.enqueue(source);
+    for (let attempt = 0; attempt < 3; attempt += 1) await runtime.runNext(client);
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(runtime.view(source).state).toBe('failed');
+    expect(await runtime.runNext(client)).toBe(false);
+    expect(complete).toHaveBeenCalledTimes(3);
+    const requirementId = runtime.view(source).requirements[0].id;
+    complete.mockResolvedValue({ content: JSON.stringify({ assessments: [{ requirementId, status: 'unknown', evidence: [] }] }) });
+    runtime.enqueue(source);
+    expect(runtime.view(source).state).toBe('processing');
+    await runtime.runNext(client);
+    expect(complete).toHaveBeenCalledTimes(4);
+    expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coveragePercent: null, status: 'unknown' } });
+    expect(await runtime.runNext(client)).toBe(false);
+  });
 });
