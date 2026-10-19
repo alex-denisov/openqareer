@@ -1,0 +1,55 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { expect, it } from 'vitest';
+import { VacancyFitSummary } from './VacancyFitSummary';
+import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
+import { sortVacancyFitItems } from './VacancyFitSort';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+it('shows factual count, percent and date with source coverage semantics', () => {
+  const html = renderToStaticMarkup(<VacancyFitSummary view={readyVacancyFit()} />);
+  expect(html).toContain('50%');
+  expect(html).toContain('1 из 2 требований');
+  expect(html).toContain('18.10.2026');
+});
+it('unknown and blocked result never renders a number even if stale numeric data arrives', () => {
+  const view = readyVacancyFit();
+  for (const status of ['unknown', 'blocked'] as const) {
+    const html = renderToStaticMarkup(
+      <VacancyFitSummary
+        view={{
+          ...view,
+          result: {
+            ...view.result!,
+            status,
+            reason: status === 'blocked' ? 'blocked_gate' : 'unknown_gate',
+          },
+        }}
+      />,
+    );
+    expect(html).not.toContain('50%');
+    expect(html).toContain('обязател');
+  }
+});
+it('no-description state explains unavailable coverage without invented zero', () => {
+  const html = renderToStaticMarkup(
+    <VacancyFitSummary view={{ state: 'no_description', requirements: [] }} />,
+  );
+  expect(html).toContain('Нет описания');
+  expect(html).not.toContain('0%');
+});
+it('known coverage precedes unknown, ties preserve existing order, freshness is explicit', () => {
+  const item = (id: string, date: string, fitView?: ReturnType<typeof readyVacancyFit>) =>
+    ({ cluster: { id, firstObservedAt: date }, explanation: { fitView } }) as MatchedVacancyItem;
+  const a = item('unknown', '2026-10-19');
+  const b = item('known', '2026-10-17', readyVacancyFit());
+  const c = item('tied', '2026-10-18', readyVacancyFit());
+  expect(sortVacancyFitItems([a, b, c]).map((i) => i.cluster.id)).toEqual([
+    'known',
+    'tied',
+    'unknown',
+  ]);
+  expect(sortVacancyFitItems([a, b, c], 'freshness').map((i) => i.cluster.id)).toEqual([
+    'unknown',
+    'tied',
+    'known',
+  ]);
+});

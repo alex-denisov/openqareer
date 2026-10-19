@@ -1,3 +1,4 @@
+import { VacancyFitSortControl, sortVacancyFitItems } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
@@ -154,7 +155,7 @@ function useVacanciesScreenBoard(
   useEffect(() => setVisibleCount(20), [state]);
 
   const filtered = useMemo(
-    () => filterBoardVacancies(matched, state, now, onFiltersChange),
+    () => sortVacancyFitItems(filterBoardVacancies(matched, state, now, onFiltersChange), state.sort),
     [matched, state, now, onFiltersChange],
   );
   return {
@@ -531,6 +532,7 @@ function VacanciesFilterContent({
         catalogSummary={input.facets?.catalogSummary}
         onReset={resetFilters}
       />
+      <VacancyFitSortControl value={board.state.sort} onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))} />
       <VacanciesFiltersSection
         facets={input.facets}
         board={board}

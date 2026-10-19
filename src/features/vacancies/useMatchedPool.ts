@@ -76,7 +76,8 @@ export function useMatchedPool(provided?: MatchedPool): MatchedPool {
 function hasMatchedPoolFilters(filters: VacanciesScreenState | undefined): boolean {
   return Boolean(
     filters &&
-      (filters.roles.length > 0 ||
+      (filters.sort === 'freshness' ||
+        filters.roles.length > 0 ||
         filters.regions.length > 0 ||
         (filters.levels?.length ?? 0) > 0 ||
         (filters.sources?.length ?? 0) > 0 ||

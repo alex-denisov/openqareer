@@ -1,3 +1,4 @@
+import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import { useState, type FormEvent } from 'react';
 import { Archive, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -606,12 +607,13 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   return (
     <div className="vac-detail vacancies-detail-col vacancies-detail-panel">
       <DetailTrustAlert trust={trust} />
+      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
       {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
-      <DetailRequirementsSection
+      {!explanation.fitView?<DetailRequirementsSection
         cluster={cluster}
         explanation={explanation}
         onAddToProfile={rowProps.onAddToProfile}
-      />
+      />:null}
 
       <RecruiterSection cluster={cluster} />
       {rowProps.onOpenCompanyPath ? (
@@ -637,12 +639,13 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
       <DetailTrustAlert trust={rowState.trust} />
+      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
       <div className="vacancies-screen-detail-grid">
-        <VacancyScreenRequirementChips
+        {!explanation.fitView?<VacancyScreenRequirementChips
           cluster={cluster}
           explanation={explanation}
           onAddToProfile={rowProps.onAddToProfile}
-        />
+        />:null}
         <section
           className="vacancies-screen-description"
           aria-labelledby={`vacancy-description-${cluster.id}`}

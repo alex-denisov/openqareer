@@ -1,3 +1,4 @@
+import { VacancyFitSummary } from './VacancyFitSummary';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -47,6 +48,7 @@ function VacancyScreenRoleCell({
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
       </span>
+      <VacancyFitSummary compact view={item.explanation.fitView} />
       {applicationStatus ? (
         <span className={`applied-note${applicationArchived ? ' is-archived' : ''}`}>
           {applicationStatus}

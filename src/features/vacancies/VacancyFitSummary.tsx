@@ -1,0 +1,74 @@
+import type { VacancyFitView } from '../../../shared/vacancyFit';
+const STATE_LABELS = {
+  not_requested: 'Соответствие ещё не рассчитано',
+  processing: 'Расчёт в очереди. Результат появится после обработки.',
+  no_description: 'Нет описания вакансии для расчёта',
+  no_requirements: 'В описании пока не найдены требования',
+  failed: 'Расчёт недоступен. Попробуйте ещё раз.',
+  ready: 'Недостаточно подтверждённых данных для расчёта',
+};
+const REASONS = {
+  blocked_gate: 'Есть обязательное условие, которое не совпадает с профилем',
+  unknown_gate: 'Не все обязательные условия подтверждены',
+  no_requirements: 'Нет извлечённых требований для расчёта',
+  no_eligible_facts: 'В профиле нет подтверждённых фактов для сравнения',
+  assessment_unavailable: 'Сравнение с фактами профиля пока недоступно',
+  assessed: 'Недостаточно подтверждённых данных для расчёта',
+};
+export function fitHasNumber(view?: VacancyFitView) {
+  return (
+    view?.state === 'ready' &&
+    view.result?.status === 'assessed' &&
+    view.result.dataState !== 'unknown' &&
+    typeof view.result.coveragePercent === 'number' &&
+    Number.isFinite(view.result.coveragePercent) &&
+    view.result.coveragePercent >= 0 &&
+    view.result.coveragePercent <= 100
+  );
+}
+function fitDate(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return 'Дата расчёта неизвестна';
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    timeZone: 'Europe/Moscow',
+  }).format(new Date(value));
+}
+export function VacancyFitSummary({
+  view,
+  compact = false,
+}: {
+  readonly view?: VacancyFitView;
+  readonly compact?: boolean;
+}) {
+  const result = view?.result;
+  const numeric = fitHasNumber(view);
+  const reason =
+    view?.state === 'ready' && result
+      ? REASONS[result.reason]
+      : STATE_LABELS[view?.state ?? 'not_requested'];
+  return (
+    <span
+      className={`vacancy-fit-summary${compact ? ' is-compact' : ''}`}
+      data-fit-state={view?.state ?? 'not_requested'}
+    >
+      <span className="vacancy-fit-label">Соответствие вашему профилю</span>
+      {numeric && result ? (
+        <>
+          <strong className="vacancy-fit-percent">{result.coveragePercent}%</strong>
+          <span>
+            {result.coverage.matched} из {result.coverage.total} требований ·{' '}
+            {fitDate(result.calculatedAt)}
+          </span>
+          <span className="vacancy-fit-track" aria-hidden="true">
+            <span style={{ inlineSize: `${result.coveragePercent}%` }} />
+          </span>
+          {result.dataState === 'partial' ? <span>Часть требований пока не проверена</span> : null}
+        </>
+      ) : (
+        <span>{reason}</span>
+      )}
+    </span>
+  );
+}

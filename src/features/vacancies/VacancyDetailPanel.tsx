@@ -1,3 +1,4 @@
+import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
 import { useState, type FormEvent } from 'react';
 import { ArrowLeft, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -122,6 +123,7 @@ function VacancyDetailPanelView(props: VacancyDetailViewProps) {
         trust={trust}
         onBack={onBack}
       />
+      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={onAddToProfile} />
       <VacancyProfileEvidence
         cluster={cluster}
         explanation={explanation}
@@ -200,7 +202,7 @@ function VacancyProfileEvidence({
   return (
     <>
       <VacancySignalGrid signals={signals} />
-      <div className="vacancies-detail-requirements">
+      {!explanation.fitView?<div className="vacancies-detail-requirements">
         {vacancyLevel ? (
           <p className="vacancies-detail-level-row">
             Уровень вакансии: <strong>{LEVEL_HUMAN_NAMES[vacancyLevel]}</strong>
@@ -216,7 +218,7 @@ function VacancyProfileEvidence({
           points={skillMissing}
           onAddToProfile={onAddToProfile}
         />
-      </div>
+      </div>:null}
 
       <div className="vacancies-detail-description vacancies-req-block">
         <h4>Вилка</h4>
