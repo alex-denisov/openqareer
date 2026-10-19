@@ -39,6 +39,12 @@ export class SqliteVacancyFitStore {
     return this.sealedText.indexToken(`vacancy-fit:${input.candidateId}`, JSON.stringify(fingerprint));
   }
 
+  getJobState(input: VacancyFitInput): string | undefined {
+    const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=? AND candidate_key=?')
+      .get(this.cacheKey(input), this.candidateKey(input.candidateId)) as { status: string } | undefined;
+    return row?.status;
+  }
+
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
     const key = this.cacheKey(input);
     const row = this.database.prepare('SELECT result_cipher FROM vacancy_fit_cache WHERE cache_key = ? AND candidate_key = ?').get(key, this.candidateKey(input.candidateId)) as { result_cipher: string } | undefined;
@@ -66,6 +72,13 @@ export class SqliteVacancyFitStore {
     return { key, status: row.status };
   }
 
+  retryFailed(input: VacancyFitInput, now = new Date().toISOString()): void {
+    const key = this.cacheKey(input);
+    this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,
+      lease_token=NULL,lease_until=NULL,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
+      .run(this.sealedText.seal(JSON.stringify(input), key), now, key, this.candidateKey(input.candidateId));
+  }
+
   /** One atomic update makes competing workers safe; expired work is retried with a new fencing token. */
   claim(options: { now?: string; leaseMs?: number } = {}): VacancyFitJob | undefined {
     const now = options.now ?? new Date().toISOString();
@@ -74,8 +87,8 @@ export class SqliteVacancyFitStore {
     const leaseUntil = new Date(Date.parse(now) + leaseMs).toISOString();
     const token = randomUUID();
     const row = this.database.prepare(`UPDATE vacancy_fit_queue SET status='leased',lease_token=?,lease_until=?,attempts=attempts+1,updated_at=?
-      WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE status='pending' OR (status='leased' AND lease_until<=?) ORDER BY created_at,cache_key LIMIT 1)
-      RETURNING cache_key,input_cipher,lease_token,lease_until,attempts`).get(token, leaseUntil, now, now) as JobRow | undefined;
+      WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE (status='pending' AND (lease_until IS NULL OR lease_until<=?)) OR (status='leased' AND lease_until<=?) ORDER BY created_at,cache_key LIMIT 1)
+      RETURNING cache_key,input_cipher,lease_token,lease_until,attempts`).get(token, leaseUntil, now, now, now) as JobRow | undefined;
     if (!row) return undefined;
     try {
       const input = JSON.parse(this.sealedText.open(row.input_cipher, row.cache_key)) as VacancyFitInput;
@@ -101,6 +114,15 @@ export class SqliteVacancyFitStore {
       this.database.exec('COMMIT');
       return true;
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
+  }
+
+  defer(job: VacancyFitJob, now = new Date().toISOString(), delayMs = 5000): boolean {
+    const available = new Date(Date.parse(now) + delayMs).toISOString();
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue
+      SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),updated_at=?
+      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`)
+      .run(available, now, job.key, job.leaseToken, now);
+    return Number(update.changes) === 1;
   }
 
   fail(job: VacancyFitJob, options: { retry?: boolean; now?: string } = {}): boolean {

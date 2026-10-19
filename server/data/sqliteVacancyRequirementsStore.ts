@@ -63,6 +63,12 @@ export class SqliteVacancyRequirementsStore {
     return row ? JSON.parse(row.result_json) as VacancyRequirementsResult : null;
   }
 
+  retryFailed(input: VacancyRequirementsInput, now = Date.now()): void {
+    this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='queued',attempts=0,available_at=0,
+      lease_token=NULL,lease_until=NULL,last_error=NULL,updated_at=? WHERE cache_key=? AND status='failed'`)
+      .run(now, vacancyRequirementsCacheKey(input));
+  }
+
   enqueue(input: VacancyRequirementsInput, options: { titleStrategyPriority?: number; freshAt?: number; now?: number } = {}): { state: 'cached' | 'queued' | 'failed'; jobId?: string } {
     const cached = this.get(input);
     if (cached) {

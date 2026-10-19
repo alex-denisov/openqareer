@@ -109,7 +109,7 @@ export async function createApp(
   });
 
   resources.push({ app, auth, candidates, directory });
-  return { app, candidates, multiSourceEngine, poolStore };
+  return { app, candidates, multiSourceEngine, poolStore, databasePath, auth };
 }
 
 export async function login(app: Awaited<ReturnType<typeof buildApp>>) {

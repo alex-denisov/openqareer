@@ -21,7 +21,7 @@ async function click(text: string) {
   return button;
 }
 function emptyPage() {
-  return { items: [], meta: { total: 0, limit: 100, offset: 0, stageCounts: {}, source: 'server' } };
+  return { items: [], meta: { total: 0, limit: 100, offset: 0, stageCounts: { saved: 0, applied: 0, responded: 0, interview: 0, offer: 0, rejected: 0, archived: 0 }, source: 'server' } };
 }
 describe('B355 real analytics disclosure', () => {
   it('loads a complete cohort only after real toggle and exposes expanded state', async () => {

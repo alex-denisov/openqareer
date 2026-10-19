@@ -73,7 +73,10 @@ test('B355 exposes a complete archived-history funnel through a real accessible 
     panel.locator('.career-pipeline-kpi-card').filter({ hasText: 'Сквозная конверсия' }),
   ).toContainText('50%');
   await expect(
-    panel.locator('.career-pipeline-funnel-row').filter({ hasText: 'Откликнулись' }).locator('.career-pipeline-funnel-count'),
+    panel
+      .locator('.career-pipeline-funnel-row')
+      .filter({ hasText: 'Откликнулись' })
+      .locator('.career-pipeline-funnel-count'),
   ).toHaveText('2');
   await expect(
     panel.locator('.career-pipeline-funnel-row').filter({ hasText: 'Получен оффер' }),

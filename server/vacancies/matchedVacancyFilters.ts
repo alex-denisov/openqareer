@@ -15,6 +15,7 @@ export const matchedVacanciesQuerySchema = z.object({
   source: repeated(z.string().min(1)),
   role: repeated(z.string().min(1)),
   remote: z.literal('1').optional(),
+  sort: z.enum(['fit', 'freshness']).optional(),
 });
 export type MatchedVacancyFilters = z.infer<typeof matchedVacanciesQuerySchema>;
 

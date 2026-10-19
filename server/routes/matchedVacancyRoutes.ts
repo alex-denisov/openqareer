@@ -25,6 +25,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
+import { withVacancyFitOrder } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
@@ -96,16 +97,16 @@ function buildMatchedResponse(
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
+  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
 ) {
-  const { offset } = filters;
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = finishMatchedVacancies(
+  const matched = decorate(finishMatchedVacancies(
     snapshot,
     targetRoles,
     campaign,
     candidateStore,
     candidateId,
-  );
+  ));
   const hypothesisSnapshot = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
     : snapshot;
@@ -120,7 +121,7 @@ function buildMatchedResponse(
     readLevel,
     sourceRegistry,
   );
-  const page = buildMatchedVacancyPage(filtered, offset);
+  const page = buildMatchedVacancyPage(filtered, filters.offset);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
@@ -203,6 +204,7 @@ async function readMatchedPage(
   titleParseStore: RouteDeps['titleParseStore'],
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
+  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
 ) {
   const startedAt = performance.now();
   const snapshot = await readMatchedSnapshot(
@@ -223,6 +225,7 @@ async function readMatchedPage(
       titleParseStore,
       filters,
       sourceRegistry,
+      decorate,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
   };
@@ -249,10 +252,11 @@ function matchedVacancyResponse(
 }
 
 const handleMatchedVacancies: Handler = async (
-  { authService, candidateStore, config, multiSourceEngine, titleParseStore },
+  deps,
   request,
   reply,
 ) => {
+  const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const requestStartedAt = performance.now();
   const cold = !observedMatchEngines.has(multiSourceEngine);
   observedMatchEngines.add(multiSourceEngine);
@@ -285,6 +289,7 @@ const handleMatchedVacancies: Handler = async (
     titleParseStore,
     filters,
     sourceRegistry,
+    withVacancyFitOrder(deps, candidate.id, filters.sort ?? 'fit'),
   );
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает

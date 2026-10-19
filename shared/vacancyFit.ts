@@ -1,4 +1,10 @@
 /** Percentages describe verified requirement coverage, never hiring probability. */
+import type { VacancyRequirement } from '../server/domain/vacancyRequirements';
+export interface VacancyFitView {
+  readonly state: 'not_requested' | 'processing' | 'ready' | 'no_description' | 'no_requirements' | 'failed';
+  readonly requirements: readonly VacancyRequirement[];
+  readonly result?: VacancyFitResult;
+}
 export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-1';
 export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
 export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];

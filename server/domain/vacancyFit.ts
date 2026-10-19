@@ -8,6 +8,7 @@ export interface VacancyFitInput {
   readonly candidateId: string;
   readonly vacancyId: string;
   readonly description: string;
+  readonly profileContextHash?: string;
   readonly requirements: readonly VacancyRequirement[];
   readonly facts: readonly VacancyFitFact[];
   /** Authoritative rule/owner evidence gates, never model-generated probabilities. */
@@ -41,7 +42,7 @@ export function vacancyFitFingerprint(input: VacancyFitInput): { vacancyHash: st
   const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
   return {
     vacancyHash: hash([input.vacancyId, input.description, input.requirements]),
-    profileHash: hash([input.candidateId, input.facts, input.gates]),
+    profileHash: hash([input.candidateId, input.facts, input.gates, input.profileContextHash]),
     algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
   };
 }

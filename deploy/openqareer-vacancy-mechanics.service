@@ -1,0 +1,36 @@
+[Unit]
+Description=OpenQareer bounded vacancy requirements and profile-fit worker
+After=network-online.target openqareer-static.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openqareer-deploy
+Group=openqareer-deploy
+Environment=NODE_ENV=production
+Environment=OPENQAREER_DATABASE_PATH=/var/lib/openqareer/openqareer.db
+Environment=NODE_OPTIONS=--max-old-space-size=512
+EnvironmentFile=/etc/openqareer/openqareer.env
+ExecStart=/opt/openqareer/node-v24.14.1-linux-x64/bin/node /srv/openqareer/current/vacancy-mechanics-worker.mjs
+Restart=on-failure
+RestartSec=30s
+TimeoutStopSec=240s
+KillMode=mixed
+UMask=0077
+MemoryMax=1G
+MemorySwapMax=0
+Nice=10
+CPUWeight=20
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadOnlyPaths=/srv/openqareer
+ReadWritePaths=/var/lib/openqareer
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
