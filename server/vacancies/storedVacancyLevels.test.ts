@@ -35,5 +35,13 @@ describe('addStoredVacancyLevels', () => {
     const result = addStoredVacancyLevels([item()], 'vp', () => ({ levelRank: 3 }));
 
     expect(result[0].explanation.levelMatch).toBe('match');
+    expect(result[0].explanation.vacancyLevel).toBe('vp');
+  });
+
+  it('sends no vacancy level when the title gives none', () => {
+    const result = addStoredVacancyLevels([item()], 'vp', () => ({ levelRank: null }));
+
+    expect(result[0].explanation.levelMatch).toBe('unknown');
+    expect(result[0].explanation.vacancyLevel).toBeUndefined();
   });
 });

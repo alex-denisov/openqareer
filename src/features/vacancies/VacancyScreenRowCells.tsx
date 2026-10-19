@@ -4,7 +4,21 @@ import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
 
-function vacancyLevelLabel(title: string): string {
+const VACANCY_LEVEL_LABEL = {
+  ic: 'Специалист',
+  lead: 'Лид',
+  head: 'Head',
+  vp: 'VP',
+  'c-level': 'C-level',
+} as const;
+
+/** Подпись уровня — тот же уровень, с которым сервер сравнивал кандидата. */
+export function vacancyLevelLabel(item: MatchedVacancyItem): string {
+  const level = item.explanation.vacancyLevel;
+  return level ? VACANCY_LEVEL_LABEL[level] : titleLevelLabel(item.cluster.canonicalTitle);
+}
+
+function titleLevelLabel(title: string): string {
   return (
     title.match(
       /^(C-level|CEO|CTO|VP|Vice President|Head|Director|Lead|Senior|Staff|Principal|Junior|Руководитель|Директор|Лид|Специалист)\b/iu,
@@ -67,7 +81,7 @@ function VacancyScreenLevelCell({ item }: { readonly item: MatchedVacancyItem })
         : 'не совпадает';
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--level" data-label="Уровень">
-      <span>{vacancyLevelLabel(item.cluster.canonicalTitle)}</span>
+      <span>{vacancyLevelLabel(item)}</span>
       <span className="vacancies-screen-fit-status">
         <span aria-hidden="true">
           <LevelFitDot levelMatch={item.explanation.levelMatch} />

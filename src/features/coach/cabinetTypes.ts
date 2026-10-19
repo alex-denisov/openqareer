@@ -24,12 +24,7 @@ export interface AccountSnapshot {
 }
 
 export type CandidateDocumentKind =
-  | 'resume'
-  | 'cover_letter'
-  | 'certificate'
-  | 'portfolio'
-  | 'profile_export'
-  | 'other';
+  'resume' | 'cover_letter' | 'certificate' | 'portfolio' | 'profile_export' | 'other';
 
 export interface CandidateDocument {
   id: string;
@@ -114,12 +109,7 @@ export interface VacancySourceRegistryEntry {
   documentationUrl: string;
   reviewedAt: string;
   health: {
-    status:
-      | 'not_checked'
-      | 'healthy'
-      | 'degraded'
-      | 'unavailable'
-      | 'official_access_required';
+    status: 'not_checked' | 'healthy' | 'degraded' | 'unavailable' | 'official_access_required';
     lastAttemptAt: string | null;
     lastSuccessAt: string | null;
     lastErrorCode: string | null;
@@ -198,6 +188,7 @@ interface VacancyMatchExplanation {
    * ролью и гео (B248). Неизвестный разбор показывается явно.
    */
   levelMatch: VacancyLevelMatch;
+  vacancyLevel?: 'ic' | 'lead' | 'head' | 'vp' | 'c-level';
   /**
    * Требования вакансии: сколько перечислено и сколько подтверждено.
    * `undefined` — требований нет, и соответствие не выдумывается (PRB-016).

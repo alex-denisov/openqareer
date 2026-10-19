@@ -1,4 +1,4 @@
-import { evaluateLevelMatch } from './levelMatcher';
+import { evaluateLevelMatch, inferSeniorityLevel, levelFromRank } from './levelMatcher';
 import { normalizeTitleKey } from './titleParse/normalizeTitleKey';
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { deriveCandidateTargetLevel } from './candidateLevel';
@@ -11,10 +11,15 @@ export function addStoredVacancyLevels(
 ): MatchedVacancyItem[] {
   return items.map((item) => {
     const parsed = getTitleParse(normalizeTitleKey(item.cluster.canonicalTitle));
+    const vacancyLevel =
+      parsed === undefined
+        ? inferSeniorityLevel(item.cluster.canonicalTitle)
+        : levelFromRank(parsed.levelRank);
     return {
       ...item,
       explanation: {
         ...item.explanation,
+        vacancyLevel,
         levelMatch: evaluateLevelMatch(
           candidateLevel,
           item.cluster.canonicalTitle,
