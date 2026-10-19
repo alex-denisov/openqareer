@@ -131,7 +131,7 @@ function ineligibleEvidenceMessage(
 ): string {
   switch (reason) {
     case 'not-confirmed':
-      return 'Факт ещё не подтверждён кандидатом — подтвердите его на «Главной».';
+      return 'Вы ещё не подтвердили этот факт: «Проверить факты» на «Сегодня».';
     case 'sensitive':
       return 'Факт помечен чувствительным и не попадает в документ.';
     case 'no-provenance':

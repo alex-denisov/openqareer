@@ -472,7 +472,7 @@ describe('POST /api/v1/candidate/resume/import', () => {
     expect(onImport.master.unknowns).toContainEqual(
       expect.objectContaining({
         code: 'ineligible-evidence',
-        message: 'Факт ещё не подтверждён кандидатом — подтвердите его на «Главной».',
+        message: 'Вы ещё не подтвердили этот факт: «Проверить факты» на «Сегодня».',
       }),
     );
 
