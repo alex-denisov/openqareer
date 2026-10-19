@@ -3,6 +3,7 @@ import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { readCampaign } from './campaignContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import { evaluateLevelMatch } from '../vacancies/levelMatcher';
+import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import { regionOfVacancy } from '../vacancies/vacancyGeography';
 import { isResumeEvidenceEligible } from '../domain/resumeEvidenceEligibility';
 import type { VacancyFitInput } from '../domain/vacancyFit';
@@ -50,7 +51,7 @@ export function createVacancyFitContextReader(deps: RouteDeps, candidateId: stri
   const campaign = readCampaign(deps.candidateStore, candidateId);
   const targetLevel = readTargetLevel(deps.candidateStore, candidateId, campaign.roles.value);
   return (target: NonNullable<ReturnType<typeof readVacancyFitTarget>>, requirements: readonly VacancyRequirement[]): VacancyFitInput => {
-  const level = evaluateLevelMatch(targetLevel, target.title);
+  const level = evaluateLevelMatch(targetLevel, target.title, deps.titleParseStore.getByKey(normalizeTitleKey(target.title))?.levelRank);
   const region = regionOfVacancy({ location: target.location, country: target.country });
   const eligible = facts.filter(isResumeEvidenceEligible);
   const location = (target.country ?? target.location ?? '').toLocaleLowerCase();
