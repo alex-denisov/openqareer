@@ -29,6 +29,7 @@ import {
   type TodayQueueItem,
   type TodaySnapshot,
 } from './todayApi';
+import { TodayLinkedinNote } from './TodayLinkedinNote';
 import { TODAY_NOTHING_TO_DECIDE, TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
   todayFunnelFootnote,
@@ -84,6 +85,7 @@ export interface TodayScreenProps {
   readonly onOpenTariffs?: () => void;
   readonly onOpenAutomation?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onOpenConnections?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
@@ -268,6 +270,7 @@ function todayContentProps(
     onLoadQueueRemainder: props.onLoadQueueRemainder,
     onNavigate: props.onNavigate,
     onOpenExpert: props.onOpenExpert,
+    onOpenConnections: props.onOpenConnections,
     onDiscussQueueItem: props.onDiscussQueueItem,
     onNavigateProfileTarget: props.onNavigateProfileTarget,
     profileDraft: props.profileDraft,
@@ -280,6 +283,7 @@ interface TodayContentProps {
   readonly profileDraft?: ResumeDraft;
   readonly funnelContext?: TodayFunnelContext;
   readonly onOpenExpert?: () => void;
+  readonly onOpenConnections?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
@@ -313,6 +317,7 @@ function TodayContent(props: TodayContentProps) {
         queueRemainderLoading={props.queueRemainderLoading}
         queueRemainderFailed={props.queueRemainderFailed}
         onLoadQueueRemainder={props.onLoadQueueRemainder}
+        onOpenConnections={props.onOpenConnections}
       />
     </div>
   );
@@ -329,8 +334,10 @@ function TodayMobileContent({
   onNavigate,
   profileDraft,
   funnelContext,
+  onOpenConnections,
 }: Pick<
   TodayContentProps,
+  | 'onOpenConnections'
   | 'snapshot'
   | 'activeAction'
   | 'onAccept'
@@ -359,6 +366,7 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
+      <TodayLinkedinNote queueSize={snapshot.queue.length} onOpenConnections={onOpenConnections} />
       <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>

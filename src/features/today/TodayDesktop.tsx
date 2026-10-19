@@ -20,6 +20,7 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
+import { TodayLinkedinNote } from './TodayLinkedinNote';
 import {
   type TodayProfileFocus,
   type TodayQueueItem,
@@ -56,6 +57,7 @@ interface TodayDesktopContentProps {
   readonly queueRemainderLoading?: boolean;
   readonly queueRemainderFailed?: boolean;
   readonly onLoadQueueRemainder?: () => Promise<void>;
+  readonly onOpenConnections?: () => void;
 }
 
 export function TodayDesktopContent(props: TodayDesktopContentProps) {
@@ -85,6 +87,10 @@ export function TodayDesktopContent(props: TodayDesktopContentProps) {
         onLoadQueueRemainder={props.onLoadQueueRemainder}
         onNavigate={props.onNavigate}
         onDiscussQueueItem={props.onDiscussQueueItem}
+      />
+      <TodayLinkedinNote
+        queueSize={props.snapshot.queue.length}
+        onOpenConnections={props.onOpenConnections}
       />
       <TodayFunnel snapshot={props.snapshot} context={props.funnelContext} />
     </div>

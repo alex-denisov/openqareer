@@ -485,3 +485,34 @@
     display: none;
   }
 }
+
+/* Макет 1 «Частично: LinkedIn не подключён» — 1440 и 390. */
+.today-linkedin-note {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.today-linkedin-note p {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.today-linkedin-note svg {
+  flex: none;
+  margin-block-start: 2px;
+}
+
+.today-linkedin-note .career-quiet-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+}

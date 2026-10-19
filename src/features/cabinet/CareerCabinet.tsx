@@ -415,6 +415,7 @@ function TodaySection(props: {
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
   onDiscussQueueItem?: (item: TodayQueueItem) => void;
   onOpenTariffs?: () => void;
+  onOpenConnections?: () => void;
   onOpenAutomation?: () => void;
   profileDraft?: ResumeDraft;
   funnelContext?: TodayFunnelContext;
@@ -525,6 +526,7 @@ function CabinetSection({
     return (
       <TodaySection
         onOpenTariffs={onOpenTariffs}
+        onOpenConnections={onOpenConnections}
         onOpenAutomation={onOpenAutomation}
         candidateId={session.candidateId}
         consultantAction={consultantAction}
