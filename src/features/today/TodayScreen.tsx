@@ -294,6 +294,14 @@ function TodayContent(props: TodayContentProps) {
   );
 }
 
+function linkedinNoteProps(snapshot: TodaySnapshot, onOpenConnections?: () => void) {
+  return {
+    queueSize: snapshot.queue.length,
+    connectedSources: snapshot.connectedSources,
+    onOpenConnections,
+  };
+}
+
 function TodayMobileContent({
   snapshot,
   activeAction,
@@ -337,11 +345,7 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
-      <TodayLinkedinNote
-        queueSize={snapshot.queue.length}
-        connectedSources={snapshot.connectedSources}
-        onOpenConnections={onOpenConnections}
-      />
+      <TodayLinkedinNote {...linkedinNoteProps(snapshot, onOpenConnections)} />
       <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>

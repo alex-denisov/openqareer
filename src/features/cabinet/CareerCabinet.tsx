@@ -1,4 +1,5 @@
 import { useTodayDiaryDecision } from '../today/useTodayDiaryDecision';
+import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -423,7 +424,13 @@ function TodaySection(props: {
   onOpenExpert?: () => void;
 }) {
   const today = useToday();
-  const diaryDecision = useTodayDiaryDecision(Boolean(props.candidateId));
+  const diaryAccess = useCareerDiaryAccess();
+  // Решение из дневника — только когда сам дневник открыт (текущее место в профиле).
+  const diaryDecision = useTodayDiaryDecision(
+    Boolean(props.candidateId) &&
+      diaryAccess.isVisible &&
+      diaryAccess.primaryWorkplace?.status === 'active',
+  );
   return (
     <TodayScreen
       {...props}
