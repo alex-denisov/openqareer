@@ -8630,6 +8630,26 @@
   font-size: var(--career-text-xs);
 }
 
+/* Макет 2 «ATS: нет избранных вакансий»: заметка с иконкой Info под оценкой. */
+.career-profile-ats-role-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-profile-ats-role-note svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--career-text-dim);
+}
+
 /* Макет 1 «Ошибка»: красная заметка и тихая кнопка «Повторить» на всю ширину карточки. */
 .career-today-state-error {
   justify-items: stretch;

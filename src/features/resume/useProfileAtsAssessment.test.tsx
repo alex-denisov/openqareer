@@ -28,6 +28,9 @@ const api = vi.hoisted(() => ({
 
 vi.mock('./resumeVersionsApi', () => api);
 
+const coach = vi.hoisted(() => ({ getRoleHypotheses: vi.fn() }));
+vi.mock('../coach/coachApi', () => coach);
+
 const unknownDimension = (maximum: number) => ({
   score: null,
   maximum,
@@ -179,13 +182,14 @@ function setFieldValue(field: HTMLInputElement | HTMLTextAreaElement, value: str
 }
 
 function AssessmentHarness() {
-  const { assessment, sourceVersion, loading, error } = useProfileAtsAssessment();
+  const { assessment, sourceVersion, roleBasis, loading, error } = useProfileAtsAssessment();
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
       <span data-testid="assessment">{assessment?.total.score ?? 'unknown'}</span>
       <span data-testid="source-version">{sourceVersion?.title ?? 'none'}</span>
       <span data-testid="error">{error ?? 'none'}</span>
+      <span data-testid="role-basis">{roleBasis ?? 'none'}</span>
     </div>
   );
 }
@@ -203,6 +207,7 @@ beforeEach(() => {
     currentMasterRevision: 'master-revision-current',
   });
   api.getResumeAtsAssessment.mockResolvedValue(unknownAssessment);
+  coach.getRoleHypotheses.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -402,5 +407,52 @@ describe('ProfileResumeVersions persistence handlers', () => {
     });
     expect(mounted.textContent).toContain('Версия под вакансию «Platform Engineer II»');
     expect(storedVersions.get(VERSION_ID)?.revision).toBe(2);
+  });
+});
+
+describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избранных вакансий»)', () => {
+  it('measures keywords by the Career role when no targeted version exists', async () => {
+    coach.getRoleHypotheses.mockResolvedValue([
+      {
+        id: 'r1',
+        title: 'Head of Engineering',
+        origin: 'market',
+        reason: null,
+        evidenceRefs: [],
+        family: null,
+        confirmation: {
+          state: 'observed',
+          sampleSize: 40,
+          observedFrom: '2026-09-01',
+          observedTo: '2026-10-01',
+          sources: [{ source: 'hh', count: 40 }],
+          repeatedRequirements: ['Kafka'],
+          matchedRequirements: 0,
+        },
+      },
+    ]);
+    const mounted = mount(<AssessmentHarness />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith(
+      { title: 'По роли «Head of Engineering»', requirements: ['Kafka'] },
+      expect.any(AbortSignal),
+    );
+    expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe(
+      'Head of Engineering',
+    );
+  });
+
+  it('keeps the old request when roles cannot be read', async () => {
+    coach.getRoleHypotheses.mockRejectedValue(new Error('offline'));
+    const mounted = mount(<AssessmentHarness />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(api.getResumeAtsAssessment).toHaveBeenCalledWith({}, expect.any(AbortSignal));
+    expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe('none');
   });
 });

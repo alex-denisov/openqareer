@@ -35,7 +35,8 @@ export function profileRelocationSummaryLabel(status: ProfileRelocationSummarySt
 export function profileRelocationSummaryDetail(status: ProfileRelocationSummaryStatus): string {
   if (status === 'enabled') return 'Данные о переезде доступны только вам.';
   if (status === 'prepared') return 'Согласие ожидает проверки и пока не может быть принято.';
-  if (status === 'not_enabled') return 'Согласие отозвано или ещё не выдано.';
+  if (status === 'not_enabled')
+    return 'Релокация выключена. Включите её, ответив на короткую анкету, около 5 минут.';
   if (status === 'loading') return 'Проверяем согласие и данные о переезде.';
   return 'Не удалось загрузить статус релокации.';
 }
@@ -92,7 +93,7 @@ function RelocationHead({
       {onOpen ? (
         <button type="button" className="career-secondary-button career-btn-sm" onClick={onOpen}>
           <ArrowRight size={16} aria-hidden="true" />
-          <span>Открыть</span>
+          <span>{summary === 'not_enabled' ? 'Заполнить анкету' : 'Открыть'}</span>
         </button>
       ) : null}
     </div>

@@ -1,6 +1,7 @@
 import { Info, Sparkle } from '@phosphor-icons/react';
 import type { ResumeAtsDimension } from '../../../server/domain/resumeAtsAssessment';
 import type { ProfileAtsAssessmentState } from './useProfileAtsAssessment';
+import { ATS_ROLE_BASIS_NOTE } from './atsRoleBasis';
 import type { ProfileMobileDataProps } from './profileMobileTypes';
 
 function ScoreRing({
@@ -170,6 +171,12 @@ export function ProfileMobileAts(
   return (
     <>
       <ScoreGauge score={ats.assessment?.total.score ?? null} />
+      {ats.roleBasis ? (
+        <div className="pm-tip">
+          <Info size="1em" aria-hidden="true" />
+          <span>{ATS_ROLE_BASIS_NOTE}</span>
+        </div>
+      ) : null}
       {ats.loading ? (
         <p className="pm-note" role="status">
           Считаем оценку по данным резюме…
