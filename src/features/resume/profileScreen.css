@@ -43,6 +43,8 @@
 .career-profile-screen-view .career-profile-screen-icon-button {
   width: var(--career-target-min);
   min-height: var(--career-target-min);
+  /* Макет 2: правка строки — ghost-кнопка без рамки, как у места работы. */
+  border-color: transparent;
 }
 
 .career-profile-screen-anchor-nav a {
