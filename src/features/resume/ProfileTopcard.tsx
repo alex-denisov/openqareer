@@ -27,6 +27,7 @@ import type {
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
 import { connectionStatusLabel, factCountLabel, importDateLabel } from './profileSourceLabels';
 import { ProfileSourceDialog } from './ProfileSourceDialog';
+import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 
 interface ProfileTopcardProps {
   readonly draft: ResumeDraft;
@@ -697,6 +698,7 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
       <ProfileImportLive onReimport={props.onOpenConnections} />
+      <ProfileImportFailureNote variant="desktop" onReimport={props.onOpenConnections} />
     </div>
   );
 }

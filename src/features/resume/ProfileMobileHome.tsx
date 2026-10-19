@@ -1,4 +1,5 @@
 import { ProfileEmptyStart } from './ProfileEmptyStart';
+import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -188,28 +189,31 @@ export function ProfileMobileSources({
 }) {
   const progress = linkedinImportProgressView(useLinkedInImportProgress());
   return (
-    <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
-      {(['linkedin', 'hh'] as const).map((platform) => {
-        const source = importedSources?.find((item) => item.platform === platform);
-        return (
-          <ProfileMobileRow
-            key={platform}
-            icon={platform === 'linkedin' ? LinkedinLogo : FileText}
-            title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
-            detail={
-              platform === 'linkedin' && progress
-                ? `читаем разделы, ${progress.readCount} из ${progress.total}`
-                : source
-                  ? pluralRu(source.factCount, ['факт', 'факта', 'фактов'])
-                  : 'Не импортировано'
-            }
-            value={profileMobileDate(source?.lastImportedAt)}
-            onClick={onSelect}
-          />
-        );
-      })}
-      <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
-    </ProfileMobileGroup>
+    <>
+      <ProfileImportFailureNote variant="mobile" onReimport={onSelect} />
+      <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
+        {(['linkedin', 'hh'] as const).map((platform) => {
+          const source = importedSources?.find((item) => item.platform === platform);
+          return (
+            <ProfileMobileRow
+              key={platform}
+              icon={platform === 'linkedin' ? LinkedinLogo : FileText}
+              title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
+              detail={
+                platform === 'linkedin' && progress
+                  ? `читаем разделы, ${progress.readCount} из ${progress.total}`
+                  : source
+                    ? pluralRu(source.factCount, ['факт', 'факта', 'фактов'])
+                    : 'Не импортировано'
+              }
+              value={profileMobileDate(source?.lastImportedAt)}
+              onClick={onSelect}
+            />
+          );
+        })}
+        <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
+      </ProfileMobileGroup>
+    </>
   );
 }
 

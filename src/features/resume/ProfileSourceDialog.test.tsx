@@ -33,7 +33,7 @@ function render(onOpenConnections = vi.fn()) {
         platform="linkedin"
         connection={connected}
         factCount={9}
-        importedAt={connected.lastImportedAt}
+        importedAt="2026-09-12T08:00:00.000Z"
         isOpen
         onClose={vi.fn()}
         onOpenConnections={onOpenConnections}
