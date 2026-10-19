@@ -57,7 +57,7 @@ describe('ProfileSourceDialog (макет 2 «Модальное окно: ис�
     const body = render();
     expect(body.textContent).toContain('Подключено');
     expect(body.textContent).toContain('с 10.09');
-    expect(body.textContent).toContain('Импортировано 9 фактов, 12.09.');
+    expect(body.textContent).toContain('В профиле 9 фактов из этого источника, импорт 12.09.');
   });
 
   it('disconnects only after confirmation and keeps imported facts', async () => {

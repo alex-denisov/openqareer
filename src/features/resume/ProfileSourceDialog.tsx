@@ -41,12 +41,12 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
       icon={<LinkSimple size={20} aria-hidden="true" />}
       onClose={props.onClose}
     >
-      <div className="career-modal-body profile-source-dialog">
+      <div className="career-modal-body profile-source-dialog career-token-scope">
         <SourceStatus connection={props.connection} disconnected={phase === 'disconnected'} />
         <p>{importSummary(props.factCount, props.importedAt)}</p>
         <PhaseNotice phase={phase} />
       </div>
-      <div className="career-modal-footer">
+      <div className="career-modal-footer career-token-scope">
         {connected ? (
           <DisconnectControl
             label={label}
@@ -150,5 +150,5 @@ function DisconnectControl({
 export function importSummary(factCount?: number, importedAt?: string): string {
   if (factCount === undefined) return 'Импорта из этого источника ещё не было.';
   const date = importDateLabel(importedAt);
-  return `Импортировано ${factCountLabel(factCount)}${date ? `, ${date}` : ''}.`;
+  return `В профиле ${factCountLabel(factCount)} из этого источника${date ? `, импорт ${date}` : ''}.`;
 }

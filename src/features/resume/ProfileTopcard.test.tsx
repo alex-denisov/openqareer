@@ -235,6 +235,8 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
             headline: 'PM, Acme · Москва',
             contact: { location: 'Москва' },
           },
+          // Без текущего места подзаголовок — заголовок резюме; повторов в нём быть не должно.
+          experience: draft.experience.map((entry) => ({ ...entry, current: false })),
         }}
         onDraftChange={() => {}}
         reader={null}
@@ -243,5 +245,35 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
     expect(html).toContain('PM, Acme · Москва');
     expect(html).not.toContain('PM, Acme · Москва, Acme');
     expect(html).not.toContain('career-profile-screen-inline-location');
+  });
+
+  it('names the current role and employer, not the whole imported headline (макет 2, 1440)', () => {
+    const html = renderToStaticMarkup(
+      <ProfileTopcard
+        draft={{
+          ...draft,
+          candidate: {
+            ...draft.candidate,
+            headline:
+              'Маркет Софт, Санкт-Петербург — Директор · Финтех Лаб, Москва — Head of Engineering',
+            contact: { location: 'Москва' },
+          },
+          experience: [
+            {
+              id: 'work-1',
+              chronologyMemoryId: 'memory-work-1',
+              title: 'Head of Engineering',
+              employer: 'Финтех Лаб',
+              current: true,
+              bulletMemoryIds: [],
+            },
+          ],
+        }}
+        onDraftChange={() => {}}
+        reader={null}
+      />,
+    );
+    expect(html).toContain('Head of Engineering, Финтех Лаб');
+    expect(html).not.toContain('Маркет Софт');
   });
 });

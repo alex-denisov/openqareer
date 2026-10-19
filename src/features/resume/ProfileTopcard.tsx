@@ -533,7 +533,11 @@ function TopcardName({ name, onEdit }: { readonly name?: string; readonly onEdit
 }
 
 function TopcardProfileMeta({ draft }: { readonly draft: ResumeDraft }) {
-  const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
+  // Макет 2: «должность, компания · город» текущего места; заголовок резюме — если места нет.
+  const headline =
+    draft.experience.find((entry) => entry.current)?.title?.trim() ||
+    draft.candidate.headline?.trim() ||
+    draft.targetRole?.trim();
   const contains = (text: string | undefined, part: string | undefined) =>
     Boolean(
       text && part && text.toLocaleLowerCase('ru-RU').includes(part.toLocaleLowerCase('ru-RU')),

@@ -699,7 +699,7 @@ test.describe('B441 Profile screen from mockup 2', () => {
     if (testInfo.project.name !== 'mobile-390') {
       // Mockup 2 «Модальное окно: источник»: the chip opens the source dialog first.
       const dialog = page.getByRole('dialog', { name: 'LinkedIn' });
-      await expect(dialog).toContainText('Импортировано 9 фактов');
+      await expect(dialog).toContainText('В профиле 9 фактов');
       await dialog.getByRole('button', { name: /Импортировать заново|Подключить/u }).click();
     }
     const account = page.getByTestId('career-shell').getByRole('main');

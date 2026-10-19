@@ -8708,6 +8708,17 @@
   color: var(--career-text-soft);
 }
 
+.profile-source-dialog .profile-source-dialog-status .career-profile-screen-tag {
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  background: var(--career-surface);
+}
+
+.profile-source-dialog .profile-source-dialog-status .career-profile-screen-tag.is-verified {
+  border-color: color-mix(in oklch, var(--career-success) 45%, var(--career-line));
+  color: var(--career-success);
+}
+
 .profile-source-dialog-confirm {
   display: flex;
   flex-wrap: wrap;
