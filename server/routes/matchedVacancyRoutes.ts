@@ -7,7 +7,10 @@ import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
-import { buildMatchedVacancyFacets, matchedVacancySourceRegistry } from '../vacancies/matchedVacancyFacets';
+import {
+  buildMatchedVacancyFacets,
+  matchedVacancySourceRegistry,
+} from '../vacancies/matchedVacancyFacets';
 import type { MatchedVacancySourceDefinition } from '../vacancies/matchedVacancyFacets';
 import {
   filterMatchedVacancies,
@@ -25,7 +28,7 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
-import { withVacancyFitOrder } from './matchedVacancyFit';
+import { requestFitForShownPage, withVacancyFitOrder } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
@@ -74,9 +77,10 @@ function matchedVacancyFacetAndFilter(
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
 ) {
   return {
-    facets: filters.offset === 0
-      ? buildMatchedVacancyFacets(items, targetRoles, readLevel, sourceRegistry)
-      : undefined,
+    facets:
+      filters.offset === 0
+        ? buildMatchedVacancyFacets(items, targetRoles, readLevel, sourceRegistry)
+        : undefined,
     filtered: filterMatchedVacancies(
       items,
       filters,
@@ -100,13 +104,9 @@ function buildMatchedResponse(
   decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
 ) {
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = decorate(finishMatchedVacancies(
-    snapshot,
-    targetRoles,
-    campaign,
-    candidateStore,
-    candidateId,
-  ));
+  const matched = decorate(
+    finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
+  );
   const hypothesisSnapshot = campaign.remoteOnly
     ? snapshot.filter((item) => item.cluster.isRemote)
     : snapshot;
@@ -251,11 +251,7 @@ function matchedVacancyResponse(
   };
 }
 
-const handleMatchedVacancies: Handler = async (
-  deps,
-  request,
-  reply,
-) => {
+const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const requestStartedAt = performance.now();
   const cold = !observedMatchEngines.has(multiSourceEngine);
@@ -295,6 +291,7 @@ const handleMatchedVacancies: Handler = async (
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
   preloadTopMatchedDescriptions(multiSourceEngine, response.preloadIds, offset, request);
+  requestFitForShownPage(deps, candidate.id, response.data);
 
   logMatchedTiming(
     request,
@@ -317,16 +314,14 @@ export function registerMatchedVacancyRoutes(app: FastifyInstance, deps: RouteDe
         return await handleMatchedVacancies(routeDeps, request, reply);
       } catch (error) {
         if (!(error instanceof ZodError)) throw error;
-        return reply
-          .code(400)
-          .send({
-            error: {
-              code: 'invalid_query',
-              message: 'Неизвестное значение фильтра вакансий',
-              requestId: request.id,
-              retryable: false,
-            },
-          });
+        return reply.code(400).send({
+          error: {
+            code: 'invalid_query',
+            message: 'Неизвестное значение фильтра вакансий',
+            requestId: request.id,
+            retryable: false,
+          },
+        });
       }
     }),
   );

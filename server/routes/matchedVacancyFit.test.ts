@@ -1,19 +1,41 @@
 import { describe, expect, it } from 'vitest';
-import { compareFitOrder } from './matchedVacancyFit';
+import { compareFitOrder, vacanciesAwaitingFit } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitResult } from '../../shared/vacancyFit';
 
 function item(id: string, score: number | null, observed = '2026-10-01'): MatchedVacancyItem {
-  const result = { status: 'assessed', coveragePercent: score,
-    requiredCoverage: { percent: null } } as VacancyFitResult;
+  const result = {
+    status: 'assessed',
+    coveragePercent: score,
+    requiredCoverage: { percent: null },
+  } as VacancyFitResult;
   return {
-    cluster: { id, canonicalTitle: 'Engineer', canonicalCompany: '', canonicalLocation: '',
-      isRemote: true, descriptionSummary: '', skills: [], primaryUrl: 'https://example.test/' + id, sources: [],
-      firstObservedAt: observed, lastSeenAt: observed, status: 'active', vacanciesCount: 1 },
-    explanation: { clusterId: id, roleMatch: 'target', levelMatch: 'match', matchingPoints: [],
-      missingPoints: [], summary: '', calculatedAt: observed,
-      fitView: { state: 'ready', requirements: [], result } },
+    cluster: {
+      id,
+      canonicalTitle: 'Engineer',
+      canonicalCompany: '',
+      canonicalLocation: '',
+      isRemote: true,
+      descriptionSummary: '',
+      skills: [],
+      primaryUrl: 'https://example.test/' + id,
+      sources: [],
+      firstObservedAt: observed,
+      lastSeenAt: observed,
+      status: 'active',
+      vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: id,
+      roleMatch: 'target',
+      levelMatch: 'match',
+      matchingPoints: [],
+      missingPoints: [],
+      summary: '',
+      calculatedAt: observed,
+      fitView: { state: 'ready', requirements: [], result },
+    },
   };
 }
 describe('B525 whole-pool order before page slicing', () => {
@@ -30,5 +52,33 @@ describe('B525 whole-pool order before page slicing', () => {
   it('switches the entire order to freshness', () => {
     const all = [item('fit', 90, '2026-09-01'), item('fresh', null, '2026-10-01')];
     expect(all.sort((a, b) => compareFitOrder(a, b, 'freshness'))[0]?.cluster.id).toBe('fresh');
+  });
+});
+
+describe('B524 background fit for the shown page', () => {
+  function withState(
+    id: string,
+    state: 'not_requested' | 'processing' | 'ready' | 'no_description',
+  ) {
+    const base = item(id, null);
+    return {
+      ...base,
+      explanation: { ...base.explanation, fitView: { state, requirements: [] } },
+    } as MatchedVacancyItem;
+  }
+  it('queues only vacancies nobody asked to compute yet, at most one page', () => {
+    const page = [
+      withState('new', 'not_requested'),
+      withState('busy', 'processing'),
+      withState('done', 'ready'),
+      withState('empty', 'no_description'),
+      ...Array.from({ length: 30 }, (_, i) => withState('n' + i, 'not_requested')),
+    ];
+    const ids = vacanciesAwaitingFit(page);
+    expect(ids[0]).toBe('new');
+    expect(ids).not.toContain('busy');
+    expect(ids).not.toContain('done');
+    expect(ids).not.toContain('empty');
+    expect(ids).toHaveLength(20);
   });
 });
