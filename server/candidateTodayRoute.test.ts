@@ -122,6 +122,41 @@ async function createApp(options?: {
 const TODAY_URL = '/api/v1/candidate/today';
 
 describe('GET /candidate/today', () => {
+  it('names the connected sources so «Сегодня» needs no connections request (B534)', async () => {
+    const { app, authorization, candidateStore, candidateId } = await createApp();
+    const empty = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(empty.json().data.connectedSources).toEqual([]);
+
+    candidateStore.commitResumeImport(candidateId, {
+      evidence: {
+        sourceLabel: 'Импорт: резюме hh.ru',
+        entries: [
+          {
+            memoryId: 'native-hh-result-1',
+            domain: 'outcome',
+            statement: 'Запустил продукт и сократил срок релиза.',
+          },
+        ],
+      },
+      draft: EMPTY_RESUME_DRAFT,
+      sourceReceipt: {
+        platform: 'hh',
+        accessMode: 'native_session_snapshot',
+        sourceUrl: 'https://hh.ru/resume/synthetic-source-731',
+        capturedAt: '2026-08-23T12:00:00.000Z',
+        importDigest: 'a'.repeat(64),
+      },
+    });
+    const connected = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(connected.json().data.connectedSources).toEqual(['hh']);
+  });
+
   it('returns 200 with a populated digest once the matched pool is warm', async () => {
     const { app, authorization } = await createApp({ withMatchingEngine: true });
 

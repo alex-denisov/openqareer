@@ -337,7 +337,11 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
-      <TodayLinkedinNote queueSize={snapshot.queue.length} onOpenConnections={onOpenConnections} />
+      <TodayLinkedinNote
+        queueSize={snapshot.queue.length}
+        connectedSources={snapshot.connectedSources}
+        onOpenConnections={onOpenConnections}
+      />
       <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>

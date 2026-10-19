@@ -201,6 +201,8 @@ export function todayMomentumMetricValue(
 }
 
 export interface TodaySnapshot {
+  /** Подключённые площадки (B534): заметка «LinkedIn не подключён» без запроса каталога. */
+  readonly connectedSources?: readonly ('linkedin' | 'hh')[];
   readonly todayDecisionSelection?: TodayDecisionSelection;
   readonly todayActionDeferral?: TodayActionDeferral;
   readonly digest: TodayDigest;

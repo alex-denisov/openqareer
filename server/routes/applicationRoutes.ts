@@ -456,8 +456,20 @@ const handleToday: Handler = async (deps, request, reply) => {
       },
     });
   }
+  // B534: «Сегодня» знает, какие площадки подключены, без отдельного запроса каталога.
+  const connectedSources = [
+    ...new Set(
+      candidateStore.listNativeSourceConnections(candidate.id).map((item) => item.platform),
+    ),
+  ];
   return {
-    data: { ...snapshot, ...queuePage, todayDecisionSelection, todayActionDeferral },
+    data: {
+      ...snapshot,
+      ...queuePage,
+      todayDecisionSelection,
+      todayActionDeferral,
+      connectedSources,
+    },
     meta: { requestId: request.id },
   };
 };

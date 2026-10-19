@@ -91,6 +91,7 @@ export function TodayDesktopContent(props: TodayDesktopContentProps) {
       />
       <TodayLinkedinNote
         queueSize={props.snapshot.queue.length}
+        connectedSources={props.snapshot.connectedSources}
         onOpenConnections={props.onOpenConnections}
       />
       <TodayFunnel snapshot={props.snapshot} context={props.funnelContext} />
