@@ -16,16 +16,23 @@
   font-variant-numeric: tabular-nums;
 }
 .vacancy-fit-track {
+  appearance: none;
   display: block;
   flex-basis: 100%;
+  inline-size: 100%;
   block-size: var(--career-space-1);
+  border: 0;
   background: var(--career-line);
   border-radius: var(--career-radius-sm);
   overflow: hidden;
 }
-.vacancy-fit-track > span {
-  display: block;
-  block-size: 100%;
+.vacancy-fit-track::-webkit-progress-bar {
+  background: var(--career-line);
+}
+.vacancy-fit-track::-webkit-progress-value {
+  background: var(--career-accent);
+}
+.vacancy-fit-track::-moz-progress-bar {
   background: var(--career-accent);
 }
 .vacancy-fit-summary.is-compact {

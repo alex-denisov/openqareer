@@ -58,16 +58,19 @@ export function VacancyFitSummary({
       data-fit-state={view?.state ?? 'not_requested'}
     >
       <span className="vacancy-fit-label">Соответствие вашему профилю</span>
-      {numeric && result ? (
+      {numeric && result && result.coveragePercent !== null ? (
         <>
           <strong className="vacancy-fit-percent">{result.coveragePercent}%</strong>
           <span>
             {result.coverage.matched} из {result.coverage.total} требований ·{' '}
             {fitDate(result.calculatedAt)}
           </span>
-          <span className="vacancy-fit-track" aria-hidden="true">
-            <span style={{ inlineSize: `${result.coveragePercent}%` }} />
-          </span>
+          <progress
+            className="vacancy-fit-track"
+            value={result.coveragePercent}
+            max={100}
+            aria-hidden="true"
+          />
           {result.dataState === 'partial' ? <span>Часть требований пока не проверена</span> : null}
         </>
       ) : (
