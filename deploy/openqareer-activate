@@ -4,6 +4,7 @@ set -Eeuo pipefail
 readonly RELEASE_ROOT=/srv/openqareer
 readonly SERVICE=openqareer-static.service
 readonly MAINTENANCE_SERVICE=openqareer-maintenance.service
+readonly MECHANICS_SERVICE=openqareer-vacancy-mechanics.service
 readonly HEALTH_URL=http://127.0.0.1:3210/health
 
 fail() {
@@ -146,6 +147,15 @@ fi
 if ! sudo -n /usr/bin/systemctl restart "$MAINTENANCE_SERVICE" ||
   ! systemctl is-active --quiet "$MAINTENANCE_SERVICE"; then
   fail "maintenance service is not active after release restart; check journalctl -u $MAINTENANCE_SERVICE"
+fi
+
+# Воркер соответствия (B523/B524) читает тот же релиз; хост без юнита
+# (до bootstrap) пропускается, установленный обязан подняться.
+if systemctl cat "$MECHANICS_SERVICE" >/dev/null 2>&1; then
+  if ! sudo -n /usr/bin/systemctl restart "$MECHANICS_SERVICE" ||
+    ! systemctl is-active --quiet "$MECHANICS_SERVICE"; then
+    fail "vacancy mechanics service is not active after release restart; check journalctl -u $MECHANICS_SERVICE"
+  fi
 fi
 
 rm -f -- "$archive"
