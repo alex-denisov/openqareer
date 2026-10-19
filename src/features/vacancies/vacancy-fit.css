@@ -137,3 +137,20 @@
   color: var(--career-text);
   font: inherit;
 }
+
+.vacancy-fit-evidence .career-vacancy-action {
+  min-block-size: var(--career-target-min);
+  max-inline-size: 100%;
+  padding: var(--career-space-2) var(--career-space-3);
+  white-space: normal;
+  text-align: start;
+  transition:
+    color var(--career-motion-quick),
+    background var(--career-motion-quick),
+    border-color var(--career-motion-quick);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vacancy-fit-evidence .career-vacancy-action {
+    transition: none;
+  }
+}

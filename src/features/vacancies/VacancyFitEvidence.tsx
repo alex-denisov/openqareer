@@ -66,7 +66,7 @@ function FitEvidenceRow({
         {assessment?.status !== 'matched' && onAddToProfile ? (
           <button
             type="button"
-            className="vacancies-req-action-btn"
+            className="career-vacancy-action vacancies-req-action-btn"
             onClick={() => onAddToProfile(requirement.text)}
           >
             Добавить в профиль
@@ -158,7 +158,7 @@ function FitRequestControls({ state }: { readonly state: ReturnType<typeof useFi
         {canRequest ? (
           <button
             type="button"
-            className="vacancies-btn vacancies-btn-secondary"
+            className="career-vacancy-action vacancies-btn vacancies-btn-secondary"
             disabled={busy}
             onClick={() => void load(true)}
           >
@@ -172,7 +172,7 @@ function FitRequestControls({ state }: { readonly state: ReturnType<typeof useFi
         {queued || view.state === 'ready' || error ? (
           <button
             type="button"
-            className="vacancies-btn vacancies-btn-secondary"
+            className="career-vacancy-action vacancies-btn vacancies-btn-secondary"
             disabled={busy}
             onClick={() => void load(false)}
           >

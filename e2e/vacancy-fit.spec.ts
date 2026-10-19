@@ -24,6 +24,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
           ...item,
           explanation: {
             ...item.explanation,
+            levelMatch: 'match',
             fitView:
               index === 0
                 ? { state: 'not_requested', requirements: [] }
