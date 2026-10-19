@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import {
   Briefcase,
   ChartBar,
@@ -95,12 +96,12 @@ function AnalyticsHeader({ summary }: { readonly summary: PipelineAnalyticsSumma
           <Funnel size={20} aria-hidden="true" /> Аналитика воронки
         </h2>
         <p className="career-pipeline-analytics-subtitle">
-          Конверсия этапов, скорость прохождения и выявление узких мест кампании
+          Все карточки выбранного периода, включая архив. Только записанные этапы; пропуски истории не восстанавливаются.
         </p>
       </div>
       <div className="career-pipeline-analytics-meta">
         <span className="career-pipeline-meta-pill">
-          Всего откликов: <strong className="career-numeric">{summary.totalCount}</strong>
+          Карточек в выборке: <strong className="career-numeric">{summary.totalCount}</strong>
         </span>
         <span className="career-pipeline-meta-pill">
           В процессе: <strong className="career-numeric">{summary.activeCount}</strong>
@@ -119,7 +120,7 @@ function AnalyticsSummaryCards({ summary }: { readonly summary: PipelineAnalytic
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Сквозная конверсия</span>
         <span className="career-pipeline-kpi-value career-numeric">
-          {summary.overallConversionRate}%
+          {summary.overallConversionRate === null ? 'Нет данных' : `${summary.overallConversionRate}%`}
         </span>
         <span className="career-pipeline-kpi-hint">отклик → оффер</span>
       </div>
@@ -133,7 +134,7 @@ function AnalyticsSummaryCards({ summary }: { readonly summary: PipelineAnalytic
         <span className="career-pipeline-kpi-value career-numeric">
           {summary.averageCycleDays !== null ? `${summary.averageCycleDays} дн.` : '—'}
         </span>
-        <span className="career-pipeline-kpi-hint">от отклика до статуса</span>
+        <span className="career-pipeline-kpi-hint">от записанного отклика до статуса</span>
       </div>
       <div className="career-pipeline-kpi-card">
         <span className="career-pipeline-kpi-label">Отказы и архив</span>
@@ -172,7 +173,7 @@ function FunnelStepRow({
             <span className="career-numeric">{step.conversionFromPrevious}%</span> от пред.
           </span>
         ) : (
-          <span className="career-pipeline-funnel-badge is-base">база</span>
+          <span className="career-pipeline-funnel-badge is-base">{step.stage === 'saved' ? 'база' : 'Нет данных'}</span>
         )}
       </div>
     </div>
@@ -195,6 +196,7 @@ function FunnelDiagram({
       <h3 id="funnel-diagram-title" className="career-pipeline-card-title">
         Этапы воронки поиска
       </h3>
+      <p>Конверсия: доля карточек предыдущего этапа с записью текущего. Пропущенные этапы не считаются подтверждёнными.</p>
       <div className="career-pipeline-funnel-steps" role="list">
         {steps.map((step) => (
           <FunnelStepRow key={step.stage} step={step} maxCount={maxCount} />
@@ -310,9 +312,10 @@ export function ArchiveReasonsList({
   readonly reasons: ReadonlyArray<{ readonly reason: string; readonly count: number }>;
   readonly title?: string;
 }) {
+  const titleId = useId();
   return (
-    <section className="career-pipeline-card" aria-labelledby="reasons-list-title">
-      <h3 id="reasons-list-title" className="career-pipeline-card-title">
+    <section className="career-pipeline-card" aria-labelledby={titleId}>
+      <h3 id={titleId} className="career-pipeline-card-title">
         {title}
       </h3>
       <ul className="career-pipeline-reasons-list">

@@ -10,6 +10,7 @@ import {
 import { ResponsesOffersPanel } from './ResponsesOffersPanel';
 import { CompanyWantsPanel } from './ResponsesCompanyWants';
 import { ResponsesPreparationPanel } from './ResponsesPreparationPanel';
+import { ResponsesPipelineAnalytics } from './ResponsesPipelineAnalytics';
 import { ResponsesChannelPerformance } from './ResponsesChannelPerformance';
 import { SelectedResponsePanel } from './SelectedResponsePanel';
 import {
@@ -239,6 +240,7 @@ function FunnelResults({
         />
       ) : null}
       <ResponsesChannelPerformance applications={applications} query={workspace.query} />
+      <ResponsesPipelineAnalytics query={workspace.query} revision={props.state.applications} initiallyExpanded={props.initialTab === 'analytics'} onOpenVacancies={props.onOpenVacancies} onOpenExpert={props.onOpenExpert} />
     </>
   );
 }

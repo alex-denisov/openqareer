@@ -495,3 +495,24 @@ describe('applications route · restore archived card', () => {
     expect(response.json().error.code).toBe('application_version_conflict');
   });
 });
+
+describe('B355 candidate-scoped history projection', () => {
+  it('returns only recorded stages and isolates another candidate history', async () => {
+    const { app, authorization, candidateStore } = await createApp();
+    const id = await createCard(app, authorization, 'history-own', 'saved');
+    const other = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
+    const otherId = await createCard(app, `Bearer ${other.accessToken}`, 'history-other', 'offer');
+    const update = await app.inject({ method: 'PATCH', url: `${APPLICATIONS_URL}/${id}`, headers: { authorization, ...ORIGIN }, payload: { expectedVersion: 1, stage: 'archived' } });
+    expect(update.statusCode).toBe(200);
+    expect(update.json().data.reachedStages).toEqual(['saved', 'archived']);
+    const own = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization } });
+    expect(own.statusCode).toBe(200);
+    expect(own.json().data).toHaveLength(1);
+    expect(own.json().data[0].reachedStages).toEqual(['saved', 'archived']);
+    expect(own.json().data[0].appliedAt).toBeNull();
+    const forbidden = await app.inject({ method: 'GET', url: `${APPLICATIONS_URL}/${otherId}`, headers: { authorization } });
+    expect(forbidden.statusCode).toBe(404);
+    const theirs = await app.inject({ method: 'GET', url: APPLICATIONS_URL, headers: { authorization: `Bearer ${other.accessToken}` } });
+    expect(theirs.json().data[0].reachedStages).toEqual(['offer']);
+  });
+});

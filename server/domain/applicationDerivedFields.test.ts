@@ -101,3 +101,22 @@ describe('deriveApplicationFields', () => {
   });
 });
 
+
+describe('B355 explicit stage evidence', () => {
+  function derive(stage: StoredApplication['stage'], events: StoredApplicationEvent[], archivePreviousStage: StoredApplication['stage'] | null = null) {
+    return deriveApplicationFields({ application: application({ stage, archivePreviousStage }), events, materials: [], interviews: [] });
+  }
+  it('saved-to-archive never invents an applied stage', () => {
+    expect(derive('archived', [{ ...stageEvent('archived', '2024-01-02T09:00:00Z'), fromStage: 'saved' }], 'saved').reachedStages).toEqual(['saved', 'archived']);
+  });
+  it('direct offer does not imply intermediate stages and missing applied time stays unknown', () => {
+    const result = derive('offer', [stageEvent('offer', '2024-01-02T09:00:00Z')]);
+    expect(result.reachedStages).toEqual(['offer']);
+    expect(result.appliedAt).toBeNull();
+  });
+  it('retains backward moves and closed history, deduplicating repeats', () => {
+    const result = derive('rejected', [stageEvent('applied', '2024-01-01T09:00:00Z'), { ...stageEvent('interview', '2024-01-03T09:00:00Z'), fromStage: 'responded' }, stageEvent('applied', '2024-01-04T09:00:00Z')]);
+    expect(result.reachedStages).toEqual(['applied', 'responded', 'interview', 'rejected']);
+    expect(result.appliedAt).toBe('2024-01-01T09:00:00Z');
+  });
+});

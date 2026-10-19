@@ -73,8 +73,15 @@ describe('PipelineAnalyticsView', () => {
       <PipelineAnalyticsView applications={apps} onOpenVacancies={() => {}} />,
     );
 
-    expect(html).toContain('Узкое место: низкий отклик работодателей');
-    expect(html).toContain('Проверьте ключевые слова в резюме');
+    expect(html).toContain('Меньше переходов: Ответ компании');
+    expect(html).toContain('Проверьте незавершённые отклики');
+  });
+
+  it('renders unavailable conversion for a direct offer without a recorded application', () => {
+    const html = renderToStaticMarkup(<PipelineAnalyticsView applications={[makeApp({ stage: 'offer', reachedStages: ['offer'] })]} onOpenVacancies={() => {}} />);
+    expect(html).toContain('Нет данных');
+    expect(html).not.toContain('null%');
+    expect(html).not.toContain('здоровому рыночному поиску');
   });
 
   it('отображает причины отказов и архива, если они есть', () => {

@@ -37,7 +37,7 @@ describe('computePipelineAnalytics', () => {
     const summary = computePipelineAnalytics([]);
     expect(summary.totalCount).toBe(0);
     expect(summary.activeCount).toBe(0);
-    expect(summary.overallConversionRate).toBe(0);
+    expect(summary.overallConversionRate).toBeNull();
     expect(summary.bottleneck.id).toBe('need_more_data');
     expect(summary.steps).toHaveLength(5);
     expect(summary.steps[0].count).toBe(0);
@@ -47,10 +47,10 @@ describe('computePipelineAnalytics', () => {
   it('считает сквозные переходы по этапам воронки', () => {
     const apps: readonly ApplicationView[] = [
       makeApp({ id: '1', stage: 'saved' }),
-      makeApp({ id: '2', stage: 'applied' }),
-      makeApp({ id: '3', stage: 'responded' }),
-      makeApp({ id: '4', stage: 'interview' }),
-      makeApp({ id: '5', stage: 'offer' }),
+      makeApp({ id: '2', stage: 'applied', reachedStages: ['saved', 'applied'] }),
+      makeApp({ id: '3', stage: 'responded', reachedStages: ['saved', 'applied', 'responded'] }),
+      makeApp({ id: '4', stage: 'interview', reachedStages: ['saved', 'applied', 'responded', 'interview'] }),
+      makeApp({ id: '5', stage: 'offer', reachedStages: ['saved', 'applied', 'responded', 'interview', 'offer'] }),
     ];
 
     const summary = computePipelineAnalytics(apps);
@@ -84,8 +84,8 @@ describe('computePipelineAnalytics', () => {
   it('учитывает историю этапа для отклоненных карточек', () => {
     const apps: readonly ApplicationView[] = [
       makeApp({ id: '1', stage: 'applied' }),
-      makeApp({ id: '2', stage: 'rejected', archivePreviousStage: 'interview' }),
-      makeApp({ id: '3', stage: 'archived', archivePreviousStage: 'responded' }),
+      makeApp({ id: '2', stage: 'rejected', archivePreviousStage: 'interview', reachedStages: ['applied', 'responded', 'interview'] }),
+      makeApp({ id: '3', stage: 'archived', archivePreviousStage: 'responded', reachedStages: ['applied', 'responded'] }),
     ];
 
     const summary = computePipelineAnalytics(apps);
@@ -121,7 +121,7 @@ describe('computePipelineAnalytics', () => {
 
   it('определяет узкое место при отсутствии интервью при наличии ответов', () => {
     const apps = Array.from({ length: 20 }, (_, index) =>
-      makeApp({ id: String(index + 1), stage: index < 6 ? 'responded' : 'applied' }),
+      makeApp({ id: String(index + 1), stage: index < 6 ? 'responded' : 'applied', reachedStages: index < 6 ? ['applied', 'responded'] : ['applied'] }),
     );
 
     const summary = computePipelineAnalytics(apps);
@@ -132,12 +132,14 @@ describe('computePipelineAnalytics', () => {
     const apps: readonly ApplicationView[] = [
       makeApp({
         id: '1',
-        createdAt: '2026-09-01T00:00:00.000Z',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        appliedAt: '2026-09-01T00:00:00.000Z',
         stageChangedAt: '2026-09-05T00:00:00.000Z',
       }),
       makeApp({
         id: '2',
-        createdAt: '2026-09-01T00:00:00.000Z',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        appliedAt: '2026-09-01T00:00:00.000Z',
         stageChangedAt: '2026-09-07T00:00:00.000Z',
       }),
     ];
@@ -170,5 +172,24 @@ describe('computePipelineAnalytics', () => {
     const hhSource = summary.sources.find((s) => s.source === 'hh');
     expect(hhSource?.total).toBe(2);
     expect(hhSource?.interview).toBe(1);
+  });
+});
+
+describe('B355 no invented transitions', () => {
+  it('does not turn saved archive or direct offer into an application', () => {
+    const summary = computePipelineAnalytics([makeApp({ stage: 'archived', archivePreviousStage: 'saved', reachedStages: ['saved', 'archived'] }), makeApp({ id: 'direct-offer', stage: 'offer', reachedStages: ['offer'] })]);
+    expect(summary.steps.find((step) => step.stage === 'applied')?.count).toBe(0);
+    expect(summary.steps.find((step) => step.stage === 'responded')?.count).toBe(0);
+    expect(summary.steps.find((step) => step.stage === 'interview')?.count).toBe(0);
+    expect(summary.overallConversionRate).toBeNull();
+  });
+  it('uses same-card intersection for conversion and retains archived offers', () => {
+    const summary = computePipelineAnalytics([makeApp({ stage: 'archived', reachedStages: ['applied', 'offer', 'archived'] }), makeApp({ id: 'direct', stage: 'offer', reachedStages: ['offer'] })]);
+    expect(summary.steps.find((step) => step.stage === 'offer')?.count).toBe(2);
+    expect(summary.overallConversionRate).toBe(100);
+    expect(summary.steps.find((step) => step.stage === 'offer')?.conversionFromPrevious).toBeNull();
+  });
+  it('does not use card creation time as application time', () => {
+    expect(computePipelineAnalytics([makeApp({ appliedAt: null })]).averageCycleDays).toBeNull();
   });
 });
