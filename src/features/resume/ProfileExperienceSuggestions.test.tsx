@@ -224,7 +224,7 @@ describe('ProfileExperienceSuggestions', () => {
     expect(calls).toEqual(['first', 'second']);
     expect(
       container.querySelector('[data-suggestion-id="first"] [role="status"]')?.textContent,
-    ).toBe('Правка применена');
+    ).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
     expect(container.querySelector('[data-suggestion-id="second"] [role="status"]')).toBeNull();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Временная ошибка');
     expect(container.textContent).toContain('Непринятые правки не изменят резюме');
@@ -328,14 +328,14 @@ describe('ProfileExperienceSuggestions', () => {
     });
 
     const appliedRow = container.querySelector('[data-suggestion-id="already-applied"]');
-    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка применена');
+    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
     expect(appliedRow?.querySelectorAll('button')).toHaveLength(1);
     expect(container.textContent).not.toContain('Откатить все');
     expect(container.querySelectorAll('button')).toHaveLength(3);
 
-    await click(container, 'Откатить');
+    await click(container, 'Отменить правку');
     expect(onRevertSuggestion).toHaveBeenCalledExactlyOnceWith(applied);
-    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка применена');
+    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
   });
 
   it('keeps applied state and announces a failed row revert', async () => {
@@ -344,8 +344,8 @@ describe('ProfileExperienceSuggestions', () => {
       onRevertSuggestion: vi.fn().mockRejectedValue(new Error('Откат не подтверждён')),
     });
 
-    await click(container, 'Откатить');
+    await click(container, 'Отменить правку');
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Откат не подтверждён');
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Правка применена');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
   });
 });

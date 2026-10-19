@@ -1,4 +1,5 @@
-import { Check, Sparkle, Spinner, X } from '@phosphor-icons/react';
+import { ArrowsClockwise, Check, CheckCircle, Sparkle, Spinner, X } from '@phosphor-icons/react';
+import { APPLIED_SUGGESTION_NOTE } from './InlineConsultantSuggestion';
 import { useId, useRef, useState } from 'react';
 import type { ResumeDraft } from './resumeTypes';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
@@ -185,7 +186,10 @@ function AppliedRowState({
   const reverting = busy && Boolean(onRevert);
   return (
     <div className="profile-experience-suggestions__row-state">
-      <span role="status">Правка применена</span>
+      <span role="status">
+        <CheckCircle size={16} weight="regular" aria-hidden="true" />
+        {APPLIED_SUGGESTION_NOTE}
+      </span>
       {onRevert ? (
         <button
           type="button"
@@ -194,8 +198,12 @@ function AppliedRowState({
           disabled={busy}
           aria-busy={reverting || undefined}
         >
-          {reverting ? <Spinner size={16} weight="regular" aria-hidden="true" /> : null}
-          {reverting ? 'Откатываем…' : 'Откатить'}
+          {reverting ? (
+            <Spinner size={16} weight="regular" aria-hidden="true" />
+          ) : (
+            <ArrowsClockwise size={16} weight="regular" aria-hidden="true" />
+          )}
+          {reverting ? 'Отменяем…' : 'Отменить правку'}
         </button>
       ) : null}
     </div>

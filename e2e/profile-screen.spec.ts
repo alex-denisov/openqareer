@@ -2021,7 +2021,7 @@ test.describe('B265 Profile screen', () => {
     // Accept suggestion after the retry.
     await suggestion.getByRole('button', { name: 'Принять' }).click();
     await expect.poll(() => approvedCommandId).toBe('cmd-revise-about-1');
-    await expect(suggestion).toContainText('Правка применена');
+    await expect(suggestion).toContainText('Правка принята');
     if (testInfo.project.name === 'mobile-390') {
       await suggestion.screenshot({
         path: 'output/playwright/C58/suggestion-applied-mobile-390.png',
@@ -2033,7 +2033,7 @@ test.describe('B265 Profile screen', () => {
     }
 
     // Revert suggestion
-    await suggestion.getByRole('button', { name: 'Откатить' }).click();
+    await suggestion.getByRole('button', { name: 'Отменить правку' }).click();
     await expect.poll(() => revertedCommandId).toBe('cmd-revise-about-1');
     await expect(suggestion).toHaveCount(0);
   });
@@ -2362,7 +2362,7 @@ test.describe('B265 Profile screen', () => {
 
     await suggestion.getByRole('button', { name: 'Принять' }).click();
     await expect.poll(() => accepted).toBe(true);
-    await expect(suggestionRow.getByRole('status')).toHaveText('Правка применена');
+    await expect(suggestionRow.getByRole('status')).toContainText('Правка принята');
     await expect.poll(() => matchedReadsAfterAccept).toBeGreaterThan(0);
     await page.locator('button[aria-label="Вакансии"]:visible').first().click();
     const reopenedToggle = page
