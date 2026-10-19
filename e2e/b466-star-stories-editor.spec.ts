@@ -36,6 +36,8 @@ const interviewApplication = {
 };
 
 async function openStories(page: Page, width: number): Promise<void> {
+  // Фикстуры датированы сентябрём–октябрём 2026: окно «30 дней» считается от этой даты, а не от часов машины.
+  await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
   await mockSignedInCabinet(page);
   await page.route('**/api/v1/candidate/applications*', (route) =>
     route.fulfill({ json: { data: [interviewApplication] } }),

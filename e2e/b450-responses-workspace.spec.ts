@@ -545,6 +545,8 @@ async function installMocks(
   page: Page,
   options: { readonly companyCount?: number } = {},
 ): Promise<CapturedCalls> {
+  // Фикстуры датированы сентябрём–октябрём 2026: окно «30 дней» считается от этой даты, а не от часов машины.
+  await page.clock.setFixedTime(new Date('2026-10-15T09:00:00.000Z'));
   const calls: CapturedCalls = {
     applicationQueries: [],
     companyMutations: [],
