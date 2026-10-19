@@ -1,3 +1,4 @@
+import { useTodayDiaryDecision } from '../today/useTodayDiaryDecision';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -422,9 +423,11 @@ function TodaySection(props: {
   onOpenExpert?: () => void;
 }) {
   const today = useToday();
+  const diaryDecision = useTodayDiaryDecision(Boolean(props.candidateId));
   return (
     <TodayScreen
       {...props}
+      diaryDecision={diaryDecision}
       snapshot={today.snapshot}
       loading={today.loading}
       failed={today.failed}

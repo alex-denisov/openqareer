@@ -23,13 +23,13 @@ import {
 } from './consultantActionStorage';
 import {
   deferTodayAction,
-  selectTodayDecision,
   type TodayFollowUp,
   type TodayProfileFocus,
   type TodayQueueItem,
   type TodaySnapshot,
 } from './todayApi';
 import { TodayLinkedinNote } from './TodayLinkedinNote';
+import { todayDecisionOverride, type TodayDiaryDecisionProp } from './todayDecisionOverride';
 import { TODAY_NOTHING_TO_DECIDE, TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
   todayFunnelFootnote,
@@ -86,6 +86,8 @@ export interface TodayScreenProps {
   readonly onOpenAutomation?: () => void;
   readonly onOpenExpert?: () => void;
   readonly onOpenConnections?: () => void;
+  /** Решение дня из карьерного дневника (макет 1 «Вы работаете»). */
+  readonly diaryDecision?: TodayDiaryDecisionProp;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
@@ -200,30 +202,6 @@ async function saveTodayActionDeferral(actionKey: string): Promise<boolean> {
   }
 }
 
-function selectedDecisionAction(snapshot: TodaySnapshot): ReasonedCareerAction | undefined {
-  if (snapshot.todayDecisionSelection?.resolution !== 'accepted') return undefined;
-  const item = snapshot.queue.find(
-    (entry) =>
-      entry.applicationId === snapshot.todayDecisionSelection?.applicationId &&
-      entry.kind === 'follow_up',
-  );
-  if (!item) return undefined;
-  return {
-    revision: 'career-action-policy-v1-2026-08-07',
-    type: 'decision',
-    destination: 'coach',
-    headline: queueActionTitle(item),
-    label: 'Открыть отклик',
-    rationale: item.eyebrow ?? 'Задача из вашей очереди дня.',
-    expectedChange: 'Откроются отклики, чтобы подготовить напоминание.',
-    findingIds: [],
-    roleIds: [],
-    marketIds: [],
-    alternatives: [],
-    approvalBoundary: 'Напоминание отправляется только после вашего подтверждения.',
-  };
-}
-
 export function TodayScreen(props: TodayScreenProps) {
   const actionState = useTodayConsultantAction({
     candidateId: props.candidateId,
@@ -250,21 +228,14 @@ function todayContentProps(
 ): TodayContentProps | null {
   const { snapshot } = props;
   if (!snapshot) return null;
-  const selectedAction = selectedDecisionAction(snapshot);
+  const override = todayDecisionOverride(snapshot, props);
   return {
     snapshot,
-    activeAction: selectedAction ?? actionState.activeAction,
-    onAccept: selectedAction ? () => props.onNavigate?.('responses') : actionState.onAccept,
-    onPostpone: selectedAction
-      ? () => {
-          void selectTodayDecision(
-            snapshot.todayDecisionSelection!.applicationId,
-            'dismissed',
-          ).catch(() => props.onRetry());
-        }
-      : actionState.onPostpone,
-    postponeBusy: selectedAction ? false : actionState.postponeBusy,
-    postponeError: selectedAction ? undefined : actionState.postponeError,
+    activeAction: override?.action ?? actionState.activeAction,
+    onAccept: override?.onAccept ?? actionState.onAccept,
+    onPostpone: override?.onPostpone ?? actionState.onPostpone,
+    postponeBusy: override ? false : actionState.postponeBusy,
+    postponeError: override ? undefined : actionState.postponeError,
     queueRemainderLoading: props.queueRemainderLoading,
     queueRemainderFailed: props.queueRemainderFailed,
     onLoadQueueRemainder: props.onLoadQueueRemainder,

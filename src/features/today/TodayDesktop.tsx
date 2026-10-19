@@ -21,6 +21,7 @@ import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
 import { TodayLinkedinNote } from './TodayLinkedinNote';
+import { TODAY_DIARY_FOOTNOTE } from './todayDiaryDecision';
 import {
   type TodayProfileFocus,
   type TodayQueueItem,
@@ -225,6 +226,7 @@ function actionDestinationLabel(action: ReasonedCareerAction): string {
 }
 
 export function actionSourceSummary(action: ReasonedCareerAction): string {
+  if (action.rationale === TODAY_DIARY_FOOTNOTE) return 'карьерный дневник';
   const sources = [
     ...(action.findingIds.length ? ['профиль'] : []),
     ...(action.roleIds.length || action.marketIds.length ? ['карьерная гипотеза'] : []),
