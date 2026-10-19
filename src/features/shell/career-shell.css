@@ -8630,6 +8630,38 @@
   font-size: var(--career-text-xs);
 }
 
+/* Макет 1 «Ошибка»: красная заметка и тихая кнопка «Повторить» на всю ширину карточки. */
+.career-today-state-error {
+  justify-items: stretch;
+  gap: var(--career-space-3);
+}
+
+.career-today-state .career-today-error-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid
+    color-mix(in oklch, var(--career-danger) 50%, transparent);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-danger-soft);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-today-error-note svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--career-danger);
+}
+
+.career-today-error-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+}
+
 @media (max-width: 640px) {
   .career-today-digest {
     gap: var(--career-space-2);

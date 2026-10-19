@@ -3,14 +3,15 @@ import {
   Bell,
   BookmarkSimple,
   Briefcase,
+  ArrowsClockwise,
   CaretDown,
   CaretRight,
   CheckCircle,
   ChatCircle,
-  ClockCountdown,
   LinkedinLogo,
   PaperPlaneTilt,
   UserCircle,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
@@ -28,7 +29,7 @@ import {
   type TodayQueueItem,
   type TodaySnapshot,
 } from './todayApi';
-import { TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
+import { TODAY_NOTHING_TO_DECIDE, TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
   todayFunnelFootnote,
   todayFunnelStages,
@@ -344,6 +345,8 @@ function TodayMobileContent({
   return (
     <div className="career-today-mobile pm tm">
       <TodayMobileDecision
+        nothingToDecide={!activeAction && snapshot.queue.length === 0}
+        onNavigate={onNavigate}
         action={activeAction}
         onAccept={onAccept}
         onPostpone={onPostpone}
@@ -385,6 +388,77 @@ function TodayMobileReasons({
 }
 
 function TodayMobileDecision({
+  nothingToDecide,
+  onNavigate,
+  action,
+  onAccept,
+  onPostpone,
+  postponeBusy,
+  postponeError,
+  onOpenExpert,
+}: {
+  readonly nothingToDecide: boolean;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly action?: ReasonedCareerAction;
+  readonly onAccept: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
+  readonly onOpenExpert?: () => void;
+}) {
+  return (
+    <section
+      className={action && !nothingToDecide ? 'tm-hero is-decision' : 'tm-hero'}
+      aria-label="Следующее решение"
+      aria-busy={postponeBusy || undefined}
+    >
+      <p className="tm-eyebrow">Следующее решение</p>
+      {nothingToDecide ? (
+        <TodayMobileNothingToDecide onNavigate={onNavigate} onOpenExpert={onOpenExpert} />
+      ) : (
+        <TodayMobileDecisionBody
+          action={action}
+          onAccept={onAccept}
+          onPostpone={onPostpone}
+          postponeBusy={postponeBusy}
+          postponeError={postponeError}
+          onOpenExpert={onOpenExpert}
+        />
+      )}
+    </section>
+  );
+}
+
+function TodayMobileNothingToDecide({
+  onNavigate,
+  onOpenExpert,
+}: {
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onOpenExpert?: () => void;
+}) {
+  return (
+    <>
+      <h2>{TODAY_NOTHING_TO_DECIDE}</h2>
+      {onNavigate ? (
+        <button
+          className="pm-cta tm-main"
+          type="button"
+          onClick={() => onNavigate('opportunities')}
+        >
+          <Briefcase aria-hidden="true" weight="regular" />
+          Открыть вакансии
+        </button>
+      ) : null}
+      {onOpenExpert ? (
+        <button className="pm-text tm-later" type="button" onClick={onOpenExpert}>
+          Обсудить цель
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function TodayMobileDecisionBody({
   action,
   onAccept,
   onPostpone,
@@ -400,12 +474,7 @@ function TodayMobileDecision({
   readonly onOpenExpert?: () => void;
 }) {
   return (
-    <section
-      className="tm-hero"
-      aria-label="Следующее решение"
-      aria-busy={postponeBusy || undefined}
-    >
-      <p className="tm-eyebrow">Следующее решение</p>
+    <>
       <h2>{action?.headline ?? 'Нет проверенного следующего шага'}</h2>
       <p className="tm-effect">
         {action?.expectedChange ?? 'В текущих данных нет основания предложить конкретное действие.'}
@@ -425,7 +494,7 @@ function TodayMobileDecision({
       ) : (
         <p className="pm-foot">Источники: нет проверенных данных</p>
       )}
-    </section>
+    </>
   );
 }
 
@@ -701,11 +770,16 @@ function TodaySkeleton() {
 function TodayError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="career-today-state career-today-state-error">
-      <ClockCountdown size={28} aria-hidden="true" />
-      <h3>Не удалось обновить очередь дня</h3>
-      <p>Часть данных ещё обновляется. Повторите запрос.</p>
-      <button type="button" className="career-btn career-btn-primary" onClick={onRetry}>
-        Повторить
+      <p className="career-today-error-note" role="alert">
+        <WarningCircle size={16} aria-hidden="true" />
+        <span>Не удалось собрать очередь: сервер не ответил.</span>
+      </p>
+      <button
+        type="button"
+        className="career-quiet-button career-today-error-retry"
+        onClick={onRetry}
+      >
+        <ArrowsClockwise size={16} aria-hidden="true" /> Повторить
       </button>
     </div>
   );

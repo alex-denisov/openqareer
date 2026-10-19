@@ -108,7 +108,7 @@ describe('TodayScreen (ACC-A-1)', () => {
       }),
     );
 
-    expect(html).toContain('class="tm-hero"');
+    expect(html).toContain('class="tm-hero is-decision"');
     expect(html).toContain('Подтвердите размер команды');
     expect(html).toContain('Подтвердить факт');
     expect(html).toContain('Отложить до завтра');
@@ -287,7 +287,6 @@ describe('TodayScreen (ACC-A-1)', () => {
   it('uses the desktop empty-decision copy and keeps a real consultant route', () => {
     const html = mobileTodayMarkup(
       renderTodayScreen({
-        snapshot: { ...snapshot, queue: [] },
         onOpenExpert: vi.fn(),
       }),
     );
@@ -295,7 +294,7 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(html).toContain('Нет проверенного следующего шага');
     expect(html).toContain('В текущих данных нет основания предложить конкретное действие.');
     expect(html).toContain('Обсудить');
-    expect(html).toContain('Очередь дня пуста. Новые задачи появятся здесь.');
+    expect(html).not.toContain('Сейчас нечего решать');
     expect(html).not.toContain('Подтвердить факт');
     expect(html).not.toContain('Отложить до завтра');
   });
@@ -309,11 +308,27 @@ describe('TodayScreen (ACC-A-1)', () => {
     expect(html).not.toContain('today-loading-desktop career-today-digest');
   });
 
+  it('offers vacancies and a goal talk when there is no decision and the queue is empty', () => {
+    const html = renderTodayScreen({
+      snapshot: { ...snapshot, queue: [], followUps: [] },
+      consultantAction: undefined,
+      onNavigate: vi.fn(),
+      onOpenExpert: vi.fn(),
+    });
+
+    expect(html.match(/Сейчас нечего решать\. Очередь пуста\./gu)?.length).toBe(2);
+    expect(html).toContain('Открыть вакансии');
+    expect(html).toContain('Обсудить цель');
+    expect(html).not.toContain('Нет проверенного следующего шага');
+  });
+
   it('shows a working retry control when loading fails', () => {
     const html = renderTodayScreen({ snapshot: null, failed: true });
 
-    expect(html).toContain('Не удалось обновить очередь дня');
+    expect(html).toContain('Не удалось собрать очередь: сервер не ответил.');
+    expect(html).toContain('role="alert"');
     expect(html).toContain('Повторить');
+    expect(html).not.toContain('Часть данных ещё обновляется');
   });
 });
 

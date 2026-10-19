@@ -25,10 +25,14 @@
     align-content: start;
     gap: var(--career-space-2);
     min-inline-size: 0;
-    min-block-size: calc(var(--career-space-8) * 9 + var(--career-space-5) * 2);
     padding: var(--career-space-4) var(--career-space-4) var(--career-space-2);
     border-radius: var(--career-radius-lg);
     background: var(--career-surface);
+  }
+
+  /* Высота полного решения; без решения карточка не держит пустое место под «Обсудить». */
+  .career-today-mobile .tm-hero.is-decision {
+    min-block-size: calc(var(--career-space-8) * 9 + var(--career-space-5) * 2);
   }
 
   .career-today-mobile .tm-eyebrow {

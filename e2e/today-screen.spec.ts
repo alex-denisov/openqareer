@@ -793,8 +793,9 @@ test.describe('B251 today screen', () => {
 
     const decision = page.getByRole('region', { name: 'Следующее решение' });
     const queue = page.getByRole('region', { name: 'Очередь дня' });
-    await expect(decision).toContainText('Нет проверенного следующего шага');
-    await expect(decision.getByRole('button', { name: 'Обсудить' })).toBeEnabled();
+    await expect(decision).toContainText('Сейчас нечего решать. Очередь пуста.');
+    await expect(decision.getByRole('button', { name: 'Открыть вакансии' })).toBeEnabled();
+    await expect(decision.getByRole('button', { name: 'Обсудить цель' })).toBeEnabled();
     await expect(queue.locator('.pm-empty')).toHaveText(
       'Очередь дня пуста. Новые задачи появятся здесь.',
     );
@@ -903,9 +904,9 @@ test.describe('B251 today screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForCareerShell(page);
 
-    await expect(
-      page.getByRole('heading', { name: 'Не удалось обновить очередь дня' }),
-    ).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText(
+      'Не удалось собрать очередь: сервер не ответил.',
+    );
     await captureAccA1Today(page, '390-error');
     await page.getByRole('button', { name: 'Повторить' }).click();
     await expect(page.locator('.career-today-mobile')).toBeVisible();
