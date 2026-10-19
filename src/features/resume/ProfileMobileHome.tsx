@@ -101,7 +101,8 @@ function MobileProfileIdentity({
     .map((part) => part[0])
     .join('');
   const current = draft.experience.find((entry) => entry.current);
-  const role = draft.candidate.headline?.trim() || current?.title || draft.targetRole;
+  // Макет 390: «должность · компания» текущего места; заголовок резюме — только если места нет.
+  const role = current?.title?.trim() || draft.candidate.headline?.trim() || draft.targetRole;
   return (
     <div className="pm-id">
       {src && !broken ? (

@@ -33,7 +33,11 @@ const mounted: Array<{
 function setViewport(desktop: boolean) {
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
-    value: vi.fn(() => ({ matches: desktop })),
+    value: vi.fn(() => ({
+      matches: desktop,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
   });
 }
 
@@ -103,6 +107,37 @@ describe('profile initial states', () => {
     expect(emptyHtml).toContain('Заполнить профиль вручную');
     expect(contentHtml).not.toContain('Профиль пока пуст');
     expect(memoryHtml).not.toContain('Профиль пока пуст');
+  });
+
+  it('names the current role and employer under the 390 name, not the whole imported headline', () => {
+    setViewport(false);
+    const container = mount(
+      <ProfileScreenSurface
+        {...baseProps}
+        draft={{
+          ...emptyDraft,
+          candidate: {
+            fullName: 'Андрей Лебедев',
+            headline:
+              'Маркет Софт, Санкт-Петербург — Директор по разработке · Финтех Лаб, Москва — Head of Engineering',
+          },
+          experience: [
+            {
+              id: 'work-1',
+              chronologyMemoryId: 'memory-work-1',
+              title: 'Head of Engineering',
+              employer: 'Финтех Лаб',
+              startDate: '2021-03',
+              current: true,
+              bulletMemoryIds: [],
+            },
+          ],
+        }}
+      />,
+    );
+    expect(container.querySelector('.pm-id p')?.textContent).toBe(
+      'Head of Engineering · Финтех Лаб',
+    );
   });
 
   it('uses the real connection action and manual contacts route from the empty prompt', () => {
