@@ -241,14 +241,16 @@ install -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0600 \
   "$authorized_keys_temp" "$RELEASE_ROOT/.ssh/authorized_keys"
 chown -R "$DEPLOY_USER:$DEPLOY_USER" "$RELEASE_ROOT/.ssh"
 
-cat > /etc/sudoers.d/openqareer-deploy <<'EOF'
+sudoers_temp="$(mktemp)"
+cat > "$sudoers_temp" <<'EOF'
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-static.service
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-maintenance.service
-systemctl restart openqareer-vacancy-mechanics.service
 openqareer-deploy ALL=(root) NOPASSWD: /usr/bin/systemctl restart openqareer-vacancy-mechanics.service
 EOF
-chmod 0440 /etc/sudoers.d/openqareer-deploy
-visudo -cf /etc/sudoers.d/openqareer-deploy >/dev/null
+# Проверка до установки: битый файл в sudoers.d не должен попасть на хост.
+visudo -cf "$sudoers_temp" >/dev/null || fail "generated sudoers rules do not parse"
+install -o root -g root -m 0440 "$sudoers_temp" /etc/sudoers.d/openqareer-deploy
+rm -f -- "$sudoers_temp"
 
 [[ -L "$RELEASE_ROOT/current" ]] ||
   fail "an immutable application release must be staged before migration"
@@ -271,6 +273,7 @@ expected_health="$(basename "$(readlink "$RELEASE_ROOT/current")")"
 wait_for_application_health "$expected_health" ||
   fail "application service health failed after restart"
 systemctl restart openqareer-maintenance.service
+systemctl restart openqareer-vacancy-mechanics.service
 
 install_caddy_configuration
 systemctl is-active --quiet openqareer-static.service ||
