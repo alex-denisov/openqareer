@@ -615,7 +615,7 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
       ],
       now,
     );
-    expect(funnel).toEqual({ favorites: 2, responses: 3, offers: 1 });
+    expect(funnel).toEqual({ favorites: 2, applied: 4, responses: 3, interviews: 2, offers: 1 });
   });
 
   it('is part of the Today snapshot', () => {
@@ -625,7 +625,28 @@ describe('computeTodayFunnel (block 0 funnel stages)', () => {
       applications: [application({ stage: 'saved' })],
       newVacancies: [],
     });
-    expect(snapshot.funnel).toEqual({ favorites: 1, responses: 0, offers: 0 });
+    expect(snapshot.funnel).toEqual({
+      favorites: 1,
+      applied: 0,
+      responses: 0,
+      interviews: 0,
+      offers: 0,
+    });
+  });
+
+  it('never shows a later stage larger than an earlier one: every stage counts applications that reached it', () => {
+    const recent = '2026-10-01T00:00:00.000Z';
+    const funnel = computeTodayFunnel(
+      [
+        application({ id: 'o1', stage: 'offer', stageChangedAt: recent }),
+        application({ id: 'o2', stage: 'offer', stageChangedAt: recent }),
+        application({ id: 'i1', stage: 'interview', stageChangedAt: recent }),
+        application({ id: 'r1', stage: 'responded', stageChangedAt: recent }),
+        application({ id: 'x1', stage: 'rejected', stageChangedAt: recent }),
+      ],
+      now,
+    );
+    expect(funnel).toEqual({ favorites: 0, applied: 5, responses: 4, interviews: 3, offers: 2 });
   });
 });
 

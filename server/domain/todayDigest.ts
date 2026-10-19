@@ -148,33 +148,39 @@ export interface TodaySnapshot {
 }
 
 /**
- * Этапы воронки «Сегодня», у которых есть проверяемый источник — стадия отклика:
- * избранное — сохранённые сейчас, ответы и офферы — переход в стадию за 30 дней.
+ * Воронка «Сегодня» из одной когорты: отклики, сменившие стадию за 30 дней.
+ * Каждый этап считает отклики, дошедшие до него или дальше, поэтому поздний
+ * этап никогда не больше раннего. Избранное — сохранённые сейчас.
  */
 export interface TodayFunnel {
   readonly favorites: number;
+  readonly applied: number;
   readonly responses: number;
+  readonly interviews: number;
   readonly offers: number;
 }
 
 const FUNNEL_WINDOW_MS = 30 * 86_400_000;
+const APPLIED_STAGES = new Set(['applied', 'responded', 'interview', 'offer', 'rejected']);
 const ANSWERED_STAGES = new Set(['responded', 'interview', 'offer']);
+const INTERVIEW_STAGES = new Set(['interview', 'offer']);
 
 export function computeTodayFunnel(
   applications: readonly ApplicationView[],
   now = new Date().toISOString(),
 ): TodayFunnel {
   const windowStart = Date.parse(now) - FUNNEL_WINDOW_MS;
-  const inWindow = (application: ApplicationView) =>
-    Date.parse(application.stageChangedAt) >= windowStart;
+  const cohort = applications.filter(
+    (application) => Date.parse(application.stageChangedAt) >= windowStart,
+  );
+  const reached = (stages: ReadonlySet<string>) =>
+    cohort.filter((application) => stages.has(application.stage)).length;
   return {
     favorites: applications.filter((application) => application.stage === 'saved').length,
-    responses: applications.filter(
-      (application) => ANSWERED_STAGES.has(application.stage) && inWindow(application),
-    ).length,
-    offers: applications.filter(
-      (application) => application.stage === 'offer' && inWindow(application),
-    ).length,
+    applied: reached(APPLIED_STAGES),
+    responses: reached(ANSWERED_STAGES),
+    interviews: reached(INTERVIEW_STAGES),
+    offers: cohort.filter((application) => application.stage === 'offer').length,
   };
 }
 

@@ -220,7 +220,10 @@ export interface TodaySnapshot {
 /** Этапы воронки из стадий откликов (сервер, `computeTodayFunnel`). */
 export interface TodayFunnelCounts {
   readonly favorites: number;
+  /** Старый сервер не присылает: тогда этап из `momentum`. */
+  readonly applied?: number;
   readonly responses: number;
+  readonly interviews?: number;
   readonly offers: number;
 }
 

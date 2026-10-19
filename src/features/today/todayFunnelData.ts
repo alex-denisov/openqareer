@@ -31,13 +31,19 @@ export function todayFunnelStages(
     {
       key: 'applied',
       label: 'Откликов',
-      value: todayMomentumMetricValue(snapshot.momentum, '30d', 'applied'),
+      value:
+        snapshot.funnel?.applied === undefined
+          ? todayMomentumMetricValue(snapshot.momentum, '30d', 'applied')
+          : count(snapshot.funnel.applied),
     },
     { key: 'responses', label: 'Ответов', value: count(snapshot.funnel?.responses) },
     {
       key: 'interviews',
       label: 'Интервью',
-      value: todayMomentumMetricValue(snapshot.momentum, '30d', 'interviews'),
+      value:
+        snapshot.funnel?.interviews === undefined
+          ? todayMomentumMetricValue(snapshot.momentum, '30d', 'interviews')
+          : count(snapshot.funnel.interviews),
     },
     { key: 'offers', label: 'Офферов', value: count(snapshot.funnel?.offers) },
   ];
