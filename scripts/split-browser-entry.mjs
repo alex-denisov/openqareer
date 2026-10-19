@@ -68,7 +68,9 @@ const PART_COUNT=${partCount};
 const LAST_PART_BYTES=${lastPartBytes};
 const FETCH_CONCURRENCY=${FETCH_CONCURRENCY};
 const REWRITES=${JSON.stringify(rewrites)};
-const statusNode=typeof document==="object"?document.querySelector("#root [role=status]"):null;
+// Only a node that opts in shows load progress: any other status in #root belongs to a screen
+// (the sign-in notice «Сессия закончилась» was overwritten and then removed by this loader).
+const statusNode=typeof document==="object"?document.querySelector("#root [data-split-load-status]"):null;
 const setStatus=(text)=>{if(statusNode)statusNode.textContent=text};
 const sleep=(delay)=>new Promise(resolve=>setTimeout(resolve,delay));
 const pathFor=(index)=>PREFIX+String(index).padStart(3,"0")+".js";
@@ -529,7 +531,7 @@ export function buildSplitDelivery({
   if (!nextHtml.includes('role="status"')) {
     nextHtml = nextHtml.replace(
       '<div id="root"></div>',
-      '<div id="root"><main class="bootstrap-loading"><p role="status">Загружаем рабочее пространство…</p></main></div>',
+      '<div id="root"><main class="bootstrap-loading"><p role="status" data-split-load-status>Загружаем рабочее пространство…</p></main></div>',
     );
   }
   writeFileSync(indexPath, nextHtml);

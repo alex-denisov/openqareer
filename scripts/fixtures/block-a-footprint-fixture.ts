@@ -44,7 +44,13 @@ export function historicalAudit(candidateId: string): CandidateFootprintAudit {
     state: 'completed',
     findings,
     selectedQueryIds: [],
-    adapterStatuses: [],
+    // Mockup 2: «2 Сканирование — 4 источника, 06.10».
+    adapterStatuses: (['sherlock', 'maigret', 'wayback', 'exa'] as const).map((adapterId) => ({
+      adapterId,
+      state: 'checked' as const,
+      sourcesChecked: 1,
+      findingsCount: 0,
+    })),
     ownershipConfirmedAt: '2026-10-05T09:00:00.000Z',
     startedAt: '2026-10-06T09:00:00.000Z',
     completedAt: '2026-10-06T09:12:00.000Z',

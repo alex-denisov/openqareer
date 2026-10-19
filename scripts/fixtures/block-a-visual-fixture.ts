@@ -96,8 +96,41 @@ const skillNames = [
   'Платёжные системы',
   'Kafka',
   'Kubernetes',
-  'PostgreSQL',
   'Найм руководителей',
+  'Terraform',
+] as const;
+
+/** Mockup 2: six skills on screen, 24 in the profile, each with its verdict and source. */
+const SKILL_EVIDENCE: Readonly<
+  Record<string, { status?: string; source: string; verifiedAt?: string }>
+> = {
+  'Engineering management': { status: 'подтверждён', source: 'квиз', verifiedAt: '2026-10-03' },
+  'Платёжные системы': { status: 'подтверждён', source: 'квиз', verifiedAt: '2026-10-03' },
+  Kafka: { status: 'не подтверждён', source: 'из LinkedIn', verifiedAt: '2026-09-12' },
+  Kubernetes: { status: 'не подтверждён', source: 'из LinkedIn', verifiedAt: '2026-09-12' },
+  'Найм руководителей': { source: 'со слов кандидата' },
+  Terraform: { source: 'выведено консультантом' },
+};
+
+const moreSkillNames = [
+  'PostgreSQL',
+  'Микросервисная архитектура',
+  'Антифрод',
+  'SRE',
+  'CI/CD',
+  'Go',
+  'Java',
+  'Python',
+  'AWS',
+  'Observability',
+  'Бюджетирование',
+  'OKR',
+  'Agile',
+  'Безопасность платежей',
+  'PCI DSS',
+  'Data platform',
+  'Менторство',
+  'Переговоры с вендорами',
 ] as const;
 
 /** Matches the approved profile sample and remains 8 of 11 blocks complete. */
@@ -153,12 +186,10 @@ export const syntheticResumeDraft: ResumeDraft = {
       bulletMemoryIds: [],
     },
   ],
-  skills: skillNames.map((name, index) => ({
+  skills: [...skillNames, ...moreSkillNames].map((name, index) => ({
     id: 'block-a-skill-' + String(index + 1).padStart(2, '0'),
     name,
-    ...(name === 'Kafka' || name === 'Kubernetes'
-      ? { status: 'awaiting_candidate_confirmation', source: 'synthetic_fixture' }
-      : {}),
+    ...(SKILL_EVIDENCE[name] ?? { source: 'из LinkedIn', verifiedAt: '2026-09-12' }),
   })),
   education: [
     {

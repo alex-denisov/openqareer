@@ -3,14 +3,15 @@ import {
   Bell,
   BookmarkSimple,
   Briefcase,
+  ArrowsClockwise,
   CaretDown,
   CaretRight,
   CheckCircle,
   ChatCircle,
-  ClockCountdown,
   LinkedinLogo,
   PaperPlaneTilt,
   UserCircle,
+  WarningCircle,
 } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
@@ -22,13 +23,14 @@ import {
 } from './consultantActionStorage';
 import {
   deferTodayAction,
-  selectTodayDecision,
   type TodayFollowUp,
   type TodayProfileFocus,
   type TodayQueueItem,
   type TodaySnapshot,
 } from './todayApi';
-import { TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
+import { TodayLinkedinNote } from './TodayLinkedinNote';
+import { todayDecisionOverride, type TodayDiaryDecisionProp } from './todayDecisionOverride';
+import { TODAY_NOTHING_TO_DECIDE, TodayDesktopContent, actionSourceSummary } from './TodayDesktop';
 import {
   todayFunnelFootnote,
   todayFunnelStages,
@@ -83,6 +85,9 @@ export interface TodayScreenProps {
   readonly onOpenTariffs?: () => void;
   readonly onOpenAutomation?: () => void;
   readonly onOpenExpert?: () => void;
+  readonly onOpenConnections?: () => void;
+  /** Решение дня из карьерного дневника (макет 1 «Вы работаете»). */
+  readonly diaryDecision?: TodayDiaryDecisionProp;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly onNavigate?: (view: CareerCabinetView) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
@@ -197,30 +202,6 @@ async function saveTodayActionDeferral(actionKey: string): Promise<boolean> {
   }
 }
 
-function selectedDecisionAction(snapshot: TodaySnapshot): ReasonedCareerAction | undefined {
-  if (snapshot.todayDecisionSelection?.resolution !== 'accepted') return undefined;
-  const item = snapshot.queue.find(
-    (entry) =>
-      entry.applicationId === snapshot.todayDecisionSelection?.applicationId &&
-      entry.kind === 'follow_up',
-  );
-  if (!item) return undefined;
-  return {
-    revision: 'career-action-policy-v1-2026-08-07',
-    type: 'decision',
-    destination: 'coach',
-    headline: queueActionTitle(item),
-    label: 'Открыть отклик',
-    rationale: item.eyebrow ?? 'Задача из вашей очереди дня.',
-    expectedChange: 'Откроются отклики, чтобы подготовить напоминание.',
-    findingIds: [],
-    roleIds: [],
-    marketIds: [],
-    alternatives: [],
-    approvalBoundary: 'Напоминание отправляется только после вашего подтверждения.',
-  };
-}
-
 export function TodayScreen(props: TodayScreenProps) {
   const actionState = useTodayConsultantAction({
     candidateId: props.candidateId,
@@ -247,26 +228,20 @@ function todayContentProps(
 ): TodayContentProps | null {
   const { snapshot } = props;
   if (!snapshot) return null;
-  const selectedAction = selectedDecisionAction(snapshot);
+  const override = todayDecisionOverride(snapshot, props);
   return {
     snapshot,
-    activeAction: selectedAction ?? actionState.activeAction,
-    onAccept: selectedAction ? () => props.onNavigate?.('responses') : actionState.onAccept,
-    onPostpone: selectedAction
-      ? () => {
-          void selectTodayDecision(
-            snapshot.todayDecisionSelection!.applicationId,
-            'dismissed',
-          ).catch(() => props.onRetry());
-        }
-      : actionState.onPostpone,
-    postponeBusy: selectedAction ? false : actionState.postponeBusy,
-    postponeError: selectedAction ? undefined : actionState.postponeError,
+    activeAction: override?.action ?? actionState.activeAction,
+    onAccept: override?.onAccept ?? actionState.onAccept,
+    onPostpone: override?.onPostpone ?? actionState.onPostpone,
+    postponeBusy: override ? false : actionState.postponeBusy,
+    postponeError: override ? undefined : actionState.postponeError,
     queueRemainderLoading: props.queueRemainderLoading,
     queueRemainderFailed: props.queueRemainderFailed,
     onLoadQueueRemainder: props.onLoadQueueRemainder,
     onNavigate: props.onNavigate,
     onOpenExpert: props.onOpenExpert,
+    onOpenConnections: props.onOpenConnections,
     onDiscussQueueItem: props.onDiscussQueueItem,
     onNavigateProfileTarget: props.onNavigateProfileTarget,
     profileDraft: props.profileDraft,
@@ -279,6 +254,7 @@ interface TodayContentProps {
   readonly profileDraft?: ResumeDraft;
   readonly funnelContext?: TodayFunnelContext;
   readonly onOpenExpert?: () => void;
+  readonly onOpenConnections?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly activeAction?: ReasonedCareerAction;
   readonly onAccept: () => void;
@@ -312,9 +288,18 @@ function TodayContent(props: TodayContentProps) {
         queueRemainderLoading={props.queueRemainderLoading}
         queueRemainderFailed={props.queueRemainderFailed}
         onLoadQueueRemainder={props.onLoadQueueRemainder}
+        onOpenConnections={props.onOpenConnections}
       />
     </div>
   );
+}
+
+function linkedinNoteProps(snapshot: TodaySnapshot, onOpenConnections?: () => void) {
+  return {
+    queueSize: snapshot.queue.length,
+    connectedSources: snapshot.connectedSources,
+    onOpenConnections,
+  };
 }
 
 function TodayMobileContent({
@@ -328,8 +313,10 @@ function TodayMobileContent({
   onNavigate,
   profileDraft,
   funnelContext,
+  onOpenConnections,
 }: Pick<
   TodayContentProps,
+  | 'onOpenConnections'
   | 'snapshot'
   | 'activeAction'
   | 'onAccept'
@@ -344,6 +331,8 @@ function TodayMobileContent({
   return (
     <div className="career-today-mobile pm tm">
       <TodayMobileDecision
+        nothingToDecide={!activeAction && snapshot.queue.length === 0}
+        onNavigate={onNavigate}
         action={activeAction}
         onAccept={onAccept}
         onPostpone={onPostpone}
@@ -356,6 +345,7 @@ function TodayMobileContent({
         followUps={snapshot.followUps}
         onNavigate={onNavigate}
       />
+      <TodayLinkedinNote {...linkedinNoteProps(snapshot, onOpenConnections)} />
       <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
     </div>
@@ -385,6 +375,77 @@ function TodayMobileReasons({
 }
 
 function TodayMobileDecision({
+  nothingToDecide,
+  onNavigate,
+  action,
+  onAccept,
+  onPostpone,
+  postponeBusy,
+  postponeError,
+  onOpenExpert,
+}: {
+  readonly nothingToDecide: boolean;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly action?: ReasonedCareerAction;
+  readonly onAccept: () => void;
+  readonly onPostpone: () => void | Promise<void>;
+  readonly postponeBusy: boolean;
+  readonly postponeError?: string;
+  readonly onOpenExpert?: () => void;
+}) {
+  return (
+    <section
+      className={action && !nothingToDecide ? 'tm-hero is-decision' : 'tm-hero'}
+      aria-label="Следующее решение"
+      aria-busy={postponeBusy || undefined}
+    >
+      <p className="tm-eyebrow">Следующее решение</p>
+      {nothingToDecide ? (
+        <TodayMobileNothingToDecide onNavigate={onNavigate} onOpenExpert={onOpenExpert} />
+      ) : (
+        <TodayMobileDecisionBody
+          action={action}
+          onAccept={onAccept}
+          onPostpone={onPostpone}
+          postponeBusy={postponeBusy}
+          postponeError={postponeError}
+          onOpenExpert={onOpenExpert}
+        />
+      )}
+    </section>
+  );
+}
+
+function TodayMobileNothingToDecide({
+  onNavigate,
+  onOpenExpert,
+}: {
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onOpenExpert?: () => void;
+}) {
+  return (
+    <>
+      <h2>{TODAY_NOTHING_TO_DECIDE}</h2>
+      {onNavigate ? (
+        <button
+          className="pm-cta tm-main"
+          type="button"
+          onClick={() => onNavigate('opportunities')}
+        >
+          <Briefcase aria-hidden="true" weight="regular" />
+          Открыть вакансии
+        </button>
+      ) : null}
+      {onOpenExpert ? (
+        <button className="pm-text tm-later" type="button" onClick={onOpenExpert}>
+          Обсудить цель
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function TodayMobileDecisionBody({
   action,
   onAccept,
   onPostpone,
@@ -400,12 +461,7 @@ function TodayMobileDecision({
   readonly onOpenExpert?: () => void;
 }) {
   return (
-    <section
-      className="tm-hero"
-      aria-label="Следующее решение"
-      aria-busy={postponeBusy || undefined}
-    >
-      <p className="tm-eyebrow">Следующее решение</p>
+    <>
       <h2>{action?.headline ?? 'Нет проверенного следующего шага'}</h2>
       <p className="tm-effect">
         {action?.expectedChange ?? 'В текущих данных нет основания предложить конкретное действие.'}
@@ -425,7 +481,7 @@ function TodayMobileDecision({
       ) : (
         <p className="pm-foot">Источники: нет проверенных данных</p>
       )}
-    </section>
+    </>
   );
 }
 
@@ -701,11 +757,16 @@ function TodaySkeleton() {
 function TodayError({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="career-today-state career-today-state-error">
-      <ClockCountdown size={28} aria-hidden="true" />
-      <h3>Не удалось обновить очередь дня</h3>
-      <p>Часть данных ещё обновляется. Повторите запрос.</p>
-      <button type="button" className="career-btn career-btn-primary" onClick={onRetry}>
-        Повторить
+      <p className="career-today-error-note" role="alert">
+        <WarningCircle size={16} aria-hidden="true" />
+        <span>Не удалось собрать очередь: сервер не ответил.</span>
+      </p>
+      <button
+        type="button"
+        className="career-quiet-button career-today-error-retry"
+        onClick={onRetry}
+      >
+        <ArrowsClockwise size={16} aria-hidden="true" /> Повторить
       </button>
     </div>
   );

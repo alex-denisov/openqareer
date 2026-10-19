@@ -1,3 +1,5 @@
+import { useTodayDiaryDecision } from '../today/useTodayDiaryDecision';
+import { useCareerDiaryAccess } from '../shell/careerDiaryAccess';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
@@ -415,15 +417,24 @@ function TodaySection(props: {
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
   onDiscussQueueItem?: (item: TodayQueueItem) => void;
   onOpenTariffs?: () => void;
+  onOpenConnections?: () => void;
   onOpenAutomation?: () => void;
   profileDraft?: ResumeDraft;
   funnelContext?: TodayFunnelContext;
   onOpenExpert?: () => void;
 }) {
   const today = useToday();
+  const diaryAccess = useCareerDiaryAccess();
+  // Решение из дневника — только когда сам дневник открыт (текущее место в профиле).
+  const diaryDecision = useTodayDiaryDecision(
+    Boolean(props.candidateId) &&
+      diaryAccess.isVisible &&
+      diaryAccess.primaryWorkplace?.status === 'active',
+  );
   return (
     <TodayScreen
       {...props}
+      diaryDecision={diaryDecision}
       snapshot={today.snapshot}
       loading={today.loading}
       failed={today.failed}
@@ -525,6 +536,7 @@ function CabinetSection({
     return (
       <TodaySection
         onOpenTariffs={onOpenTariffs}
+        onOpenConnections={onOpenConnections}
         onOpenAutomation={onOpenAutomation}
         candidateId={session.candidateId}
         consultantAction={consultantAction}

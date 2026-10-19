@@ -22,8 +22,12 @@ async function openAssessment(
   } else {
     await page.locator('aside#career-rail nav').getByRole('button', { name: 'Профиль' }).click();
   }
+  await openSkillCheckFromProfile(page, width);
+}
+
+// The approved mockups open the check from the skills tab, not from a consultant card.
+async function openSkillCheckFromProfile(page: Page, width: number): Promise<void> {
   await page.getByRole('tab', { name: /^Навыки/u }).click();
-  // The approved mockups open the check from the skills tab, not from a consultant card.
   if (width <= 760) {
     await page
       .locator('.career-profile-mobile .pm-row')
@@ -274,18 +278,7 @@ test('connects mobile checklist, suggestions, detail screens and role links', as
       await openAssessment(surface, width);
       await surface.getByRole('button', { name: 'Позже' }).click();
       await expect(surface.getByTestId('role-skill-assessment')).toHaveCount(0);
-      const consultant = surface.locator('.career-expert-panel');
-      if (!(await consultant.isVisible())) {
-        await surface
-          .getByRole('button', {
-            name: /^((Спросить|Открыть) консультанта|Консультант: открыть)$/u,
-          })
-          .first()
-          .click();
-      }
-      const expand = consultant.getByRole('button', { name: 'Развернуть консультанта' });
-      if (await expand.isVisible()) await expand.click();
-      await consultant.getByRole('button', { name: 'Проверить навыки роли' }).click();
+      await openSkillCheckFromProfile(surface, width);
       await beginDialogue(surface);
       await capture(surface, `${width}-dialogue`);
       if (width === 390) {

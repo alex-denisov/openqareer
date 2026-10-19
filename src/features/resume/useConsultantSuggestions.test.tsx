@@ -211,7 +211,7 @@ describe('useConsultantSuggestions and InlineConsultantSuggestion', () => {
       acceptButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(acceptButton.disabled).toBe(true);
-    expect(container.textContent).not.toContain('Правка применена');
+    expect(container.textContent).not.toContain('Правка принята');
 
     await act(async () => {
       approval.resolve(careerCommand('paused'));
@@ -223,7 +223,7 @@ describe('useConsultantSuggestions and InlineConsultantSuggestion', () => {
     });
 
     expect(card()).not.toBeNull();
-    expect(container.textContent).not.toContain('Правка применена');
+    expect(container.textContent).not.toContain('Правка принята');
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('paused');
     expect(getCareerCommands).toHaveBeenCalledTimes(1);
   });
@@ -237,8 +237,8 @@ describe('useConsultantSuggestions and InlineConsultantSuggestion', () => {
 
     await clickAndWait('Принять', 'accept');
 
-    expect(container.textContent).toContain('Правка применена');
-    expect(button('Откатить')).toBeDefined();
+    expect(container.textContent).toContain('Правка принята');
+    expect(button('Отменить правку')).toBeDefined();
     expect(getCareerCommands).toHaveBeenCalledTimes(2);
     expect(approveCareerCommand).toHaveBeenCalledWith('command-about-1');
   });
@@ -283,14 +283,14 @@ describe('useConsultantSuggestions and InlineConsultantSuggestion', () => {
       careerCommand('completed_with_receipt', false),
     );
     await renderProbe();
-    expect(container.textContent).toContain('Правка применена');
+    expect(container.textContent).toContain('Правка принята');
 
-    await clickAndWait('Откатить', 'revert');
+    await clickAndWait('Отменить правку', 'revert');
 
     expect(card()).not.toBeNull();
-    expect(container.textContent).toContain('Правка применена');
+    expect(container.textContent).toContain('Правка принята');
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Откат');
-    expect(button('Откатить')?.disabled).toBe(false);
+    expect(button('Отменить правку')?.disabled).toBe(false);
   });
 
   it('rejects accept and revert attempts without a command ID', async () => {
@@ -325,7 +325,7 @@ describe('useConsultantSuggestions and InlineConsultantSuggestion', () => {
       root.render(<InlineConsultantSuggestion suggestion={{ ...suggestion(), applied: true }} />);
     });
 
-    expect(container.textContent).toContain('Правка применена');
+    expect(container.textContent).toContain('Правка принята');
     expect(button('Принять')).toBeUndefined();
   });
 });

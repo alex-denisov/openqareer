@@ -1465,12 +1465,19 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: connection catalog loaded before the candidate opened Profile`,
   );
   await page.locator('button[aria-label="Профиль"]:visible').click();
-  await page.locator('.career-profile-screen-view').first().waitFor();
+  // 390 has its own native Profile (mockup 2, iOS list) with the short tab «След».
+  const mobileProfile = viewport.width <= 760;
+  await page
+    .locator(mobileProfile ? '.career-profile-mobile' : '.career-profile-screen-view')
+    .first()
+    .waitFor();
   // B441 — вкладки профиля: «Резюме», «Навыки», «Цифровой след»; блок
   // «Документ и форматы» ушёл из экрана вместе с меню документа.
   const profileTabs = page.getByRole('tablist', { name: 'Профиль' });
   await profileTabs.getByRole('tab', { name: 'Резюме' }).waitFor();
-  await profileTabs.getByRole('tab', { name: 'Цифровой след' }).waitFor();
+  await profileTabs
+    .getByRole('tab', { name: mobileProfile ? 'След' : /^Цифровой след/u })
+    .waitFor();
   await mkdir('output/playwright', { recursive: true });
   await page.screenshot({ path: `output/playwright/resume-source-${viewport.name}.png` });
   await page.locator('button[aria-label="Сегодня"]:visible').click();

@@ -667,13 +667,9 @@ test.describe('B232 readability gate', () => {
     await expect(title).toHaveText('Профиль');
     await expect(page.getByText('Не удалось загрузить резюме')).toHaveCount(0);
     await expect(page.getByText('FinCloud').locator('visible=true').first()).toBeVisible();
-    // 390 shows the role line under the name (2-profil.html); 1440 also lists vacancy titles.
+    // Mockup 2: the line under the name is the current role on 1440 and 390 alike.
     await expect(
-      page
-        .getByText(
-          (page.viewportSize()?.width ?? 1440) <= 760 ? 'Руководитель продукта' : 'Head of Product',
-        )
-        .first(),
+      page.getByText('Руководитель продукта').locator('visible=true').first(),
     ).toBeVisible();
   });
 

@@ -2228,7 +2228,14 @@ export async function mockSignedInCabinet(
     }
     if (path.endsWith('/candidate/resume/versions') && route.request().method() === 'GET') {
       return route.fulfill({
-        json: { data: { items: [], nextCursor: null, currentMasterRevision: 'mock-master-1' } },
+        json: {
+          data: {
+            items: [],
+            nextCursor: null,
+            totalCount: 0,
+            currentMasterRevision: 'mock-master-1',
+          },
+        },
       });
     }
     if (path.endsWith('/candidate/footprint')) {

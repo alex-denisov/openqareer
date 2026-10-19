@@ -6,7 +6,8 @@ import {
   getResumeVersions,
   type ResumeAtsAssessmentRequest,
 } from './resumeVersionsApi';
-
+import { getRoleHypotheses } from '../coach/coachApi';
+import { roleAtsRequest } from './atsRoleBasis';
 
 export const RESUME_VERSION_COLLECTION_CHANGED_EVENT =
   'openqareer:resume-version-collection-changed';
@@ -14,6 +15,8 @@ export const RESUME_VERSION_COLLECTION_CHANGED_EVENT =
 export interface ProfileAtsAssessmentState {
   readonly assessment: ResumeAtsAssessment | null;
   readonly sourceVersion: ResumeVersionSummary | null;
+  /** Роль из «Карьеры», по которой считаны ключевые слова, когда версии под вакансию нет. */
+  readonly roleBasis?: string | null;
   readonly loading: boolean;
   readonly error: string | null;
   readonly refresh: () => void;
@@ -28,23 +31,39 @@ export interface UseProfileAtsAssessmentOptions {
 async function loadProfileAssessment(
   requestKey: string | null,
   signal: AbortSignal,
-): Promise<{ readonly assessment: ResumeAtsAssessment; readonly sourceVersion: ResumeVersionSummary | null }> {
+): Promise<{
+  readonly assessment: ResumeAtsAssessment;
+  readonly sourceVersion: ResumeVersionSummary | null;
+  readonly roleBasis: string | null;
+}> {
   let request: ResumeAtsAssessmentRequest;
   let sourceVersion: ResumeVersionSummary | null = null;
+  let roleBasis: string | null = null;
   if (requestKey === null) {
     const versions = await getResumeVersions({ limit: 50, signal });
     sourceVersion =
-      versions.items.find(
-        (item) => item.sourceMasterRevision === versions.currentMasterRevision,
-      ) ?? null;
-    request = sourceVersion ? { versionId: sourceVersion.id } : {};
+      versions.items.find((item) => item.sourceMasterRevision === versions.currentMasterRevision) ??
+      null;
+    const byRole = sourceVersion ? null : await roleBasisOrNull(signal);
+    roleBasis = byRole?.roleTitle ?? null;
+    request = sourceVersion ? { versionId: sourceVersion.id } : (byRole?.request ?? {});
   } else {
     request = JSON.parse(requestKey) as ResumeAtsAssessmentRequest;
   }
   return {
     assessment: await getResumeAtsAssessment(request, signal),
     sourceVersion,
+    roleBasis,
   };
+}
+
+/** Роли не прочитались — оценка остаётся без ключевых слов, как раньше, а не падает. */
+async function roleBasisOrNull(signal: AbortSignal) {
+  try {
+    return roleAtsRequest(await getRoleHypotheses(signal));
+  } catch {
+    return null;
+  }
 }
 
 function subscribeToVersionChanges(refresh: () => void): () => void {
@@ -61,6 +80,7 @@ export function useProfileAtsAssessment(
   const requestKey = request === undefined ? null : JSON.stringify(request);
   const [assessment, setAssessment] = useState<ResumeAtsAssessment | null>(null);
   const [sourceVersion, setSourceVersion] = useState<ResumeVersionSummary | null>(null);
+  const [roleBasis, setRoleBasis] = useState<string | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const [refreshSequence, setRefreshSequence] = useState(0);
@@ -76,12 +96,14 @@ export function useProfileAtsAssessment(
     setLoading(true);
     setAssessment(null);
     setSourceVersion(null);
+    setRoleBasis(null);
     setError(null);
     void loadProfileAssessment(requestKey, controller.signal)
       .then((result) => {
         if (!active) return;
         setAssessment(result.assessment);
         setSourceVersion(result.sourceVersion);
+        setRoleBasis(result.roleBasis);
       })
       .catch((reason: unknown) => {
         if (!active || controller.signal.aborted) return;
@@ -98,5 +120,5 @@ export function useProfileAtsAssessment(
 
   useEffect(() => subscribeToVersionChanges(refresh), [refresh]);
 
-  return { assessment, sourceVersion, loading, error, refresh };
+  return { assessment, sourceVersion, roleBasis, loading, error, refresh };
 }

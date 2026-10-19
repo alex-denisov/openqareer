@@ -571,14 +571,18 @@ test('routes a diary achievement through profile approval and rollback', async (
       .getByRole('button', { name: 'Профиль' })
       .click();
   }
+  if (testInfo.project.name === 'mobile-390') {
+    // 390 (mockup 2, iOS list): the home row names the pending edit and opens «Обо мне».
+    await page.getByRole('button', { name: /Консультант предложил 1 правку/u }).click();
+  }
   const suggestion = page.getByRole('region', { name: 'Предложение карьерного консультанта' });
   await expect(suggestion).toContainText('Предложение из карьерного дневника');
   await suggestion.getByRole('button', { name: 'Принять' }).click();
-  await expect(suggestion).toContainText('Правка применена');
+  await expect(suggestion).toContainText('Правка принята');
   await expect(suggestion).toContainText('Источник: карьерный дневник');
   await captureDiary(page, testInfo, 'achievement-profile-applied');
 
-  await suggestion.getByRole('button', { name: 'Откатить' }).click();
+  await suggestion.getByRole('button', { name: 'Отменить правку' }).click();
   await expect(suggestion).toHaveCount(0);
   await captureDiary(page, testInfo, 'achievement-profile-reverted');
 });

@@ -133,14 +133,15 @@ describe('CandidateFootprintAuditSurface', () => {
     });
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...completedProps} />);
 
+    // Mockup 2: what was found, when the scan found it, and the source one click away.
     expect(html).toContain('GitHub');
-    expect(html).toContain('4 окт. 2026 г.');
-    expect(html).toContain('Источники: sherlock');
+    expect(html).toContain('Найдено сканированием 04.10.');
+    expect(html).toContain('href="https://github.com/ada"');
     const consentHtml = await renderAtStep(completedProps, '1 Согласие');
     expect(consentHtml).toContain('Отозвать согласие');
     expect(html).toContain('Это я');
     expect(html).toContain('Не я');
-    expect(html).toContain('Скрыть');
+    expect(html).not.toContain('Скрыть');
   });
 
   it('keeps sources without keys marked not connected after an audit skips them', async () => {
@@ -185,7 +186,7 @@ describe('CandidateFootprintAuditSurface', () => {
     expect(html).toContain('Обратный поиск по изображению не выполняется.');
   });
 
-  it('shows hidden findings in a disclosure with a real restore action', () => {
+  it('keeps a finding hidden earlier in the list with its review actions', () => {
     const props = baseProps({
       audit: {
         id: 'audit-1',
@@ -227,8 +228,10 @@ describe('CandidateFootprintAuditSurface', () => {
     });
 
     const html = renderToStaticMarkup(<CandidateFootprintAuditSurface {...props} />);
-    expect(html).toContain('Скрытые находки (1)');
-    expect(html).toContain('Показать');
+    // The approved mockup has no hiding: every finding is answered with «Это я» or «Не я».
+    expect(html).toContain('Архивная копия профиля');
+    expect(html).toContain('Это я');
+    expect(html).not.toContain('Скрытые находки');
   });
 
   it('B375: отображает адаптеры метаданных и секретов (B368) со статусом в состоянии источников', async () => {

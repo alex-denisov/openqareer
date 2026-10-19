@@ -166,6 +166,8 @@ describe('LinkedIn session import flow', () => {
     expect(events[0]).toMatchObject({ type: 'start' });
     expect(events.at(-1)).toEqual({ type: 'end' });
     expect(events.some((event) => (event as { type: string }).type === 'read')).toBe(false);
+    // The first detail page answered with another page: the walk names it before closing.
+    expect(events.at(-2)).toEqual({ type: 'failed', key: 'experience' });
   });
 
   it('says why the structured capture fell back to text (B266)', async () => {
@@ -200,10 +202,9 @@ describe('LinkedIn session import flow', () => {
   });
 
   it('names the profile cards the snapshot did not carry (B266)', () => {
-    expect(missingProfileCards('<div componentkey="com.linkedin.sdui.profile.card.refXAbout"></div>')).toEqual([
-      'missing:LanguageTopLevel',
-      'missing:EducationTopLevelSection',
-    ]);
+    expect(
+      missingProfileCards('<div componentkey="com.linkedin.sdui.profile.card.refXAbout"></div>'),
+    ).toEqual(['missing:LanguageTopLevel', 'missing:EducationTopLevelSection']);
     expect(
       missingProfileCards(
         ['About', 'LanguageTopLevel', 'EducationTopLevelSection']

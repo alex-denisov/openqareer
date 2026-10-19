@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ProfileImportLive } from './ProfileImportLive';
 import { useLinkedInImportProgress } from '../connections/linkedinImportProgress';
 import {
@@ -25,6 +25,9 @@ import type {
   ImportedSourceSummary,
 } from '../coach/coachApi';
 import { CONNECTION_PLATFORMS, PLATFORM_LABELS } from '../connections/platformLabels';
+import { connectionStatusLabel, factCountLabel, importDateLabel } from './profileSourceLabels';
+import { ProfileSourceDialog } from './ProfileSourceDialog';
+import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 
 interface ProfileTopcardProps {
   readonly draft: ResumeDraft;
@@ -249,39 +252,6 @@ function TopcardEdit({
  * way — folded into one line here, the full filled/empty list opens only on
  * click (C54 п.5, `<details>`, never an always-open card).
  */
-function connectionStatusLabel(status: CandidateConnection['status'] | undefined): string {
-  if (status === 'connected') return 'Подключено';
-  if (status === 'imported') return 'Импортировано';
-  if (status === 'disconnected') return 'Не подключено';
-  return 'Не импортировано';
-}
-
-function factCountLabel(count: number): string {
-  const rest100 = count % 100;
-  const rest10 = count % 10;
-  const noun =
-    rest100 >= 11 && rest100 <= 14
-      ? 'фактов'
-      : rest10 === 1
-        ? 'факт'
-        : rest10 >= 2 && rest10 <= 4
-          ? 'факта'
-          : 'фактов';
-  return `${count} ${noun}`;
-}
-
-function importDateLabel(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  const parts = new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    timeZone: 'UTC',
-  }).format(date);
-  return parts.replace(/\.$/u, '');
-}
-
 function SourceChip({
   platform,
   imported,
@@ -319,16 +289,66 @@ function SourceChip({
   );
 
   return onOpenConnections ? (
-    <button
-      type="button"
-      className="career-profile-screen-source-chip career-profile-screen-connection-chip"
-      onClick={onOpenConnections}
-      aria-label={`${PLATFORM_LABELS[platform]} · ${detail} · Управлять подключением`}
+    <SourceChipButton
+      platform={platform}
+      detail={detail}
+      connection={connection}
+      factCount={count}
+      importedAt={importedAtValue(imported, connection)}
+      onOpenConnections={onOpenConnections}
     >
       {contents}
-    </button>
+    </SourceChipButton>
   ) : (
     <span className="career-profile-screen-source-chip">{contents}</span>
+  );
+}
+
+function importedAtValue(
+  imported: ImportedSourceSummary | ImportedSource | undefined,
+  connection: CandidateConnection | undefined,
+): string | undefined {
+  if (imported && 'lastImportedAt' in imported) return imported.lastImportedAt;
+  if (imported?.importedAt) return imported.importedAt;
+  if (connection?.status === 'connected') return connection.lastImportedAt;
+  return connection?.status === 'imported' ? connection.importedAt : undefined;
+}
+
+/** Макет 2: чип источника открывает окно источника, а не сразу «Аккаунт». */
+function SourceChipButton(props: {
+  readonly platform: (typeof CONNECTION_PLATFORMS)[number];
+  readonly detail: string;
+  readonly connection?: CandidateConnection;
+  readonly factCount?: number;
+  readonly importedAt?: string;
+  readonly onOpenConnections: () => void;
+  readonly children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="career-profile-screen-source-chip career-profile-screen-connection-chip"
+        onClick={() => setOpen(true)}
+        aria-haspopup="dialog"
+        aria-label={`${PLATFORM_LABELS[props.platform]} · ${props.detail} · Управлять подключением`}
+      >
+        {props.children}
+      </button>
+      <ProfileSourceDialog
+        platform={props.platform}
+        connection={props.connection}
+        factCount={props.factCount}
+        importedAt={props.importedAt}
+        isOpen={open}
+        onClose={() => setOpen(false)}
+        onOpenConnections={() => {
+          setOpen(false);
+          props.onOpenConnections();
+        }}
+      />
+    </>
   );
 }
 
@@ -513,7 +533,11 @@ function TopcardName({ name, onEdit }: { readonly name?: string; readonly onEdit
 }
 
 function TopcardProfileMeta({ draft }: { readonly draft: ResumeDraft }) {
-  const headline = draft.candidate.headline?.trim() || draft.targetRole?.trim();
+  // Макет 2: «должность, компания · город» текущего места; заголовок резюме — если места нет.
+  const headline =
+    draft.experience.find((entry) => entry.current)?.title?.trim() ||
+    draft.candidate.headline?.trim() ||
+    draft.targetRole?.trim();
   const contains = (text: string | undefined, part: string | undefined) =>
     Boolean(
       text && part && text.toLocaleLowerCase('ru-RU').includes(part.toLocaleLowerCase('ru-RU')),
@@ -678,6 +702,7 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
       <ProfileImportLive onReimport={props.onOpenConnections} />
+      <ProfileImportFailureNote variant="desktop" onReimport={props.onOpenConnections} />
     </div>
   );
 }

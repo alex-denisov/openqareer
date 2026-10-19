@@ -696,6 +696,12 @@ test.describe('B441 Profile screen from mockup 2', () => {
 
     const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 фактов/u });
     await sourceButton.click();
+    if (testInfo.project.name !== 'mobile-390') {
+      // Mockup 2 «Модальное окно: источник»: the chip opens the source dialog first.
+      const dialog = page.getByRole('dialog', { name: 'LinkedIn' });
+      await expect(dialog).toContainText('В профиле 9 фактов');
+      await dialog.getByRole('button', { name: /Импортировать заново|Подключить/u }).click();
+    }
     const account = page.getByTestId('career-shell').getByRole('main');
     if (testInfo.project.name === 'mobile-390') {
       await expect(account.locator('[data-mv="conn"]')).toBeVisible();
@@ -2021,7 +2027,7 @@ test.describe('B265 Profile screen', () => {
     // Accept suggestion after the retry.
     await suggestion.getByRole('button', { name: 'Принять' }).click();
     await expect.poll(() => approvedCommandId).toBe('cmd-revise-about-1');
-    await expect(suggestion).toContainText('Правка применена');
+    await expect(suggestion).toContainText('Правка принята');
     if (testInfo.project.name === 'mobile-390') {
       await suggestion.screenshot({
         path: 'output/playwright/C58/suggestion-applied-mobile-390.png',
@@ -2033,7 +2039,7 @@ test.describe('B265 Profile screen', () => {
     }
 
     // Revert suggestion
-    await suggestion.getByRole('button', { name: 'Откатить' }).click();
+    await suggestion.getByRole('button', { name: 'Отменить правку' }).click();
     await expect.poll(() => revertedCommandId).toBe('cmd-revise-about-1');
     await expect(suggestion).toHaveCount(0);
   });
@@ -2362,7 +2368,7 @@ test.describe('B265 Profile screen', () => {
 
     await suggestion.getByRole('button', { name: 'Принять' }).click();
     await expect.poll(() => accepted).toBe(true);
-    await expect(suggestionRow.getByRole('status')).toHaveText('Правка применена');
+    await expect(suggestionRow.getByRole('status')).toContainText('Правка принята');
     await expect.poll(() => matchedReadsAfterAccept).toBeGreaterThan(0);
     await page.locator('button[aria-label="Вакансии"]:visible').first().click();
     const reopenedToggle = page

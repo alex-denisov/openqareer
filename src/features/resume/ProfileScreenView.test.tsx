@@ -73,7 +73,8 @@ describe('ProfileScreenSurface — states', () => {
         draft={{ candidate: {}, experience: [], education: [], languages: [] }}
       />,
     );
-    expect(html).toContain('Профиль пока пуст');
+    expect(html).toContain('Профиль пуст.');
+    expect(html).toContain('Загрузить резюме');
   });
 
   it('renders every section anchor and the source-coverage side rail once the draft is populated', () => {

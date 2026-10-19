@@ -8630,6 +8630,154 @@
   font-size: var(--career-text-xs);
 }
 
+/* Макет 2 «Ошибка импорта»: красная заметка и тихая кнопка повтора. */
+.profile-import-failure {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.profile-import-failure p {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid
+    color-mix(in oklch, var(--career-danger) 50%, transparent);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-danger-soft);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.profile-import-failure svg {
+  flex: none;
+  margin-block-start: 2px;
+}
+
+.profile-import-failure p svg {
+  color: var(--career-danger);
+}
+
+.profile-import-failure.is-mobile .career-quiet-button {
+  inline-size: 100%;
+  justify-content: center;
+}
+
+.profile-import-failure .career-quiet-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+/* Макет 2 «Модальное окно: источник»: опасное действие и строка подтверждения. */
+.career-danger-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-4);
+  border: var(--career-border-width) solid
+    color-mix(in oklch, var(--career-danger) 60%, transparent);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  color: var(--career-danger);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.career-danger-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.profile-source-dialog {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.profile-source-dialog p {
+  margin: 0;
+}
+
+.profile-source-dialog-status {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+}
+
+.profile-source-dialog .profile-source-dialog-status .career-profile-screen-tag {
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  background: var(--career-surface);
+}
+
+.profile-source-dialog .profile-source-dialog-status .career-profile-screen-tag.is-verified {
+  border-color: color-mix(in oklch, var(--career-success) 45%, var(--career-line));
+  color: var(--career-success);
+}
+
+.profile-source-dialog-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+/* Макет 2 «ATS: нет избранных вакансий»: заметка с иконкой Info под оценкой. */
+.career-profile-ats-role-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-profile-ats-role-note svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--career-text-dim);
+}
+
+/* Макет 1 «Ошибка»: красная заметка и тихая кнопка «Повторить» на всю ширину карточки. */
+.career-today-state-error {
+  justify-items: stretch;
+  gap: var(--career-space-3);
+}
+
+.career-today-state .career-today-error-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid
+    color-mix(in oklch, var(--career-danger) 50%, transparent);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-danger-soft);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+
+.career-today-error-note svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--career-danger);
+}
+
+.career-today-error-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+}
+
 @media (max-width: 640px) {
   .career-today-digest {
     gap: var(--career-space-2);
@@ -16698,7 +16846,7 @@ button.chip {
     display: none;
   }
 
-  .career-desktop-topbar .career-bootstrap-bell {
+  .career-desktop-topbar:has(.career-bootstrap-status) .career-desktop-topbar-actions {
     margin-inline-start: auto;
   }
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Spinner } from '@phosphor-icons/react';
+import { ArrowsClockwise, CheckCircle, Spinner } from '@phosphor-icons/react';
 
 export interface InlineSuggestionItem {
   readonly id: string;
@@ -47,6 +47,10 @@ function SuggestionComparison({
   );
 }
 
+/** Макет 2 «Предложение консультанта: принято». */
+export const APPLIED_SUGGESTION_NOTE =
+  'Правка принята, квитанция консультанта сохранена. Её можно отменить позже.';
+
 function AppliedActions({
   busy,
   onRevert,
@@ -55,8 +59,11 @@ function AppliedActions({
   readonly onRevert?: () => void;
 }) {
   return (
-    <div className="career-consultant-suggestion-actions">
-      <span className="career-consultant-suggestion-status">Правка применена</span>
+    <div className="career-consultant-suggestion-actions is-applied">
+      <p className="career-consultant-suggestion-status" role="status">
+        <CheckCircle size={16} aria-hidden="true" />
+        <span>{APPLIED_SUGGESTION_NOTE}</span>
+      </p>
       {onRevert ? (
         <button
           type="button"
@@ -65,8 +72,12 @@ function AppliedActions({
           disabled={busy}
           aria-busy={busy || undefined}
         >
-          {busy ? <Spinner size={16} aria-hidden="true" /> : null}
-          {busy ? 'Откатываем…' : 'Откатить'}
+          {busy ? (
+            <Spinner size={16} aria-hidden="true" />
+          ) : (
+            <ArrowsClockwise size={16} aria-hidden="true" />
+          )}
+          {busy ? 'Отменяем…' : 'Отменить правку'}
         </button>
       ) : null}
     </div>

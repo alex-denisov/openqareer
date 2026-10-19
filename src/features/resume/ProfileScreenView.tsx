@@ -32,6 +32,7 @@ import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfi
 import { ProfileResumeVersions, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
 import { getRelocationQuestionnaire } from '../relocation/relocationApi';
 import type { ProfileFocusRequest, ProfileMobileScene } from './profileMobileNavigation';
+import { ProfileEmptyStart } from './ProfileEmptyStart';
 import { ProfileMobileScreen } from './ProfileMobileScreen';
 import { ProfileDataDialog } from './ProfileDataDialog';
 import { ProfileDesktopSkills } from './ProfileDesktopSkills';
@@ -81,30 +82,6 @@ function ProfileErrorState({
         <ArrowClockwise size={15} />
         Повторить
       </button>
-    </div>
-  );
-}
-
-function ProfileEmptyState({
-  onOpenConnections,
-  onFillManually,
-}: {
-  readonly onOpenConnections?: () => void;
-  readonly onFillManually: () => void;
-}) {
-  return (
-    <div className="career-profile-screen-state">
-      <p>Профиль пока пуст. Подключите источник резюме или заполните разделы вручную.</p>
-      <div className="career-profile-screen-review-actions">
-        {onOpenConnections ? (
-          <button type="button" className="career-primary-button" onClick={onOpenConnections}>
-            Подключить источник
-          </button>
-        ) : null}
-        <button type="button" className="career-quiet-button" onClick={onFillManually}>
-          Заполнить профиль вручную
-        </button>
-      </div>
     </div>
   );
 }
@@ -273,9 +250,12 @@ export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
     return (
       <div className="career-profile-screen-view">
         {dialog}
-        <ProfileEmptyState
+        <ProfileEmptyStart
+          variant="desktop"
           onOpenConnections={onOpenConnections}
+          onOpenExpert={props.onOpenExpert}
           onFillManually={() => dataDialog.select()}
+          onImported={onRetry}
         />
         {props.vacancyRequirement ? (
           <ProfileExperienceSection

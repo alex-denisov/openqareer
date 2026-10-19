@@ -242,7 +242,7 @@ export function apiErrorMessage(reason: unknown, fallback: string): string {
 
 const MALFORMED_RESPONSE_MESSAGE = 'Сервис вернул ответ неожиданной формы. Повторите запрос.';
 
-function malformedResponseError(): CoachApiError {
+export function malformedResponseError(): CoachApiError {
   return new CoachApiError(MALFORMED_RESPONSE_MESSAGE, 'malformed_response', true);
 }
 

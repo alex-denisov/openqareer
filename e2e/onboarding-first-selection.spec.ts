@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { chooseFirstRunPlatform, saveFirstRunGoal } from './helpers/firstRunGoal';
 
 const CANDIDATE = {
   username: 'first-run.candidate',
@@ -44,10 +45,8 @@ test.describe('S11-WIZ: account consent remains available from FirstRun', () => 
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('first-run-wizard')).toBeVisible();
 
-    await page.getByTestId('edit-goal-btn').click();
-    await page.getByTestId('goal-textarea').fill('Ищу продуктовую роль в Европе.');
-    await page.getByTestId('save-goal-btn').click();
-    await page.getByTestId('source-opt-hh').click();
+    await saveFirstRunGoal(page, 'Ищу продуктовую роль в Европе.');
+    await chooseFirstRunPlatform(page, 'hh');
 
     const access = page.locator('.career-account-access');
     await expect(access).toBeVisible();

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { chooseFirstRunPlatform, saveFirstRunGoal } from './helpers/firstRunGoal';
 
 /**
  * B140 — the four defects the owner reported on the released shell. Each check
@@ -112,7 +113,8 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await waitForLiveApp(page);
     await expect(page.getByTestId('first-run-wizard')).toBeVisible();
-    await page.getByTestId('source-opt-linkedin').click();
+    await saveFirstRunGoal(page);
+    await chooseFirstRunPlatform(page, 'linkedin');
     await expect(page.locator('.career-account-access')).toBeVisible();
     await expect(page.getByTestId('first-run-wizard')).toBeHidden();
     await expect(page.getByText('Подключено', { exact: true })).toHaveCount(0);

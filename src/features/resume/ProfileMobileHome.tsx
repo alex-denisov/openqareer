@@ -1,3 +1,5 @@
+import { ProfileEmptyStart } from './ProfileEmptyStart';
+import { ProfileImportFailureNote } from './ProfileImportFailureNote';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -101,7 +103,8 @@ function MobileProfileIdentity({
     .map((part) => part[0])
     .join('');
   const current = draft.experience.find((entry) => entry.current);
-  const role = draft.candidate.headline?.trim() || current?.title || draft.targetRole;
+  // Макет 390: «должность · компания» текущего места; заголовок резюме — только если места нет.
+  const role = current?.title?.trim() || draft.candidate.headline?.trim() || draft.targetRole;
   return (
     <div className="pm-id">
       {src && !broken ? (
@@ -186,28 +189,31 @@ export function ProfileMobileSources({
 }) {
   const progress = linkedinImportProgressView(useLinkedInImportProgress());
   return (
-    <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
-      {(['linkedin', 'hh'] as const).map((platform) => {
-        const source = importedSources?.find((item) => item.platform === platform);
-        return (
-          <ProfileMobileRow
-            key={platform}
-            icon={platform === 'linkedin' ? LinkedinLogo : FileText}
-            title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
-            detail={
-              platform === 'linkedin' && progress
-                ? `читаем разделы, ${progress.readCount} из ${progress.total}`
-                : source
-                  ? pluralRu(source.factCount, ['факт', 'факта', 'фактов'])
-                  : 'Не импортировано'
-            }
-            value={profileMobileDate(source?.lastImportedAt)}
-            onClick={onSelect}
-          />
-        );
-      })}
-      <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
-    </ProfileMobileGroup>
+    <>
+      <ProfileImportFailureNote variant="mobile" onReimport={onSelect} />
+      <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
+        {(['linkedin', 'hh'] as const).map((platform) => {
+          const source = importedSources?.find((item) => item.platform === platform);
+          return (
+            <ProfileMobileRow
+              key={platform}
+              icon={platform === 'linkedin' ? LinkedinLogo : FileText}
+              title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
+              detail={
+                platform === 'linkedin' && progress
+                  ? `читаем разделы, ${progress.readCount} из ${progress.total}`
+                  : source
+                    ? pluralRu(source.factCount, ['факт', 'факта', 'фактов'])
+                    : 'Не импортировано'
+              }
+              value={profileMobileDate(source?.lastImportedAt)}
+              onClick={onSelect}
+            />
+          );
+        })}
+        <ProfileMobileRow icon={Plus} title="Добавить источник" onClick={onSelect} />
+      </ProfileMobileGroup>
+    </>
   );
 }
 
@@ -289,7 +295,12 @@ function ProfileMobileReadiness(props: HomeProps) {
 export function ProfileMobileEmptyResume({
   open,
   onOpenConnections,
-}: Pick<HomeProps, 'open' | 'onOpenConnections'>) {
+  onOpenExpert,
+  onRetry,
+}: Pick<HomeProps, 'open' | 'onOpenConnections'> & {
+  readonly onOpenExpert?: () => void;
+  readonly onRetry?: () => void;
+}) {
   return (
     <div
       className="pm-pane"
@@ -297,21 +308,13 @@ export function ProfileMobileEmptyResume({
       role="tabpanel"
       aria-labelledby="profile-mobile-tab-resume"
     >
-      <p className="pm-foot">
-        {onOpenConnections
-          ? 'Профиль пока пуст. Подключите источник резюме или заполните разделы вручную.'
-          : 'Профиль пока пуст. Заполните разделы вручную.'}
-      </p>
-      <ProfileMobileGroup>
-        {onOpenConnections ? (
-          <ProfileMobileRow icon={Plus} title="Подключить источник" onClick={onOpenConnections} />
-        ) : null}
-        <ProfileMobileRow
-          icon={UserCircle}
-          title="Заполнить профиль вручную"
-          onClick={() => open({ page: 'contacts' })}
-        />
-      </ProfileMobileGroup>
+      <ProfileEmptyStart
+        variant="mobile"
+        onOpenConnections={onOpenConnections}
+        onOpenExpert={onOpenExpert}
+        onFillManually={() => open({ page: 'contacts' })}
+        onImported={() => onRetry?.()}
+      />
     </div>
   );
 }
@@ -322,9 +325,22 @@ function suggestionTopics(pending: readonly InlineSuggestionItem[]): string {
   return [...topics].sort((a) => (a === 'даты' ? 1 : -1)).join(' и ');
 }
 
+/** The pending edits lead to one nested page: «Опыт» when it has any, otherwise «Обо мне». */
+function pendingSuggestionTarget(pending: readonly InlineSuggestionItem[]) {
+  return pending.some((item) => item.section === 'experience')
+    ? { page: 'exp' as const, block: 'Опыт' }
+    : { page: 'about' as const, block: 'Обо мне' };
+}
+
 export function ProfileMobileResumeHome(props: HomeProps) {
   const pending = (props.suggestions ?? []).filter(
-    (suggestion) => suggestion.section === 'experience' && !suggestion.applied,
+    (suggestion) =>
+      (suggestion.section === 'experience' || suggestion.section === 'about') &&
+      !suggestion.applied,
+  );
+  const target = pendingSuggestionTarget(pending);
+  const targetPending = pending.filter((item) =>
+    target.page === 'exp' ? item.section === 'experience' : item.section === 'about',
   );
   return (
     <div
@@ -334,11 +350,21 @@ export function ProfileMobileResumeHome(props: HomeProps) {
       aria-labelledby="profile-mobile-tab-resume"
     >
       {pending.length ? (
-        <button type="button" className="pm-focus" onClick={() => props.open({ page: 'exp' })}>
+        <button
+          type="button"
+          className="pm-focus"
+          onClick={() => props.open({ page: target.page })}
+        >
           <Sparkle size="1em" aria-hidden="true" />
           <span>
-            <b>Консультант предложил {pluralRu(pending.length, ['правку', 'правки', 'правок'])}</b>
-            <small>Блок «Опыт»: {suggestionTopics(pending)}</small>
+            <b>
+              Консультант предложил {pluralRu(targetPending.length, ['правку', 'правки', 'правок'])}
+            </b>
+            <small>
+              {target.page === 'exp'
+                ? `Блок «Опыт»: ${suggestionTopics(targetPending)}`
+                : 'Блок «Обо мне»: текст раздела'}
+            </small>
           </span>
           <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
         </button>

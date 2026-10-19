@@ -1,15 +1,16 @@
 import {
   ArrowClockwise,
+  Check,
   CheckCircle,
   CircleNotch,
-  EyeSlash,
   Info,
   LockSimple,
   ShieldCheck,
   TrashSimple,
   WarningCircle,
-  XCircle,
+  X,
 } from '@phosphor-icons/react';
+import { pluralRu } from '../../../shared/pluralRu';
 import { useEffect, useRef, useState, type JSX } from 'react';
 import {
   FOOTPRINT_ADAPTER_REGISTRY,
@@ -413,25 +414,12 @@ function ConsentDisclosure(props: ConsentDisclosureProps): JSX.Element {
   return <ConsentGrantForm {...props} />;
 }
 
-function FindingGroupTitle(kind: string): string {
-  if (kind === 'profile') return 'Профили';
-  if (kind === 'breach') return 'Утечки';
-  if (kind === 'archive') return 'Архивные страницы';
-  if (kind === 'mention') return 'Упоминания';
-  return 'Другие находки';
-}
-
-function findingLabel(finding: CandidateFootprintFinding): string {
-  if (finding.review === 'confirmed_self') return 'Подтверждено вами';
-  if (finding.review === 'not_self') return 'Вы отметили «не я»';
-  if (finding.match === 'likely_self') return 'Нужно проверить';
-  return 'Совпадение не подтверждено';
-}
-
-function observedDate(value: string): string {
+/** «06.10» — the short date the approved mockup uses on findings and step tiles. */
+function shortDate(value: string | undefined): string | null {
+  if (!value) return null;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('ru-RU', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(date);
 }
 
 function ProfileFootprintReviewSegments({
@@ -456,6 +444,7 @@ function ProfileFootprintReviewSegments({
           )
         }
       >
+        <Check aria-hidden="true" />
         Это я
       </button>
       <button
@@ -466,13 +455,18 @@ function ProfileFootprintReviewSegments({
           onReview(finding.id, finding.review === 'not_self' ? 'unreviewed' : 'not_self')
         }
       >
+        <X aria-hidden="true" />
         Не я
       </button>
     </div>
   );
 }
 
-function FindingReviewButtons({
+/**
+ * Mockup 2, «Цифровой след»: one row per finding — what was found, when the scan found it and
+ * why it may be the candidate — with «Это я» / «Не я». 390 keeps the reason line only.
+ */
+function FindingRow({
   finding,
   busy,
   onReview,
@@ -481,93 +475,29 @@ function FindingReviewButtons({
   readonly busy: boolean;
   readonly onReview: (findingId: string, review: FootprintReview) => void;
 }) {
-  if (finding.review === 'hidden') {
-    return (
-      <button type="button" disabled={busy} onClick={() => onReview(finding.id, 'unreviewed')}>
-        Показать
-      </button>
-    );
-  }
+  const found = shortDate(finding.observedAt);
+  const detail = finding.detail.trim().replace(/[.。]$/u, '');
   return (
-    <div className="career-footprint-review-actions profile-footprint-review-actions--segmented">
-      <ProfileFootprintReviewSegments finding={finding} busy={busy} onReview={onReview} />
-      <button
-        type="button"
-        className="profile-footprint-review-hide"
-        disabled={busy}
-        onClick={() => onReview(finding.id, 'hidden')}
-      >
-        Скрыть
-      </button>
-    </div>
-  );
-}
-
-function ProfileFootprintFindingEvidence({
-  finding,
-}: {
-  readonly finding: CandidateFootprintFinding;
-}) {
-  return (
-    <>
-      <div className="profile-footprint-finding-evidence-desktop">
-        <p className="career-footprint-finding-sources">Источники: {finding.sources.join(', ')}</p>
-        {finding.url ? (
-          <a href={finding.url} target="_blank" rel="noopener noreferrer">
-            Открыть источник
-          </a>
-        ) : null}
-      </div>
-      <details className="profile-footprint-finding-evidence-mobile">
-        <summary>Источники и дата</summary>
-        <div>
-          <span className="career-footprint-finding-date">{observedDate(finding.observedAt)}</span>
-          <p className="career-footprint-finding-sources">
-            Источники: {finding.sources.join(', ')}
-          </p>
+    <li className="profile-footprint-find">
+      <div className="profile-footprint-find-copy">
+        <strong>
           {finding.url ? (
             <a href={finding.url} target="_blank" rel="noopener noreferrer">
-              Открыть источник
+              {finding.title}
             </a>
+          ) : (
+            finding.title
+          )}
+        </strong>
+        <p>
+          {found ? (
+            <span className="profile-footprint-find-when">Найдено сканированием {found}. </span>
           ) : null}
-        </div>
-      </details>
-    </>
-  );
-}
-
-function FindingCard({
-  finding,
-  busy,
-  onReview,
-}: {
-  readonly finding: CandidateFootprintFinding;
-  readonly busy: boolean;
-  readonly onReview: (findingId: string, review: FootprintReview) => void;
-}) {
-  const SourceIcon =
-    finding.review === 'confirmed_self'
-      ? CheckCircle
-      : finding.review === 'not_self'
-        ? XCircle
-        : finding.review === 'hidden'
-          ? EyeSlash
-          : Info;
-  return (
-    <li className="career-footprint-finding">
-      <div className="career-footprint-finding-heading">
-        <div>
-          <strong>{finding.title}</strong>
-          <span className="career-footprint-finding-status">
-            <SourceIcon aria-hidden="true" />
-            {findingLabel(finding)}
-          </span>
-        </div>
-        <span className="career-footprint-finding-date">{observedDate(finding.observedAt)}</span>
+          {detail}
+          <span className="profile-footprint-find-when">.</span>
+        </p>
       </div>
-      <p className="career-footprint-finding-detail">{finding.detail}</p>
-      <ProfileFootprintFindingEvidence finding={finding} />
-      <FindingReviewButtons finding={finding} busy={busy} onReview={onReview} />
+      <ProfileFootprintReviewSegments finding={finding} busy={busy} onReview={onReview} />
     </li>
   );
 }
@@ -577,73 +507,33 @@ function FindingsSection({
   busyFindingId,
   onReview,
 }: Pick<CandidateFootprintAuditSurfaceProps, 'audit' | 'busyFindingId' | 'onReview'>) {
-  const findings = audit?.findings ?? [];
-  const visible = findings.filter((finding) => finding.review !== 'hidden');
-  const hidden = findings.filter((finding) => finding.review === 'hidden');
-  const groups = [...new Set(visible.map((finding) => finding.kind))];
   if (!audit || audit.state === 'pending') return null;
+  const findings = audit.findings;
   return (
     <section className="career-footprint-findings" aria-labelledby="footprint-findings-title">
-      <h3 id="footprint-findings-title">Находки</h3>
-      {groups.length ? (
-        groups.map((kind) => (
-          <FindingGroup
-            key={kind}
-            kind={kind}
-            findings={visible.filter((finding) => finding.kind === kind)}
-            busyFindingId={busyFindingId}
-            onReview={onReview}
-          />
-        ))
+      <h3 id="footprint-findings-title" className="career-sr-only">
+        Находки
+      </h3>
+      {findings.length ? (
+        <ul className="profile-footprint-finds">
+          {findings.map((finding) => (
+            <FindingRow
+              key={finding.id}
+              finding={finding}
+              busy={busyFindingId === finding.id}
+              onReview={onReview}
+            />
+          ))}
+        </ul>
       ) : (
         <div className="career-footprint-empty-results" role="status">
           <ShieldCheck aria-hidden="true" />
           <p>По выбранным источникам новых находок нет.</p>
         </div>
       )}
-      {hidden.length ? (
-        <details className="career-footprint-hidden">
-          <summary>Скрытые находки ({hidden.length})</summary>
-          <ul>
-            {hidden.map((finding) => (
-              <FindingCard
-                key={finding.id}
-                finding={finding}
-                busy={busyFindingId === finding.id}
-                onReview={onReview}
-              />
-            ))}
-          </ul>
-        </details>
-      ) : null}
-    </section>
-  );
-}
-
-function FindingGroup({
-  kind,
-  findings,
-  busyFindingId,
-  onReview,
-}: {
-  readonly kind: string;
-  readonly findings: readonly CandidateFootprintFinding[];
-  readonly busyFindingId?: string;
-  readonly onReview: (findingId: string, review: FootprintReview) => void;
-}) {
-  return (
-    <section aria-label={FindingGroupTitle(kind)} className="career-footprint-finding-group">
-      <h4>{FindingGroupTitle(kind)}</h4>
-      <ul>
-        {findings.map((finding) => (
-          <FindingCard
-            key={finding.id}
-            finding={finding}
-            busy={busyFindingId === finding.id}
-            onReview={onReview}
-          />
-        ))}
-      </ul>
+      <p className="profile-footprint-find-note">
+        До подтверждения находки не попадают в профиль и не используются в откликах.
+      </p>
     </section>
   );
 }
@@ -871,7 +761,10 @@ const PROFILE_FOOTPRINT_STEP_META: ReadonlyArray<
 
 function consentStepStatus(state: ProfileFootprintStepState) {
   if (!state.consent.approved) return 'Ожидает утверждения';
-  if (state.consent.granted) return 'Согласие выдано';
+  if (state.consent.granted) {
+    const given = shortDate(state.audit?.ownershipConfirmedAt);
+    return given ? `дано ${given}` : 'Согласие выдано';
+  }
   return 'Нужно ваше согласие';
 }
 
@@ -879,9 +772,14 @@ function scanStepStatus(state: ProfileFootprintStepState) {
   if (state.audit?.state === 'pending') return 'Проверка выполняется';
   if (state.audit?.state === 'failed') return 'Не завершена';
   if (state.audit?.state === 'completed') {
-    return state.audit.completedAt
-      ? `Завершена ${observedDate(state.audit.completedAt)}`
-      : 'Завершена';
+    // Mockup 2: «4 источника, 06.10» — how many sources answered and when the scan finished.
+    const checked = state.audit.adapterStatuses.filter((item) => item.state === 'checked').length;
+    const finished = shortDate(state.audit.completedAt);
+    if (checked > 0) {
+      const sources = pluralRu(checked, ['источник', 'источника', 'источников']);
+      return finished ? `${sources}, ${finished}` : sources;
+    }
+    return finished ? `Завершена ${finished}` : 'Завершена';
   }
   return 'Не запускалась';
 }
@@ -890,7 +788,7 @@ function findingsStepStatus(state: ProfileFootprintStepState) {
   if (state.audit?.state !== 'completed') return 'После завершения проверки';
   const unresolved = reviewCounts(state.audit).unresolved;
   return unresolved > 0
-    ? `Нужно проверить: ${unresolved}`
+    ? `${unresolved} ждут подтверждения`
     : `Находок: ${state.audit.findings.length}`;
 }
 
@@ -1062,27 +960,45 @@ function ReviewChecklist({
   );
 }
 
+const PRIVACY_NOTE =
+  'Находки видите только вы. До подтверждения они не попадают в профиль и отклики.';
+
+/**
+ * Mockup 2: 1440 shows the tag «Видите только вы» beside the findings heading, 390 the full
+ * note above the list. Either opens consent and data controls (revoke, delete).
+ */
+function FootprintPrivacyToggle({
+  open,
+  onToggle,
+}: {
+  readonly open: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="profile-footprint-privacy-trigger"
+      aria-label={PRIVACY_NOTE}
+      aria-expanded={open}
+      aria-controls="profile-footprint-privacy-controls"
+      onClick={onToggle}
+    >
+      <LockSimple aria-hidden="true" />
+      <span className="profile-footprint-privacy-short">Видите только вы</span>
+      <span className="profile-footprint-privacy-long">{PRIVACY_NOTE}</span>
+    </button>
+  );
+}
+
 function ProfileFootprintFindingsStep({
   props,
   privacyControlsOpen,
-  onTogglePrivacyControls,
 }: {
   readonly props: CandidateFootprintAuditSurfaceProps;
   readonly privacyControlsOpen: boolean;
-  readonly onTogglePrivacyControls: () => void;
 }) {
   return (
     <>
-      <button
-        type="button"
-        className="profile-footprint-privacy-trigger"
-        aria-expanded={privacyControlsOpen}
-        aria-controls="profile-footprint-privacy-controls"
-        onClick={onTogglePrivacyControls}
-      >
-        <LockSimple aria-hidden="true" />
-        <span>Находки видите только вы. До подтверждения они не попадают в профиль и отклики.</span>
-      </button>
       {privacyControlsOpen ? (
         <section
           id="profile-footprint-privacy-controls"
@@ -1107,13 +1023,11 @@ function ProfileFootprintStepContent({
   props,
   onOpenFindings,
   privacyControlsOpen,
-  onTogglePrivacyControls,
 }: {
   readonly step: ProfileFootprintStepId;
   readonly props: CandidateFootprintAuditSurfaceProps;
   readonly onOpenFindings: () => void;
   readonly privacyControlsOpen: boolean;
-  readonly onTogglePrivacyControls: () => void;
 }) {
   if (step === 'consent') return <ConsentStepContent {...props} />;
   if (step === 'scan') {
@@ -1125,13 +1039,7 @@ function ProfileFootprintStepContent({
     );
   }
   if (step === 'findings') {
-    return (
-      <ProfileFootprintFindingsStep
-        props={props}
-        privacyControlsOpen={privacyControlsOpen}
-        onTogglePrivacyControls={onTogglePrivacyControls}
-      />
-    );
+    return <ProfileFootprintFindingsStep props={props} privacyControlsOpen={privacyControlsOpen} />;
   }
   return (
     <>
@@ -1213,6 +1121,26 @@ function ProfileFootprintStepNavigation({
   );
 }
 
+function ProfileFootprintStepHeader({
+  step,
+  privacyControlsOpen,
+  onTogglePrivacyControls,
+}: {
+  readonly step: ProfileFootprintStepInfo;
+  readonly privacyControlsOpen: boolean;
+  readonly onTogglePrivacyControls: () => void;
+}) {
+  return (
+    <header className="profile-footprint-step-panel-header">
+      <h3 id="profile-footprint-step-title">{step.heading}</h3>
+      <p>{step.description}</p>
+      {step.id === 'findings' ? (
+        <FootprintPrivacyToggle open={privacyControlsOpen} onToggle={onTogglePrivacyControls} />
+      ) : null}
+    </header>
+  );
+}
+
 export function CandidateFootprintAuditSurface(props: CandidateFootprintAuditSurfaceProps) {
   const { activeStep, setActiveStep } = useProfileFootprintStep(props);
   const [privacyControlsOpen, setPrivacyControlsOpen] = useState(false);
@@ -1250,16 +1178,16 @@ export function CandidateFootprintAuditSurface(props: CandidateFootprintAuditSur
         aria-busy={busy || undefined}
         data-testid="profile-footprint-active-step"
       >
-        <header className="profile-footprint-step-panel-header">
-          <h3 id="profile-footprint-step-title">{active.heading}</h3>
-          <p>{active.description}</p>
-        </header>
+        <ProfileFootprintStepHeader
+          step={active}
+          privacyControlsOpen={privacyControlsOpen}
+          onTogglePrivacyControls={() => setPrivacyControlsOpen((open) => !open)}
+        />
         <ProfileFootprintStepContent
           step={activeStep}
           props={props}
           onOpenFindings={() => setActiveStep('findings')}
           privacyControlsOpen={privacyControlsOpen}
-          onTogglePrivacyControls={() => setPrivacyControlsOpen((open) => !open)}
         />
       </section>
     </div>

@@ -1,4 +1,5 @@
 import { Info, Lightbulb } from '@phosphor-icons/react';
+import { ATS_ROLE_BASIS_NOTE } from './atsRoleBasis';
 import type {
   ResumeAtsAssessment,
   ResumeAtsDimension,
@@ -262,18 +263,29 @@ function useAtsCardState(props: ProfileAtsAssessmentProps) {
   const loading = suppliedLoading ?? internal.loading;
   const error = suppliedError ?? internal.error;
   const refresh = onRefresh ?? internal.refresh;
+  const roleBasis = suppliedAssessment === undefined ? (internal.roleBasis ?? null) : null;
   const score = assessment?.total.score ?? null;
   const ariaLabel = loading
     ? 'Оценка ATS рассчитывается'
     : score === null
       ? 'Оценка ATS неизвестна'
       : `Оценка ATS ${score} из 100`;
-  return { assessment, sourceVersion, loading, error, refresh, score, ariaLabel };
+  return { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel };
+}
+
+/** Макет 2 «ATS: нет избранных вакансий». */
+export function AtsRoleBasisNote() {
+  return (
+    <p className="career-profile-ats-role-note">
+      <Info size={16} aria-hidden="true" />
+      <span>{ATS_ROLE_BASIS_NOTE}</span>
+    </p>
+  );
 }
 
 export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
   const { id = 'sec-ats', desktopLayout = false } = props;
-  const { assessment, sourceVersion, loading, error, refresh, score, ariaLabel } =
+  const { assessment, sourceVersion, roleBasis, loading, error, refresh, score, ariaLabel } =
     useAtsCardState(props);
   return (
     <section
@@ -296,7 +308,9 @@ export function ProfileAtsAssessment(props: ProfileAtsAssessmentProps) {
           {loading ? '…' : (score ?? '—')}
         </strong>
         <span className="career-profile-screen-ats-unit">из 100</span>
+        {roleBasis ? <span className="career-profile-screen-tag">по роли</span> : null}
       </div>
+      {roleBasis ? <AtsRoleBasisNote /> : null}
       <AtsRetryError error={error} onRefresh={refresh} loading={loading} />
       <AtsDimensions assessment={assessment} desktopLayout={desktopLayout} />
       <AtsGuidance assessment={assessment} />

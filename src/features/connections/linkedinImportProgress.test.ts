@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyLinkedInImportProgress,
+  linkedinImportFailure,
   linkedinImportProgressView,
   reduceLinkedInImportProgress,
   type LinkedInImportProgress,
@@ -40,5 +42,16 @@ describe('LinkedIn import progress', () => {
 
   it('does not invent progress when a read arrives with no walk running', () => {
     expect(reduceLinkedInImportProgress(null, { type: 'read', key: 'skills' })).toBeNull();
+  });
+
+  it('remembers the section a walk stopped on until the next walk starts', () => {
+    applyLinkedInImportProgress({ type: 'start', keys });
+    applyLinkedInImportProgress({ type: 'read', key: 'experience' });
+    applyLinkedInImportProgress({ type: 'failed', key: 'education' });
+    applyLinkedInImportProgress({ type: 'end' });
+    expect(linkedinImportFailure()).toEqual({ key: 'education', label: 'образование' });
+    applyLinkedInImportProgress({ type: 'start', keys });
+    expect(linkedinImportFailure()).toBeNull();
+    applyLinkedInImportProgress({ type: 'end' });
   });
 });

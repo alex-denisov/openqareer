@@ -20,6 +20,8 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
+import { TodayLinkedinNote } from './TodayLinkedinNote';
+import { TODAY_DIARY_FOOTNOTE } from './todayDiaryDecision';
 import {
   type TodayProfileFocus,
   type TodayQueueItem,
@@ -56,6 +58,7 @@ interface TodayDesktopContentProps {
   readonly queueRemainderLoading?: boolean;
   readonly queueRemainderFailed?: boolean;
   readonly onLoadQueueRemainder?: () => Promise<void>;
+  readonly onOpenConnections?: () => void;
 }
 
 export function TodayDesktopContent(props: TodayDesktopContentProps) {
@@ -86,6 +89,11 @@ export function TodayDesktopContent(props: TodayDesktopContentProps) {
         onNavigate={props.onNavigate}
         onDiscussQueueItem={props.onDiscussQueueItem}
       />
+      <TodayLinkedinNote
+        queueSize={props.snapshot.queue.length}
+        connectedSources={props.snapshot.connectedSources}
+        onOpenConnections={props.onOpenConnections}
+      />
       <TodayFunnel snapshot={props.snapshot} context={props.funnelContext} />
     </div>
   );
@@ -99,8 +107,10 @@ function TodayDecisionSection({
   postponeBusy = false,
   postponeError,
   onNavigate,
+  snapshot,
 }: Pick<
   TodayDesktopContentProps,
+  | 'snapshot'
   | 'activeAction'
   | 'onAccept'
   | 'onDiscuss'
@@ -109,7 +119,14 @@ function TodayDecisionSection({
   | 'postponeError'
   | 'onNavigate'
 >) {
-  if (!activeAction) return <TodayNextDecisionUnavailable onDiscuss={onDiscuss} />;
+  if (!activeAction)
+    return (
+      <TodayNextDecisionUnavailable
+        onDiscuss={onDiscuss}
+        nothingToDecide={snapshot.queue.length === 0}
+        onNavigate={onNavigate}
+      />
+    );
   return (
     <TodayNextDecision
       action={activeAction}
@@ -210,6 +227,7 @@ function actionDestinationLabel(action: ReasonedCareerAction): string {
 }
 
 export function actionSourceSummary(action: ReasonedCareerAction): string {
+  if (action.rationale === TODAY_DIARY_FOOTNOTE) return 'карьерный дневник';
   const sources = [
     ...(action.findingIds.length ? ['профиль'] : []),
     ...(action.roleIds.length || action.marketIds.length ? ['карьерная гипотеза'] : []),
@@ -308,7 +326,48 @@ function DecisionActions({
   );
 }
 
-function TodayNextDecisionUnavailable({ onDiscuss }: { readonly onDiscuss?: () => void }) {
+// Макет 1 «Пусто: решения нет»: решения нет и очередь пуста — пути дальше, а не тупик.
+function TodayNothingToDecide({
+  onDiscuss,
+  onNavigate,
+}: {
+  readonly onDiscuss?: () => void;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  return (
+    <section className="career-today-next-decision" aria-label="Следующее решение">
+      <p className="career-today-eyebrow">Следующее решение</p>
+      <h2 id="today-next-decision-title">{TODAY_NOTHING_TO_DECIDE}</h2>
+      <div className="career-today-decision-actions">
+        {onNavigate ? (
+          <button type="button" className="career-btn" onClick={() => onNavigate('opportunities')}>
+            Открыть вакансии
+          </button>
+        ) : null}
+        {onDiscuss ? (
+          <button type="button" className="career-today-decision-postpone" onClick={onDiscuss}>
+            Обсудить цель
+          </button>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+/** Текст макета 1 «Пусто: решения нет» — общий для 1440 и 390. */
+export const TODAY_NOTHING_TO_DECIDE = 'Сейчас нечего решать. Очередь пуста.';
+
+function TodayNextDecisionUnavailable({
+  onDiscuss,
+  nothingToDecide,
+  onNavigate,
+}: {
+  readonly onDiscuss?: () => void;
+  readonly nothingToDecide: boolean;
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  if (nothingToDecide)
+    return <TodayNothingToDecide onDiscuss={onDiscuss} onNavigate={onNavigate} />;
   return (
     <section className="career-today-next-decision" aria-label="Следующее решение">
       <p className="career-today-eyebrow">Следующее решение</p>

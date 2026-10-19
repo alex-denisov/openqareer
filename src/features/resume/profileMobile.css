@@ -736,7 +736,9 @@
 
 /* Semantic React controls keep the approved anchor geometry. */
 @media (max-width: 760px) {
-  .career-main:has(.career-profile-mobile) .career-page-header {
+  /* Заголовок уже в верхней строке 390, в том числе пока профиль грузится или не ответил. */
+  .career-main:has(.career-profile-mobile) .career-page-header,
+  .career-shell[data-shell-view='profile'] .career-page-header {
     display: none;
   }
   .career-shell .career-main:has(.career-profile-mobile[data-mobile-profile-page]) {
@@ -932,4 +934,31 @@
     border-radius: var(--career-space-5);
     background: var(--career-surface);
   }
+}
+
+/* Макет 2 «Пусто: источников нет» на 390. */
+.pm-empty-start {
+  display: grid;
+  gap: var(--career-space-4);
+  padding: var(--career-space-4);
+  border-radius: var(--career-radius-lg);
+  background: var(--career-surface);
+}
+
+.pm-empty-start p {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+
+.pm-empty-start .career-profile-screen-review-actions {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-2);
+}
+
+.pm-empty-start button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
 }

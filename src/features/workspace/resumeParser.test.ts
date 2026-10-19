@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  parseResumeContent,
-  parsedResumeToDraft,
-  parsedResumeToFactDrafts,
-} from './resumeParser';
+import { parseResumeContent, parsedResumeToDraft, parsedResumeToFactDrafts } from './resumeParser';
 
 const SYNTHETIC_4PAGE_RESUME = `
 Иван Иванов
@@ -325,5 +321,32 @@ Master's degree, Computer Science · (2008 - 2014)
     expect(parsed.education[0].institution).toBe('Kazan Federal University');
     expect(parsed.education[0].qualification).toBe('Marketing, Master');
     expect(parsed.education[0].endDate).toBe('2010');
+  });
+});
+
+describe('one-line «Компания, город — должность» headers', () => {
+  const text = [
+    'Мария Соколова',
+    'Опыт работы',
+    'FinCloud, Москва — Руководитель продукта',
+    'Январь 2021 — по настоящее время',
+    '• Вела платёжное направление',
+    'Вектор Банк, Санкт-Петербург — Менеджер продукта',
+    'Март 2017 — Декабрь 2020',
+    '• Запустила мобильный банк',
+    'Гринкод, Казань — Аналитик',
+    'Сентябрь 2014 — Февраль 2017',
+    '• Строила отчёты для продаж',
+  ].join('\n');
+
+  it('keeps each place whole: employer, city and title from its own header line', () => {
+    const experience = parseResumeContent(text).experience;
+    expect(
+      experience.map(({ employer, title, location }) => ({ employer, title, location })),
+    ).toEqual([
+      { employer: 'FinCloud', title: 'Руководитель продукта', location: 'Москва' },
+      { employer: 'Вектор Банк', title: 'Менеджер продукта', location: 'Санкт-Петербург' },
+      { employer: 'Гринкод', title: 'Аналитик', location: 'Казань' },
+    ]);
   });
 });

@@ -288,7 +288,7 @@
     > .panel-col
     .career-expert-panel:not(.is-intake)
     .career-expert-input-row {
-    position: static;
+    position: relative;
   }
   .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
     > .panel-col
@@ -303,6 +303,7 @@
     > .panel-col
     .career-expert-panel:not(.is-intake)
     .career-composer-split {
+    inset-block-end: 0;
     inset-inline-end: var(--career-space-4);
   }
   .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])

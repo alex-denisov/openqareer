@@ -14,13 +14,27 @@ import { ProfileMobileGroup, ProfileMobileRow, profileMobileDate } from './Profi
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ResumeSkillInput } from './resumeTypes';
 
-function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+// Mockup 2 (390): «Подтверждён», «Не проверен» or «Без квиза»; an unknown status code is never
+// shown as is. The source and its date read as one phrase: «из LinkedIn, 12.09».
+export function mobileSkillLabels(skill: ResumeSkillInput) {
   const verified = skill.status === 'подтверждён';
   const rejected = skill.status === 'не подтверждён';
-  const Icon = verified ? CheckCircle : rejected ? Question : Circle;
-  const status = skill.status || 'Не проверен';
+  const status = verified ? 'Подтверждён' : rejected ? 'Не проверен' : 'Без квиза';
   const source = skill.source || 'Источник не указан';
   const date = profileMobileDate(skill.verifiedAt);
+  return {
+    verified,
+    rejected,
+    status,
+    source,
+    date,
+    origin: [source, date].filter(Boolean).join(', '),
+  };
+}
+
+function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
+  const { verified, rejected, status, source, date, origin } = mobileSkillLabels(skill);
+  const Icon = verified ? CheckCircle : rejected ? Question : Circle;
   return (
     <details className="profile-mobile-skill">
       <summary className={`pm-row${rejected ? ' is-warn' : ''}`}>
@@ -29,7 +43,9 @@ function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
         </span>
         <span className="pm-main">
           <b>{skill.name}</b>
-          <small>{[status, source, date].filter(Boolean).join(' · ')}</small>
+          <small>
+            {status} · {origin}
+          </small>
         </span>
         <CaretRight className="pm-chev" size="1em" aria-hidden="true" />
       </summary>
@@ -50,6 +66,27 @@ function MobileSkillRow({ skill }: { readonly skill: ResumeSkillInput }) {
         ) : null}
       </dl>
     </details>
+  );
+}
+
+function ProfileMobileSkillActions(props: ProfileMobileDataProps & ProfileMobileNavigationProps) {
+  return (
+    <ProfileMobileGroup>
+      <ProfileMobileRow
+        icon={Plus}
+        title="Добавить навык"
+        onClick={() => props.open({ page: 'skilladd' })}
+      />
+      {/* Temporary 390 entry: the mockup puts it in «Карьера», which is not built yet (block B). */}
+      {props.onOpenRoleSkillAssessment ? (
+        <ProfileMobileRow
+          icon={Target}
+          title="Проверка навыков роли"
+          detail="Вопросы по навыкам выбранной роли"
+          onClick={props.onOpenRoleSkillAssessment}
+        />
+      ) : null}
+    </ProfileMobileGroup>
   );
 }
 
@@ -82,22 +119,7 @@ export function ProfileMobileSkills(props: ProfileMobileDataProps & ProfileMobil
           </p>
         )}
       </section>
-      <ProfileMobileGroup>
-        <ProfileMobileRow
-          icon={Plus}
-          title="Добавить навык"
-          onClick={() => props.open({ page: 'skilladd' })}
-        />
-        {/* Temporary 390 entry: the mockup puts it in «Карьера», which is not built yet (block B). */}
-        {props.onOpenRoleSkillAssessment ? (
-          <ProfileMobileRow
-            icon={Target}
-            title="Проверка навыков роли"
-            detail="Вопросы по навыкам выбранной роли"
-            onClick={props.onOpenRoleSkillAssessment}
-          />
-        ) : null}
-      </ProfileMobileGroup>
+      <ProfileMobileSkillActions {...props} />
       <button
         className="pm-cta"
         type="button"

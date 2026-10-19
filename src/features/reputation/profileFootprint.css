@@ -18,13 +18,16 @@
 .profile-footprint-step {
   display: grid;
   align-content: start;
+  justify-content: stretch;
   justify-items: start;
   gap: var(--career-space-1);
   inline-size: 100%;
   min-inline-size: 0;
   min-block-size: var(--career-target-min);
   padding: var(--career-space-3);
-  background: var(--career-surface);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
   text-align: start;
   white-space: normal;
 }
@@ -38,12 +41,15 @@
 .profile-footprint-step strong {
   color: var(--career-text);
   font-size: var(--career-text-sm);
+  font-weight: 700;
+  line-height: 1.5;
 }
 
 .profile-footprint-step span {
-  color: var(--career-text-dim);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
-  line-height: 1.4;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .profile-footprint-step[aria-current='step'] {
@@ -65,9 +71,9 @@
   gap: var(--career-space-4);
   min-inline-size: 0;
   padding: var(--career-space-6);
-  border: var(--career-border-width) solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
-  background: var(--career-surface);
+  background: var(--career-bg-elevated);
 }
 
 .profile-footprint-step-panel-header {
@@ -135,58 +141,122 @@
   margin: 0;
 }
 
+/* Mockup 2, «Цифровой след» → «Находки» (1440): the heading carries the tag «Видите только вы»,
+   rows are .check-row with «Это я» / «Не я», a note closes the card. */
+.profile-footprint-step-panel--findings .profile-footprint-step-panel-header {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+}
+
+.profile-footprint-step-panel--findings .profile-footprint-step-panel-header h3 {
+  flex: 1;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.profile-footprint-step-panel--findings .profile-footprint-step-panel-header p,
+.profile-footprint-privacy-long {
+  display: none;
+}
+
 .profile-footprint-step-panel--findings .career-footprint-findings {
-  gap: 0;
-  order: 1;
-}
-
-.profile-footprint-step-panel--findings .career-footprint-findings > h3,
-.profile-footprint-step-panel--findings .profile-footprint-step-panel-header p {
-  display: none;
-}
-
-.profile-footprint-step-panel--findings .profile-footprint-privacy-trigger {
-  order: 2;
-}
-
-.profile-footprint-step-panel--findings .profile-footprint-privacy-controls {
-  order: 3;
-}
-
-.profile-footprint-finding-evidence-mobile {
-  display: none;
-}
-
-.profile-footprint-finding-evidence-mobile > div {
   display: grid;
-  gap: var(--career-space-2);
-  min-inline-size: 0;
-}
-
-.profile-footprint-finding-evidence-mobile summary {
-  color: var(--career-accent);
-  font-size: var(--career-text-xs);
-  cursor: pointer;
-}
-
-.profile-footprint-finding-evidence-mobile summary:focus-visible {
-  outline: var(--career-border-width) solid var(--career-accent);
-  outline-offset: var(--career-space-1);
-  border-radius: var(--career-radius-sm);
-}
-
-.profile-footprint-step-panel--findings .career-footprint-finding {
+  gap: var(--career-space-4);
   border: 0;
-  border-block-end: var(--career-border-width) solid var(--career-line);
-  border-radius: 0;
-  padding-inline: 0;
+  padding: 0;
   background: transparent;
 }
 
-.profile-footprint-step-panel--findings
-  .career-footprint-finding-group:last-child
-  .career-footprint-finding:last-child {
-  border-block-end: 0;
+.career-footprint-findings .profile-footprint-finds {
+  display: grid;
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.profile-footprint-find {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.profile-footprint-find-copy {
+  min-inline-size: 0;
+}
+
+.profile-footprint-find-copy strong {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.profile-footprint-find-copy strong a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.profile-footprint-find-copy strong a:hover {
+  color: var(--career-accent);
+}
+
+.profile-footprint-find-copy p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.profile-footprint-find .profile-footprint-review-segments {
+  display: flex;
+  gap: var(--career-space-3);
+}
+
+/* Like the mockup's .career-btn.is-sm: a 44 px hit area whose transparent 6 px edge leaves a
+   32 px pill, so the pills align with the row edge. */
+.profile-footprint-find .profile-footprint-review-segments button {
+  display: inline-flex;
+  margin-inline: -6px;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: 6px solid transparent;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-line-strong);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+
+.profile-footprint-find .profile-footprint-review-segments button svg {
+  inline-size: var(--career-text-md);
+  block-size: var(--career-text-md);
+  color: var(--career-text-soft);
+}
+
+.profile-footprint-find .profile-footprint-review-segments button[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-accent);
+  background-color: var(--career-accent-soft);
+}
+
+.profile-footprint-find-note {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
 }
 
 .profile-footprint-checklist {
@@ -261,20 +331,19 @@
 }
 
 .profile-footprint-privacy-trigger {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--career-space-2);
-  inline-size: 100%;
-  min-inline-size: 0;
-  min-block-size: var(--career-target-min);
-  padding: 0;
-  border: 0;
-  color: var(--career-text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: 2px var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  color: var(--career-text-dim);
   background: transparent;
   font: inherit;
-  font-size: var(--career-text-sm);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
   line-height: 1.5;
-  text-align: start;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -337,100 +406,107 @@
 
   .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
     > .profile-footprint-step-panel {
-    gap: var(--career-space-4);
+    gap: var(--career-space-5);
     padding: 0;
     border: 0;
     border-radius: 0;
     background: transparent;
   }
 
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-step-panel-header {
-    display: none;
-  }
-
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .career-footprint-finding-group
-    > h4 {
-    display: none;
-  }
-
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-privacy-trigger {
-    order: 1;
-  }
-
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-step-panel--findings
-    .career-footprint-findings {
-    gap: var(--career-space-4);
-    order: 2;
-  }
-
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-step-panel--findings
-    .career-footprint-finding-heading
-    .career-footprint-finding-status,
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-step-panel--findings
-    .career-footprint-finding-heading
-    .career-footprint-finding-date,
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-finding-evidence-desktop {
-    display: none;
-  }
-
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    .profile-footprint-finding-evidence-mobile {
+  /* Mockup 2 (390), pane «След»: the lock note, then one card per finding with an iOS segmented
+     «Это я» / «Не я»; no heading, date or closing note. */
+  .profile-footprint-step-panel--findings .profile-footprint-step-panel-header {
     display: block;
+    min-block-size: 0;
   }
 
-  .profile-footprint-review-actions--segmented {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--career-space-2);
+  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
+    .profile-footprint-step-panel-header
+    h3,
+  .profile-footprint-privacy-short,
+  .profile-footprint-find-when,
+  .profile-footprint-find-note {
+    display: none;
   }
 
-  .profile-footprint-review-segments {
+  .profile-footprint-privacy-long {
+    display: inline;
+  }
+
+  .profile-footprint-privacy-trigger {
     display: flex;
-    gap: var(--career-space-1);
+    align-items: flex-start;
+    gap: var(--career-space-2);
     inline-size: 100%;
-    min-inline-size: 0;
-    padding: var(--career-space-1);
-    border-radius: var(--career-radius-pill);
-    background: var(--career-surface-raised);
-  }
-
-  .career-footprint-review-actions .profile-footprint-review-segments button {
-    flex: 1 1 0;
-    min-inline-size: 0;
-    border-color: transparent;
-    border-radius: var(--career-radius-pill);
-    background: transparent;
-    text-align: center;
-  }
-
-  .career-footprint-review-actions .profile-footprint-review-segments button[aria-pressed='true'] {
-    border-color: transparent;
-    background: var(--career-bg-elevated);
-  }
-
-  .career-footprint-review-actions .profile-footprint-review-hide {
-    min-block-size: var(--career-target-min);
-    padding-inline: var(--career-space-2);
+    padding: 0 var(--career-space-2);
     border: 0;
-    color: var(--career-text-dim);
-    background: transparent;
-    font-size: var(--career-text-xs);
-    text-decoration: underline;
-    text-underline-offset: var(--career-space-1);
+    border-radius: 0;
+    color: var(--career-text-soft);
+    font-weight: 400;
+    text-align: start;
+    white-space: normal;
   }
 
-  .profile-footprint-step-panel--findings .career-footprint-finding {
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-lg);
+  .profile-footprint-privacy-trigger svg {
+    inline-size: var(--career-space-4);
+    block-size: var(--career-space-4);
+    margin-block-start: 1px;
+    color: inherit;
+  }
+
+  .career-footprint-findings .profile-footprint-finds {
+    gap: var(--career-space-5);
+  }
+
+  .profile-footprint-find {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: var(--career-space-1);
     padding: var(--career-space-4);
+    border: 0;
+    border-radius: 20px;
     background: var(--career-surface);
+  }
+
+  .profile-footprint-find-copy {
+    display: grid;
+    gap: var(--career-space-1);
+  }
+
+  .profile-footprint-find-copy strong {
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .profile-footprint-find .profile-footprint-review-segments {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    margin-block-start: var(--career-space-2);
+    padding: 3px;
+    border-radius: 20px;
+    background: color-mix(in oklch, white 7%, transparent);
+  }
+
+  .profile-footprint-find .profile-footprint-review-segments button {
+    justify-content: center;
+    min-block-size: 36px;
+    margin: 0;
+    padding: 1px 6px;
+    border: 0;
+    border-radius: 17px;
+    box-shadow: none;
+    font-size: var(--career-text-sm);
+    font-weight: 400;
+  }
+
+  .profile-footprint-find .profile-footprint-review-segments button svg {
+    display: none;
+  }
+
+  .profile-footprint-find .profile-footprint-review-segments button[aria-pressed='true'] {
+    box-shadow: none;
+    background: color-mix(in oklch, white 12%, transparent);
   }
 }

@@ -60,8 +60,11 @@ describe('InlineConsultantSuggestion', () => {
       />,
     );
 
-    expect(html).toContain('Правка применена');
-    expect(html).toContain('Откатить');
+    expect(html).toContain('Правка принята');
+    expect(html).toContain('Отменить правку');
+    expect(html).toContain(
+      'Правка принята, квитанция консультанта сохранена. Её можно отменить позже.',
+    );
     expect(html).not.toContain('Принять');
   });
 
@@ -79,7 +82,9 @@ describe('InlineConsultantSuggestion', () => {
 
     expect(html).toContain('career-consultant-suggestion');
     expect(html).toContain('Предложение карьерного консультанта');
-    expect(html).toContain('Senior Frontend Engineer с 3 годами опыта в высоконагруженных системах.');
+    expect(html).toContain(
+      'Senior Frontend Engineer с 3 годами опыта в высоконагруженных системах.',
+    );
   });
 
   it('отображается в ProfileExperienceSection для предложений по опыту', () => {

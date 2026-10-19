@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { installDesktopApiTestBridge } from '../scripts/desktop-api-test-bridge.mjs';
+import { chooseFirstRunPlatform, saveFirstRunGoal } from './helpers/firstRunGoal';
 
 /**
  * B157, owner report 2026-08-26 — «Импортировать выбранное резюме не удалось».
@@ -212,7 +213,8 @@ async function openHhDialog(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy', /.*/);
   await expect(page.getByTestId('first-run-wizard')).toBeVisible();
-  await page.getByTestId('source-opt-hh').click();
+  await saveFirstRunGoal(page);
+  await chooseFirstRunPlatform(page, 'hh');
   const connectionRow = accountHhRow(page);
   await expect(connectionRow).toContainText('Не подключено');
   if ((page.viewportSize()?.width ?? 1440) <= 760) {

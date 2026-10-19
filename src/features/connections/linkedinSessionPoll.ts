@@ -6,10 +6,7 @@ import {
   LI_SDUI_EXTRACTOR_VERSION,
   type LinkedInProfilePages,
 } from './linkedinProfileStructuredExtract';
-import {
-  hasStructuredSubstance,
-  validLinkedInProfileWithDrops,
-} from './linkedinProfileSanitize';
+import { hasStructuredSubstance, validLinkedInProfileWithDrops } from './linkedinProfileSanitize';
 import type { LinkedInProfileV2 } from '../../../shared/linkedinProfileV2';
 import type { SessionInspectionResult, SessionPageResult } from './connectorSession';
 import type { LinkedInImportProgressEvent } from './linkedinImportProgress';
@@ -292,7 +289,10 @@ const EXPECTED_PROFILE_CARDS = ['About', 'LanguageTopLevel', 'EducationTopLevelS
  */
 export function missingProfileCards(profileHtml: string): string[] {
   return EXPECTED_PROFILE_CARDS.filter(
-    (card) => !new RegExp(`componentkey="com\\.linkedin\\.sdui\\.profile\\.card\\.[^"]*${card}"`, 'u').test(profileHtml),
+    (card) =>
+      !new RegExp(`componentkey="com\\.linkedin\\.sdui\\.profile\\.card\\.[^"]*${card}"`, 'u').test(
+        profileHtml,
+      ),
   ).map((card) => `missing:${card}`);
 }
 
@@ -319,7 +319,10 @@ async function readLinkedDetailPages(
         .catch(() => ({ ok: false as const }));
       // A redirect to /checkpoint/, /authwall or a captcha still answers ok=true:
       // anything but the requested section ends the walk (security review B266).
-      if (!detail.ok || !detail.body || !landedOn(detail.url, DETAIL_PAGE_PATHS[key])) break;
+      if (!detail.ok || !detail.body || !landedOn(detail.url, DETAIL_PAGE_PATHS[key])) {
+        report({ type: 'failed', key });
+        break;
+      }
       if (detail.body.length <= MAX_DETAIL_PAGE_BYTES) read = { ...read, [key]: detail.body };
       report({ type: 'read', key });
     }
