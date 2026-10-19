@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { STAGE_TO_PHASE, type MarketObservation } from '../domain/coach';
+import { checkGeneratedTextFacts } from '../domain/generatedTextFactGate';
 import { selectCoachPhase } from '../orchestration/coachPhaseRouter';
 import { CoachProviderError, type CoachProvider } from '../providers/coachProvider';
 import type { CandidateStore } from '../data/candidateStore';
@@ -97,7 +98,19 @@ async function completeTurnWithProvider(
   input: Parameters<CoachProvider['createTurn']>[0],
 ) {
   try {
-    const output = await deps.coachProvider.createTurn(input, key);
+    const generated = await deps.coachProvider.createTurn(input, key);
+    // Quick replies are proposed candidate answers, unlike the consultant's
+    // general advice. Check them before persistence so replay cannot restore
+    // an invented achievement that was suppressed in the initial response.
+    const facts = deps.candidateStore.getSnapshot(candidateId).memory;
+    const output = generated.result.quickReplies ? {
+      ...generated,
+      result: {
+        ...generated.result,
+        quickReplies: generated.result.quickReplies.filter((answer) =>
+          checkGeneratedTextFacts(answer, facts).status === 'checked'),
+      },
+    } : generated;
     deps.candidateStore.completeTurn(candidateId, key, output);
     return output;
   } catch (error) {

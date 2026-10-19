@@ -1,3 +1,4 @@
+import { AdminBulkLlmSpend } from './AdminBulkLlmSpend';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   ArrowLeft,
@@ -242,7 +243,7 @@ export function AdminConsole({
           {activeTab === 'users' && <AdminDirectory />}
           {activeTab === 'vacancies' && <AdminVacanciesView />}
           {activeTab === 'sources' && <AdminVacancySourcesTab />}
-          {activeTab === 'audit' && <AdminAuditView />}
+          {activeTab === 'audit' && <><AdminBulkLlmSpend /><AdminAuditView /></>}
           {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
         </div>
       </div>

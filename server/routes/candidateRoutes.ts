@@ -249,6 +249,7 @@ const handleDeleteCandidate: Handler = async (deps, request, reply) => {
   notificationRepositoryFor(deps).deleteByCandidate(candidate.id);
   candidateReputationRepo?.deleteFootprintAuditsByCandidateId(candidate.id);
   candidateReputationRepo?.deleteAuditsByCandidateId(candidate.id);
+  deps.vacancyMechanics?.deleteCandidate(candidate.id);
   candidateStore.deleteCandidate(candidate.id);
   recruiterContactsRepo?.deleteContactsByCandidateId(candidate.id);
   recruiterContactsRepo?.deleteJobsByCandidateId(candidate.id);

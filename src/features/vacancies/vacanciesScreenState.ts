@@ -1,4 +1,5 @@
 export interface VacanciesScreenState {
+  readonly sort?: 'fit' | 'freshness';
   readonly roles: readonly string[];
   readonly regions: readonly string[];
   readonly levels?: readonly string[];

@@ -1,0 +1,163 @@
+.vacancy-fit-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--career-space-1) var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.vacancy-fit-label {
+  color: var(--career-text);
+}
+.vacancy-fit-percent {
+  color: var(--career-text);
+  font-variant-numeric: tabular-nums;
+}
+.vacancy-fit-track {
+  appearance: none;
+  display: block;
+  flex-basis: 100%;
+  inline-size: 100%;
+  block-size: var(--career-space-1);
+  border: 0;
+  background: var(--career-line);
+  border-radius: var(--career-radius-sm);
+  overflow: hidden;
+}
+.vacancy-fit-track::-webkit-progress-bar {
+  background: var(--career-line);
+}
+.vacancy-fit-track::-webkit-progress-value {
+  background: var(--career-accent);
+}
+.vacancy-fit-track::-moz-progress-bar {
+  background: var(--career-accent);
+}
+.vacancy-fit-summary.is-compact {
+  font-size: var(--career-text-xs);
+  margin-block-start: var(--career-space-1);
+}
+.vacancy-fit-evidence {
+  display: grid;
+  gap: var(--career-space-3);
+  padding-block: var(--career-space-4);
+  min-inline-size: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  color: var(--career-text);
+}
+.vacancy-fit-evidence p,
+.vacancy-fit-evidence ul {
+  margin: 0;
+}
+.vacancy-fit-note {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+.vacancy-fit-gates {
+  padding-inline-start: var(--career-space-4);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+.vacancy-fit-table {
+  inline-size: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: var(--career-text-xs);
+}
+.vacancy-fit-table caption {
+  text-align: start;
+  font-size: var(--career-text-sm);
+  padding-block-end: var(--career-space-2);
+}
+.vacancy-fit-table th,
+.vacancy-fit-table td {
+  text-align: start;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  padding: var(--career-space-2);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+  font-weight: normal;
+}
+.vacancy-fit-table thead {
+  position: absolute;
+  inline-size: var(--career-border-width);
+  block-size: var(--career-border-width);
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.vacancy-fit-table tbody {
+  display: block;
+}
+.vacancy-fit-table tbody tr {
+  display: flex;
+  flex-wrap: wrap;
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+.vacancy-fit-table tbody th,
+.vacancy-fit-table tbody td {
+  display: block;
+  flex: 1 1 calc(var(--career-target-min) * 5);
+  min-inline-size: 0;
+  border-block-end: 0;
+}
+.vacancy-fit-cell-label {
+  display: block;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  margin-block-end: var(--career-space-2);
+}
+.vacancy-fit-table q,
+.vacancy-fit-table small,
+.vacancy-fit-fact {
+  display: block;
+  margin-block-start: var(--career-space-2);
+  font-size: inherit;
+  color: var(--career-text-soft);
+}
+.vacancy-fit-table a {
+  color: var(--career-accent);
+}
+.vacancy-fit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.vacancy-fit-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+.vacancy-fit-sort select {
+  max-inline-size: 100%;
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text);
+  font: inherit;
+}
+
+.vacancy-fit-evidence .career-vacancy-action {
+  min-block-size: var(--career-target-min);
+  max-inline-size: 100%;
+  padding: var(--career-space-2) var(--career-space-3);
+  white-space: normal;
+  text-align: start;
+  transition:
+    color var(--career-motion-quick),
+    background var(--career-motion-quick),
+    border-color var(--career-motion-quick);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vacancy-fit-evidence .career-vacancy-action {
+    transition: none;
+  }
+}

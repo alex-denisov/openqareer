@@ -187,6 +187,7 @@ export interface VacancyMatchingFact {
 }
 
 interface VacancyMatchExplanation {
+  readonly fitView?: import('../../../shared/vacancyFit').VacancyFitView;
   clusterId: string;
   /** Совпадение названия вакансии с целевыми ролями кандидата. */
   roleMatch: VacancyRoleMatch;

@@ -139,6 +139,7 @@ export function matchedVacancyQuery(offset: number, filters?: VacanciesScreenSta
     for (const value of values ?? []) query.append(key, value);
   }
   if (filters?.remoteOnly) query.set('remote', '1');
+  if (filters?.sort) query.set('sort', filters.sort);
   return query.toString();
 }
 

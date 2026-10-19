@@ -1,0 +1,154 @@
+import { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
+import { runSqliteTransaction } from './sqliteTransaction';
+import type { BulkLlmConfig } from '../providers/bulkLlmConfig';
+export class SqliteBulkLlmLedger {
+  readonly db: DatabaseSync;
+  constructor(path: string) {
+    this.db = new DatabaseSync(path);
+    this.db.exec(
+      `PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS bulk_llm_spend(id TEXT PRIMARY KEY,run_id TEXT NOT NULL,task TEXT NOT NULL,day TEXT NOT NULL,reserved REAL NOT NULL,cost REAL,model TEXT NOT NULL,provider TEXT NOT NULL,prompt_tokens INTEGER,cached_tokens INTEGER,completion_tokens INTEGER,batch_id TEXT,status TEXT NOT NULL,created_at TEXT NOT NULL); CREATE TABLE IF NOT EXISTS bulk_llm_events(id TEXT PRIMARY KEY,kind TEXT NOT NULL,created_at TEXT NOT NULL);`,
+    );
+  }
+  event(kind: string) {
+    this.db
+      .prepare('INSERT INTO bulk_llm_events VALUES(?,?,?)')
+      .run(randomUUID(), kind, new Date().toISOString());
+  }
+  private sum(where: string, ...values: string[]) {
+    return Number(
+      (
+        this.db
+          .prepare(
+            `SELECT COALESCE(SUM(COALESCE(cost,reserved)),0) AS total FROM bulk_llm_spend WHERE ${where}`,
+          )
+          .get(...values) as { total: number }
+      ).total,
+    );
+  }
+  reserve(
+    input: { runId: string; task: string; model: string; provider: string },
+    config: BulkLlmConfig,
+    amount = config.perRequestUsd,
+  ) {
+    return runSqliteTransaction(this.db, () => {
+      const day = new Date().toISOString().slice(0, 10);
+      if (
+        this.db
+          .prepare("SELECT 1 FROM bulk_llm_events WHERE kind='cost_exceeds_reservation' LIMIT 1")
+          .get()
+      )
+        return null;
+      if (
+        this.sum('1=1') + amount > config.totalUsd ||
+        this.sum('run_id=?', input.runId) + amount > config.runUsd ||
+        this.sum('(day=? OR cost IS NULL)', day) + amount > config.dayUsd
+      ) {
+        this.event('budget_exceeded');
+        return null;
+      }
+      const id = randomUUID();
+      this.db
+        .prepare(
+          'INSERT INTO bulk_llm_spend(id,run_id,task,day,reserved,model,provider,status,created_at) VALUES(?,?,?,?,?,?,?,?,?)',
+        )
+        .run(
+          id,
+          input.runId,
+          input.task,
+          day,
+          amount,
+          input.model,
+          input.provider,
+          'reserved',
+          new Date().toISOString(),
+        );
+      return id;
+    });
+  }
+  settle(
+    id: string,
+    usage: { cost: number; promptTokens: number; cachedTokens: number; completionTokens: number },
+    actual?: { model?: string; provider?: string },
+  ) {
+    runSqliteTransaction(this.db, () => {
+      const row = this.db.prepare('SELECT reserved,cost FROM bulk_llm_spend WHERE id=?').get(id) as
+        { reserved: number; cost: number | null } | undefined;
+      if (!row) throw new Error('Unknown reservation');
+      if (row.cost !== null) return;
+      if (usage.cost > row.reserved) this.event('cost_exceeds_reservation');
+      this.db
+        .prepare(
+          "UPDATE bulk_llm_spend SET cost=?,prompt_tokens=?,cached_tokens=?,completion_tokens=?,day=?,model=COALESCE(?,model),provider=COALESCE(?,provider),status='settled' WHERE id=? AND cost IS NULL",
+        )
+        .run(
+          usage.cost,
+          usage.promptTokens,
+          usage.cachedTokens,
+          usage.completionTokens,
+          new Date().toISOString().slice(0, 10),
+          actual?.model ?? null,
+          actual?.provider ?? null,
+          id,
+        );
+    });
+  }
+  release(id: string) {
+    this.db
+      .prepare("UPDATE bulk_llm_spend SET cost=0,status='rejected' WHERE id=? AND cost IS NULL")
+      .run(id);
+  }
+  pendingBatch(id: string, batchId: string) {
+    this.db
+      .prepare("UPDATE bulk_llm_spend SET batch_id=?,status='pending' WHERE id=?")
+      .run(batchId, id);
+  }
+  reservation(id: string) {
+    return this.db.prepare('SELECT * FROM bulk_llm_spend WHERE id=?').get(id);
+  }
+  status(config: BulkLlmConfig | null) {
+    const row = this.db
+      .prepare(
+        'SELECT COALESCE(SUM(cost),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend',
+      )
+      .get() as { spent: number; held: number };
+    return {
+      enabled: !!config,
+      dayRemainingUsd: config
+        ? Math.max(
+            0,
+            config.dayUsd -
+              this.sum('(day=? OR cost IS NULL)', new Date().toISOString().slice(0, 10)),
+          )
+        : 0,
+      runs: this.db
+        .prepare(
+          'SELECT run_id,COALESCE(SUM(cost),0) spentUsd,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) heldUsd FROM bulk_llm_spend GROUP BY run_id ORDER BY MAX(created_at) DESC LIMIT 50',
+        )
+        .all()
+        .map((row) => ({
+          ...row,
+          remainingUsd: config
+            ? Math.max(0, config.runUsd - Number(row.spentUsd) - Number(row.heldUsd))
+            : 0,
+        })),
+      spentUsd: row.spent,
+      heldUsd: row.held,
+      remainingUsd: config ? Math.max(0, config.totalUsd - row.spent - row.held) : 0,
+      limits: config
+        ? {
+            runUsd: config.runUsd,
+            dayUsd: config.dayUsd,
+            totalUsd: config.totalUsd,
+            perRequestUsd: config.perRequestUsd,
+          }
+        : null,
+      events: this.db
+        .prepare('SELECT kind,created_at FROM bulk_llm_events ORDER BY created_at DESC LIMIT 30')
+        .all(),
+    };
+  }
+  close() {
+    this.db.close();
+  }
+}

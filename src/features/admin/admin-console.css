@@ -2421,3 +2421,6 @@
   margin-top: var(--space-3);
   flex-wrap: wrap;
 }
+
+.admin-bulk-spend { overflow-wrap:anywhere; }
+.admin-bulk-spend dd { margin:0; font-variant-numeric:tabular-nums; }

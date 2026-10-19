@@ -40,7 +40,7 @@ export interface PipelineAnalyticsSummary {
   readonly archivedCount: number;
   readonly averageCycleDays: number | null;
   readonly steps: readonly StageFunnelStep[];
-  readonly overallConversionRate: number;
+  readonly overallConversionRate: number | null;
   readonly bottleneck: PipelineBottleneck;
   readonly sources: readonly SourceBreakdownItem[];
   readonly archiveReasons: ReadonlyArray<{ readonly reason: string; readonly count: number }>;
@@ -55,7 +55,7 @@ const STAGE_ORDER: readonly ApplicationStage[] = [
 ];
 
 const STAGE_LABELS: Record<ApplicationStage, string> = {
-  saved: 'Сохранено',
+  saved: 'Было в избранном',
   applied: 'Откликнулись',
   responded: 'Ответ компании',
   interview: 'Интервью',
@@ -70,30 +70,7 @@ import { humanSourceLabel } from './sourceLabels';
  * Проверяет, проходила ли карточка через указанный этап воронки.
  */
 function applicationReachedStage(app: ApplicationView, targetStage: ApplicationStage): boolean {
-  if (targetStage === 'saved') return true;
-
-  const currentStageIndex = STAGE_ORDER.indexOf(app.stage);
-  const targetStageIndex = STAGE_ORDER.indexOf(targetStage);
-
-  if (currentStageIndex >= targetStageIndex && targetStageIndex !== -1) {
-    return true;
-  }
-
-  // Если карточка закрыта (rejected или archived), смотрим историю
-  if (app.stage === 'rejected' || app.stage === 'archived') {
-    if (targetStage === 'applied') return true;
-    if (app.archivePreviousStage) {
-      const prevIndex = STAGE_ORDER.indexOf(app.archivePreviousStage);
-      if (prevIndex >= targetStageIndex && targetStageIndex !== -1) {
-        return true;
-      }
-    }
-    if (targetStage === 'interview' && app.nearestInterview !== null) {
-      return true;
-    }
-  }
-
-  return false;
+  return app.stage === targetStage || app.archivePreviousStage === targetStage || (app.reachedStages?.includes(targetStage) ?? false);
 }
 
 /**
@@ -110,9 +87,9 @@ function buildFunnelSteps(applications: readonly ApplicationView[]): readonly St
   return counts.map((item, index) => {
     const prevCount = index > 0 ? counts[index - 1].count : 0;
     const conversionFromPrevious =
-      index > 0 && prevCount > 0 ? Math.round((item.count / prevCount) * 100) : null;
+      index > 0 && prevCount > 0 ? Math.round((applications.filter((app) => applicationReachedStage(app, STAGE_ORDER[index - 1]) && applicationReachedStage(app, item.stage)).length / prevCount) * 100) : null;
     const conversionFromApplied =
-      index >= 1 && appliedCount > 0 ? Math.round((item.count / appliedCount) * 100) : null;
+      index >= 1 && appliedCount > 0 ? Math.round((applications.filter((app) => applicationReachedStage(app, 'applied') && applicationReachedStage(app, item.stage)).length / appliedCount) * 100) : null;
 
     return {
       stage: item.stage,
@@ -127,79 +104,24 @@ function buildFunnelSteps(applications: readonly ApplicationView[]): readonly St
 /**
  * Диагностирует узкие места в воронке по критериям US-7.6.
  */
-function diagnoseInterviewBottleneck(
-  interviewCount: number,
-  respondedCount: number,
-  offerCount: number,
-  closedCount: number,
-): PipelineBottleneck {
-  const interviewRate = interviewCount / respondedCount;
-  if (respondedCount >= 2 && interviewRate < 0.25) {
-    return {
-      id: 'low_interview_rate',
-      severity: 'warning',
-      title: 'Узкое место: переход от ответа к интервью',
-      description:
-        'Отклики просматривают, но на собеседование не приглашают. Обычно дело в позиционировании и вводном блоке резюме.',
-      recommendation:
-        'Усильте первые строки резюме и сопроводительного письма измеримыми достижениями.',
-    };
-  }
-
-  if (interviewCount >= 2 && offerCount === 0 && closedCount > 0) {
-    return {
-      id: 'low_offer_rate',
-      severity: 'warning',
-      title: 'Узкое место: конверсия после интервью',
-      description: 'Интервью назначаются, но этап оффера пока не достигнут.',
-      recommendation:
-        'Подготовьте примеры по методике STAR (ситуация, задача, действие, результат) и разберите сложные вопросы с экспертом.',
-    };
-  }
-
-  return {
-    id: 'healthy',
-    severity: 'success',
-    title: 'Воронка стабильна',
-    description: 'Показатели конверсии соответствуют здоровому рыночному поиску.',
-    recommendation: 'Сохраняйте темп откликов и готовьтесь к следующим раундам.',
+function diagnoseBottlenecks(steps: readonly StageFunnelStep[]): PipelineBottleneck {
+  const applied = steps.find((step) => step.stage === 'applied')?.count ?? 0;
+  if (applied < MIN_PIPELINE_SAMPLE_SIZE) return {
+    id: 'need_more_data', severity: 'info', title: 'Мало данных: воронка',
+    description: 'Меньше 20 откликов: узкие места не определены.',
+    recommendation: 'Это ограничение сводки, а не оценка качества вашего поиска.',
   };
-}
-
-/**
- * Диагностирует узкие места в воронке по критериям US-7.6.
- */
-function diagnoseBottlenecks(
-  appliedCount: number,
-  respondedCount: number,
-  interviewCount: number,
-  offerCount: number,
-  closedCount: number,
-): PipelineBottleneck {
-  if (appliedCount < MIN_PIPELINE_SAMPLE_SIZE) {
-    return {
-      id: 'need_more_data',
-      severity: 'info',
-      title: 'Мало данных: воронка',
-      description: 'Меньше 20 откликов: узкие места не определены.',
-      recommendation: 'Соберите 20 откликов, чтобы система могла показать узкие места.',
-    };
-  }
-
-  const responseRate = respondedCount / appliedCount;
-  if (responseRate < 0.15) {
-    return {
-      id: 'low_response_rate',
-      severity: 'warning',
-      title: 'Узкое место: низкий отклик работодателей',
-      description:
-        'Менее 15% откликов получают ответ или просмотр. Частая причина — несоответствие резюме фильтрам ATS или нецелевой канал.',
-      recommendation:
-        'Проверьте ключевые слова в резюме под требования вакансий и протестируйте прямые контакты с нанимателями.',
-    };
-  }
-
-  return diagnoseInterviewBottleneck(interviewCount, respondedCount, offerCount, closedCount);
+  const transitions = steps.slice(2).filter((step) => step.conversionFromPrevious !== null);
+  const smallest = transitions.reduce<StageFunnelStep | undefined>((result, step) => !result || step.conversionFromPrevious! < result.conversionFromPrevious! ? step : result, undefined);
+  if (!smallest || smallest.conversionFromPrevious === 100) return {
+    id: 'healthy', severity: 'info', title: 'Явного разрыва не видно',
+    description: 'В записанных переходах нет потери между сопоставимыми этапами. Пропущенные этапы и незавершённые процессы ограничивают вывод.',
+    recommendation: 'Обновляйте этапы после новых событий; рыночные нормы здесь не оцениваются.',
+  };
+  const id = smallest.stage === 'responded' ? 'low_response_rate' : smallest.stage === 'interview' ? 'low_interview_rate' : 'low_offer_rate';
+  return { id, severity: 'warning', title: `Меньше переходов: ${smallest.label}`,
+    description: `Наименьшая записанная конверсия в выборке — ${smallest.conversionFromPrevious}%. Это наблюдение, а не причина отказов или прогноз.`,
+    recommendation: 'Проверьте незавершённые отклики и полноту истории, затем разберите конкретные карточки со стратегом.' };
 }
 
 /**
@@ -210,8 +132,8 @@ function calculateAverageCycleDays(applications: readonly ApplicationView[]): nu
   const oneDayMs = 24 * 60 * 60 * 1000;
 
   for (const app of applications) {
-    if (!app.createdAt || !app.stageChangedAt) continue;
-    const start = new Date(app.createdAt).getTime();
+    if (!app.appliedAt || !app.stageChangedAt) continue;
+    const start = new Date(app.appliedAt).getTime();
     const end = new Date(app.stageChangedAt).getTime();
     if (!Number.isNaN(start) && !Number.isNaN(end) && end >= start) {
       durations.push((end - start) / oneDayMs);
@@ -287,20 +209,12 @@ export function computePipelineAnalytics(
 
   const steps = buildFunnelSteps(applications);
   const appliedCount = steps.find((s) => s.stage === 'applied')?.count ?? 0;
-  const respondedCount = steps.find((s) => s.stage === 'responded')?.count ?? 0;
-  const interviewCount = steps.find((s) => s.stage === 'interview')?.count ?? 0;
-  const offerCount = steps.find((s) => s.stage === 'offer')?.count ?? 0;
+
 
   const overallConversionRate =
-    appliedCount > 0 ? Math.round((offerCount / appliedCount) * 100) : 0;
+    appliedCount > 0 ? Math.round((applications.filter((app) => applicationReachedStage(app, 'applied') && applicationReachedStage(app, 'offer')).length / appliedCount) * 100) : null;
 
-  const bottleneck = diagnoseBottlenecks(
-    appliedCount,
-    respondedCount,
-    interviewCount,
-    offerCount,
-    rejectedCount + archivedCount,
-  );
+  const bottleneck = diagnoseBottlenecks(steps);
 
   const averageCycleDays = calculateAverageCycleDays(
     applications.filter((a) => a.stage !== 'saved'),

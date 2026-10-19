@@ -138,6 +138,32 @@ describe('Coach Stage Routes (B340)', () => {
     };
   }
 
+  it('B528 removes invented candidate quick answers before delivery and replay', async () => {
+    const { app, headers, coachProvider } = await createTestServer();
+    coachProvider.createTurn.mockImplementationOnce(async (input) => ({
+      ...output,
+      result: {
+        ...output.result,
+        phase: input.phase,
+        message: 'Обсудим следующий шаг.',
+        quickReplies: ['Я создал проект Atlas', 'I increased revenue by 90%', 'Расскажите подробнее'],
+        actionProposals: [],
+      },
+    }));
+    const key = randomUUID();
+    const payload = { messageId: randomUUID(), content: 'Как ответить?', stage: 'interviews' };
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const response = await app.inject({
+        method: 'POST', url: '/api/v1/coach/turn',
+        headers: { ...headers, 'idempotency-key': key }, payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.quickReplies).toEqual(['Расскажите подробнее']);
+      expect(response.json().data.message).toBe('Обсудим следующий шаг.');
+    }
+    expect(coachProvider.createTurn).toHaveBeenCalledTimes(1);
+  });
+
   it('определяет фазу по stage без регулярок', async () => {
     const { app, headers, getLastInput } = await createTestServer();
 

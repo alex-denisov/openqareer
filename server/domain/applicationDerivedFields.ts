@@ -4,6 +4,7 @@ import type {
   StoredApplication,
   StoredApplicationEvent,
 } from '../data/sqliteApplicationRepository';
+import { APPLICATION_STAGES, type ApplicationStage } from '../../shared/applicationStage';
 import type { DeliveryReceipt } from '../../shared/applicationStage';
 import type { StoredApplicationMaterial } from '../data/sqliteApplicationMaterialsRepository';
 import type { StoredApplicationInterview } from '../data/sqliteApplicationInterviewRepository';
@@ -26,6 +27,9 @@ export interface ApplicationView extends StoredApplication, ApplicationDerivedFi
 }
 
 export interface ApplicationDerivedFields {
+  /** Recorded stages only: no inferred intermediate funnel steps. */
+  readonly reachedStages?: readonly ApplicationStage[];
+  readonly appliedAt?: string | null;
   readonly followUp: FollowUpStatus | null;
   readonly whoseTurn: ApplicationTurn;
   readonly materials: { readonly coverLetter: boolean; readonly resume: boolean };
@@ -77,6 +81,7 @@ export function deriveApplicationFields(
     upcomingInterviewNeedsPrep: needsPrepSoon(nearestInterview, now),
   });
   return {
+    ...recordedApplicationStages(input.application, input.events),
     followUp,
     whoseTurn,
     materials,
@@ -159,4 +164,17 @@ function needsPrepSoon(interview: StoredApplicationInterview | null, now: string
   return (
     new Date(interview.scheduledAt).getTime() - new Date(now).getTime() <= INTERVIEW_PREP_WINDOW_MS
   );
+}
+
+function recordedApplicationStages(application: StoredApplication, events: readonly StoredApplicationEvent[]) {
+  const stages = new Set<ApplicationStage>([application.stage]);
+  if (application.archivePreviousStage) stages.add(application.archivePreviousStage);
+  const appliedDates: string[] = [];
+  for (const event of events) {
+    if (event.kind !== 'stage') continue;
+    if (event.fromStage) stages.add(event.fromStage);
+    if (event.toStage) stages.add(event.toStage);
+    if (event.toStage === 'applied' && Number.isFinite(Date.parse(event.occurredAt))) appliedDates.push(event.occurredAt);
+  }
+  return { reachedStages: APPLICATION_STAGES.filter((stage) => stages.has(stage)), appliedAt: appliedDates.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null };
 }

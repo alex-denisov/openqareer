@@ -22,7 +22,8 @@ const shared = {
   external: ['playwright', 'playwright-core', 'fsevents', 'chromium-bidi'],
 };
 
-// Два входа из одного кода: HTTP-сервер и обслуживатель пула (B230). Оба
-// лежат в dist и уезжают в релизный tarball одним архивом.
+// HTTP, pool maintenance and isolated bounded fit worker share one release artifact.
+// Worker activation is a separate release operation.
 await build({ ...shared, entryPoints: ['server/index.ts'], outfile: 'dist/server.mjs' });
 await build({ ...shared, entryPoints: ['server/maintenance.ts'], outfile: 'dist/maintenance.mjs' });
+await build({ ...shared, entryPoints: ['scripts/run-vacancy-mechanics-worker.ts'], outfile: 'dist/vacancy-mechanics-worker.mjs' });

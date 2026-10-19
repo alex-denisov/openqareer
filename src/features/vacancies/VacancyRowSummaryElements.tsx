@@ -1,3 +1,4 @@
+import { VacancyFitSummary } from './VacancyFitSummary';
 import { CaretDown, CaretUp, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { formatCompensationCompact } from './vacancyCompensation';
@@ -73,18 +74,20 @@ function VacancyRowTitleCol({
   skillMatching,
   skillMissing,
   trust,
+  showRequirements=true,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly skillMatching: readonly string[];
   readonly skillMissing: readonly string[];
   readonly trust: ReturnType<typeof vacancyTrustSignals>;
+  readonly showRequirements?:boolean;
 }) {
   const total = skillMatching.length + skillMissing.length;
   return (
     <span className="vac-title-col">
       <span className="vac-title">{cluster.canonicalTitle}</span>
       <span className="vac-sub">{vacancySubtitle(cluster)}</span>
-      <VacancyReqTag matching={skillMatching.length} total={total} missing={skillMissing.length} />
+      {showRequirements?<VacancyReqTag matching={skillMatching.length} total={total} missing={skillMissing.length} />:null}
       <VacancyTrustTag trust={trust} />
     </span>
   );
@@ -121,10 +124,12 @@ export function VacancyDefaultSummaryContent({
       <span className="vac-main">
         <VacancyRowTitleCol
           cluster={cluster}
+          showRequirements={!explanation.fitView}
           skillMatching={skillMatching}
           skillMissing={skillMissing}
           trust={trust}
         />
+        <VacancyFitSummary compact vacancyId={cluster.id} view={explanation.fitView} />
         <VacancyRowMeta
           comp={formatCompensationCompact(cluster.salary)}
           age={age}

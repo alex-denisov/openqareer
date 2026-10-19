@@ -34,7 +34,9 @@
     "test:e2e:intake-fits": "node scripts/verify-intake-fits.mjs",
     "test:e2e:wizard-source-step": "node scripts/verify-wizard-source-step.mjs",
     "verify:hh-session-import": "tsx scripts/verify-hh-session-import.ts",
-    "test:impact": "node scripts/impact-tests.mjs"
+    "test:impact": "node scripts/impact-tests.mjs",
+    "worker:vacancy-mechanics": "node dist/vacancy-mechanics-worker.mjs",
+    "worker:vacancy-mechanics:dev": "tsx scripts/run-vacancy-mechanics-worker.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.2",
