@@ -71,7 +71,10 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     '50%',
   );
   await expect(evidence.getByRole('table')).toContainText('Требуется опыт управления продуктом.');
-  await expect(evidence.getByRole('table')).toContainText('fixture-fact-01');
+  await expect(evidence.getByRole('table')).toContainText(
+    'Управляла продуктом в тестовой компании.',
+  );
+  await expect(evidence.getByRole('table')).not.toContainText('fixture-fact-01');
   expect(methods).toEqual(['POST', 'GET', 'GET']);
   const directory = join('docs/v1-release/tasks/evidence/B525', testInfo.project.name);
   await mkdir(directory, { recursive: true });

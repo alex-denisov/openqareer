@@ -74,7 +74,7 @@ function FitEvidenceRow({
         ) : null}
         {assessment?.evidence.map((fact) => (
           <span className="vacancy-fit-fact" key={`${fact.factId}:${fact.quote}`}>
-            <span>Факт профиля: {fact.factId}</span>
+            <span>Из профиля</span>
             <q>{fact.quote}</q>
           </span>
         ))}
@@ -146,6 +146,12 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
       if (mounted.current) setBusy(false);
     }
   }
+  // Список приносит только сводку; полный разбор подгружается при раскрытии.
+  const needsDetail = view.state === 'ready' && view.requirements.length === 0;
+  useEffect(() => {
+    if (needsDetail) void load(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opened vacancy
+  }, [vacancyId, needsDetail]);
   return { view, busy, error, load };
 }
 function FitRequestControls({ state }: { readonly state: ReturnType<typeof useFitRequest> }) {

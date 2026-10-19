@@ -68,7 +68,8 @@ it('POST enqueues, GET reads processing, refresh GET reveals real evidence', asy
   expect(container.querySelector('table')?.textContent).toContain(
     'Требуется опыт управления продуктом.',
   );
-  expect(container.textContent).toContain('fixture-fact-01');
+  expect(container.textContent).toContain('Управляла продуктом в тестовой компании.');
+  expect(container.textContent).not.toContain('fixture-fact-01');
 });
 it('failed POST shows error without queued success or invented result', async () => {
   vi.stubGlobal(

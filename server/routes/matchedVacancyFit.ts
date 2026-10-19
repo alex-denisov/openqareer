@@ -1,6 +1,7 @@
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
 import type { RouteDeps } from './deps';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
+import type { VacancyFitView } from '../../shared/vacancyFit';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 
 /** Runs before pagination, so a cached match on a later page can move to the front. */
@@ -17,7 +18,7 @@ export function withVacancyFitOrder(
       if (!context || !deps.vacancyMechanics) return item;
       const target = readVacancyFitTarget(deps, item.cluster.id);
       if (!target) return item;
-      const fitView = deps.vacancyMechanics.view(context(target, []));
+      const fitView = compactFitView(deps.vacancyMechanics.view(context(target, [])));
       return { ...item, explanation: { ...item.explanation, fitView } };
     });
     return decorated.sort((left, right) => compareFitOrder(left, right, sort));
@@ -25,6 +26,19 @@ export function withVacancyFitOrder(
 }
 
 const FIT_PAGE_LIMIT = 20;
+
+/**
+ * Страница списка режется по байтам: полный разбор (тексты требований, цитаты
+ * фактов) на каждой вакансии оставлял одну вакансию на странице. В списке —
+ * только сводка; раскрытая карточка читает полный разбор сама.
+ */
+export function compactFitView(view: VacancyFitView): VacancyFitView {
+  return {
+    ...view,
+    requirements: [],
+    ...(view.result ? { result: { ...view.result, assessments: [] } } : {}),
+  };
+}
 
 /** Вакансии страницы, для которых расчёт соответствия ещё никто не ставил (B524). */
 export function vacanciesAwaitingFit(items: readonly MatchedVacancyItem[]): string[] {

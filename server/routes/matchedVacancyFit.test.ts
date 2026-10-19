@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compareFitOrder, vacanciesAwaitingFit } from './matchedVacancyFit';
+import { compactFitView, compareFitOrder, vacanciesAwaitingFit } from './matchedVacancyFit';
 import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitResult } from '../../shared/vacancyFit';
@@ -80,5 +80,21 @@ describe('B524 background fit for the shown page', () => {
     expect(ids).not.toContain('done');
     expect(ids).not.toContain('empty');
     expect(ids).toHaveLength(20);
+  });
+});
+
+describe('B525 list carries a fit summary, not the full evidence', () => {
+  it('drops requirement texts and assessment quotes but keeps what the row and sort read', () => {
+    const view = {
+      state: 'ready' as const,
+      requirements: [{ id: 'r1', text: 'x'.repeat(2000) }],
+      result: { status: 'assessed', coveragePercent: 14, requiredCoverage: { percent: 0 },
+        assessments: [{ requirementId: 'r1', status: 'matched', evidence: [{ factId: 'f', quote: 'y'.repeat(2000) }] }] },
+    } as never;
+    const compact = compactFitView(view);
+    expect(compact.requirements).toEqual([]);
+    expect(compact.result?.assessments).toEqual([]);
+    expect(compact.result?.coveragePercent).toBe(14);
+    expect(JSON.stringify(compact).length).toBeLessThan(400);
   });
 });
