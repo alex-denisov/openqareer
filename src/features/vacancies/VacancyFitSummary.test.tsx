@@ -53,3 +53,26 @@ it('known coverage precedes unknown, ties preserve existing order, freshness is 
     'known',
   ]);
 });
+
+it('mandatory requirement coverage precedes overall coverage for supplied local pools', () => {
+  const base = readyVacancyFit();
+  const make = (id: string, overall: number, required: number) =>
+    ({
+      cluster: { id, firstObservedAt: '2026-10-18' },
+      explanation: {
+        fitView: {
+          ...base,
+          result: {
+            ...base.result!,
+            coveragePercent: overall,
+            requiredCoverage: { matched: required, total: 100, percent: required },
+          },
+        },
+      },
+    }) as MatchedVacancyItem;
+  expect(
+    sortVacancyFitItems([make('overall-high', 90, 50), make('mandatory-high', 50, 100)]).map(
+      (item) => item.cluster.id,
+    ),
+  ).toEqual(['mandatory-high', 'overall-high']);
+});

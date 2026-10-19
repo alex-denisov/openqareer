@@ -1,3 +1,4 @@
+import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
 const STATE_LABELS = {
   not_requested: 'Соответствие ещё не рассчитано',
@@ -36,12 +37,15 @@ function fitDate(value?: string) {
   }).format(new Date(value));
 }
 export function VacancyFitSummary({
-  view,
+  view: initialView,
+  vacancyId,
   compact = false,
 }: {
   readonly view?: VacancyFitView;
+  readonly vacancyId?: string;
   readonly compact?: boolean;
 }) {
+  const view = useLatestVacancyFitView(vacancyId, initialView);
   const result = view?.result;
   const numeric = fitHasNumber(view);
   const reason =

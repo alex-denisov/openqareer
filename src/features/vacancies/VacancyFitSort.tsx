@@ -22,6 +22,16 @@ export function sortVacancyFitItems(
       const right = fitHasNumber(b.item.explanation.fitView)
         ? b.item.explanation.fitView!.result!.coveragePercent!
         : -1;
+      const leftRequired = a.item.explanation.fitView?.result?.requiredCoverage.percent;
+      const rightRequired = b.item.explanation.fitView?.result?.requiredCoverage.percent;
+      if (
+        left >= 0 &&
+        right >= 0 &&
+        typeof leftRequired === 'number' &&
+        typeof rightRequired === 'number' &&
+        leftRequired !== rightRequired
+      )
+        return rightRequired - leftRequired;
       return right - left || a.index - b.index;
     })
     .map((row) => row.item);

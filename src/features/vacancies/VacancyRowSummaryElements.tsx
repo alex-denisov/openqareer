@@ -129,7 +129,7 @@ export function VacancyDefaultSummaryContent({
           skillMissing={skillMissing}
           trust={trust}
         />
-        <VacancyFitSummary compact view={explanation.fitView} />
+        <VacancyFitSummary compact vacancyId={cluster.id} view={explanation.fitView} />
         <VacancyRowMeta
           comp={formatCompensationCompact(cluster.salary)}
           age={age}

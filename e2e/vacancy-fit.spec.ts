@@ -58,7 +58,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     has: page.getByRole('heading', { name: base.data[0]!.cluster.canonicalTitle, exact: true }),
   });
   if (!(await card.locator('.vacancy-fit-evidence').isVisible()))
-    await card.locator('.vacancies-screen-expand-action').click();
+    await card.locator('.vacancies-screen-row-trigger').click();
   const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
   await evidence.getByRole('button', { name: 'Рассчитать соответствие', exact: true }).click();
   await expect(evidence.getByRole('status')).toContainText('Расчёт в очереди');
@@ -66,6 +66,9 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   completed = true;
   await evidence.getByRole('button', { name: 'Обновить результат' }).click();
   await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
+  await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-percent')).toHaveText(
+    '50%',
+  );
   await expect(evidence.getByRole('table')).toContainText('Требуется опыт управления продуктом.');
   await expect(evidence.getByRole('table')).toContainText('fixture-fact-01');
   expect(methods).toEqual(['POST', 'GET', 'GET']);

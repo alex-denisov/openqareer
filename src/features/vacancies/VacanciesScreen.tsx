@@ -120,7 +120,8 @@ function filterBoardVacancies(
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
 ) {
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
-  return filterByScreenState(matched, filters, now);
+  const items=filterByScreenState(matched,filters,now);
+  return onFiltersChange?items:sortVacancyFitItems(items,state.sort);
 }
 
 function useVacanciesScreenBoard(
@@ -155,7 +156,7 @@ function useVacanciesScreenBoard(
   useEffect(() => setVisibleCount(20), [state]);
 
   const filtered = useMemo(
-    () => sortVacancyFitItems(filterBoardVacancies(matched, state, now, onFiltersChange), state.sort),
+    () => filterBoardVacancies(matched,state,now,onFiltersChange),
     [matched, state, now, onFiltersChange],
   );
   return {

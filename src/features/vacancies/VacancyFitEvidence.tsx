@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { publishVacancyFitRead } from './vacancyFitViewUpdates';
 import type { VacancyFitView, VacancyFitResult } from '../../../shared/vacancyFit';
 import { VacancyFitSummary } from './VacancyFitSummary';
 import { readVacancyFit, requestVacancyFit } from './vacancyFitApi';
@@ -115,6 +116,13 @@ function FitEvidenceTable({
   );
 }
 function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [loaded, setLoaded] = useState<{ id: string; view: VacancyFitView }>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -128,11 +136,14 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
     try {
       if (enqueue) await requestVacancyFit(vacancyId);
       const next = await readVacancyFit(vacancyId);
+      if (!mounted.current) return;
       setLoaded({ id: vacancyId, view: next });
+      publishVacancyFitRead(vacancyId, next);
     } catch {
-      setError('Не удалось обновить соответствие. Проверьте соединение и повторите.');
+      if (mounted.current)
+        setError('Не удалось обновить соответствие. Проверьте соединение и повторите.');
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
   return { view, busy, error, load };

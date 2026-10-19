@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
+import { VacancyFitSummary } from './VacancyFitSummary';
 import { VacancyFitEvidence } from './VacancyFitEvidence';
 import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 let root: Root | undefined;
@@ -15,16 +16,20 @@ async function mount(
   initialView?: ReturnType<typeof readyVacancyFit>,
   onAddToProfile?: (requirement: string) => void,
 ) {
+  vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   const container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
   await act(async () =>
     root!.render(
-      <VacancyFitEvidence
-        vacancyId="fit-1"
-        initialView={initialView}
-        onAddToProfile={onAddToProfile}
-      />,
+      <>
+        <VacancyFitSummary vacancyId="fit-1" />
+        <VacancyFitEvidence
+          vacancyId="fit-1"
+          initialView={initialView}
+          onAddToProfile={onAddToProfile}
+        />
+      </>,
     ),
   );
   return container;
@@ -59,7 +64,7 @@ it('POST enqueues, GET reads processing, refresh GET reveals real evidence', asy
       .click(),
   );
   expect(methods).toEqual(['POST', 'GET', 'GET']);
-  expect(container.textContent).toContain('50%');
+  expect(container.querySelectorAll('.vacancy-fit-percent')).toHaveLength(2);
   expect(container.querySelector('table')?.textContent).toContain(
     'Требуется опыт управления продуктом.',
   );
@@ -88,4 +93,25 @@ it('unconfirmed requirement retains the existing add-to-profile action', async (
   expect(button).toBeDefined();
   await act(async () => button!.click());
   expect(add).toHaveBeenCalledWith('Знание немецкого языка');
+});
+it('late read after leaving the vacancy cannot update a newly mounted session summary', async () => {
+  let resolveRead!: (response: Response) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? Response.json({ data: { state: 'processing' } }, { status: 202 })
+        : new Promise<Response>((resolve) => {
+            resolveRead = resolve;
+          }),
+    ),
+  );
+  const container = await mount();
+  await act(async () => container.querySelector('button')!.click());
+  await act(async () => root!.unmount());
+  root = createRoot(container);
+  await act(async () => root!.render(<VacancyFitSummary vacancyId="fit-1" />));
+  await act(async () => resolveRead(Response.json({ data: readyVacancyFit('fit-1') })));
+  expect(container.textContent).not.toContain('50%');
+  expect(container.textContent).toContain('ещё не рассчитано');
 });
