@@ -1,3 +1,4 @@
+import { ProfileEmptyStart } from './ProfileEmptyStart';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -290,7 +291,12 @@ function ProfileMobileReadiness(props: HomeProps) {
 export function ProfileMobileEmptyResume({
   open,
   onOpenConnections,
-}: Pick<HomeProps, 'open' | 'onOpenConnections'>) {
+  onOpenExpert,
+  onRetry,
+}: Pick<HomeProps, 'open' | 'onOpenConnections'> & {
+  readonly onOpenExpert?: () => void;
+  readonly onRetry?: () => void;
+}) {
   return (
     <div
       className="pm-pane"
@@ -298,21 +304,13 @@ export function ProfileMobileEmptyResume({
       role="tabpanel"
       aria-labelledby="profile-mobile-tab-resume"
     >
-      <p className="pm-foot">
-        {onOpenConnections
-          ? 'Профиль пока пуст. Подключите источник резюме или заполните разделы вручную.'
-          : 'Профиль пока пуст. Заполните разделы вручную.'}
-      </p>
-      <ProfileMobileGroup>
-        {onOpenConnections ? (
-          <ProfileMobileRow icon={Plus} title="Подключить источник" onClick={onOpenConnections} />
-        ) : null}
-        <ProfileMobileRow
-          icon={UserCircle}
-          title="Заполнить профиль вручную"
-          onClick={() => open({ page: 'contacts' })}
-        />
-      </ProfileMobileGroup>
+      <ProfileEmptyStart
+        variant="mobile"
+        onOpenConnections={onOpenConnections}
+        onOpenExpert={onOpenExpert}
+        onFillManually={() => open({ page: 'contacts' })}
+        onImported={() => onRetry?.()}
+      />
     </div>
   );
 }

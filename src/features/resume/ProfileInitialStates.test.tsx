@@ -102,11 +102,11 @@ describe('profile initial states', () => {
       />,
     );
 
-    expect(emptyHtml).toContain('Профиль пока пуст');
-    expect(emptyHtml).toContain('Подключить источник');
+    expect(emptyHtml).toContain('Профиль пуст.');
+    expect(emptyHtml).toContain('Загрузить резюме');
     expect(emptyHtml).toContain('Заполнить профиль вручную');
-    expect(contentHtml).not.toContain('Профиль пока пуст');
-    expect(memoryHtml).not.toContain('Профиль пока пуст');
+    expect(contentHtml).not.toContain('Профиль пуст.');
+    expect(memoryHtml).not.toContain('Профиль пуст.');
   });
 
   it('names the current role and employer under the 390 name, not the whole imported headline', () => {
@@ -140,26 +140,44 @@ describe('profile initial states', () => {
     );
   });
 
-  it('uses the real connection action and manual contacts route from the empty prompt', () => {
+  it('follows mockup 2 «Пусто»: upload, consultant, and the source link in the copy', () => {
     const open = vi.fn();
     const onOpenConnections = vi.fn();
+    const onOpenExpert = vi.fn();
     const container = mount(
-      <ProfileMobileEmptyResume open={open} onOpenConnections={onOpenConnections} />,
+      <ProfileMobileEmptyResume
+        open={open}
+        onOpenConnections={onOpenConnections}
+        onOpenExpert={onOpenExpert}
+      />,
     );
-    const sourceButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Подключить источник'),
-    );
-    const manualButton = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('Заполнить профиль вручную'),
-    );
+    const button = (text: string) =>
+      Array.from(container.querySelectorAll('button')).find((item) =>
+        item.textContent?.includes(text),
+      );
 
-    expect(sourceButton).toBeDefined();
-    expect(manualButton).toBeDefined();
-    act(() => sourceButton?.click());
-    act(() => manualButton?.click());
+    expect(container.textContent).toContain(
+      'Профиль пуст. Подключите источник или загрузите резюме.',
+    );
+    expect(button('Загрузить резюме')).toBeDefined();
+    expect(container.querySelector('input[type="file"]')?.getAttribute('accept')).toContain(
+      '.docx',
+    );
+    act(() => button('Подключите источник')?.click());
+    act(() => button('Рассказать консультанту')?.click());
 
     expect(onOpenConnections).toHaveBeenCalledOnce();
-    expect(open).toHaveBeenCalledOnce();
+    expect(onOpenExpert).toHaveBeenCalledOnce();
+    expect(button('Заполнить профиль вручную')).toBeUndefined();
+  });
+
+  it('falls back to manual filling when the consultant is unavailable', () => {
+    const open = vi.fn();
+    const container = mount(<ProfileMobileEmptyResume open={open} />);
+    const manual = Array.from(container.querySelectorAll('button')).find((item) =>
+      item.textContent?.includes('Заполнить профиль вручную'),
+    );
+    act(() => manual?.click());
     expect(open).toHaveBeenCalledWith({ page: 'contacts' });
   });
 
