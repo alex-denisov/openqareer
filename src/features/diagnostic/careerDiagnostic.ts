@@ -1,15 +1,9 @@
 import type { CandidateAnalysis } from '../evidence/evidenceEngine';
 
-const CAREER_DIAGNOSTIC_REVISION =
-  'career-diagnostic-v1-2026-08-07' as const;
+const CAREER_DIAGNOSTIC_REVISION = 'career-diagnostic-v1-2026-08-07' as const;
 
 export type DiagnosticDimension =
-  | 'readability'
-  | 'ats'
-  | 'evidence'
-  | 'freshness'
-  | 'contradictions'
-  | 'market';
+  'readability' | 'ats' | 'evidence' | 'freshness' | 'contradictions' | 'market';
 type DiagnosticCertainty = 'fact' | 'hypothesis' | 'unknown';
 type DiagnosticStatus = 'strength' | 'issue' | 'unknown';
 
@@ -88,9 +82,7 @@ export function buildCareerDiagnostic(
   const knownIssues = findings.filter(
     (finding) => finding.status === 'issue' && finding.certainty === 'fact',
   );
-  const unknowns = findings.filter(
-    (finding) => finding.certainty === 'unknown',
-  );
+  const unknowns = findings.filter((finding) => finding.certainty === 'unknown');
   const isPartial = unknowns.length > 0 || input.resumeSource === 'conversation';
 
   return {
@@ -154,7 +146,8 @@ export function applyCanonicalProfileEvidence(
         ? {
             type: 'review',
             label: profileFinding.correction,
-            reason: `Сначала закрываем «${profileFinding.title.toLowerCase()}»: канонический профиль должен опираться только на проверенные выводы.`,
+            reason:
+              'В профиле есть выводы, которые вы ещё не подтвердили. Роли и подбор вакансий опираются только на подтверждённое.',
             findingIds: [profileFinding.id],
           }
         : diagnostic.nextAction,
@@ -188,7 +181,8 @@ function canonicalProfileEvidenceFinding({
       title: 'Профиль содержит выводы, которые нужно проверить',
       explanation: `${confirmed.length} утверждений подтверждено, ${proposed.length} ждут проверки; подтверждённых результатов — ${confirmedOutcomes.length}.`,
       sourceRefs: proposed.map((item) => `memory:${item.id}`),
-      correction: 'Проверьте выводы диалога по одному: подтвердите, исправьте или исключите каждый.',
+      correction:
+        'Проверьте выводы диалога по одному: подтвердите, исправьте или исключите каждый.',
     });
   }
   if (confirmedOutcomes.length > 0) {
@@ -213,7 +207,8 @@ function canonicalProfileEvidenceFinding({
     title: 'В профиле нет подтверждённого результата',
     explanation: `${confirmed.length} утверждений подтверждено, но ни одно ещё не описывает наблюдаемый результат.`,
     sourceRefs: confirmed.map((item) => `memory:${item.id}`),
-    correction: 'Для одного сильного эпизода уточните контекст, действие, масштаб и наблюдаемый результат.',
+    correction:
+      'Для одного сильного эпизода уточните контекст, действие, масштаб и наблюдаемый результат.',
   });
 }
 
@@ -264,7 +259,8 @@ function atsFinding(input: CareerDiagnosticInput): DiagnosticFinding {
       status: 'unknown',
       severity: 'medium',
       title: 'ATS-совместимость оформления не проверена',
-      explanation: 'В источнике нет исходной вёрстки документа, поэтому нельзя проверить порядок блоков, колонки и подписи.',
+      explanation:
+        'В источнике нет исходной вёрстки документа, поэтому нельзя проверить порядок блоков, колонки и подписи.',
       sourceRefs: ['source:resume-text'],
       correction: 'Добавьте оригинал PDF или DOCX для проверки структуры и порядка чтения.',
     });
@@ -276,7 +272,8 @@ function atsFinding(input: CareerDiagnosticInput): DiagnosticFinding {
     status: 'unknown',
     severity: 'medium',
     title: 'Текст извлечён, но вёрстка ATS ещё не проверена',
-    explanation: 'Один извлечённый текст не доказывает, что ATS прочитает колонки, заголовки и даты в правильном порядке.',
+    explanation:
+      'Один извлечённый текст не доказывает, что ATS прочитает колонки, заголовки и даты в правильном порядке.',
     sourceRefs: ['source:resume-text'],
     correction: 'Сопоставьте оригинал PDF с порядком извлечения и исправьте проблемные блоки.',
   });
@@ -296,12 +293,8 @@ function evidenceFinding(input: CareerDiagnosticInput): DiagnosticFinding {
       correction: 'Проверьте предложения по одному: подтвердите, исправьте или отклоните каждое.',
     });
   }
-  const confirmed = input.analysis.evidenceItems.filter(
-    (item) => item.status === 'confirmed',
-  );
-  const pending = input.analysis.evidenceItems.filter(
-    (item) => item.status === 'pending',
-  );
+  const confirmed = input.analysis.evidenceItems.filter((item) => item.status === 'confirmed');
+  const pending = input.analysis.evidenceItems.filter((item) => item.status === 'pending');
   const confirmedResults = confirmed.filter((item) => item.kind === 'result');
   if (pending.length > 0 || confirmedResults.length === 0) {
     return finding({
@@ -313,7 +306,8 @@ function evidenceFinding(input: CareerDiagnosticInput): DiagnosticFinding {
       title: 'Результаты пока не доказаны',
       explanation: `${confirmed.length} утверждений подтверждено, ${pending.length} ждут проверки; подтверждённых результатов — ${confirmedResults.length}.`,
       sourceRefs: pending.map((item) => `evidence:${item.id}`),
-      correction: 'Для одного сильного эпизода уточните контекст, действие, масштаб и наблюдаемый результат.',
+      correction:
+        'Для одного сильного эпизода уточните контекст, действие, масштаб и наблюдаемый результат.',
     });
   }
   return finding({
@@ -329,10 +323,7 @@ function evidenceFinding(input: CareerDiagnosticInput): DiagnosticFinding {
   });
 }
 
-function freshnessFinding(
-  input: CareerDiagnosticInput,
-  now: string,
-): DiagnosticFinding {
+function freshnessFinding(input: CareerDiagnosticInput, now: string): DiagnosticFinding {
   if (!input.sourceUpdatedAt) {
     return finding({
       id: 'freshness-unknown',
@@ -343,7 +334,8 @@ function freshnessFinding(
       title: 'Неизвестно, насколько источник актуален',
       explanation: 'Дата последнего содержательного обновления не указана.',
       sourceRefs: ['source:resume'],
-      correction: 'Укажите месяц последнего обновления и добавьте более свежий опыт, если он появился.',
+      correction:
+        'Укажите месяц последнего обновления и добавьте более свежий опыт, если он появился.',
     });
   }
   const months = monthsBetween(input.sourceUpdatedAt, now);
@@ -373,9 +365,7 @@ function freshnessFinding(
   });
 }
 
-function contradictionFinding(
-  input: CareerDiagnosticInput,
-): DiagnosticFinding {
+function contradictionFinding(input: CareerDiagnosticInput): DiagnosticFinding {
   return finding({
     id: 'contradictions-single-source',
     dimension: 'contradictions',
@@ -389,10 +379,7 @@ function contradictionFinding(
   });
 }
 
-function marketFinding(
-  input: CareerDiagnosticInput,
-  now: string,
-): DiagnosticFinding {
+function marketFinding(input: CareerDiagnosticInput, now: string): DiagnosticFinding {
   if (!input.marketEvidenceUpdatedAt) {
     return finding({
       id: 'market-not-observed',
@@ -405,7 +392,8 @@ function marketFinding(
         ? `Для «${input.targetDirection.trim()}» нет датированной выборки вакансий и требований.`
         : 'Целевое направление не выбрано, поэтому рыночное сравнение преждевременно.',
       sourceRefs: [],
-      correction: 'Соберите датированную выборку вакансий по 1–3 гипотезам роли и выбранной географии.',
+      correction:
+        'Соберите датированную выборку вакансий по 1–3 гипотезам роли и выбранной географии.',
     });
   }
   const months = monthsBetween(input.marketEvidenceUpdatedAt, now);
@@ -457,8 +445,7 @@ function chooseNextAction(
   const unknown = unknownPriority
     .map((dimension) =>
       findings.find(
-        (finding) =>
-          finding.dimension === dimension && finding.certainty === 'unknown',
+        (finding) => finding.dimension === dimension && finding.certainty === 'unknown',
       ),
     )
     .find((finding): finding is DiagnosticFinding => Boolean(finding));
@@ -486,8 +473,6 @@ function monthsBetween(from: string, to: string): number {
   if (Number.isNaN(start.valueOf()) || Number.isNaN(end.valueOf())) return 0;
   return Math.max(
     0,
-    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 +
-      end.getUTCMonth() -
-      start.getUTCMonth(),
+    (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth(),
   );
 }
