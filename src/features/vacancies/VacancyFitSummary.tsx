@@ -71,11 +71,29 @@ export function VacancyFitSummary({
             max={100}
             aria-hidden="true"
           />
-          {result.dataState === 'partial' ? <span>Часть требований пока не проверена</span> : null}
+          {result.dataState === 'partial' ? <span>{partialNote(result)}</span> : null}
         </>
       ) : (
         <span>{reason}</span>
       )}
     </span>
   );
+}
+
+const GATE_NAMES: Record<string, string> = {
+  role: 'роль',
+  level: 'уровень',
+  region: 'регион',
+  workAuthorization: 'право на работу',
+  workFormat: 'формат работы',
+};
+
+/** Неподтверждённые условия называются прямо, а не прячутся в «совпадении». */
+function partialNote(result: NonNullable<VacancyFitView['result']>): string {
+  const unconfirmed = Object.entries(result.gates)
+    .filter(([, gate]) => gate.status !== 'matched')
+    .map(([name]) => GATE_NAMES[name] ?? name);
+  return unconfirmed.length
+    ? `Не подтверждено: ${unconfirmed.join(', ')}`
+    : 'Часть требований пока не проверена';
 }

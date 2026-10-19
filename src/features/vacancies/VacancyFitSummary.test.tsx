@@ -76,3 +76,25 @@ it('mandatory requirement coverage precedes overall coverage for supplied local 
     ),
   ).toEqual(['mandatory-high', 'overall-high']);
 });
+
+it('names unconfirmed conditions next to the percent instead of passing them off as a match', () => {
+  const view = readyVacancyFit();
+  const html = renderToStaticMarkup(
+    <VacancyFitSummary
+      view={{
+        ...view,
+        result: {
+          ...view.result!,
+          dataState: 'partial',
+          gates: {
+            ...view.result!.gates,
+            region: { status: 'unknown', reason: 'География не подтверждена.' },
+            workAuthorization: { status: 'unknown', reason: 'Не указано.' },
+          },
+        },
+      }}
+    />,
+  );
+  expect(html).toContain('50%');
+  expect(html).toContain('Не подтверждено: регион, право на работу');
+});

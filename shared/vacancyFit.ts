@@ -5,7 +5,7 @@ export interface VacancyFitView {
   readonly requirements: readonly VacancyRequirement[];
   readonly result?: VacancyFitResult;
 }
-export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-1';
+export const VACANCY_FIT_ALGORITHM_VERSION = 'evidence-coverage-2';
 export const VACANCY_FIT_GATE_NAMES = ['role', 'level', 'region', 'workAuthorization', 'workFormat'] as const;
 export type VacancyFitGateName = typeof VACANCY_FIT_GATE_NAMES[number];
 export type VacancyFitGateStatus = 'matched' | 'blocked' | 'unknown';

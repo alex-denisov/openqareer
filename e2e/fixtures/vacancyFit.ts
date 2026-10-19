@@ -29,7 +29,7 @@ export function readyVacancyFit(vacancyId = 'fit-fixture'): VacancyFitView {
     result: {
       candidateId: 'synthetic-candidate',
       vacancyId,
-      algorithmVersion: 'evidence-coverage-1',
+      algorithmVersion: 'evidence-coverage-2',
       status: 'assessed',
       calculatedAt: '2026-10-18T12:00:00.000Z',
       dataState: 'confirmed',

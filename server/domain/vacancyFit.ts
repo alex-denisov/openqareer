@@ -64,8 +64,10 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
     return { requirementId: requirement.id, status: claim.status, evidence: claim.evidence.map(({ factId, quote }) => ({ factId, quote })) };
   });
   const blocked = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status === 'blocked');
-  const unknown = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
-  const reason = blocked ? 'blocked_gate' : unknown ? 'unknown_gate' : !requirements.length ? 'no_requirements' : !facts.length ? 'no_eligible_facts' : !assessments.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
+  // Неподтверждённые ворота не прячут процент (почти у всех профилей регион, формат и право на работу
+  // не подтверждены), а остаются в результате как «неизвестно»; число прячут только закрытые ворота.
+  const unknownGate = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
+  const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : !facts.length ? 'no_eligible_facts' : !assessments.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
   const matchedIds = new Set(assessments.filter((item) => item.status === 'matched').map((item) => item.requirementId));
   const required = requirements.filter((item) => item.hard || item.stopFactor);
   const matched = assessments.filter((item) => item.status === 'matched').length;
@@ -73,7 +75,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
     status: blocked ? 'blocked' : canScore ? 'assessed' : 'unknown', gates,
-    calculatedAt: now, dataState: !canScore ? 'unknown' : assessments.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
+    calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || assessments.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
     coveragePercent: canScore ? Math.round(matched / requirements.length * 100) : null,
     requiredCoverage: { matched: required.filter((item) => matchedIds.has(item.id)).length, total: required.length, percent: canScore && required.length ? Math.round(required.filter((item) => matchedIds.has(item.id)).length / required.length * 100) : null },
     coverage: { matched, total: requirements.length, unknown: assessments.filter((item) => item.status === 'unknown').length },
@@ -81,7 +83,7 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   };
 }
 
-/** The injected assessor is never reached for blocked/unknown gates or absent source data. */
+/** The injected assessor is never reached for blocked gates or absent source data. */
 export async function assessVacancyFit(input: VacancyFitInput, assessor?: VacancyFitAssessor): Promise<VacancyFitResult> {
   const prerequisite = evaluateVacancyFit({ ...input, assessments: undefined });
   if (prerequisite.reason !== 'assessment_unavailable' || !assessor) return prerequisite;

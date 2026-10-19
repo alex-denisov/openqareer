@@ -19,13 +19,25 @@ describe('verified vacancy fit coverage', () => {
     expect(result.requiredCoverage).toEqual({ matched: 1, total: 1, percent: 100 });
     expect(result.assessments[0].evidence[0].factId).toBe('f1');
   });
-  it.each(['unknown', 'blocked'] as const)('does not score %s gates or invoke a model', async (status) => {
+  it('does not score a blocked gate or invoke a model', async () => {
     const input = fitInput();
     const assessor = { assess: vi.fn() };
-    const result = await assessVacancyFit({ ...input, gates: { ...input.gates, role: { status, reason: 'uncertain' } } }, assessor);
+    const result = await assessVacancyFit({ ...input, gates: { ...input.gates, role: { status: 'blocked', reason: 'other role' } } }, assessor);
     expect(result.coveragePercent).toBeNull();
     expect(result.requiredCoverage.percent).toBeNull();
     expect(assessor.assess).not.toHaveBeenCalled();
+  });
+  it('scores requirements while unconfirmed gates stay listed as unknown, never as matched', async () => {
+    const input = fitInput();
+    const assessor = { assess: vi.fn().mockResolvedValue(input.assessments) };
+    const gates = { ...input.gates, region: { status: 'unknown' as const, reason: 'not chosen' }, workAuthorization: { status: 'unknown' as const, reason: 'not stated' } };
+    const result = await assessVacancyFit({ ...input, gates, assessments: undefined }, assessor);
+    expect(assessor.assess).toHaveBeenCalledTimes(1);
+    expect(result.coveragePercent).toBe(100);
+    expect(result.status).toBe('assessed');
+    expect(result.dataState).toBe('partial');
+    expect(result.gates.region.status).toBe('unknown');
+    expect(result.gates.workAuthorization.status).toBe('unknown');
   });
   it.each(['candidate', 'quote', 'status', 'sensitive', 'provenance', 'source'] as const)('rejects invalid %s evidence without inventing a failure', (invalid) => {
     const input = fitInput();
