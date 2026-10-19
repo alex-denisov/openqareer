@@ -16698,7 +16698,7 @@ button.chip {
     display: none;
   }
 
-  .career-desktop-topbar .career-bootstrap-bell {
+  .career-desktop-topbar:has(.career-bootstrap-status) .career-desktop-topbar-actions {
     margin-inline-start: auto;
   }
 

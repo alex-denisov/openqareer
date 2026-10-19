@@ -79,9 +79,6 @@ function BootStatus({ text }: { readonly text?: string | null }) {
   if (!text) return null;
   return (
     <>
-      <span className="career-notification-bell career-bootstrap-bell" aria-hidden="true">
-        <BellSimple size={22} />
-      </span>
       <span
         className="career-desktop-topbar-hint career-bootstrap-status"
         role="status"

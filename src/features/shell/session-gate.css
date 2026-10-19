@@ -62,3 +62,21 @@
   gap: 10px;
   margin-top: 18px;
 }
+
+/* 390: заметка «Загрузка дольше обычного» стоит над нижним меню, а не под ним. */
+@media (max-width: 760px) {
+  .career-session-gate > .career-session-gate-actions {
+    position: fixed;
+    z-index: 40;
+    inset-inline: var(--career-space-4);
+    inset-block-end: calc(
+      var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
+    );
+    align-items: center;
+    justify-content: space-between;
+    margin: 0;
+    padding: var(--career-space-2) var(--career-space-2) var(--career-space-2) var(--career-space-4);
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface-raised);
+  }
+}
