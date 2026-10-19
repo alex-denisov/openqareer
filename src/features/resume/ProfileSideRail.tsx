@@ -20,7 +20,7 @@ export function profileRelocationSummaryStatusFromResponse(
 ): ProfileRelocationSummaryStatus {
   if (response.consent.granted) return 'enabled';
   if (response.consent.status === 'revoked') return 'not_enabled';
-  if (response.consentTextStatus === 'pending_dpo_review') return 'prepared';
+  if (response.consentTextStatus !== 'approved') return 'prepared';
   return 'not_enabled';
 }
 

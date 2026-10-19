@@ -32,7 +32,7 @@ async function putStep(
 }
 
 describe('relocation questionnaire API', () => {
-  it('does not expose personal fields before consent and fails closed while consent text is under review', async () => {
+  it('does not expose personal fields before consent and grants the approved consent text', async () => {
     const app = await createApp();
     const authorization = candidateAuthorization(app);
     const read = await app.inject({
@@ -50,10 +50,10 @@ describe('relocation questionnaire API', () => {
     expect(read.json().data).toMatchObject({
       profile: null,
       consent: { granted: false, status: 'not_granted' },
-      consentTextStatus: 'pending_dpo_review',
+      consentTextStatus: 'approved',
     });
-    expect(grant.statusCode).toBe(409);
-    expect(grant.json().error.code).toBe('relocation_consent_text_not_approved');
+    expect(grant.statusCode).toBe(200);
+    expect(grant.json().data.consent).toMatchObject({ granted: true });
   });
 
   it('requires candidate authentication before reading the questionnaire', async () => {

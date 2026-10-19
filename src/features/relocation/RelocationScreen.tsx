@@ -4,7 +4,11 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { buildCountryComparisonCountry, listRelocationCountries } from './relocationCountryData';
-import { getRelocationQuestionnaire, type RelocationQuestionnaireResponse } from './relocationApi';
+import {
+  getRelocationQuestionnaire,
+  grantRelocationConsent,
+  type RelocationQuestionnaireResponse,
+} from './relocationApi';
 import { RelocationCountryWorkspace } from './RelocationCountryWorkspace';
 import { RelocationEconomy } from './RelocationEconomy';
 import { RelocationProfile } from './RelocationProfile';
@@ -40,10 +44,14 @@ export function RelocationScreen({
         consentStatus={state.snapshot?.consent.status === 'revoked' ? 'revoked' : 'not_granted'}
         consentTextStatus={state.snapshot?.consentTextStatus ?? 'pending_dpo_review'}
         onNavigateBack={onNavigateBack}
+        onConsentGranted={state.updateGrantedConsent}
       />
     );
   }
-  const snapshot = { ...state.snapshot, profile: state.snapshot.profile ?? emptyRelocationQuestionnaire() };
+  const snapshot = {
+    ...state.snapshot,
+    profile: state.snapshot.profile ?? emptyRelocationQuestionnaire(),
+  };
   return (
     <RelocationWorkspace
       snapshot={snapshot}
@@ -67,7 +75,9 @@ function useRelocationSnapshot() {
     try {
       setSnapshot(await getRelocationQuestionnaire(signal));
     } catch (reason) {
-      setError(apiErrorMessage(reason, 'Не удалось загрузить данные о релокации. Повторите запрос.'));
+      setError(
+        apiErrorMessage(reason, 'Не удалось загрузить данные о релокации. Повторите запрос.'),
+      );
     } finally {
       setLoading(false);
     }
@@ -79,16 +89,25 @@ function useRelocationSnapshot() {
     return () => controller.abort();
   }, [reload]);
 
-  const updateProfile = useCallback((
-    profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
-    alerts: RelocationQuestionnaireResponse['alerts'] = [],
-  ) => {
-    setSnapshot((current) => current ? { ...current, profile, alerts } : current);
-  }, []);
+  const updateProfile = useCallback(
+    (
+      profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
+      alerts: RelocationQuestionnaireResponse['alerts'] = [],
+    ) => {
+      setSnapshot((current) => (current ? { ...current, profile, alerts } : current));
+    },
+    [],
+  );
   const updateConsent = useCallback((consent: RelocationQuestionnaireResponse['consent']) => {
-    setSnapshot((current) => current ? { ...current, consent, profile: null } : current);
+    setSnapshot((current) => (current ? { ...current, consent, profile: null } : current));
   }, []);
-  return { snapshot, error, loading, reload, updateProfile, updateConsent };
+  const updateGrantedConsent = useCallback(
+    (consent: RelocationQuestionnaireResponse['consent']) => {
+      setSnapshot((current) => (current ? { ...current, consent } : current));
+    },
+    [],
+  );
+  return { snapshot, error, loading, reload, updateProfile, updateConsent, updateGrantedConsent };
 }
 
 function RelocationWorkspace({
@@ -99,8 +118,13 @@ function RelocationWorkspace({
   onProfileUpdated,
   onConsentRevoked,
 }: RelocationScreenProps & {
-  readonly snapshot: RelocationQuestionnaireResponse & { readonly profile: NonNullable<RelocationQuestionnaireResponse['profile']> };
-  readonly onProfileUpdated: (profile: NonNullable<RelocationQuestionnaireResponse['profile']>, alerts?: RelocationQuestionnaireResponse['alerts']) => void;
+  readonly snapshot: RelocationQuestionnaireResponse & {
+    readonly profile: NonNullable<RelocationQuestionnaireResponse['profile']>;
+  };
+  readonly onProfileUpdated: (
+    profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
+    alerts?: RelocationQuestionnaireResponse['alerts'],
+  ) => void;
   readonly onConsentRevoked: (consent: RelocationQuestionnaireResponse['consent']) => void;
 }) {
   const [tab, setTab] = useState<RelocationTab>('countries');
@@ -109,18 +133,26 @@ function RelocationWorkspace({
   const [grossAnnualIncome, setGrossAnnualIncome] = useState<number>();
   const countryCount = useMemo(() => listRelocationCountries().length, []);
   const comparisonCountries = useMemo(
-    () => selectedCountryCodes.map((countryCode) => buildCountryComparisonCountry(
-      countryCode,
-      snapshot.profile,
-      countryCode === economyCountryCode ? grossAnnualIncome : undefined,
-    )),
+    () =>
+      selectedCountryCodes.map((countryCode) =>
+        buildCountryComparisonCountry(
+          countryCode,
+          snapshot.profile,
+          countryCode === economyCountryCode ? grossAnnualIncome : undefined,
+        ),
+      ),
     [economyCountryCode, grossAnnualIncome, selectedCountryCodes, snapshot.profile],
   );
 
   return (
     <main className="career-relocation" aria-labelledby="career-relocation-title">
       <RelocationHeader onNavigateBack={onNavigateBack} />
-      <RelocationTabs activeTab={tab} onChange={setTab} countryCount={countryCount} selectedCount={selectedCountryCodes.length} />
+      <RelocationTabs
+        activeTab={tab}
+        onChange={setTab}
+        countryCount={countryCount}
+        selectedCount={selectedCountryCodes.length}
+      />
       <RelocationTabPanel
         tab={tab}
         snapshot={snapshot}
@@ -144,7 +176,12 @@ function RelocationWorkspace({
 function RelocationHeader({ onNavigateBack }: { readonly onNavigateBack: () => void }) {
   return (
     <header className="career-relocation-header">
-      <button className="career-relocation-back" type="button" aria-label="Назад" onClick={onNavigateBack}>
+      <button
+        className="career-relocation-back"
+        type="button"
+        aria-label="Назад"
+        onClick={onNavigateBack}
+      >
         <CaretLeft aria-hidden="true" size={20} />
       </button>
       <div className="career-relocation-title-row">
@@ -158,7 +195,9 @@ function RelocationHeader({ onNavigateBack }: { readonly onNavigateBack: () => v
 
 interface RelocationTabPanelProps {
   readonly tab: RelocationTab;
-  readonly snapshot: RelocationQuestionnaireResponse & { readonly profile: NonNullable<RelocationQuestionnaireResponse['profile']> };
+  readonly snapshot: RelocationQuestionnaireResponse & {
+    readonly profile: NonNullable<RelocationQuestionnaireResponse['profile']>;
+  };
   readonly comparisonCountries: ReturnType<typeof buildCountryComparisonCountry>[];
   readonly selectedCountryCodes: readonly string[];
   readonly grossAnnualIncome: number | undefined;
@@ -169,7 +208,10 @@ interface RelocationTabPanelProps {
   readonly onTabChange: (tab: RelocationTab) => void;
   readonly onOpenExpert?: () => void;
   readonly onOpenVacancies?: () => void;
-  readonly onProfileUpdated: (profile: NonNullable<RelocationQuestionnaireResponse['profile']>, alerts?: RelocationQuestionnaireResponse['alerts']) => void;
+  readonly onProfileUpdated: (
+    profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
+    alerts?: RelocationQuestionnaireResponse['alerts'],
+  ) => void;
   readonly onConsentRevoked: (consent: RelocationQuestionnaireResponse['consent']) => void;
 }
 
@@ -204,10 +246,51 @@ function RelocationTabContent({
   onProfileUpdated,
   onConsentRevoked,
 }: RelocationTabPanelProps) {
-  if (tab === 'countries') return <CountriesTab profile={snapshot.profile} selectedCountryCodes={selectedCountryCodes} onSelectedCountryCodesChange={onSelectedCountryCodesChange} onCompare={() => onTabChange('comparison')} onCalculateEconomy={(countryCode) => { onEconomyCountryCodeChange(countryCode); onTabChange('economy'); }} onOpenProfile={() => onTabChange('profile')} onOpenVacancies={onOpenVacancies} />;
-  if (tab === 'comparison') return <ComparisonTab countries={comparisonCountries} onChangeCountries={() => onTabChange('countries')} onOpenExpert={onOpenExpert} />;
-  if (tab === 'economy') return <RelocationEconomy profile={snapshot.profile} selectedCountryCodes={selectedCountryCodes} selectedCountryCode={economyCountryCode} grossAnnualIncome={grossAnnualIncome} onCountryCodeChange={onEconomyCountryCodeChange} onGrossAnnualIncomeChange={onGrossAnnualIncomeChange} onShowComparison={() => onTabChange('comparison')} />;
-  return <RelocationProfile profile={snapshot.profile} consent={snapshot.consent} alerts={snapshot.alerts} onProfileUpdated={onProfileUpdated} onConsentRevoked={onConsentRevoked} onShowCountries={() => onTabChange('countries')} />;
+  if (tab === 'countries')
+    return (
+      <CountriesTab
+        profile={snapshot.profile}
+        selectedCountryCodes={selectedCountryCodes}
+        onSelectedCountryCodesChange={onSelectedCountryCodesChange}
+        onCompare={() => onTabChange('comparison')}
+        onCalculateEconomy={(countryCode) => {
+          onEconomyCountryCodeChange(countryCode);
+          onTabChange('economy');
+        }}
+        onOpenProfile={() => onTabChange('profile')}
+        onOpenVacancies={onOpenVacancies}
+      />
+    );
+  if (tab === 'comparison')
+    return (
+      <ComparisonTab
+        countries={comparisonCountries}
+        onChangeCountries={() => onTabChange('countries')}
+        onOpenExpert={onOpenExpert}
+      />
+    );
+  if (tab === 'economy')
+    return (
+      <RelocationEconomy
+        profile={snapshot.profile}
+        selectedCountryCodes={selectedCountryCodes}
+        selectedCountryCode={economyCountryCode}
+        grossAnnualIncome={grossAnnualIncome}
+        onCountryCodeChange={onEconomyCountryCodeChange}
+        onGrossAnnualIncomeChange={onGrossAnnualIncomeChange}
+        onShowComparison={() => onTabChange('comparison')}
+      />
+    );
+  return (
+    <RelocationProfile
+      profile={snapshot.profile}
+      consent={snapshot.consent}
+      alerts={snapshot.alerts}
+      onProfileUpdated={onProfileUpdated}
+      onConsentRevoked={onConsentRevoked}
+      onShowCountries={() => onTabChange('countries')}
+    />
+  );
 }
 
 function CountriesTab({
@@ -227,7 +310,17 @@ function CountriesTab({
   readonly onOpenProfile: () => void;
   readonly onOpenVacancies?: () => void;
 }) {
-  return <RelocationCountryWorkspace profile={profile} selectedCountryCodes={selectedCountryCodes} onSelectedCountryCodesChange={onSelectedCountryCodesChange} onCompare={onCompare} onCalculateEconomy={onCalculateEconomy} onOpenProfile={onOpenProfile} onOpenVacancies={onOpenVacancies} />;
+  return (
+    <RelocationCountryWorkspace
+      profile={profile}
+      selectedCountryCodes={selectedCountryCodes}
+      onSelectedCountryCodesChange={onSelectedCountryCodesChange}
+      onCompare={onCompare}
+      onCalculateEconomy={onCalculateEconomy}
+      onOpenProfile={onOpenProfile}
+      onOpenVacancies={onOpenVacancies}
+    />
+  );
 }
 
 function ComparisonTab({
@@ -242,7 +335,9 @@ function ComparisonTab({
   return (
     <div className="career-relocation-comparison-view">
       <CountryComparisonPanel countries={countries} />
-      <button className="career-btn career-btn-secondary" type="button" onClick={onChangeCountries}>Изменить страны</button>
+      <button className="career-btn career-btn-secondary" type="button" onClick={onChangeCountries}>
+        Изменить страны
+      </button>
       {onOpenExpert ? (
         <button className="career-btn career-btn-secondary" type="button" onClick={onOpenExpert}>
           Обсудить с консультантом
@@ -265,9 +360,12 @@ function RelocationTabs({
 }) {
   const tabs = TABS.map((tab) => ({
     ...tab,
-    label: tab.id === 'countries'
-      ? `Страны ${countryCount}`
-      : tab.id === 'comparison' ? `Сравнение ${selectedCount}` : tab.label,
+    label:
+      tab.id === 'countries'
+        ? `Страны ${countryCount}`
+        : tab.id === 'comparison'
+          ? `Сравнение ${selectedCount}`
+          : tab.label,
   }));
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     const currentIndex = tabs.findIndex(({ id }) => id === activeTab);
@@ -308,16 +406,26 @@ function ConsentGate({
   consentStatus,
   consentTextStatus,
   onNavigateBack,
+  onConsentGranted,
 }: {
   readonly consentStatus: 'not_granted' | 'revoked';
-  readonly consentTextStatus: 'pending_dpo_review';
+  readonly consentTextStatus: 'approved' | 'pending_dpo_review';
   readonly onNavigateBack: () => void;
+  readonly onConsentGranted: (consent: RelocationQuestionnaireResponse['consent']) => void;
 }) {
   const revoked = consentStatus === 'revoked';
   return (
-    <main className="career-relocation career-relocation-off" aria-labelledby="career-relocation-title">
+    <main
+      className="career-relocation career-relocation-off"
+      aria-labelledby="career-relocation-title"
+    >
       <header className="career-relocation-header">
-        <button className="career-relocation-back" type="button" aria-label="Назад" onClick={onNavigateBack}>
+        <button
+          className="career-relocation-back"
+          type="button"
+          aria-label="Назад"
+          onClick={onNavigateBack}
+        >
           <CaretLeft aria-hidden="true" size={20} />
         </button>
         <div className="career-relocation-title-row">
@@ -326,11 +434,20 @@ function ConsentGate({
         </div>
         <p>Сейчас подборка идёт только по России.</p>
       </header>
-      <section className="career-relocation-consent" aria-labelledby="career-relocation-consent-title">
-        <h2 id="career-relocation-consent-title">{revoked ? 'Согласие отозвано' : 'Что появится после включения'}</h2>
+      <section
+        className="career-relocation-consent"
+        aria-labelledby="career-relocation-consent-title"
+      >
+        <h2 id="career-relocation-consent-title">
+          {revoked ? 'Согласие отозвано' : 'Что появится после включения'}
+        </h2>
         <ConsentGateDetails revoked={revoked} />
         <RelocationPrivacyNote />
-        {!revoked ? <ConsentPendingControl consentTextStatus={consentTextStatus} /> : null}
+        {consentTextStatus === 'approved' ? (
+          <ConsentGrantControl onGranted={onConsentGranted} />
+        ) : !revoked ? (
+          <ConsentPendingControl />
+        ) : null}
       </section>
     </main>
   );
@@ -340,9 +457,18 @@ function ConsentGateDetails({ revoked }: { readonly revoked: boolean }) {
   if (revoked) return <p role="status">Согласие отозвано. Данные анкеты удалены.</p>;
   return (
     <ul>
-      <li><strong>Доступность стран</strong><span>По гражданству, документам и подтверждённым фактам профиля.</span></li>
-      <li><strong>Вакансии с релокацией</strong><span>Из вашего подбора, с указанием источника и периода.</span></li>
-      <li><strong>Сравнение и экономика</strong><span>Только по сопоставимым показателям с доступными данными.</span></li>
+      <li>
+        <strong>Доступность стран</strong>
+        <span>По гражданству, документам и подтверждённым фактам профиля.</span>
+      </li>
+      <li>
+        <strong>Вакансии с релокацией</strong>
+        <span>Из вашего подбора, с указанием источника и периода.</span>
+      </li>
+      <li>
+        <strong>Сравнение и экономика</strong>
+        <span>Только по сопоставимым показателям с доступными данными.</span>
+      </li>
     </ul>
   );
 }
@@ -351,15 +477,63 @@ function RelocationPrivacyNote() {
   return (
     <p className="career-relocation-privacy-note">
       <LockKey aria-hidden="true" size={17} />
-      <span>Гражданство, документы, образование и семья видны только вам. Их хранение требует отдельного согласия.</span>
+      <span>
+        Гражданство, документы, образование и семья видны только вам. Их хранение требует отдельного
+        согласия.
+      </span>
     </p>
   );
 }
 
-function ConsentPendingControl({ consentTextStatus }: { readonly consentTextStatus: 'pending_dpo_review' }) {
-  const message = consentTextStatus === 'pending_dpo_review'
-    ? 'Заполнение станет доступно после утверждения текста согласия.'
-    : '';
+function ConsentGrantControl({
+  onGranted,
+}: {
+  readonly onGranted: (consent: RelocationQuestionnaireResponse['consent']) => void;
+}) {
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const submit = async () => {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const result = await grantRelocationConsent();
+      onGranted(result.consent);
+    } catch (reason) {
+      setError(apiErrorMessage(reason, 'Не удалось сохранить согласие. Повторите.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <fieldset className="career-relocation-consent-control" disabled={busy}>
+      <label>
+        <input
+          type="checkbox"
+          checked={accepted}
+          onChange={(event) => setAccepted(event.target.checked)}
+        />
+        <span>
+          Согласен на обработку данных о гражданстве, документах, образовании и семье для раздела
+          «Страны и релокация». Согласие можно отозвать: данные анкеты удалятся.
+        </span>
+      </label>
+      <button
+        className="career-btn career-btn-primary"
+        type="button"
+        disabled={!accepted || busy}
+        onClick={() => void submit()}
+      >
+        <ArrowRight aria-hidden="true" size={17} />
+        Заполнить анкету
+      </button>
+      {error ? <p role="alert">{error}</p> : null}
+    </fieldset>
+  );
+}
+
+function ConsentPendingControl() {
+  const message = 'Заполнение станет доступно после утверждения текста согласия.';
   return (
     <fieldset className="career-relocation-consent-control" disabled>
       <label>
@@ -387,7 +561,10 @@ function ScreenState({
   const Tag = busy ? 'div' : 'section';
   return (
     <Tag className="career-relocation-state" aria-busy={busy} role={busy ? 'status' : 'alert'}>
-      <p>{busy ? null : <WarningCircle aria-hidden="true" size={18} />}{message}</p>
+      <p>
+        {busy ? null : <WarningCircle aria-hidden="true" size={18} />}
+        {message}
+      </p>
       {onRetry ? (
         <button className="career-btn career-btn-secondary" type="button" onClick={onRetry}>
           Повторить загрузку

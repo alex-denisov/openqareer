@@ -15,7 +15,7 @@ import { apiFetch, readDataObject } from '../coach/apiClient';
 export interface RelocationQuestionnaireResponse {
   readonly profile: RelocationQuestionnaire | null;
   readonly consent: RelocationConsentState;
-  readonly consentTextStatus: 'pending_dpo_review';
+  readonly consentTextStatus: 'approved' | 'pending_dpo_review';
   readonly alerts: readonly RelocationAlert[];
 }
 
@@ -64,14 +64,11 @@ export async function putRelocationQuestionnaireStep<K extends RelocationStepId>
   data: RelocationStepInput[K],
   revision: number,
 ): Promise<RelocationQuestionnaireWriteResult> {
-  const response = await apiFetch(
-    `/api/v1/candidate/relocation-questionnaire/steps/${step}`,
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'If-Match': quotedRevision(revision) },
-      body: JSON.stringify(data),
-    },
-  );
+  const response = await apiFetch(`/api/v1/candidate/relocation-questionnaire/steps/${step}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'If-Match': quotedRevision(revision) },
+    body: JSON.stringify(data),
+  });
   return readDataObject<RelocationQuestionnaireWriteResult>(response);
 }
 
@@ -90,14 +87,11 @@ export async function putRelocationQuestionnaireProgress(
 export async function importRelocationLanguagesFromLinkedIn(
   revision: number,
 ): Promise<RelocationQuestionnaireWriteResult> {
-  const response = await apiFetch(
-    '/api/v1/candidate/relocation-questionnaire/languages/linkedin',
-    {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'If-Match': quotedRevision(revision) },
-      body: JSON.stringify({}),
-    },
-  );
+  const response = await apiFetch('/api/v1/candidate/relocation-questionnaire/languages/linkedin', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', 'If-Match': quotedRevision(revision) },
+    body: JSON.stringify({}),
+  });
   return readDataObject<RelocationQuestionnaireWriteResult>(response);
 }
 

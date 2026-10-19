@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 export const RELOCATION_CONSENT_VERSION = 'relocation-questionnaire-v1.0';
-export const RELOCATION_CONSENT_STATUS = 'pending_dpo_review' as const;
-export const RELOCATION_CONSENT_TEXT_APPROVED = false;
+/** Текст согласия утверждён владельцем 19.10.2026. */
+export const RELOCATION_CONSENT_STATUS = 'approved' as const;
+export const RELOCATION_CONSENT_TEXT_APPROVED = true;
 
 export const RELOCATION_STEPS = [
   'citizenship_documents',

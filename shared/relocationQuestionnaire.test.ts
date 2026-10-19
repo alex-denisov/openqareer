@@ -144,6 +144,6 @@ describe('relocation questionnaire contract', () => {
   });
 
   it('keeps consent unavailable until the separate consent text receives approval', () => {
-    expect(RELOCATION_CONSENT_STATUS).toBe('pending_dpo_review');
+    expect(RELOCATION_CONSENT_STATUS).toBe('approved');
   });
 });

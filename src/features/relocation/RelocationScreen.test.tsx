@@ -46,10 +46,51 @@ describe('RelocationScreen', () => {
     expect(grantConsent).not.toHaveBeenCalled();
   });
 
+  it('grants the approved consent only after the candidate ticks it, then opens the workspace', async () => {
+    vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
+      profile: null,
+      consent: notGranted,
+      consentTextStatus: 'approved',
+      alerts: [],
+    });
+    const grantConsent = vi.spyOn(relocationApi, 'grantRelocationConsent').mockResolvedValueOnce({
+      consent: {
+        ...notGranted,
+        status: 'granted',
+        granted: true,
+        versionId: 'v1',
+        grantedAt: '2026-10-19T12:00:00.000Z',
+      },
+    });
+    render();
+    await act(async () => Promise.resolve());
+
+    const startButton = () =>
+      [...(host?.querySelectorAll('button') ?? [])].find((button) =>
+        button.textContent?.includes('Заполнить анкету'),
+      );
+    expect(host?.textContent).not.toContain('ожидает проверки');
+    expect(startButton()?.disabled).toBe(true);
+
+    const checkbox = host?.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    await act(async () => checkbox?.click());
+    expect(startButton()?.disabled).toBe(false);
+    await act(async () => startButton()?.click());
+
+    expect(grantConsent).toHaveBeenCalledTimes(1);
+    expect(host?.querySelectorAll('[role="tab"]').length).toBe(4);
+  });
+
   it('exposes the four workspace tabs when consent is active', async () => {
     vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
       profile: emptyRelocationQuestionnaire(),
-      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consent: {
+        ...notGranted,
+        status: 'granted',
+        granted: true,
+        versionId: 'v1',
+        grantedAt: '2026-10-10T12:00:00.000Z',
+      },
       consentTextStatus: 'pending_dpo_review',
       alerts: [],
     });
@@ -75,7 +116,9 @@ describe('RelocationScreen', () => {
     await clickButton('Указать в профиле');
 
     expect(host?.textContent).toContain('Мои данные');
-    expect(host?.querySelector('#career-relocation-tab-profile')?.getAttribute('aria-selected')).toBe('true');
+    expect(
+      host?.querySelector('#career-relocation-tab-profile')?.getAttribute('aria-selected'),
+    ).toBe('true');
   });
 
   it('shows citizenship and document-expiration alerts from the profile response', async () => {
@@ -85,15 +128,23 @@ describe('RelocationScreen', () => {
         ...profile,
         citizenshipDocuments: {
           ...profile.citizenshipDocuments,
-          documents: [{
-            id: 'permit-1',
-            kind: 'residence_permit',
-            countryCode: 'DE',
-            expiresAt: '2026-10-20',
-          }],
+          documents: [
+            {
+              id: 'permit-1',
+              kind: 'residence_permit',
+              countryCode: 'DE',
+              expiresAt: '2026-10-20',
+            },
+          ],
         },
       },
-      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consent: {
+        ...notGranted,
+        status: 'granted',
+        granted: true,
+        versionId: 'v1',
+        grantedAt: '2026-10-10T12:00:00.000Z',
+      },
       consentTextStatus: 'pending_dpo_review',
       alerts: [
         { kind: 'citizenship_missing' },
@@ -114,7 +165,13 @@ describe('RelocationScreen', () => {
     const profile = { ...emptyRelocationQuestionnaire(), currentStep: 'education' as const };
     vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
       profile,
-      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consent: {
+        ...notGranted,
+        status: 'granted',
+        granted: true,
+        versionId: 'v1',
+        grantedAt: '2026-10-10T12:00:00.000Z',
+      },
       consentTextStatus: 'pending_dpo_review',
       alerts: [],
     });
@@ -149,7 +206,13 @@ describe('RelocationScreen', () => {
   function mockGrantedQuestionnaire() {
     vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
       profile: emptyRelocationQuestionnaire(),
-      consent: { ...notGranted, status: 'granted', granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' },
+      consent: {
+        ...notGranted,
+        status: 'granted',
+        granted: true,
+        versionId: 'v1',
+        grantedAt: '2026-10-10T12:00:00.000Z',
+      },
       consentTextStatus: 'pending_dpo_review',
       alerts: [],
     });
@@ -160,8 +223,12 @@ describe('RelocationScreen', () => {
   }
 
   async function clickButton(label: string) {
-    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) => item.textContent?.includes(label));
+    const button = [...(host?.querySelectorAll('button') ?? [])].find((item) =>
+      item.textContent?.includes(label),
+    );
     expect(button).toBeDefined();
-    await act(async () => { button?.click(); });
+    await act(async () => {
+      button?.click();
+    });
   }
 });
