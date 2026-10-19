@@ -28,7 +28,6 @@ describe('reputation audit API routes', () => {
     expect(response.statusCode).toBe(403);
   });
 
-
   it('возвращает 401 при получении аудита без авторизации', async () => {
     const app = await createApp();
     const response = await app.inject({
@@ -52,7 +51,7 @@ describe('reputation audit API routes', () => {
     expect(json.data.audit).toBeNull();
   });
 
-  it('blocks the legacy start route until the consent text is approved', async () => {
+  it('sends the legacy start route to the reviewed query plan', async () => {
     const app = await createApp();
     const startRes = await app.inject({
       method: 'POST',
@@ -94,8 +93,8 @@ describe('reputation audit API routes', () => {
 
     expect(startRes.statusCode).toBe(409);
     const startJson = startRes.json();
-    expect(startJson.error.code).toBe('consent_text_not_approved');
-    expect(startJson.error.message).toContain('Скоро: ждёт утверждения текста согласия');
+    expect(startJson.error.code).toBe('query_plan_required');
+    expect(startJson.error.message).toContain('план запросов');
 
     // Проверяем последующий GET
     const getRes = await app.inject({

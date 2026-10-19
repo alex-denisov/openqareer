@@ -11,10 +11,9 @@ import {
   SqliteCapabilityConsentStore,
 } from './capabilityConsentStore';
 
-
 describe('capabilityConsents draft text and flags', () => {
-  it('keeps approval flag false until owner visual acceptance', () => {
-    expect(CAPABILITY_CONSENTS_APPROVED).toBe(false);
+  it('enables consent texts approved by the owner on 19.10', () => {
+    expect(CAPABILITY_CONSENTS_APPROVED).toBe(true);
   });
 
   it('defines 3 closed candidate capabilities', () => {
@@ -126,11 +125,7 @@ describe('SqliteCapabilityConsentStore', () => {
       grantedAt: '2026-09-01T10:00:00.000Z',
     });
 
-    const revoked = store.revokeConsent(
-      'usr-1',
-      'profile_activity',
-      '2026-09-05T12:00:00.000Z',
-    );
+    const revoked = store.revokeConsent('usr-1', 'profile_activity', '2026-09-05T12:00:00.000Z');
     expect(revoked).not.toBeNull();
     expect(revoked?.revokedAt).toBe('2026-09-05T12:00:00.000Z');
 

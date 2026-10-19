@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../app';
-import { config, candidateAuthorization, createApp, noSessions, successProvider } from '../appTestHarness';
+import {
+  config,
+  candidateAuthorization,
+  createApp,
+  noSessions,
+  successProvider,
+} from '../appTestHarness';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
 import type { FootprintAdapter, FootprintFinding } from '../osint/adapters/footprintAdapter';
 import type { FootprintAdapterSet } from '../osint/adapters/createFootprintAdapters';
 import type { FootprintQueryPlanItem } from '../osint/candidateFootprintQueryPlan';
-import { startCandidateFootprintAudit, waitForFootprintRun } from '../osint/candidateFootprintWorker';
+import {
+  startCandidateFootprintAudit,
+  waitForFootprintRun,
+} from '../osint/candidateFootprintWorker';
 
 const lifecycleApps: Array<{
   readonly app: Awaited<ReturnType<typeof buildApp>>;
@@ -34,7 +43,7 @@ describe('candidate footprint routes', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({
-      consent: { approved: false, granted: false, versionId: 'digital_footprint-v1.1' },
+      consent: { approved: true, granted: false, versionId: 'digital_footprint-v1.1' },
       sourceAvailability: {
         sherlock: true,
         maigret: true,
@@ -47,7 +56,7 @@ describe('candidate footprint routes', () => {
     });
   });
 
-  it('does not start scans through the legacy or query-plan route while consent text is unapproved', async () => {
+  it('does not start scans through the legacy or query-plan route before the candidate grants consent', async () => {
     const app = await createApp();
     const authorization = candidateAuthorization(app);
     const response = await app.inject({
@@ -57,9 +66,7 @@ describe('candidate footprint routes', () => {
       payload: { selectedQueryIds: ['00000000000000000000'] },
     });
 
-    expect(response.statusCode).toBe(409);
-    expect(response.json().error.code).toBe('consent_text_not_approved');
-    expect(response.json().error.message).toContain('Скоро: ждёт утверждения текста согласия');
+    expect(response.statusCode).toBe(403);
     const latest = await app.inject({
       method: 'GET',
       url: '/api/v1/candidate/footprint',
@@ -99,10 +106,11 @@ describe('candidate footprint routes', () => {
       serveStatic: false,
     });
     lifecycleApps.push({ app, candidateStore, repo });
-    const waybackRun = vi.fn((_input: { profileUrl?: string }, signal: AbortSignal) =>
-      new Promise<readonly FootprintFinding[]>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      }),
+    const waybackRun = vi.fn(
+      (_input: { profileUrl?: string }, signal: AbortSignal) =>
+        new Promise<readonly FootprintFinding[]>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
     );
     const noAdapter = <I>(id: string): FootprintAdapter<I> => ({
       id,
@@ -116,14 +124,16 @@ describe('candidate footprint routes', () => {
       wayback: { id: 'wayback', passive: true, run: waybackRun },
       exa: noAdapter('exa'),
     };
-    const plan: FootprintQueryPlanItem[] = [{
-      id: '0123456789abcdef0123',
-      adapterId: 'wayback',
-      kind: 'profile_url',
-      preview: 'Проверить публичную страницу',
-      selectedByDefault: true,
-      input: { profileUrl: 'https://portfolio.example/profile' },
-    }];
+    const plan: FootprintQueryPlanItem[] = [
+      {
+        id: '0123456789abcdef0123',
+        adapterId: 'wayback',
+        kind: 'profile_url',
+        preview: 'Проверить публичную страницу',
+        selectedByDefault: true,
+        input: { profileUrl: 'https://portfolio.example/profile' },
+      },
+    ];
     const pending = startCandidateFootprintAudit({
       candidateId: candidate.id,
       userId: 'test-user',

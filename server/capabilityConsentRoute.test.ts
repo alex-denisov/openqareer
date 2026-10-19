@@ -12,7 +12,10 @@ import { SqliteCandidateReputationRepository } from './data/sqliteCandidateReput
 import type { FootprintAdapter, FootprintFinding } from './osint/adapters/footprintAdapter';
 import type { FootprintAdapterSet } from './osint/adapters/createFootprintAdapters';
 import type { FootprintQueryPlanItem } from './osint/candidateFootprintQueryPlan';
-import { startCandidateFootprintAudit, waitForFootprintRun } from './osint/candidateFootprintWorker';
+import {
+  startCandidateFootprintAudit,
+  waitForFootprintRun,
+} from './osint/candidateFootprintWorker';
 
 describe('capability consents API routes', () => {
   const openApps: FastifyInstance[] = [];
@@ -106,10 +109,13 @@ describe('capability consents API routes', () => {
     expect(deleteRes.statusCode).toBe(403);
   });
 
-
   it('возвращает 404 unknown_capability для несуществующей возможности', async () => {
     const { app, authService, candidateStore } = await createTestEnv();
-    const reg = await authService.register('unknown.cap.user', 'valid-password-123', candidateStore);
+    const reg = await authService.register(
+      'unknown.cap.user',
+      'valid-password-123',
+      candidateStore,
+    );
     const authHeader = `Bearer ${reg.sessionToken}`;
 
     const getRes = await app.inject({
@@ -130,7 +136,7 @@ describe('capability consents API routes', () => {
     expect(postRes.json().error.code).toBe('unknown_capability');
   });
 
-  it('отклоняет POST с 409 consent_text_not_approved пока тексты не согласованы владельцем', async () => {
+  it('принимает POST утверждённой версии текста согласия', async () => {
     const { app, authService, candidateStore } = await createTestEnv();
     const reg = await authService.register('unapproved.user', 'valid-password-123', candidateStore);
     const authHeader = `Bearer ${reg.sessionToken}`;
@@ -142,10 +148,8 @@ describe('capability consents API routes', () => {
       payload: { versionId: 'profile_activity-v1.0' },
     });
 
-    expect(postRes.statusCode).toBe(409);
-    const body = postRes.json();
-    expect(body.error.code).toBe('consent_text_not_approved');
-    expect(body.error.message).toContain('на согласовании');
+    expect(postRes.statusCode).not.toBe(409);
+    expect(postRes.json().error?.code).not.toBe('consent_text_not_approved');
   });
 
   it('возвращает granted: false до выдачи согласия', async () => {
@@ -221,8 +225,13 @@ describe('capability consents API routes', () => {
   });
 
   it('отзыв цифрового следа отменяет активный аудит и удаляет его зашифрованные находки', async () => {
-    const { app, authService, candidateStore, capabilityConsentStore, databasePath } = await createTestEnv();
-    const reg = await authService.register('footprint.withdraw', 'valid-password-123', candidateStore);
+    const { app, authService, candidateStore, capabilityConsentStore, databasePath } =
+      await createTestEnv();
+    const reg = await authService.register(
+      'footprint.withdraw',
+      'valid-password-123',
+      candidateStore,
+    );
     const candidateId = reg.principal.candidate?.id;
     const userId = reg.principal.userId;
     expect(candidateId).toBeTruthy();
@@ -236,10 +245,11 @@ describe('capability consents API routes', () => {
       encryptionKey: baseConfig.dataEncryptionKey,
     });
     openStores.push(repo);
-    const waybackRun = vi.fn((_input: { profileUrl?: string }, signal: AbortSignal) =>
-      new Promise<readonly FootprintFinding[]>((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-      }),
+    const waybackRun = vi.fn(
+      (_input: { profileUrl?: string }, signal: AbortSignal) =>
+        new Promise<readonly FootprintFinding[]>((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
     );
     const noAdapter = <I>(id: string): FootprintAdapter<I> => ({
       id,
@@ -253,14 +263,16 @@ describe('capability consents API routes', () => {
       wayback: { id: 'wayback', passive: true, run: waybackRun },
       exa: noAdapter('exa'),
     };
-    const plan: FootprintQueryPlanItem[] = [{
-      id: '0123456789abcdef0123',
-      adapterId: 'wayback',
-      kind: 'profile_url',
-      preview: 'Проверить публичную страницу',
-      selectedByDefault: true,
-      input: { profileUrl: 'https://portfolio.example/profile' },
-    }];
+    const plan: FootprintQueryPlanItem[] = [
+      {
+        id: '0123456789abcdef0123',
+        adapterId: 'wayback',
+        kind: 'profile_url',
+        preview: 'Проверить публичную страницу',
+        selectedByDefault: true,
+        input: { profileUrl: 'https://portfolio.example/profile' },
+      },
+    ];
     const pending = startCandidateFootprintAudit({
       candidateId: candidateId!,
       userId,
@@ -269,7 +281,8 @@ describe('capability consents API routes', () => {
       ownershipConfirmedAt: '2026-10-04T12:00:00.000Z',
       repo,
       adapters,
-      isAuthorized: () => Boolean(capabilityConsentStore.getActiveConsent(userId, 'digital_footprint')),
+      isAuthorized: () =>
+        Boolean(capabilityConsentStore.getActiveConsent(userId, 'digital_footprint')),
     });
     await vi.waitFor(() => expect(waybackRun).toHaveBeenCalledTimes(1));
 

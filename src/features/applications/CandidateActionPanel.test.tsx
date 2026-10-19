@@ -175,7 +175,7 @@ describe('CandidateActionPanel', () => {
     expect(container.textContent).toContain('Доставлено');
   });
 
-  it('shows the consent terms and does not claim acceptance while the consent text is disabled', async () => {
+  it('shows the approved consent terms and waits for the candidate to tick them', async () => {
     vi.mocked(applicationsApi.getActionsOnBehalfConsent).mockResolvedValue({
       granted: false,
       consent: null,
@@ -183,7 +183,7 @@ describe('CandidateActionPanel', () => {
     await mount();
 
     expect(container.textContent).toContain('Согласие на действия от вашего имени');
-    expect(container.textContent).toContain('Принятие отключено');
+    expect(container.textContent).not.toContain('Принятие отключено');
     const consentButton = Array.from(container.querySelectorAll('button')).find((button) =>
       button.textContent?.includes('Дать согласие'),
     );
