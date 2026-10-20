@@ -59,7 +59,8 @@ describe('applyMigrations', () => {
         enableForeignKeyConstraints: true,
       });
       try {
-        applyMigrations(oldDatabase, (operation) => operation(), MIGRATIONS.slice(0, -2));
+        // Историческая база до хранения версий резюме: новые миграции не меняют её границу.
+        applyMigrations(oldDatabase, (operation) => operation(), MIGRATIONS.slice(0, 40));
         const appliedBeforeUpgrade = oldDatabase
           .prepare('SELECT version FROM schema_migrations ORDER BY version')
           .all() as { readonly version: number }[];

@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { RelocationScenarioPanel } from './RelocationScenarioPanel';
 import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import type { SourcedThreshold } from '../../../shared/countryFit/types';
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
@@ -24,6 +25,7 @@ export function RelocationEconomy({
   onShowComparison,
 }: RelocationEconomyProps) {
   const countries = useMemo(() => listRelocationCountries(), []);
+  const [incomeMode, setIncomeMode] = useState('local_employment');
   const countryCode = selectedCountryCode || selectedCountryCodes[0] || '';
   const country = countries.find((item) => item.countryCode === countryCode);
   const supported = supportedCountryCodes.some((code) => code === countryCode);
@@ -38,9 +40,10 @@ export function RelocationEconomy({
   return (
     <section className="career-relocation-economy" aria-labelledby="career-relocation-economy-title">
       <EconomyHeading />
-      <EconomyInputs countries={countries} countryCode={countryCode} data={data} income={grossAnnualIncome} onCountryChange={onCountryCodeChange} onIncomeChange={onGrossAnnualIncomeChange} />
+      <EconomyInputs countries={countries} countryCode={countryCode} data={data} income={grossAnnualIncome} onCountryChange={(code) => { onCountryCodeChange(code); onGrossAnnualIncomeChange(undefined); }} onIncomeChange={onGrossAnnualIncomeChange} />
       <TaxDataFreshness data={data} />
-      <EconomyOutput countryCode={countryCode} countryName={country?.name} supported={supported} income={grossAnnualIncome} result={result} />
+      {incomeMode === 'local_employment' && <EconomyOutput countryCode={countryCode} countryName={country?.name} supported={supported} income={grossAnnualIncome} result={result} />}
+      {supported && <RelocationScenarioPanel countryCode={countryCode} income={grossAnnualIncome} profile={profile} onCountryChange={onCountryCodeChange} onIncomeChange={onGrossAnnualIncomeChange} onIncomeModeChange={setIncomeMode} />}
       <SalaryThresholdWarnings warnings={belowThresholds} />
       <EconomyActions onShowComparison={onShowComparison} />
     </section>
@@ -179,11 +182,8 @@ function EconomyNotice({ title, detail }: { readonly title: string; readonly det
 function EconomyActions({ onShowComparison }: { readonly onShowComparison: () => void }) {
   return (
     <>
-      <p className="career-relocation-economy-unavailable">
-        Сохранение расчёта в профиль недоступно: сервер пока не хранит расчёты экономики.
-      </p>
+
       <div className="career-relocation-list-footer">
-        <button className="career-btn career-btn-primary" type="button" disabled>Сохранить расчёт в профиль</button>
         <button className="career-btn career-btn-secondary" type="button" onClick={onShowComparison}>К сравнению</button>
       </div>
     </>
@@ -197,10 +197,11 @@ function PayrollResult({
   readonly countryName: string;
   readonly result: Extract<ReturnType<typeof calculateRelocationEconomy>, { readonly status: 'available' }>;
 }) {
-  const { payroll, disposableIncome } = result;
+  const { payroll } = result;
   return (
     <div className="career-relocation-economy-result" aria-live="polite">
       <h3>{countryName}</h3>
+      <p>Предварительная зарплатная оценка со стандартными условиями. Настройки и полный бюджет учитываются в итоге сценария ниже.</p>
       <p>
         Чистый доход: <strong>{formatCurrency(payroll.netMonthlyIncome, payroll.currency)}</strong> в месяц.
       </p>
@@ -211,12 +212,7 @@ function PayrollResult({
           <span key={item.name}>{item.name}: {formatCurrency(item.amount, payroll.currency)} в год</span>
         ))}
       </div>
-      {disposableIncome.status === 'unavailable' ? (
-        <div className="career-relocation-empty" role="note">
-          <strong>Свободный остаток не рассчитан</strong>
-          <span>Нет проверенных значений аренды и частной страховки для {countryName}.</span>
-        </div>
-      ) : null}
+      <p>Расходы на жильё, страховку и другие обязательства задайте в полном сценарии ниже. Его итог учитывает заполненность бюджета.</p>
       <ul className="career-relocation-source-list" aria-label="Источники расчёта">
         {[payroll.incomeTax.source, ...payroll.employeeContributions.items.map(({ source }) => source)]
           .filter((source, index, all) => all.findIndex((item) => item.url === source.url) === index)

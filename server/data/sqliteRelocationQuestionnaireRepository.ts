@@ -1,3 +1,4 @@
+import { SqliteRelocationScenarioRepository } from './sqliteRelocationScenarioRepository';
 import type { DatabaseSync } from 'node:sqlite';
 import { RELOCATION_CONSENT_VERSION, emptyRelocationQuestionnaire, relocationQuestionnaireSchema, relocationQuestionnaireStepSchemas, relocationProgressSchema, type RelocationConsentState, type RelocationCurrentStep, type RelocationQuestionnaire, type RelocationQuestionnaireStepData, type RelocationStepId } from '../../shared/relocationQuestionnaire';
 import type { SealedText } from './sealedText';
@@ -37,11 +38,13 @@ export class RelocationQuestionnaireStorageError extends Error {
 }
 
 export class SqliteRelocationQuestionnaireRepository {
+  readonly scenarios: SqliteRelocationScenarioRepository;
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
   ) {
     this.database.exec(RELOCATION_QUESTIONNAIRE_SCHEMA);
+    this.scenarios = new SqliteRelocationScenarioRepository(database, sealedText);
   }
 
   getConsent(candidateId: string): RelocationConsentState {
@@ -71,6 +74,7 @@ export class SqliteRelocationQuestionnaireRepository {
         this.database.prepare('UPDATE relocation_questionnaire_consents SET revoked_at = ? WHERE candidate_id = ? AND revoked_at IS NULL').run(now, candidateId);
       }
       this.deleteProfileRow(candidateId);
+      this.scenarios.deleteAll(candidateId);
       return this.getConsent(candidateId);
     });
     this.checkpointAfterDeletion();
@@ -112,6 +116,7 @@ export class SqliteRelocationQuestionnaireRepository {
       if (expectedRevision !== undefined && expectedRevision !== currentRevision) {
         throw new RelocationProfileRevisionConflictError(currentRevision);
       }
+      this.scenarios.deleteAll(candidateId);
       return this.deleteProfileRow(candidateId);
     });
     if (deleted) this.checkpointAfterDeletion();

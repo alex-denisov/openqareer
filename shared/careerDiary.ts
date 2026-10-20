@@ -101,6 +101,33 @@ export interface CareerDiaryMeasurementInput {
   readonly note?: string | null;
 }
 
+export interface CareerDiaryInterviewPractice {
+  readonly id: string;
+  readonly source: 'mock_interview';
+  readonly session: {
+    readonly id: string;
+    readonly version: number;
+    readonly roleTitle: string;
+    readonly status: 'active' | 'paused' | 'interrupted' | 'completed';
+    readonly questions: readonly {
+      readonly id: string;
+      readonly prompt: string;
+      readonly skipped: boolean;
+      readonly sourceFactIds: readonly string[];
+      readonly storyId: string | null;
+      readonly answer?: {
+        readonly text: string;
+        readonly evaluation: {
+          readonly rubric: 'star' | 'system_design';
+          readonly criteria: Readonly<Record<string, { readonly points: number; readonly reason: string }>>;
+          readonly feedback?: string;
+        };
+      };
+    }[];
+  };
+  readonly createdAt: string;
+}
+
 export type CareerDiaryWeeklyReviewInput = Omit<
   CareerDiaryWeeklyReview,
   'createdAt' | 'updatedAt'

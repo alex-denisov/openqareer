@@ -1,3 +1,4 @@
+import { registerInterviewDiaryRoutes } from './interviewDiaryRoutes';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -347,6 +348,7 @@ const handleTransition: Handler = async (deps, request, reply) => {
 };
 
 export function registerInterviewSimulatorRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  registerInterviewDiaryRoutes(app, deps);
   app.get(`${URL}/current`, withDeps(deps, handleGetCurrent));
   app.get(`${URL}/:id`, withDeps(deps, handleGetSession));
   app.post(

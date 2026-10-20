@@ -6,6 +6,56 @@ info:
 servers:
   - url: /
 paths:
+  /api/v1/candidate/billing/trial:
+    get:
+      summary: Read server-owned Pro trial eligibility and expiry
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      responses:
+        '200':
+          description: Candidate-scoped trial state. Cache-Control is no-store.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProTrialResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+    post:
+      summary: Activate Pro once for 24 hours without a payment or renewal
+      description: Empty input only. Server timestamps and a unique user record enforce atomic one-time activation. Active paid plans take precedence. Cookie callers require an allowed Origin. Retries after successful activation return 409; GET reconciles uncertain responses. No checkout is created.
+      security:
+        - sessionCookie: []
+        - bearerSession: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+      responses:
+        '201':
+          description: Trial activated. The server determines both start and end.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProTrialResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          description: Already activated or an active paid plan exists (pro_trial_unavailable).
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
   /api/v1/candidate/billing:
     get:
       summary: Read the current tariff and renewal state
@@ -14,7 +64,7 @@ paths:
         - bearerSession: []
       responses:
         '200':
-          description: Current tariff; a missing subscription means Free.
+          description: Effective tariff, including a currently active Pro trial. A missing paid subscription may coexist with trial access.
           content:
             application/json:
               schema:
@@ -268,6 +318,18 @@ components:
         amountKopecks: { type: integer }
         currency: { type: string, const: RUB }
         interval: { type: string, const: month }
+    ProTrialResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [status, startedAt, expiresAt, serverNow]
+          properties:
+            status: { type: string, enum: [eligible, active, expired, unavailable] }
+            startedAt: { type: [string, 'null'], format: date-time }
+            expiresAt: { type: [string, 'null'], format: date-time }
+            serverNow: { type: string, format: date-time }
     BillingSummaryResponse:
       type: object
       required: [data]

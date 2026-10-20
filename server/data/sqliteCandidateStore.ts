@@ -238,6 +238,7 @@ export class SqliteCandidateStore implements CandidateStore {
         workPreferenceRepository: this.workPreferenceRepository,
         documentRepository: this.documentRepository,
         relocationQuestionnaireRepo: {
+          scenarios: this.relocationQuestionnaireRepo.scenarios,
           getProfile: (candidateId) => this.relocationQuestionnaireRepo.getProfile(candidateId),
           getConsent: (candidateId) => this.relocationQuestionnaireRepo.getConsent(candidateId),
         },
@@ -248,6 +249,7 @@ export class SqliteCandidateStore implements CandidateStore {
         roleSkillAssessments: this.roleSkillAssessments,
         starStoriesRepo: this.starStoriesRepo,
         interviewSimulatorRepo: this.interviewSimulatorRepo,
+        careerDiaryRepo: this.careerDiaryRepo,
       }),
     );
   }

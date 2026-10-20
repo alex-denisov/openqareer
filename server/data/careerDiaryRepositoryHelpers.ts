@@ -25,6 +25,7 @@ export interface WeeklyReviewRow {
 }
 
 export type DiaryTable =
+  | 'career_diary_interview_practices'
   | 'career_diary_goals'
   | 'career_diary_measurements'
   | 'career_diary_weekly_reviews'

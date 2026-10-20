@@ -39,6 +39,7 @@ import { RESUME_VERSION_MIGRATION } from '../resumeVersionSchema';
 import { PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION } from '../profileRevisionSchema';
 import { MIGRATION_40 } from '../consultantHistorySchema';
 import { MIGRATION_BILLING } from '../../billing/billingSchema';
+import { MIGRATION_PRO_TRIAL } from '../../billing/proTrialSchema';
 import { MIGRATION_41 as MIGRATION_EXECUTIVE_REQUEST } from '../executiveRequestSchema';
 import { MIGRATION_47 as MIGRATION_ROLE_SKILL_ASSESSMENT } from '../roleSkillAssessmentSchema';
 import { MIGRATION_48 as MIGRATION_STAR_STORIES } from '../starStoriesSchema';
@@ -94,6 +95,7 @@ export const MIGRATIONS = [
   // Resume-version storage is appended to preserve all existing index-assigned migration ids.
   RESUME_VERSION_MIGRATION,
   PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION,
+  MIGRATION_PRO_TRIAL,
 ] as const;
 
 export function applyMigrations(

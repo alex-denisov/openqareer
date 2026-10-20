@@ -7,6 +7,7 @@ import {
 } from 'node:crypto';
 import { promisify } from 'node:util';
 import { DatabaseSync } from 'node:sqlite';
+import { withEffectiveProTrial } from '../billing/proTrial';
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
 import {
   MIGRATION_2,
@@ -357,7 +358,8 @@ export class AuthServiceCore implements SessionAuth {
   }
 
   getUser(userId: string): AdminUserRecord | null {
-    return adminGetUser(this.database, userId);
+    const user = adminGetUser(this.database, userId);
+    return user ? withEffectiveProTrial(this.database, user, new Date().toISOString()) : null;
   }
 
   setUserRole(

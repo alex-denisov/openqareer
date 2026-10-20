@@ -17,6 +17,51 @@ security:
 tags:
   - name: Career diary
 paths:
+  /api/v1/candidate/career-diary/interview-practices:
+    get:
+      tags: [Career diary]
+      operationId: listInterviewDiaryPractices
+      summary: List explicit candidate-saved interview practice snapshots
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: cursor, in: query, schema: { type: string, minLength: 1, maxLength: 2048 } }
+      responses:
+        '200': { $ref: '#/components/responses/Page' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/candidate/career-diary/interview-practices/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, minLength: 1, maxLength: 160 } }
+    get:
+      tags: [Career diary]
+      operationId: getInterviewDiaryPractice
+      summary: Read a saved practice snapshot owned by the candidate
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '404': { $ref: '#/components/responses/Error' }
+    put:
+      tags: [Career diary]
+      operationId: saveInterviewDiaryPractice
+      summary: Save the server-owned session snapshot by session id, with no request body
+      description: >-
+        Explicit save only. Retries for the same source version return the same record.
+        A newer source version updates that record without changing its identity or original creation date.
+        The server derives all answers, rubric and provenance from the authenticated candidate's session.
+        These training records are never career achievements and never added to the candidate profile.
+        Free text is encrypted at rest; candidate deletion cascades; candidate export includes saved snapshots.
+      responses:
+        '201': { $ref: '#/components/responses/Success' }
+        '400': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      tags: [Career diary]
+      operationId: deleteInterviewDiaryPractice
+      summary: Delete only the candidate-owned saved diary copy
+      responses:
+        '200': { $ref: '#/components/responses/Success' }
+        '403': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/v1/candidate/career-diary:
     get:
       tags: [Career diary]

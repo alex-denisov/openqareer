@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { ProTrialPanel } from './ProTrialPanel';
 import { ListChecks } from '@phosphor-icons/react';
 import type { CandidateBillingSummary } from '../shell/candidateBillingApi';
 import { TARIFF_LEVELS, type TariffSubscriptionInfo, type TariffTierId } from './tariffsData';
@@ -123,6 +124,10 @@ interface TariffsViewFrameProps {
 function TariffsViewFrame(props: TariffsViewFrameProps) {
   return (
     <section className="career-tariffs" aria-labelledby="tariffs-page-title">
+      <ProTrialPanel
+        key={props.billingSummary?.currentPlan ?? props.activeTier}
+        onSummaryChanged={props.onSummaryChanged}
+      />
       <TariffsDesktopView {...props} />
       <TariffsMobileView {...props} />
       {props.upgradeContext || props.externalUpgradeContext ? (

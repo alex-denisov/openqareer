@@ -1595,6 +1595,18 @@ export async function mockSignedInCabinet(
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });
     }
+    if (path === '/api/v1/candidate/billing/trial' && route.request().method() === 'GET') {
+      return route.fulfill({
+        json: {
+          data: {
+            status: 'unavailable',
+            startedAt: null,
+            expiresAt: null,
+            serverNow: new Date().toISOString(),
+          },
+        },
+      });
+    }
     if (path === '/api/v1/candidate/billing' && route.request().method() === 'GET') {
       const currentPlan =
         currentInvoice?.status === 'paid' ? currentInvoice.planId : billingCurrentPlan;
@@ -2125,6 +2137,9 @@ export async function mockSignedInCabinet(
           },
         },
       });
+    }
+    if (path.endsWith('/candidate/relocation-scenarios') && route.request().method() === 'GET') {
+      return route.fulfill({ json: { data: { items: [], nextOffset: null } } });
     }
     if (
       path.endsWith('/candidate/relocation-questionnaire') &&

@@ -25,8 +25,9 @@ interface CandidateExportDependencies {
   readonly documentRepository: Pick<SqliteDocumentRepository, 'get'>;
   readonly relocationQuestionnaireRepo: Pick<
     SqliteRelocationQuestionnaireRepository,
-    'getProfile' | 'getConsent'
+    'getProfile' | 'getConsent' | 'scenarios'
   >;
+  readonly careerDiaryRepo: Pick<import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository, 'exportInterviewPractices'>;
   readonly exportConsultantConversations: (
     candidateId: string,
   ) => ConsultantConversationExport[];
@@ -53,6 +54,8 @@ export function createSqliteCandidateStoreExportMethods(
         roleSkillAssessments: dependencies.roleSkillAssessments.list(candidateId),
         starStories: dependencies.starStoriesRepo.list(candidateId),
         interviewSession: dependencies.interviewSimulatorRepo.getCurrent(candidateId),
+        interviewPractices: dependencies.careerDiaryRepo.exportInterviewPractices(candidateId),
+        relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {
           const stored = dependencies.documentRepository.get(candidateId, document.id);

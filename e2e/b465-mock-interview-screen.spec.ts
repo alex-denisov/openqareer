@@ -590,3 +590,67 @@ test('renders the many-stories setup without overflow at both viewport sizes', a
     }
   }
 });
+
+test('B465 diary saves review, retries lost response and reopens after reload at 1440 and 390', async ({
+  browser,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'This flow checks both viewports.');
+  test.setTimeout(120_000);
+  for (const width of [1440, 390]) {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await openPreparation(page, width);
+      let saved: unknown = null;
+      let writes = 0;
+      await page.route('**/api/v1/candidate/career-diary/interview-practices/**', async (route) => {
+        if (route.request().method() === 'PUT') {
+          writes += 1;
+          const response = await page.evaluate(async () =>
+            (await fetch('/api/v1/candidate/interview-sessions/current')).json(),
+          );
+          saved = saved ?? {
+            id: response.data.session.id,
+            source: 'mock_interview',
+            createdAt: '2026-10-19T10:00:00Z',
+            session: response.data.session,
+          };
+          if (writes === 1) return route.abort('failed');
+          return route.fulfill({ json: { data: saved } });
+        }
+        return route.fulfill({ json: { data: saved } });
+      });
+      await startSimulator(page);
+      await page.getByRole('button', { name: 'Начать', exact: true }).click();
+      await page
+        .getByLabel('Ваш ответ', { exact: true })
+        .fill(
+          'В проекте моя задача была ускорить релизы. Я автоматизировал проверки, результат — меньше ручных операций.',
+        );
+      await page.getByRole('button', { name: 'Отправить ответ' }).click();
+      await page.getByRole('button', { name: 'Записать в дневник', exact: true }).click();
+      await expect(page.getByRole('alert')).toContainText('Не удалось подтвердить');
+      await page.getByRole('button', { name: 'Повторить запись в дневник' }).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Запись сохранена в карьерном дневнике.' }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Открыть запись дневника' }).click();
+      await expect(page.getByRole('article', { name: 'Запись тренировки' })).toContainText(
+        'Учебные ответы',
+      );
+      await checkAndCapture(page, `${width}-diary-saved`, true);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await openPreparationDialog(page, width);
+      await startSimulator(page);
+      const resume = page.getByRole('button', { name: /Продолжить с вопроса/u });
+      if (await resume.isVisible()) await resume.click();
+      await page.getByRole('button', { name: 'Записать в дневник', exact: true }).click();
+      await expect(
+        page.getByRole('status').filter({ hasText: 'Запись сохранена в карьерном дневнике.' }),
+      ).toBeVisible();
+      expect(writes).toBe(3);
+    } finally {
+      await context.close();
+    }
+  }
+});

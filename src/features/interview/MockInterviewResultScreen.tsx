@@ -1,3 +1,4 @@
+import { InterviewDiaryAction } from './InterviewDiaryAction';
 import { useState } from 'react';
 import { ArrowClockwise, CheckCircle, Notebook } from '@phosphor-icons/react';
 import type { InterviewSessionView } from './interviewSimulatorApi';
@@ -102,6 +103,7 @@ function ResultActions({ session, busy, diary, onStartAgain, onBack }: {
         <ArrowClockwise aria-hidden="true" className="career-mock-icon" />
         Пройти заново
       </button>
+      {!diary ? <InterviewDiaryAction key={session.id} sessionId={session.id} /> : null}
       {diary ? (
         <button type="button" className="career-btn career-btn-secondary" disabled={writing} aria-busy={writing} onClick={() => void writeDiary()}>
           <Notebook aria-hidden="true" className="career-mock-icon" />
