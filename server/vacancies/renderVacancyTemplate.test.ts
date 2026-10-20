@@ -333,3 +333,30 @@ Acme is proud to be an equal opportunity employer. All qualified applicants will
     });
   });
 });
+
+describe('renderUnifiedVacancyView without recognised section headings (B535)', () => {
+  it('shows the full text, not the short description snippet', () => {
+    const fullDescription = `The Opportunity\n\nWe are looking for a Staff Engineer. ${'Long paragraph about the team. '.repeat(40)}Final sentence of the posting.\n\nAdobe is proud to be an Equal Employment Opportunity employer.`;
+    const view = renderUnifiedVacancyView({
+      id: 'ats-workday-adobe:R1',
+      fingerprint: 'ats-workday-adobe:R1',
+      title: 'Staff Engineer',
+      company: 'Adobe',
+      description: 'The Opportunity We are looking for a Staff Engineer…',
+      fullDescription,
+      requiredSkills: [],
+      url: 'https://adobe.wd5.myworkdayjobs.com/x/job/R1',
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: 'ats-workday-adobe',
+        sourceUrl: 'https://adobe.wd5.myworkdayjobs.com/x/job/R1',
+        observedAt: '2026-10-20T00:00:00Z',
+      },
+      publishedAt: '2026-10-20T00:00:00Z',
+      status: 'active',
+    } satisfies UnifiedVacancy);
+    expect(view).toContain('Final sentence of the posting.');
+    expect(view).not.toContain('Staff Engineer…');
+    expect(view).not.toContain('Equal Employment Opportunity');
+  });
+});

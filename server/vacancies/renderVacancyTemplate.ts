@@ -187,8 +187,10 @@ function parseRawSections(rawText: string): ParsedSections {
   let aboutCompany = '';
 
   for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed || isEeoText(trimmed)) continue;
+    // Текст без размеченных заголовков (Workday, B535) — один раздел, и абзац
+    // EEO в его конце выбрасывал весь текст. Вырезается только этот абзац.
+    const trimmed = stripEeoBoilerplate(section.trim());
+    if (!trimmed) continue;
     const [headerLine, ...bodyLines] = trimmed.split('\n');
     const header = headerLine.trim();
     const body = bodyLines.join('\n').trim();
