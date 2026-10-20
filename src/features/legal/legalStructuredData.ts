@@ -37,8 +37,9 @@ export function legalStructuredData(slug: LegalDocSlug): StructuredDataGraph {
         url,
         inLanguage: 'ru-RU',
         datePublished: LEGAL_PACK_PUBLISHED_AT,
+        dateModified: LEGAL_PACK_PUBLISHED_AT,
         version: LEGAL_PACK_VERSION,
-        isPartOf: { '@type': 'WebSite', name: 'OpenQareer', url: `${SITE_ORIGIN}/` },
+        isPartOf: { '@type': 'WebSite', name: 'openqareer', url: `${SITE_ORIGIN}/` },
       },
       {
         '@type': 'BreadcrumbList',

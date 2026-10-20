@@ -44,12 +44,14 @@ function HelpShell({
       <a className="ps-skip" href="#main">
         К содержимому
       </a>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData).replace(/</gu, '\\u003c'),
-        }}
-      />
+      {Object.keys(structuredData).length > 0 ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replace(/</gu, '\\u003c'),
+          }}
+        />
+      ) : null}
       <PublicHeader
         onNavigate={onNavigate}
         onLanding={false}
@@ -272,6 +274,38 @@ export function SupportPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
       <h2 className="ps-contact-h">Как связаться с поддержкой</h2>
       <SupportChannels />
       <SupportExtras onNavigate={onNavigate} />
+    </HelpShell>
+  );
+}
+
+export const NOT_FOUND_TITLE = 'Страница не найдена | openqareer';
+
+/** B535: unknown addresses answer 404 with a way back instead of the landing. */
+export function NotFoundPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
+  return (
+    <HelpShell
+      onNavigate={onNavigate}
+      signedIn={signedIn}
+      isAdmin={isAdmin}
+      title={NOT_FOUND_TITLE}
+      structuredData={{}}
+    >
+      <h1>Такой страницы нет</h1>
+      <p className="ps-intro">
+        Адрес набран с ошибкой или страницу убрали. Начните с главной, каталога вакансий или ответов
+        на частые вопросы.
+      </p>
+      <p className="ps-cta">
+        <SiteLink to="/" className="ps-btn is-primary" onNavigate={onNavigate}>
+          На главную
+        </SiteLink>
+        <a href="/vacancies" className="ps-btn">
+          Каталог вакансий
+        </a>
+        <SiteLink to="/faq" className="ps-btn is-ghost" onNavigate={onNavigate}>
+          Вопросы и ответы
+        </SiteLink>
+      </p>
     </HelpShell>
   );
 }

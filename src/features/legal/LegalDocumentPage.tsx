@@ -14,7 +14,7 @@ import {
 } from '../../../shared/legalRegistry';
 
 export function legalDocumentTitle(slug: LegalDocSlug): string {
-  return `${legalDocMeta(slug).title} · OpenQareer`;
+  return `${legalDocMeta(slug).title} · openqareer`;
 }
 
 /** A published legal document: indexable, canonical and dated (B173). */

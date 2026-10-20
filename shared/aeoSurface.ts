@@ -10,6 +10,10 @@
  * ChatGPT) нужны факты и границы, а не маркетинг.
  */
 import { LEGAL_DOCS, legalPath } from './legalRegistry';
+import { TARIFF_LEVELS } from '../src/features/tariffs/tariffsData';
+
+/** Last factual update of this surface; bump with the texts. */
+export const AEO_UPDATED_AT = '2026-10-20';
 
 export const SITE_ORIGIN = 'https://openqareer.com';
 
@@ -20,11 +24,17 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   // видимая без входа. Умолчать о нём значит скрыть от ИИ-ответчика ровно то,
   // ради чего он приходит.
   '/vacancies',
+  '/vacancies/remote',
+  '/faq',
+  '/support',
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 
 /** Что продукт делает — только то, что уже работает в выпущенной сборке. */
 const CAPABILITIES: readonly string[] = [
+  'Проверяет резюме на ATS: показывает, что система отбора работодателя не прочитает, и предлагает правки.',
+  'Подбирает вакансии по резюме с процентом совпадения и объясняет, каких требований не хватает.',
+  'Готовит сопроводительное письмо и отклик под конкретную вакансию; отправляет кандидат сам или после его подтверждения.',
   'Разбирает резюме кандидата из PDF и собирает профиль по фактам: опыт, результаты, навыки, образование.',
   'Подключает профили кандидата на площадках (LinkedIn, hh.ru и другие) в приложении для компьютера, в сессии самого кандидата.',
   'Показывает, какие названия ролей подтверждаются опытом кандидата, а какие пока гипотеза, и каких данных не хватает для решения.',
@@ -44,7 +54,6 @@ const BOUNDARIES: readonly string[] = [
   'Не рассылает отклики массово и не действует в аккаунтах кандидата без его подтверждения.',
   'Не продаёт и не передаёт данные кандидата работодателям.',
   'Не инструмент наблюдения за кандидатом для работодателя: продуктом владеет сам кандидат.',
-  'Покупка подписки и автоматизация внешних аккаунтов в продукте пока не подключены.',
 ];
 
 const AUDIENCE =
@@ -54,6 +63,10 @@ const AUDIENCE =
 const SUMMARY =
   'Рабочее место кандидата: профиль по фактам, роли с опорой на опыт, вакансии из десятков ' +
   'источников и один следующий шаг в поиске работы.';
+
+function tariffLine(): string {
+  return TARIFF_LEVELS.map((level) => `${level.name} ${level.price}`).join(', ');
+}
 
 function bullet(lines: readonly string[]): string {
   return lines.map((line) => `- ${line}`).join('\n');
@@ -74,6 +87,9 @@ export function buildLlmsTxt(): string {
     `- Audience: ${AUDIENCE}`,
     '- Product boundary: openqareer не обещает интервью, оффер, трудоустройство или визу',
     `- Vacancy catalogue: ${SITE_ORIGIN}/vacancies`,
+    `- Remote vacancies: ${SITE_ORIGIN}/vacancies/remote`,
+    `- Pricing: ${tariffLine()}`,
+    `- Updated: ${AEO_UPDATED_AT}`,
     `- Full specification: ${SITE_ORIGIN}/llms-full.txt`,
     '',
     '## Помощь',
@@ -98,6 +114,8 @@ export function buildLlmsFullTxt(): string {
     '',
     `> ${SUMMARY}`,
     '',
+    `Обновлено: ${AEO_UPDATED_AT}.`,
+    '',
     '## Что это',
     '',
     'openqareer — рабочее место кандидата, которым владеет сам кандидат. Оно превращает',
@@ -117,7 +135,13 @@ export function buildLlmsFullTxt(): string {
     '',
     '## Как устроен доступ',
     '',
-    '- Базовый тариф бесплатен и не ограничен по сроку.',
+    '- Тариф Free бесплатен и не ограничен по сроку. Платные тарифы — помесячная подписка:',
+    bullet(
+      TARIFF_LEVELS.map(
+        (level) =>
+          `${level.name} — ${level.price}${level.term ? ` ${level.term}` : ''}: ${level.promise}`,
+      ),
+    ),
     '- Веб-приложение на openqareer.com; профили с площадок (LinkedIn, hh.ru и другие) подключаются в приложении для компьютера.',
     '- Данные кандидата можно выгрузить и удалить вместе с аккаунтом в настройках.',
     '',

@@ -222,6 +222,9 @@
 .ps-hero .ps-cta {
   margin-top: 32px;
 }
+.ps-page .ps-cta {
+  margin-top: 28px;
+}
 .ps-fine {
   margin-top: 14px;
   font-size: 13px;
@@ -1498,4 +1501,39 @@
     position: static;
     order: -1;
   }
+}
+
+/* B535: web auth pages (login, signup, recovery) on the public palette. The
+   desktop app keeps its dark overlay: it never renders `.ps-auth`. */
+.ps-auth {
+  --career-bg: var(--ps-bg);
+  --career-surface-card: var(--ps-surface);
+  --career-line: var(--ps-line-2);
+  --career-text: var(--ps-ink);
+  --career-text-soft: var(--ps-soft);
+  --career-text-dim: var(--ps-mute);
+  --career-muted: var(--ps-mute);
+  --career-accent: var(--ps-blue);
+  --career-accent-ink: var(--ps-blue-ink);
+  --career-danger: oklch(52% 0.19 25);
+  --text-main: var(--ps-ink);
+  --text-muted: var(--ps-mute);
+  --surface-soft: var(--ps-bg-2);
+  --line-strong: var(--ps-line-2);
+  --focus: var(--ps-blue);
+  color-scheme: light;
+}
+.ps-auth .auth-page-container {
+  background: var(--ps-bg);
+}
+.ps-auth .auth-card {
+  backdrop-filter: none;
+  box-shadow:
+    0 1px 2px oklch(20% 0.02 260 / 0.04),
+    0 12px 32px -16px oklch(20% 0.02 260 / 0.14);
+}
+.ps-auth input:not([type='checkbox']) {
+  background: var(--ps-surface);
+  color: var(--ps-ink);
+  border-color: var(--ps-line-2);
 }

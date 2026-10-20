@@ -22,6 +22,7 @@ import {
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 import { renderDescriptionHtml } from './catalogMarkdown';
+import { countLabel } from './catalogCopy';
 import { isIndexableCard, validThroughOf } from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
@@ -210,8 +211,8 @@ export function buildCatalogPageFromEntries(
     description:
       total === 0
         ? 'Каталог вакансий openqareer: сейчас в нём нет ни одной записи с публичным адресом.'
-        : `${total} вакансий, собранных с досок работодателей и открытых площадок. ` +
-          'Каждая карточка называет источник и дату наблюдения.',
+        : `${countLabel(total)} с досок работодателей и открытых площадок. ` +
+          'У каждой — источник, дата и ссылка на отклик у работодателя.',
     page,
     pageCount,
     total,
@@ -375,9 +376,8 @@ export function buildListingPageFromEntries(
     documentTitle:
       page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
     description:
-      `${total} вакансий: ${heading.toLowerCase()}. ` +
-      'Каждая карточка называет работодателя, источник и дату наблюдения, ' +
-      'а отклик подаётся на площадке работодателя.',
+      `${countLabel(total)}: ${heading.toLowerCase()}. ` +
+      'У каждой — работодатель, источник и дата, отклик подаётся на сайте работодателя.',
     page,
     pageCount,
     total,

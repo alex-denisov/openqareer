@@ -28,6 +28,7 @@ import { escapeHtml } from './catalogHtml';
 import { CATALOG_STYLE } from './catalogStyle';
 import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
 import { plainSummary, renderDescriptionHtml } from './catalogMarkdown';
+import { countLabel } from './catalogCopy';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -75,6 +76,7 @@ function head(options: {
   noindex?: boolean;
   previousPath?: string;
   nextPath?: string;
+  ogType?: 'website' | 'article';
 }): string {
   return [
     '<meta charset="UTF-8">',
@@ -91,7 +93,15 @@ function head(options: {
       ? `<link rel="next" href="${SITE_ORIGIN}${escapeHtml(options.nextPath)}">`
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
-    '<meta property="og:type" content="website">',
+    `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
+    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover.jpg">`,
+    '<meta property="og:image:width" content="700">',
+    '<meta property="og:image:height" content="367">',
+    '<meta property="og:locale" content="ru_RU">',
+    '<meta name="twitter:card" content="summary_large_image">',
+    `<meta name="twitter:title" content="${escapeHtml(options.title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(options.description)}">`,
+    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover.jpg">`,
     '<meta property="og:site_name" content="openqareer">',
     `<meta property="og:title" content="${escapeHtml(options.title)}">`,
     `<meta property="og:description" content="${escapeHtml(options.description)}">`,
@@ -141,19 +151,6 @@ function formatDate(iso: string): string {
   const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
   if (!year || !month || !day) return iso.slice(0, 10);
   return `${day} ${MONTHS[month - 1]} ${year}`;
-}
-
-function formatCount(value: number): string {
-  return value.toLocaleString('ru-RU').replace(/\u00a0/gu, '\u202f');
-}
-
-function vacancyWord(value: number): string {
-  const tens = value % 100;
-  const ones = value % 10;
-  if (tens >= 11 && tens <= 14) return 'вакансий';
-  if (ones === 1) return 'вакансия';
-  if (ones >= 2 && ones <= 4) return 'вакансии';
-  return 'вакансий';
 }
 
 function descriptionBlock(markdown: string, summary: string): string {
@@ -245,14 +242,33 @@ function pagination(page: CatalogPage): string {
  * вместо вакансии список. Поисковику этот адрес индексировать нечего — отсюда
  * `noindex` поверх кода `410`.
  */
-export function renderGoneDocument(page: CatalogPage): string {
+const GONE_COPY = {
+  vacancy: {
+    heading: 'Этой вакансии больше нет',
+    lead:
+      'Площадка сняла запись или перестала её отдавать. Мы не держим ' +
+      'карточку, которую нечем подтвердить. Ниже — вакансии, которые есть в каталоге сейчас.',
+    title: 'Вакансия снята · openqareer',
+  },
+  listing: {
+    heading: 'В этом разделе сейчас нет вакансий',
+    lead:
+      'Вакансии по этому городу или роли закрылись или ещё не появились. ' +
+      'Ниже — вакансии, которые есть в каталоге сейчас.',
+    title: 'Раздел каталога пуст · openqareer',
+  },
+} as const;
+
+export function renderGoneDocument(
+  page: CatalogPage,
+  kind: keyof typeof GONE_COPY = 'vacancy',
+): string {
+  const copy = GONE_COPY[kind];
   const body =
     siteHeader() +
     '<main id="main" class="ps-wrap ps-page">' +
     crumbs([]) +
-    '<div class="cat-head"><h1>Этой вакансии больше нет</h1>' +
-    '<p class="cat-lead">Площадка сняла запись или перестала её отдавать. Мы не держим ' +
-    'карточку, которую нечем подтвердить. Ниже — вакансии, которые есть в пуле сейчас.</p></div>' +
+    `<div class="cat-head"><h1>${copy.heading}</h1><p class="cat-lead">${copy.lead}</p></div>` +
     '<div class="cat-layout"><div>' +
     (page.entries.length > 0
       ? `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>`
@@ -264,10 +280,10 @@ export function renderGoneDocument(page: CatalogPage): string {
 
   return shell(
     head({
-      title: 'Вакансия снята · openqareer',
+      title: copy.title,
       description:
-        'Эта вакансия пропала из пула: площадка сняла её или перестала отдавать. ' +
-        'Каталог openqareer показывает только записи, которые наблюдались.',
+        'Эту вакансию сняли с площадки, и в каталоге её больше нет. ' +
+        'Откройте актуальные вакансии и откликайтесь на сайте работодателя.',
       canonicalPath: CATALOG_ROOT,
       jsonLd: page.jsonLd,
       noindex: true,
@@ -298,7 +314,7 @@ export function renderCatalogDocument(
     (empty
       ? '<p class="cat-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
         'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div>'
-      : `<p class="cat-lead">${formatCount(page.total)} ${vacancyWord(page.total)} с открытых площадок и сайтов работодателей. ` +
+      : `<p class="cat-lead">${countLabel(page.total)} с открытых площадок и сайтов работодателей. ` +
         'У каждой указаны источник и дата, отклик подаётся на сайте работодателя.</p></div>') +
     '<div class="cat-layout"><div>' +
     (empty
@@ -372,6 +388,7 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
       description,
       canonicalPath: entry.path,
       jsonLd: detail.jsonLd,
+      ogType: 'article',
       // Outside the indexable set: reachable and followed, not indexed.
       ...(detail.indexable ? {} : { noindex: true }),
     }),

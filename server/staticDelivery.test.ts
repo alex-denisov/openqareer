@@ -54,6 +54,10 @@ async function createStaticApp(
   );
   writeFileSync(join(directory, 'faq.html'), '<!doctype html><title>faq document</title>');
   writeFileSync(join(directory, 'support.html'), '<!doctype html><title>support document</title>');
+  writeFileSync(
+    join(directory, 'not-found.html'),
+    '<!doctype html><title>not found document</title>',
+  );
   if (options.legalDocuments !== false) {
     writeFileSync(
       join(directory, 'legal-privacy.html'),
@@ -130,7 +134,7 @@ describe('static release delivery', () => {
       indexHtml:
         '<!doctype html><b>%%OQ_ACTIVE%%</b> <b>%%OQ_SOURCES%%</b> %%OQ_SOURCES_WORD%% <i>%%OQ_DATE%%</i> <u>%%OQ_V0_TITLE%%</u>',
     });
-    for (const url of ['/', '/index.html', '/career']) {
+    for (const url of ['/', '/index.html']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
       expect(response.headers['content-type'], url).toContain('text/html');
@@ -152,7 +156,7 @@ describe('static release delivery', () => {
     expect(landing.body).toContain(
       '<script defer src="/assets/oq-entry-loader-2.js" data-entry="/assets/index-abc.js">',
     );
-    for (const url of ['/app', '/career', '/login']) {
+    for (const url of ['/app', '/app/profile', '/login']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.body, url).toContain(
         '<script type="module" crossorigin src="/assets/index-abc.js">',
@@ -169,6 +173,18 @@ describe('static release delivery', () => {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
       expect(response.body, url).toContain(marker);
+    }
+  });
+
+  it('answers unknown addresses with 404 and keeps client routes on 200 (B535)', async () => {
+    const app = await createStaticApp();
+    const missing = await app.inject({ method: 'GET', url: '/no-such-page' });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.body).toContain('not found document');
+    for (const url of ['/', '/app/profile', '/login', '/legal/privacy', '/faq/', '/admin/users']) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).not.toContain('not found document');
     }
   });
 
@@ -195,10 +211,15 @@ describe('static release delivery', () => {
   it('keeps every other deep link on the workspace document', async () => {
     const app = await createStaticApp();
 
-    for (const url of ['/', '/career', '/administrators', '/adminsomething']) {
+    for (const url of ['/', '/app', '/app/career']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
       expect(response.body, url).toContain('current release');
+    }
+    // No client route owns these: a real 404, not the landing (B535).
+    for (const url of ['/career', '/administrators', '/adminsomething']) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(404);
     }
   });
 
@@ -264,7 +285,7 @@ describe('static release delivery', () => {
 
     const response = await app.inject({ method: 'GET', url: '/legal/offer' });
 
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain('current release');
+    expect(response.statusCode).toBe(404);
+    expect(response.body).toContain('not found document');
   });
 });

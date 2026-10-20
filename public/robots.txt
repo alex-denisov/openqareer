@@ -19,4 +19,26 @@ Disallow: /reset-password
 Disallow: /verify-email
 Clean-param: plan /signup
 
+# AI answer engines: same rules, named explicitly. Summary: /llms.txt
+User-agent: GPTBot
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: Google-Extended
+User-agent: Applebot-Extended
+User-agent: YandexAdditional
+User-agent: YandexGPT
+Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /admin
+Disallow: /login
+Disallow: /signup
+Disallow: /reset-password
+Disallow: /verify-email
+
 Sitemap: https://openqareer.com/sitemap.xml
