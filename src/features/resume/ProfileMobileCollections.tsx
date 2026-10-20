@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { coursesNotFoundLead, provenanceLabel } from './profileProvenance';
+import { useFactProvenance, useProvenanceLabelOf } from './ProfileProvenanceChip';
 import { BookOpen, Info, Plus, Student, Target, Translate } from '@phosphor-icons/react';
 import { EducationEditForm } from './ProfileEducationSection';
 import { ProjectEditForm } from './ProfileTileSections';
@@ -111,11 +113,16 @@ function MobileEducationRow({
   readonly entry: ResumeEducationInput;
   readonly onEdit: () => void;
 }) {
+  const origin = provenanceLabel(useFactProvenance(entry.evidenceMemoryId));
   return (
     <ProfileMobileRow
       icon={Student}
       title={entry.institution || 'Учебное заведение не указано'}
-      detail={[entry.qualification, [entry.startDate, entry.endDate].filter(Boolean).join(' — ')]
+      detail={[
+        entry.qualification,
+        [entry.startDate, entry.endDate].filter(Boolean).join(' — '),
+        origin,
+      ]
         .filter(Boolean)
         .join(' · ')}
       onClick={onEdit}
@@ -129,16 +136,6 @@ function projectPeriod(start?: string, end?: string): string {
     .map((value) => value?.replace(/^(\d{4})-(\d{2})$/u, '$2.$1'))
     .filter(Boolean)
     .join(' — ');
-}
-
-/** «Курсы не найдены ни в LinkedIn, ни в hh.ru» names only the sources actually imported. */
-function coursesNote(sources: ProfileMobileDataProps['importedSources']): string {
-  const names = (sources ?? []).map((item) =>
-    item.platform === 'linkedin' ? 'LinkedIn' : 'hh.ru',
-  );
-  if (!names.length) return 'Курсы не указаны в профиле.';
-  if (names.length === 1) return `Курсы не найдены в ${names[0]}.`;
-  return `Курсы не найдены ни в ${names.slice(0, -1).join(', ни в ')}, ни в ${names.at(-1)}.`;
 }
 
 function MobileEducationList({
@@ -172,7 +169,7 @@ function MobileEducationList({
       {!draft.courses?.length ? (
         <p className="pm-note">
           <Info size="1em" aria-hidden="true" />
-          {coursesNote(importedSources)} Добавьте вручную или расскажите консультанту.
+          {coursesNotFoundLead(importedSources)} Добавьте вручную или расскажите консультанту.
         </p>
       ) : null}
     </>
@@ -224,6 +221,7 @@ export function ProfileMobileProjects(
   props: ProfileMobileDataProps & { readonly initialAdd?: boolean },
 ) {
   const projects = props.draft.projects ?? [];
+  const originOf = useProvenanceLabelOf();
   const editor = useMobileEntryEditor<ResumeProjectInput>(
     (entry) =>
       props.onSectionSave(
@@ -249,7 +247,12 @@ export function ProfileMobileProjects(
           key={entry.id}
           icon={Target}
           title={entry.name || 'Название не указано'}
-          detail={[entry.description, entry.employer, projectPeriod(entry.startDate, entry.endDate)]
+          detail={[
+            entry.description,
+            entry.employer,
+            projectPeriod(entry.startDate, entry.endDate),
+            originOf(entry.evidenceMemoryId ?? `manual-${entry.id}`),
+          ]
             .filter(Boolean)
             .join(' · ')}
           onClick={() => editor.edit(entry)}
@@ -267,6 +270,7 @@ export function ProfileMobileProjects(
 export function ProfileMobileLanguages(
   props: ProfileMobileDataProps & { readonly initialAdd?: boolean },
 ) {
+  const originOf = useProvenanceLabelOf();
   const editor = useMobileEntryEditor<ResumeLanguageInput>(
     (entry) =>
       props.onSectionSave(
@@ -295,6 +299,7 @@ export function ProfileMobileLanguages(
           key={entry.id}
           icon={Translate}
           title={languageName(entry.name ?? '')}
+          detail={originOf(entry.evidenceMemoryId)}
           value={mobileLanguageLevel(entry)}
           onClick={() => editor.edit(entry)}
         />

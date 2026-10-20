@@ -9,6 +9,8 @@ import {
   SectionRemoveButton,
 } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
+import { ProfileFactProvenance, useProfileProvenance } from './ProfileProvenanceChip';
+import { coursesNotFoundLead } from './profileProvenance';
 import type { ResumeDraft, ResumeEducationInput } from './resumeTypes';
 
 interface SectionProps {
@@ -121,6 +123,9 @@ function EducationRow({
       </div>
       <div className="career-profile-screen-edu-meta">{entry.qualification}</div>
       {entry.description ? <p>{entry.description}</p> : null}
+      <div className="career-profile-screen-entry-origin">
+        <ProfileFactProvenance memoryId={entry.evidenceMemoryId} />
+      </div>
     </div>
   );
 }
@@ -130,12 +135,13 @@ function EducationCoursesNotice({
   onAddCourse,
   onConsultCourses,
 }: Pick<SectionProps, 'draft' | 'onAddCourse' | 'onConsultCourses'>) {
+  const { importedSources } = useProfileProvenance();
   if (draft.courses?.length) return null;
   return (
     <div className="profile-education-courses-note">
       <Info size={16} aria-hidden="true" />
       <p>
-        Курсы пока не добавлены.{' '}
+        {coursesNotFoundLead(importedSources)}{' '}
         {onAddCourse ? (
           <button type="button" onClick={onAddCourse}>
             Добавьте вручную
@@ -150,6 +156,7 @@ function EducationCoursesNotice({
             </button>
           </>
         ) : null}
+        {onAddCourse || onConsultCourses ? '.' : null}
       </p>
     </div>
   );

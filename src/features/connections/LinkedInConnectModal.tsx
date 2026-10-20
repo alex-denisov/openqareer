@@ -25,6 +25,7 @@ import {
 } from './connectorSessionStart';
 import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
 import { applyLinkedInImportProgress } from './linkedinImportProgress';
+import { createImportWalkSync } from './importWalkSync';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createLinkedInSessionImportFlow,
@@ -228,10 +229,14 @@ export function LinkedInConnectModal({
 
   function getSessionFlow(): LinkedInSessionImportFlow {
     if (sessionFlow.current) return sessionFlow.current;
+    const syncWalk = createImportWalkSync();
     sessionFlow.current = createLinkedInSessionImportFlow({
       inspectCurrentPage: () => inspectSessionPage('linkedin'),
       readSessionPage: (url) => readSessionPage('linkedin', url),
-      onDetailProgress: applyLinkedInImportProgress,
+      onDetailProgress: (event) => {
+        applyLinkedInImportProgress(event);
+        syncWalk(event);
+      },
       onAuthenticated: () => {
         // The sign-in window stays on screen while the profile is read: a
         // hidden WKWebView stops running the script that read depends on, so
@@ -257,9 +262,7 @@ export function LinkedInConnectModal({
   }
 
   /** Keeps the step audibly alive: every poll says where the flow stands. */
-  function noticeFor(
-    result: LinkedInSessionPollResult,
-  ): LinkedInWaitingNotice | undefined {
+  function noticeFor(result: LinkedInSessionPollResult): LinkedInWaitingNotice | undefined {
     // Any answer at all means the page was readable this time round.
     unreadablePolls.current = 0;
     if (result.status !== 'waiting_for_sign_in') {
@@ -273,8 +276,7 @@ export function LinkedInConnectModal({
         stuck: false,
       };
     }
-    unrecognisedPolls.current =
-      result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
+    unrecognisedPolls.current = result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
     return linkedinWaitingNotice(result.stage, unrecognisedPolls.current);
   }
 
@@ -325,7 +327,8 @@ export function LinkedInConnectModal({
         sessionOpened: sessionOpened.current,
         paused: autoPollPaused,
       })
-    ) return;
+    )
+      return;
     let cancelled = false;
     const run = () => {
       void (async () => {
@@ -365,8 +368,8 @@ export function LinkedInConnectModal({
         {!sessionActive ? (
           <>
             <p className="career-modal-intro">
-              Вход проходит на странице самого LinkedIn, в вашей собственной
-              сессии. После входа OpenQareer сам загрузит профиль и закроет окно.
+              Вход проходит на странице самого LinkedIn, в вашей собственной сессии. После входа
+              OpenQareer сам загрузит профиль и закроет окно.
             </p>
           </>
         ) : null}
@@ -392,15 +395,13 @@ export function LinkedInConnectModal({
 
         {sessionActive && !isTauriEnvironment() ? (
           <p className="career-connector-waiting" role="status">
-            Войдите в LinkedIn в отдельном окне. Веб-версия не может прочитать страницу и не обновит профиль.
+            Войдите в LinkedIn в отдельном окне. Веб-версия не может прочитать страницу и не обновит
+            профиль.
           </p>
         ) : null}
 
         {status ? (
-          <p
-            className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`}
-            role="status"
-          >
+          <p className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`} role="status">
             {status.stuck ? (
               <WarningCircle size={16} weight="fill" />
             ) : (
@@ -420,9 +421,8 @@ export function LinkedInConnectModal({
             {/* Visible only when the native window is not covering this area —
                 a blank white rectangle is what the owner saw instead (B157). */}
             <p className="career-connector-webview-placeholder">
-              Окно входа LinkedIn открывается поверх этой области. Если его не
-              видно, оно может быть свёрнуто или за другим окном — найдите его и
-              завершите вход.
+              Окно входа LinkedIn открывается поверх этой области. Если его не видно, оно может быть
+              свёрнуто или за другим окном — найдите его и завершите вход.
             </p>
           </div>
         ) : null}

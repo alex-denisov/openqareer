@@ -237,7 +237,9 @@
   border-block-start: var(--career-border-width) solid var(--career-line);
 }
 
-.career-profile-screen-versions .career-profile-screen-section-head + .career-profile-screen-versions-row {
+.career-profile-screen-versions
+  .career-profile-screen-section-head
+  + .career-profile-screen-versions-row {
   border-block-start: 0;
 }
 
@@ -796,6 +798,10 @@
   color: var(--career-success);
 }
 
+.career-profile-screen-import-live-list .is-failed svg {
+  color: var(--career-warning);
+}
+
 /* B430 экран 2, 1440: секции плотными строками — название, подпись, годы справа, правка. */
 @media (min-width: 761px) {
   .career-profile-screen-view .career-profile-screen-company-logo {
@@ -975,4 +981,41 @@
   .career-profile-screen-view .career-profile-screen-review-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* B541: происхождение записи профиля (макет 2, shared.css .origin). */
+.career-profile-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+/* B541: свёрнутое старое место (макет 2, .job.is-compact). */
+.career-profile-screen-place-compact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--career-space-3);
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-profile-screen-place-compact-copy {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+}
+
+.career-profile-screen-place-compact-copy p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+}
+
+.career-profile-screen-entry-origin {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
 }

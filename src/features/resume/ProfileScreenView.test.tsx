@@ -211,13 +211,24 @@ describe('ProfileScreenSurface — states', () => {
             sensitive: false,
             status: 'confirmed',
           },
+          {
+            id: 'mem-lang-1',
+            kind: 'fact',
+            domain: 'skill',
+            statement: 'Английский C1',
+            confidence: 'candidate-reported',
+            sourceMessageIds: ['import-li'],
+            sensitive: false,
+            status: 'proposed',
+            provenance: { kind: 'import', platform: 'linkedin', at: '2026-09-12T08:00:00.000Z' },
+          },
         ]}
       />,
     );
     expect(html).toContain('career-profile-screen-position-bullets');
     expect(html).toContain('Отвечал за платёжную стратегию для 6 продуктовых команд.');
     expect(html).toContain('career-profile-screen-lang-source');
-    expect(html).toContain('Источник: импортированный профиль');
+    expect(html).toContain('из LinkedIn, 12.09');
     expect(html).not.toContain('Full professional proficiency');
   });
 

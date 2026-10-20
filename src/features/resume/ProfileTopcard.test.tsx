@@ -104,7 +104,7 @@ describe('ProfileTopcard — source and connection status (C54)', () => {
       />,
     );
     expect(html).toContain('hh.ru');
-    expect(html).toContain('3 факта · 01.01');
+    expect(html).toContain('3 из 3 · 01.01');
     expect(html).toContain('LinkedIn');
     expect(html).toContain('Не подключено');
   });

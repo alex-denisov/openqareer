@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
-import { CaretDown, Link, PencilSimple, Sparkle } from '@phosphor-icons/react';
+import { CaretDown, PencilSimple, Sparkle } from '@phosphor-icons/react';
 import { parseAboutContent } from './profileAbout';
 import { updateAbout } from './profileEntryEditing';
 import { SectionEditActions } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
+import { ProfileProvenanceChip, useProfileProvenance } from './ProfileProvenanceChip';
+import { aboutProvenance } from './profileProvenance';
 import {
   InlineConsultantSuggestion,
   type InlineSuggestionItem,
@@ -312,6 +314,7 @@ function AboutSectionHead({
   readonly about?: string;
   readonly onEdit: () => void;
 }) {
+  const { memory } = useProfileProvenance();
   return (
     <SectionHead
       id="sec-about-title"
@@ -324,11 +327,13 @@ function AboutSectionHead({
           onClick={onEdit}
         >
           {about ? (
-            <Link size="1em" aria-hidden="true" />
+            <ProfileProvenanceChip provenance={aboutProvenance(about, memory)} />
           ) : (
-            <PencilSimple size="1em" aria-hidden="true" />
+            <>
+              <PencilSimple size="1em" aria-hidden="true" />
+              Добавить текст
+            </>
           )}
-          {about ? 'со слов кандидата' : 'Добавить текст'}
         </button>
       }
     />

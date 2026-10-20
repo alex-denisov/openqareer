@@ -1,5 +1,9 @@
 import { ArrowsClockwise, WarningCircle } from '@phosphor-icons/react';
-import { useLinkedInImportFailure } from '../connections/linkedinImportProgress';
+import type { ImportWalk } from '../coach/coachApi';
+import {
+  linkedinStageLabel,
+  useLinkedInImportFailure,
+} from '../connections/linkedinImportProgress';
 
 /**
  * Макет 2 «Ошибка импорта». Обход LinkedIn останавливается на первом
@@ -9,11 +13,16 @@ import { useLinkedInImportFailure } from '../connections/linkedinImportProgress'
 export function ProfileImportFailureNote({
   onReimport,
   variant,
+  storedWalk,
 }: {
   readonly onReimport?: () => void;
   readonly variant: 'desktop' | 'mobile';
+  /** B541: the walk the server kept, so the note survives a reload. */
+  readonly storedWalk?: ImportWalk;
 }) {
-  const failure = useLinkedInImportFailure();
+  const failed = storedWalk?.sections.find((section) => section.status === 'failed');
+  const failure =
+    useLinkedInImportFailure() ?? (failed ? { label: linkedinStageLabel(failed.key) } : null);
   if (!failure) return null;
   return (
     <div className={`profile-import-failure is-${variant}`}>

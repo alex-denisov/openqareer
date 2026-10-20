@@ -9,6 +9,8 @@ export interface ProfileSourceDialogProps {
   readonly platform: CandidateConnection['platform'];
   readonly connection?: CandidateConnection;
   readonly factCount?: number;
+  /** N: facts of the import still in the profile (B541). */
+  readonly keptFactCount?: number;
   readonly importedAt?: string;
   readonly isOpen: boolean;
   readonly onClose: () => void;
@@ -43,7 +45,7 @@ export function ProfileSourceDialog(props: ProfileSourceDialogProps) {
     >
       <div className="career-modal-body profile-source-dialog career-token-scope">
         <SourceStatus connection={props.connection} disconnected={phase === 'disconnected'} />
-        <p>{importSummary(props.factCount, props.importedAt)}</p>
+        <p>{importSummary(props.factCount, props.importedAt, props.keptFactCount)}</p>
         <PhaseNotice phase={phase} />
       </div>
       <div className="career-modal-footer career-token-scope">
@@ -147,8 +149,15 @@ function DisconnectControl({
   );
 }
 
-export function importSummary(factCount?: number, importedAt?: string): string {
+/** Макет 2: «Импортировано 9 из 9 …, 12.09» — the same N из M as the source chip (B541). */
+export function importSummary(
+  factCount?: number,
+  importedAt?: string,
+  keptFactCount?: number,
+): string {
   if (factCount === undefined) return 'Импорта из этого источника ещё не было.';
   const date = importDateLabel(importedAt);
-  return `В профиле ${factCountLabel(factCount)} из этого источника${date ? `, импорт ${date}` : ''}.`;
+  const kept = keptFactCount ?? factCount;
+  const noun = factCountLabel(factCount).replace(/^\d+ /u, '');
+  return `Импортировано ${kept} из ${factCount} ${noun}${date ? `, ${date}` : ''}.`;
 }

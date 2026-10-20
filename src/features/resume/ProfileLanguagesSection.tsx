@@ -8,6 +8,7 @@ import {
   SectionRemoveButton,
 } from './ProfileSectionEdit';
 import { SectionHead } from './ProfileSectionHead';
+import { ProfileFactProvenance } from './ProfileProvenanceChip';
 import type { CefrLevel, ResumeDraft, ResumeLanguageInput } from './resumeTypes';
 
 interface SectionProps {
@@ -153,7 +154,7 @@ function LanguageRow({
         <SectionRemoveButton label="Удалить язык" onClick={onRemove} />
       </div>
       <p className="career-profile-screen-lang-source">
-        {entry.sourceLabel?.trim() ? 'Источник: импортированный профиль' : 'Указано вами'}
+        <ProfileFactProvenance memoryId={entry.evidenceMemoryId} />
       </p>
     </div>
   );

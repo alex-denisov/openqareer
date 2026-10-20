@@ -8,6 +8,7 @@ import {
 } from '../coach/coachApi';
 import { CandidateFootprintAuditView } from '../reputation/CandidateFootprintAuditView';
 import { ProfileAboutSection } from './ProfileAboutSection';
+import { ProfileProvenanceProvider } from './ProfileProvenanceChip';
 import { ProfileAchievementsSection } from './ProfileAchievementsSection';
 import { ProfileCoursesSection } from './ProfileCoursesSection';
 import { ProfileEducationSection } from './ProfileEducationSection';
@@ -201,8 +202,16 @@ export interface ProfileScreenSurfaceProps {
  * There is no permanent "Сохранить" button (B265 owner remark #5) — every
  * section saves itself when its own edit mode is closed.
  */
-// eslint-disable-next-line max-lines-per-function
 export function ProfileScreenSurface(props: ProfileScreenSurfaceProps) {
+  return (
+    <ProfileProvenanceProvider memory={props.memory} importedSources={props.importedSources ?? []}>
+      <ProfileScreenSurfaceBody {...props} />
+    </ProfileProvenanceProvider>
+  );
+}
+
+// eslint-disable-next-line max-lines-per-function
+function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
   const desktopProfileLayout = useDesktopProfileLayout();
   const dataDialog = useProfileDataDialog(props, desktopProfileLayout);
   useDesktopProfileFocus(

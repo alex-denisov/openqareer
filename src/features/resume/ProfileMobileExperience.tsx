@@ -1,5 +1,8 @@
 import { useRef, useState } from 'react';
 import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
+import { useFactProvenance } from './ProfileProvenanceChip';
+import { provenanceSourceValue } from './profileProvenance';
+import { Briefcase, PencilSimple, Plus } from '@phosphor-icons/react';
 import { ProfileMobilePositionEditor } from './ProfileMobilePositionEditor';
 import {
   ExperienceSuggestionsList,
@@ -12,7 +15,6 @@ import {
   ProfileMobileGroup,
   ProfileMobileKeyValue,
   ProfileMobileRow,
-  profileMobileDate,
 } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ProfileMobileRoute } from './profileMobileNavigation';
@@ -77,7 +79,6 @@ function MobileExperienceFacts({
   readonly entry: ResumeExperienceInput;
   readonly memory: ProfileMobileDataProps['memory'];
 }) {
-  const chronology = memory.find((fact) => fact.id === entry.chronologyMemoryId);
   const linked = entry.bulletMemoryIds.flatMap((id) => memory.filter((fact) => fact.id === id));
   const confirmed =
     linked.length > 0 &&
@@ -93,19 +94,13 @@ function MobileExperienceFacts({
         : entry.workplaceType === 'remote'
           ? 'удалённо'
           : undefined;
-  const source = !chronology
-    ? 'Не указан'
-    : chronology.confidence === 'coach-hypothesis'
-      ? 'Выведено консультантом'
-      : 'Со слов кандидата';
+  const source = provenanceSourceValue(useFactProvenance(entry.chronologyMemoryId));
   return (
     <ProfileMobileGroup>
       <ProfileMobileKeyValue label="Место">
         {[entry.location, workplace].filter(Boolean).join(', ') || 'Не указано'}
       </ProfileMobileKeyValue>
-      <ProfileMobileKeyValue label="Источник">
-        {[source, profileMobileDate(chronology?.createdAt)].filter(Boolean).join(', ')}
-      </ProfileMobileKeyValue>
+      <ProfileMobileKeyValue label="Источник">{source}</ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Подтверждено">
         {confirmed ? 'вами' : 'не подтверждено вами'}
       </ProfileMobileKeyValue>

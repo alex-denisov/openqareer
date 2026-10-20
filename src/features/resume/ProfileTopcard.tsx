@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { ProfileImportLive } from './ProfileImportLive';
+import { sourceCountLabel } from './profileProvenance';
 import { useLinkedInImportProgress } from '../connections/linkedinImportProgress';
 import {
   ArrowClockwise,
@@ -265,25 +266,11 @@ function SourceChip({
 }) {
   const count =
     imported?.factCount ?? (connection?.status === 'connected' ? connection.factCount : undefined);
-  const date = importDateLabel(
-    imported && 'lastImportedAt' in imported
-      ? imported.lastImportedAt
-      : (imported?.importedAt ??
-          (connection?.status === 'connected'
-            ? connection.lastImportedAt
-            : connection?.status === 'imported'
-              ? connection.importedAt
-              : undefined)),
-  );
-  const detail =
-    count !== undefined
-      ? [factCountLabel(count), date].filter(Boolean).join(' · ')
-      : connectionStatusLabel(connection?.status);
+  const detail = sourceChipDetail(imported, connection, count);
   const contents = (
     <span className="career-profile-screen-source-visual">
       {platform === 'linkedin' ? <LinkedinLogo size={14} aria-hidden="true" /> : null}
       <span className="career-profile-screen-source-name">{PLATFORM_LABELS[platform]}</span>
-      <span aria-hidden="true">·</span>
       <span className="career-profile-screen-source-detail">{detail}</span>
     </span>
   );
@@ -294,6 +281,7 @@ function SourceChip({
       detail={detail}
       connection={connection}
       factCount={count}
+      keptFactCount={imported && 'keptFactCount' in imported ? imported.keptFactCount : undefined}
       importedAt={importedAtValue(imported, connection)}
       onOpenConnections={onOpenConnections}
     >
@@ -302,6 +290,18 @@ function SourceChip({
   ) : (
     <span className="career-profile-screen-source-chip">{contents}</span>
   );
+}
+
+/** Макет 2: «LinkedIn 9 из 9 · 12.09» — kept facts of the import against everything it brought. */
+function sourceChipDetail(
+  imported: ImportedSourceSummary | ImportedSource | undefined,
+  connection: CandidateConnection | undefined,
+  count: number | undefined,
+): string {
+  if (imported && 'lastImportedAt' in imported) return sourceCountLabel(imported);
+  if (count === undefined) return connectionStatusLabel(connection?.status);
+  const date = importDateLabel(importedAtValue(imported, connection));
+  return [`${count} из ${count}`, date].filter(Boolean).join(' · ');
 }
 
 function importedAtValue(
@@ -320,6 +320,7 @@ function SourceChipButton(props: {
   readonly detail: string;
   readonly connection?: CandidateConnection;
   readonly factCount?: number;
+  readonly keptFactCount?: number;
   readonly importedAt?: string;
   readonly onOpenConnections: () => void;
   readonly children: ReactNode;
@@ -340,6 +341,7 @@ function SourceChipButton(props: {
         platform={props.platform}
         connection={props.connection}
         factCount={props.factCount}
+        keptFactCount={props.keptFactCount}
         importedAt={props.importedAt}
         isOpen={open}
         onClose={() => setOpen(false)}
@@ -354,12 +356,15 @@ function SourceChipButton(props: {
 
 function ProfileSourceActions({
   hasImports,
+  hasWalk,
   onOpenConnections,
 }: {
   readonly hasImports: boolean;
+  /** The walk band carries its own «Импортировать заново» (макет 2). */
+  readonly hasWalk: boolean;
   readonly onOpenConnections?: () => void;
 }) {
-  const importRunning = Boolean(useLinkedInImportProgress());
+  const importRunning = Boolean(useLinkedInImportProgress()) || hasWalk;
   if (!onOpenConnections) return null;
   return (
     <>
@@ -414,7 +419,11 @@ function ConnectionStatusChips({
           />
         );
       })}
-      <ProfileSourceActions hasImports={hasImports} onOpenConnections={onOpenConnections} />
+      <ProfileSourceActions
+        hasImports={hasImports}
+        hasWalk={sources.some((source) => 'walk' in source && Boolean(source.walk))}
+        onOpenConnections={onOpenConnections}
+      />
     </div>
   );
 }
@@ -701,8 +710,15 @@ function ProfileStatusRow({ props }: { readonly props: ProfileTopcardProps }) {
         <span className="career-profile-screen-reader-status">{readerLabel(props.reader)}</span>
       ) : null}
       <ProfileCoverageDetails draft={props.draft} />
-      <ProfileImportLive onReimport={props.onOpenConnections} />
-      <ProfileImportFailureNote variant="desktop" onReimport={props.onOpenConnections} />
+      <ProfileImportLive
+        onReimport={props.onOpenConnections}
+        storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
+      />
+      <ProfileImportFailureNote
+        variant="desktop"
+        onReimport={props.onOpenConnections}
+        storedWalk={props.importedSources?.find((source) => source.walk)?.walk}
+      />
     </div>
   );
 }

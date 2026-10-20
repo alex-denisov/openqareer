@@ -2452,6 +2452,10 @@ export async function mockSignedInCabinet(
     ) {
       return route.fulfill({ json: { data: [] } });
     }
+    if (/\/candidate\/connections\/(linkedin|hh)\/walk$/u.test(path)) {
+      // B541: the walk copy is a convenience write; the cabinet ignores its body.
+      return route.fulfill({ json: { data: route.request().postDataJSON() ?? {} } });
+    }
     if (path.endsWith('/candidate/connections')) {
       return route.fulfill({ json: { data: options.accountConnections ?? [] } });
     }

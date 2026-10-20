@@ -57,7 +57,7 @@ describe('ProfileSourceDialog (макет 2 «Модальное окно: ис�
     const body = render();
     expect(body.textContent).toContain('Подключено');
     expect(body.textContent).toContain('с 10.09');
-    expect(body.textContent).toContain('В профиле 9 фактов из этого источника, импорт 12.09.');
+    expect(body.textContent).toContain('Импортировано 9 из 9 фактов, 12.09.');
   });
 
   it('disconnects only after confirmation and keeps imported facts', async () => {
@@ -90,5 +90,8 @@ describe('ProfileSourceDialog (макет 2 «Модальное окно: ис�
 
   it('says plainly when nothing was imported', () => {
     expect(importSummary(undefined, undefined)).toBe('Импорта из этого источника ещё не было.');
+    expect(importSummary(9, '2026-10-07T08:00:00.000Z', 8)).toBe(
+      'Импортировано 8 из 9 фактов, 07.10.',
+    );
   });
 });

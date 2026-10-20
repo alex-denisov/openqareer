@@ -15,6 +15,11 @@ const STAGE_LABELS = {
 
 export type LinkedInImportStageKey = keyof typeof STAGE_LABELS;
 
+/** The candidate-facing name of a walk section; an unknown key reads as itself. */
+export function linkedinStageLabel(key: string): string {
+  return key in STAGE_LABELS ? STAGE_LABELS[key as LinkedInImportStageKey] : key;
+}
+
 export interface LinkedInImportProgress {
   readonly keys: readonly LinkedInImportStageKey[];
   readonly read: readonly LinkedInImportStageKey[];

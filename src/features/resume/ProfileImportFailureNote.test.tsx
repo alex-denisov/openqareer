@@ -44,4 +44,31 @@ describe('ProfileImportFailureNote (макет 2 «Ошибка импорта»
     act(() => container.querySelector('button')?.click());
     expect(onReimport).toHaveBeenCalledOnce();
   });
+
+  it('reads the failed section from the walk the server kept (B541)', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    act(() =>
+      root.render(
+        <ProfileImportFailureNote
+          variant="mobile"
+          storedWalk={{
+            platform: 'linkedin',
+            state: 'done',
+            updatedAt: '2026-10-20T08:00:00.000Z',
+            sections: [
+              { key: 'experience', status: 'read' },
+              { key: 'languages', status: 'failed' },
+            ],
+          }}
+        />,
+      ),
+    );
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'LinkedIn: раздел «языки» не прочитан, сайт не ответил.',
+    );
+    act(() => root.unmount());
+    container.remove();
+  });
 });

@@ -117,6 +117,7 @@ export interface CandidateMemory {
   status: 'proposed' | 'confirmed' | 'corrected';
   createdAt?: string;
   updatedAt?: string;
+  provenance?: FactProvenance;
 }
 
 interface ProductCaseSubmission {
@@ -337,7 +338,17 @@ export interface ImportedSourceSummary {
   connectedAt: string;
   lastImportedAt: string;
   factCount: number;
+  /** B541: N of `factCount` still in the profile, and the last section walk. */
+  keptFactCount?: number;
+  walk?: ImportWalk;
 }
+
+export type {
+  FactProvenance,
+  ImportWalk,
+  ImportWalkSectionStatus,
+} from '../../../server/domain/factProvenance';
+import type { FactProvenance, ImportWalk } from '../../../server/domain/factProvenance';
 
 export interface CandidateSnapshot {
   importedSources?: ImportedSourceSummary[];

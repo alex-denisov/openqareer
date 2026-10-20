@@ -1,5 +1,6 @@
 import { ProfileEmptyStart } from './ProfileEmptyStart';
 import { ProfileImportFailureNote } from './ProfileImportFailureNote';
+import { walkReadCount } from './profileProvenance';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import { useState } from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
@@ -188,9 +189,10 @@ export function ProfileMobileSources({
   readonly showTitle?: boolean;
 }) {
   const progress = linkedinImportProgressView(useLinkedInImportProgress());
+  const storedWalk = importedSources?.find((item) => item.walk)?.walk;
   return (
     <>
-      <ProfileImportFailureNote variant="mobile" onReimport={onSelect} />
+      <ProfileImportFailureNote variant="mobile" onReimport={onSelect} storedWalk={storedWalk} />
       <ProfileMobileGroup title={showTitle ? 'Источники' : undefined}>
         {(['linkedin', 'hh'] as const).map((platform) => {
           const source = importedSources?.find((item) => item.platform === platform);
@@ -199,13 +201,7 @@ export function ProfileMobileSources({
               key={platform}
               icon={platform === 'linkedin' ? LinkedinLogo : FileText}
               title={platform === 'linkedin' ? 'LinkedIn' : 'hh.ru'}
-              detail={
-                platform === 'linkedin' && progress
-                  ? `читаем разделы, ${progress.readCount} из ${progress.total}`
-                  : source
-                    ? pluralRu(source.factCount, ['факт', 'факта', 'фактов'])
-                    : 'Не импортировано'
-              }
+              detail={mobileSourceDetail(platform, source, progress)}
               value={profileMobileDate(source?.lastImportedAt)}
               onClick={onSelect}
             />
@@ -215,6 +211,21 @@ export function ProfileMobileSources({
       </ProfileMobileGroup>
     </>
   );
+}
+
+/** Макет 2, 390: «читаем разделы, 3 из 7» during a walk, «8 из 9 фактов» otherwise (B541). */
+function mobileSourceDetail(
+  platform: 'linkedin' | 'hh',
+  source: NonNullable<ProfileMobileDataProps['importedSources']>[number] | undefined,
+  progress: ReturnType<typeof linkedinImportProgressView>,
+): string {
+  if (platform === 'linkedin' && progress)
+    return `читаем разделы, ${progress.readCount} из ${progress.total}`;
+  if (source?.walk?.state === 'running')
+    return `читаем разделы, ${walkReadCount(source.walk)} из ${source.walk.sections.length}`;
+  if (!source) return 'Не импортировано';
+  const kept = source.keptFactCount ?? source.factCount;
+  return `${kept} из ${pluralRu(source.factCount, ['факта', 'фактов', 'фактов'])}`;
 }
 
 function ProfileMobileDataRows({

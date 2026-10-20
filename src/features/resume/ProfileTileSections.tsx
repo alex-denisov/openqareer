@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ProfileFactProvenance } from './ProfileProvenanceChip';
 import { useProfileEntrySave, type ProfileEntrySaveResult } from './profileEntrySave';
 import {
   addCertification,
@@ -308,6 +309,9 @@ function ProjectTile({ entry, saving, onSave, onRemove }: ProjectTileProps) {
           Открыть проект
         </a>
       ) : null}
+      <div className="career-profile-screen-entry-origin">
+        <ProfileFactProvenance memoryId={entry.evidenceMemoryId ?? `manual-${entry.id}`} />
+      </div>
     </div>
   );
 }

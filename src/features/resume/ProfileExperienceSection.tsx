@@ -1,4 +1,6 @@
 import { useRef, useState } from 'react';
+import { CollapsiblePlace, EXPANDED_PLACES } from './ProfileExperienceCollapsed';
+import { ProfileFactProvenance } from './ProfileProvenanceChip';
 import {
   Buildings,
   CheckCircle,
@@ -204,6 +206,7 @@ function PositionEvidenceBadge({
         <span className="career-profile-screen-tag is-accent">Работаю здесь</span>
       ) : null}
       <PositionPlace entry={entry} />
+      <ProfileFactProvenance memoryId={entry.chronologyMemoryId} />
       {entry.employmentType ? (
         <span className="career-profile-screen-tag">{entry.employmentType}</span>
       ) : null}
@@ -391,18 +394,24 @@ function ExperienceGroupsList({
   }
   return (
     <>
-      {groups.map((group) => (
-        <CompanyGroup
+      {groups.map((group, index) => (
+        <CollapsiblePlace
           key={group.key}
           group={group}
-          memory={memory}
-          candidateId={candidateId}
-          saving={saving}
-          draft={draft}
-          onSectionSave={onSectionSave}
-          onUpdateExperience={onUpdateExperience}
-          onManualExperienceFactAdded={onManualExperienceFactAdded}
-        />
+          collapsed={index >= EXPANDED_PLACES}
+          period={group.positions[0] ? periodLabel(group.positions[0]) : ''}
+        >
+          <CompanyGroup
+            group={group}
+            memory={memory}
+            candidateId={candidateId}
+            saving={saving}
+            draft={draft}
+            onSectionSave={onSectionSave}
+            onUpdateExperience={onUpdateExperience}
+            onManualExperienceFactAdded={onManualExperienceFactAdded}
+          />
+        </CollapsiblePlace>
       ))}
     </>
   );
