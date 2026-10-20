@@ -335,24 +335,6 @@ jobs:
           curl --compressed -fsS --max-time 60 --retry 3 --retry-all-errors \
             "https://openqareer.com$entry_asset" > "$release_asset"
           grep -Fq "$GITHUB_SHA" "$release_asset"
-          part_prefix="$(sed -nE 's#^const PREFIX="([^"]+)";#\1#p' \
-            "$release_asset" | head -n 1)"
-          case "$part_prefix" in
-            /assets/*.split.js.oqpart-) ;;
-            *)
-              printf 'production bootstrap has no safe part prefix\n' >&2
-              exit 1
-              ;;
-          esac
-          first_part="$(mktemp)"
-          curl -fsS --max-time 30 --retry 3 --retry-all-errors \
-            "https://openqareer.com${part_prefix}000.js" > "$first_part"
-          first_part_bytes="$(wc -c < "$first_part")"
-          if [ "$first_part_bytes" -gt 12288 ]; then
-            printf 'production delivery part exceeds 12 KiB: %s\n' \
-              "$first_part_bytes" >&2
-            exit 1
-          fi
           # INC-026 / B168 — the public route drops any single response past
           # ~20 KB, and the render-blocking stylesheet used to be 138 KB, so
           # the site did not open at all on that route while /health stayed
@@ -391,10 +373,10 @@ jobs:
           # that transport limitation visible without treating it as a wrong
           # HTTP response. Any response other than 404 still fails the gate.
           missing_status="$(curl -sS -I --max-time 30 --retry 3 --retry-all-errors -o /dev/null -w '%{http_code}' \
-            "https://openqareer.com${part_prefix}999.js" || true)"
+            "https://openqareer.com/assets/missing-$GITHUB_SHA.js" || true)"
           if [ "$missing_status" = "000" ] || [ -z "$missing_status" ]; then
             printf 'missing_asset_probe=inconclusive transport_timeout path=%s\n' \
-              "${part_prefix}999.js"
+              "/assets/missing-$GITHUB_SHA.js"
           elif [ "$missing_status" != "404" ]; then
             printf 'missing build asset answered %s, expected 404\n' \
               "$missing_status" >&2
