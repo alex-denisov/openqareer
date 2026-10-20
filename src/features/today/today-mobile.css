@@ -304,13 +304,15 @@
   }
 
   .career-today-mobile .pm-main b {
+    display: -webkit-box;
     overflow: hidden;
     color: var(--career-text);
     font-size: var(--career-text-md);
     font-weight: 500;
     line-height: var(--career-space-6);
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .career-today-mobile .pm-main small {

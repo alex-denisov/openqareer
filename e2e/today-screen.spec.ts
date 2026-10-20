@@ -603,8 +603,9 @@ test.describe('B251 today screen', () => {
     expect(boxes.queueRowHeights).toHaveLength(4);
     expect(
       boxes.queueRowHeights.every(
-        (height) => Math.abs(height - 60) <= 1 || Math.abs(height - 79) <= 1,
+        (height) => [60, 79, 84].some((expected) => Math.abs(height - expected) <= 1),
       ),
+      `queue row heights ${boxes.queueRowHeights.join(',')}`,
     ).toBe(true);
     expectSize(boxes.funnel, 358, 84, 'funnel 358x84');
     expect(Math.abs((boxes.profile?.width ?? 0) - 358)).toBeLessThanOrEqual(1);
@@ -834,7 +835,12 @@ test.describe('B251 today screen', () => {
     const row = page.getByTestId('today-mobile-queue-row');
     await expect(row).toBeVisible();
     const title = row.locator('.pm-main b');
-    await expect(title).toHaveCSS('text-overflow', 'ellipsis');
+    await expect(title).toHaveCSS('-webkit-line-clamp', '2');
+    const titleBox = await title.evaluate((element) => ({
+      lines: Math.round(element.getBoundingClientRect().height / 24),
+      overflow: element.scrollWidth > element.clientWidth,
+    }));
+    expect(titleBox).toEqual({ lines: 2, overflow: false });
     const subtitleOverflow = await row
       .locator('.pm-main small')
       .evaluate((element) => element.scrollWidth > element.clientWidth);
