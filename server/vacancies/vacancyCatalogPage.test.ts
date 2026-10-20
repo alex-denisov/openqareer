@@ -318,3 +318,18 @@ describe('видимая зарплата каталога', () => {
     expect(detail.entry.salaryLabel).toBe(`${(125000).toLocaleString('ru-RU')} ₽`);
   });
 });
+
+describe('страна в разметке вакансии', () => {
+  it('называет страну и требование к кандидату у удалённой вакансии', () => {
+    const detail = buildVacancyDetail(
+      cluster({ canonicalLocation: 'Berlin, Germany', isRemote: true }),
+      undefined,
+      undefined,
+      NOW,
+    )!;
+    expect(detail.indexable).toBe(true);
+    const posting = JSON.stringify(detail.jsonLd);
+    expect(posting).toContain('"addressCountry":"DE"');
+    expect(posting).toContain('"applicantLocationRequirements":{"@type":"Country","name":"DE"}');
+  });
+});

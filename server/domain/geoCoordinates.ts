@@ -2,7 +2,12 @@ import { gunzipSync } from 'node:zlib';
 import { isCountryName } from '../../shared/placeNames';
 import { GEONAMES_CITY_DATA_GZIP_BASE64 } from './geonamesCityData';
 
-type GeoNamesCityRow = readonly [countryCode: string, lat: number, lng: number, names: readonly string[]];
+type GeoNamesCityRow = readonly [
+  countryCode: string,
+  lat: number,
+  lng: number,
+  names: readonly string[],
+];
 type GeoNamesCountryRow = readonly [code: string, iso3: string, name: string];
 
 interface GeoNamesSnapshot {
@@ -162,7 +167,9 @@ const GEO_NAMES_DATA = JSON.parse(
   gunzipSync(Buffer.from(GEONAMES_CITY_DATA_GZIP_BASE64.join(''), 'base64')).toString('utf8'),
 ) as GeoNamesSnapshot;
 
-function buildCityIndex(rows: readonly GeoNamesCityRow[]): ReadonlyMap<string, readonly CityCandidate[]> {
+function buildCityIndex(
+  rows: readonly GeoNamesCityRow[],
+): ReadonlyMap<string, readonly CityCandidate[]> {
   const index = new Map<string, CityCandidate[]>();
   for (const [countryCode, lat, lng, names] of rows) {
     const candidate = { countryCode, point: { lat, lng } };
@@ -213,7 +220,13 @@ const LOCAL_COUNTRY_ALIASES: Readonly<Record<string, readonly string[]>> = {
   PT: ['Португалия'],
   RU: ['Россия', 'Российская Федерация'],
   SG: ['Сингапур'],
-  US: ['США', 'Соединённые Штаты', 'Соединенные Штаты', 'Соединённые Штаты Америки', 'Соединенные Штаты Америки'],
+  US: [
+    'США',
+    'Соединённые Штаты',
+    'Соединенные Штаты',
+    'Соединённые Штаты Америки',
+    'Соединенные Штаты Америки',
+  ],
   UZ: ['Узбекистан'],
 };
 
@@ -224,9 +237,55 @@ const LEGACY_CITY_COORDINATES_BY_KEY = new Map(
 );
 
 const LEGACY_CITY_COUNTRY_ALIASES: readonly (readonly [string, readonly string[]])[] = [
-  ['NL', ['amsterdam', 'амстердам', 'eindhoven', 'эйндховен', 'veldhoven', 'велдховен', 'utrecht', 'утрехт', 'rotterdam', 'роттердам', 'nijmegen', 'неймеген', 'thehague', 'гаага']],
-  ['DE', ['berlin', 'берлин', 'munich', 'мюнхен', 'frankfurt', 'франкфурт', 'hamburg', 'гамбург', 'cologne', 'кёльн', 'dusseldorf', 'дюссельдорф']],
-  ['GB', ['london', 'лондон', 'manchester', 'манчестер', 'cambridge', 'кембридж', 'edinburgh', 'эдинбург']],
+  [
+    'NL',
+    [
+      'amsterdam',
+      'амстердам',
+      'eindhoven',
+      'эйндховен',
+      'veldhoven',
+      'велдховен',
+      'utrecht',
+      'утрехт',
+      'rotterdam',
+      'роттердам',
+      'nijmegen',
+      'неймеген',
+      'thehague',
+      'гаага',
+    ],
+  ],
+  [
+    'DE',
+    [
+      'berlin',
+      'берлин',
+      'munich',
+      'мюнхен',
+      'frankfurt',
+      'франкфурт',
+      'hamburg',
+      'гамбург',
+      'cologne',
+      'кёльн',
+      'dusseldorf',
+      'дюссельдорф',
+    ],
+  ],
+  [
+    'GB',
+    [
+      'london',
+      'лондон',
+      'manchester',
+      'манчестер',
+      'cambridge',
+      'кембридж',
+      'edinburgh',
+      'эдинбург',
+    ],
+  ],
   ['AM', ['yerevan', 'ереван']],
   ['GE', ['tbilisi', 'тбилиси']],
   ['RS', ['belgrade', 'белград', 'novisad', 'новисад']],
@@ -262,7 +321,9 @@ function lookupGeoNamesCity(cityKey: string, country?: string): GeoPoint | undef
   if (!candidates) return undefined;
   const countryCode = country ? GEO_NAMES_COUNTRY_INDEX.get(normalizeGeoKey(country)) : undefined;
   if (!countryCode) return uniqueCandidatePoint(candidates);
-  return uniqueCandidatePoint(candidates.filter((candidate) => candidate.countryCode === countryCode));
+  return uniqueCandidatePoint(
+    candidates.filter((candidate) => candidate.countryCode === countryCode),
+  );
 }
 
 function lookupLegacyCity(cityKey: string, country?: string): GeoPoint | undefined {
@@ -292,11 +353,7 @@ export function isKnownCountry(label?: string): boolean {
   return isCountryName(label);
 }
 
-
-export function lookupLocationCoordinates(
-  city?: string,
-  country?: string,
-): GeoPoint | undefined {
+export function lookupLocationCoordinates(city?: string, country?: string): GeoPoint | undefined {
   if (city) {
     const cityKey = normalizeGeoKey(city);
     const dataPoint = cityKey ? lookupGeoNamesCity(cityKey, country) : undefined;
@@ -313,5 +370,29 @@ export function lookupLocationCoordinates(
     }
   }
 
+  return undefined;
+}
+
+/**
+ * ISO 3166-1 alpha-2 code for a free-form location («San Francisco, USA»,
+ * «Remote (United States | Canada)», «Weybridge»), or undefined when the text
+ * names no country and no city that belongs to exactly one country. Used for
+ * `addressCountry` in JobPosting markup (B535).
+ */
+export function countryCodeOf(location?: string): string | undefined {
+  if (!location) return undefined;
+  const parts = location
+    .split(/[,|()/;]+/u)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  for (const part of [...parts].reverse()) {
+    const code = GEO_NAMES_COUNTRY_INDEX.get(normalizeGeoKey(part));
+    if (code) return code;
+  }
+  for (const part of parts) {
+    const candidates = GEO_NAMES_CITY_INDEX.get(normalizeGeoKey(part));
+    const codes = new Set(candidates?.map((candidate) => candidate.countryCode));
+    if (codes.size === 1) return [...codes][0];
+  }
   return undefined;
 }

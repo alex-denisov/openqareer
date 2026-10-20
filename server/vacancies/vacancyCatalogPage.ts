@@ -22,6 +22,7 @@ import {
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 import { renderDescriptionHtml } from './catalogMarkdown';
+import { countryCodeOf } from '../domain/geoCoordinates';
 import { countLabel } from './catalogCopy';
 import { isIndexableCard, isIndexableListing, validThroughOf } from '../seo/catalogIndexing';
 
@@ -300,6 +301,30 @@ export function googleEmploymentType(value?: string): string | undefined {
   return EMPLOYMENT_TYPES.find(([pattern]) => pattern.test(trimmed))?.[1];
 }
 
+/** Where the job is, with the ISO country Google asks for (B535). */
+function postingLocation(entry: CatalogEntry, isRemote: boolean): Record<string, unknown> {
+  const country = countryCodeOf(entry.location);
+  return {
+    ...(entry.location
+      ? {
+          jobLocation: {
+            '@type': 'Place',
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: entry.location,
+              ...(country ? { addressCountry: country } : {}),
+            },
+          },
+        }
+      : {}),
+    ...(isRemote ? { jobLocationType: 'TELECOMMUTE' } : {}),
+    // Google requires the allowed applicant country for remote postings.
+    ...(isRemote && country
+      ? { applicantLocationRequirements: { '@type': 'Country', name: country } }
+      : {}),
+  };
+}
+
 function jobPosting(
   cluster: VacancyCluster,
   entry: CatalogEntry,
@@ -330,15 +355,7 @@ function jobPosting(
     // обещать кандидату действие, которого продукт не делает.
     directApply: false,
     ...(company ? { hiringOrganization: { '@type': 'Organization', name: company } } : {}),
-    ...(entry.location
-      ? {
-          jobLocation: {
-            '@type': 'Place',
-            address: { '@type': 'PostalAddress', addressLocality: entry.location },
-          },
-        }
-      : {}),
-    ...(cluster.isRemote ? { jobLocationType: 'TELECOMMUTE' } : {}),
+    ...postingLocation(entry, cluster.isRemote),
     ...(employmentType ? { employmentType } : {}),
     ...(entry.skills.length > 0 ? { skills: entry.skills.join(', ') } : {}),
     ...(hasSalary

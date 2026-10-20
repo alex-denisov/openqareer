@@ -78,6 +78,7 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
       address: {
         '@type': 'PostalAddress',
         addressLocality: 'Berlin, Germany',
+        addressCountry: 'DE',
       },
     });
 
@@ -117,6 +118,7 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
       address: {
         '@type': 'PostalAddress',
         addressLocality: 'Amsterdam, Netherlands',
+        addressCountry: 'NL',
       },
     });
   });
