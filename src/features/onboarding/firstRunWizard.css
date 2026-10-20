@@ -572,12 +572,14 @@
   padding-inline: var(--career-space-3);
 }
 
-.first-run-state-container {
-  width: 100%;
+.first-run-state-block {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-3);
   max-width: var(--career-first-run-dialog-max);
-  margin-inline: auto;
-  padding: var(--career-space-8);
-  text-align: center;
+}
+.first-run-state-block > .first-run-state-message {
+  margin-block-end: 0;
 }
 
 .first-run-state-status {
@@ -586,11 +588,6 @@
   justify-content: center;
   gap: var(--career-space-2);
   color: var(--career-text-soft);
-}
-.first-run-state-caption {
-  margin-block-start: var(--career-space-2);
-  color: var(--career-text-dim);
-  font-size: var(--career-text-xs);
 }
 
 .first-run-state-message {

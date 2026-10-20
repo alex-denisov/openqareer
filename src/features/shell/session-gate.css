@@ -63,7 +63,7 @@
   margin-top: 18px;
 }
 
-/* 390: заметка «Загрузка дольше обычного» стоит над нижним меню, а не под ним. */
+/* 390: заметка «Проверяем вход…» стоит над нижним меню, а не под ним. */
 @media (max-width: 760px) {
   .career-session-gate > .career-session-gate-actions {
     position: fixed;

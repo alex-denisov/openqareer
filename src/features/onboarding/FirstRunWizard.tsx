@@ -1,19 +1,18 @@
 import { CaretLeft, Check, PencilSimple } from '@phosphor-icons/react';
 
-import { useEffect, type ReactElement } from 'react';
-import type { FirstRunData, FirstRunSpecialState, FirstRunStep } from './firstRunTypes';
+import { useEffect, useRef, type ReactElement, type RefObject } from 'react';
+import type { FirstRunData, FirstRunStep } from './firstRunTypes';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
 import { FirstRunCitySheet } from './FirstRunCitySheet';
 import { FirstRunSkipDialog, FirstRunSkippedToast } from './FirstRunSkipDialog';
 import { FirstRunConsultant } from './FirstRunConsultant';
 import {
   FirstRunEmptySources,
-  FirstRunErrorState,
   FirstRunPartialSources,
-  FirstRunSessionExpired,
-  FirstRunSkeleton,
   FirstRunStaleLoading,
 } from './FirstRunStates';
+import { fileStaleLabel } from './firstRunSpecialState';
+import { useLongWait } from './useLongWait';
 import { FirstRunContextCard, FirstRunGoalCard, FirstRunSourceCard } from './FirstRunSteps';
 import { useFirstRunWizardState } from './useFirstRunWizardState';
 import { useResumeIngestion } from '../journey/useResumeIngestion';
@@ -21,10 +20,11 @@ import type { IngestedResume, ResumeIngestionState } from '../journey/useResumeI
 
 export interface FirstRunWizardProps {
   readonly initialStep?: FirstRunStep;
-  readonly specialState?: FirstRunSpecialState;
   readonly onComplete?: (data: FirstRunData, ingestionResult?: IngestedResume) => void;
-  readonly onRetry?: () => void;
-  readonly onSignIn?: () => void;
+  /** Ровно один коннектор подключён на сервере (см. useFirstRunSpecialState). */
+  readonly partialSourcesMessage?: string | null;
+  /** Долгое чтение подключённого источника: «Читаем LinkedIn: раздел 2 из 5». */
+  readonly importProgressLabel?: string | null;
   readonly onStartedChange?: (started: boolean) => void;
   readonly onOpenConsultant: (prompt?: string) => void;
   readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
@@ -127,6 +127,37 @@ interface WizardMainCardsProps {
   readonly onOpenConsultant: (prompt?: string) => void;
   readonly onConnectSource?: (source: 'linkedin' | 'hh') => void;
   readonly isMobile: boolean;
+  readonly fileInputRef: RefObject<HTMLInputElement>;
+}
+
+function WizardSourceStep({
+  state,
+  isMobile,
+  fileInputRef,
+  onOpenConsultant,
+  onConnectSource,
+}: Omit<WizardMainCardsProps, 'onComplete' | 'ingestionResult'>): ReactElement {
+  return (
+    <FirstRunSourceCard
+      data={state.data}
+      isMobile={isMobile}
+      uploadedFileName={state.uploadedFile?.name}
+      isIngesting={state.isIngesting}
+      ingestionError={state.ingestionError}
+      ingestionNotice={state.ingestionNotice}
+      onSelectSource={state.handleSelectSource}
+      onConnectSource={onConnectSource}
+      onTriggerFileUpload={() =>
+        isMobile ? state.setIsSourceMenuOpen(true) : fileInputRef.current?.click()
+      }
+      onTriggerConsultant={() => {
+        state.handleChooseTalk();
+        onOpenConsultant();
+      }}
+      onNext={() => state.setStep('context')}
+      onSkip={() => state.setIsSkipDialogOpen(true)}
+    />
+  );
 }
 
 function WizardMainCards({
@@ -136,24 +167,18 @@ function WizardMainCards({
   onOpenConsultant,
   onConnectSource,
   isMobile,
+  fileInputRef,
 }: WizardMainCardsProps): ReactElement {
   return (
     <>
       <WizardGoalCard state={state} />
       {state.step === 'source' ? (
-        <FirstRunSourceCard
-          data={state.data}
+        <WizardSourceStep
+          state={state}
           isMobile={isMobile}
-          uploadedFileName={state.uploadedFile?.name}
-          isIngesting={state.isIngesting}
-          ingestionError={state.ingestionError}
-          ingestionNotice={state.ingestionNotice}
-          onSelectSource={state.handleSelectSource}
+          fileInputRef={fileInputRef}
+          onOpenConsultant={onOpenConsultant}
           onConnectSource={onConnectSource}
-          onTriggerFileUpload={() => state.setIsSourceMenuOpen(true)}
-          onTriggerConsultant={onOpenConsultant}
-          onNext={() => state.setStep('context')}
-          onSkip={() => state.setIsSkipDialogOpen(true)}
         />
       ) : null}
       {!isMobile && state.step === 'goal' ? (
@@ -195,21 +220,52 @@ function WizardCityPicker({
   );
 }
 
+/** 1440: «Загрузить» сразу открывает системный выбор файла, без меню 390. */
+function DesktopFileInput({
+  inputRef,
+  onPickFile,
+}: {
+  readonly inputRef: RefObject<HTMLInputElement>;
+  readonly onPickFile: (file: File) => void;
+}): ReactElement {
+  return (
+    <input
+      ref={inputRef}
+      type="file"
+      accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+      className="first-run-native-file-input"
+      data-testid="native-file-input"
+      aria-label="Файл резюме"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        if (file) onPickFile(file);
+        event.target.value = '';
+      }}
+    />
+  );
+}
+
 function WizardDialogs({
   state,
   ingestion,
+  isMobile,
+  fileInputRef,
 }: {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
   readonly ingestion?: ResumeIngestionState;
+  readonly isMobile: boolean;
+  readonly fileInputRef: RefObject<HTMLInputElement>;
 }): ReactElement {
+  const pickFile = (file: File) => {
+    void state.handleFileUpload(file, ingestion);
+  };
   return (
     <>
+      {isMobile ? null : <DesktopFileInput inputRef={fileInputRef} onPickFile={pickFile} />}
       <FirstRunSourceMenu
         isOpen={state.isSourceMenuOpen}
         onClose={() => state.setIsSourceMenuOpen(false)}
-        onPickFile={(file) => {
-          void state.handleFileUpload(file, ingestion);
-        }}
+        onPickFile={pickFile}
       />
       <FirstRunSkipDialog
         isOpen={state.isSkipDialogOpen}
@@ -224,22 +280,34 @@ function WizardDialogs({
   );
 }
 
-function getSpecialStateView(
-  specialState: FirstRunSpecialState,
-  onRetry?: () => void,
-  onSignIn?: () => void,
-): ReactElement | null {
-  if (specialState === 'skeleton') return <FirstRunSkeleton />;
-  if (specialState === 'stale-loading') return <FirstRunStaleLoading />;
-  if (specialState === 'error') return <FirstRunErrorState onRetry={onRetry} />;
-  if (specialState === 'session-expired') return <FirstRunSessionExpired onSignIn={onSignIn} />;
-  if (specialState === 'partial-sources') return <FirstRunPartialSources />;
-  return null;
+function WizardStateNotes(props: {
+  readonly state: ReturnType<typeof useFirstRunWizardState>;
+  readonly partialSourcesMessage?: string | null;
+  readonly importProgressLabel?: string | null;
+  readonly onOpenConsultant: (prompt?: string) => void;
+}): ReactElement {
+  const { state } = props;
+  const fileIsLong = useLongWait(state.isIngesting);
+  const staleLabel = fileIsLong
+    ? fileStaleLabel(state.uploadedFile?.name)
+    : props.importProgressLabel;
+  return (
+    <>
+      {staleLabel ? <FirstRunStaleLoading label={staleLabel} /> : null}
+      {props.partialSourcesMessage && state.step !== 'goal' ? (
+        <FirstRunPartialSources message={props.partialSourcesMessage} />
+      ) : null}
+      {state.step === 'context' && state.data.isSourceSkipped ? (
+        <FirstRunEmptySources onConsultant={() => props.onOpenConsultant()} />
+      ) : null}
+    </>
+  );
 }
 
 interface FirstRunScreenProps {
   readonly state: ReturnType<typeof useFirstRunWizardState>;
-  readonly specialState: FirstRunSpecialState;
+  readonly partialSourcesMessage?: string | null;
+  readonly importProgressLabel?: string | null;
   readonly isMobile: boolean;
   readonly hasInternalConsultant: boolean;
   readonly onComplete?: FirstRunWizardProps['onComplete'];
@@ -263,7 +331,8 @@ function WizardBack({ state }: { readonly state: ReturnType<typeof useFirstRunWi
 }
 
 function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
-  const { state, specialState, isMobile, hasInternalConsultant, onComplete } = props;
+  const { state, isMobile, hasInternalConsultant, onComplete } = props;
+  const fileInputRef = useRef<HTMLInputElement>(null);
   return (
     <div
       className={`first-run-screen${isMobile ? ' is-mobile' : ''}`}
@@ -283,9 +352,12 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
           <p className="first-run-eyebrow">
             Находка себя, шаг {state.step === 'goal' ? 1 : state.step === 'source' ? 2 : 3} из 3
           </p>
-          {specialState === 'empty-sources' ? (
-            <FirstRunEmptySources onConsultant={props.onOpenConsultant} />
-          ) : null}
+          <WizardStateNotes
+            state={state}
+            partialSourcesMessage={props.partialSourcesMessage}
+            importProgressLabel={props.importProgressLabel}
+            onOpenConsultant={props.onOpenConsultant}
+          />
           <WizardMainCards
             state={state}
             onComplete={onComplete}
@@ -293,13 +365,14 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
             onOpenConsultant={props.onOpenConsultant}
             onConnectSource={props.onConnectSource}
             isMobile={isMobile}
+            fileInputRef={fileInputRef}
           />
         </main>
         {hasInternalConsultant ? (
           <FirstRunConsultant onOpenConsultant={props.onOpenConsultant} />
         ) : null}
       </div>
-      <WizardDialogs state={state} ingestion={props.ingestion} />
+      <WizardDialogs {...{ state, isMobile, fileInputRef }} ingestion={props.ingestion} />
     </div>
   );
 }
@@ -307,10 +380,7 @@ function FirstRunScreen(props: FirstRunScreenProps): ReactElement {
 export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
   const {
     initialStep = 'goal',
-    specialState = 'normal',
     onComplete,
-    onRetry,
-    onSignIn,
     onStartedChange,
     onOpenConsultant,
     onConnectSource,
@@ -324,13 +394,12 @@ export function FirstRunWizard(props: FirstRunWizardProps): ReactElement {
   const activeIngestion = ingestion ?? ownedIngestion;
   const hasInternalConsultant = showConsultantPanel && !isMobile;
   useEffect(() => onStartedChange?.(true), [onStartedChange]);
-  const specialView = getSpecialStateView(specialState, onRetry, onSignIn);
-  if (specialView) return specialView;
 
   return (
     <FirstRunScreen
       state={state}
-      specialState={specialState}
+      partialSourcesMessage={props.partialSourcesMessage}
+      importProgressLabel={props.importProgressLabel}
       isMobile={isMobile}
       hasInternalConsultant={hasInternalConsultant}
       onComplete={onComplete}

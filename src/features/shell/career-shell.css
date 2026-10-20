@@ -4064,6 +4064,11 @@
     white-space: nowrap;
   }
 
+  /* Второй «Сегодня» для чтеца экрана не нужен: заголовок уже в шапке (B538). */
+  .career-today-skeleton-heading h1 {
+    display: none;
+  }
+
   .career-today-skeleton-card,
   .career-today-skeleton-card.is-decision {
     border-color: transparent;

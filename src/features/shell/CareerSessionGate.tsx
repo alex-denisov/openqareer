@@ -1,42 +1,33 @@
+import { FirstRunErrorState, FirstRunStaleLoading } from '../onboarding/FirstRunStates';
+import { SESSION_STALE_LABEL, sessionGateState } from '../onboarding/firstRunSpecialState';
 import { CareerTodaySkeleton } from './CareerTodaySkeleton';
 
+/**
+ * Ожидание входа. Тексты — из состояний экрана 0 (B538): «Проверяем вход…»
+ * при долгом ответе и «Не удалось войти…» с одной кнопкой «Повторить».
+ * Мастер первого запуска, если уже начат, остаётся смонтированным за этим
+ * экраном, поэтому введённое не теряется.
+ */
 export function CareerSessionGate({
   error,
   waitIsLong,
   onRetry,
-  onOpenLogin,
 }: {
   readonly error?: string;
   readonly waitIsLong: boolean;
   readonly onRetry: () => void;
-  readonly onOpenLogin: () => void;
 }) {
+  const state = sessionGateState({ error, waitIsLong });
   return (
-    <section className="career-session-gate" aria-live="polite" aria-busy={!error}>
-      {error ? (
-        <div className="career-session-error" role="alert">
-          <strong>Ошибка: сервер не ответил.</strong>
-          <p>{error}</p>
-          <div className="career-session-gate-actions">
-            <button className="career-primary-button" type="button" onClick={onRetry}>
-              Повторить
-            </button>
-            <button className="career-quiet-button" type="button" onClick={onOpenLogin}>
-              Открыть вход
-            </button>
-          </div>
-        </div>
+    <section className="career-session-gate" aria-live="polite" aria-busy={state !== 'error'}>
+      {state === 'error' ? (
+        <FirstRunErrorState onRetry={onRetry} />
       ) : (
         <>
           <CareerTodaySkeleton />
-          {waitIsLong ? (
+          {state === 'stale-loading' ? (
             <div className="career-session-gate-actions">
-              <p className="career-session-gate-note" role="status">
-                Загрузка дольше обычного.
-              </p>
-              <button className="career-primary-button" type="button" onClick={onRetry}>
-                Повторить
-              </button>
+              <FirstRunStaleLoading label={SESSION_STALE_LABEL} />
             </div>
           ) : null}
         </>

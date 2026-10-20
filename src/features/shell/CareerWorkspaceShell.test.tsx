@@ -171,7 +171,7 @@ describe('CareerWorkspaceShell', () => {
     expect(html).not.toContain('data-testid="first-run-wizard"');
   });
 
-  it('explains a failed session check and offers retry and sign-in', () => {
+  it('explains a failed session check with the single retry from the mockup', () => {
     const html = renderToStaticMarkup(
       <CareerWorkspaceShell
         sessionPending
@@ -179,9 +179,9 @@ describe('CareerWorkspaceShell', () => {
       />,
     );
 
-    expect(html).toContain('Ошибка: сервер не ответил.');
+    expect(html).toContain('Не удалось войти: сервер не ответил. Данные не потеряны.');
     expect(html).toContain('Повторить');
-    expect(html).toContain('Открыть вход');
+    expect(html).not.toContain('Открыть вход');
   });
 
   it('does not repeat the active navigation item in the top bar', () => {
@@ -727,7 +727,7 @@ describe('B440 — fixed shell and first-read skeleton', () => {
       <CareerWorkspaceShell sessionPending sessionError="network_error" />,
     );
 
-    expect(html).toContain('Ошибка: сервер не ответил');
+    expect(html).toContain('Не удалось войти: сервер не ответил');
     expect(html).toContain('Повторить');
   });
 });

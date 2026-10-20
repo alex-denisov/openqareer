@@ -75,12 +75,12 @@ test.describe('B140 workspace shell and intake defects', () => {
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
 
-  test('a slow session check stays silent, then offers a retry without the «checking» headline', async ({
+  test('a slow session check stays silent, then names its subject without the «checking» headline', async ({
     page,
   }) => {
     // Владелец 2026-09-20: на старте никакого «проверяем защищённую сессию».
-    // Пока ответ идёт — тихая заглушка; через 6 с — только две кнопки и одна
-    // строка о долгом ответе. Стаб держит ответ 12 с, чтобы окно было широким.
+    // Пока ответ идёт — тихая заглушка; через 4 с — одна строка «Проверяем
+    // вход…» по макету экрана 0 (B538). Стаб держит ответ 12 с.
     await watchForSessionGate(page);
     await page.route('**/api/v1/auth/**', async (route) => {
       await new Promise((resolve) => setTimeout(resolve, 12_000));
@@ -90,10 +90,7 @@ test.describe('B140 workspace shell and intake defects', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('.career-session-gate')).toBeVisible({ timeout: 4_000 });
     await expect(page.locator('.career-session-gate')).not.toContainText('защищённую сессию');
-    await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 9_000 });
-    await expect(page.getByRole('button', { name: 'Повторить', exact: true })).toBeVisible({
-      timeout: 9_000,
-    });
+    await expect(page.getByText('Проверяем вход…')).toBeVisible({ timeout: 9_000 });
     expect(await sessionGateWasSeen(page)).toBe(false);
   });
 

@@ -4,6 +4,7 @@ import { FirstRunWizard, type FirstRunWizardProps } from './FirstRunWizard';
 import { FirstRunSourceMenu } from './FirstRunSourceMenu';
 import { FirstRunCitySheet } from './FirstRunCitySheet';
 import { FirstRunSkipDialog, FirstRunSkippedToast } from './FirstRunSkipDialog';
+import { FirstRunEmptySources, FirstRunErrorState } from './FirstRunStates';
 
 function renderWizard(
   props: Omit<FirstRunWizardProps, 'onOpenConsultant'> &
@@ -47,29 +48,28 @@ describe('FirstRunWizard component tests', () => {
     expect(html).toContain('Собрать профиль');
   });
 
-  it('renders loading and error states without invented platform progress', () => {
-    expect(renderWizard({ specialState: 'skeleton' })).toContain(
-      'Проверяем вход и читаем ваш профиль',
-    );
-    expect(renderWizard({ specialState: 'stale-loading' })).toContain(
-      'Подготавливаем данные профиля',
-    );
-    expect(renderWizard({ specialState: 'error' })).toContain(
-      'Не удалось войти: сервер не ответил. Данные не потеряны.',
-    );
+  it('names the subject and step while a connected source is read for long', () => {
+    const html = renderWizard({
+      initialStep: 'source',
+      importProgressLabel: 'Читаем LinkedIn: раздел 2 из 5',
+    });
+    expect(html).toContain('Читаем LinkedIn: раздел 2 из 5');
+    expect(html).not.toContain('Собираем');
   });
 
-  it('shows retry and sign-in only when handlers exist', () => {
-    const error = renderWizard({ specialState: 'error', onRetry: () => undefined });
-    const session = renderWizard({ specialState: 'session-expired', onSignIn: () => undefined });
-    expect(error).toContain('Повторить');
-    expect(session).toContain('Войти');
+  it('renders the server error with a single retry and no sign-in link', () => {
+    const html = renderToStaticMarkup(<FirstRunErrorState onRetry={() => undefined} />);
+    expect(html).toContain('Не удалось войти: сервер не ответил. Данные не потеряны.');
+    expect(html).toContain('Повторить');
+    expect(html).not.toContain('Открыть вход');
   });
 
-  it('renders an honest empty-source state', () => {
-    const html = renderWizard({ specialState: 'empty-sources' });
-    expect(html).toContain('Источник не выбран. Можно продолжить');
-    expect(html).not.toContain('подключён');
+  it('renders the empty-source note with the consultant action', () => {
+    const html = renderToStaticMarkup(<FirstRunEmptySources onConsultant={() => undefined} />);
+    expect(html).toContain(
+      'Источник не выбран. Можно рассказать консультанту, профиль соберётся из ответов.',
+    );
+    expect(html).toContain('Рассказать консультанту');
   });
 
   it('renders the three upload choices and a PDF file input', () => {
@@ -120,9 +120,13 @@ describe('FirstRunWizard component tests', () => {
     expect(html).not.toContain('first-run-consultant-sidebar');
   });
 
-  it('renders partial-sources state with honest notice', () => {
-    const html = renderWizard({ specialState: 'partial-sources' });
-    expect(html).toContain('LinkedIn подключён, hh.ru нет: доступно после подключения hh.ru.');
+  it('renders the partial-sources note from the step «Источник» on', () => {
+    const message = 'LinkedIn подключён, hh.ru нет: доступно после подключения hh.ru.';
+    expect(renderWizard({ initialStep: 'source', partialSourcesMessage: message })).toContain(
+      message,
+    );
+    expect(renderWizard({ partialSourcesMessage: message })).not.toContain(message);
+    expect(renderWizard({ initialStep: 'source' })).not.toContain('first-run-partial-sources');
   });
 
   it('renders all mockup starter prompts in consultant sidebar', () => {
