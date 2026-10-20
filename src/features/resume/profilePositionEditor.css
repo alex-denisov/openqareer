@@ -237,12 +237,13 @@
   min-inline-size: 0;
 }
 
-.profile-position-editor__unit {
+.career-profile-screen-field .profile-position-editor__unit {
   flex: none;
-  color: var(--career-muted);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
 }
 
-.profile-position-editor__hint {
-  color: var(--career-muted);
+.career-profile-screen-field .profile-position-editor__hint {
+  color: var(--career-text-dim);
   font-size: var(--career-text-aux);
 }
