@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import { VACANCY_CATALOG_ENTRIES_TABLE } from '../data/sqliteSchema';
+import { INDEXED_PLACE_MIN } from './catalogIndexing';
 import {
   computeCatalogSitemaps,
   readCatalogSitemaps,
@@ -68,13 +69,21 @@ function database(rows: readonly Row[]): DatabaseSync {
   return db;
 }
 
+/** Enough Berlin rows to pass the indexed-place threshold (`INDEXED_PLACE_MIN`). */
+function berlinRows(prefix: string, posted = 6): Row[] {
+  return Array.from({ length: INDEXED_PLACE_MIN }, (_, index) => ({
+    id: `${prefix}${index}`,
+    posted,
+  }));
+}
+
 function locs(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1] ?? '');
 }
 
 describe('computeCatalogSitemaps', () => {
   it('splits the sitemap into static, listings and job files', () => {
-    const files = computeCatalogSitemaps(database([{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }]), NOW);
+    const files = computeCatalogSitemaps(database(berlinRows('a')), NOW);
     expect(files.map((file) => file.name)).toEqual([
       'sitemap-static.xml',
       'sitemap-listings.xml',
@@ -108,6 +117,7 @@ describe('computeCatalogSitemaps', () => {
         { id: 'b1', posted: 5 },
         { id: 'b2', posted: 2 },
         { id: 'b3', posted: 9, salary: null },
+        ...berlinRows('bb'),
         { id: 'one', place: 'paris' },
       ]),
       NOW,
@@ -119,7 +129,7 @@ describe('computeCatalogSitemaps', () => {
     expect(listings.xml).toContain(
       '<loc>https://openqareer.com/vacancies/berlin/frontend-developer</loc>',
     );
-    // A one-vacancy place is below the publishing threshold, as on the page itself.
+    // A one-vacancy place is below the indexing threshold, as on the page itself.
     expect(listings.xml).not.toContain('/vacancies/paris');
     expect(listings.lastmod).toBe(iso(2).slice(0, 10));
   });
@@ -200,7 +210,7 @@ describe('address policy', () => {
 
 describe('catalog_sitemaps storage', () => {
   it('replaces the stored files as a whole and reads them back', () => {
-    const db = database([{ id: 'a1' }, { id: 'a2' }, { id: 'a3' }]);
+    const db = database(berlinRows('a'));
     expect(readCatalogSitemaps(db)).toBeNull();
     writeCatalogSitemaps(db, computeCatalogSitemaps(db, NOW), NOW);
     expect(readCatalogSitemaps(db)?.map((file) => file.name)).toEqual([

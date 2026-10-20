@@ -27,6 +27,17 @@ export const POSTING_VALID_DAYS = 30;
  */
 export const DEEP_PAGE_NOINDEX_AFTER = 10;
 
+/**
+ * Thin-content rule for listings (SEO review, round 2, 20.10). A listing is
+ * published from 3 vacancies (`MIN_LISTING_SIZE`), but a page of 3 aggregated
+ * cards is a near-duplicate of those cards. Prod has 4 745 place pages and
+ * 4 531 place+role pages, most with 1–5 entries, so indexing them would spend
+ * the crawl budget on doorway-like pages. Below these counts a listing still
+ * renders (`noindex, follow`, links count) but is left out of the sitemap.
+ */
+export const INDEXED_PLACE_MIN = 10;
+export const INDEXED_PLACE_ROLE_MIN = 5;
+
 const DAY_MS = 86_400_000;
 
 export interface IndexableCardFields {
@@ -63,4 +74,9 @@ export function validThroughOf(publishedAt: string, withdrawnAt?: string): strin
 
 export function isIndexablePage(page: number): boolean {
   return page <= DEEP_PAGE_NOINDEX_AFTER;
+}
+
+/** Whether a place (or place+role) listing with `total` vacancies asks to be indexed. */
+export function isIndexableListing(total: number, hasRole: boolean): boolean {
+  return total >= (hasRole ? INDEXED_PLACE_ROLE_MIN : INDEXED_PLACE_MIN);
 }

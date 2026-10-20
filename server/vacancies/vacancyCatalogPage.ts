@@ -23,7 +23,7 @@ import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
 import { renderDescriptionHtml } from './catalogMarkdown';
 import { countLabel } from './catalogCopy';
-import { isIndexableCard, validThroughOf } from '../seo/catalogIndexing';
+import { isIndexableCard, isIndexableListing, validThroughOf } from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
 export const CATALOG_PAGE_SIZE = 24;
@@ -62,6 +62,8 @@ export interface CatalogPage {
   /** Заголовок документа и `og:title`. */
   readonly documentTitle: string;
   readonly description: string;
+  /** false — страница отдаётся с `noindex, follow` (тонкий список, см. catalogIndexing). */
+  readonly indexable?: boolean;
   readonly page: number;
   readonly pageCount: number;
   readonly total: number;
@@ -207,12 +209,12 @@ export function buildCatalogPageFromEntries(
     documentTitle:
       page > 1
         ? `Вакансии — страница ${page} · openqareer`
-        : 'Вакансии с досок работодателей и открытых площадок · openqareer',
+        : 'Вакансии и удалённая работа с сайтов работодателей · openqareer',
     description:
       total === 0
         ? 'Каталог вакансий openqareer: сейчас в нём нет ни одной записи с публичным адресом.'
-        : `${countLabel(total)} с досок работодателей и открытых площадок. ` +
-          'У каждой — источник, дата и ссылка на отклик у работодателя.',
+        : `Свежие вакансии, в том числе удалённые: ${countLabel(total)} с сайтов ` +
+          'работодателей и открытых площадок. У каждой — источник, дата и ссылка на отклик.',
     page,
     pageCount,
     total,
@@ -341,7 +343,14 @@ function listingHeading(summary: ListingSummary): string {
       ? `${summary.roleLabel} — удалённые вакансии`
       : `${summary.roleLabel} — вакансии, ${summary.placeLabel}`;
   }
-  return remote ? 'Удалённые вакансии' : `Вакансии — ${summary.placeLabel}`;
+  return remote ? 'Удалённые вакансии и удалённая работа' : `Вакансии — ${summary.placeLabel}`;
+}
+
+/** Число вакансий в title первой страницы — сниппет отвечает «сколько» до клика. */
+function listingTitle(heading: string, page: number, total: number): string {
+  return page > 1
+    ? `${heading} — страница ${page} · openqareer`
+    : `${heading}: ${countLabel(total)} · openqareer`;
 }
 
 /** Страница списка по месту и роли (B209, срез 2b). */
@@ -373,11 +382,11 @@ export function buildListingPageFromEntries(
   const canonicalPath = listingPath(summary.place, summary.role, page) ?? summary.path;
   return {
     heading,
-    documentTitle:
-      page > 1 ? `${heading} — страница ${page} · openqareer` : `${heading} · openqareer`,
+    documentTitle: listingTitle(heading, page, total),
     description:
       `${countLabel(total)}: ${heading.toLowerCase()}. ` +
       'У каждой — работодатель, источник и дата, отклик подаётся на сайте работодателя.',
+    indexable: isIndexableListing(total, Boolean(summary.role)),
     page,
     pageCount,
     total,
