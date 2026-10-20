@@ -183,6 +183,8 @@ export const syntheticResumeDraft: ResumeDraft = {
       startDate: '2013-06',
       endDate: '2017-08',
       current: false,
+      // B540: one of three places knows its team size, so the review counts the other two.
+      teamSize: 8,
       bulletMemoryIds: [],
     },
   ],
@@ -401,9 +403,24 @@ export function createCommands(): CareerCommand[] {
     'Выстроил две платёжные команды и антифрод, всего 3 направления.',
     'Выстроил две платёжные команды и антифрод, всего 3 направления; команда — 38 человек.',
   );
+  // B540: the consultant proposes the team size as the place's own field, not a bullet rewrite.
   team.proposal = {
     ...team.proposal,
     evidenceRefs: [...team.proposal.evidenceRefs, `memory:${TEAM_SIZE_ID}`],
+    resumeRevision: {
+      section: 'experience',
+      experienceId: 'block-a-experience-fintech',
+      memoryId: null,
+      field: 'teamSize',
+      proposedText: '38',
+    },
+  };
+  team.executionTarget = {
+    ...team.executionTarget,
+    memoryId: undefined,
+    field: 'teamSize',
+    currentText: '',
+    proposedText: '38',
   };
   const dates = suggestionCommand(
     'block-a-command-marketing-dates',

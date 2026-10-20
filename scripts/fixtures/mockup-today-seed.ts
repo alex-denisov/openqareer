@@ -57,14 +57,24 @@ function daysAgo(now: Date, days: number, hourUtc = 9): string {
   return date.toISOString();
 }
 
+/** B540: three favorites ask to lead a team «от 50 человек», as in mockup 1's decision. */
+const TEAM_SIZE_NOTES = 'Требование вакансии: опыт управления инженерной командой от 50 человек.';
+const FAVORITES_ASKING_TEAM_SIZE = 3;
+
 function seedFavorites(store: MockupSeedStore, candidateId: string, now: Date): void {
   FAVORITES.forEach((company, index) => {
-    store.createApplication(candidateId, {
+    const created = store.createApplication(candidateId, {
       clusterId: `mockup-favorite-${index}`,
       manualVacancy: vacancy(company, 'CTO'),
       stage: 'saved',
       occurredAt: daysAgo(now, 2 + index),
     });
+    if (index < FAVORITES_ASKING_TEAM_SIZE) {
+      store.patchApplication(candidateId, created.id, {
+        expectedVersion: created.version,
+        notes: TEAM_SIZE_NOTES,
+      });
+    }
   });
 }
 
