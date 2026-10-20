@@ -37,10 +37,19 @@ import {
   queueDesktopSubtitle,
   queueKey,
 } from './todayFormat';
-import { todayFunnelBasis, todayFunnelStages, type TodayFunnelContext } from './todayFunnelData';
+import {
+  todayFunnelBasis,
+  todayFunnelHint,
+  todayFunnelStages,
+  type TodayFunnelContext,
+} from './todayFunnelData';
 import { useCanOpenQueueItem, useOpenQueueItem } from './todayQueueOpen';
 
 export type { TodayFunnelContext } from './todayFunnelData';
+
+/** Подсказка «Пояснение» у «Очередь дня», дословно по макету 1. */
+export const TODAY_QUEUE_HINT =
+  'Только то, у чего есть срок или что ждёт вашего ответа: ответ рекрутера, одобрение черновика, интервью. Заполнение профиля сюда не попадает, оно в полосе выше.';
 
 interface TodayDesktopContentProps {
   readonly snapshot: TodaySnapshot;
@@ -600,12 +609,8 @@ function TodayQueueHeader({ queueTotal }: { readonly queueTotal: number }) {
       <div className="career-today-queue-heading">
         <h2>Очередь дня</h2>
         <span className="career-today-queue-count">{queueTotal}</span>
-        <CareerTooltip content="Решения, которые ждут вашего действия.">
-          <button
-            type="button"
-            className="career-today-info-button"
-            aria-label="О составе очереди дня"
-          >
+        <CareerTooltip content={TODAY_QUEUE_HINT}>
+          <button type="button" className="career-today-info-button" aria-label="Пояснение">
             <Info size="1em" aria-hidden="true" />
           </button>
         </CareerTooltip>
@@ -722,12 +727,8 @@ function TodayFunnel({
     <section className="career-today-funnel" aria-label="Воронка за 30 дней">
       <header>
         <h2>Воронка за 30 дней</h2>
-        <CareerTooltip content="Отклики — по подтверждениям отправки, интервью — по сохранённым датам встреч, ответы и офферы — по стадиям откликов за 30 дней, найдено — по каталогу подбора.">
-          <button
-            type="button"
-            className="career-today-info-button"
-            aria-label="Об источнике данных воронки"
-          >
+        <CareerTooltip content={todayFunnelHint(stages, snapshot.momentum?.calculatedAt)}>
+          <button type="button" className="career-today-info-button" aria-label="Пояснение">
             <Info size="1em" aria-hidden="true" />
           </button>
         </CareerTooltip>

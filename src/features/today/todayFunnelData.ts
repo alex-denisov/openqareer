@@ -102,3 +102,21 @@ export function todayFunnelFootnote(
     .filter(Boolean)
     .join(' ');
 }
+
+/** Подсказка «Пояснение» у «Воронка за 30 дней» на 1440, дословно по макету 1. */
+export function todayFunnelHint(
+  stages: readonly TodayFunnelStage[],
+  calculatedAt: string | undefined,
+): string {
+  const date = funnelDateTime(calculatedAt);
+  const applied = stageValue(stages, 'applied');
+  return [
+    date ? `Ваши данные на ${date};` : 'Ваши данные;',
+    '«найдено» — каталог openqareer на ту же дату.',
+    applied !== 'unknown' && applied < LOW_SAMPLE
+      ? `Откликов меньше ${LOW_SAMPLE}: на выводы о конверсии это не годится.`
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
