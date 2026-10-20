@@ -521,3 +521,42 @@ describe('experience description contract', () => {
     expect(onSave.mock.calls[0]?.[0].skills).toEqual(['Go', 'python', 'TypeScript']);
   });
 });
+
+describe('PositionEditForm team size (B540)', () => {
+  function changeTeamSize(container: HTMLElement, value: string) {
+    const input = container.querySelector<HTMLInputElement>('input[name="teamSize"]')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, value);
+    act(() => input.dispatchEvent(new Event('input', { bubbles: true })));
+  }
+
+  it('saves the team size with the place in one PUT', async () => {
+    const { container, onSave, onDone } = renderEditor();
+    const input = container.querySelector<HTMLInputElement>('input[name="teamSize"]');
+    expect(input?.closest('label')?.textContent).toContain('Размер команды');
+    expect(input?.closest('label')?.textContent).toContain('человек');
+    changeTeamSize(container, '38');
+    await submitForm(container);
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ teamSize: 38 });
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it('keeps an unknown team size unknown and shows the stored one', async () => {
+    const { container, onSave } = renderEditor({ entry: { ...entry, teamSize: 12 } });
+    expect(container.querySelector<HTMLInputElement>('input[name="teamSize"]')?.value).toBe('12');
+    changeTeamSize(container, '');
+    await submitForm(container);
+    expect(onSave.mock.calls[0]?.[0]).toMatchObject({ teamSize: undefined });
+  });
+
+  it('refuses a team size that is not a whole number of people', async () => {
+    const { container, onSave } = renderEditor();
+    changeTeamSize(container, '0');
+    await submitForm(container);
+    expect(onSave).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      'Размер команды — целое число людей, от 1. Текст остался в форме.',
+    );
+  });
+});

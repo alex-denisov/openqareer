@@ -88,6 +88,19 @@ function MobileIdentityFields({ form }: { readonly form: PositionFormState }) {
         onChange={form.setLocation}
         placeholder="Город"
       />
+      <label className="pm-field profile-mobile-team-size">
+        <span>Размер команды</span>
+        <input
+          name="teamSize"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="неизвестно"
+          value={form.teamSize}
+          aria-invalid={form.teamSizeInvalid || undefined}
+          onChange={(event) => form.setTeamSize(event.target.value)}
+        />
+        <span className="profile-mobile-team-size__unit">человек</span>
+      </label>
     </ProfileMobileGroup>
   );
 }

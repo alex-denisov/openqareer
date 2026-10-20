@@ -30,6 +30,8 @@ interface PositionFormBasics {
   readonly setWorkplaceType: ValueSetter<WorkplaceType | ''>;
   readonly current: boolean;
   readonly setCurrent: ValueSetter<boolean>;
+  readonly teamSize: string;
+  readonly setTeamSize: ValueSetter<string>;
 }
 
 interface PositionFormFacts {
@@ -47,6 +49,18 @@ interface PositionFormFacts {
 
 export interface PositionFormState extends PositionFormBasics, PositionFormFacts {
   readonly patch: Partial<ResumeExperienceInput>;
+  readonly teamSizeInvalid: boolean;
+}
+
+const TEAM_SIZE_PATTERN = /^\d{1,6}$/u;
+
+/** Empty means unknown; anything else must be a whole number of people from 1. */
+export function parseTeamSize(value: string): number | undefined | null {
+  const text = value.trim();
+  if (!text) return undefined;
+  if (!TEAM_SIZE_PATTERN.test(text)) return null;
+  const size = Number(text);
+  return size >= 1 && size <= 100_000 ? size : null;
 }
 
 function useSynchronizedPositionMonth(value: string | undefined) {
@@ -75,6 +89,7 @@ function usePositionFormBasics(entry: ResumeExperienceInput): PositionFormBasics
   const [employmentType, setEmploymentType] = useState(entry.employmentType ?? '');
   const [workplaceType, setWorkplaceType] = useState<WorkplaceType | ''>(entry.workplaceType ?? '');
   const [current, setCurrent] = useState(entry.current);
+  const [teamSize, setTeamSize] = useState(entry.teamSize ? String(entry.teamSize) : '');
   return {
     title,
     setTitle,
@@ -95,6 +110,8 @@ function usePositionFormBasics(entry: ResumeExperienceInput): PositionFormBasics
     setWorkplaceType,
     current,
     setCurrent,
+    teamSize,
+    setTeamSize,
   };
 }
 
@@ -152,9 +169,11 @@ export function usePositionFormState(
 ): PositionFormState {
   const basics = usePositionFormBasics(entry);
   const facts = usePositionFormFacts(entry, memory);
+  const teamSize = parseTeamSize(basics.teamSize);
   return {
     ...basics,
     ...facts,
+    teamSizeInvalid: teamSize === null,
     patch: {
       title: basics.title,
       employer: basics.employer,
@@ -171,6 +190,7 @@ export function usePositionFormState(
       location: basics.location,
       employmentType: basics.employmentType || undefined,
       workplaceType: basics.workplaceType || undefined,
+      teamSize: teamSize ?? undefined,
       skills: normalizedPositionSkills(basics.skills),
       descriptionMemoryId: entry.descriptionMemoryId,
       bulletMemoryIds: facts.selectedFactIds,
@@ -316,6 +336,10 @@ export function usePositionSubmit(props: PositionEditorProps, form: PositionForm
         );
         return;
       }
+      if (form.teamSizeInvalid) {
+        setError('Размер команды — целое число людей, от 1. Текст остался в форме.');
+        return;
+      }
       if ((await props.onSave(form.patch)) === false) {
         setError('Изменения не сохранены. Повторите сохранение после устранения ошибки.');
         return;
@@ -389,6 +413,27 @@ function PositionWorkplaceFields({ form }: { readonly form: PositionFormState })
         </div>
       </fieldset>
     </div>
+  );
+}
+
+function PositionTeamSizeField({ form }: { readonly form: PositionFormState }) {
+  return (
+    <label className="career-profile-screen-field profile-position-editor__team-size">
+      <span>Размер команды</span>
+      <span className="profile-position-editor__unit-input">
+        <input
+          type="text"
+          name="teamSize"
+          inputMode="numeric"
+          autoComplete="off"
+          placeholder="неизвестно"
+          value={form.teamSize}
+          aria-invalid={form.teamSizeInvalid || undefined}
+          onChange={(event) => form.setTeamSize(event.target.value)}
+        />
+        <span className="profile-position-editor__unit">человек</span>
+      </span>
+    </label>
   );
 }
 
@@ -649,6 +694,7 @@ export function PositionEditForm(props: PositionEditorProps) {
       <PositionIdentityFields form={form} />
       <PositionScheduleFields form={form} />
       <PositionWorkplaceFields form={form} />
+      <PositionTeamSizeField form={form} />
       <label className="career-profile-screen-field profile-position-editor__description">
         <span>Описание</span>
         <textarea
