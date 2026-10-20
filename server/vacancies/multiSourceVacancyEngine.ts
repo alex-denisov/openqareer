@@ -111,6 +111,8 @@ export interface VacancyDescriptionPreloadSummary {
 }
 
 const MAX_PERSISTED_DESCRIPTION_IDS = 2_000;
+/** How long catalog listing counts are reused between maintenance passes. */
+const LISTINGS_CACHE_MS = 5 * 60_000;
 
 /**
  * What one sync actually did. `syncSource` used to return `void`, so an admin
@@ -305,6 +307,9 @@ function extractErrorHttpDetails(err: unknown): { statusCode?: number; retryAfte
 }
 
 export class MultiSourceVacancyEngine {
+  private listingsCache: { at: number; value: CatalogListingSummary[] | undefined } | null = null;
+  private readonly now: () => number = () => Date.now();
+
   private sources: Map<string, VacancySourceConfig> = new Map();
   private clusters: VacancyCluster[] = [];
   private clusterBuilder?: IncrementalClusterBuilder;
@@ -747,7 +752,16 @@ export class MultiSourceVacancyEngine {
       return undefined;
     }
     if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
-    return this.pool.loadCatalogListings();
+    // The GROUP BY over the whole projection took ~1.8 s on prod and ran on
+    // the event loop for every listing page; counts move only with
+    // maintenance, so a short-lived copy is enough (B535).
+    const now = this.now();
+    if (this.listingsCache && now - this.listingsCache.at < LISTINGS_CACHE_MS) {
+      return this.listingsCache.value;
+    }
+    const value = this.pool.loadCatalogListings();
+    this.listingsCache = { at: now, value };
+    return value;
   }
 
   public getPublicCatalogEntry(key: string): CatalogEntryRow | undefined {
