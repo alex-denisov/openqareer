@@ -1,5 +1,11 @@
 import type { ReactElement } from 'react';
-import { ArrowsClockwise, ChatCircleText, CircleNotch, Info, WarningCircle } from '@phosphor-icons/react';
+import {
+  ArrowsClockwise,
+  ChatCircleText,
+  CircleNotch,
+  Info,
+  WarningCircle,
+} from '@phosphor-icons/react';
 
 import { EMPTY_SOURCES_TEXT, SESSION_ERROR_TEXT } from './firstRunSpecialState';
 

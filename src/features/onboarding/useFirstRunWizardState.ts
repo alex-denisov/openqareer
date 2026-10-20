@@ -100,6 +100,12 @@ export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
     setStep('context');
   };
 
+  /** «Рассказать консультанту»: путь без источника ведёт сразу на шаг 3 (B538). */
+  const handleChooseTalk = () => {
+    setData((current) => skipSourceStep(current));
+    setStep('context');
+  };
+
   const handleUndoSkip = () => {
     setData((current) => restoreSourceStep(current, 'linkedin'));
     dialogs.setIsSkippedToastVisible(false);
@@ -113,6 +119,7 @@ export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
     setData,
     ...dialogs,
     handleConfirmSkip,
+    handleChooseTalk,
     handleUndoSkip,
     ...upload,
     handleSelectSource: (source: SourceType) =>

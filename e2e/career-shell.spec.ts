@@ -547,9 +547,7 @@ test('offers a retry when the server does not answer, then recovers', async ({
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('names the subject of a slow session read after four seconds', async ({
-  page,
-}, testInfo) => {
+test('names the subject of a slow session read after four seconds', async ({ page }, testInfo) => {
   let releaseSession!: () => void;
   const sessionGate = new Promise<void>((resolve) => {
     releaseSession = resolve;

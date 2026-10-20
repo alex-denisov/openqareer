@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { CandidateConnection } from '../src/features/coach/coachApi';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { firstRunResumeFile } from './helpers/advance-first-run-source.mjs';
 
 /**
  * B538 — шесть состояний экрана 0 «Вход и первый запуск» из реальных условий:
@@ -140,4 +141,48 @@ test('partial: exactly one connector on the server is named', async ({ page }) =
   await expect(page.getByTestId('first-run-partial-sources')).toHaveText(
     'LinkedIn подключён, hh.ru нет: доступно после подключения hh.ru.',
   );
+});
+
+test('empty: «Рассказать консультанту → Начать» goes to step 3 without a source', async ({
+  page,
+}, info) => {
+  await openNewCandidate(page);
+  await reachSourceStep(page);
+  await page.getByTestId('source-opt-talk').click();
+  if (info.project.name === 'mobile-390') await page.getByTestId('source-next-btn').click();
+  await expect(page.getByTestId('first-run-wizard')).toHaveAttribute('data-step', 'context');
+  await expect(page.getByTestId('first-run-empty-sources')).toContainText(
+    'Источник не выбран. Можно рассказать консультанту, профиль соберётся из ответов.',
+  );
+  const sheet = page.locator('#career-consultant-sheet');
+  if (info.project.name === 'mobile-390') {
+    await expect(sheet).toHaveAttribute('data-mobile-expanded', 'true');
+  } else {
+    await expect(sheet).not.toHaveClass(/consultant-strip/);
+  }
+});
+
+test('1440: «Загрузить» opens the system file picker and a long read names the file', async ({
+  page,
+}, info) => {
+  test.skip(info.project.name !== 'desktop-1440', 'The 390 layout keeps its own file menu');
+  await openNewCandidate(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/v1/candidate/resume/import', async (route) => {
+    await gate;
+    return route.fallback();
+  });
+  await reachSourceStep(page);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByTestId('source-opt-file').click();
+  await (await chooser).setFiles(firstRunResumeFile());
+  await expect(page.getByTestId('first-run-source-menu')).toHaveCount(0);
+  await expect(page.getByTestId('first-run-stale-loading')).toHaveText('Читаем файл: resume.docx', {
+    timeout: 15_000,
+  });
+  release();
+  await expect(page.getByTestId('first-run-stale-loading')).toHaveCount(0, { timeout: 15_000 });
 });
