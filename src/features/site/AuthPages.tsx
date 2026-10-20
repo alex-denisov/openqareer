@@ -2,18 +2,9 @@ import '../site/landing.css';
 import './auth.css';
 import React, { useState } from 'react';
 import { preloadCareerWorkspaceShell } from '../shell/careerWorkspaceLoader';
-import {
-  login,
-  register,
-  CoachApiError,
-  type AuthUser,
-} from '../coach/coachApi';
+import { login, register, CoachApiError, type AuthUser } from '../coach/coachApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
-import {
-  LEGAL_DOCS,
-  LEGAL_PACK_VERSION_ID,
-  legalPath,
-} from '../../../shared/legalRegistry';
+import { LEGAL_DOCS, LEGAL_PACK_VERSION_ID, legalPath } from '../../../shared/legalRegistry';
 import { AuthCardHeader, AuthInputField } from './AuthPageComponents';
 
 export { AuthCardHeader, AuthInputField };
@@ -52,7 +43,7 @@ function useLoginForm({
     setFieldErrors({});
 
     if (!identifier.trim()) return setFieldErrors({ username: 'Укажите email или логин' });
-    if (!password) return setFieldErrors({ password: 'Длина пароля — от 8 символов' });
+    if (!password) return setFieldErrors({ password: 'Введите пароль' });
 
     setBusy(true);
     try {
@@ -77,7 +68,16 @@ function useLoginForm({
     }
   };
 
-  return { identifier, setIdentifier, password, setPassword, busy, error, fieldErrors, handleSubmit };
+  return {
+    identifier,
+    setIdentifier,
+    password,
+    setPassword,
+    busy,
+    error,
+    fieldErrors,
+    handleSubmit,
+  };
 }
 
 function LoginFormFields({
@@ -158,12 +158,21 @@ function LoginForm({
   );
 }
 
-export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app', notice }: AuthPageProps) {
+export function LoginPage({
+  onNavigate,
+  onSessionChange,
+  nextPath = '/app',
+  notice,
+}: AuthPageProps) {
   const isDesktop = isTauriEnvironment();
   return (
     <div className="auth-page-container">
       <div className="auth-card">
-        <AuthCardHeader title="Вход в кабинет" subtitle="Введите ваш email или логин для доступа к профилю" onNavigate={onNavigate} />
+        <AuthCardHeader
+          title="Вход в кабинет"
+          subtitle="Введите ваш email или логин для доступа к профилю"
+          onNavigate={onNavigate}
+        />
         {notice ? (
           <p className="auth-notice" role="status">
             {notice}
@@ -171,9 +180,16 @@ export function LoginPage({ onNavigate, onSessionChange, nextPath = '/app', noti
         ) : null}
         <LoginForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
-          <span>Ещё нет аккаунта? <button type="button" onClick={() => onNavigate('/signup')}>Зарегистрироваться</button></span>
+          <span>
+            Ещё нет аккаунта?{' '}
+            <button type="button" onClick={() => onNavigate('/signup')}>
+              Зарегистрироваться
+            </button>
+          </span>
           {!isDesktop ? (
-            <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+            <button type="button" onClick={() => onNavigate('/')}>
+              ← Вернуться на главную
+            </button>
           ) : null}
         </div>
       </div>
@@ -378,12 +394,23 @@ export function SignupPage({ onNavigate, onSessionChange, nextPath = '/app' }: A
   return (
     <div className="auth-page-container">
       <div className="auth-card">
-        <AuthCardHeader title="Создать аккаунт" subtitle="Соберите профиль и получите подходящие вакансии" onNavigate={onNavigate} />
+        <AuthCardHeader
+          title="Создать аккаунт"
+          subtitle="Загрузите резюме: соберём профиль, проверим на ATS и покажем вакансии с процентом совпадения. Старт бесплатно."
+          onNavigate={onNavigate}
+        />
         <SignupForm onNavigate={onNavigate} onSessionChange={onSessionChange} nextPath={nextPath} />
         <div className="auth-links">
-          <span>Уже есть аккаунт? <button type="button" onClick={() => onNavigate('/login')}>Войти</button></span>
+          <span>
+            Уже есть аккаунт?{' '}
+            <button type="button" onClick={() => onNavigate('/login')}>
+              Войти
+            </button>
+          </span>
           {!isDesktop ? (
-            <button type="button" onClick={() => onNavigate('/')}>← Вернуться на главную</button>
+            <button type="button" onClick={() => onNavigate('/')}>
+              ← Вернуться на главную
+            </button>
           ) : null}
         </div>
       </div>

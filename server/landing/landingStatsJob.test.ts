@@ -147,3 +147,11 @@ describe('cleanLandingTitle', () => {
     expect(cleanLandingTitle('Аналитик данных #remote #fulltime')).toBe('Аналитик данных');
   });
 });
+
+describe('formatLandingSalary with equal ends', () => {
+  it('prints one number instead of «60–60»', () => {
+    expect(formatLandingSalary({ from: 60_000, to: 60_000, currency: 'USD' })).toBe(
+      '$60 тыс. в год',
+    );
+  });
+});

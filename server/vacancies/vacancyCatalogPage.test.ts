@@ -198,7 +198,7 @@ describe('страница публичного каталога ваканси�
     const to = buildVacancyDetail(cluster({ salary: { to: 90000 } }))!;
     // `toLocaleString('ru-RU')` разделяет разряды неразрывным пробелом —
     // сравниваем с тем же форматированием, а не с набранным руками.
-    expect(from.entry.salaryLabel).toBe(`от ${(150000).toLocaleString('ru-RU')} RUB`);
+    expect(from.entry.salaryLabel).toBe(`от ${(150000).toLocaleString('ru-RU')} ₽`);
     expect(to.entry.salaryLabel).toBe(`до ${(90000).toLocaleString('ru-RU')}`);
   });
 
@@ -286,5 +286,14 @@ describe('страница списка каталога (B209, срез 2b)', (
     const page = buildListingPage([cluster()], summary, 1);
     const crumbs = page.jsonLd['@graph'].find((node) => node['@type'] === 'BreadcrumbList');
     expect(JSON.stringify(crumbs)).toContain('/vacancies/moscow/frontend-developer');
+  });
+});
+
+describe('видимая зарплата каталога', () => {
+  it('печатает одно число, когда концы вилки равны, и знак вместо кода валюты', () => {
+    const detail = buildVacancyDetail(
+      cluster({ salary: { from: 125000, to: 125000, currency: 'RUR' } }),
+    )!;
+    expect(detail.entry.salaryLabel).toBe(`${(125000).toLocaleString('ru-RU')} ₽`);
   });
 });

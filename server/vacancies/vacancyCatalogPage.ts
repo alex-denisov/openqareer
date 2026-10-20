@@ -92,16 +92,31 @@ function isoDate(value: string): string {
   return value.slice(0, 10);
 }
 
+const CURRENCY_LABEL: Readonly<Record<string, string>> = {
+  RUR: '₽',
+  RUB: '₽',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  KZT: '₸',
+  BYN: 'Br',
+  UAH: '₴',
+};
+
 function salaryLabel(cluster: VacancyCluster): string | undefined {
   const salary = cluster.salary;
   if (!salary || (salary.from === undefined && salary.to === undefined)) return undefined;
-  const currency = salary.currency ? ` ${salary.currency}` : '';
+  const code = salary.currency?.toUpperCase() ?? '';
+  const currency = code ? ` ${CURRENCY_LABEL[code] ?? code}` : '';
+  const money = (value: number) => value.toLocaleString('ru-RU');
   if (salary.from !== undefined && salary.to !== undefined) {
-    return `${salary.from.toLocaleString('ru-RU')} — ${salary.to.toLocaleString('ru-RU')}${currency}`;
+    // «125 000 — 125 000» is one number.
+    if (salary.from === salary.to) return `${money(salary.from)}${currency}`;
+    return `${money(salary.from)} — ${money(salary.to)}${currency}`;
   }
   const single = salary.from ?? salary.to;
   const prefix = salary.from !== undefined ? 'от' : 'до';
-  return `${prefix} ${single!.toLocaleString('ru-RU')}${currency}`;
+  return `${prefix} ${money(single!)}${currency}`;
 }
 
 /** Карточка каталога, или `null`, если правило адресов не даёт вакансии адрес. */
@@ -242,6 +257,29 @@ export function buildCatalogPageFromEntries(
   };
 }
 
+/** hh.ru and a few boards still send pre-ISO codes; schema.org wants ISO 4217. */
+const LEGACY_CURRENCY: Readonly<Record<string, string>> = { RUR: 'RUB', BYR: 'BYN' };
+
+function isoCurrency(code: string): string {
+  const upper = code.trim().toUpperCase();
+  return LEGACY_CURRENCY[upper] ?? upper;
+}
+
+/**
+ * The pool stores no pay period. Boards in these currencies publish annual
+ * ranges (Workday, Greenhouse: «69 800 — 125 900 USD»); a monthly figure of
+ * that size is implausible, so such a range is marked YEAR, everything else
+ * keeps MONTH (hh.ru, regional boards).
+ */
+const ANNUAL_RANGE_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF']);
+const ANNUAL_RANGE_MIN = 20_000;
+
+function salaryUnit(salary: { from?: number; to?: number; currency?: string }): 'MONTH' | 'YEAR' {
+  const currency = salary.currency ? isoCurrency(salary.currency) : '';
+  const top = Math.max(salary.from ?? 0, salary.to ?? 0);
+  return ANNUAL_RANGE_CURRENCIES.has(currency) && top >= ANNUAL_RANGE_MIN ? 'YEAR' : 'MONTH';
+}
+
 function jobPosting(
   cluster: VacancyCluster,
   entry: CatalogEntry,
@@ -284,12 +322,12 @@ function jobPosting(
       ? {
           baseSalary: {
             '@type': 'MonetaryAmount',
-            ...(salary.currency ? { currency: salary.currency } : {}),
+            ...(salary.currency ? { currency: isoCurrency(salary.currency) } : {}),
             value: {
               '@type': 'QuantitativeValue',
               ...(salary.from !== undefined ? { minValue: salary.from } : {}),
               ...(salary.to !== undefined ? { maxValue: salary.to } : {}),
-              unitText: 'MONTH',
+              unitText: salaryUnit(salary),
             },
           },
         }
@@ -384,7 +422,7 @@ export function buildListingPageFromEntries(
     heading,
     documentTitle: listingTitle(heading, page, total),
     description:
-      `${countLabel(total)}: ${heading.toLowerCase()}. ` +
+      `${heading}: ${countLabel(total)}. ` +
       'У каждой — работодатель, источник и дата, отклик подаётся на сайте работодателя.',
     indexable: isIndexableListing(total, Boolean(summary.role)),
     page,

@@ -57,10 +57,10 @@ export function catalogRoleOf(
 ): { slug: string; label: string } | null {
   const slug = buildVacancySlug(entry.title.replace(TITLE_NOISE, ' '));
   if (!slug) return null;
-  const label = slug
-    .split('-')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  // The label is the title as published («Программист 1С», «QA Engineer»):
+  // rebuilding it from the slug gave «Programmist 1c» and «Qa».
+  const cleaned = entry.title.replace(TITLE_NOISE, ' ').replace(/\s+/gu, ' ').trim();
+  const label = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
   return { slug, label };
 }
 

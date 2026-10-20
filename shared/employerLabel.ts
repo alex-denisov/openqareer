@@ -6,7 +6,9 @@ export const EMPLOYER_NOT_NAMED = 'Работодатель не указан';
 
 export function employerLabel(company: string | undefined): string {
   const value = company?.trim() ?? '';
-  return value.length > 0 ? value : EMPLOYER_NOT_NAMED;
+  // Some boards fill the field with a placeholder instead of leaving it empty.
+  const placeholder = /^(?:unavailable|n\/a|na|none|null|undefined|confidential|-+)$/iu;
+  return value.length > 0 && !placeholder.test(value) ? value : EMPLOYER_NOT_NAMED;
 }
 
 const GENERIC_MARKERS = /\b(?:top-tier|institution|platform)\b/iu;
@@ -96,4 +98,3 @@ export function partitionEmployers(employers: readonly (string | undefined)[]): 
     unidentifiedEmployers: [...unidentified],
   };
 }
-

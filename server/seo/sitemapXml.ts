@@ -92,14 +92,22 @@ function file(name: string, urls: readonly SitemapUrl[]): SitemapFile {
   };
 }
 
-export function staticSitemapUrls(): SitemapUrl[] {
+/**
+ * Last content change of the landing and the help pages (B535 release).
+ * Bump it with any text change there: a stale or missing lastmod makes
+ * crawlers re-fetch by guess instead of by signal.
+ */
+export const PUBLIC_PAGES_UPDATED_AT = '2026-10-20';
+
+/** `catalogLastmod` — the freshest listing date; the catalog root changes with it. */
+export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
   return [
-    { path: '/' },
+    { path: '/', lastmod: PUBLIC_PAGES_UPDATED_AT },
     // B535: help pages next to the landing.
-    { path: '/faq' },
-    { path: '/support' },
+    { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
+    { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
     ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
-    { path: CATALOG_ROOT },
+    { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
   ];
 }
 
@@ -111,7 +119,7 @@ export function buildSitemapFiles(input: {
   readonly listings: readonly SitemapUrl[];
   readonly jobs: readonly SitemapUrl[];
 }): SitemapFile[] {
-  const files = [file(STATIC_SITEMAP, staticSitemapUrls())];
+  const files = [file(STATIC_SITEMAP, staticSitemapUrls(newest(input.listings)))];
   const listings = input.listings.slice(0, SITEMAP_FILE_URL_LIMIT);
   if (listings.length > 0) files.push(file(LISTINGS_SITEMAP, listings));
   for (let start = 0; start < input.jobs.length; start += SITEMAP_FILE_URL_LIMIT) {
