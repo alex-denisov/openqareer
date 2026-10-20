@@ -1,7 +1,5 @@
-import { useState } from 'react';
 import {
   Bell,
-  BellSimple,
   ChatsCircle,
   PaperPlaneTilt,
   Target,
@@ -12,7 +10,6 @@ import {
   Info,
   LinkedinLogo,
   ListChecks,
-  X,
 } from '@phosphor-icons/react';
 import './today-desktop.css';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
@@ -23,13 +20,13 @@ import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfile
 import { TodayLinkedinNote } from './TodayLinkedinNote';
 import { TODAY_DIARY_FOOTNOTE } from './todayDiaryDecision';
 import {
+  dismissTodayChanges,
   type TodayProfileFocus,
   type TodayQueueItem,
-  type TodaySinceLastVisit,
   type TodaySnapshot,
 } from './todayApi';
+import { TodayChangesNotice } from './TodayChangesNotice';
 import {
-  buildReturningDigestItems,
   consultantTargetView,
   formatQueueTitle,
   queueActionTitle,
@@ -71,15 +68,13 @@ interface TodayDesktopContentProps {
 }
 
 export function TodayDesktopContent(props: TodayDesktopContentProps) {
-  const [noticeDismissed, setNoticeDismissed] = useState(false);
   return (
     <div className="career-today-desktop">
-      {!noticeDismissed ? (
-        <TodayChangesNotice
-          sinceLastVisit={props.snapshot.sinceLastVisit}
-          onDismiss={() => setNoticeDismissed(true)}
-        />
-      ) : null}
+      <TodayChangesNotice
+        sinceLastVisit={props.snapshot.sinceLastVisit}
+        onNavigate={props.onNavigate}
+        onDismiss={dismissTodayChanges}
+      />
       {props.profileDraft ? (
         <TodayProfileProgressView
           draft={props.profileDraft}
@@ -146,86 +141,6 @@ function TodayDecisionSection({
       postponeError={postponeError}
       onNavigate={onNavigate}
     />
-  );
-}
-
-function shortDateTime(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return undefined;
-  return new Intl.DateTimeFormat('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
-}
-
-function changeLabels(sinceLastVisit: TodaySinceLastVisit): readonly string[] {
-  const reportedChanges = sinceLastVisit.items.map((item) => item.trim()).filter(Boolean);
-  const reportedKinds = new Set(
-    reportedChanges.map((item) =>
-      /вакан/u.test(item)
-        ? 'vacancies'
-        : /отклик/u.test(item)
-          ? 'applications'
-          : /интерв/u.test(item)
-            ? 'interview'
-            : 'other',
-    ),
-  );
-  const derivedChanges = buildReturningDigestItems({
-    since: sinceLastVisit.since,
-    newVacanciesCount: sinceLastVisit.newVacanciesCount ?? 0,
-    applicationsWaitingOver7Days: sinceLastVisit.applicationsWaitingOver7Days ?? 0,
-    nearestInterview: sinceLastVisit.nearestInterview ?? null,
-  })
-    .filter((item) => !reportedKinds.has(item.id))
-    .map((item) => {
-      if (item.id !== 'interview' || !sinceLastVisit.nearestInterview) return item.label;
-      return `${sinceLastVisit.nearestInterview.company ?? sinceLastVisit.nearestInterview.title} · ${item.label}`;
-    });
-  return [...reportedChanges, ...derivedChanges];
-}
-
-function TodayChangesNotice({
-  sinceLastVisit,
-  onDismiss,
-}: {
-  readonly sinceLastVisit: TodaySinceLastVisit;
-  readonly onDismiss: () => void;
-}) {
-  const changes = changeLabels(sinceLastVisit);
-  const since = shortDateTime(sinceLastVisit.since ?? undefined);
-  if (!changes.length || !since) return null;
-  return (
-    <section className="career-today-changes" aria-label="Изменения с прошлого визита">
-      <BellSimple size="1em" aria-hidden="true" />
-      <p>
-        <span className="career-today-changes-since">С {since}:</span>
-        <span className="career-today-changes-summary">{changes.join(' · ')}</span>
-        <button
-          className="career-today-changes-link"
-          type="button"
-          onClick={() => {
-            const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-            document
-              .getElementById('today-queue')
-              ?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' });
-          }}
-        >
-          Смотреть
-        </button>
-      </p>
-      <button
-        className="career-today-changes-close"
-        type="button"
-        aria-label="Скрыть уведомление"
-        onClick={onDismiss}
-      >
-        <X size="1em" aria-hidden="true" />
-      </button>
-    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 import { dativeNameRu } from './dativeNameRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type {
+  TodayChange,
   TodayDigest,
   TodayFollowUp,
   TodayNewVacanciesCaption,
@@ -415,4 +416,26 @@ export function queueMobileSubtitle(item: TodayQueueItem, overdue: boolean): str
   if (item.kind === 'interview') return `${company} · ${queueDateLabel(item.dueAt, item.kind)}`;
   const line = [company, queueDetail(item)].filter(Boolean).join(' · ');
   return item.kind === 'follow_up' && overdue ? `${line}. Срок вышел` : line;
+}
+
+/** Фраза полосы изменений по макету 1: «+14 вакансий подходят по роли, Вектор Банк открыл письмо.» */
+export function todayChangesSentence(changes: readonly TodayChange[]): string {
+  const parts = changes.map((change) => {
+    if (change.kind === 'vacancies') {
+      return `+${pluralRu(change.count, [
+        'вакансия подходит',
+        'вакансии подходят',
+        'вакансий подходят',
+      ])} по роли`;
+    }
+    return change.kind === 'letter_opened'
+      ? `${change.company} открыл письмо`
+      : `${change.company} ответил на отклик`;
+  });
+  return parts.length ? `${parts.join(', ')}.` : '';
+}
+
+/** «Смотреть» ведёт к первому событию: вакансии — в «Вакансии», письмо и ответ — в «Отклики». */
+export function todayChangeTarget(change: TodayChange): CareerCabinetView {
+  return change.kind === 'vacancies' ? 'opportunities' : 'responses';
 }

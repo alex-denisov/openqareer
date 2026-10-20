@@ -987,6 +987,20 @@ test.describe('B251 today screen', () => {
       sinceLastVisit: {
         since: '2026-09-24T10:00:00.000Z',
         items: ['3 новые вакансии по VP Technology Ops'],
+        changes: [
+          {
+            kind: 'vacancies',
+            count: 3,
+            role: 'VP Technology Ops',
+            at: '2026-09-25T08:00:00.000Z',
+          },
+          {
+            kind: 'letter_opened',
+            company: 'HRTx Inc.',
+            applicationId: 'app-hrtx',
+            at: '2026-09-25T09:00:00.000Z',
+          },
+        ],
         newVacanciesCount: 3,
         applicationsWaitingOver7Days: 1,
         nearestInterview: {
@@ -1032,14 +1046,20 @@ test.describe('B251 today screen', () => {
     const notice = page.getByRole('button', { name: 'Смотреть', exact: true });
     await expect(notice).toBeVisible();
     const changesStrip = page.locator('.career-today-changes');
-    await expect(changesStrip.getByText(/3 новые вакансии по VP Technology Ops/u)).toBeVisible();
-    await expect(changesStrip.getByText(/1 отклик ждёт ответа больше 7 дней/u)).toBeVisible();
-    await expect(changesStrip.getByText(/HRTx Inc\..*ближайшее интервью/u)).toBeVisible();
+    await expect(changesStrip).toContainText(
+      '+3 вакансии подходят по роли, HRTx Inc. открыл письмо. Смотреть',
+    );
     await expect(page.locator('.career-today-mobile .career-today-return-banner')).toHaveCount(0);
     await captureS10Today(page, 'today-changes-1440');
 
+    let dismissals = 0;
+    await page.route('**/api/v1/candidate/today/changes/dismiss', async (route) => {
+      dismissals += 1;
+      return route.fulfill({ json: { data: { dismissedAt: '2026-09-25T10:00:00.000Z' } } });
+    });
     await page.getByRole('button', { name: 'Скрыть уведомление', exact: true }).click();
     await expect(page.locator('.career-today-changes')).toHaveCount(0);
+    expect(dismissals).toBe(1);
 
     // Check responsive layout on 390
     await page.setViewportSize({ width: 390, height: 844 });

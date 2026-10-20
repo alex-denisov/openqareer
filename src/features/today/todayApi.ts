@@ -116,9 +116,25 @@ export interface TodayFollowUp {
   readonly status: TodayFollowUpStatus;
 }
 
+/** Строка полосы «С ДД.ММ, ЧЧ:ММ: …» (макет 1), собранная сервером из событий (B542). */
+export type TodayChange =
+  | {
+      readonly kind: 'vacancies';
+      readonly count: number;
+      readonly role: string | null;
+      readonly at: string;
+    }
+  | {
+      readonly kind: 'letter_opened' | 'employer_reply';
+      readonly company: string;
+      readonly applicationId: string;
+      readonly at: string;
+    };
+
 export interface TodaySinceLastVisit {
   readonly since: string | null;
   readonly items: readonly string[];
+  readonly changes?: readonly TodayChange[];
   readonly newVacanciesCount?: number;
   readonly applicationsWaitingOver7Days?: number;
   readonly nearestInterview?: TodayNextInterview | null;
@@ -276,6 +292,12 @@ export async function deferTodayAction(actionId: string, tz: string): Promise<To
   const deferral = await readData<TodayActionDeferral>(response);
   window.dispatchEvent(new Event(TODAY_DECISION_CHANGED));
   return deferral;
+}
+
+/** «Скрыть уведомление»: отметка на сервере, полоса вернётся с более новым событием. */
+export async function dismissTodayChanges(): Promise<void> {
+  const response = await apiFetch('/api/v1/candidate/today/changes/dismiss', { method: 'POST' });
+  await readData<{ readonly dismissedAt: string }>(response);
 }
 
 export async function getTodayQueueRemainder(
