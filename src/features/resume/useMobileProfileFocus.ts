@@ -36,9 +36,7 @@ export function mobileRouteForProfileFocus(
           : (!request.employer || item.employer === request.employer) &&
             (!request.title || item.title === request.title),
       );
-      return entry
-        ? { page: request.field === 'teamSize' ? 'job' : 'jobedit', entryId: entry.id }
-        : { page: 'jobadd' };
+      return entry ? { page: 'jobedit', entryId: entry.id } : { page: 'jobadd' };
     }
     default:
       return { page: request.section };
@@ -65,8 +63,6 @@ export function useMobileProfileFocus(
       setTab('skills');
       props.onTabChange?.('skills');
     }
-    if (request.section === 'experience' && request.field === 'teamSize')
-      props.onCollectExperienceFact?.(request);
     const field =
       request.section === 'experience'
         ? request.field

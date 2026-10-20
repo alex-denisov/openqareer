@@ -593,9 +593,9 @@ function focusTopcardField(section: 'name' | 'contacts'): boolean {
   return focusTopcardInput(section) || focusSectionTarget('career-profile-screen-topcard');
 }
 
-function focusExperienceDate(
+function focusExperienceField(
   experienceId: string | undefined,
-  field: 'startDate' | 'endDate',
+  field: 'startDate' | 'endDate' | 'teamSize',
 ): boolean {
   const position = Array.from(document.querySelectorAll<HTMLElement>('[data-experience-id]')).find(
     (element) => element.dataset.experienceId === experienceId,
@@ -617,37 +617,34 @@ function focusExperienceDate(
   return true;
 }
 
+function experienceIdForRequest(
+  request: Extract<ProfileFocusRequest, { readonly section: 'experience' }>,
+  draft: ResumeDraft,
+): string | undefined {
+  if (request.experienceId) return request.experienceId;
+  return draft.experience.find(
+    (item) =>
+      (!request.employer || item.employer === request.employer) &&
+      (!request.title || item.title === request.title),
+  )?.id;
+}
+
 function focusDesktopProfileRequest(
   request: ProfileFocusRequest,
   target: { readonly tab: ProfileTab; readonly targetId: string },
-  onCollectExperienceFact?: ProfileScreenSurfaceProps['onCollectExperienceFact'],
+  draft: ResumeDraft,
 ): boolean {
-  if (request.section === 'experience' && request.field === 'teamSize') {
-    if (!onCollectExperienceFact) return false;
-    onCollectExperienceFact(request);
-    return true;
-  }
   if (request.section === 'name' || request.section === 'contacts') {
     return focusTopcardField(request.section);
   }
-  if (
-    request.section === 'experience' &&
-    (request.field === 'startDate' || request.field === 'endDate')
-  ) {
-    return focusExperienceDate(request.experienceId, request.field);
+  if (request.section === 'experience' && request.field) {
+    return focusExperienceField(experienceIdForRequest(request, draft), request.field);
   }
   return focusSectionTarget(target.targetId);
 }
 
 function useDesktopProfileFocus(props: ProfileScreenSurfaceProps, desktopLayout: boolean): void {
-  const {
-    profileFocusRequest,
-    draft,
-    tab,
-    onCollectExperienceFact,
-    onProfileFocusHandled,
-    onTabChange,
-  } = props;
+  const { profileFocusRequest, draft, tab, onProfileFocusHandled, onTabChange } = props;
   useEffect(() => {
     const request = profileFocusRequest;
     if (!desktopLayout || !request || !draft) return;
@@ -657,19 +654,11 @@ function useDesktopProfileFocus(props: ProfileScreenSurfaceProps, desktopLayout:
       return;
     }
     window.requestAnimationFrame(() => {
-      if (focusDesktopProfileRequest(request, destination, onCollectExperienceFact)) {
+      if (focusDesktopProfileRequest(request, destination, draft)) {
         onProfileFocusHandled?.();
       }
     });
-  }, [
-    desktopLayout,
-    draft,
-    onCollectExperienceFact,
-    onProfileFocusHandled,
-    onTabChange,
-    profileFocusRequest,
-    tab,
-  ]);
+  }, [desktopLayout, draft, onProfileFocusHandled, onTabChange, profileFocusRequest, tab]);
 }
 
 function useProfileScreenController(props: ProfileScreenViewProps) {

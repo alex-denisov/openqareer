@@ -52,7 +52,7 @@ describe('mobile profile routes', () => {
         { section: 'experience', employer: 'Компания', title: 'Руководитель', field: 'teamSize' },
         props,
       ),
-    ).toEqual({ page: 'job', entryId: 'second' });
+    ).toEqual({ page: 'jobedit', entryId: 'second' });
   });
 
   it('keeps courses and education as distinct add forms', () => {
