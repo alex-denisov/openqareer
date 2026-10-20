@@ -94,8 +94,83 @@ async function createBillingApp() {
     serveStatic: false,
   });
   resources.push({ app, auth, candidates, directory });
-  return { app, gateway, authorization: `Bearer ${login.sessionToken}`, databasePath };
+  return { app, auth, candidates, gateway, authorization: `Bearer ${login.sessionToken}`, databasePath };
 }
+
+describe('Pro trial HTTP contract', () => {
+  it('activates once under concurrent requests, grants Pro for exactly 24 hours, and expires without charging', async () => {
+    const { app, auth, authorization, databasePath, gateway } = await createBillingApp();
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    const before = await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/trial', headers });
+    expect(before.statusCode).toBe(200);
+    expect(before.json().data.status).toBe('eligible');
+    const activated = await Promise.all([1, 2].map(() => app.inject({
+      method: 'POST', url: '/api/v1/candidate/billing/trial', headers, payload: {},
+    })));
+    expect(activated.map((response) => response.statusCode).sort()).toEqual([201, 409]);
+    const trial = activated.find((response) => response.statusCode === 201)!.json().data;
+    expect(Date.parse(trial.expiresAt) - Date.parse(trial.startedAt)).toBe(24 * 60 * 60 * 1000);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers })).json().data.currentPlan).toBe('pro');
+    expect(gateway.createCheckout).not.toHaveBeenCalled();
+    expect(gateway.createRecurringCharge).not.toHaveBeenCalled();
+    const db = new DatabaseSync(databasePath);
+    try {
+      expect(db.prepare('SELECT COUNT(*) AS count FROM billing_pro_trials').get()?.count).toBe(1);
+      expect(db.prepare('SELECT COUNT(*) AS count FROM billing_subscriptions').get()?.count).toBe(0);
+      const user = db.prepare("SELECT id, candidate_id FROM users WHERE username = 'billing.candidate'").get() as { id: string; candidate_id: string };
+      expect(auth.getUser(user.id)?.subscriptionTier).toBe('pro');
+      expect(auth.getUser(user.id)?.subscriptionStatus).toBe('trialing');
+      const repository = new SqliteBillingRepository({ databasePath });
+      try { expect(repository.canCandidateUseLlm(user.candidate_id, new Date().toISOString())).toBe(true); }
+      finally { repository.close(); }
+      db.prepare("UPDATE billing_pro_trials SET started_at = '2020-01-01T00:00:00.000Z', expires_at = '2020-01-02T00:00:00.000Z'").run();
+    } finally { db.close(); }
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/trial', headers })).json().data.status).toBe('expired');
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers })).json().data.currentPlan).toBe('free');
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers, payload: {} })).statusCode).toBe(409);
+  });
+
+  it('keeps a purchased Basic subscription intact when an existing trial expires', async () => {
+    const { app, auth, authorization, databasePath } = await createBillingApp();
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers, payload: {} })).statusCode).toBe(201);
+    const checkout = await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/checkouts',
+      headers: { ...headers, 'idempotency-key': 'trial-to-basic' }, payload: { planId: 'basic', autoRenew: false } });
+    expect(checkout.statusCode).toBe(201);
+    const params = new URLSearchParams({ OutSum: '3990.00', InvId: String(checkout.json().data.invoiceId), PaymentMethod: 'SBP', SignatureValue: 'valid-signature' });
+    expect((await app.inject({ method: 'POST', url: '/api/v1/billing/robokassa/result',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: params.toString() })).statusCode).toBe(200);
+    const before = (await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers })).json().data;
+    expect(before.currentPlan).toBe('basic');
+    const db = new DatabaseSync(databasePath);
+    try {
+      const userId = db.prepare("SELECT id FROM users WHERE username = 'billing.candidate'").get()?.id as string;
+      expect(auth.getUser(userId)?.subscriptionStatus).not.toBe('trialing');
+      db.prepare("UPDATE billing_pro_trials SET started_at = '2020-01-01T00:00:00.000Z', expires_at = '2020-01-02T00:00:00.000Z'").run();
+    } finally { db.close(); }
+    const after = (await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers })).json().data;
+    expect(after).toEqual(before);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers, payload: {} })).statusCode).toBe(409);
+  });
+
+  it('rejects unauthenticated, cross-origin and forged activation fields', async () => {
+    const { app, authorization } = await createBillingApp();
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/trial' })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers: { cookie: `openqareer_session=${authorization.slice(7)}`, origin: 'https://attacker.invalid' }, payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers: { authorization, origin: 'http://localhost:3000' }, payload: { userId: 'other', expiresAt: '2099-01-01' } })).statusCode).toBe(400);
+  });
+
+  it('refuses a paid candidate and preserves their paid entitlement', async () => {
+    const { app, authorization, databasePath } = await createBillingApp();
+    const db = new DatabaseSync(databasePath);
+    try { db.prepare("UPDATE users SET subscription_tier = 'enterprise', subscription_status = 'active', subscription_expires_at = NULL WHERE username = 'billing.candidate'").run(); }
+    finally { db.close(); }
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing/trial', headers })).json().data.status).toBe('unavailable');
+    expect((await app.inject({ method: 'POST', url: '/api/v1/candidate/billing/trial', headers, payload: {} })).statusCode).toBe(409);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/candidate/billing', headers })).json().data.currentPlan).toBe('max');
+  });
+});
 
 describe('candidate billing HTTP contract', () => {
   it('creates an idempotent paid-tier checkout using the server plan amount', async () => {

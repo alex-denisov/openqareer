@@ -122,6 +122,8 @@ export interface CandidateSnapshot {
 }
 
 export interface CandidateExport extends CandidateSnapshot {
+  interviewPractices: import('../../shared/careerDiary').CareerDiaryInterviewPractice[];
+  relocationScenarios: import('../../shared/relocationScenario').SavedRelocationScenario[];
   documentContents: CandidateDocumentWithContent[];
   sourceConnections: ExportedNativeSourceConnection[];
   consultantConversations: ConsultantConversationExport[];

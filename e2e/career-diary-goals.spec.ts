@@ -199,7 +199,10 @@ async function handleDiaryRoute(route: Route, state: DiaryHarness): Promise<void
   const parts = pathname.slice(DIARY_API.length).split('/').filter(Boolean);
   if (parts.length === 0 && method === 'GET') return serveOverview(route, state);
   if (await handleGoalRoute(route, state, parts, method)) return;
-  if (['reviews', 'achievements', 'workplaces'].includes(parts[0] ?? '') && method === 'GET') {
+  if (
+    ['reviews', 'achievements', 'workplaces', 'interview-practices'].includes(parts[0] ?? '') &&
+    method === 'GET'
+  ) {
     return route.fulfill({ json: { data: { items: [], nextCursor: null } } });
   }
   await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } });

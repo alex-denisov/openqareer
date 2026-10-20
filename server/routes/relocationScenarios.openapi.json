@@ -1,0 +1,830 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Candidate relocation scenarios B468",
+    "version": "1.0.0",
+    "description": "Additive v1 surface; runtime input schema shared/relocationScenario.ts is authoritative. Estimates retain source, city, household, period, payer and observation date. Candidate-only encrypted storage; unknown figures are not zero."
+  },
+  "security": [
+    {
+      "candidateBearer": []
+    }
+  ],
+  "paths": {
+    "/api/v1/candidate/relocation-scenarios": {
+      "post": {
+        "summary": "Save an immutable server-calculated relocation scenario",
+        "description": "Active relocation consent required. Same key and same parsed input replays the original snapshot without extending history; different input with same key returns409. At most50 saved scenarios per candidate. Body limit32768bytes. Conditional source URL rule is enforced by the runtime schema: source_quote requires URL. No provider calls are performed.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenarioInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Candidate-owned saved scenario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SavedScenario"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Candidate-owned saved scenario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SavedScenario"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "401": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "403": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "409": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "429": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "503": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          }
+        }
+      },
+      "get": {
+        "summary": "List own saved scenarios",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 20
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 50,
+              "default": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "data.items (SavedScenario[]) and data.nextOffset (integer|null); private,no-store"
+          },
+          "400": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "401": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          }
+        }
+      }
+    },
+    "/api/v1/candidate/relocation-scenarios/{id}": {
+      "get": {
+        "summary": "Read own immutable snapshot",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Candidate-owned saved scenario",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SavedScenario"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "404": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete own scenario",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "description": "Existing same-origin cookie mutation policy applies; missing/other-candidate resources return404. All snapshots also cascade on account deletion and are erased on relocation-consent revocation.",
+        "responses": {
+          "204": {
+            "description": "Deleted; empty body"
+          },
+          "401": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "403": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "404": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          },
+          "429": {
+            "description": "Standard candidate API error envelope; machine code and retryable flag."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "candidateBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Existing candidate authentication. Browser sessions use the same authenticated API client and mutation-origin policy."
+      }
+    },
+    "schemas": {
+      "ScenarioInput": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "countryCode": {
+            "type": "string",
+            "enum": [
+              "DE",
+              "CY",
+              "RS",
+              "AE",
+              "GE",
+              "RU"
+            ]
+          },
+          "city": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "householdSize": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20
+          },
+          "incomeMode": {
+            "type": "string",
+            "enum": [
+              "local_employment",
+              "remote_employment",
+              "self_employed"
+            ]
+          },
+          "grossAnnualIncome": {
+            "$ref": "#/components/schemas/ScenarioInput/$defs/__schema0"
+          },
+          "confirmedNetMonthly": {
+            "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+          },
+          "scenarioId": {
+            "type": "string",
+            "enum": [
+              "domestic_market",
+              "employer_sponsorship",
+              "job_seeker_visa",
+              "digital_nomad",
+              "simple_mobility"
+            ]
+          },
+          "expenses": {
+            "type": "object",
+            "properties": {
+              "rent": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "utilities": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "food": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "transport": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "insurance": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "education": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "other": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              }
+            },
+            "additionalProperties": false
+          },
+          "upfront": {
+            "type": "object",
+            "properties": {
+              "visa": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "moving": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "deposit": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "documents": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "travel": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              },
+              "furnishings": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+              }
+            },
+            "additionalProperties": false
+          },
+          "reserveMonths": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 36
+          },
+          "proofOfFunds": {
+            "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+          },
+          "comparisonRate": {
+            "$ref": "#/components/schemas/ScenarioInput/$defs/__schema1"
+          },
+          "proofFundsUsableForLiving": {
+            "default": false,
+            "type": "boolean"
+          },
+          "payrollOptions": {
+            "type": "object",
+            "properties": {
+              "germanyChildless": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "georgiaPensionParticipant": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "uaeNational": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              }
+            },
+            "additionalProperties": false
+          },
+          "visa": {
+            "type": "object",
+            "properties": {
+              "citizenshipCountryCodes": {
+                "maxItems": 5,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScenarioInput/$defs/__schema10"
+                }
+              },
+              "currentCountryCode": {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$"
+              },
+              "hasJobOffer": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "approvedEmployerSponsor": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "occupationEligible": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "occupationGoingRateMet": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "recognizedDegreeCountryCodes": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScenarioInput/$defs/__schema11"
+                }
+              },
+              "completedFormalQualification": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "blueCardExceptionEligible": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "isItProfessional": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "hasBachelorDegree": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "worksRemotelyForForeignEmployer": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "hasPrivateHealthInsurance": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "remoteMonthlyIncomeIsNet": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema9"
+              },
+              "remoteMonthlyIncome": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "$ref": "#/components/schemas/ScenarioInput/$defs/__schema0"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "additionalProperties": false
+              },
+              "hasLocalWorkAuthorizationCountryCodes": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScenarioInput/$defs/__schema12"
+                }
+              },
+              "minimumMonthlyFunds": {
+                "type": "object",
+                "properties": {
+                  "amount": {
+                    "$ref": "#/components/schemas/ScenarioInput/$defs/__schema0"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{3}$"
+                  }
+                },
+                "required": [
+                  "amount",
+                  "currency"
+                ],
+                "additionalProperties": false
+              },
+              "meetsLanguageRequirementsByCountry": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{2}$"
+                },
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "jobSeekerCategoryEligibleByCountry": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{2}$"
+                },
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "recentTopUniversityGraduateWithinYearsByCountry": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{2}$"
+                },
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 50
+                }
+              },
+              "financialGuaranteeSatisfiedByCountry": {
+                "maxItems": 10,
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ScenarioInput/$defs/__schema13"
+                }
+              },
+              "relevantExperienceYearsByWindow": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[0-9]{1,2}$"
+                },
+                "additionalProperties": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 80
+                }
+              },
+              "shortTermWorkExceptionByCountry": {
+                "type": "object",
+                "propertyNames": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{2}$"
+                },
+                "additionalProperties": {
+                  "type": "boolean"
+                }
+              },
+              "germanyOpportunityCard": {
+                "type": "object",
+                "properties": {
+                  "qualificationRecognition": {
+                    "type": "string",
+                    "enum": [
+                      "fully",
+                      "partially",
+                      "not-recognized",
+                      "unknown"
+                    ]
+                  },
+                  "shortageOccupation": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "experienceYearsLastFive": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 5
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "experienceYearsLastSeven": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 7
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "germanLevel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "A1",
+                          "A2",
+                          "B1",
+                          "B2",
+                          "C1",
+                          "C2",
+                          "native"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "englishLevel": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "none",
+                          "A1",
+                          "A2",
+                          "B1",
+                          "B2",
+                          "C1",
+                          "C2",
+                          "native"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "age": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "germanyStayMonthsLastFive": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 60
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "partnerQualifiedAndApplying": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "qualificationRecognition",
+                  "shortageOccupation",
+                  "experienceYearsLastFive",
+                  "experienceYearsLastSeven",
+                  "germanLevel",
+                  "englishLevel",
+                  "age",
+                  "germanyStayMonthsLastFive",
+                  "partnerQualifiedAndApplying"
+                ],
+                "additionalProperties": false
+              },
+              "relevantExperienceYears": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 80
+              },
+              "stayDurationDays": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3650
+              },
+              "family": {
+                "type": "object",
+                "properties": {
+                  "hasPartner": {
+                    "type": "boolean"
+                  },
+                  "children": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 15
+                  }
+                },
+                "required": [
+                  "hasPartner",
+                  "children"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "name",
+          "countryCode",
+          "city",
+          "householdSize",
+          "incomeMode",
+          "scenarioId",
+          "expenses",
+          "upfront",
+          "reserveMonths",
+          "visa"
+        ],
+        "additionalProperties": false,
+        "$defs": {
+          "__schema0": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000000
+          },
+          "__schema1": {
+            "type": "object",
+            "properties": {
+              "amount": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema0"
+              },
+              "currency": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema2"
+              },
+              "period": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema3"
+              },
+              "payer": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema4"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema5"
+              },
+              "basis": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema6"
+              },
+              "observedAt": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema7"
+              },
+              "url": {
+                "$ref": "#/components/schemas/ScenarioInput/$defs/__schema8"
+              }
+            },
+            "required": [
+              "amount",
+              "currency",
+              "period",
+              "kind",
+              "basis",
+              "observedAt"
+            ],
+            "additionalProperties": false
+          },
+          "__schema2": {
+            "type": "string",
+            "pattern": "^[A-Z]{3}$"
+          },
+          "__schema3": {
+            "type": "string",
+            "enum": [
+              "monthly",
+              "annual",
+              "once"
+            ]
+          },
+          "__schema4": {
+            "default": "candidate",
+            "type": "string",
+            "enum": [
+              "candidate",
+              "employer",
+              "included"
+            ]
+          },
+          "__schema5": {
+            "type": "string",
+            "enum": [
+              "candidate_estimate",
+              "source_quote"
+            ]
+          },
+          "__schema6": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 500
+          },
+          "__schema7": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "__schema8": {
+            "type": "string",
+            "maxLength": 2000,
+            "format": "uri",
+            "pattern": "^https:\\/\\/.*"
+          },
+          "__schema9": {
+            "type": "boolean"
+          },
+          "__schema10": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "__schema11": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "__schema12": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          },
+          "__schema13": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$"
+          }
+        }
+      },
+      "SavedScenario": {
+        "type": "object",
+        "required": [
+          "id",
+          "createdAt",
+          "input",
+          "result",
+          "profileRevision"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "input": {
+            "$ref": "#/components/schemas/ScenarioInput"
+          },
+          "profileRevision": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "result": {
+            "type": "object",
+            "description": "Server-calculated immutable result with engine version, tax sources, mobility conditions and explicit null values for unknown totals."
+          }
+        }
+      }
+    }
+  }
+}

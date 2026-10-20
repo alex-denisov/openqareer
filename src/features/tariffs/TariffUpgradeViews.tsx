@@ -24,7 +24,10 @@ import type {
 } from './tariffUpgradeApi';
 import type { AccountEmailState, FlowView, TariffUpgradeContext } from './TariffUpgradeFlow';
 
+import { ProTrialPanel } from './ProTrialPanel';
+
 export interface UpgradeDialogState {
+  readonly onTrialChanged?: () => void;
   readonly context: TariffUpgradeContext;
   readonly summary: CandidateBillingSummary | null;
   readonly summaryStatus: 'loading' | 'ready' | 'error';
@@ -204,6 +207,7 @@ function OfferView({
   return (
     <div className="career-upgrade-offer" data-testid="tariff-offer">
       <OfferContextCopy context={state.context} />
+      <ProTrialPanel onSummaryChanged={() => state.onTrialChanged?.()} />
       <OfferBenefits plan={findPlan(summary, plans[0])} context={state.context} />
       <div className="career-upgrade-actions">
         {plans.map((planId, index) => (

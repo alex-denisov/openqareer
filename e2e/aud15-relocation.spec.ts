@@ -128,7 +128,7 @@ test('compares countries, calculates income, and persists profile changes', asyn
   await capture(page, info, 'relocation-calculation-error');
   await income.fill('12000');
   await expect(page.getByRole('heading', { name: 'Зарплата ниже порога' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Сохранить расчёт в профиль' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Сохранить расчёт в профиль' })).toBeEnabled();
   await capture(page, info, 'relocation-economy-below-threshold');
 
   await page.getByRole('tab', { name: 'Мои данные' }).click();

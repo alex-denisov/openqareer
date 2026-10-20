@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+import { hasActiveProTrial, insertProTrial, readProTrial, type ProTrialState } from './proTrial';
 import { randomUUID } from 'node:crypto';
 import { applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 import { BILLING_PLANS } from './billingPlans';
@@ -168,6 +169,30 @@ export class SqliteBillingRepository {
     ).get(userId, idempotencyKey) !== undefined;
   }
 
+  getEffectivePlan(userId: string, now: string): 'free' | 'basic' | 'pro' | 'max' {
+    return this.getSubscription(userId, now)?.planId ?? this.getLegacyPaidPlan(userId, now)
+      ?? (hasActiveProTrial(this.database, userId, now) ? 'pro' : 'free');
+  }
+
+  getProTrial(userId: string, now: string): ProTrialState {
+    const paid = this.getSubscription(userId, now) !== null || this.getLegacyPaidPlan(userId, now) !== null;
+    return readProTrial(this.database, userId, now, paid);
+  }
+
+  activateProTrial(userId: string, now: string): { activated: boolean; trial: ProTrialState } {
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      const trial = this.getProTrial(userId, now);
+      const activated = trial.status === 'eligible' && insertProTrial(this.database, userId, now);
+      const result = { activated, trial: this.getProTrial(userId, now) };
+      this.database.exec('COMMIT');
+      return result;
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+  }
+
   getSubscription(userId: string, now: string): BillingSubscription | null {
     const row = this.database.prepare(
       `SELECT * FROM billing_subscriptions
@@ -196,11 +221,13 @@ export class SqliteBillingRepository {
     if (!row || (row.subscription_status !== 'active' && row.subscription_status !== 'trialing')) return null;
     if (row.subscription_expires_at && row.subscription_expires_at <= now) return null;
     if (row.subscription_tier === 'pro') return 'pro';
-    if (row.subscription_tier === 'enterprise') return 'max';
+    if (row.subscription_tier === 'enterprise' || row.subscription_tier === 'executive') return 'max';
     return null;
   }
 
   canCandidateUseLlm(candidateId: string, now: string): boolean {
+    const trialUser = this.database.prepare('SELECT id FROM users WHERE candidate_id = ?').get(candidateId) as { id: string } | undefined;
+    if (trialUser && hasActiveProTrial(this.database, trialUser.id, now)) return true;
     const row = this.database.prepare(
       `SELECT users.subscription_tier, users.subscription_status,
               users.subscription_expires_at, billing_subscriptions.status AS billing_status,

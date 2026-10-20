@@ -133,6 +133,9 @@ async function handleDiaryRoute(route: Route, state: DiaryHarness): Promise<void
   if (parts.length === 0 && method === 'GET') {
     return route.fulfill({ json: { data: overviewFor(state) } });
   }
+  if (parts[0] === 'interview-practices' && parts.length === 1 && method === 'GET') {
+    return route.fulfill({ json: { data: { items: [], nextCursor: null } } });
+  }
   if (parts[0] === 'goals' && method === 'GET') {
     return parts.length === 1
       ? route.fulfill({ json: { data: { items: [], nextCursor: null } } })

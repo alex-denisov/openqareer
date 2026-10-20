@@ -3,6 +3,12 @@
  * Свободный текст хранится в зашифрованном payload_cipher.
  */
 export const MIGRATION_44 = [
+  "CREATE TABLE IF NOT EXISTS career_diary_interview_practices (",
+  " candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,",
+  " id TEXT NOT NULL, payload_cipher TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,",
+  " PRIMARY KEY(candidate_id,id)",
+  ") STRICT;",
+  "CREATE INDEX IF NOT EXISTS idx_diary_interview_candidate_created ON career_diary_interview_practices(candidate_id,created_at DESC,id DESC);",
   "CREATE TABLE IF NOT EXISTS career_diary_goals (",
   "  candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,",
   "  id TEXT NOT NULL,",

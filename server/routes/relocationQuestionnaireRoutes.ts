@@ -1,3 +1,4 @@
+import { registerRelocationScenarioRoutes } from './relocationScenarioRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z, ZodError } from 'zod';
@@ -254,6 +255,7 @@ const handleImportLinkedInLanguages: Handler = async (
 };
 
 export function registerRelocationQuestionnaireRoutes(app: FastifyInstance, deps: RouteDeps): void {
+  registerRelocationScenarioRoutes(app, deps);
   const readLimit = { config: { rateLimit: { max: 120, timeWindow: '1 hour' } } };
   const writeLimit = { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } };
   app.get('/api/v1/candidate/relocation-questionnaire', readLimit, withDeps(deps, handleGet));

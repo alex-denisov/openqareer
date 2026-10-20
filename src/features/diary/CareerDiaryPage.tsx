@@ -1,3 +1,4 @@
+import { CareerDiaryInterviewPractices } from './CareerDiaryInterviewPractices';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaretLeft, Plus } from '@phosphor-icons/react';
 import type { CareerDiaryAchievement, CareerDiaryGoalSummary } from '../../../shared/careerDiary';
@@ -220,6 +221,7 @@ function CareerDiaryScreen(props: ReturnType<typeof useCareerDiaryController>) {
       <CareerDiaryPageHeader props={props} planningView={planningView} />
       <CareerDiaryPageNavigation props={props} />
       <DiaryTabPanel {...props} />
+      {!planningView ? <CareerDiaryInterviewPractices /> : null}
       <CareerDiaryGoalFormOverlay props={props} />
     </div>
   );

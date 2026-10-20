@@ -1,3 +1,4 @@
+import { InterviewDiaryAction } from './InterviewDiaryAction';
 import type { FormEvent } from 'react';
 import {
   ArrowClockwise,
@@ -558,6 +559,7 @@ function ReviewScreen({ flow, props }: { readonly flow: Flow; readonly props: Mo
           <h3 id="career-mock-answer-title">Ваш ответ</h3>
           <p>{answer.text}</p>
         </section>
+        <InterviewDiaryAction key={`${session.id}:${session.version}`} sessionId={session.id} />
         <CriteriaList questionType={question.type} evaluation={answer.evaluation} />
         {answer.evaluation.feedback ? <ModelFeedback message={answer.evaluation.feedback} /> : null}
         {flow.error ? <SessionError flow={flow} /> : null}

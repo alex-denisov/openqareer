@@ -84,6 +84,40 @@ export class SqliteCareerDiaryRepository {
     this.database.exec(MIGRATION_44);
   }
 
+  saveInterviewPractice(candidateId: string, session: import('../domain/interviewSimulator').InterviewSession): import('../../shared/careerDiary').CareerDiaryInterviewPractice {
+    const existing = this.getInterviewPractice(candidateId, session.id);
+    if (existing && existing.session.version >= session.version) return existing;
+    const now = existing?.createdAt ?? new Date().toISOString();
+    const record: import('../../shared/careerDiary').CareerDiaryInterviewPractice = { id: session.id, source: 'mock_interview', session, createdAt: now };
+    this.database.prepare('INSERT INTO career_diary_interview_practices(candidate_id,id,payload_cipher,created_at,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(candidate_id,id) DO UPDATE SET payload_cipher=excluded.payload_cipher,updated_at=excluded.updated_at').run(candidateId, session.id, sealPayload(this.sealedText, candidateId, 'interview-practice', session.id, record), now, now);
+    return this.getInterviewPractice(candidateId, session.id)!;
+  }
+
+  getInterviewPractice(candidateId: string, id: string): import('../../shared/careerDiary').CareerDiaryInterviewPractice | null {
+    const row = this.database.prepare('SELECT payload_cipher FROM career_diary_interview_practices WHERE candidate_id = ? AND id = ?').get(candidateId, id) as { payload_cipher: string } | undefined;
+    return row ? openPayload(this.sealedText, candidateId, 'interview-practice', id, row.payload_cipher) : null;
+  }
+
+  listInterviewPractices(candidateId: string, limit: number, cursor?: string): import('../../shared/careerDiary').CareerDiaryPage<import('../../shared/careerDiary').CareerDiaryInterviewPractice> {
+    const page = pagePayloadRows(this.database, 'career_diary_interview_practices', candidateId, limit, cursor, 'created_at');
+    return { items: page.rows.map(row => openPayload(this.sealedText, candidateId, 'interview-practice', row.id, row.payload_cipher)), nextCursor: page.nextCursor };
+  }
+
+  exportInterviewPractices(candidateId: string): import('../../shared/careerDiary').CareerDiaryInterviewPractice[] {
+    const records: import('../../shared/careerDiary').CareerDiaryInterviewPractice[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = this.listInterviewPractices(candidateId, 100, cursor);
+      records.push(...page.items);
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    return records;
+  }
+
+  deleteInterviewPractice(candidateId: string, id: string): boolean {
+    return this.database.prepare('DELETE FROM career_diary_interview_practices WHERE candidate_id = ? AND id = ?').run(candidateId, id).changes > 0;
+  }
+
   createGoal(
   candidateId: string,
   input: CareerDiaryGoalInput,

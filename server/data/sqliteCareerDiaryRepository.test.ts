@@ -37,6 +37,7 @@ describe('career diary storage', () => {
     expect(tables.map(({ name }) => name).sort()).toEqual([
       'career_diary_achievements',
       'career_diary_goals',
+      'career_diary_interview_practices',
       'career_diary_measurements',
       'career_diary_weekly_reviews',
       'career_diary_workplaces',

@@ -1695,7 +1695,9 @@ test.describe('B265 Profile screen', () => {
     const recommendationsBeforeRejectedDelete = [...(savedDraft.recommendations ?? [])];
     failNextResumeSave = true;
     await recommendation.getByRole('button', { name: 'Удалить рекомендацию', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('Сохранение временно недоступно.');
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Сохранение временно недоступно.' }),
+    ).toBeVisible();
     await expect(recommendation).toBeVisible();
     await expect(recommendation).toContainText('Обновлённая проверяемая рекомендация.');
     await expect
