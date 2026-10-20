@@ -183,11 +183,13 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
 async function writeNotFoundPage(html: string, distDirectory: string): Promise<void> {
   await writeFile(
     `${distDirectory}/${NOT_FOUND_DOCUMENT}`,
-    pageHead(html, {
-      path: '/',
-      title: NOT_FOUND_TITLE,
-      description: 'Страница не найдена. Перейдите на главную openqareer или в каталог вакансий.',
-    })
+    deferEntryScript(
+      pageHead(html, {
+        path: '/',
+        title: NOT_FOUND_TITLE,
+        description: 'Страница не найдена. Перейдите на главную openqareer или в каталог вакансий.',
+      }),
+    )
       .replace(/<link rel="canonical"[^>]*>/u, '<meta name="robots" content="noindex">')
       .replace(
         EMPTY_ROOT,
@@ -232,7 +234,7 @@ export async function prerenderShells(
   for (const doc of LEGAL_DOCS) {
     await writeFile(
       `${distDirectory}/${legalDocumentFileName(doc.slug)}`,
-      legalHead(html, doc.slug, doc.description).replace(
+      deferEntryScript(legalHead(html, doc.slug, doc.description)).replace(
         EMPTY_ROOT,
         bootstrapRoot(
           renderToStaticMarkup(<LegalDocumentPage slug={doc.slug} onNavigate={() => {}} />),
