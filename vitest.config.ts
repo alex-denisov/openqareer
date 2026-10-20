@@ -138,12 +138,15 @@ export default defineConfig({
         'server/providers/modelRegistry.ts',
         'server/providers/privacyAwareCoachProvider.ts',
       ],
-      thresholds: {
-        branches: 80,
-        functions: 80,
-        lines: 80,
-        statements: 80,
-      },
+      // A CI shard covers a fraction of the suite; the merge job enforces the thresholds.
+      thresholds: process.env.COVERAGE_SHARD
+        ? undefined
+        : {
+            branches: 80,
+            functions: 80,
+            lines: 80,
+            statements: 80,
+          },
     },
   },
 });
