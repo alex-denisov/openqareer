@@ -3,6 +3,7 @@ import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
 import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
+import type { WorkdayDescriptionReport } from '../vacancies/workdayDescriptions';
 import {
   SYNC_BATCH_LIMIT,
   type RequestedSourceSync,
@@ -32,7 +33,12 @@ export interface MaintenanceEngine {
   probeDueLinks(nowMs?: number): Promise<LinkCheckCensus | undefined>;
   runCatalogMaintenanceStep(chunk?: number): { processed: number; pending: number } | undefined;
   runClusterKeysBackfillStep(chunk?: number): number;
-  runDescriptionSkillsStep?(chunk?: number): { inspected: number; updated: number; passFinished: boolean };
+  runDescriptionSkillsStep?(chunk?: number): {
+    inspected: number;
+    updated: number;
+    passFinished: boolean;
+  };
+  runWorkdayDescriptionStep?(): Promise<WorkdayDescriptionReport>;
   readonly clusterKeysReady: boolean;
   readonly poolSize: number;
 }
@@ -53,6 +59,7 @@ export interface MaintenanceIntervals {
   readonly titleParseMs: number;
   readonly titleModelMs: number;
   readonly descriptionSkillsMs?: number;
+  readonly workdayDescriptionMs?: number;
   readonly linkedinPoolExecutorMs: number;
   readonly recruiterPurgeMs: number;
 }
@@ -104,6 +111,8 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   titleParseMs: 5 * 1_000,
   titleModelMs: 30 * 1_000,
   descriptionSkillsMs: 10 * 1_000,
+  // До двух запросов на хост Workday за тик: ~6 в минуту на тенанта (B535).
+  workdayDescriptionMs: 20 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
 };
@@ -288,8 +297,7 @@ export class MaintenanceWorker {
 
   /** Один такт обогащения описаний навыками: короткая транзакция, потом уступить (B307). */
   runDescriptionSkillsStep():
-    | { inspected: number; updated: number; passFinished: boolean }
-    | undefined {
+    { inspected: number; updated: number; passFinished: boolean } | undefined {
     if (this.stopped) return undefined;
     try {
       const result = this.engine.runDescriptionSkillsStep?.(DESCRIPTION_SKILLS_STEP_CHUNK);
@@ -299,6 +307,21 @@ export class MaintenanceWorker {
       return result;
     } catch (error: unknown) {
       this.log.error({ errorName: errorName(error) }, 'vacancy-description-skills-failed');
+      return undefined;
+    }
+  }
+
+  /** Один такт дочитывания текста Workday: сеть, потом короткие записи (B535). */
+  async runWorkdayDescriptionStep(): Promise<WorkdayDescriptionReport | undefined> {
+    if (this.stopped || !this.engine.runWorkdayDescriptionStep) return undefined;
+    try {
+      const report = await this.engine.runWorkdayDescriptionStep();
+      if (report.requested > 0) {
+        this.log.info({ ...report }, 'vacancy-workday-description-tick');
+      }
+      return report;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'vacancy-workday-description-failed');
       return undefined;
     }
   }
@@ -488,6 +511,9 @@ export class MaintenanceWorker {
     every(this.intervals.catalogMs, () => this.runCatalogStep());
     if (this.intervals.descriptionSkillsMs) {
       every(this.intervals.descriptionSkillsMs, () => this.runDescriptionSkillsStep());
+    }
+    if (this.intervals.workdayDescriptionMs) {
+      every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
     }
     every(this.intervals.reportMs, () => this.reportMemory());
     if (this.purgeRecruiters) {

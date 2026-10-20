@@ -182,6 +182,12 @@ export interface VacancyPoolStore {
   backfillCatalogEntriesStep?(chunk?: number): number;
   /** Number of cluster rows still absent from the projection marker. */
   pendingCatalogEntries?(): number;
+  /** Живые записи площадки без дочитанного текста, новые первыми (Workday, B535). */
+  loadVacanciesWithoutFullText?(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[],
+  ): UnifiedVacancy[];
   /** Bounded maintenance tick: enriches stored vacancies that have descriptions with management skills (B307). */
   backfillDescriptionSkillsStep?(chunk?: number): {
     inspected: number;

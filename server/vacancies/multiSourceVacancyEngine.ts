@@ -53,6 +53,11 @@ import type {
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
+import {
+  WorkdayDescriptionBackfill,
+  type WorkdayDescriptionReport,
+  type WorkdayDetailFetch,
+} from './workdayDescriptions';
 
 /**
  * Улов одного опроса. Простой список означает полное чтение: площадка показала
@@ -350,6 +355,8 @@ export class MultiSourceVacancyEngine {
   private readonly linkProbe?: LinkProbe;
   private readonly descriptionLoader?: VacancyDescriptionLoader;
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
+  private readonly workdayDetailFetch?: WorkdayDetailFetch;
+  private workdayDescriptions?: WorkdayDescriptionBackfill;
   /** Successful fetches become cached only after the pool write also succeeds. */
   private readonly persistedDescriptionIds = new Set<string>();
 
@@ -361,6 +368,7 @@ export class MultiSourceVacancyEngine {
     linkProbe?: LinkProbe;
     descriptionLoader?: VacancyDescriptionLoader;
     recluster?: ReclusterMode;
+    workdayDetailFetch?: WorkdayDetailFetch;
   }) {
     this.reclusterMode = options?.recluster ?? { mode: 'sync' };
     const initial = options?.sources ?? DEFAULT_VACANCY_SOURCES;
@@ -374,6 +382,7 @@ export class MultiSourceVacancyEngine {
     this.robots = options?.robots;
     this.linkProbe = options?.linkProbe;
     this.descriptionLoader = options?.descriptionLoader;
+    this.workdayDetailFetch = options?.workdayDetailFetch;
     // Source state is a small bounded registry, unlike the vacancy/cluster
     // pool. Load it immediately so the HTTP admin surface can show a durable
     // manual-sync request without hydrating any pool rows (B231).
@@ -856,9 +865,11 @@ export class MultiSourceVacancyEngine {
   /**
    * Один шаг обогащения вакансий пула управленческими навыками (B307).
    */
-  public runDescriptionSkillsStep(
-    chunk?: number,
-  ): { inspected: number; updated: number; passFinished: boolean } {
+  public runDescriptionSkillsStep(chunk?: number): {
+    inspected: number;
+    updated: number;
+    passFinished: boolean;
+  } {
     return (
       this.pool.backfillDescriptionSkillsStep?.(chunk) ?? {
         inspected: 0,
@@ -866,6 +877,31 @@ export class MultiSourceVacancyEngine {
         passFinished: true,
       }
     );
+  }
+
+  /**
+   * Один такт дочитывания текста вакансий Workday (B535): только включённые
+   * площадки с подтверждённым правом. Зовёт только воркер обслуживания.
+   */
+  public runWorkdayDescriptionStep(): Promise<WorkdayDescriptionReport> {
+    const pool = this.pool;
+    if (typeof pool.loadVacanciesWithoutFullText !== 'function') {
+      return Promise.resolve({ requested: 0, loaded: 0, gone: 0, failed: 0 });
+    }
+    this.workdayDescriptions ??= new WorkdayDescriptionBackfill({
+      pool: {
+        loadVacanciesWithoutFullText: (sourceId, limit, excludeIds) =>
+          pool.loadVacanciesWithoutFullText!(sourceId, limit, excludeIds),
+        mergeSourceSlice: (sourceId, vacancies) => pool.mergeSourceSlice(sourceId, vacancies),
+        markExpired: (ids, atIso) => pool.markExpired(ids, atIso),
+      },
+      sourceIds: () =>
+        [...this.sources.values()]
+          .filter((source) => source.enabled && this.rights.get(source.id) === 'live')
+          .map((source) => source.id),
+      ...(this.workdayDetailFetch ? { fetchDetail: this.workdayDetailFetch } : {}),
+    });
+    return this.workdayDescriptions.step();
   }
 
   /**

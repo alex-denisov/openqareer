@@ -106,9 +106,18 @@ const offline = async () => ({ status: 0, body: null });
 describe('MaintenanceWorker (B230)', () => {
   it('isolates recruiter purge failure and logs no PII', async () => {
     const log = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
-    const worker = new MaintenanceWorker({ engine: {} as never, log, purgeRecruiters: () => { throw new Error('Private Name https://linkedin.com/in/private'); } });
+    const worker = new MaintenanceWorker({
+      engine: {} as never,
+      log,
+      purgeRecruiters: () => {
+        throw new Error('Private Name https://linkedin.com/in/private');
+      },
+    });
     expect(await worker.runRecruiterPurgeStep()).toBe(0);
-    expect(log.error).toHaveBeenCalledWith({ errorName: 'Error' }, 'linkedin-recruiter-retention-failed');
+    expect(log.error).toHaveBeenCalledWith(
+      { errorName: 'Error' },
+      'linkedin-recruiter-retention-failed',
+    );
     expect(JSON.stringify(log.error.mock.calls)).not.toContain('Private Name');
   });
   it('reports only the number of purged recruiter rows', async () => {
@@ -280,7 +289,11 @@ describe('MaintenanceWorker (B230)', () => {
   it('runs and stops the optional LinkedIn pool step through the maintenance boundary', async () => {
     const log = silentLog();
     const linkedinPoolExecutor = {
-      runStep: vi.fn(async () => ({ status: 'processed' as const, pageCount: 2, recruiterCount: 1 })),
+      runStep: vi.fn(async () => ({
+        status: 'processed' as const,
+        pageCount: 2,
+        recruiterCount: 1,
+      })),
       stop: vi.fn(async () => undefined),
     };
     const worker = new MaintenanceWorker({
@@ -654,9 +667,7 @@ describe('MaintenanceWorker description skills step (B307)', () => {
 
     expect(mockStep).toHaveBeenCalledWith(DESCRIPTION_SKILLS_STEP_CHUNK);
     expect(result).toEqual({ inspected: 5, updated: 2, passFinished: false });
-    expect(log.entries).toEqual([
-      { level: 'info', msg: 'vacancy-description-skills-tick' },
-    ]);
+    expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-description-skills-tick' }]);
   });
 
   it('не логирует пустой такт без обновлений', () => {
@@ -672,5 +683,36 @@ describe('MaintenanceWorker description skills step (B307)', () => {
     expect(mockStep).toHaveBeenCalledWith(DESCRIPTION_SKILLS_STEP_CHUNK);
     expect(result).toEqual({ inspected: 5, updated: 0, passFinished: false });
     expect(log.entries).toEqual([]);
+  });
+});
+
+describe('MaintenanceWorker Workday description step (B535)', () => {
+  function workerWith(step: ReturnType<typeof vi.fn>) {
+    const log = silentLog();
+    const engine = {
+      runWorkdayDescriptionStep: step,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    return { log, worker: new MaintenanceWorker({ engine, log }) };
+  }
+
+  it('logs a tick that asked the sources for text', async () => {
+    const report = { requested: 4, loaded: 3, gone: 1, failed: 0 };
+    const { log, worker } = workerWith(vi.fn().mockResolvedValue(report));
+    expect(await worker.runWorkdayDescriptionStep()).toEqual(report);
+    expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-workday-description-tick' }]);
+  });
+
+  it('stays quiet on an empty tick and logs a failure without throwing', async () => {
+    const empty = workerWith(
+      vi.fn().mockResolvedValue({ requested: 0, loaded: 0, gone: 0, failed: 0 }),
+    );
+    await empty.worker.runWorkdayDescriptionStep();
+    expect(empty.log.entries).toEqual([]);
+
+    const broken = workerWith(vi.fn().mockRejectedValue(new Error('db')));
+    expect(await broken.worker.runWorkdayDescriptionStep()).toBeUndefined();
+    expect(broken.log.entries).toEqual([
+      { level: 'error', msg: 'vacancy-workday-description-failed' },
+    ]);
   });
 });
