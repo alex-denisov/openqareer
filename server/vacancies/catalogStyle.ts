@@ -385,6 +385,7 @@ export const CATALOG_STYLE = `body{margin:0}
 .cat-head h1{font-size:clamp(30px,3.6vw,44px);line-height:1.1;letter-spacing:-0.03em}
 .cat-lead{margin-top:12px;font-size:17px;color:var(--ps-soft);max-width:62ch}
 .cat-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:40px;align-items:start;margin-top:32px}
+.cat-facts-box{display:grid;gap:6px;margin-bottom:16px;padding:16px 18px;border-radius:16px;background:var(--ps-bg-2);font-size:14px;color:var(--ps-soft)}
 .cat-list{list-style:none;margin:0;padding:0;display:grid;gap:12px}
 .cat-card{background:var(--ps-surface);border:1px solid var(--ps-line);border-radius:16px;padding:20px 22px;transition:border-color 180ms ease}
 .cat-card:hover{border-color:var(--ps-line-2)}

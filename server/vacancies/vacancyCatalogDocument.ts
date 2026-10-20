@@ -28,7 +28,7 @@ import { escapeHtml } from './catalogHtml';
 import { CATALOG_STYLE } from './catalogStyle';
 import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
 import { plainSummary, renderDescriptionHtml } from './catalogMarkdown';
-import { countLabel } from './catalogCopy';
+import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -132,32 +132,21 @@ const CTA_BOX =
   'проверит резюме на ATS и подготовит отклик, который вы одобрите.</p>' +
   '<a class="ps-btn is-primary" href="/signup">Загрузить резюме бесплатно</a></div>';
 
-const MONTHS = [
-  'января',
-  'февраля',
-  'марта',
-  'апреля',
-  'мая',
-  'июня',
-  'июля',
-  'августа',
-  'сентября',
-  'октября',
-  'ноября',
-  'декабря',
-];
-
-function formatDate(iso: string): string {
-  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
-  if (!year || !month || !day) return iso.slice(0, 10);
-  return `${day} ${MONTHS[month - 1]} ${year}`;
-}
+const formatDate = formatRuDate;
 
 function descriptionBlock(markdown: string, summary: string): string {
   const html = renderDescriptionHtml(markdown) || renderDescriptionHtml(summary);
   return html
     ? `<div class="cat-body">${html}</div>`
     : '<div class="cat-body"><p>Источник не передал текст вакансии. Полное описание — на сайте работодателя.</p></div>';
+}
+
+function factsBlock(page: CatalogPage): string {
+  const facts = pageFacts(page.total, page.entries);
+  if (facts.length === 0) return '';
+  return `<section class="cat-facts-box" aria-label="Коротко о разделе">${facts
+    .map((fact) => `<p>${escapeHtml(fact)}</p>`)
+    .join('')}</section>`;
 }
 
 function crumbs(trail: readonly { readonly label: string; readonly path: string }[]): string {
@@ -320,7 +309,9 @@ export function renderCatalogDocument(
     '<div class="cat-layout"><div>' +
     (empty
       ? ''
-      : `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>` + pagination(page)) +
+      : factsBlock(page) +
+        `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>` +
+        pagination(page)) +
     '</div><aside class="cat-side">' +
     CTA_BOX +
     filterPanel(filters) +
