@@ -272,7 +272,7 @@ test('runs text and voice interview screens through a partial result at 1440 and
       await expect(page.locator('.career-mock-topic-list')).toContainText(
         '1 вопрос оценено по рубрике.',
       );
-      await expect(page.getByRole('button', { name: 'Записать в дневник' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Записать в дневник' })).toBeVisible();
       await checkAndCapture(page, `${width}-partial-result`, true);
       await page.getByRole('button', { name: 'Пройти заново' }).click();
       await page.getByRole('radio', { name: /Голосом/u }).check();
