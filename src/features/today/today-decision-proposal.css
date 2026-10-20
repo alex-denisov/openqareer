@@ -128,35 +128,20 @@
   .has-dialogue .career-dialogue-turn.is-assistant {
     border-radius: calc(var(--career-space-4) + var(--career-space-1) / 2);
   }
+  /* Макет 390: пилюли 44 px, текст 14/600, поля 12, «Отклонить» основным цветом текста. */
   .career-expert-proposal .career-expert-actions button {
     border: 0;
     border-radius: var(--career-radius-pill);
+    padding-inline: var(--career-space-3);
     background: var(--career-bg-elevated);
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    line-height: 1.2;
   }
   .career-expert-proposal .career-expert-actions .career-inline-ok {
     color: var(--career-accent);
     background: var(--career-accent-soft);
   }
-}
-
-.career-expert-mobile-history-title {
-  position: relative;
-  min-inline-size: 0;
-  display: grid;
-  gap: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--career-text);
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.career-expert-mobile-history-title::before {
-  content: '';
-  position: absolute;
-  inset: calc(var(--career-space-1) * -1) 0;
 }
 
 .career-expert-panel.is-intake .career-expert-conversation,
@@ -200,11 +185,19 @@
   line-height: 1.5;
 }
 @media (min-width: 761px) {
+  /* Макет 1440: три кнопки 44 стоят с шагом 44 (зазор 12 минус поля по 6). */
   .consultant-desktop .career-expert-panel .career-expert-panel-controls {
-    gap: var(--career-space-2);
+    gap: var(--career-space-3);
+  }
+  .consultant-desktop
+    .career-expert-panel
+    .career-expert-panel-controls
+    .career-expert-history-button[aria-pressed='true'] {
+    color: var(--career-accent);
+    background-color: var(--career-accent-soft);
   }
   .consultant-desktop .career-expert-panel .career-expert-panel-controls button {
-    color: var(--career-text-dim);
+    color: var(--career-text-soft);
     --header-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
     margin-inline: calc(var(--header-gutter) * -1);
     padding: 0;

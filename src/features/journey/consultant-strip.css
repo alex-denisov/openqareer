@@ -178,7 +178,7 @@
   .consultant-desktop .career-expert-panel > header {
     gap: 0;
     padding-block: 0;
-    padding-inline: var(--career-space-4) 2px;
+    padding-inline: var(--career-space-4) var(--career-space-2);
   }
   .consultant-overlay {
     position: fixed;
@@ -304,7 +304,7 @@
     .career-expert-panel:not(.is-intake)
     .career-composer-split {
     inset-block-end: 0;
-    inset-inline-end: var(--career-space-4);
+    inset-inline-end: var(--career-space-1);
   }
   .career-shell:is([data-shell-view='today'], [data-shell-view='profile'])
     > .panel-col

@@ -2745,12 +2745,17 @@
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: var(--career-radius-sm);
-  color: var(--career-text-dim);
+  border-radius: var(--career-radius-md);
+  color: var(--career-text-soft);
   background: transparent;
   transition:
     color var(--career-motion-quick),
     background var(--career-motion-quick);
+}
+
+.career-expert-history-button[aria-pressed='true'] {
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
 }
 
 .career-expert-history-button:not(:disabled):hover,
@@ -3417,7 +3422,8 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--career-space-3);
-  padding: var(--career-space-3) var(--career-space-4);
+  /* Макет 1440: справа 8 px, кнопки 44 стоят вплотную и заходят на отступ на 6 px. */
+  padding: var(--career-space-3) var(--career-space-2) var(--career-space-3) var(--career-space-4);
   border-bottom: 1px solid var(--career-line);
 }
 
@@ -3465,7 +3471,7 @@
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: var(--career-radius-sm);
+  border-radius: var(--career-radius-md);
   color: var(--career-text-soft);
   background: transparent;
 }

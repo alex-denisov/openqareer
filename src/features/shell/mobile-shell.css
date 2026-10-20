@@ -433,15 +433,6 @@
     padding: var(--career-space-2) var(--career-space-3);
   }
 
-  .career-shell > .panel-col .career-expert-starters {
-    position: absolute;
-    inset-block-end: calc(100% + var(--career-space-2));
-    inset-inline: 0;
-    inline-size: 100%;
-    min-inline-size: 0;
-    z-index: 1;
-  }
-
   .career-shell > .panel-col .career-expert-composer .career-expert-input-row {
     align-self: start;
     block-size: auto;
@@ -507,7 +498,7 @@
     inline-size: var(--career-target-min);
     block-size: var(--career-target-min);
     border: 0;
-    border-radius: var(--career-radius-sm);
+    border-radius: calc(var(--career-target-min) / 2);
     padding: 0;
     color: var(--career-text-soft);
     background: transparent;

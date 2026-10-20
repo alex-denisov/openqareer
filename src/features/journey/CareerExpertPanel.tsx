@@ -432,24 +432,10 @@ export function CareerExpertPanel({
           <span>
             <Sparkle size={18} weight="regular" />
           </span>
-          {overlay && mobileExpanded && !onExpand ? (
-            <button
-              type="button"
-              className="career-expert-mobile-history-title"
-              aria-label="История бесед"
-              aria-pressed={historyOpen}
-              onClick={toggleHistory}
-              disabled={loadingSession || !user}
-            >
-              <strong>Консультант</strong>
-              <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
-            </button>
-          ) : (
-            <div>
-              <strong>Консультант</strong>
-              <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
-            </div>
-          )}
+          <div>
+            <strong>Консультант</strong>
+            <small>{intakeMode ? 'Старт' : STAGE_TITLE[stage]}</small>
+          </div>
         </div>
         <div className="career-expert-panel-controls">
           <MobileConsultantStagePicker stage={stage} onStageChange={onStageChange} />

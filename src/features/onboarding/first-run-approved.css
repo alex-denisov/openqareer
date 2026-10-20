@@ -25,7 +25,7 @@
   padding: 0;
   background: none;
   color: var(--career-text-soft);
-  border-radius: var(--career-radius-sm);
+  border-radius: var(--career-radius-md);
 }
 .first-run-screen:not(.is-mobile) .first-run-stage-card.is-active .first-run-stage-badge {
   border-color: var(--career-accent);
