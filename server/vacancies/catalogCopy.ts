@@ -80,3 +80,26 @@ export function pageFacts(total: number, entries: readonly FactsEntry[]): readon
     ...(updated ? [`Данные проверены ${formatRuDate(updated)}.`] : []),
   ];
 }
+
+const CURRENCY_SIGN: Readonly<Record<string, string>> = {
+  RUR: '₽',
+  RUB: '₽',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+  KZT: '₸',
+  BYN: 'Br',
+  UAH: '₴',
+};
+
+/**
+ * Labels stored by earlier releases read «1 500 — 2 999 USD» or
+ * «125 000 — 125 000 RUR»: swap the code for its sign and fold equal ends.
+ */
+export function normalizeSalaryLabel(label: string): string {
+  const signed = label.replace(/\s([A-Z]{3})$/u, (whole, code: string) =>
+    CURRENCY_SIGN[code] ? ` ${CURRENCY_SIGN[code]}` : whole,
+  );
+  const equal = /^([\d\s\u00a0\u202f]+?)\s—\s\1(\s.*)?$/u.exec(signed);
+  return equal ? `${equal[1]}${equal[2] ?? ''}` : signed;
+}

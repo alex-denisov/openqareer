@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
+import { countLabel, formatRuDate, normalizeSalaryLabel, pageFacts } from './catalogCopy';
 
 const entry = (over: Partial<Parameters<typeof pageFacts>[1][number]> = {}) => ({
   company: 'Acme',
@@ -40,5 +40,14 @@ describe('pageFacts', () => {
 
   it('returns nothing for an empty page', () => {
     expect(pageFacts(0, [])).toEqual([]);
+  });
+});
+
+describe('normalizeSalaryLabel', () => {
+  it('swaps currency codes for signs and folds equal ends', () => {
+    expect(normalizeSalaryLabel('1\u00a0500 — 2\u00a0999 USD')).toBe('1\u00a0500 — 2\u00a0999 $');
+    expect(normalizeSalaryLabel('125\u00a0000 — 125\u00a0000 RUR')).toBe('125\u00a0000 ₽');
+    expect(normalizeSalaryLabel('от 90\u00a0000 ₽')).toBe('от 90\u00a0000 ₽');
+    expect(normalizeSalaryLabel('100 — 200 XYZ')).toBe('100 — 200 XYZ');
   });
 });

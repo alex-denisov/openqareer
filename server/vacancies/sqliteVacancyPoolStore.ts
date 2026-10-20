@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
+import { normalizeSalaryLabel } from './catalogCopy';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -2066,7 +2067,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       company: row.company,
       ...(row.location ? { location: row.location } : {}),
       isRemote: row.is_remote === 1,
-      ...(row.salary_label ? { salaryLabel: row.salary_label } : {}),
+      ...(row.salary_label ? { salaryLabel: normalizeSalaryLabel(row.salary_label) } : {}),
       summary: row.summary,
       skills,
       sourceUrl: row.source_url,
