@@ -38,8 +38,9 @@ import {
 } from './features/workspace/workspaceStorage';
 import type { ResumeImportSource } from './features/resume/resumeApi';
 import { clearCareerCabinetCache } from './features/cabinet/careerCabinetCache';
+import { SESSION_EXPIRED_TEXT } from './features/onboarding/firstRunSpecialState';
 
-const EXPIRED_SESSION_NOTICE = 'Сессия закончилась. Войдите снова, чтобы продолжить.';
+const EXPIRED_SESSION_NOTICE = SESSION_EXPIRED_TEXT;
 
 const AdminConsole = lazy(() => loadAdminConsole());
 const CareerWorkspaceShell = lazy(async () => {

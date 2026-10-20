@@ -6,7 +6,11 @@ import '../journey/consultant-strip.css';
 import './mockup-shell.css';
 import './mobile-shell.css';
 import { CareerExpertPanel } from '../journey/CareerExpertPanel';
-import { FirstRunWizard, firstRunDataToWorkspaceInput } from '../onboarding';
+import {
+  FirstRunWizard,
+  firstRunDataToWorkspaceInput,
+  useFirstRunSpecialState,
+} from '../onboarding';
 import {
   OpportunitiesView,
   ProfileJourneyView,
@@ -172,6 +176,9 @@ export function CareerWorkspaceShell({
     isTodayView: true,
   });
   const intakeVisible = intakeRequired && activeView === 'today';
+  const firstRunSpecial = useFirstRunSpecialState(
+    intakeRequired ? (session?.candidateId ?? null) : null,
+  );
 
   useEffect(() => {
     if (
@@ -550,7 +557,8 @@ export function CareerWorkspaceShell({
                   onStartedChange={setIntakeStarted}
                   isMobile={isCompactViewport}
                   showConsultantPanel={false}
-                  onSignIn={() => openAccount('security', true)}
+                  partialSourcesMessage={firstRunSpecial.partialMessage}
+                  importProgressLabel={firstRunSpecial.importLabel}
                   onConnectSource={() => openAccount('connections', true)}
                   onOpenConsultant={openIntakeConsultant}
                 />
@@ -584,7 +592,6 @@ export function CareerWorkspaceShell({
                     error={sessionError}
                     waitIsLong={sessionWaitIsLong}
                     onRetry={onRetrySession}
-                    onOpenLogin={onOpenLogin}
                   />
                 ) : invalidStorage ? (
                   <div className="career-storage-warning" role="alert">

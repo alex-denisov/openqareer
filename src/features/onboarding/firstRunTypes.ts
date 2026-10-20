@@ -2,15 +2,6 @@ import type { CandidateRegion } from '../workspace/candidateRegions';
 
 export type FirstRunStep = 'goal' | 'source' | 'context';
 
-export type FirstRunSpecialState =
-  | 'normal'
-  | 'skeleton'
-  | 'stale-loading'
-  | 'error'
-  | 'session-expired'
-  | 'empty-sources'
-  | 'partial-sources';
-
 export type SourceType = 'linkedin' | 'hh' | 'file' | 'talk';
 
 export interface FirstRunCity {

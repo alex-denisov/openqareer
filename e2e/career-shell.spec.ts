@@ -534,7 +534,10 @@ test('offers a retry when the server does not answer, then recovers', async ({
     return route.fallback();
   });
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
-  await expect(page.getByRole('alert')).toContainText('Ошибка: сервер не ответил.');
+  await expect(page.getByRole('alert')).toContainText(
+    'Не удалось войти: сервер не ответил. Данные не потеряны.',
+  );
+  await expect(page.getByRole('button', { name: 'Открыть вход' })).toHaveCount(0);
   await page.screenshot({
     path: evidenceScreenshot(`${testInfo.project.name}-session-error`),
     fullPage: true,
@@ -544,7 +547,7 @@ test('offers a retry when the server does not answer, then recovers', async ({
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
 
-test('announces a slow session read after four seconds and retries the same request', async ({
+test('names the subject of a slow session read after four seconds', async ({
   page,
 }, testInfo) => {
   let releaseSession!: () => void;
@@ -560,7 +563,7 @@ test('announces a slow session read after four seconds and retries the same requ
   await expect(
     page.getByText('Проверяем вход и читаем ваш профиль').filter({ visible: true }).first(),
   ).toBeVisible();
-  await expect(page.getByText('Загрузка дольше обычного.')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText('Проверяем вход…')).toBeVisible({ timeout: 15_000 });
   await page.screenshot({
     path: evidenceScreenshot(`${testInfo.project.name}-session-slow`),
     fullPage: true,

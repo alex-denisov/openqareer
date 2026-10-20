@@ -6,13 +6,17 @@ export { FirstRunCitySheet, type FirstRunCitySheetProps } from './FirstRunCitySh
 export { FirstRunSkipDialog, FirstRunSkippedToast } from './FirstRunSkipDialog';
 export { FirstRunConsultant, type FirstRunConsultantProps } from './FirstRunConsultant';
 export {
-  FirstRunSkeleton,
   FirstRunStaleLoading,
   FirstRunErrorState,
-  FirstRunSessionExpired,
   FirstRunEmptySources,
   FirstRunPartialSources,
 } from './FirstRunStates';
+export { useFirstRunSpecialState, type FirstRunSpecialView } from './useFirstRunSpecialState';
+export {
+  SESSION_EXPIRED_TEXT,
+  SESSION_STALE_LABEL,
+  sessionGateState,
+} from './firstRunSpecialState';
 export {
   filterCities,
   selectCity,
@@ -31,7 +35,6 @@ export type {
   FirstRunCity,
   FirstRunContext,
   FirstRunStep,
-  FirstRunSpecialState,
   SourceType,
   WorkFormat,
 } from './firstRunTypes';

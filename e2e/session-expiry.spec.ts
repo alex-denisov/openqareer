@@ -30,9 +30,13 @@ test('a 401 on a candidate route sends the whole app to sign in once', async ({ 
   await expect(page.getByRole('heading', { name: 'Вход в кабинет' })).toBeVisible({
     timeout: 15_000,
   });
-  await expect(page.getByRole('status')).toContainText('Сессия закончилась', {
-    timeout: 30_000,
-  });
+  await expect(page.getByRole('status')).toContainText(
+    'Вход устарел. Войдите снова, один раз для всего приложения.',
+    {
+      timeout: 30_000,
+    },
+  );
+  await expect(page.getByRole('button', { name: 'Войти в кабинет', exact: true })).toBeVisible();
   await expect(page.getByText('Нужна действующая сессия')).toHaveCount(0);
   await expect(page.getByText('Выйти')).toHaveCount(0);
 });
