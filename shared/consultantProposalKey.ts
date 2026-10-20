@@ -1,3 +1,5 @@
+import type { ExperienceRevisionField } from './experienceRevisionField';
+
 /**
  * B340 срез 1 — устойчивый ключ предложения консультанта (раздел + хеш текста).
  * Работает одинаково на сервере и клиенте без асинхронного crypto.
@@ -5,7 +7,7 @@
 export function computeProposalKey(
   section: string,
   proposedText: string,
-  field?: 'startDate' | 'endDate' | null,
+  field?: ExperienceRevisionField | null,
 ): string {
   let hash = 0x811c9dc5;
   const normalized = proposedText.trim();
@@ -21,7 +23,7 @@ export function consultantProposalKey(proposal: {
   section?: string;
   resumeRevision?: {
     section?: string;
-    field?: 'startDate' | 'endDate' | null;
+    field?: ExperienceRevisionField | null;
     proposedText?: string;
   } | null;
 }): string {

@@ -256,6 +256,10 @@ describe('career coach domain contract', () => {
     const resumeRevisionSchema =
       COACH_TURN_JSON_SCHEMA.properties.actionProposals.items.properties.resumeRevision.anyOf[0];
     expect(resumeRevisionSchema.required).toContain('field');
-    expect(resumeRevisionSchema.properties.field.anyOf[0].enum).toEqual(['startDate', 'endDate']);
+    expect(resumeRevisionSchema.properties.field.anyOf[0].enum).toEqual([
+      'startDate',
+      'endDate',
+      'teamSize',
+    ]);
   });
 });

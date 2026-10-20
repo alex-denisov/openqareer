@@ -1,5 +1,14 @@
-import { adaptationStageSchema, adaptationTaskSuggestionSchema, adaptationContextSchema } from '../../shared/adaptationCoach';
+import {
+  adaptationStageSchema,
+  adaptationTaskSuggestionSchema,
+  adaptationContextSchema,
+} from '../../shared/adaptationCoach';
 import { z } from 'zod';
+import {
+  EXPERIENCE_REVISION_FIELDS,
+  TEAM_SIZE_TEXT_PATTERN,
+  type ExperienceRevisionField,
+} from '../../shared/experienceRevisionField';
 
 const COACH_PHASES = [
   'discovery',
@@ -62,12 +71,22 @@ export const resumeExperienceDateTextSchema = z.union([
   z.string().date(),
 ]);
 
+/** Dates are canonical ISO months or days; a team size is a whole number of people. */
+export function experienceRevisionTextIsValid(
+  field: ExperienceRevisionField,
+  proposedText: string,
+): boolean {
+  return field === 'teamSize'
+    ? TEAM_SIZE_TEXT_PATTERN.test(proposedText)
+    : resumeExperienceDateTextSchema.safeParse(proposedText).success;
+}
+
 export const resumeRevisionProposalSchema = z
   .object({
     section: z.enum(['headline', 'about', 'experience', 'skills']),
     experienceId: z.string().min(1).max(80).nullable(),
     memoryId: z.string().min(1).max(80).nullable(),
-    field: z.enum(['startDate', 'endDate']).nullable().optional(),
+    field: z.enum(EXPERIENCE_REVISION_FIELDS).nullable().optional(),
     proposedText: z.string().trim().min(1).max(10_000),
   })
   .strict()
@@ -103,7 +122,7 @@ export const resumeRevisionProposalSchema = z
         message: 'experience date revisions cannot target a bullet fact',
       });
     }
-    if (target.field && !resumeExperienceDateTextSchema.safeParse(target.proposedText).success) {
+    if (target.field && !experienceRevisionTextIsValid(target.field, target.proposedText)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'experience date revisions need a canonical ISO month or date',
@@ -396,7 +415,9 @@ export const coachTurnResultSchema = z.object({
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
 export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
 // The provider limit stays unchanged; only stored server-labeled replies have extra headroom.
-export const coachProviderTurnResultSchema = coachTurnResultSchema.extend({ message: z.string().trim().min(1).max(6_000) });
+export const coachProviderTurnResultSchema = coachTurnResultSchema.extend({
+  message: z.string().trim().min(1).max(6_000),
+});
 export type CoachTurnResult = z.infer<typeof coachTurnResultSchema>;
 export type CoachMessage = z.infer<typeof coachMessageSchema>;
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
@@ -409,8 +430,18 @@ export const coachTurnStageSchema = z.enum(COACH_TURN_STAGES);
 export type CoachTurnStage = (typeof COACH_TURN_STAGES)[number];
 
 export const coachTurnSubjectSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('adaptation'), id: z.string().trim().min(1).max(200), planId: z.string().trim().min(1).max(200), adaptationStage: adaptationStageSchema }).strict(),
-  z.object({ kind: z.enum(['vacancy', 'application', 'interview']), id: z.string().trim().min(1).max(200) }),
+  z
+    .object({
+      kind: z.literal('adaptation'),
+      id: z.string().trim().min(1).max(200),
+      planId: z.string().trim().min(1).max(200),
+      adaptationStage: adaptationStageSchema,
+    })
+    .strict(),
+  z.object({
+    kind: z.enum(['vacancy', 'application', 'interview']),
+    id: z.string().trim().min(1).max(200),
+  }),
 ]);
 export type CoachTurnSubject = z.infer<typeof coachTurnSubjectSchema>;
 
@@ -538,7 +569,24 @@ export const COACH_TURN_JSON_SCHEMA = {
       ],
     },
     adaptationTask: {
-      anyOf: [{ type: 'object', properties: { targetTaskId: { anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }] }, title: { type: 'string', minLength: 1, maxLength: 200 }, description: { type: 'string', maxLength: 1500 }, dueDate: { anyOf: [{ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, { type: 'null' }] } }, required: ['targetTaskId', 'title', 'description', 'dueDate'], additionalProperties: false }, { type: 'null' }],
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            targetTaskId: {
+              anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
+            },
+            title: { type: 'string', minLength: 1, maxLength: 200 },
+            description: { type: 'string', maxLength: 1500 },
+            dueDate: {
+              anyOf: [{ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, { type: 'null' }],
+            },
+          },
+          required: ['targetTaskId', 'title', 'description', 'dueDate'],
+          additionalProperties: false,
+        },
+        { type: 'null' },
+      ],
     },
     quickReplies: {
       type: 'array',
@@ -587,7 +635,10 @@ export const COACH_TURN_JSON_SCHEMA = {
                     anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }],
                   },
                   field: {
-                    anyOf: [{ type: 'string', enum: ['startDate', 'endDate'] }, { type: 'null' }],
+                    anyOf: [
+                      { type: 'string', enum: [...EXPERIENCE_REVISION_FIELDS] },
+                      { type: 'null' },
+                    ],
                   },
                   proposedText: { type: 'string', minLength: 1, maxLength: 10_000 },
                 },

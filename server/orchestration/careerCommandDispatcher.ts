@@ -385,6 +385,19 @@ export class CareerCommandDispatcher {
   }
 }
 
+type ExperienceEntry = ResumeDraft['experience'][number];
+
+/** Writes a revision's text into the field; an empty team size means unknown again. */
+function withExperienceFieldText(
+  entry: ExperienceEntry,
+  field: NonNullable<ResumeReviseExecutionTarget['field']>,
+  text: string,
+): ExperienceEntry {
+  if (field !== 'teamSize') return { ...entry, [field]: text };
+  const { teamSize: _previous, ...rest } = entry;
+  return text ? { ...rest, teamSize: Number(text) } : rest;
+}
+
 function applyExperienceDateRevision(
   store: CandidateStore,
   candidateId: string,
@@ -397,7 +410,7 @@ function applyExperienceDateRevision(
   const index = currentDraft.experience.findIndex((entry) => entry.id === target.experienceId);
   if (index < 0) throw new ResumeRevisionConflictError();
   const previous = currentDraft.experience[index]!;
-  const updated = { ...previous, [target.field]: target.proposedText };
+  const updated = withExperienceFieldText(previous, target.field, target.proposedText);
   const appliedChronologyMemoryId = createCandidateExperienceChronologyEvidence(
     store,
     candidateId,
@@ -447,6 +460,7 @@ export function currentTextForResumeRevision(
   if (!experience) return null;
   if (target.field) {
     if (target.field === 'endDate' && experience.current) return null;
+    if (target.field === 'teamSize') return experience.teamSize ? String(experience.teamSize) : '';
     return experience[target.field] ?? null;
   }
   if (!target.memoryId) return experience.title ?? '';
@@ -494,8 +508,7 @@ function revertDraftRevision(
     const index = experiences.findIndex((entry) => entry.id === revision.experienceId);
     if (index < 0) throw new ResumeRevisionConflictError();
     experiences[index] = {
-      ...experiences[index],
-      [field]: revision.previousText,
+      ...withExperienceFieldText(experiences[index]!, field, revision.previousText),
       chronologyMemoryId: revision.previousChronologyMemoryId,
     };
     return { ...draft, experience: experiences };
