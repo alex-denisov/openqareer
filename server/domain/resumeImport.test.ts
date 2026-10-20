@@ -56,6 +56,20 @@ function evidenceFor(plan: ReturnType<typeof planResumeImport>) {
 }
 
 describe('planResumeImport', () => {
+  it('links «Обо мне» to the imported fact so the profile can name its source (B541)', () => {
+    const plan = planResumeImport(
+      { ...resume(), about: 'Руковожу инженерией платформ.' },
+      {
+        idPrefix: 'imp1',
+      },
+    );
+    const fact = plan.evidence.find(
+      (entry) => entry.memoryId === plan.draft.candidate.aboutMemoryId,
+    );
+    expect(fact?.statement).toContain('Руковожу инженерией платформ.');
+    expect(resumeDraftSchema.safeParse(plan.draft).success).toBe(true);
+  });
+
   it('produces a draft the resume schema accepts', () => {
     const plan = planResumeImport(resume(), { idPrefix: 'imp1' });
 
@@ -71,9 +85,7 @@ describe('planResumeImport', () => {
     });
 
     expect(projection.master.experience).toHaveLength(1);
-    expect(projection.master.experience[0].employer?.value).toBe(
-      'Enterprise Energy IT Services',
-    );
+    expect(projection.master.experience[0].employer?.value).toBe('Enterprise Energy IT Services');
     expect(projection.master.experience[0].bullets).toHaveLength(2);
     expect(projection.master.education).toHaveLength(1);
     expect(projection.master.languages).toHaveLength(1);
@@ -145,9 +157,7 @@ describe('planResumeImport', () => {
           { name: '   ', institution: 'ignored' },
         ],
         tests: [{ name: 'IELTS', provider: 'British Council', score: '7.5', year: '2021' }],
-        recommendations: [
-          { recommender: 'Степан Рукосуев', organization: 'Россети Цифра' },
-        ],
+        recommendations: [{ recommender: 'Степан Рукосуев', organization: 'Россети Цифра' }],
         additional: {
           citizenship: 'Россия',
           workSchedule: 'полная занятость',

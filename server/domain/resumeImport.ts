@@ -69,8 +69,12 @@ export function remapResumeImportDraftEvidence(
   memoryIds: ReadonlyMap<string, string>,
 ): ResumeDraft {
   const remap = (memoryId: string) => memoryIds.get(memoryId) ?? memoryId;
+  const aboutMemoryId = draft.candidate.aboutMemoryId;
   return {
     ...draft,
+    candidate: aboutMemoryId
+      ? { ...draft.candidate, aboutMemoryId: remap(aboutMemoryId) }
+      : draft.candidate,
     experience: draft.experience.map((role) => ({
       ...role,
       chronologyMemoryId: remap(role.chronologyMemoryId),
@@ -168,7 +172,7 @@ export function planResumeImport(
     evidence,
     draft: {
       schemaVersion: options.schemaVersion,
-      candidate: planCandidate(parsed),
+      candidate: planCandidate(parsed, prefix),
       targetRole: label(parsed.targetRole),
       experience,
       skills,
@@ -188,11 +192,13 @@ export function planResumeImport(
   };
 }
 
-function planCandidate(parsed: ParsedResume): ResumeDraft['candidate'] {
+function planCandidate(parsed: ParsedResume, prefix: string): ResumeDraft['candidate'] {
   return {
     fullName: label(parsed.fullName),
     headline: label(parsed.headline),
     about: longText(parsed.about),
+    // The same fact `addProfileEvidence` writes, so «Обо мне» names its import (B541).
+    ...(parsed.about?.trim() ? { aboutMemoryId: `${prefix}-about` } : {}),
     contact: {
       email: email(parsed.contact.email),
       phone: clamp(parsed.contact.phone, 60),

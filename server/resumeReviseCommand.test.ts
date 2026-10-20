@@ -218,6 +218,10 @@ describe('resume.revise career command (C58)', () => {
     expect(afterApproval.json().data.draft.candidate.about).toBe(
       '15 лет опыта в финтех-платформах.',
     );
+    // B541: the accepted consultant edit becomes the origin of «Обо мне».
+    expect(afterApproval.json().data.draft.candidate.aboutOrigin).toMatchObject({
+      kind: 'consultant',
+    });
     expect(
       store.getSnapshot(candidateId).memory.find((item) => item.id === 'fact-about-1')?.status,
     ).toBe('confirmed');

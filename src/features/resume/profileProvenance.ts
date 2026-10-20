@@ -6,6 +6,7 @@ import type {
 } from '../coach/coachApi';
 import { PLATFORM_LABELS } from '../connections/platformLabels';
 import { importDateLabel } from './profileSourceLabels';
+import type { ResumeDraft } from './resumeTypes';
 
 /** Макет 2: «из LinkedIn, 12.09», «со слов кандидата», «выведено консультантом, беседа 06.10». */
 export function provenanceLabel(provenance: FactProvenance | undefined): string {
@@ -54,18 +55,24 @@ export function walkHeadline(walk: ImportWalk): string {
 }
 
 /**
- * «Обо мне» has no memory id: the text is attributed to the import whose fact
- * holds the very same words; any other text was written by the candidate.
+ * «Обо мне» (B541): an accepted consultant edit or the candidate's own text
+ * carries `aboutOrigin`; an imported text points at its fact. Drafts written
+ * before B541 have neither — they are matched against the imported facts by
+ * text, and any other text was written by the candidate.
  */
 export function aboutProvenance(
-  about: string | undefined,
+  candidate: Pick<ResumeDraft['candidate'], 'about' | 'aboutMemoryId' | 'aboutOrigin'>,
   memory: readonly CandidateMemory[],
 ): FactProvenance | undefined {
-  const text = about?.trim();
+  const text = candidate.about?.trim();
   if (!text) return undefined;
-  const match = memory.find((entry) => entry.statement.trim() === text);
-  if (match) return match.provenance;
-  return { kind: 'candidate', at: new Date(0).toISOString() };
+  if (candidate.aboutOrigin) return candidate.aboutOrigin;
+  const linked = candidate.aboutMemoryId
+    ? memory.find((entry) => entry.id === candidate.aboutMemoryId)?.provenance
+    : undefined;
+  if (linked) return linked;
+  const match = memory.find((entry) => entry.statement.trim() === text)?.provenance;
+  return match ?? { kind: 'candidate', at: '' };
 }
 
 /** Макет 2, 390 «Источник»: «LinkedIn, 12.09» / «Со слов кандидата». */

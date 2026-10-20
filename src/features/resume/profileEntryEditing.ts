@@ -18,8 +18,21 @@ function localId(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function updateAbout(draft: ResumeDraft, about: string): ResumeDraft {
-  return { ...draft, candidate: { ...draft.candidate, about } };
+/**
+ * B541: the text records who wrote it. `restore` puts back an earlier text whose
+ * origin is unknown, so the profile matches it against the imported facts again.
+ */
+export function updateAbout(
+  draft: ResumeDraft,
+  about: string,
+  author: 'candidate' | 'consultant' | 'restore' = 'candidate',
+): ResumeDraft {
+  const { aboutMemoryId: _imported, aboutOrigin: _origin, ...candidate } = draft.candidate;
+  if (author === 'restore') return { ...draft, candidate: { ...candidate, about } };
+  return {
+    ...draft,
+    candidate: { ...candidate, about, aboutOrigin: { kind: author, at: new Date().toISOString() } },
+  };
 }
 
 export function addCertification(draft: ResumeDraft): ResumeDraft {
@@ -59,7 +72,9 @@ export function updateProject(
 ): ResumeDraft {
   return {
     ...draft,
-    projects: (draft.projects ?? []).map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+    projects: (draft.projects ?? []).map((entry) =>
+      entry.id === id ? { ...entry, ...patch } : entry,
+    ),
   };
 }
 
@@ -99,7 +114,9 @@ export function updateCourse(
 ): ResumeDraft {
   return {
     ...draft,
-    courses: (draft.courses ?? []).map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+    courses: (draft.courses ?? []).map((entry) =>
+      entry.id === id ? { ...entry, ...patch } : entry,
+    ),
   };
 }
 

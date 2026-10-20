@@ -477,7 +477,16 @@ function applyRevisionToDraft(
     return { ...draft, candidate: { ...draft.candidate, headline: target.proposedText } };
   }
   if (target.section === 'about') {
-    return { ...draft, candidate: { ...draft.candidate, about: target.proposedText } };
+    // B541: an accepted consultant edit is the text's origin from now on.
+    const { aboutMemoryId: _imported, ...candidate } = draft.candidate;
+    return {
+      ...draft,
+      candidate: {
+        ...candidate,
+        about: target.proposedText,
+        aboutOrigin: { kind: 'consultant', at: new Date().toISOString() },
+      },
+    };
   }
   if (target.section === 'skills') {
     if (!target.experienceId) throw new ResumeRevisionConflictError();
@@ -517,7 +526,9 @@ function revertDraftRevision(
     return { ...draft, candidate: { ...draft.candidate, headline: revision.previousText } };
   }
   if (revision.section === 'about') {
-    return { ...draft, candidate: { ...draft.candidate, about: revision.previousText } };
+    // The previous text's origin was not kept: the profile falls back to matching it.
+    const { aboutOrigin: _consultant, ...candidate } = draft.candidate;
+    return { ...draft, candidate: { ...candidate, about: revision.previousText } };
   }
   if (revision.section === 'skills') {
     if (!revision.experienceId) throw new ResumeRevisionConflictError();

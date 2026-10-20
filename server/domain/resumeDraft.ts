@@ -18,6 +18,10 @@ export interface ResumeCandidateInput {
    */
   readonly photoMediaId?: string;
   readonly about?: string;
+  /** B541: the imported fact the about text came from (platform and date live on it). */
+  readonly aboutMemoryId?: string;
+  /** B541: set when the candidate or an accepted consultant edit wrote the text. */
+  readonly aboutOrigin?: { readonly kind: 'candidate' | 'consultant'; readonly at: string };
   readonly contact?: {
     readonly email?: string;
     readonly phone?: string;
@@ -275,6 +279,11 @@ export const resumeDraftSchema = z
         headline: labelSchema.optional(),
         photoMediaId: mediaIdSchema.optional(),
         about: longTextSchema.optional(),
+        aboutMemoryId: z.string().trim().min(1).max(200).optional(),
+        aboutOrigin: z
+          .object({ kind: z.enum(['candidate', 'consultant']), at: z.string().datetime() })
+          .strict()
+          .optional(),
         contact: z
           .object({
             email: z.string().trim().email().max(320).optional(),

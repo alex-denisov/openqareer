@@ -24,9 +24,26 @@ const base: ResumeDraft = {
 
 describe('updateAbout', () => {
   it('replaces the about text without touching other candidate fields', () => {
-    const next = updateAbout({ ...base, candidate: { ...base.candidate, fullName: 'A' } }, 'Новый текст');
+    const next = updateAbout(
+      { ...base, candidate: { ...base.candidate, fullName: 'A' } },
+      'Новый текст',
+    );
     expect(next.candidate.about).toBe('Новый текст');
     expect(next.candidate.fullName).toBe('A');
+  });
+
+  it('records who wrote the text and drops the link to an imported fact (B541)', () => {
+    const imported = { ...base, candidate: { about: 'Импорт', aboutMemoryId: 'imp1-about' } };
+    const own = updateAbout(imported, 'Свой текст');
+    expect(own.candidate.aboutMemoryId).toBeUndefined();
+    expect(own.candidate.aboutOrigin).toMatchObject({ kind: 'candidate' });
+    expect(
+      updateAbout(imported, 'Текст консультанта', 'consultant').candidate.aboutOrigin,
+    ).toMatchObject({
+      kind: 'consultant',
+    });
+    const restored = updateAbout(own, 'Импорт', 'restore');
+    expect(restored.candidate.aboutOrigin).toBeUndefined();
   });
 });
 

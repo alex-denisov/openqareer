@@ -3,6 +3,7 @@ import {
   coursesNotFoundLead,
   provenanceLabel,
   provenanceSourceValue,
+  aboutProvenance,
   sourceCountLabel,
   walkHeadline,
 } from './profileProvenance';
@@ -78,5 +79,35 @@ describe('profile provenance copy (B541, макет 2)', () => {
     ).toBe('LinkedIn, 12.09');
     expect(provenanceSourceValue({ kind: 'candidate', at: '' })).toBe('Со слов кандидата');
     expect(provenanceSourceValue(undefined)).toBe('Источник неизвестен');
+  });
+
+  it('names the origin of «Обо мне» from the draft, not from the words (B541)', () => {
+    const imported = {
+      id: 'imp1-about',
+      kind: 'fact' as const,
+      domain: 'other' as const,
+      statement: 'Старый текст',
+      confidence: 'candidate-reported' as const,
+      sourceMessageIds: ['m'],
+      sensitive: false,
+      status: 'proposed' as const,
+      provenance: { kind: 'import' as const, platform: 'hh' as const, at: '2026-10-07T08:00:00Z' },
+    };
+    expect(
+      aboutProvenance({ about: 'Текст', aboutMemoryId: 'imp1-about' }, [imported]),
+    ).toMatchObject({ kind: 'import', platform: 'hh' });
+    expect(
+      aboutProvenance(
+        { about: 'Текст', aboutOrigin: { kind: 'consultant', at: '2026-10-06T08:00:00Z' } },
+        [imported],
+      ),
+    ).toEqual({ kind: 'consultant', at: '2026-10-06T08:00:00Z' });
+    expect(aboutProvenance({ about: 'Старый текст' }, [imported])).toMatchObject({
+      kind: 'import',
+    });
+    expect(aboutProvenance({ about: 'Свой текст' }, [imported])).toMatchObject({
+      kind: 'candidate',
+    });
+    expect(aboutProvenance({}, [imported])).toBeUndefined();
   });
 });

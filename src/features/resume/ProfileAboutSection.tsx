@@ -130,6 +130,23 @@ function AboutContent({
   );
 }
 
+/** Puts back the text the consultant edit replaced; its origin is matched again (B541). */
+function revertAbout(
+  draft: ResumeDraft,
+  suggestion: { readonly proposedText: string; readonly currentText?: string },
+  onSectionSave: ProfileAboutSectionProps['onSectionSave'],
+): (() => Promise<void>) | undefined {
+  if (suggestion.currentText === undefined) return undefined;
+  return async () => {
+    if (draft.candidate.about !== suggestion.proposedText)
+      throw new Error('Текст уже изменился. Обновите профиль перед откатом.');
+    if (
+      (await onSectionSave(updateAbout(draft, suggestion.currentText ?? '', 'restore'))) === false
+    )
+      throw new Error('Не удалось откатить правку. Повторите попытку.');
+  };
+}
+
 function AboutSuggestionsList({
   draft,
   suggestions,
@@ -156,25 +173,12 @@ function AboutSuggestionsList({
           onAccept={
             onAcceptSuggestion ??
             (async (s) => {
-              if ((await onSectionSave(updateAbout(draft, s.proposedText))) === false)
+              if ((await onSectionSave(updateAbout(draft, s.proposedText, 'consultant'))) === false)
                 throw new Error('Не удалось сохранить правку. Повторите попытку.');
             })
           }
           onDismiss={onDismissSuggestion}
-          onRevert={
-            onRevertSuggestion ??
-            (suggestion.currentText !== undefined
-              ? async () => {
-                  if (draft.candidate.about !== suggestion.proposedText)
-                    throw new Error('Текст уже изменился. Обновите профиль перед откатом.');
-                  if (
-                    (await onSectionSave(updateAbout(draft, suggestion.currentText ?? ''))) ===
-                    false
-                  )
-                    throw new Error('Не удалось откатить правку. Повторите попытку.');
-                }
-              : undefined)
-          }
+          onRevert={onRevertSuggestion ?? revertAbout(draft, suggestion, onSectionSave)}
         />
       ))}
     </>
@@ -309,9 +313,11 @@ function useProfileAboutView(props: ProfileAboutSectionProps) {
 
 function AboutSectionHead({
   about,
+  candidate,
   onEdit,
 }: {
   readonly about?: string;
+  readonly candidate: ResumeDraft['candidate'];
   readonly onEdit: () => void;
 }) {
   const { memory } = useProfileProvenance();
@@ -327,7 +333,7 @@ function AboutSectionHead({
           onClick={onEdit}
         >
           {about ? (
-            <ProfileProvenanceChip provenance={aboutProvenance(about, memory)} />
+            <ProfileProvenanceChip provenance={aboutProvenance(candidate, memory)} />
           ) : (
             <>
               <PencilSimple size="1em" aria-hidden="true" />
@@ -351,7 +357,7 @@ export function ProfileAboutSection(props: ProfileAboutSectionProps) {
       id="sec-about"
       aria-labelledby="sec-about-title"
     >
-      <AboutSectionHead about={about} onEdit={() => setEditing(true)} />
+      <AboutSectionHead about={about} candidate={draft.candidate} onEdit={() => setEditing(true)} />
       <AboutViewBody
         editing={editing}
         about={about}
