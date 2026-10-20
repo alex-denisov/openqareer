@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { SNAPSHOT_PAGE_BYTE_BUDGET, buildSnapshotHead } from './candidateSnapshotPage';
+import { buildSnapshotHead } from './candidateSnapshotPage';
+
+/** Механика листания проверяется на малом бюджете, как и было до 20.10. */
+const BUDGET = 12_288;
 
 /**
  * Снимок кандидата весил 59 561 байт, а маршрут доносит около 20 460 (INC-030):
@@ -36,26 +39,26 @@ function snapshot(memoryCount: number, messageCount: number, turnCount: number) 
 
 describe('buildSnapshotHead', () => {
   it('укладывает первый ответ в бюджет маршрута', () => {
-    const { data } = buildSnapshotHead(snapshot(400, 200, 40), 0);
+    const { data } = buildSnapshotHead(snapshot(400, 200, 40), 0, BUDGET);
     expect(Buffer.byteLength(JSON.stringify(data), 'utf8')).toBeLessThanOrEqual(
-      SNAPSHOT_PAGE_BYTE_BUDGET,
+      BUDGET,
     );
   });
 
   it('оставляет у набора фактов счёт, но не его разделы', () => {
-    const { data } = buildSnapshotHead(snapshot(10, 0, 0), 0);
+    const { data } = buildSnapshotHead(snapshot(10, 0, 0), 0, BUDGET);
     expect(data.dossier.confirmedCount).toBe(12);
     expect(data.dossier.sections).toEqual([]);
   });
 
   it('не тащит диалог в первый ответ и говорит, сколько его', () => {
-    const { data, meta } = buildSnapshotHead(snapshot(10, 200, 5), 0);
+    const { data, meta } = buildSnapshotHead(snapshot(10, 200, 5), 0, BUDGET);
     expect(data.messages).toEqual([]);
     expect(meta.messages.total).toBe(200);
   });
 
   it('оставляет последние ходы, а не первые, и только те, что влезли', () => {
-    const { data, meta } = buildSnapshotHead(snapshot(10, 0, 40), 0);
+    const { data, meta } = buildSnapshotHead(snapshot(10, 0, 40), 0, BUDGET);
     expect(data.turns.length).toBeLessThan(40);
     expect(data.turns.at(-1)?.id).toBe('turn-39');
     expect(meta.turns.total).toBe(40);
@@ -64,34 +67,34 @@ describe('buildSnapshotHead', () => {
   it('не тащит ход, который сам не помещается, и говорит об этом', () => {
     const heavy = snapshot(0, 0, 5);
     heavy.turns = heavy.turns.map((turn) => ({ ...turn, payload: 'x'.repeat(20_000) }));
-    const { data, meta } = buildSnapshotHead(heavy, 0);
+    const { data, meta } = buildSnapshotHead(heavy, 0, BUDGET);
     expect(data.turns).toEqual([]);
     expect(meta.turns.total).toBe(5);
     // Ход не влез — экран дочитает его отдельной страницей, а не решит, что
     // ходов не было.
     expect(meta.turns.nextOffset).toBe(0);
     expect(Buffer.byteLength(JSON.stringify(data), 'utf8')).toBeLessThanOrEqual(
-      SNAPSHOT_PAGE_BYTE_BUDGET,
+      BUDGET,
     );
   });
 
   it('называет свой размер, чтобы бюджет можно было проверить снаружи', () => {
-    const { data, meta } = buildSnapshotHead(snapshot(50, 20, 4), 0);
+    const { data, meta } = buildSnapshotHead(snapshot(50, 20, 4), 0, BUDGET);
     expect(meta.headBytes).toBe(Buffer.byteLength(JSON.stringify(data), 'utf8'));
   });
 
   it('отдаёт память страницами и показывает, где продолжить', () => {
-    const first = buildSnapshotHead(snapshot(400, 0, 0), 0);
+    const first = buildSnapshotHead(snapshot(400, 0, 0), 0, BUDGET);
     expect(first.meta.memory.total).toBe(400);
     expect(first.meta.memory.nextOffset).toBe(first.data.memory.length);
     expect(first.data.memory[0].id).toBe('memory-0');
 
-    const second = buildSnapshotHead(snapshot(400, 0, 0), first.meta.memory.nextOffset ?? 0);
+    const second = buildSnapshotHead(snapshot(400, 0, 0), first.meta.memory.nextOffset ?? 0, BUDGET);
     expect(second.data.memory[0].id).toBe(`memory-${first.data.memory.length}`);
   });
 
   it('короткий снимок доходит целиком и не обещает продолжения', () => {
-    const { data, meta } = buildSnapshotHead(snapshot(3, 0, 2), 0);
+    const { data, meta } = buildSnapshotHead(snapshot(3, 0, 2), 0, BUDGET);
     expect(data.memory).toHaveLength(3);
     expect(meta.memory.nextOffset).toBeNull();
   });
