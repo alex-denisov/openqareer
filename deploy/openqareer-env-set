@@ -20,7 +20,7 @@ readonly BASE64_KEY='^OPENQAREER_VERTEX_SERVICE_ACCOUNT_B64$'
 readonly BASE64_PATTERN='^[A-Za-z0-9+/=]{100,8000}$'
 # Модель и провайдер массового клиента (B522) — пути вида deepseek/deepseek-v4-flash.
 readonly SLUG_KEY='^OPENQAREER_BULK_LLM_(MODEL|PROVIDER)$'
-readonly SLUG_PATTERN='^[a-z0-9][a-z0-9./_-]{1,120}$'
+readonly SLUG_PATTERN='^[a-z0-9][a-z0-9./_,-]{1,200}$'
 
 fail() {
   printf 'openqareer-env-set: %s\n' "$1" >&2

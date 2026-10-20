@@ -193,3 +193,26 @@ it('an upstream cost above reservation records actual charge and stops later dis
   expect(calls).toBe(1);
   runtime.close();
 });
+it('routes through an ordered list of pinned providers so one price change or rate limit does not stop the work', async () => {
+  let body: { provider: { order: string[]; only: string[]; allow_fallbacks: boolean; quantizations: string[] } };
+  const base = options((async (_u, init) => {
+    body = JSON.parse(String(init?.body));
+    return response(0.001);
+  }) as typeof fetch);
+  const runtime = createBulkLlmRuntime({
+    ...base,
+    env: {
+      ...base.env,
+      OPENQAREER_BULK_LLM_PROVIDER: 'streamlake/fp8,deepinfra/fp8',
+      OPENQAREER_BULK_LLM_QUANTIZATION: 'fp8',
+    },
+  });
+  await runtime.client!.complete(req);
+  expect(body!.provider).toMatchObject({
+    order: ['streamlake/fp8', 'deepinfra/fp8'],
+    only: ['streamlake/fp8', 'deepinfra/fp8'],
+    allow_fallbacks: true,
+    quantizations: ['fp8'],
+  });
+  runtime.close();
+});

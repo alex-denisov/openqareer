@@ -58,7 +58,7 @@ describe('B525 whole-pool order before page slicing', () => {
 describe('B524 background fit for the shown page', () => {
   function withState(
     id: string,
-    state: 'not_requested' | 'processing' | 'ready' | 'no_description',
+    state: 'not_requested' | 'processing' | 'ready' | 'no_description' | 'failed',
   ) {
     const base = item(id, null);
     return {
@@ -80,6 +80,11 @@ describe('B524 background fit for the shown page', () => {
     expect(ids).not.toContain('done');
     expect(ids).not.toContain('empty');
     expect(ids).toHaveLength(20);
+  });
+  it('retries a calculation that failed on a provider outage', () => {
+    expect(vacanciesAwaitingFit([withState('down', 'failed'), withState('done', 'ready')])).toEqual([
+      'down',
+    ]);
   });
 });
 

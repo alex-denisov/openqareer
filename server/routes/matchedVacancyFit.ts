@@ -40,10 +40,11 @@ export function compactFitView(view: VacancyFitView): VacancyFitView {
   };
 }
 
-/** Вакансии страницы, для которых расчёт соответствия ещё никто не ставил (B524). */
+/** Вакансии страницы без расчёта или с упавшим расчётом (B524). */
 export function vacanciesAwaitingFit(items: readonly MatchedVacancyItem[]): string[] {
   return items
-    .filter((item) => item.explanation.fitView?.state === 'not_requested')
+    // Упавший расчёт (провайдер недоступен) повторяется при следующем показе, а не ждёт нажатия.
+    .filter((item) => ['not_requested', 'failed'].includes(item.explanation.fitView?.state ?? ''))
     .slice(0, FIT_PAGE_LIMIT)
     .map((item) => item.cluster.id);
 }

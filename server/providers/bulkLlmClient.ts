@@ -62,6 +62,9 @@ export class BulkLlmClient {
     private readonly delay: (ms: number) => Promise<void> = (ms) =>
       new Promise((r) => setTimeout(r, ms)),
   ) {}
+  private get providers(): string[] {
+    return this.config.provider.split(',');
+  }
   private body(input: BulkLlmInput) {
     if (
       !['public', 'candidate'].includes(input.dataClass) ||
@@ -91,9 +94,10 @@ export class BulkLlmClient {
       reasoning: { enabled: false },
       usage: { include: true },
       provider: {
-        order: [this.config.provider],
-        only: [this.config.provider],
-        allow_fallbacks: false,
+        // Список закреплённых провайдеров по порядку: цена или лимит одного не останавливают работу.
+        order: this.providers,
+        only: this.providers,
+        allow_fallbacks: this.providers.length > 1,
         require_parameters: true,
         data_collection: 'deny',
         quantizations: [this.config.quantization],

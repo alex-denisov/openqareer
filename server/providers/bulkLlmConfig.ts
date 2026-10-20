@@ -46,7 +46,9 @@ export function readBulkLlmConfig(env: NodeJS.ProcessEnv = process.env): BulkLlm
   )
     throw new Error('Bulk model must be pinned and support disabled reasoning');
   if (
-    !/^[a-z0-9][a-z0-9./_-]+$/u.test(config.provider) ||
+    !config.provider
+      .split(',')
+      .every((provider) => /^[a-z0-9][a-z0-9./_-]+$/u.test(provider)) ||
     !['fp4', 'fp8', 'fp16', 'bf16', 'fp32', 'int4', 'int8', 'mxfp4'].includes(config.quantization)
   )
     throw new Error('Invalid pinned provider or quantization');
