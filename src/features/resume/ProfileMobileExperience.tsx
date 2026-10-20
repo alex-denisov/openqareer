@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Briefcase, PencilSimple, Plus } from '@phosphor-icons/react';
+import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
 import { ProfileMobilePositionEditor } from './ProfileMobilePositionEditor';
 import {
   ExperienceSuggestionsList,
@@ -16,6 +16,8 @@ import {
 } from './ProfileMobileElements';
 import type { ProfileMobileDataProps, ProfileMobileNavigationProps } from './profileMobileTypes';
 import type { ProfileMobileRoute } from './profileMobileNavigation';
+import { teamSizeLabel } from './ProfileTeamSizeTag';
+import { teamSizeFinding } from './reviewFindings';
 import type { ResumeExperienceInput } from './resumeTypes';
 
 interface ExperienceProps extends ProfileMobileDataProps, ProfileMobileNavigationProps {
@@ -52,7 +54,19 @@ export function ProfileMobileExperienceList(props: ExperienceProps) {
           onClick={() => props.open({ page: 'jobadd' })}
         />
       </ProfileMobileGroup>
+      <TeamSizeWarnline draft={props.draft} />
     </>
+  );
+}
+
+function TeamSizeWarnline({ draft }: { readonly draft: ExperienceProps['draft'] }) {
+  const finding = teamSizeFinding(draft);
+  if (!finding) return null;
+  return (
+    <p className="pm-warnline">
+      <Question size="1em" aria-hidden="true" />
+      {finding.replace(/\.$/u, '')}
+    </p>
   );
 }
 
@@ -96,7 +110,11 @@ function MobileExperienceFacts({
         {confirmed ? 'вами' : 'не подтверждено вами'}
       </ProfileMobileKeyValue>
       <ProfileMobileKeyValue label="Размер команды">
-        <span className="pm-unk">неизвестно</span>
+        {entry.teamSize ? (
+          teamSizeLabel(entry.teamSize)
+        ) : (
+          <span className="pm-unk">неизвестно</span>
+        )}
       </ProfileMobileKeyValue>
     </ProfileMobileGroup>
   );

@@ -22,6 +22,7 @@ import { PositionEditForm } from './ProfileExperienceEditor';
 import { monthOrder } from './experienceDate';
 import type { ResumeDraft, ResumeExperienceInput } from './resumeTypes';
 import { VacancyRequirementAssistant } from './VacancyRequirementAssistant';
+import { ProfileTeamSizeTag } from './ProfileTeamSizeTag';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 
 export interface ProfileExperienceSectionProps {
@@ -218,6 +219,7 @@ function PositionEvidenceBadge({
         )}
         {confirmedByCandidate ? 'Подтверждено вами' : 'Не подтверждено вами'}
       </span>
+      <ProfileTeamSizeTag teamSize={entry.teamSize} />
     </div>
   );
 }
