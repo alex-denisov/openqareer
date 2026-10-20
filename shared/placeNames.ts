@@ -337,6 +337,17 @@ const CITY_SLUG_ALIASES: Readonly<Record<string, string>> = {
 
 const LATIN_LABEL = /^[a-z0-9]+(?:[ -][a-z0-9]+)*$/u;
 
+const CITY_EXONYMS: ReadonlySet<string> = new Set(Object.values(CITY_LATIN_NAMES));
+
+/**
+ * The English name of a city from the list above (`izhevsk`, `nizhny-novgorod`).
+ * It is the city's established exonym, not a transliteration, even when it
+ * contains `zh` (B535: Ижевск with 217 vacancies was left out of the sitemap).
+ */
+export function isCityExonym(segment: string): boolean {
+  return CITY_EXONYMS.has(segment);
+}
+
 export function latinCityName(label?: string): string | undefined {
   if (!label) return undefined;
   const trimmed = label.trim();

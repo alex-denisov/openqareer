@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isValidPublicPath,
-  publicPathViolation,
-  isTransliteratedSegment,
-} from './seoSlugPolicy';
+import { isValidPublicPath, publicPathViolation, isTransliteratedSegment } from './seoSlugPolicy';
 
 describe('политика публичных адресов (B209)', () => {
   it('принимает естественный английский путь', () => {
@@ -48,5 +44,12 @@ describe('политика публичных адресов (B209)', () => {
 
   it('возвращает null как причину для валидного пути', () => {
     expect(publicPathViolation('/legal/terms')).toBeNull();
+  });
+});
+
+describe('city exonyms', () => {
+  it('accepts an established English city name even with a transliteration digraph', () => {
+    expect(publicPathViolation('/vacancies/izhevsk')).toBeNull();
+    expect(publicPathViolation('/vacancies/moskva')).not.toBeNull();
   });
 });

@@ -11,6 +11,7 @@
  * независимыми способами — словарём корней и диграфами, которых в английском
  * не бывает, — потому что один словарь всегда отстаёт от новых страниц.
  */
+import { isCityExonym } from './placeNames';
 
 /** Сегмент адреса: строчная латиница и цифры, разделитель — дефис. */
 const SEGMENT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
@@ -84,7 +85,7 @@ export function publicPathViolation(path: string): string | null {
     if (!SEGMENT.test(segment)) {
       return `сегмент «${segment}» — не строчная латиница через дефис`;
     }
-    if (isRussianSoftwareProduct(segment)) continue;
+    if (isRussianSoftwareProduct(segment) || isCityExonym(segment)) continue;
     if (isTransliteratedSegment(segment)) {
       return `сегмент «${segment}» выглядит транслитом русского слова`;
     }
