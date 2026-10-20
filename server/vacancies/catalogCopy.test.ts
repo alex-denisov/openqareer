@@ -28,7 +28,7 @@ describe('pageFacts', () => {
     expect(facts[0]).toBe(
       'В разделе 40 вакансий. Из 3 на этой странице: с указанной зарплатой — 1, удалённых — 1, работодателей — 2.',
     );
-    expect(facts[1]).toBe('Чаще всего в требованиях: Python, SQL.');
+    expect(facts[1]).toBe('Частые метки в вакансиях: Python, SQL.');
     expect(facts[2]).toBe(`Данные проверены ${formatRuDate('2026-10-20')}.`);
   });
 

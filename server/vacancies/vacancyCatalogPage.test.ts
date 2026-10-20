@@ -4,7 +4,9 @@ import {
   buildListingPage,
   buildVacancyDetail,
   CATALOG_PAGE_SIZE,
+  closeDanglingParentheses,
   googleEmploymentType,
+  readableSkill,
 } from './vacancyCatalogPage';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 
@@ -331,5 +333,33 @@ describe('страна в разметке вакансии', () => {
     const posting = JSON.stringify(detail.jsonLd);
     expect(posting).toContain('"addressCountry":"DE"');
     expect(posting).toContain('"applicantLocationRequirements":{"@type":"Country","name":"DE"}');
+  });
+});
+
+describe('чистые названия и навыки в разметке (B535, круг 5)', () => {
+  it('закрывает скобку, обрезанную площадкой, в title, h1 и разметке', () => {
+    expect(closeDanglingParentheses('Consultant - Water (Chemical')).toBe(
+      'Consultant - Water (Chemical)',
+    );
+    expect(closeDanglingParentheses('Developer (Backend)')).toBe('Developer (Backend)');
+    const detail = buildVacancyDetail(
+      cluster({ canonicalTitle: 'Consultant (Chemical' }),
+      undefined,
+      undefined,
+      NOW,
+    )!;
+    expect(JSON.stringify(detail.jsonLd)).toContain('"title":"Consultant (Chemical)"');
+  });
+
+  it('печатает навыки словами, а не слагами', () => {
+    expect(readableSkill('Senior-Backend-Engineer')).toBe('Senior Backend Engineer');
+    expect(readableSkill('Front-end')).toBe('Front-end');
+    const detail = buildVacancyDetail(
+      cluster({ skills: ['Digital-Sales-Director', 'GDPR'] }),
+      undefined,
+      undefined,
+      NOW,
+    )!;
+    expect(JSON.stringify(detail.jsonLd)).toContain('"skills":"Digital Sales Director, GDPR"');
   });
 });

@@ -81,11 +81,11 @@ export function pageFacts(total: number, entries: readonly FactsEntry[]): readon
   const counted = [
     salaried > 0 ? `с указанной зарплатой — ${salaried}` : '',
     remote > 0 ? `удалённых — ${remote}` : '',
-    `работодателей — ${employers}`,
+    employers < entries.length ? `работодателей — ${employers}` : '',
   ].filter(Boolean);
   return [
     `В разделе ${countLabel(total)}. Из ${sample}: ${counted.join(', ')}.`,
-    ...(skills.length > 0 ? [`Чаще всего в требованиях: ${skills.join(', ')}.`] : []),
+    ...(skills.length > 0 ? [`Частые метки в вакансиях: ${skills.join(', ')}.`] : []),
     ...(updated ? [`Данные проверены ${formatRuDate(updated)}.`] : []),
   ];
 }

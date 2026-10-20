@@ -143,7 +143,7 @@ function descriptionBlock(markdown: string, summary: string): string {
   const html = renderDescriptionHtml(markdown) || renderDescriptionHtml(summary);
   return html
     ? `<div class="cat-body">${html}</div>`
-    : '<div class="cat-body"><p>Источник не передал текст вакансии. Полное описание — на сайте работодателя.</p></div>';
+    : '<div class="cat-body"><p>Источник не передал полный текст. Условия и требования — на сайте работодателя, кнопка «Открыть у работодателя».</p></div>';
 }
 
 function factsBlock(page: CatalogPage): string {
@@ -357,7 +357,9 @@ function aboutBox(entry: CatalogEntry, employer: string): string {
     `<dt>Где</dt><dd>${escapeHtml(placeLabel(entry))}</dd>` +
     `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
     `<dt>Проверена</dt><dd>${escapeHtml(formatDate(entry.lastSeenAt))}</dd>` +
-    (entry.sourceName ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName)}</dd>` : '') +
+    (entry.sourceName
+      ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName.replace(/\s*\(страница поиска\)$/u, ''))}</dd>`
+      : '') +
     (entry.sourceCount > 1
       ? `<dt>Площадок с этой вакансией</dt><dd>${entry.sourceCount}</dd>`
       : '') +

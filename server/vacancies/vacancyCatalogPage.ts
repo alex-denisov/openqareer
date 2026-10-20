@@ -120,6 +120,22 @@ function salaryLabel(cluster: VacancyCluster): string | undefined {
   return `${prefix} ${money(single!)}${currency}`;
 }
 
+/**
+ * Площадка режет длинные названия посередине скобки: «… Systems (Chemical».
+ * Незакрытая скобка в title, h1 и разметке выглядит как сломанная страница,
+ * поэтому её закрываем, не выдумывая обрезанный хвост.
+ */
+export function closeDanglingParentheses(title: string): string {
+  const opened = (title.match(/\(/gu) ?? []).length;
+  const closed = (title.match(/\)/gu) ?? []).length;
+  return opened > closed ? `${title.trimEnd()}${')'.repeat(opened - closed)}` : title;
+}
+
+/** Ярлыки площадки приходят слагами «Senior-Backend-Engineer»; в разметке нужны слова. */
+export function readableSkill(skill: string): string {
+  return skill.replace(/(?<=\p{L})-(?=\p{Lu})/gu, ' ').trim();
+}
+
 /** Карточка каталога, или `null`, если правило адресов не даёт вакансии адрес. */
 export function toCatalogEntry(cluster: VacancyCluster): CatalogEntry | null {
   const path = vacancyPath({
@@ -132,7 +148,7 @@ export function toCatalogEntry(cluster: VacancyCluster): CatalogEntry | null {
   return {
     key: vacancyKey(cluster.id),
     path,
-    title: cluster.canonicalTitle,
+    title: closeDanglingParentheses(cluster.canonicalTitle),
     company: cluster.canonicalCompany,
     ...(cluster.canonicalLocation ? { location: cluster.canonicalLocation } : {}),
     isRemote: cluster.isRemote,
@@ -357,7 +373,7 @@ function jobPosting(
     ...(company ? { hiringOrganization: { '@type': 'Organization', name: company } } : {}),
     ...postingLocation(entry, cluster.isRemote),
     ...(employmentType ? { employmentType } : {}),
-    ...(entry.skills.length > 0 ? { skills: entry.skills.join(', ') } : {}),
+    ...(entry.skills.length > 0 ? { skills: entry.skills.map(readableSkill).join(', ') } : {}),
     ...(hasSalary
       ? {
           baseSalary: {
