@@ -106,7 +106,8 @@ export async function getResumeAtsAssessment(
     body: JSON.stringify(input),
     signal,
   });
-  return readData<{ assessment: ResumeAtsAssessment }>(response).then(
-    (result) => result.assessment,
-  );
+  const result = await readData<{ assessment?: ResumeAtsAssessment | null } | null>(response);
+  const assessment = result?.assessment;
+  if (!assessment || typeof assessment !== 'object') throw malformedResponseError();
+  return assessment;
 }

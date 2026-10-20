@@ -455,4 +455,17 @@ describe('useProfileAtsAssessment by role (макет 2 «ATS: нет избра
     expect(api.getResumeAtsAssessment).toHaveBeenCalledWith({}, expect.any(AbortSignal));
     expect(mounted.querySelector('[data-testid="role-basis"]')?.textContent).toBe('none');
   });
+
+  it('shows candidate copy, not an engine message, when the assessment fails (B536)', async () => {
+    api.getResumeAtsAssessment.mockRejectedValue(
+      new TypeError("Cannot read properties of undefined (reading 'assessment')"),
+    );
+    const mounted = mount(<AssessmentHarness />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const error = mounted.querySelector('[data-testid="error"]')?.textContent ?? '';
+    expect(error).toBe('Не удалось обновить оценку ATS.');
+  });
 });

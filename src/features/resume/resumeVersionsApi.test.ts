@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getResumeVersions } from './resumeVersionsApi';
+import { getResumeAtsAssessment, getResumeVersions } from './resumeVersionsApi';
 
 function respond(body: unknown): void {
   vi.stubGlobal(
@@ -28,5 +28,19 @@ describe('getResumeVersions', () => {
     const page = { items: [], nextCursor: null, totalCount: 0, currentMasterRevision: 'm' };
     respond({ data: page });
     await expect(getResumeVersions()).resolves.toEqual(page);
+  });
+});
+
+describe('getResumeAtsAssessment', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('rejects a response without an assessment as malformed, not a TypeError (B536)', async () => {
+    respond({});
+    await expect(getResumeAtsAssessment({})).rejects.toMatchObject({ code: 'malformed_response' });
+  });
+
+  it('rejects data without an assessment object (B536)', async () => {
+    respond({ data: { assessment: null } });
+    await expect(getResumeAtsAssessment({})).rejects.toMatchObject({ code: 'malformed_response' });
   });
 });

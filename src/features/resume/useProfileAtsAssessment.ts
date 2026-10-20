@@ -7,6 +7,7 @@ import {
   type ResumeAtsAssessmentRequest,
 } from './resumeVersionsApi';
 import { getRoleHypotheses } from '../coach/coachApi';
+import { apiErrorMessage } from '../coach/apiClient';
 import { roleAtsRequest } from './atsRoleBasis';
 
 export const RESUME_VERSION_COLLECTION_CHANGED_EVENT =
@@ -107,7 +108,7 @@ export function useProfileAtsAssessment(
       })
       .catch((reason: unknown) => {
         if (!active || controller.signal.aborted) return;
-        setError(reason instanceof Error ? reason.message : 'Не удалось обновить оценку ATS.');
+        setError(apiErrorMessage(reason, 'Не удалось обновить оценку ATS.'));
       })
       .finally(() => {
         if (active) setLoading(false);
