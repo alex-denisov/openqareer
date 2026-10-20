@@ -238,6 +238,7 @@ describe('B542: reminder names the person, as in mockup 1', () => {
     expect(queueMobileTitle({ ...base, contactName: 'Мария Орлова', afterInterview: true })).toBe(
       'Напомнить Марии Орловой',
     );
+    expect(queueMobileTitle(base)).toBe('Напомнить про ответ');
     expect(queueMobileSubtitle({ ...base, contactName: 'Мария Орлова' }, false)).toBe(
       'Вектор Банк · ответа нет 6 дней',
     );

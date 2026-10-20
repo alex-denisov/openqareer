@@ -271,10 +271,11 @@ function followUpTitle(
   return company ? `Напомнить компании ${company} про ответ` : 'Напомнить компании про ответ';
 }
 
-/** Заголовок строки 390 по макету: напоминание называет только человека, компания — в подписи. */
+/** Заголовок строки 390 по макету: напоминание называет только человека, компания — в подписи, без повтора. */
 export function queueMobileTitle(item: Parameters<typeof queueActionTitle>[0]): string {
-  const contact = item.kind === 'follow_up' ? item.contactName?.trim() : undefined;
-  return contact ? `Напомнить ${dativeNameRu(contact)}` : queueActionTitle(item);
+  if (item.kind !== 'follow_up') return queueActionTitle(item);
+  const contact = item.contactName?.trim();
+  return contact ? `Напомнить ${dativeNameRu(contact)}` : 'Напомнить про ответ';
 }
 
 export function queueDiscussionContext(item: TodayQueueItem): string {
