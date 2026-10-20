@@ -94,14 +94,14 @@ function head(options: {
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
     `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
-    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover-2.jpg">`,
-    '<meta property="og:image:width" content="1200">',
-    '<meta property="og:image:height" content="630">',
+    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover-3.jpg">`,
+    '<meta property="og:image:width" content="600">',
+    '<meta property="og:image:height" content="315">',
     '<meta property="og:locale" content="ru_RU">',
     '<meta name="twitter:card" content="summary_large_image">',
     `<meta name="twitter:title" content="${escapeHtml(options.title)}">`,
     `<meta name="twitter:description" content="${escapeHtml(options.description)}">`,
-    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover-2.jpg">`,
+    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover-3.jpg">`,
     '<meta property="og:site_name" content="openqareer">',
     `<meta property="og:title" content="${escapeHtml(options.title)}">`,
     `<meta property="og:description" content="${escapeHtml(options.description)}">`,
@@ -240,10 +240,12 @@ const GONE_COPY = {
   vacancy: {
     heading: 'Этой вакансии больше нет',
     lead:
-      'Площадка сняла запись или перестала её отдавать, поэтому мы не храним карточку, ' +
-      'которую нечем подтвердить. Откройте вакансии из каталога ниже или загрузите резюме: ' +
-      'мы подберём похожие.',
+      'Площадка сняла вакансию, а карточку без подтверждения источником мы не показываем. ' +
+      'Откройте актуальные вакансии из каталога ниже или загрузите резюме: подберём похожие.',
     title: 'Вакансия снята · openqareer',
+    description:
+      'Эту вакансию сняли с площадки, и в каталоге её больше нет. ' +
+      'Откройте актуальные вакансии и откликайтесь на сайте работодателя.',
   },
   listing: {
     heading: 'В этом разделе сейчас нет вакансий',
@@ -251,6 +253,9 @@ const GONE_COPY = {
       'Вакансии по этому городу или роли закрылись или ещё не появились. ' +
       'Откройте вакансии из каталога ниже или загрузите резюме: подберём похожие.',
     title: 'Раздел каталога пуст · openqareer',
+    description:
+      'Вакансий по этому городу или роли сейчас нет. ' +
+      'Откройте актуальные вакансии каталога и откликайтесь на сайте работодателя.',
   },
 } as const;
 
@@ -276,9 +281,7 @@ export function renderGoneDocument(
   return shell(
     head({
       title: copy.title,
-      description:
-        'Эту вакансию сняли с площадки, и в каталоге её больше нет. ' +
-        'Откройте актуальные вакансии и откликайтесь на сайте работодателя.',
+      description: copy.description,
       canonicalPath: CATALOG_ROOT,
       jsonLd: page.jsonLd,
       noindex: true,

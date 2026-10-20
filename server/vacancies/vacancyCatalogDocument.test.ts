@@ -191,7 +191,7 @@ describe('документ публичного каталога (B209)', () => 
         }),
       )!,
     );
-    expect(html).toContain('RUB');
+    expect(html).toContain('₽');
     expect(html).toContain('<dt>Площадок с этой вакансией</dt><dd>2</dd>');
   });
 
@@ -214,7 +214,7 @@ describe('документ публичного каталога (B209)', () => 
     const html = renderCatalogDocument(
       buildCatalogPage([cluster({ salary: { from: 100, to: 200, currency: 'EUR' } })], 1),
     );
-    expect(html).toContain('EUR');
+    expect(html).toContain('€');
   });
 
   /**

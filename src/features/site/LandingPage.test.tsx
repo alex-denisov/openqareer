@@ -25,7 +25,7 @@ describe('LandingPage (B535, approved mockup v18)', () => {
     const html = render();
     expect(html).toContain('Ваш опыт стоит больше, <span>чем видно в резюме</span>');
     expect(html).toContain('Сервис для поиска работы с ИИ');
-    expect(html).toContain('подберёт вакансии из всех источников');
+    expect(html).toContain('подберёт вакансии из сотен источников');
     expect(html).toMatch(/href="\/signup" class="ps-btn is-primary is-lg">Найти работу</u);
     expect(html).toMatch(/href="\/signup" class="ps-btn is-lg">Подобрать вакансии</u);
     expect(html).toContain('Загрузить резюме бесплатно');

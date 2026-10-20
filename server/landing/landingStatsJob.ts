@@ -74,7 +74,9 @@ function thousands(value: number): string {
 export function formatLandingSalary(salary: PoolSalary | null | undefined): string | null {
   if (!salary || !salary.currency) return null;
   const from = salary.from && salary.from > 0 ? salary.from : undefined;
-  const to = salary.to && salary.to > 0 ? salary.to : undefined;
+  const rawTo = salary.to && salary.to > 0 ? salary.to : undefined;
+  // «$60–60 тыс.»: a range with equal ends is one number.
+  const to = rawTo !== undefined && rawTo === from ? undefined : rawTo;
   const top = to ?? from;
   if (!top) return null;
   const currency = salary.currency.toUpperCase();
@@ -88,8 +90,13 @@ export function formatLandingSalary(salary: PoolSalary | null | undefined): stri
     !rouble && value < 10_000
       ? (value / 1_000).toLocaleString('ru-RU', { maximumFractionDigits: 1 })
       : thousands(value);
+  const exact = salary.from !== undefined && salary.from === salary.to;
   const range =
-    from && to ? `${short(from)}–${short(to)}` : `${from ? 'от' : 'до'} ${sign ?? ''}${short(top)}`;
+    from && to
+      ? `${short(from)}–${short(to)}`
+      : exact
+        ? `${sign ?? ''}${short(top)}`
+        : `${from ? 'от' : 'до'} ${sign ?? ''}${short(top)}`;
   if (rouble) return from && to ? `${range} тыс. ₽ ${period}` : `${range} тыс. ₽ ${period}`;
   return from && to ? `${sign}${range} тыс. ${period}` : `${range} тыс. ${period}`;
 }
