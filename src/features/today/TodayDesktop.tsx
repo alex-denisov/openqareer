@@ -16,7 +16,7 @@ import {
 } from '@phosphor-icons/react';
 import './today-desktop.css';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
-import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
+import type { CareerActionReason, ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
@@ -235,6 +235,7 @@ export function decisionAcceptLabel(action: ReasonedCareerAction): string {
 }
 
 export function actionSourceSummary(action: ReasonedCareerAction): string {
+  if (action.sourcesLabel) return action.sourcesLabel;
   if (action.rationale === TODAY_DIARY_FOOTNOTE) return 'карьерный дневник';
   const sources = [
     ...(action.findingIds.length ? ['профиль'] : []),
@@ -253,6 +254,9 @@ function DecisionReason({
   readonly onNavigate?: (view: CareerCabinetView) => void;
 }) {
   const isCoachAction = action.destination === 'coach';
+  if (action.reasons?.length) {
+    return <DecisionReasonList reasons={action.reasons} onNavigate={onNavigate} />;
+  }
   return (
     <ol className="career-today-decision-reasons">
       <li>
@@ -277,11 +281,47 @@ function DecisionReason({
   );
 }
 
+const REASON_LINK_VIEW = {
+  'profile-experience': 'profile',
+  favorites: 'responses',
+} as const satisfies Record<CareerActionReasonTarget, CareerCabinetView>;
+
+type CareerActionReasonTarget = NonNullable<CareerActionReason['link']>['target'];
+
+function DecisionReasonList({
+  reasons,
+  onNavigate,
+}: {
+  readonly reasons: readonly CareerActionReason[];
+  readonly onNavigate?: (view: CareerCabinetView) => void;
+}) {
+  return (
+    <ol className="career-today-decision-reasons">
+      {reasons.map((reason, index) => (
+        <li key={reason.text}>
+          <span aria-hidden="true">{index + 1}</span>
+          <p>
+            {reason.text}{' '}
+            {reason.link && onNavigate ? (
+              <button
+                type="button"
+                onClick={() => onNavigate(REASON_LINK_VIEW[reason.link!.target])}
+              >
+                {reason.link.label}
+              </button>
+            ) : null}
+          </p>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function DecisionExpectedChange({ text }: { readonly text: string }) {
   return (
     <p className="career-today-decision-effect">
       <Target size="1em" aria-hidden="true" />
-      <span>Откроется: {text}</span>
+      <span>{text.startsWith('Откроется') ? text : `Откроется: ${text}`}</span>
     </p>
   );
 }

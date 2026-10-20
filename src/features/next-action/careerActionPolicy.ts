@@ -1,4 +1,5 @@
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
+import type { TodayProfileFocus } from '../today/todayApi';
 import type {
   CareerDiagnostic,
   DiagnosticDimension,
@@ -24,6 +25,22 @@ export interface ReasonedCareerAction {
     destination: 'coach' | 'profile' | 'evidence' | 'career' | 'search';
   }>;
   approvalBoundary: string;
+  /** B540: numbered reasons with their own links; without them `rationale` is the one reason. */
+  reasons?: readonly CareerActionReason[];
+  /** B540: the sources line as data names them, e.g. «профиль и избранное, 07.10 09:12». */
+  sourcesLabel?: string;
+  /** B540: where «Подтвердить факт» lands in the profile. */
+  profileFocus?: TodayProfileFocus;
+}
+
+export interface CareerActionReason {
+  readonly text: string;
+  /** The 390 hero words some reasons as two sentences (mockup 1). */
+  readonly mobileText?: string;
+  readonly link?: {
+    readonly label: string;
+    readonly target: 'profile-experience' | 'favorites';
+  };
 }
 
 export function buildReasonedCareerAction(input: {

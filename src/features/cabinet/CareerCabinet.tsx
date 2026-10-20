@@ -63,6 +63,7 @@ import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 export type { CareerCabinetView } from './cabinetViews';
 
 function profileFocusForAction(action: ReasonedCareerAction): ProfileFocusRequest | undefined {
+  if (action.profileFocus) return action.profileFocus;
   const findingId = action.findingIds[0];
   if (!findingId) return undefined;
   return { section: findingId.startsWith('ats-layout-') ? 'ats' : 'review', findingId };

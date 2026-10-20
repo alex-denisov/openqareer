@@ -99,6 +99,38 @@ describe('TodayScreen (ACC-A-1)', () => {
     approvalBoundary: 'Изменения требуют подтверждения.',
   };
 
+  it('shows the server team size decision with both reasons and their links (B540)', () => {
+    const html = renderTodayScreen({
+      snapshot: {
+        ...snapshot,
+        teamSizeDecision: {
+          kind: 'team_size',
+          experienceId: 'exp-fintech',
+          employer: 'Финтех Лаб',
+          favoritesTotal: 18,
+          favoritesAsking: 3,
+          minTeamSize: 50,
+          readAt: '2026-10-07T06:12:00.000Z',
+        },
+      },
+      consultantAction: action,
+      onNavigate: vi.fn(),
+      onOpenExpert: vi.fn(),
+    });
+    const mobile = mobileTodayMarkup(html);
+    expect(html).toContain('Подтвердите размер команды в «Финтех Лаб»');
+    expect(html).toContain('Профиль, Опыт</button>');
+    expect(html).toContain('Избранное</button>');
+    expect(html).toContain(
+      '3 из 18 избранных вакансий просят управлять от 50 человек; без этого факта совпадение по уровню не считается.',
+    );
+    expect(html).toContain('<span>Откроется оценка уровня для 3 вакансий. Около 2 минут.</span>');
+    expect(html).toMatch(/Источники: (<!-- -->)?профиль и избранное, \d{2}\.10 \d{2}:12/u);
+    expect(mobile).toContain(
+      '3 из 18 избранных вакансий просят управлять от 50 человек. Без этого факта совпадение по уровню не считается.',
+    );
+  });
+
   it('names a profile decision «Подтвердить факт» on 390 as on 1440 (mockup 1)', () => {
     const html = mobileTodayMarkup(
       renderTodayScreen({

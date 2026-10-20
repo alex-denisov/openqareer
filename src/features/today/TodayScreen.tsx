@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import {
   Bell,
   BookmarkSimple,
@@ -16,6 +16,7 @@ import {
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
+import { todayDecisionAction } from '../next-action/teamSizeAction';
 import {
   isConsultantActionResolved,
   resolveConsultantAction,
@@ -208,10 +209,15 @@ async function saveTodayActionDeferral(actionKey: string): Promise<boolean> {
 }
 
 export function TodayScreen(props: TodayScreenProps) {
+  const teamSizeDecision = props.snapshot?.teamSizeDecision;
+  const consultantAction = useMemo(
+    () => todayDecisionAction(teamSizeDecision, props.consultantAction),
+    [teamSizeDecision, props.consultantAction],
+  );
   const actionState = useTodayConsultantAction({
     candidateId: props.candidateId,
     snapshot: props.snapshot,
-    consultantAction: props.consultantAction,
+    consultantAction,
     onNavigate: props.onNavigate,
     onOpenExpert: props.onOpenExpert,
     onNavigateProfileAction: props.onNavigateProfileAction,
@@ -368,12 +374,14 @@ function TodayMobileReasons({
 }) {
   return (
     <ol className="tm-reasons" id={id} hidden={!open}>
-      <li>
-        <span className="num-badge" aria-hidden="true">
-          1
-        </span>
-        <span>{action.rationale}</span>
-      </li>
+      {(action.reasons ?? [{ text: action.rationale }]).map((reason, index) => (
+        <li key={reason.text}>
+          <span className="num-badge" aria-hidden="true">
+            {index + 1}
+          </span>
+          <span>{reason.mobileText ?? reason.text}</span>
+        </li>
+      ))}
       <li className="tm-src">Источники: {actionSourceSummary(action)}</li>
     </ol>
   );

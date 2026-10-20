@@ -215,6 +215,19 @@ export interface TodaySnapshot {
   readonly vacanciesPending: boolean;
   readonly momentum?: SearchMomentum;
   readonly funnel?: TodayFunnelCounts;
+  /** B540: server-born «Подтвердите размер команды» (`todayTeamSizeDecision.ts`). */
+  readonly teamSizeDecision?: TodayTeamSizeDecision;
+}
+
+export interface TodayTeamSizeDecision {
+  readonly kind: 'team_size';
+  readonly experienceId: string;
+  readonly employer: string;
+  readonly title?: string;
+  readonly favoritesTotal: number;
+  readonly favoritesAsking: number;
+  readonly minTeamSize: number;
+  readonly readAt: string;
 }
 
 /** Этапы воронки из стадий откликов (сервер, `computeTodayFunnel`). */
