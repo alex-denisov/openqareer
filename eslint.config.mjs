@@ -9,7 +9,6 @@ import tseslint from 'typescript-eslint';
 // into a rewrite of every pre-existing large module. New production files get
 // the 800/50/4 limits below; these named legacy files retain explicit debt.
 const legacyComplexityFiles = [
-  'scripts/split-browser-entry.mjs',
   'scripts/verify-built-shell.mjs',
   'server/config.ts',
   'server/connectors/connectorHarness.ts',

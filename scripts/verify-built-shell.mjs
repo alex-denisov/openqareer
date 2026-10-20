@@ -1229,7 +1229,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     errors.push(`request:${new URL(request.url()).pathname}`);
   });
 
-  await page.route('**/*.oqpart-000.js', async (route) => {
+  await page.route('**/assets/index-*.js', async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 500));
     await route.continue();
   });
@@ -1579,7 +1579,9 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: logout retained candidate workspace`,
   );
   await page.goto(`${baseUrl}app?built-shell=${viewport.name}`);
-  await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
+  // A guest on /app gets the first-run start; the prerendered landing heading
+  // was only ever seen here while the split bundle was still arriving.
+  await page.getByTestId('first-run-wizard').waitFor();
   const accountRestart =
     (await page.evaluate(() => localStorage.getItem('candidate-workspace'))) === null;
   assert(accountRestart, `${viewport.name}: logout retained the candidate workspace`);
