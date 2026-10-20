@@ -1,7 +1,7 @@
 import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayDecision';
 import { buildTodayTeamSizeDecision } from '../domain/todayTeamSizeDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
-import { registerTodayChangesRoutes } from './todayChangesRoutes';
+import { readApplicationContacts, registerTodayChangesRoutes } from './todayChangesRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -403,7 +403,12 @@ async function readTodaySnapshot(
       since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
     shortlist: newVacancies,
     pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
-    contacts: candidateStore.listApplicationContacts?.(candidateId),
+    contacts: new Map(
+      [...readApplicationContacts(deps, candidateId, applications)].map(([id, contact]) => [
+        id,
+        contact.name,
+      ]),
+    ),
     changeEvents:
       since === null
         ? []

@@ -3,6 +3,7 @@ import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { EMPTY_RESUME_DRAFT } from './domain/resumeDraft';
 import { apps, config, noSessions, stores, successProvider } from './appTestHarness';
+import { SqliteRecruiterContactsRepository } from './data/sqliteRecruiterContactsRepository';
 
 /** B542: напоминание называет контакт отклика, полоса «С ДД.ММ» — из событий, «Скрыть» — на сервере. */
 const SINCE = '2026-01-01T15:40:00.000Z';
@@ -28,6 +29,7 @@ async function setup() {
     previousVisitedAt: SINCE,
   });
   const application = store.createApplication(owner.id, {
+    clusterId: 'vector-cluster',
     stage: 'applied',
     vacancy: {
       title: 'Head of Engineering',
@@ -47,9 +49,33 @@ async function setup() {
     sourceId: application.id,
     createdAt: new Date(Date.now() - 3_600_000).toISOString(),
   });
+  const recruiterContactsRepo = new SqliteRecruiterContactsRepository({ databasePath: ':memory:' });
+  const at = '2026-01-01T00:00:00.000Z';
+  recruiterContactsRepo.saveContacts(owner.id, 'vector-cluster', [
+    {
+      id: 'rc-1',
+      vacancyId: 'vector-cluster',
+      companyName: 'Вектор Банк',
+      fullName: 'Ольга Белая',
+      roleTitle: 'Рекрутер',
+      email: null,
+      emailStatus: 'unverified',
+      phone: null,
+      telegram: null,
+      whatsapp: null,
+      linkedinUrl: null,
+      githubUrl: null,
+      twitterUrl: null,
+      sourceType: 'vacancy_text',
+      confidence: 0.8,
+      createdAt: at,
+      updatedAt: at,
+    },
+  ]);
   const app = await buildApp({
     config,
     coachProvider: successProvider,
+    recruiterContactsRepo,
     candidateStore: store,
     authService: noSessions,
     serveStatic: false,
@@ -64,9 +90,19 @@ async function setup() {
 }
 
 describe('Today changes strip and reminder contact (B542)', () => {
-  it('names the saved contact on the follow-up row', async () => {
+  it('names the vacancy recruiter, then the contact the candidate added', async () => {
     const { app, application, headers, otherHeaders } = await setup();
     const url = `/api/v1/candidate/applications/${application.id}/contact`;
+    const fromVacancy = await app.inject({ url, headers });
+    expect(fromVacancy.json().data).toEqual({ name: 'Ольга Белая', source: 'vacancy' });
+    const todayBefore = await app.inject({
+      url: '/api/v1/candidate/today?tz=Europe/Moscow',
+      headers,
+    });
+    expect(
+      todayBefore.json().data.queue.find((item: { kind: string }) => item.kind === 'follow_up'),
+    ).toMatchObject({ contactName: 'Ольга Белая' });
+
     const foreign = await app.inject({
       method: 'PUT',
       url,
@@ -88,6 +124,10 @@ describe('Today changes strip and reminder contact (B542)', () => {
       payload: { name: 'Мария Орлова' },
     });
     expect(saved.statusCode, saved.body).toBe(200);
+    expect((await app.inject({ url, headers })).json().data).toEqual({
+      name: 'Мария Орлова',
+      source: 'candidate',
+    });
 
     const today = await app.inject({ url: '/api/v1/candidate/today?tz=Europe/Moscow', headers });
     const row = today

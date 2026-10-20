@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Buildings,
   CalendarBlank,
@@ -15,6 +15,8 @@ import { StarStoriesModal } from '../interview/StarStoriesModal';
 import { humanSourceLabel } from './sourceLabels';
 import { waitingLabel } from './waitingLabel';
 import { FollowUpSentControl } from './ResponsesCardStageControls';
+import { ResponseContactRow } from './ResponseContactRow';
+import { getApplicationContact, saveApplicationContact } from './applicationContactApi';
 import './selected-response-panel.css';
 
 interface SelectedResponsePanelProps {
@@ -383,9 +385,19 @@ function Dossier({
         Роль: {application.vacancy?.title ?? 'не указана'} · источник:{' '}
         {source ? humanSourceLabel(source) : 'не указан'}
       </p>
+      <ApplicationContactRow applicationId={application.id} />
       <small>Показаны сведения из отклика; проверенная карточка компании не привязана.</small>
     </section>
   );
+}
+
+function ApplicationContactRow({ applicationId }: { readonly applicationId: string }) {
+  const load = useCallback(() => getApplicationContact(applicationId), [applicationId]);
+  const save = useCallback(
+    (name: string | null) => saveApplicationContact(applicationId, name),
+    [applicationId],
+  );
+  return <ResponseContactRow key={applicationId} load={load} save={save} />;
 }
 
 function formatDateTime(value: string): string {

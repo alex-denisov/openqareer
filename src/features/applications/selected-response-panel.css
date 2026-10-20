@@ -187,3 +187,27 @@
     text-align: start;
   }
 }
+
+/* B542: строка досье «Рекрутер» — его называет напоминание на «Сегодня». */
+.career-responses-contact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin: 0;
+}
+
+.career-responses-contact label {
+  display: grid;
+  flex: 1 1 16rem;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-responses-contact [role='alert'] {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--career-danger);
+  font-size: var(--career-text-xs);
+}
