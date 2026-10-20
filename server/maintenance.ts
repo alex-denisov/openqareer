@@ -21,6 +21,7 @@ import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
+import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -153,6 +154,8 @@ try {
   worker.start();
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);
+  // Sitemap files: the listings query groups the whole catalog, so it runs here too.
+  scheduleCatalogSitemapJob(semanticDatabase, log);
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {
   log.error(

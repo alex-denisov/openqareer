@@ -1,11 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   buildCatalogPage,
   buildListingPage,
   buildVacancyDetail,
   CATALOG_PAGE_SIZE,
 } from './vacancyCatalogPage';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
+import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 
 function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
   return {
@@ -29,11 +29,22 @@ function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
     lastSeenAt: '2026-09-06T00:00:00.000Z',
     status: 'active',
     vacanciesCount: 1,
+    // A salary keeps the default card in the indexable set (seo/catalogIndexing).
+    salary: { from: 200000, to: 300000, currency: 'RUB' },
     ...overrides,
   };
 }
 
+/** The fixture's dates are fresh at this moment: posted 5 days ago, seen today. */
+const NOW = new Date('2026-09-06T12:00:00.000Z');
+
 describe('страница публичного каталога вакансий (B209)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('оставляет только вакансии, которым правило адресов даёт адрес', () => {
     const page = buildCatalogPage(
       [
@@ -111,17 +122,53 @@ describe('страница публичного каталога ваканси�
   });
 
   it('не выдумывает поля, которых площадка не назвала', () => {
-    const detail = buildVacancyDetail(
-      cluster({ canonicalLocation: undefined, salary: undefined, canonicalCompany: '' }),
-    )!;
+    const detail = buildVacancyDetail(cluster({ canonicalLocation: undefined }))!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
 
-    expect(posting).not.toHaveProperty('baseSalary');
     expect(posting).not.toHaveProperty('jobLocation');
-    expect(posting).not.toHaveProperty('validThrough');
     // Язык текста вакансии задаёт работодатель, и мы его не знаем.
     expect(posting).not.toHaveProperty('inLanguage');
-    expect(posting).not.toHaveProperty('hiringOrganization');
+    // validThrough — наш срок, а не поле площадки: публикация + 30 дней.
+    expect(posting.validThrough).toBe('2026-10-01T00:00:00.000Z');
+  });
+
+  it('не размечает JobPosting карточку без вилки или без работодателя', () => {
+    for (const overrides of [{ salary: undefined }, { canonicalCompany: '' }]) {
+      const detail = buildVacancyDetail(cluster(overrides))!;
+      expect(detail.indexable).toBe(false);
+      expect(detail.jsonLd['@graph'].map((node) => node['@type'])).toEqual(['BreadcrumbList']);
+    }
+  });
+
+  it('не размечает JobPosting карточку старше окна публикации', () => {
+    const detail = buildVacancyDetail(cluster(), undefined, undefined, new Date('2026-10-01'))!;
+    expect(detail.indexable).toBe(false);
+  });
+
+  it('берёт validThrough из даты снятия, когда площадка её назвала', () => {
+    const vacancy: UnifiedVacancy = {
+      id: 'v1',
+      fingerprint: 'f1',
+      title: 'Director, Privacy Legal',
+      company: 'Reddit',
+      location: 'San Francisco, USA',
+      isRemote: false,
+      description: 'Мы ищем директора.',
+      requiredSkills: [],
+      url: 'https://boards.greenhouse.io/reddit/jobs/1',
+      provenance: {
+        sourceType: 'json_api',
+        sourceId: 'ats-reddit',
+        sourceUrl: 'https://boards.greenhouse.io/reddit/jobs/1',
+        observedAt: '2026-09-06T00:00:00.000Z',
+      },
+      publishedAt: '2026-09-01T00:00:00.000Z',
+      status: 'active',
+      archivedAt: '2026-09-20T00:00:00.000Z',
+    };
+    const detail = buildVacancyDetail(cluster(), undefined, vacancy)!;
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
+    expect(posting?.validThrough).toBe('2026-09-20T00:00:00.000Z');
   });
 
   it('называет удалённую вакансию удалённой так, как это понимает поисковик', () => {

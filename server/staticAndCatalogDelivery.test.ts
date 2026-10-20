@@ -56,8 +56,9 @@ describe('B209: сервер поднимается с раздачей стат
     const response = await app.inject({ method: 'GET', url: '/sitemap.xml' });
 
     expect(response.statusCode).toBe(200);
-    // Живая карта побеждает файл сборки: в ней есть каталог, в файле — нет.
-    expect(response.body).toContain('/vacancies');
+    // Живая карта побеждает файл сборки: это индекс, а в файле — пустой urlset.
+    expect(response.body).toContain('<sitemapindex');
+    expect(response.body).toContain('/sitemap-static.xml');
   });
 
   it('отдаёт публичный каталог и файлы сборки одновременно', async () => {

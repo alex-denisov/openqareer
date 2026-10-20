@@ -6,16 +6,12 @@
  * пул меняется каждый час, а сборка неизменяема.
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { LEGAL_DOCS, LEGAL_PACK_PUBLISHED_AT, legalPath } from '../../shared/legalRegistry';
-import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import {
   CATALOG_ROOT,
-  catalogPagePath,
   parseListingPath,
   parseVacancyPath,
   vacancyKey,
 } from '../../shared/vacancyCatalogRoutes';
-import type { VacancyCluster } from '../domain/unifiedVacancy';
 import {
   CATALOG_PAGE_SIZE,
   buildCatalogPage,
@@ -44,63 +40,19 @@ import {
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
+import { isIndexableCard } from '../seo/catalogIndexing';
+import { getCatalogSitemaps } from '../seo/catalogSitemapSchedule';
+import {
+  LISTINGS_SITEMAP,
+  STATIC_SITEMAP,
+  buildSitemapFiles,
+  jobsSitemapName,
+  renderSitemapIndex,
+  type SitemapFile,
+} from '../seo/sitemapXml';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
 import { createTtlMemo, type TtlMemo } from './ttlMemo';
-
-/** Сколько подборок печатать ссылками на странице. */
-
-/** Предел протокола карты сайта — 50 000 адресов в одном файле. */
-const SITEMAP_URL_LIMIT = 50_000;
-
-function urlEntry(path: string, lastmod?: string): string {
-  return `  <url><loc>${SITE_ORIGIN}${path}</loc>${lastmod ? `<lastmod>${lastmod}</lastmod>` : ''}</url>`;
-}
-
-/**
- * Карта сайта собирается на запросе: статический файл сборки не может
- * перечислить вакансии, которых на момент сборки ещё не было, и не может
- * убрать те, что уже пропали.
- */
-export function buildCatalogSitemap(clusters: readonly VacancyCluster[]): string {
-  const entries = catalogEntries(clusters);
-  const pageCount = Math.max(1, Math.ceil(entries.length / CATALOG_PAGE_SIZE));
-
-  const urls = [
-    urlEntry('/'),
-    // B535: help pages next to the landing.
-    urlEntry('/faq'),
-    urlEntry('/support'),
-    ...LEGAL_DOCS.map((doc) => urlEntry(legalPath(doc.slug), LEGAL_PACK_PUBLISHED_AT)),
-    urlEntry(CATALOG_ROOT),
-    ...Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
-      urlEntry(catalogPagePath(index + 2)),
-    ),
-    // Списки по месту и роли — те самые страницы, по которым ищут (срез 2b).
-    ...catalogListings(entries).map((listing) => urlEntry(listing.path)),
-    ...entries.map((entry) => urlEntry(entry.path, entry.lastSeenAt.slice(0, 10))),
-  ].slice(0, SITEMAP_URL_LIMIT);
-
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
-}
-
-/** Sitemap variant backed by the narrow projection and keyset page. */
-export function buildCatalogSitemapFromProjection(
-  entries: readonly import('../vacancies/vacancyCatalogProjection').CatalogEntryRow[],
-  listings: readonly CatalogListingSummary[],
-): string {
-  const urls = [
-    urlEntry('/'),
-    // B535: help pages next to the landing.
-    urlEntry('/faq'),
-    urlEntry('/support'),
-    ...LEGAL_DOCS.map((doc) => urlEntry(legalPath(doc.slug), LEGAL_PACK_PUBLISHED_AT)),
-    urlEntry(CATALOG_ROOT),
-    ...listings.map((listing) => urlEntry(listing.path)),
-    ...entries.map((entry) => urlEntry(entry.path, entry.lastSeenAt.slice(0, 10))),
-  ].slice(0, SITEMAP_URL_LIMIT);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.join('\n')}\n</urlset>\n`;
-}
 
 function sendDocument(reply: FastifyReply, html: string, status = 200): FastifyReply {
   return (
@@ -323,29 +275,67 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
 }
 
 const SITEMAP_TTL_MS = 15 * 60 * 1000;
-const sitemapMemos = new WeakMap<RouteDeps, TtlMemo<string>>();
+/**
+ * Fallback only: the freshest rows of the projection. Indexable cards are
+ * posted within 7 days, so the newest 10 000 rows cover them on any pool we
+ * run today (6 075 indexable on prod, 20.10) at a fifth of the old 50 000 read.
+ */
+const FALLBACK_JOB_SCAN = 10_000;
+const fallbackSitemaps = new WeakMap<RouteDeps, TtlMemo<SitemapFile[]>>();
 
-function buildSitemap(deps: RouteDeps): string {
+/**
+ * Used until the maintenance process has written `catalog_sitemaps` (first
+ * run 90 s after its start) and in tests with an in-memory pool.
+ */
+function buildFallbackSitemapFiles(deps: RouteDeps): SitemapFile[] {
+  const now = new Date();
   const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
-    limit: SITEMAP_URL_LIMIT,
+    limit: FALLBACK_JOB_SCAN,
   });
-  const listings = deps.multiSourceEngine.getPublicCatalogListings();
-  if (projected && listings) return buildCatalogSitemapFromProjection(projected.items, listings);
-  return buildCatalogSitemap(deps.multiSourceEngine.getPublicCatalogClusters());
+  const projectedListings = deps.multiSourceEngine.getPublicCatalogListings();
+  const entries =
+    projected && projectedListings
+      ? projected.items
+      : catalogEntries(deps.multiSourceEngine.getPublicCatalogClusters());
+  const listings = projected && projectedListings ? projectedListings : catalogListings(entries);
+  return buildSitemapFiles({
+    listings: listings.map((listing) => ({ path: listing.path })),
+    jobs: entries
+      .filter((entry) => isIndexableCard(entry, now))
+      .map((entry) => ({ path: entry.path, lastmod: entry.publishedAt.slice(0, 10) })),
+  });
 }
 
-async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
-  // The pool read costs ~2 s of the event loop on prod; build once per
-  // window, matching the max-age crawlers are told (B535).
-  let memo = sitemapMemos.get(deps);
+function sitemapFiles(deps: RouteDeps): readonly SitemapFile[] {
+  const written = getCatalogSitemaps();
+  if (written) return written;
+  // The fallback read holds the event loop; build once per window (B535).
+  let memo = fallbackSitemaps.get(deps);
   if (!memo) {
-    memo = createTtlMemo<string>(SITEMAP_TTL_MS);
-    sitemapMemos.set(deps, memo);
+    memo = createTtlMemo<SitemapFile[]>(SITEMAP_TTL_MS);
+    fallbackSitemaps.set(deps, memo);
   }
+  return memo.get(() => buildFallbackSitemapFiles(deps));
+}
+
+function sendXml(reply: FastifyReply, xml: string): FastifyReply {
   return reply
     .header('Content-Type', 'application/xml; charset=utf-8')
     .header('Cache-Control', 'public, max-age=900')
-    .send(memo.get(() => buildSitemap(deps)));
+    .send(xml);
+}
+
+async function handleSitemapIndex(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  return sendXml(reply, renderSitemapIndex(sitemapFiles(deps)));
+}
+
+function sitemapFileHandler(name: (request: FastifyRequest) => string) {
+  return async (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => {
+    const wanted = name(request);
+    const found = sitemapFiles(deps).find((file) => file.name === wanted);
+    if (!found) return reply.status(404).send({ error: 'not_found' });
+    return sendXml(reply, found.xml);
+  };
 }
 
 export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDeps): void {
@@ -357,6 +347,31 @@ export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDe
   app.get(`${CATALOG_ROOT}/:place/page/:page`, withDeps(deps, handleListing));
   app.get(`${CATALOG_ROOT}/:place/:role`, withDeps(deps, handleListing));
   app.get(`${CATALOG_ROOT}/:place/:role/page/:page`, withDeps(deps, handleListing));
-  // Карта сайта живая, поэтому маршрут перекрывает файл сборки.
-  app.get('/sitemap.xml', withDeps(deps, handleSitemap));
+  // Карта сайта живая, поэтому маршрут перекрывает файл сборки. Сама карта —
+  // индекс дочерних файлов (SEO-ревью 20.10).
+  app.get('/sitemap.xml', withDeps(deps, handleSitemapIndex));
+  app.get(
+    `/${STATIC_SITEMAP}`,
+    withDeps(
+      deps,
+      sitemapFileHandler(() => STATIC_SITEMAP),
+    ),
+  );
+  app.get(
+    `/${LISTINGS_SITEMAP}`,
+    withDeps(
+      deps,
+      sitemapFileHandler(() => LISTINGS_SITEMAP),
+    ),
+  );
+  app.get(
+    '/sitemap-jobs-:n.xml',
+    withDeps(
+      deps,
+      sitemapFileHandler((request) => {
+        const raw = (request.params as { n?: string }).n ?? '';
+        return /^[1-9]\d{0,3}$/u.test(raw) ? jobsSitemapName(Number(raw)) : '';
+      }),
+    ),
+  );
 }
