@@ -5,7 +5,9 @@ import type { VacancyFitInput } from './vacancyFit';
 type ProfileReader = Pick<CandidateStore, 'getSnapshot' | 'getCandidateWorkspace'>;
 
 export function vacancyFitProfileStamp(snapshot: CandidateSnapshot, workspace: ReturnType<ProfileReader['getCandidateWorkspace']>): string {
-  return createHash('sha256').update(JSON.stringify([snapshot.memory, snapshot.resume?.draft ?? null, workspace])).digest('hex');
+  // Отметки визита «Сегодня» меняются при каждом заходе и к соответствию не относятся.
+  const stable = workspace ? { ...workspace, lastVisitedAt: undefined, previousVisitedAt: undefined } : workspace;
+  return createHash('sha256').update(JSON.stringify([snapshot.memory, snapshot.resume?.draft ?? null, stable])).digest('hex');
 }
 
 /** Includes eligibility, resume and workspace preferences; never persisted as a plain index. */
