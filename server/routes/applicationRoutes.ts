@@ -403,9 +403,11 @@ async function readTodaySnapshot(
   });
   recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
   return {
-    snapshot,
+    snapshot: {
+      ...snapshot,
+      teamSizeDecision: todayTeamSizeDecision(deps, candidateId, applications, matched, now),
+    },
     workspace: candidateStore.getCandidateWorkspace(candidateId),
-    teamSizeDecision: todayTeamSizeDecision(deps, candidateId, applications, matched, now),
   };
 }
 
@@ -465,12 +467,7 @@ const handleToday: Handler = async (deps, request, reply) => {
     queueRevision: requestedRevision,
   } = todayQuerySchema.parse(request.query ?? {});
   const now = new Date();
-  const { snapshot, workspace, teamSizeDecision } = await readTodaySnapshot(
-    deps,
-    request,
-    candidate.id,
-    now,
-  );
+  const { snapshot, workspace } = await readTodaySnapshot(deps, request, candidate.id, now);
   const selection = currentTodayDecision(workspace?.todayDecisionSelection, now, tz);
   const todayDecisionSelection = snapshot.queue.some(
     (item) => item.applicationId === selection?.applicationId && item.kind === 'follow_up',
@@ -502,7 +499,6 @@ const handleToday: Handler = async (deps, request, reply) => {
       todayDecisionSelection,
       todayActionDeferral,
       connectedSources,
-      teamSizeDecision,
     },
     meta: { requestId: request.id },
   };
