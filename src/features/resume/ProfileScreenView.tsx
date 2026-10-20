@@ -612,8 +612,13 @@ function focusExperienceField(
   );
   if (!editButton) return focusSectionTarget('sec-experience');
   editButton.click();
+  // The place's card is replaced by its editor form, so look the field up again by place id.
   window.requestAnimationFrame(() => {
-    position.querySelector<HTMLInputElement>(`input[name="${field}"]:not([disabled])`)?.focus();
+    document
+      .querySelector<HTMLInputElement>(
+        `[data-experience-id="${CSS.escape(experienceId ?? '')}"] input[name="${field}"]:not([disabled])`,
+      )
+      ?.focus();
   });
   return true;
 }
