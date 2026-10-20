@@ -179,6 +179,23 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
  * structured JSON-LD and instant first paint.
  * The administrator console `/admin` has its own prerendered first paint.
  */
+/** Unknown addresses: the server answers 404 with this document (B535). */
+async function writeNotFoundPage(html: string, distDirectory: string): Promise<void> {
+  await writeFile(
+    `${distDirectory}/${NOT_FOUND_DOCUMENT}`,
+    pageHead(html, {
+      path: '/',
+      title: NOT_FOUND_TITLE,
+      description: 'Страница не найдена. Перейдите на главную openqareer или в каталог вакансий.',
+    })
+      .replace(/<link rel="canonical"[^>]*>/u, '<meta name="robots" content="noindex">')
+      .replace(
+        EMPTY_ROOT,
+        bootstrapRoot(renderToStaticMarkup(<NotFoundPage onNavigate={() => {}} />)),
+      ),
+  );
+}
+
 export async function prerenderShells(
   indexPath: string,
   adminPath: string,
@@ -224,20 +241,8 @@ export async function prerenderShells(
     );
   }
   await writeHelpPages(html, distDirectory);
-  // Unknown addresses: the server answers 404 with this document (B535).
-  await writeFile(
-    `${distDirectory}/${NOT_FOUND_DOCUMENT}`,
-    pageHead(html, {
-      path: '/',
-      title: NOT_FOUND_TITLE,
-      description: 'Страница не найдена. Перейдите на главную openqareer или в каталог вакансий.',
-    })
-      .replace(/<link rel="canonical"[^>]*>/u, '<meta name="robots" content="noindex">')
-      .replace(
-        EMPTY_ROOT,
-        bootstrapRoot(renderToStaticMarkup(<NotFoundPage onNavigate={() => {}} />)),
-      ),
-  );
+  await writeNotFoundPage(html, distDirectory);
+
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
   // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
   // обязана падать на транслите до выката, а не после.

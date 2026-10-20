@@ -10,5 +10,5 @@ export function countLabel(value: number): string {
         : ones >= 2 && ones <= 4
           ? 'вакансии'
           : 'вакансий';
-  return `${value.toLocaleString('ru-RU').replace(/ /gu, ' ')} ${word}`;
+  return `${value.toLocaleString('ru-RU').replace(/\u00a0/gu, '\u202f')} ${word}`;
 }
