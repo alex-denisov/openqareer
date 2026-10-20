@@ -4,7 +4,7 @@ import { CareerTooltip } from '../shell/CareerTooltip';
 import { pluralRu } from '../../../shared/pluralRu';
 import { profileCompleteness } from './profileCompleteness';
 import type { CandidateMemory } from '../coach/coachApi';
-import { aboutFinding, experienceFinding } from './reviewFindings';
+import { aboutFinding, experienceFinding, experienceFindingCount } from './reviewFindings';
 import { orderUnknowns, previewProjection, selectDocument } from './resumeStudioModel';
 import {
   ProfileAtsAssessment as ProfileAtsAssessmentContent,
@@ -150,7 +150,11 @@ function withFindings(
   };
   return blocks.map((block) => {
     const description = findings[block.id];
-    return description && !block.description ? { ...block, description } : block;
+    const described = description && !block.description ? { ...block, description } : block;
+    const extra = block.id === 'experience' ? experienceFindingCount(draft) : 0;
+    return extra
+      ? { ...described, issueCount: actionableIssues(described).length + extra }
+      : described;
   });
 }
 
@@ -190,9 +194,13 @@ function distinctReviewIssues(issues: readonly ResumeUnknown[]): ResumeUnknown[]
 }
 
 /** Returns the saved master's deduplicated review issue count when loaded. */
-export function profileResumeReviewIssueCount(view?: ResumeStudioView): number | undefined {
+export function profileResumeReviewIssueCount(
+  view?: ResumeStudioView,
+  draft?: Pick<ResumeDraft, 'experience'>,
+): number | undefined {
   if (!view) return undefined;
-  return distinctReviewIssues(selectDocument(view.projection, 'master').unknowns).length;
+  const findings = draft ? experienceFindingCount(draft) : 0;
+  return distinctReviewIssues(selectDocument(view.projection, 'master').unknowns).length + findings;
 }
 
 /** Uses the same master-document review projection and block rules as the Review card. */

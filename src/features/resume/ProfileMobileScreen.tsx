@@ -222,7 +222,7 @@ export function ProfileMobileScreen(props: ProfileMobileScreenProps) {
     activeTab,
     onTab,
     atsScore: ats.assessment?.total.score ?? null,
-    reviewCount: profileResumeReviewIssueCount(props.view),
+    reviewCount: profileResumeReviewIssueCount(props.view, props.draft),
     versionCount,
     relocationLabel: profileRelocationSummaryLabel(props.relocationSummary ?? 'unknown'),
   };
