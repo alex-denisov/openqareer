@@ -62,15 +62,21 @@ if (process.env.LANDING_SHOTS === '1') seedLandingShots(candidateStore, candidat
 // Two imports, as in the approved Profile mockup: LinkedIn and hh.ru each own their facts,
 // so the source chips and provenance read real import labels, not a synthetic one.
 const fromHh = (fact: (typeof syntheticResumeMemory)[number]) => /marketing/u.test(fact.id);
-for (const [sourceLabel, facts] of [
+for (const [platform, sourceLabel, facts] of [
   [
+    'linkedin',
     'Импорт: профиль LinkedIn (синтетический набор блока A)',
     syntheticResumeMemory.filter((f) => !fromHh(f)),
   ],
-  ['Импорт: резюме hh.ru (синтетический набор блока A)', syntheticResumeMemory.filter(fromHh)],
+  [
+    'hh',
+    'Импорт: резюме hh.ru (синтетический набор блока A)',
+    syntheticResumeMemory.filter(fromHh),
+  ],
 ] as const) {
   candidateStore.importResumeEvidence(candidate.id, {
     sourceLabel,
+    platform,
     entries: facts.map((fact) => ({
       memoryId: fact.id,
       domain: fact.domain,
@@ -82,6 +88,21 @@ for (const fact of syntheticResumeMemory) {
   if (fact.status === 'confirmed')
     candidateStore.changeMemory(candidate.id, fact.id, { action: 'confirm' });
 }
+// B541, макет 2: «LinkedIn: читаем разделы, 3 из 7» — the walk the profile shows after a reload.
+candidateStore.saveImportWalk(candidate.id, {
+  platform: 'linkedin',
+  state: 'running',
+  updatedAt: new Date().toISOString(),
+  sections: [
+    { key: 'experience', status: 'read' },
+    { key: 'education', status: 'read' },
+    { key: 'skills', status: 'read' },
+    { key: 'languages', status: 'pending' },
+    { key: 'projects', status: 'pending' },
+    { key: 'courses', status: 'pending' },
+    { key: 'contactInfo', status: 'pending' },
+  ],
+});
 const memory = candidateStore.getSnapshot(candidate.id)?.memory ?? [];
 const resumeDraft = mockupResumeDraft(syntheticResumeDraft);
 const projection = buildResumeStudioProjection({ ...resumeDraft, evidence: memory });
