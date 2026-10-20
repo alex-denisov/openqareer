@@ -206,6 +206,19 @@ export class SqliteNotificationRepository {
     }));
   }
 
+  /** B543: отмена ручной отметки снимает её уведомление и неотправленные доставки. */
+  withdrawEvent(candidateId: string, idempotencyKey: string): boolean {
+    const row = this.readByIdempotencyKey(candidateId, idempotencyKey);
+    if (!row) return false;
+    this.database
+      .prepare('DELETE FROM candidate_notification_deliveries WHERE notification_id = ?')
+      .run(row.id);
+    this.database
+      .prepare('DELETE FROM candidate_notifications WHERE candidate_id = ? AND id = ?')
+      .run(candidateId, row.id);
+    return true;
+  }
+
   markRead(candidateId: string, notificationId: string, now = new Date().toISOString()): boolean {
     this.deleteExpired(now);
     const result = this.database

@@ -2,6 +2,7 @@ import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayD
 import { buildTodayTeamSizeDecision } from '../domain/todayTeamSizeDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
 import { readApplicationContacts, registerTodayChangesRoutes } from './todayChangesRoutes';
+import { registerEmployerReadRoutes } from './employerReadRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -554,6 +555,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
   );
   registerTodayDecisionRoutes(app, deps);
   registerTodayChangesRoutes(app, deps);
+  registerEmployerReadRoutes(app, deps);
   app.get('/api/v1/candidate/today', withDeps(deps, handleToday));
   registerApplicationMaterialsRoutes(app, deps);
   registerApplicationInterviewRoutes(app, deps);

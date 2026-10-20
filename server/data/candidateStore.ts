@@ -1,4 +1,5 @@
 import type { FactProvenance, ImportPlatform, ImportWalk } from '../domain/factProvenance';
+import type { EmployerRead } from './applicationEmployerReads';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type {
   ResumeVersionContent,
@@ -729,6 +730,10 @@ export interface CandidateStore {
   /** B542: рекрутер или собеседник отклика, которого называет напоминание «Сегодня». */
   listApplicationContacts?(candidateId: string): ReadonlyMap<string, string>;
   setApplicationContact?(candidateId: string, applicationId: string, name: string | null): void;
+  /** B543: «Работодатель прочитал» — время и источник (кандидат или hh.ru). */
+  getEmployerRead?(candidateId: string, applicationId: string): EmployerRead | null;
+  markEmployerRead?(candidateId: string, applicationId: string, mark: EmployerRead): EmployerRead;
+  clearEmployerRead?(candidateId: string, applicationId: string): boolean;
   /** B266: a paid-plan request, idempotent per candidate and plan. */
   requestPlan?(candidateId: string, planId: PlanRequestId, note?: string): StoredPlanRequest;
   listPlanRequests?(candidateId: string): StoredPlanRequest[];

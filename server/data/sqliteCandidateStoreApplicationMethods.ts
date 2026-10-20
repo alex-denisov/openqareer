@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { createApplicationContactMethods, type ApplicationContactMethods } from './applicationContacts';
+import {
+  createApplicationEmployerReadMethods,
+  type ApplicationEmployerReadMethods,
+} from './applicationEmployerReads';
 import type { SealedText } from './sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
@@ -65,7 +69,9 @@ export class ApplicationOperationConflictError extends Error {
   }
 }
 
-export interface ApplicationTrackerMethods extends ApplicationContactMethods {
+export interface ApplicationTrackerMethods
+  extends ApplicationContactMethods,
+    ApplicationEmployerReadMethods {
   getInterviewSubject(
     candidateId: string,
     interviewId: string,
@@ -389,6 +395,7 @@ export function createApplicationTrackerMethods(
     ...createVacancyJourneyMethods(tracker, requireCandidate),
     ...createApplicationOperationsMethods(requireCandidate, database),
     ...createApplicationContactMethods(database, sealedText, requireCandidate),
+    ...createApplicationEmployerReadMethods(database, requireCandidate),
   };
 }
 
