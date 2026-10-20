@@ -50,7 +50,7 @@ test.describe('published legal pack', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     for (const doc of DOCS) {
-      await expect(page.locator(`.site-footer a[href="/legal/${doc.slug}"]`)).toHaveCount(1);
+      await expect(page.locator(`.ps-footer a[href="/legal/${doc.slug}"]`)).toHaveCount(1);
     }
   });
 

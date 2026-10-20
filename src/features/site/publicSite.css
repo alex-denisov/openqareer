@@ -776,6 +776,21 @@
 .ps-footer-group a:hover {
   color: var(--ps-ink);
 }
+.ps-footer-cookie {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.ps-footer-cookie:hover {
+  color: var(--ps-ink);
+}
+.ps-footer-cookie:focus-visible {
+  outline: 2px solid var(--ps-blue);
+  outline-offset: 2px;
+}
 .ps-footer-legal {
   grid-column: 1 / -1;
   border-top: 1px solid var(--ps-line);
@@ -1030,8 +1045,72 @@
   .ps-tier.is-hl {
     order: -1;
   }
+  /* 390: a tier is a compact row — name and price on one line, the blurb,
+     then the action beside the term. Only the recommended tier keeps a
+     full-width primary button; the rest are text links. */
+  .ps-tier {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name price'
+      'blurb blurb'
+      'action term';
+    gap: 4px 12px;
+    align-items: center;
+    padding: 14px 16px;
+  }
+  .ps-tier-name {
+    grid-area: name;
+    font-size: 16px;
+  }
   .ps-tier-sub {
-    min-height: 0;
+    display: none;
+  }
+  .ps-tier-price,
+  .ps-tier-price.is-long {
+    grid-area: price;
+    justify-self: end;
+    font-size: 18px;
+  }
+  .ps-tier-term {
+    grid-area: term;
+    justify-self: end;
+    text-align: right;
+  }
+  .ps-tier-blurb {
+    grid-area: blurb;
+    margin-top: 0;
+    font-size: 13px;
+  }
+  .ps-tier .ps-btn {
+    grid-area: action;
+    justify-self: start;
+    margin-top: 0;
+  }
+  .ps-tier .ps-btn:not(.is-primary) {
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ps-blue);
+    gap: 4px;
+  }
+  .ps-tier .ps-btn:not(.is-primary)::after {
+    content: '→';
+  }
+  .ps-tier.is-hl {
+    grid-template-areas:
+      'name price'
+      '. term'
+      'blurb blurb'
+      'action action';
+  }
+  .ps-tier.is-hl .ps-tier-term {
+    margin-top: -4px;
+  }
+  .ps-tier.is-hl .ps-btn {
+    justify-self: stretch;
+    margin-top: 8px;
   }
   .ps-final {
     padding: 64px 0;
@@ -1067,5 +1146,256 @@
     transition: none !important;
     animation: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * B535, 390: a phone gets its own density instead of the stacked desktop —
+ * 4 vacancies in the hero board, a tighter route, inline control points,
+ * smaller section rhythm. Desktop rules above stay untouched.
+ */
+@media (max-width: 760px) {
+  .ps-hero {
+    padding: 28px 0 40px;
+  }
+  .ps-hero h1 {
+    font-size: 34px;
+  }
+  .ps-lead {
+    font-size: 16px;
+  }
+  .ps-section {
+    padding: 48px 0;
+  }
+  .ps-sh {
+    margin-bottom: 24px;
+  }
+  .ps-board .ps-job:nth-child(n + 6) {
+    display: none;
+  }
+  .ps-job {
+    padding: 12px 14px;
+  }
+  .ps-loop li {
+    padding: 0 0 14px 20px;
+  }
+  .ps-loop p {
+    font-size: 13px;
+  }
+  .ps-loop h3 {
+    font-size: 16px;
+    margin: 2px 0 4px;
+  }
+  .ps-loop-who {
+    margin-top: 4px;
+  }
+  .ps-control {
+    gap: 16px;
+    margin-top: 24px;
+  }
+  .ps-control > div {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    column-gap: 12px;
+  }
+  .ps-tick {
+    grid-row: span 2;
+    margin-bottom: 0;
+  }
+  .ps-control h3 {
+    margin-bottom: 2px;
+  }
+  .ps-tools {
+    gap: 12px;
+  }
+  .ps-tool {
+    padding: 18px;
+    gap: 8px;
+  }
+  .ps-tool h3 {
+    font-size: 16px;
+  }
+  .ps-dl-card {
+    padding: 20px;
+  }
+  .ps-final {
+    padding: 48px 0;
+  }
+  /* Pool facts as three columns: number on top, label under it. */
+  .ps-facts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px 12px;
+    font-size: 13px;
+  }
+  .ps-facts span {
+    display: flex;
+    flex-direction: column;
+  }
+  .ps-facts b {
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+  }
+  .ps-facts small {
+    grid-column: 1 / -1;
+  }
+  /* Each row already carries the country badge. */
+  .ps-board-head span {
+    display: none;
+  }
+  /* The macOS app cannot be installed from a phone. */
+  .ps-hero .ps-dl-link {
+    display: none;
+  }
+  /* The portrait «Отклики» shot reads on a phone; the wide «Сегодня» one
+     shrinks into an unreadable dark box. */
+  .ps-band-grid > figure:first-child {
+    display: none;
+  }
+  .ps-band .ps-band-side {
+    display: block;
+  }
+  /* Route and tools: titles and roles carry the meaning on a phone. */
+  .ps-loop p,
+  .ps-tool p {
+    display: none;
+  }
+  .ps-loop li {
+    padding-bottom: 12px;
+  }
+  /* Tariffs read as a price ladder: Free, Basic, Pro, Max, Executive. */
+  .ps-tier:first-child,
+  .ps-tier.is-hl {
+    order: 0;
+  }
+}
+
+/*
+ * B535: cookie notice built by public/assets/oq-analytics-2.js on the public
+ * pages (landing, /faq, /support, /legal/*). Global on purpose: legal pages
+ * are not wrapped in `.ps`. Quiet bottom card, no backdrop, no layout shift.
+ */
+.oq-consent {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 40;
+  max-width: 340px;
+  padding: 14px 16px;
+  border: 1px solid oklch(30% 0.02 255 / 0.12);
+  border-radius: 14px;
+  background: oklch(99.6% 0.002 250);
+  color: oklch(20% 0.02 260);
+  box-shadow: 0 6px 24px oklch(20% 0.02 260 / 0.1);
+  font:
+    400 13px/1.5 'Onest',
+    -apple-system,
+    'Segoe UI',
+    system-ui,
+    sans-serif;
+  animation: oq-consent-in 200ms ease-out;
+}
+.oq-consent-text {
+  margin: 0;
+  color: oklch(42% 0.02 260);
+}
+.oq-consent-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.oq-consent-accept,
+.oq-consent-refuse {
+  min-height: 36px;
+  padding: 0 16px;
+  border-radius: 9px;
+  border: 1px solid oklch(50% 0.19 256);
+  background: oklch(50% 0.19 256);
+  color: oklch(98% 0.01 256);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.oq-consent-refuse {
+  background: transparent;
+  color: oklch(50% 0.19 256);
+}
+.oq-consent-more {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: oklch(52% 0.015 260);
+  font: inherit;
+  cursor: pointer;
+}
+.oq-consent a {
+  color: oklch(52% 0.015 260);
+  text-decoration: none;
+}
+.oq-consent a:hover {
+  color: oklch(20% 0.02 260);
+}
+.oq-consent-more:hover {
+  color: oklch(20% 0.02 260);
+}
+.oq-consent button:focus-visible,
+.oq-consent a:focus-visible,
+.oq-consent input:focus-visible {
+  outline: 2px solid oklch(50% 0.19 256);
+  outline-offset: 2px;
+}
+.oq-consent-option {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 10px;
+  cursor: pointer;
+}
+.oq-consent-option input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: oklch(50% 0.19 256);
+}
+.oq-consent-option-copy {
+  display: flex;
+  flex-direction: column;
+}
+.oq-consent-option-copy b {
+  font-weight: 600;
+}
+.oq-consent-option-copy span {
+  color: oklch(52% 0.015 260);
+}
+@keyframes oq-consent-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@media (max-width: 560px) {
+  .oq-consent {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    max-width: none;
+  }
+}
+@media (pointer: coarse) {
+  .oq-consent-accept,
+  .oq-consent-refuse {
+    min-height: 44px;
+  }
+  .oq-consent-more {
+    min-height: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oq-consent {
+    animation: none;
   }
 }

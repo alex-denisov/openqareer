@@ -76,6 +76,13 @@ export const RETENTION_POLICIES: readonly RetentionPolicy[] = [
     rule: { kind: 'not-stored' },
   },
   {
+    // Cookie ставят Яндекс Метрика и GA4 в браузере посетителя после согласия
+    // (public/assets/oq-analytics-2.js); на сервере openqareer их нет.
+    subject: 'cookie счётчиков посещаемости',
+    period: 'не более 2 лет; данные в самих счётчиках — по срокам хранения провайдера',
+    rule: { kind: 'not-stored' },
+  },
+  {
     subject: 'обезличенные статистические сведения',
     period: 'бессрочно',
     rule: { kind: 'kept-indefinitely' },

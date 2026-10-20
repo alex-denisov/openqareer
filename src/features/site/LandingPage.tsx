@@ -298,6 +298,8 @@ function CabinetBand() {
           </figure>
           <figure className="ps-band-side">
             <picture>
+              {/* 390: one readable column of the board instead of the whole board. */}
+              <source media="(max-width: 760px)" srcSet="/landing/apps-m.png" />
               <source type="image/webp" srcSet="/landing/apps.webp" />
               <img
                 src="/landing/apps.png"

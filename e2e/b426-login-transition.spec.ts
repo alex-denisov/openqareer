@@ -213,7 +213,7 @@ test('preloads the login page chunk when a landing login link receives focus', a
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'chunk preload uses one desktop runner');
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  const loginLink = page.getByRole('link', { name: 'Войти в кабинет' });
+  const loginLink = page.locator('.ps-top').getByRole('link', { name: 'Войти', exact: true });
   await expect(loginLink).toBeVisible();
   const before = await page.evaluate(
     () =>
