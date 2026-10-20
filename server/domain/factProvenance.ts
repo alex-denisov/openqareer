@@ -1,6 +1,6 @@
 /**
  * Where each profile fact came from (B541, макет 2: «из LinkedIn, 12.09»,
- * «со слов кандидата», «выведено консультантом, беседа 06.10»).
+ * «со слов кандидата», «консультант 06.10»).
  *
  * The origin is read from the import records themselves — the native session
  * receipt, or the platform the import wrote down — never from how the entry
@@ -101,16 +101,24 @@ export function buildImportIndex(input: ImportIndexInput): ImportIndex {
   return new Map(entries);
 }
 
+/**
+ * `consultantEdits`: memory id → when an accepted consultant edit wrote that
+ * fact. Only such facts read «консультант»; a hypothesis waiting for the
+ * candidate is not a profile fact yet and gets no origin.
+ */
 export function resolveFactProvenance(
   memory: ProvenanceMemory,
   index: ImportIndex,
+  consultantEdits: ReadonlyMap<string, string> = new Map(),
 ): FactProvenance | undefined {
+  const editedAt = consultantEdits.get(memory.id);
+  if (editedAt) return { kind: 'consultant', at: editedAt };
   const origin = memory.sourceMessageIds
     .map((id) => index.get(id))
     .find((value): value is ImportOrigin => Boolean(value));
   if (origin)
     return { kind: 'import', platform: origin.platform, at: origin.at ?? memory.createdAt };
-  if (memory.confidence === 'coach-hypothesis') return { kind: 'consultant', at: memory.createdAt };
+  if (memory.confidence === 'coach-hypothesis') return undefined;
   if (memory.sourceMessageIds.length > 0) return { kind: 'candidate', at: memory.createdAt };
   return undefined;
 }

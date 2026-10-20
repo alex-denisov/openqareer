@@ -395,10 +395,11 @@ export class SqliteCandidateStore implements CandidateStore {
     const candidate = this.requireCandidate(candidateId);
     const parts = this.conversations.snapshotParts(candidateId, stage);
     const native = this.sourceConnections.list(candidateId);
+    const edits = this.profileRevisionRepo.listRevisions(candidateId);
     return {
       candidate,
       ...parts,
-      ...this.conversations.importSources.withProvenance(candidateId, parts, native),
+      ...this.conversations.importSources.withProvenance(candidateId, parts, native, edits),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: this.resumeRepository.get(candidateId),

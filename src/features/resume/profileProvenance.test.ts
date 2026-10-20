@@ -23,7 +23,7 @@ describe('profile provenance copy (B541, макет 2)', () => {
       'со слов кандидата',
     );
     expect(provenanceLabel({ kind: 'consultant', at: '2026-10-06T08:00:00Z' })).toBe(
-      'выведено консультантом, беседа 06.10',
+      'консультант 06.10',
     );
     expect(provenanceLabel(undefined)).toBe('источник неизвестен');
   });

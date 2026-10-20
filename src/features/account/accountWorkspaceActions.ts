@@ -1,3 +1,4 @@
+import { setCandidateTimeZone } from '../resume/profileSourceLabels';
 import {
   changePassword,
   deleteCandidateAccount,
@@ -54,6 +55,7 @@ function profileActions(context: AccountWorkspaceActionContext) {
     },
     async saveTimezone(timezone: string | null) {
       context.setAccount(await context.runAction(() => updateAccountProfile({ timezone })));
+      setCandidateTimeZone(timezone);
       context.setNotice('Часовой пояс сохранён.');
     },
     async changePassword(input: { currentPassword: string; newPassword: string }) {
@@ -66,7 +68,9 @@ function profileActions(context: AccountWorkspaceActionContext) {
 function emailActions(context: AccountWorkspaceActionContext) {
   return {
     async requestEmailChange(email: string, currentPassword: string) {
-      const result = await context.runAction(() => requestAccountEmailChange({ email, currentPassword }));
+      const result = await context.runAction(() =>
+        requestAccountEmailChange({ email, currentPassword }),
+      );
       if (result.status === 'pending') {
         const pending = {
           email: result.email,

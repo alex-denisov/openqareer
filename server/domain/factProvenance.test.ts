@@ -57,12 +57,16 @@ describe('resolveFactProvenance (B541)', () => {
     });
   });
 
-  it('tells a consultant inference from the candidate’s own words', () => {
-    expect(resolveFactProvenance(memory('c', ['msg-chat'], 'coach-hypothesis'), index)).toEqual({
+  it('marks only facts an accepted consultant edit wrote, not every hypothesis', () => {
+    const edits = new Map([['edited', '2026-10-06T09:00:00.000Z']]);
+    expect(resolveFactProvenance(memory('edited', ['msg-li']), index, edits)).toEqual({
       kind: 'consultant',
-      at: '2026-10-06T10:00:00.000Z',
+      at: '2026-10-06T09:00:00.000Z',
     });
-    expect(resolveFactProvenance(memory('u', ['msg-chat']), index)).toEqual({
+    expect(
+      resolveFactProvenance(memory('c', ['msg-chat'], 'coach-hypothesis'), index, edits),
+    ).toBeUndefined();
+    expect(resolveFactProvenance(memory('u', ['msg-chat']), index, edits)).toEqual({
       kind: 'candidate',
       at: '2026-10-06T10:00:00.000Z',
     });

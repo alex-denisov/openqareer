@@ -8,6 +8,7 @@ import {
   type CandidateSnapshot,
 } from '../coach/coachApi';
 import { getResumeStudio } from '../resume/resumeApi';
+import { setCandidateTimeZone } from '../resume/profileSourceLabels';
 import type { ResumeStudioView } from '../resume/resumeTypes';
 import { readCareerCabinetCache, writeCareerCabinetCache } from './careerCabinetCache';
 
@@ -50,6 +51,7 @@ export function useCareerCabinetData(candidateId: string): CareerCabinetData {
           true,
         );
       }
+      setCandidateTimeZone(nextAccount.profile.timezone);
       if (
         !nextSnapshot ||
         typeof nextSnapshot !== 'object' ||

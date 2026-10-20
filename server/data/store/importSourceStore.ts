@@ -109,8 +109,10 @@ export class ImportSourceStore {
     candidateId: string,
     parts: Parameters<typeof withImportProvenance>[0],
     native: readonly StoredNativeSourceConnection[],
+    consultantEdits: Parameters<typeof withImportProvenance>[1]['consultantEdits'] = [],
   ): ReturnType<typeof withImportProvenance> {
     return withImportProvenance(parts, {
+      consultantEdits,
       native,
       recorded: this.list(candidateId),
       walks: this.listWalks(candidateId),

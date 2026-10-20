@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { importDateLabel } from './profileSourceLabels';
 import { CaretRight, type Icon } from '@phosphor-icons/react';
 
 export function ProfileMobileRow({
@@ -69,10 +70,7 @@ export function ProfileMobileKeyValue({
   );
 }
 
+/** One date rule for 1440 and 390: the candidate's time zone (B541). */
 export function profileMobileDate(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? undefined
-    : new Intl.DateTimeFormat('ru-RU', { day: '2-digit', month: '2-digit' }).format(date);
+  return importDateLabel(value);
 }

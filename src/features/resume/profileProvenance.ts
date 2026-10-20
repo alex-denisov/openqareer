@@ -8,13 +8,12 @@ import { PLATFORM_LABELS } from '../connections/platformLabels';
 import { importDateLabel } from './profileSourceLabels';
 import type { ResumeDraft } from './resumeTypes';
 
-/** Макет 2: «из LinkedIn, 12.09», «со слов кандидата», «выведено консультантом, беседа 06.10». */
+/** Макет 2: «из LinkedIn, 12.09», «со слов кандидата», «консультант 06.10» (B541, кратко). */
 export function provenanceLabel(provenance: FactProvenance | undefined): string {
   if (!provenance) return 'источник неизвестен';
   const date = importDateLabel(provenance.at);
   if (provenance.kind === 'candidate') return 'со слов кандидата';
-  if (provenance.kind === 'consultant')
-    return date ? `выведено консультантом, беседа ${date}` : 'выведено консультантом';
+  if (provenance.kind === 'consultant') return date ? `консультант ${date}` : 'консультант';
   const origin =
     provenance.platform === 'file'
       ? 'из файла резюме'

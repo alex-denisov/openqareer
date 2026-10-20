@@ -21,6 +21,26 @@ export function factCountLabel(count: number): string {
   return `${count} ${noun}`;
 }
 
+/**
+ * The candidate's time zone from the account (B541): profile dates read in it,
+ * not in UTC — an import at 02:00 Moscow is «21.10», not «20.10». Unset, the
+ * device's own zone is used.
+ */
+let candidateTimeZone: string | undefined;
+
+export function setCandidateTimeZone(timeZone: string | null | undefined): void {
+  candidateTimeZone = timeZone && isKnownTimeZone(timeZone) ? timeZone : undefined;
+}
+
+function isKnownTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('ru-RU', { timeZone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function importDateLabel(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const date = new Date(value);
@@ -28,7 +48,7 @@ export function importDateLabel(value: string | undefined): string | undefined {
   const parts = new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit',
     month: '2-digit',
-    timeZone: 'UTC',
+    ...(candidateTimeZone ? { timeZone: candidateTimeZone } : {}),
   }).format(date);
   return parts.replace(/\.$/u, '');
 }

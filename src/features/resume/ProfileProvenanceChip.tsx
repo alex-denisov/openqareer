@@ -51,7 +51,7 @@ export function useProvenanceLabelOf(): (memoryId: string | undefined) => string
   return (memoryId) => provenanceLabel(factProvenance(memory, memoryId));
 }
 
-/** Макет 2: «из LinkedIn, 12.09» / «со слов кандидата» / «выведено консультантом, беседа 06.10». */
+/** Макет 2: «из LinkedIn, 12.09» / «со слов кандидата» / «консультант 06.10». */
 export function ProfileProvenanceChip({
   provenance,
 }: {
