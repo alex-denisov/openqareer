@@ -157,6 +157,65 @@ describe('GET /candidate/today', () => {
     expect(connected.json().data.connectedSources).toEqual(['hh']);
   });
 
+  it('asks to confirm the current place team size only when favorites name one (B540)', async () => {
+    const { app, authorization, candidateStore, candidateId } = await createApp();
+    candidateStore.saveResumeDraft(
+      candidateId,
+      {
+        ...EMPTY_RESUME_DRAFT,
+        experience: [
+          {
+            id: 'exp-fintech',
+            chronologyMemoryId: 'chronology-fintech',
+            title: 'Head of Engineering',
+            employer: 'Финтех Лаб',
+            current: true,
+            bulletMemoryIds: [],
+          },
+        ],
+      },
+      [],
+    );
+    const favorite = (index: number, notes: string | null) => {
+      const created = candidateStore.createApplication(candidateId, {
+        manualVacancy: {
+          title: 'CTO',
+          company: `Компания ${index}`,
+          source: 'other',
+          url: `https://example.test/${index}`,
+        },
+        stage: 'saved',
+      });
+      if (notes) {
+        candidateStore.patchApplication(candidateId, created.id, {
+          expectedVersion: created.version,
+          notes,
+        });
+      }
+    };
+    favorite(1, 'Опыт от 7 лет');
+    const silent = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(silent.json().data.teamSizeDecision).toBeUndefined();
+
+    favorite(2, 'Управление командой от 50 человек');
+    favorite(3, null);
+    const asked = await app.inject({
+      url: `${TODAY_URL}?tz=Europe/Moscow`,
+      headers: { authorization },
+    });
+    expect(asked.json().data.teamSizeDecision).toMatchObject({
+      kind: 'team_size',
+      experienceId: 'exp-fintech',
+      employer: 'Финтех Лаб',
+      favoritesTotal: 3,
+      favoritesAsking: 1,
+      minTeamSize: 50,
+    });
+  });
+
   it('returns 200 with a populated digest once the matched pool is warm', async () => {
     const { app, authorization } = await createApp({ withMatchingEngine: true });
 

@@ -1,4 +1,5 @@
 import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayDecision';
+import { buildTodayTeamSizeDecision } from '../domain/todayTeamSizeDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -401,7 +402,34 @@ async function readTodaySnapshot(
     now: now.toISOString(),
   });
   recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
-  return { snapshot, workspace: candidateStore.getCandidateWorkspace(candidateId) };
+  return {
+    snapshot,
+    workspace: candidateStore.getCandidateWorkspace(candidateId),
+    teamSizeDecision: todayTeamSizeDecision(deps, candidateId, applications, matched, now),
+  };
+}
+
+/** Favorites' text is what the pool knows of the vacancy plus the candidate's own notes. */
+function todayTeamSizeDecision(
+  deps: RouteDeps,
+  candidateId: string,
+  applications: ReturnType<RouteDeps['candidateStore']['listApplications']>,
+  matched: readonly MatchedVacancyItem[],
+  now: Date,
+) {
+  const experience = deps.candidateStore.getSnapshot(candidateId).resume?.draft.experience ?? [];
+  if (!experience.some((entry) => entry.current && !entry.teamSize)) return undefined;
+  const summaries = new Map(
+    matched.map((item) => [item.cluster.id, item.cluster.descriptionSummary]),
+  );
+  const favorites = applications
+    .filter((application) => application.stage === 'saved')
+    .map((application) => ({
+      text: [summaries.get(application.clusterId ?? ''), application.notes]
+        .filter(Boolean)
+        .join('\n'),
+    }));
+  return buildTodayTeamSizeDecision({ experience, favorites, now: now.toISOString() }) ?? undefined;
 }
 
 function todayQueuePage(
@@ -437,7 +465,12 @@ const handleToday: Handler = async (deps, request, reply) => {
     queueRevision: requestedRevision,
   } = todayQuerySchema.parse(request.query ?? {});
   const now = new Date();
-  const { snapshot, workspace } = await readTodaySnapshot(deps, request, candidate.id, now);
+  const { snapshot, workspace, teamSizeDecision } = await readTodaySnapshot(
+    deps,
+    request,
+    candidate.id,
+    now,
+  );
   const selection = currentTodayDecision(workspace?.todayDecisionSelection, now, tz);
   const todayDecisionSelection = snapshot.queue.some(
     (item) => item.applicationId === selection?.applicationId && item.kind === 'follow_up',
@@ -469,6 +502,7 @@ const handleToday: Handler = async (deps, request, reply) => {
       todayDecisionSelection,
       todayActionDeferral,
       connectedSources,
+      teamSizeDecision,
     },
     meta: { requestId: request.id },
   };
