@@ -35,6 +35,7 @@ export function experienceStatement(entry: ExperienceEntry): string | null {
     ['Текущая роль', entry.current],
     ['Занятость', entry.employmentType],
     ['Формат работы', entry.workplaceType],
+    ['Размер команды', entry.teamSize ? `${entry.teamSize} человек` : undefined],
     [
       'Навыки на этом месте',
       (entry.skills ?? [])

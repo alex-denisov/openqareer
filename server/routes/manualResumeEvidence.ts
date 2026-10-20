@@ -37,6 +37,7 @@ function experienceFields(entry: ExperienceEntry): readonly unknown[] {
     entry.current,
     text(entry.employmentType),
     entry.workplaceType ?? '',
+    entry.teamSize ?? null,
     (entry.skills ?? []).map((skill) => skill.trim()).filter(Boolean),
   ];
 }

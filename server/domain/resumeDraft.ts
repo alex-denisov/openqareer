@@ -51,6 +51,8 @@ export interface ResumeExperienceInput {
   readonly employerLogoMediaId?: string;
   /** v2: groups several roles held at the same employer. */
   readonly employerGroupKey?: string;
+  /** v2: how many people the candidate led in this role; absent means unknown. */
+  readonly teamSize?: number;
 }
 
 export interface ResumeCertificationInput {
@@ -78,11 +80,7 @@ export interface ResumeProjectInput {
 }
 
 export type ResumeAchievementKind =
-  | 'honor'
-  | 'publication'
-  | 'patent'
-  | 'organization'
-  | 'volunteering';
+  'honor' | 'publication' | 'patent' | 'organization' | 'volunteering';
 
 export interface ResumeAchievementInput {
   readonly id: string;
@@ -311,6 +309,7 @@ export const resumeDraftSchema = z
             skills: skillListSchema.optional(),
             employerLogoMediaId: mediaIdSchema.optional(),
             employerGroupKey: labelSchema.optional(),
+            teamSize: z.number().int().min(1).max(100_000).optional(),
           })
           .strict(),
       )

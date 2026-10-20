@@ -152,9 +152,7 @@ describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => 
     expect(draft.schemaVersion).toBe(2);
     expect(draft.candidate.headline).toBe('VP of Engineering');
     expect(draft.candidate.photoMediaId).toBe('media-photo-1');
-    expect(draft.candidate.contact?.linkedinUrl).toBe(
-      'https://www.linkedin.com/in/mila-example',
-    );
+    expect(draft.candidate.contact?.linkedinUrl).toBe('https://www.linkedin.com/in/mila-example');
     expect(draft.experience[0]).toMatchObject({
       employmentType: 'Full-time',
       workplaceType: 'hybrid',
@@ -168,6 +166,18 @@ describe('resumeDraftSchema — v2 extension for reading (B265 slice 1)', () => 
     expect(draft.projects?.[0]?.name).toBe('Internal platform migration');
     expect(draft.achievements?.[0]?.kind).toBe('honor');
     expect(draft.sourceSuggestions?.openToWork?.roles).toEqual(['VP of Engineering']);
+  });
+
+  it('keeps a whole positive team size and rejects any other (B540)', () => {
+    const withTeam = (teamSize: unknown) => ({
+      ...v2Draft(),
+      experience: [{ ...v2Draft().experience[0], teamSize }],
+    });
+    expect(resumeDraftSchema.parse(withTeam(38)).experience[0]?.teamSize).toBe(38);
+    expect(resumeDraftSchema.parse(v2Draft()).experience[0]?.teamSize).toBeUndefined();
+    for (const invalid of [0, -3, 2.5, '38']) {
+      expect(() => resumeDraftSchema.parse(withTeam(invalid))).toThrow();
+    }
   });
 
   it('rejects an invalid experience description memory reference', () => {
