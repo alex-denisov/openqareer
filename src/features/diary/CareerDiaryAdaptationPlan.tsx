@@ -1,22 +1,23 @@
 import { useEffect, useState } from 'react';
-import { Plus } from '@phosphor-icons/react';
+import { Info } from '@phosphor-icons/react';
 import type { CareerDiaryWorkplace } from '../../../shared/careerDiary';
-import { generateStageAdvice } from '../onboarding/executiveOnboarding';
 import { formatCareerDiaryDate } from './careerDiaryModel';
+import { CareerDiaryTaskEntry } from './CareerDiaryAdaptationTaskForm';
 import {
-  CareerDiaryAdaptationTaskList,
-  CareerDiaryTaskEntry,
-} from './CareerDiaryAdaptationTaskForm';
-import { CAREER_DIARY_ADAPTATION_STAGES } from './careerDiaryAdaptationStages';
+  CareerDiaryStageAside,
+  CareerDiaryStageTabs,
+  CareerDiaryStageTaskPanel,
+} from './CareerDiaryAdaptationStage';
 import {
-  adaptationPlanProgress,
   careerDiaryAdaptationPhase,
   type CareerDiaryAdaptationPlan,
   type CareerDiaryAdaptationStage,
 } from './careerDiaryPlanning';
-import { useAdaptationDiscussion } from './adaptationDiscussion';
-import { ADAPTATION_STAGE_LABELS } from '../../../shared/adaptationCoach';
 import { useCareerDiaryAdaptationPlan } from './useCareerDiaryAdaptationPlan';
+import './career-diary-adaptation.css';
+
+const PLAN_RULES =
+  'План адаптации 30–60–90: задачи первых трёх месяцев в новой роли. Выход не больше месяца назад или ещё впереди: предлагаем сами. От одного до двух месяцев: можно запустить вручную, пройденные этапы отмечены. Больше двух месяцев: адаптация считается пройденной и не предлагается. Цели из плана попадают во вкладку «Цели и KPI».';
 
 interface CareerDiaryAdaptationPlanProps {
   readonly asOf: string | null;
@@ -93,8 +94,9 @@ function CareerDiaryAdaptationPlanContent({
       className="career-diary-adaptation-workspace"
       aria-labelledby="career-diary-adaptation-title"
     >
-      <CareerDiaryAdaptationContext workplace={workplace} phase={phase} />
+      <CareerDiaryAdaptationContext workplace={workplace} />
       <CareerDiaryPlanBody
+        asOf={asOf}
         phase={phase}
         plan={plan}
         workplace={workplace}
@@ -109,6 +111,7 @@ function CareerDiaryAdaptationPlanContent({
 }
 
 function CareerDiaryPlanBody({
+  asOf,
   phase,
   plan,
   workplace,
@@ -118,6 +121,7 @@ function CareerDiaryPlanBody({
   setActiveStage,
   setTaskFormOpen,
 }: {
+  readonly asOf: string;
   readonly phase: ReturnType<typeof careerDiaryAdaptationPhase>;
   readonly plan: CareerDiaryAdaptationPlan | null;
   readonly workplace: CareerDiaryWorkplace;
@@ -131,6 +135,7 @@ function CareerDiaryPlanBody({
     <>
       {plan ? (
         <CareerDiaryActivePlan
+          asOf={asOf}
           plan={plan}
           workplace={workplace}
           activeStage={activeStage}
@@ -142,21 +147,27 @@ function CareerDiaryPlanBody({
       ) : (
         <CareerDiaryPlanLaunch
           phase={phase}
+          startDate={workplace.startDate}
           canLaunch={adaptation.canLaunch}
           saving={adaptation.saving}
           onLaunch={adaptation.launch}
         />
       )}
-      {adaptation.error && !taskFormOpen ? (
-        <p className="career-diary-error" role="alert">
-          {adaptation.error}
-        </p>
-      ) : null}
+      {adaptation.error && !taskFormOpen ? <PlanError message={adaptation.error} /> : null}
     </>
   );
 }
 
+function PlanError({ message }: { readonly message: string }) {
+  return (
+    <p className="career-diary-error" role="alert">
+      {message}
+    </p>
+  );
+}
+
 function CareerDiaryActivePlan({
+  asOf,
   plan,
   workplace,
   activeStage,
@@ -165,6 +176,7 @@ function CareerDiaryActivePlan({
   setActiveStage,
   setTaskFormOpen,
 }: {
+  readonly asOf: string;
   readonly plan: CareerDiaryAdaptationPlan;
   readonly workplace: CareerDiaryWorkplace;
   readonly activeStage: CareerDiaryAdaptationStage;
@@ -176,6 +188,7 @@ function CareerDiaryActivePlan({
   return (
     <>
       <CareerDiaryPlanContents
+        asOf={asOf}
         plan={plan}
         workplace={workplace}
         activeStage={activeStage}
@@ -200,22 +213,22 @@ function CareerDiaryActivePlan({
   );
 }
 
-function CareerDiaryAdaptationContext({
-  workplace,
-  phase,
-}: {
-  readonly workplace: CareerDiaryWorkplace;
-  readonly phase: ReturnType<typeof careerDiaryAdaptationPhase>;
-}) {
+function CareerDiaryAdaptationContext({ workplace }: { readonly workplace: CareerDiaryWorkplace }) {
   return (
     <>
       <header className="career-diary-adaptation-header">
         <h2 id="career-diary-adaptation-title" tabIndex={-1}>
           30–60–90
         </h2>
-        <p>Задачи первых трёх месяцев в новой роли.</p>
-        <p className="career-diary-note">{workplacePhaseCopy(phase, workplace.startDate)}</p>
+        <p>
+          Задачи первых трёх месяцев в новой роли. Предлагается, если выход не больше месяца назад
+          или ещё впереди.
+        </p>
       </header>
+      <p className="career-diary-adaptation-rules">
+        <Info size={16} aria-hidden="true" />
+        <span>{PLAN_RULES}</span>
+      </p>
       {workplace.status === 'archived' ? (
         <p className="career-diary-note" role="status">
           Работу завершили: архив. План доступен только для чтения.
@@ -227,11 +240,13 @@ function CareerDiaryAdaptationContext({
 
 function CareerDiaryPlanLaunch({
   phase,
+  startDate,
   canLaunch,
   saving,
   onLaunch,
 }: {
   readonly phase: ReturnType<typeof careerDiaryAdaptationPhase>;
+  readonly startDate: string;
   readonly canLaunch: boolean;
   readonly saving: boolean;
   readonly onLaunch: () => Promise<boolean>;
@@ -247,6 +262,7 @@ function CareerDiaryPlanLaunch({
   return (
     <section className="career-diary-adaptation-launch">
       <h3>{phase === 'offer_accepted' ? 'Оффер принят' : 'План пока не запущен'}</h3>
+      <p className="career-diary-note">{workplacePhaseCopy(phase, startDate)}</p>
       <p>
         {phase === 'offer_accepted'
           ? 'Подготовьте первые задачи до выхода на работу.'
@@ -268,6 +284,7 @@ function CareerDiaryPlanLaunch({
 }
 
 function CareerDiaryPlanContents({
+  asOf,
   plan,
   workplace,
   activeStage,
@@ -278,6 +295,7 @@ function CareerDiaryPlanContents({
   onAddTask,
   onClosePlan,
 }: {
+  readonly asOf: string;
   readonly plan: CareerDiaryAdaptationPlan;
   readonly workplace: CareerDiaryWorkplace;
   readonly activeStage: CareerDiaryAdaptationStage;
@@ -290,7 +308,7 @@ function CareerDiaryPlanContents({
 }) {
   return (
     <>
-      <StageTabs plan={plan} activeStage={activeStage} onChange={onStageChange} />
+      <CareerDiaryStageTabs plan={plan} activeStage={activeStage} onChange={onStageChange} />
       <div className="career-diary-adaptation-columns">
         <CareerDiaryStageTaskPanel
           plan={plan}
@@ -301,203 +319,14 @@ function CareerDiaryPlanContents({
           onAddTask={onAddTask}
           onClosePlan={onClosePlan}
         />
-        <CareerDiaryStageAdvice workplace={workplace} plan={plan} activeStage={activeStage} />
+        <CareerDiaryStageAside
+          asOf={asOf}
+          workplace={workplace}
+          plan={plan}
+          activeStage={activeStage}
+        />
       </div>
     </>
-  );
-}
-
-function CareerDiaryStageTaskPanel({
-  plan,
-  activeStage,
-  readOnly,
-  saving,
-  onTaskChange,
-  onAddTask,
-  onClosePlan,
-}: {
-  readonly plan: CareerDiaryAdaptationPlan;
-  readonly activeStage: CareerDiaryAdaptationStage;
-  readonly readOnly: boolean;
-  readonly saving: boolean;
-  readonly onTaskChange: (taskId: string, completed: boolean) => Promise<boolean>;
-  readonly onAddTask: () => void;
-  readonly onClosePlan: () => Promise<boolean>;
-}) {
-  const tasks = plan.tasks.filter((task) => task.stage === activeStage);
-  const progress = adaptationPlanProgress(plan, activeStage);
-  return (
-    <section
-      className="career-diary-adaptation-task-list"
-      id={`career-diary-adaptation-stage-${activeStage}`}
-      role="tabpanel"
-      aria-labelledby={`career-diary-adaptation-tab-${activeStage}`}
-    >
-      <header className="career-diary-adaptation-task-list__header">
-        <h3>
-          {stageLabel(activeStage)}: {tasks.length} задач
-        </h3>
-        <CareerDiaryStageTaskAction readOnly={readOnly} saving={saving} onAddTask={onAddTask} />
-      </header>
-      <p className="career-diary-note">
-        Выполнено {progress.completed} из {progress.total} задач этапа.
-      </p>
-      <CareerDiaryAdaptationTaskList
-        tasks={tasks}
-        readOnly={readOnly}
-        saving={saving}
-        onTaskChange={onTaskChange}
-      />
-      <CareerDiaryPlanProgress
-        plan={plan}
-        readOnly={readOnly}
-        saving={saving}
-        onClosePlan={onClosePlan}
-      />
-    </section>
-  );
-}
-
-function CareerDiaryStageTaskAction({
-  readOnly,
-  saving,
-  onAddTask,
-}: {
-  readonly readOnly: boolean;
-  readonly saving: boolean;
-  readonly onAddTask: () => void;
-}) {
-  if (readOnly) return <span className="career-diary-note">Только для чтения</span>;
-  return (
-    <button className="career-btn is-primary" type="button" disabled={saving} onClick={onAddTask}>
-      <Plus size={18} aria-hidden="true" />
-      Добавить задачу
-    </button>
-  );
-}
-
-function CareerDiaryPlanProgress({
-  plan,
-  readOnly,
-  saving,
-  onClosePlan,
-}: {
-  readonly plan: CareerDiaryAdaptationPlan;
-  readonly readOnly: boolean;
-  readonly saving: boolean;
-  readonly onClosePlan: () => Promise<boolean>;
-}) {
-  const progress = adaptationPlanProgress(plan);
-  return (
-    <>
-      <p className="career-diary-note">
-        Выполнено {progress.completed} из {progress.total} задач.
-      </p>
-      {plan.status === 'active' && !readOnly ? (
-        <button
-          className="career-btn is-ghost"
-          type="button"
-          disabled={saving}
-          onClick={() => void onClosePlan()}
-        >
-          Закрыть план
-        </button>
-      ) : null}
-      {plan.status === 'closed' ? (
-        <p className="career-diary-note" role="status">
-          План адаптации закрыт.
-        </p>
-      ) : null}
-    </>
-  );
-}
-
-function CareerDiaryStageAdvice({
-  workplace,
-  plan,
-  activeStage,
-}: {
-  readonly workplace: CareerDiaryWorkplace;
-  readonly plan: CareerDiaryAdaptationPlan;
-  readonly activeStage: CareerDiaryAdaptationStage;
-}) {
-  const advice = generateStageAdvice(onboardingStage(activeStage));
-  return (
-    <aside
-      className="career-diary-adaptation-advice"
-      aria-label={`Совет этапа ${stageLabel(activeStage)}`}
-    >
-      <h3>Совет этапа {stageLabel(activeStage)}</h3>
-      {advice.map((item) => (
-        <p key={item}>{item}</p>
-      ))}
-      <p className="career-diary-note">
-        Общие рекомендации для руководителей, не оценка вашей ситуации.
-      </p>
-      <CareerDiaryAdaptationConsultant
-        workplace={workplace}
-        plan={plan}
-        activeStage={activeStage}
-      />
-    </aside>
-  );
-}
-
-function StageTabs({
-  plan,
-  activeStage,
-  onChange,
-}: {
-  readonly plan: CareerDiaryAdaptationPlan;
-  readonly activeStage: CareerDiaryAdaptationStage;
-  readonly onChange: (stage: CareerDiaryAdaptationStage) => void;
-}) {
-  return (
-    <div
-      className="career-diary-adaptation-stages"
-      role="tablist"
-      aria-label="Этап плана адаптации"
-    >
-      {CAREER_DIARY_ADAPTATION_STAGES.map((stage) => {
-        const progress = adaptationPlanProgress(plan, stage.id);
-        return (
-          <button
-            className="career-diary-adaptation-stage"
-            key={stage.id}
-            type="button"
-            role="tab"
-            id={`career-diary-adaptation-tab-${stage.id}`}
-            aria-controls={`career-diary-adaptation-stage-${stage.id}`}
-            aria-selected={activeStage === stage.id}
-            tabIndex={activeStage === stage.id ? 0 : -1}
-            onClick={() => onChange(stage.id)}
-          >
-            <strong>{stage.label}</strong>
-            <span>
-              {progress.completed} из {progress.total}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CareerDiaryAdaptationConsultant({ workplace, plan, activeStage }: {
-  readonly workplace: CareerDiaryWorkplace;
-  readonly plan: CareerDiaryAdaptationPlan;
-  readonly activeStage: CareerDiaryAdaptationStage;
-}) {
-  const open = useAdaptationDiscussion({
-    subject: { kind: 'adaptation', id: workplace.id, planId: plan.id, adaptationStage: activeStage },
-    title: `${workplace.company} · ${workplace.title} · ${ADAPTATION_STAGE_LABELS[activeStage]}`,
-  });
-  return (
-    <div className="career-diary-adaptation-consultant">
-      <button data-adaptation-consultant-trigger className="career-btn is-ghost" type="button" disabled={!open} onClick={open}>
-        Обсудить план с консультантом
-      </button>
-    </div>
   );
 }
 
@@ -508,10 +337,6 @@ function stageForPhase(
   if (phase === 'days_31_60') return 'days_31_60';
   if (phase === 'days_61_90' || phase === 'past_90' || phase === 'archived') return 'days_61_90';
   return 'days_1_30';
-}
-
-function stageLabel(stage: CareerDiaryAdaptationStage): string {
-  return CAREER_DIARY_ADAPTATION_STAGES.find((item) => item.id === stage)!.label;
 }
 
 function workplacePhaseCopy(
@@ -528,14 +353,4 @@ function workplacePhaseCopy(
     return `Адаптация: выход 2–3 месяца назад (${formatCareerDiaryDate(startDate)}).`;
   if (phase === 'past_90') return 'Дата выхода больше 90 дней назад.';
   return 'Работу завершили: архив.';
-}
-
-function onboardingStage(stage: CareerDiaryAdaptationStage) {
-  const stageMap = {
-    prep: 'prep',
-    days_1_30: 'days-30',
-    days_31_60: 'days-60',
-    days_61_90: 'days-90',
-  } as const;
-  return stageMap[stage];
 }

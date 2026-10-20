@@ -337,7 +337,7 @@ test('B357 continues the diary dialogue, confirms an edited task after a lost re
   await navigateToDiary(page, info);
   await openPlanningView(page, info, 'adaptation');
   await page.getByRole('button', { name: 'Запустить план', exact: true }).click();
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  await openPlanConsultant(page, info);
   expect(server.requests).toHaveLength(0);
   const panel = page.getByRole(info.project.name === 'mobile-390' ? 'dialog' : 'complementary', {
     name: /Консультант · Карьерный дневник/u,
@@ -403,22 +403,24 @@ test('B357 continues the diary dialogue, confirms an edited task after a lost re
   await page.reload({ waitUntil: 'domcontentloaded' });
   await navigateToDiary(page, info);
   await openPlanningView(page, info, 'adaptation');
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  await openPlanConsultant(page, info);
   await expect(panel.getByText('Пока не знаю', { exact: true })).toBeVisible();
   await expect(panel.getByText('Изменение плана сохранено.')).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('button', { name: 'Обсудить план с консультантом' })).toBeFocused();
+  if (info.project.name === 'mobile-390') {
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Консультант: открыть' })).toBeFocused();
+  }
   await expect(
     page.getByText('Согласовать критерий успеха до выхода', { exact: true }),
   ).toBeVisible();
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  await openPlanConsultant(page, info);
   server.deferNext();
   await input.fill('Вопрос по прежнему этапу');
   await panel.getByRole('button', { name: 'Отправить вопрос', exact: true }).click();
   await expect.poll(() => server.requests.length).toBe(3);
-  await page.keyboard.press('Escape');
-  await page.getByRole('tab', { name: /Дни 31–60/u }).click();
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  if (info.project.name === 'mobile-390') await page.keyboard.press('Escape');
+  await page.getByRole('tab', { name: /31–60/u }).click();
+  await openPlanConsultant(page, info);
   await input.fill('Черновик для нового этапа');
   const reply = page.waitForResponse((response) => response.url().includes('/api/v1/coach/turn'));
   server.release();
@@ -426,6 +428,14 @@ test('B357 continues the diary dialogue, confirms an edited task after a lost re
   await expect(input).toHaveValue('Черновик для нового этапа');
   await expect(panel.getByText(/Контекст:.*Дни 31–60/u)).toBeVisible();
 });
+
+/** Макет 10: диалог по плану идёт в панели консультанта; на 390 её открывает значок в шапке. */
+async function openPlanConsultant(page: Page, testInfo: TestInfo): Promise<void> {
+  if (testInfo.project.name === 'mobile-390') {
+    await page.getByRole('button', { name: 'Консультант: открыть' }).click();
+  }
+  await expect(page.getByText(/^Контекст: Норма Групп/u)).toBeVisible();
+}
 
 async function openPlanningView(
   page: Page,
@@ -491,7 +501,7 @@ test('B357 reviews and confirms an existing task change without changing its com
   (
     state.workplace!.planning as { adaptationPlan: { tasks: Array<{ description: string }> } }
   ).adaptationPlan.tasks[0]!.description = 'ДлинноеОписание'.repeat(100);
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  await openPlanConsultant(page, info);
   const panel = page.getByRole(info.project.name === 'mobile-390' ? 'dialog' : 'complementary', {
     name: /Консультант · Карьерный дневник/u,
   });
@@ -589,7 +599,7 @@ test('launches an offer-stage plan, manages tasks, and asks the ordinary consult
     'aria-selected',
     'true',
   );
-  await expect(page.getByText('Выполнено 0 из 14 задач.')).toBeVisible();
+  await expect(page.getByRole('checkbox')).toHaveCount(3);
   await capture(page, testInfo, 'adaptation-plan-launched');
 
   await page.getByRole('button', { name: 'Добавить задачу' }).click();
@@ -597,13 +607,14 @@ test('launches an offer-stage plan, manages tasks, and asks the ordinary consult
   await page.locator('#career-diary-adaptation-task-stage').selectOption('prep');
   await page.locator('#career-diary-adaptation-task-due').fill('2026-12-19');
   await page.getByRole('button', { name: 'Сохранить задачу' }).click();
-  await expect(page.getByText('Согласовать критерии успеха')).toBeVisible();
+  await expect(page.getByText('Согласовать критерии успеха', { exact: true })).toBeVisible();
   const firstTask = page.getByRole('checkbox', { name: /Аудит условий и ожиданий/u });
   await firstTask.click();
   await expect(firstTask).toBeChecked();
-  await expect(page.getByText('Выполнено 1 из 15 задач.')).toBeVisible();
+  await expect(page.getByRole('checkbox')).toHaveCount(4);
+  await expect(page.getByRole('checkbox', { checked: true })).toHaveCount(1);
 
-  await page.getByRole('button', { name: 'Обсудить план с консультантом' }).click();
+  await openPlanConsultant(page, testInfo);
   const consultant = page.getByRole(
     testInfo.project.name === 'mobile-390' ? 'dialog' : 'complementary',
     { name: /Консультант · Карьерный дневник/u },
@@ -624,14 +635,13 @@ test('launches an offer-stage plan, manages tasks, and asks the ordinary consult
   await capture(page, testInfo, 'adaptation-plan-with-task');
   if (testInfo.project.name === 'mobile-390') await page.keyboard.press('Escape');
 
-  for (const stage of ['Дни 1–30', 'Дни 31–60', 'Дни 61–90']) {
+  for (const stage of ['1–30', '31–60', '61–90']) {
     const stageTab = page.getByRole('tab', { name: new RegExp(stage, 'u') });
     await stageTab.click();
     await expect(stageTab).toHaveAttribute('aria-selected', 'true');
   }
   await capture(page, testInfo, 'adaptation-plan-stage-61-90');
 
-  await page.getByRole('tab', { name: /Подготовка/u }).click();
   await page.getByRole('button', { name: 'Закрыть план' }).click();
   await expect(page.getByText('План адаптации закрыт')).toBeVisible();
   await capture(page, testInfo, 'adaptation-plan-closed');
@@ -646,12 +656,9 @@ test('shows the active 31–60 day stage when the start date was one to two mont
 }, testInfo) => {
   await openDiary(page, testInfo, fixture({ startDate: '2026-10-18' }));
   await openPlanningView(page, testInfo, 'adaptation');
+  await expect(page.getByText(/Адаптация: выход 1–2 месяца назад/u)).toBeVisible();
   await page.getByRole('button', { name: 'Запустить план' }).click();
-  await expect(page.getByRole('tab', { name: /Дни 31–60/u })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  );
-  await expect(page.getByText('Адаптация: выход 1–2 месяца назад')).toBeVisible();
+  await expect(page.getByRole('tab', { name: /31–60/u })).toHaveAttribute('aria-selected', 'true');
   await capture(page, testInfo, 'adaptation-days-31-60');
 });
 
@@ -690,3 +697,136 @@ test('keeps an archived workplace and its plan read-only', async ({ page }, test
   await expect(page.getByText('Только для чтения', { exact: true })).toBeVisible();
   await capture(page, testInfo, 'adaptation-archived');
 });
+
+const MOCKUP_TASKS = [
+  ['prep', 'Аудит условий и ожиданий', 'alignment', '2026-11-01', true, 'template'],
+  ['prep', 'Изучить продукт и рынок', 'strategy', '2026-11-01', true, 'template'],
+  ['prep', 'Список стейкхолдеров', 'people', '2026-11-02', true, 'template'],
+  ['prep', 'Договориться о первых встречах', 'alignment', '2026-11-02', true, 'template'],
+  ['days_1_30', '1:1 с каждым в команде', 'people', '2026-11-20', true, 'template'],
+  [
+    'days_31_60',
+    'Оценка команды и компетенций',
+    'people',
+    '2026-12-15',
+    true,
+    'template',
+    'Определить кадровые дефициты, перегруженные роли и потребности в найме.',
+  ],
+  [
+    'days_31_60',
+    'Встреча с продуктовым директором: приоритеты Q1',
+    'alignment',
+    '2026-12-12',
+    true,
+    'coach',
+    'Согласовать, какие продуктовые обещания команда берёт в первом квартале.',
+  ],
+  [
+    'days_31_60',
+    'Реализация первой быстрой победы',
+    'delivery',
+    '2026-12-20',
+    false,
+    'template',
+    'Завершить осязаемое улучшение процесса: релизный цикл команды платежей.',
+  ],
+  [
+    'days_31_60',
+    'Бюджет и план найма на Q1',
+    'people',
+    '2026-12-22',
+    false,
+    'coach',
+    'Подготовить расчёт на три открытые позиции и согласовать с финансовым директором.',
+  ],
+  [
+    'days_31_60',
+    'Показать первый результат команде',
+    'people',
+    '2026-12-28',
+    false,
+    'coach',
+    'Короткий разбор того, что изменилось за 60 дней, и что дальше.',
+  ],
+  [
+    'days_31_60',
+    'Разбор инцидентов за 60 дней',
+    'delivery',
+    '2026-12-29',
+    false,
+    'coach',
+    'Свести причины инцидентов P1 в три системные темы.',
+  ],
+  [
+    'days_31_60',
+    'Промежуточный синк 60 дней',
+    'alignment',
+    '2027-01-02',
+    false,
+    'template',
+    'Обсудить прогресс со стейкхолдерами и скорректировать курс при необходимости.',
+  ],
+  [
+    'days_31_60',
+    'Формирование проекта стратегии',
+    'strategy',
+    '2027-01-05',
+    false,
+    'template',
+    'Подготовить драфт дорожной карты развития подразделения на 6–12 месяцев.',
+  ],
+  ['days_61_90', 'Защитить дорожную карту', 'strategy', '2027-01-30', false, 'template'],
+] as const;
+
+test('B459 renders the 31–60 day frame of the approved mockup 10', async ({ page }, testInfo) => {
+  const tasks = MOCKUP_TASKS.map(
+    ([stage, title, category, dueDate, completed, origin, description], index) => ({
+      id: origin === 'coach' ? `coach-${index}` : `task-${index}`,
+      title,
+      description: description ?? '',
+      stage,
+      category,
+      dueDate,
+      completed,
+      source: origin === 'template' ? 'template' : 'candidate',
+    }),
+  );
+  const state = fixture({
+    startDate: '2026-11-03',
+    planning: {
+      adaptationPlan: {
+        id: 'plan-mockup',
+        workplaceId: 'workplace-1',
+        startDate: '2026-11-03',
+        createdAt: '2026-11-03T00:00:00.000Z',
+        status: 'active',
+        closedAt: null,
+        tasks,
+      },
+    },
+  });
+  await openDiary(page, testInfo, state);
+  await openPlanningView(page, testInfo, 'adaptation');
+  await expect(page.getByRole('tab', { name: /31–60/u })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: /Дни 31–60.*8 задач/u })).toBeVisible();
+  await expect(page.getByText('Ближайшее', { exact: true })).toBeVisible();
+  await expect(page.getByText('добавлено консультантом').first()).toBeAttached();
+  await expectNoHorizontalOverflow(page);
+  await captureFull(page, testInfo, 'adaptation-mockup-31-60');
+});
+
+/** Кадр на всю высоту: окно растягивается до высоты прокручиваемой области кабинета. */
+async function captureFull(page: Page, testInfo: TestInfo, state: string): Promise<void> {
+  mkdirSync(EVIDENCE, { recursive: true });
+  const viewport = page.viewportSize()!;
+  const overflow = await page
+    .locator('#career-main')
+    .evaluate((element) => element.scrollHeight - element.clientHeight);
+  await page.setViewportSize({
+    width: viewport.width,
+    height: viewport.height + Math.max(0, overflow),
+  });
+  await page.screenshot({ path: join(EVIDENCE, `${state}-full-${testInfo.project.name}.png`) });
+  await page.setViewportSize(viewport);
+}

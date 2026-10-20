@@ -1,5 +1,14 @@
 import { useState, type FormEvent } from 'react';
-import { formatCareerDiaryDate } from './careerDiaryModel';
+import {
+  CheckCircle,
+  Circle,
+  Compass,
+  Handshake,
+  Target,
+  Users,
+  type Icon,
+} from '@phosphor-icons/react';
+import { adaptationTaskOrigin, formatDayMonth } from './careerDiaryAdaptationView';
 import { CAREER_DIARY_ADAPTATION_STAGES } from './careerDiaryAdaptationStages';
 import {
   type CareerDiaryAdaptationStage,
@@ -55,9 +64,8 @@ export function CareerDiaryAdaptationTaskList({
   readonly saving: boolean;
   readonly onTaskChange: (taskId: string, completed: boolean) => Promise<boolean>;
 }) {
-  if (!tasks.length) return <p className="career-diary-note">На этом этапе задач пока нет.</p>;
   return (
-    <div className="career-diary-adaptation-tasks">
+    <>
       {tasks.map((task) => (
         <CareerDiaryAdaptationTaskItem
           key={task.id}
@@ -67,7 +75,7 @@ export function CareerDiaryAdaptationTaskList({
           onTaskChange={onTaskChange}
         />
       ))}
-    </div>
+    </>
   );
 }
 
@@ -83,25 +91,55 @@ function CareerDiaryAdaptationTaskItem({
   readonly onTaskChange: (taskId: string, completed: boolean) => Promise<boolean>;
 }) {
   return (
-    <label className="career-diary-adaptation-task">
-      <input
-        type="checkbox"
-        checked={task.completed}
-        disabled={readOnly || saving}
-        onChange={(event) => void onTaskChange(task.id, event.currentTarget.checked)}
-      />
-      <span className="career-diary-adaptation-task__content">
-        <strong>{task.title}</strong>
-        <span>
-          {categoryLabel(task.category)} ·{' '}
-          {task.source === 'template' ? 'из шаблона' : 'добавлено вами'} · до{' '}
-          {formatCareerDiaryDate(task.dueDate)}
-        </span>
-        {task.description ? <span>{task.description}</span> : null}
-      </span>
-    </label>
+    <li className={`career-diary-otask${task.completed ? ' is-done' : ''}`}>
+      <div className="career-diary-otask__main">
+        <label className="career-diary-otask__check">
+          <span className="career-diary-otask__box">
+            <input
+              className="career-checkbox"
+              type="checkbox"
+              checked={task.completed}
+              disabled={readOnly || saving}
+              onChange={(event) => void onTaskChange(task.id, event.currentTarget.checked)}
+            />
+            <CheckCircle className="is-on" size={18} aria-hidden="true" />
+            <Circle className="is-off" size={18} aria-hidden="true" />
+          </span>
+          <b>{task.title}</b>
+        </label>
+        {task.description ? <p>{task.description}</p> : null}
+      </div>
+      <CareerDiaryAdaptationTaskMeta task={task} />
+    </li>
   );
 }
+
+function CareerDiaryAdaptationTaskMeta({ task }: { readonly task: CareerDiaryAdaptationTask }) {
+  const Icon = CATEGORY_ICONS[task.category];
+  return (
+    <div className="career-diary-otask__meta">
+      <span className="career-diary-tag">
+        <Icon size={14} aria-hidden="true" />
+        {categoryLabel(task.category)}
+      </span>
+      <span className="career-diary-otask__due">
+        {task.completed ? 'готово' : `до ${formatDayMonth(task.dueDate)}`}
+      </span>
+      <span
+        className={`career-diary-otask__origin${task.source === 'template' ? ' is-template' : ''}`}
+      >
+        {adaptationTaskOrigin(task)}
+      </span>
+    </div>
+  );
+}
+
+const CATEGORY_ICONS: Record<CareerDiaryAdaptationTask['category'], Icon> = {
+  people: Users,
+  strategy: Compass,
+  delivery: Target,
+  alignment: Handshake,
+};
 
 function CareerDiaryAdaptationTaskForm({
   stage,

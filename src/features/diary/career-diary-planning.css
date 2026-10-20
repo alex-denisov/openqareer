@@ -7,9 +7,6 @@
 .career-diary-quarter-goals,
 .career-diary-quarter-confidence,
 .career-diary-quarter-decisions,
-.career-diary-adaptation-workspace,
-.career-diary-adaptation-task-list,
-.career-diary-adaptation-advice,
 .career-diary-adaptation-task-form {
   display: grid;
   gap: var(--career-space-4);
@@ -21,22 +18,16 @@
 .career-diary-quarter-goals h3,
 .career-diary-quarter-confidence h3,
 .career-diary-quarter-decisions h3,
-.career-diary-adaptation-header h2,
-.career-diary-adaptation-header p,
-.career-diary-adaptation-task-list__header h3,
-.career-diary-adaptation-advice h3,
 .career-diary-adaptation-task-form h3 {
   margin: 0;
 }
 
-.career-diary-quarter-review__header h2,
-.career-diary-adaptation-header h2 {
+.career-diary-quarter-review__header h2 {
   font-size: var(--career-text-lg);
   overflow-wrap: anywhere;
 }
 
-.career-diary-quarter-review__header p,
-.career-diary-adaptation-header p {
+.career-diary-quarter-review__header p {
   color: var(--career-text-soft);
   font-size: var(--career-text-sm);
 }
@@ -53,8 +44,6 @@
 .career-diary-quarter-confidence,
 .career-diary-quarter-decision,
 .career-diary-adaptation-launch,
-.career-diary-adaptation-task-list,
-.career-diary-adaptation-advice,
 .career-diary-adaptation-task-form {
   padding: var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
@@ -104,9 +93,7 @@
 }
 
 .career-diary-quarter-goal__heading,
-.career-diary-quarter-goal__actions,
-.career-diary-adaptation-task-list__header,
-.career-diary-adaptation-consultant {
+.career-diary-quarter-goal__actions {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -140,98 +127,11 @@
   margin: 0;
 }
 
-.career-diary-adaptation-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-  align-items: start;
-  gap: var(--career-space-4);
-  min-inline-size: 0;
-}
-
-.career-diary-adaptation-stages {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--career-space-2);
-  min-inline-size: 0;
-}
-
-.career-diary-adaptation-stage {
-  display: grid;
-  align-content: center;
-  gap: var(--career-space-1);
-  min-inline-size: 0;
-  min-block-size: var(--career-target-min);
-  padding: var(--career-space-2);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface);
-  color: var(--career-text-soft);
-  font: inherit;
-  font-size: var(--career-text-xs);
-  text-align: start;
-  cursor: pointer;
-}
-
-.career-diary-adaptation-stage[aria-selected='true'] {
-  border-color: var(--career-accent);
-  color: var(--career-text);
-}
-
-.career-diary-adaptation-stage:focus-visible,
-.career-diary-adaptation-task:focus-within {
-  outline: var(--career-space-1) solid var(--career-accent);
-  outline-offset: var(--career-space-1);
-}
-
-.career-diary-adaptation-stage span,
-.career-diary-adaptation-task__content > span {
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  overflow-wrap: anywhere;
-}
-
-.career-diary-adaptation-tasks {
-  display: grid;
-  gap: var(--career-space-2);
-}
-
-.career-diary-adaptation-task {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--career-space-3);
-  min-block-size: var(--career-target-min);
-  padding: var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-sm);
-  background: var(--career-surface-raised);
-}
-
-.career-diary-adaptation-task input {
-  inline-size: var(--career-space-5);
-  block-size: var(--career-space-5);
-  margin-block-start: var(--career-space-1);
-  accent-color: var(--career-accent);
-}
-
-.career-diary-adaptation-task__content {
-  display: grid;
-  gap: var(--career-space-1);
-  min-inline-size: 0;
-}
-
-.career-diary-adaptation-task-list__header h3,
-.career-diary-adaptation-advice h3,
 .career-diary-adaptation-task-form h3,
 .career-diary-quarter-goals h3,
 .career-diary-quarter-confidence h3,
 .career-diary-quarter-decisions h3 {
   font-size: var(--career-text-md);
-}
-
-.career-diary-adaptation-advice > p {
-  margin: 0;
-  font-size: var(--career-text-sm);
 }
 
 .career-diary-adaptation-task-fields {
@@ -245,8 +145,7 @@
 }
 
 .career-diary-page__header h1:focus-visible,
-.career-diary-quarter-review__header h2:focus-visible,
-.career-diary-adaptation-header h2:focus-visible {
+.career-diary-quarter-review__header h2:focus-visible {
   outline: var(--career-space-1) solid var(--career-accent);
   outline-offset: var(--career-space-1);
 }
@@ -304,18 +203,8 @@
   .career-diary-quarter-goals,
   .career-diary-quarter-confidence,
   .career-diary-quarter-decisions,
-  .career-diary-adaptation-task-list,
-  .career-diary-adaptation-advice,
   .career-diary-adaptation-task-form {
     padding: var(--career-space-3);
-  }
-
-  .career-diary-adaptation-columns {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .career-diary-adaptation-stages {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .career-diary-adaptation-task-fields {

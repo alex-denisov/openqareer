@@ -19,6 +19,9 @@ export function useAdaptationDiscussion(target: AdaptationDiscussionTarget) {
   const key = JSON.stringify(target);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent(ADAPTATION_CONTEXT_EVENT, { detail: JSON.parse(key) }));
+    return () => {
+      window.dispatchEvent(new CustomEvent(ADAPTATION_CONTEXT_EVENT, { detail: null }));
+    };
   }, [key]);
   return open ? () => open(target) : undefined;
 }
@@ -28,9 +31,14 @@ export function useAdaptationPanelContext(view: string, setConfig: Dispatch<SetS
     if (view !== 'diary') return;
     const update = (event: Event) => {
       const target = (event as CustomEvent<AdaptationDiscussionTarget | null>).detail;
-      setConfig(previous => previous.stage === 'diary' && previous.subject?.kind === 'adaptation'
-        ? { ...previous, subject: target?.subject, subjectTitle: target?.title, initialPrompt: undefined }
-        : previous);
+      // Вкладка плана сама даёт панели контекст (макет 10: диалог идёт в панели, без отдельной кнопки).
+      setConfig(previous => {
+        if (previous.stage !== 'diary') return previous;
+        if (target) return { ...previous, subject: target.subject, subjectTitle: target.title, initialPrompt: undefined };
+        return previous.subject?.kind === 'adaptation'
+          ? { ...previous, subject: undefined, subjectTitle: undefined, initialPrompt: undefined }
+          : previous;
+      });
     };
     window.addEventListener(ADAPTATION_CONTEXT_EVENT, update);
     return () => window.removeEventListener(ADAPTATION_CONTEXT_EVENT, update);

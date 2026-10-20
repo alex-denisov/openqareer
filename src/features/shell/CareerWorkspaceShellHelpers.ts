@@ -41,13 +41,13 @@ export function openExpertPanel(
 ) {
   setAccountOpen(false);
   setExpanded(isCompactViewport);
-  setConfig({
-    open: true,
-    stage: stage ?? stageForView(activeView),
-    subject,
-    subjectTitle,
-    initialPrompt,
-  });
+  const nextStage = stage ?? stageForView(activeView);
+  setConfig((previous) =>
+    // Значок консультанта на открытом плане адаптации сохраняет контекст плана (макет 10, 390).
+    !subject && !subjectTitle && previous.stage === nextStage && previous.subject?.kind === 'adaptation'
+      ? { ...previous, open: true, initialPrompt }
+      : { open: true, stage: nextStage, subject, subjectTitle, initialPrompt },
+  );
 }
 
 export function openIntakeConsultantPanel(
@@ -78,9 +78,11 @@ export function updateExpertStage(
 }
 
 export function focusConsultantTrigger() {
-  const visible = (candidate: HTMLButtonElement) => candidate.getClientRects().length > 0;
-  const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-adaptation-consultant-trigger]')).find(visible)
-    ?? Array.from(document.querySelectorAll<HTMLButtonElement>('.career-mobile-consultant-trigger, .consultant-strip-button')).find(visible);
+  const trigger = Array.from(
+    document.querySelectorAll<HTMLButtonElement>(
+      '.career-mobile-consultant-trigger, .consultant-strip-button',
+    ),
+  ).find((candidate) => candidate.getClientRects().length > 0);
   trigger?.focus();
 }
 

@@ -1,0 +1,645 @@
+/* План адаптации 30–60–90 по утверждённому макету 10 (вкладка «План адаптации», 1440 и 390). */
+
+.career-diary-adaptation-workspace {
+  display: grid;
+  gap: var(--career-space-5);
+  min-inline-size: 0;
+}
+
+/* На 1440 заголовок «30–60–90» есть только для чтения с экрана: кадр начинается с пояснения. */
+.career-diary-adaptation-header {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.career-diary-adaptation-header h2,
+.career-diary-adaptation-header p {
+  margin: 0;
+}
+
+.career-diary-adaptation-rules {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+}
+
+.career-diary-adaptation-rules svg {
+  flex: none;
+  margin-block-start: var(--career-space-1);
+  color: var(--career-text-dim);
+}
+
+/* Этапы */
+.career-diary-adaptation-stages {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+
+.career-diary-adaptation-stage {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+}
+
+.career-diary-adaptation-stage b {
+  font-weight: 700;
+}
+
+.career-diary-adaptation-stage__count {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-diary-adaptation-stage[aria-selected='true'] {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-diary-adaptation-stage:focus-visible,
+.career-diary-adaptation-header h2:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-diary-adaptation-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  align-items: start;
+  gap: var(--career-space-6);
+  min-inline-size: 0;
+}
+
+/* Задачи этапа */
+.career-diary-adaptation-task-list {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  background: var(--career-bg-elevated);
+}
+
+.career-diary-adaptation-task-list__header,
+.career-diary-adaptation-advice__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+  min-inline-size: 0;
+}
+
+.career-diary-adaptation-task-list__header h3,
+.career-diary-adaptation-advice__header h3,
+.career-diary-adaptation-nearest h3 {
+  flex: 1;
+  min-inline-size: 12ch;
+  margin: 0;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.career-diary-adaptation-sep.is-narrow,
+.career-diary-adaptation-passed,
+.career-diary-adaptation-foot,
+.career-diary-otask-add,
+.career-diary-otask__box svg,
+.career-diary-advice svg,
+.career-diary-adaptation-nearest__body svg {
+  display: none;
+}
+
+/* Малая кнопка макета: видна 32 px, зона нажатия 44 px за счёт прозрачной рамки 6 px. */
+.career-diary-sm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  margin-inline: -6px;
+  padding: 0 var(--career-space-3);
+  border: 6px solid transparent;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-field-edge);
+  color: var(--career-text);
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.career-diary-sm-btn:hover:not(:disabled) {
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--career-accent);
+}
+
+.career-diary-sm-btn.is-ghost {
+  justify-self: start;
+  box-shadow: none;
+  color: var(--career-text-soft);
+}
+
+.career-diary-sm-btn:focus-visible,
+.career-diary-info-btn:focus-visible,
+.career-diary-otask-add button:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -4px;
+}
+
+.career-diary-sm-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.career-diary-otasks,
+.career-diary-advice {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-diary-otask {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--career-space-3) var(--career-space-5);
+  padding-block: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-diary-otask:first-child {
+  border-block-start: 0;
+}
+
+.career-diary-otask__main {
+  min-inline-size: 0;
+}
+
+.career-diary-otask__check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  min-block-size: var(--career-target-min);
+  max-inline-size: 100%;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.career-diary-otask__check b {
+  min-inline-size: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.career-diary-otask.is-done .career-diary-otask__check b {
+  color: var(--career-text-soft);
+}
+
+.career-diary-otask__box {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+.career-diary-otask__main p {
+  margin: 0;
+  padding-inline-start: calc(var(--career-control-min) + var(--career-space-3));
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.career-diary-otask__meta {
+  display: grid;
+  justify-items: end;
+  gap: var(--career-space-1);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+  text-align: end;
+}
+
+.career-diary-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: 2px var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.career-diary-otask__due {
+  font-variant-numeric: tabular-nums;
+}
+
+.career-diary-otask__origin {
+  color: var(--career-text-dim);
+}
+
+/* Совет этапа и «Ближайшее» */
+.career-diary-adaptation-aside {
+  display: grid;
+  gap: var(--career-space-6);
+  min-inline-size: 0;
+}
+
+.career-diary-adaptation-advice,
+.career-diary-adaptation-nearest {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+  padding: var(--career-space-6);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: transparent;
+}
+
+.career-diary-adaptation-nearest h3 {
+  display: flex;
+  align-items: center;
+  min-block-size: var(--career-target-min);
+}
+
+.career-diary-info-btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  margin-inline: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  color: var(--career-text-soft);
+  cursor: pointer;
+}
+
+.career-diary-advice {
+  gap: var(--career-space-3);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-diary-advice li {
+  padding-inline-start: var(--career-space-3);
+  border-inline-start: 2px solid var(--career-line-strong);
+}
+
+.career-diary-adaptation-nearest__body p {
+  display: grid;
+  gap: var(--career-space-3);
+  margin: 0;
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-diary-adaptation-nearest__body span {
+  color: var(--career-text-soft);
+}
+
+@media (max-width: 767px) {
+  .career-diary-adaptation-header {
+    position: static;
+    display: grid;
+    gap: 2px;
+    inline-size: auto;
+    block-size: auto;
+    padding: 0 var(--career-space-1);
+    overflow: visible;
+    clip-path: none;
+    white-space: normal;
+  }
+
+  .career-diary-adaptation-header h2 {
+    font-size: var(--career-text-xl);
+    font-weight: 600;
+    line-height: 1.15;
+  }
+
+  .career-diary-adaptation-header p {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    line-height: 1.5;
+  }
+
+  .career-diary-adaptation-rules,
+  .career-diary-adaptation-stage__prefix,
+  .career-diary-adaptation-stage__count,
+  .career-diary-adaptation-sep.is-wide,
+  .career-diary-adaptation-task-list__header .career-diary-sm-btn,
+  .career-diary-otask__main p,
+  .career-diary-tag svg,
+  .career-diary-otask__origin.is-template,
+  .career-diary-info-btn {
+    display: none;
+  }
+
+  .career-diary-adaptation-sep.is-narrow,
+  .career-diary-adaptation-foot,
+  .career-diary-otask-add {
+    display: revert;
+  }
+
+  .career-diary-adaptation-stages {
+    gap: 2px;
+    padding: 3px;
+    border-radius: 19px;
+    background: color-mix(in oklch, var(--career-bg-elevated) 48%, transparent);
+  }
+
+  .career-diary-adaptation-stage {
+    justify-items: center;
+    min-block-size: var(--career-space-8);
+    padding: 0 2px;
+    border: 0;
+    border-radius: var(--career-radius-md);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    text-align: center;
+  }
+
+  .career-diary-adaptation-stage b {
+    font-weight: 500;
+  }
+
+  .career-diary-adaptation-stage[aria-selected='true'] {
+    background: color-mix(in oklch, white 14%, transparent);
+    color: var(--career-text);
+  }
+
+  .career-diary-adaptation-columns,
+  .career-diary-adaptation-aside {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--career-space-5);
+  }
+
+  .career-diary-adaptation-task-list,
+  .career-diary-adaptation-advice,
+  .career-diary-adaptation-nearest {
+    gap: var(--career-space-2);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+
+  .career-diary-adaptation-task-list__header,
+  .career-diary-adaptation-advice__header {
+    min-block-size: 0;
+  }
+
+  .career-diary-adaptation-task-list__header h3,
+  .career-diary-adaptation-advice__header h3,
+  .career-diary-adaptation-nearest h3 {
+    min-block-size: 0;
+    padding: 0 var(--career-space-4);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-diary-otasks,
+  .career-diary-advice,
+  .career-diary-adaptation-nearest__body,
+  .career-diary-adaptation-passed {
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--career-surface);
+  }
+
+  /* Строка задачи: значок слева, название и одна строка подробностей справа. */
+  .career-diary-otask {
+    position: relative;
+    grid-template-columns: var(--career-space-8) minmax(0, 1fr);
+    align-items: center;
+    gap: 0 var(--career-space-3);
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border: 0;
+  }
+
+  .career-diary-otask__main,
+  .career-diary-otask__check {
+    display: contents;
+  }
+
+  .career-diary-otask__box {
+    grid-row: 1 / 3;
+    inline-size: var(--career-space-8);
+    block-size: var(--career-space-8);
+    border-radius: 9px;
+    background: color-mix(in oklch, white 7%, transparent);
+    color: var(--career-success);
+  }
+
+  .career-diary-otask__box .career-checkbox {
+    position: absolute;
+    inset: 0;
+    inline-size: 100%;
+    block-size: 100%;
+    min-inline-size: 0;
+    min-block-size: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .career-diary-otask__box .is-off,
+  .career-diary-otask.is-done .career-diary-otask__box .is-on,
+  .career-diary-otask-add .career-diary-otask__box svg {
+    display: block;
+  }
+
+  .career-diary-otask__box .is-off {
+    color: var(--career-text-dim);
+  }
+
+  .career-diary-otask.is-done .career-diary-otask__box .is-off {
+    display: none;
+  }
+
+  .career-diary-otask__check b,
+  .career-diary-otask.is-done .career-diary-otask__check b,
+  .career-diary-otask-add b {
+    color: var(--career-text);
+    font-size: var(--career-text-md);
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  .career-diary-otask__meta {
+    display: block;
+    color: var(--career-text-soft);
+    text-align: start;
+  }
+
+  .career-diary-tag {
+    display: inline;
+    padding: 0;
+    border: 0;
+    color: inherit;
+    font-weight: 400;
+    white-space: normal;
+  }
+
+  .career-diary-otask__due::before,
+  .career-diary-otask__origin::before {
+    content: ' · ';
+  }
+
+  .career-diary-otask__origin {
+    color: inherit;
+  }
+
+  .career-diary-otask.is-done .career-diary-otask__origin {
+    display: none;
+  }
+
+  .career-diary-otask + .career-diary-otask::before,
+  .career-diary-otask + .career-diary-otask-add::before,
+  .career-diary-advice li + li::before {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: 60px 0;
+    border-block-start: var(--career-border-width) solid var(--career-line);
+    content: '';
+  }
+
+  .career-diary-otask-add {
+    position: relative;
+  }
+
+  .career-diary-otask-add button {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-3);
+    inline-size: 100%;
+    min-block-size: 56px;
+    padding: var(--career-space-2) var(--career-space-4);
+    border: 0;
+    background: none;
+    color: var(--career-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .career-diary-otask-add .career-diary-otask__box {
+    color: var(--career-text-soft);
+  }
+
+  .career-diary-otask-add__chev {
+    display: block;
+    margin-inline-start: auto;
+    color: var(--career-text-dim);
+  }
+
+  .career-diary-adaptation-foot {
+    margin: 0;
+    padding: 0 var(--career-space-4);
+    color: var(--career-text-dim);
+    font-size: var(--career-text-xs);
+    line-height: 1.5;
+  }
+
+  .career-diary-adaptation-task-list.is-passed > :not(.career-diary-adaptation-passed) {
+    display: none;
+  }
+
+  .career-diary-adaptation-passed,
+  .career-diary-advice li,
+  .career-diary-adaptation-nearest__body {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--career-space-3);
+    margin: 0;
+    padding: var(--career-space-3) var(--career-space-4);
+    color: var(--career-text);
+    font-size: var(--career-text-sm);
+    line-height: 1.35;
+  }
+
+  .career-diary-advice {
+    gap: 0;
+  }
+
+  .career-diary-advice li {
+    position: relative;
+    border: 0;
+  }
+
+  .career-diary-advice li + li::before {
+    inset-inline-start: 48px;
+  }
+
+  .career-diary-advice svg,
+  .career-diary-adaptation-passed svg,
+  .career-diary-adaptation-nearest__body svg {
+    display: block;
+    flex: none;
+    color: var(--career-success);
+  }
+
+  .career-diary-adaptation-nearest__body svg {
+    color: var(--career-text-soft);
+  }
+
+  .career-diary-adaptation-nearest__body p {
+    display: block;
+    font-size: inherit;
+    line-height: inherit;
+  }
+
+  .career-diary-adaptation-nearest__body b {
+    font-weight: 400;
+  }
+
+  .career-diary-adaptation-nearest__body b::after {
+    content: '.';
+  }
+
+  .career-diary-adaptation-nearest__body span {
+    color: var(--career-text);
+  }
+}
