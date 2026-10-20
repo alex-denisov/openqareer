@@ -29,6 +29,18 @@ describe('encrypted persistent vacancy fit cache and queue', () => {
     expect(JSON.stringify(database.prepare('SELECT * FROM vacancy_fit_cache').all())).not.toContain('candidate-a');
     database.close();
   });
+  it('lists the vacancies with a stored result for one candidate in a single read, never another tenant', () => {
+    const { database, store } = setup();
+    const a = input();
+    const other = { ...input(), vacancyId: 'vacancy-2' };
+    store.putCache(a, evaluateVacancyFit(a), now);
+    store.putCache(other, evaluateVacancyFit(other), now);
+    const b = input('candidate-b');
+    store.putCache(b, evaluateVacancyFit(b), now);
+    expect([...store.cachedVacancyIds('candidate-a')].sort()).toEqual(['vacancy', 'vacancy-2']);
+    expect([...store.cachedVacancyIds('candidate-c')]).toEqual([]);
+    database.close();
+  });
   it('persists queue/cache across store recreation and never exposes profile statements in SQLite rows', () => {
     const { database, store } = setup();
     const a = input();

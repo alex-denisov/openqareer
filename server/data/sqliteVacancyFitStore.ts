@@ -56,6 +56,24 @@ export class SqliteVacancyFitStore {
     } catch { return undefined; }
   }
 
+  /**
+   * Вакансии, по которым у кандидата есть сохранённый результат, — одним
+   * чтением. Сортировка пула считает точный разбор только для них, а не для
+   * тысяч вакансий без результата. Свежесть результата проверяет getCache.
+   */
+  cachedVacancyIds(candidateId: string): Set<string> {
+    const rows = this.database.prepare('SELECT cache_key, result_cipher FROM vacancy_fit_cache WHERE candidate_key = ?')
+      .all(this.candidateKey(candidateId)) as { cache_key: string; result_cipher: string }[];
+    const ids = new Set<string>();
+    for (const row of rows) {
+      try {
+        const result = JSON.parse(this.sealedText.open(row.result_cipher, row.cache_key)) as VacancyFitResult;
+        if (result.candidateId === candidateId) ids.add(result.vacancyId);
+      } catch { /* повреждённая строка не даёт вакансии результата */ }
+    }
+    return ids;
+  }
+
   putCache(input: VacancyFitInput, result: VacancyFitResult, now = new Date().toISOString()): void {
     this.validateResult(input, result);
     const key = this.cacheKey(input);

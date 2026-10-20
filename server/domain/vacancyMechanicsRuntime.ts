@@ -31,6 +31,7 @@ export class VacancyMechanicsRuntime {
         : queued === 'failed' ? 'failed' : queued === 'pending' || queued === 'leased' ? 'processing' : 'not_requested';
     return { state, requirements: resolved.requirements, ...(result ? { result } : {}) };
   }
+  cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
   enqueue(input: VacancyFitInput) {
     const requirementInput = { vacancyId: input.vacancyId, description: input.description };
     // This method is reached only by an explicit authenticated POST, never by the worker retry loop.

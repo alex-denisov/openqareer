@@ -37,8 +37,11 @@ export function withVacancyFitOrder(
   };
 
   function decorateAndSort(items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] {
+    // Точный разбор дорог (отпечатки всех фактов, проверка результата, полный
+    // текст вакансии) — только для вакансий с сохранённым результатом.
+    const scored = deps.vacancyMechanics?.cachedVacancyIds(candidateId) ?? new Set<string>();
     const decorated = items.map((item) => {
-      if (!context || !deps.vacancyMechanics) return item;
+      if (!context || !deps.vacancyMechanics || !scored.has(item.cluster.id)) return item;
       const target = readVacancyFitTarget(deps, item.cluster.id);
       if (!target) return item;
       const fitView = compactFitView(deps.vacancyMechanics.view(context(target, [])));
@@ -46,6 +49,26 @@ export function withVacancyFitOrder(
     });
     return decorated.sort((left, right) => compareFitOrder(left, right, sort));
   }
+}
+
+/**
+ * Показанная страница получает текущее состояние разбора для каждой вакансии:
+ * «в очереди», «нет описания», свежий процент — без окна кэша порядка.
+ */
+export function withShownPageFitViews(
+  deps: RouteDeps,
+  candidateId: string,
+  items: readonly MatchedVacancyItem[],
+): MatchedVacancyItem[] {
+  const runtime = deps.vacancyMechanics;
+  if (!runtime) return [...items];
+  const context = createVacancyFitContextReader(deps, candidateId);
+  return items.map((item) => {
+    const target = readVacancyFitTarget(deps, item.cluster.id);
+    if (!target) return item;
+    const fitView = compactFitView(runtime.view(context(target, [])));
+    return { ...item, explanation: { ...item.explanation, fitView } };
+  });
 }
 
 const FIT_PAGE_LIMIT = 20;

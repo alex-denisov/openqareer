@@ -28,7 +28,11 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
-import { requestFitForShownPage, withVacancyFitOrder } from './matchedVacancyFit';
+import {
+  requestFitForShownPage,
+  withShownPageFitViews,
+  withVacancyFitOrder,
+} from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, withDeps } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
@@ -274,7 +278,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   }
 
   const targetLevel = readTargetLevel(candidateStore, candidate.id, targetRoles);
-  const { response, semanticQueryAndSqlMs } = await readMatchedPage(
+  const { response: orderedPage, semanticQueryAndSqlMs } = await readMatchedPage(
     multiSourceEngine,
     candidateStore,
     candidate.id,
@@ -287,6 +291,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     sourceRegistry,
     withVacancyFitOrder(deps, candidate.id, filters.sort ?? 'fit'),
   );
+  const response = { ...orderedPage, data: withShownPageFitViews(deps, candidate.id, orderedPage.data) };
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
