@@ -1,4 +1,3 @@
-import { mergeImportedSources } from '../connectors/nativeSourceConnection';
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type {
@@ -395,14 +394,11 @@ export class SqliteCandidateStore implements CandidateStore {
   getSnapshot(candidateId: string, stage?: CoachTurnStage): CandidateSnapshot {
     const candidate = this.requireCandidate(candidateId);
     const parts = this.conversations.snapshotParts(candidateId, stage);
+    const native = this.sourceConnections.list(candidateId);
     return {
       candidate,
-      importedSources: mergeImportedSources(
-        this.sourceConnections.list(candidateId),
-        parts.messages,
-        parts.memory,
-      ),
       ...parts,
+      ...this.conversations.importSources.withProvenance(candidateId, parts, native),
       assessments: this.assessmentsRepository.list(candidateId),
       germanyMarket: this.marketRepository.get(candidateId),
       resume: this.resumeRepository.get(candidateId),
@@ -685,6 +681,9 @@ export class SqliteCandidateStore implements CandidateStore {
     this.requireCandidate(candidateId);
     return this.workspaceRepository.save(candidateId, workspace);
   }
+
+  saveImportWalk: CandidateStore['saveImportWalk'] = (candidateId, walk) =>
+    this.conversations.importSources.saveWalk(this.requireCandidate(candidateId).id, walk);
 
   importResumeEvidence(
     candidateId: string,

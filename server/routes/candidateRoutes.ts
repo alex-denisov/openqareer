@@ -447,6 +447,8 @@ function resumeImportCommit(
   return {
     evidence: {
       sourceLabel: resumeImportLabel(body.source, body.fileName),
+      platform:
+        body.source === 'linkedin' || body.source === 'hh' ? body.source : ('file' as const),
       sourceDigest: resumeDocumentDigest(candidateId, body.source, body.text),
       entries: plan.evidence.map((item) => ({
         memoryId: item.memoryId,

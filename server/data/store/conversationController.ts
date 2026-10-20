@@ -1,3 +1,4 @@
+import { ImportSourceStore } from './importSourceStore';
 import { createHash, randomUUID } from 'node:crypto';
 import {
   coachTurnResultSchema,
@@ -59,6 +60,7 @@ export class ConversationController {
   private readonly documentRepository: SqliteDocumentRepository;
   private readonly stageMessages: StageMessageStore;
   private readonly consultantRejections: ConsultantRejectionStore;
+  readonly importSources: ImportSourceStore;
 
   constructor(deps: ConversationDeps) {
     this.database = deps.database;
@@ -66,6 +68,7 @@ export class ConversationController {
     this.documentRepository = deps.documentRepository;
     this.stageMessages = new StageMessageStore(deps.database);
     this.consultantRejections = new ConsultantRejectionStore(deps.database);
+    this.importSources = new ImportSourceStore(deps.database);
   }
 
   private verifyOrResumeTurn(
@@ -338,6 +341,7 @@ export class ConversationController {
       memoryIds.push(entry.memoryId);
     }
     this.touchConversation(conversationId, now);
+    this.importSources.record(candidateId, input.platform, messageId, now, memoryIds.length);
     return { messageId, memoryIds };
   }
 

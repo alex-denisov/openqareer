@@ -1,3 +1,4 @@
+import type { FactProvenance, ImportPlatform, ImportWalk } from '../domain/factProvenance';
 import type { CandidateWorkspaceState } from '../domain/candidateWorkspace';
 import type {
   ResumeVersionContent,
@@ -105,6 +106,10 @@ export interface ImportedSourceSummary {
   readonly connectedAt: string;
   readonly lastImportedAt: string;
   readonly factCount: number;
+  /** Facts of that import still in the profile; `factCount` is everything it brought (B541). */
+  readonly keptFactCount: number;
+  /** The last walk of the source's sections, if the source reports one (B541). */
+  readonly walk?: ImportWalk;
 }
 
 export interface CandidateSnapshot {
@@ -227,6 +232,8 @@ export interface StoredAssessment {
 
 export interface StoredMemory extends MemoryCandidate {
   id: string;
+  /** Set on snapshot reads only: where the fact came from (B541). */
+  provenance?: FactProvenance;
   status: 'proposed' | 'confirmed' | 'corrected';
   createdAt: string;
   updatedAt: string;
@@ -345,6 +352,8 @@ export interface ResumeEvidenceImport {
    * Omitted callers keep the old always-insert behaviour.
    */
   readonly sourceDigest?: string;
+  /** The platform the facts came from, recorded so provenance never parses the label (B541). */
+  readonly platform?: ImportPlatform;
   readonly entries: ReadonlyArray<{
     readonly memoryId: string;
     readonly domain: StoredMemory['domain'];
@@ -518,6 +527,8 @@ export interface CandidateStore {
     candidateId: string,
     input: ResumeEvidenceImport,
   ): ImportedResumeEvidence;
+  /** Keeps the last section walk of a source so the profile shows it after a reload (B541). */
+  saveImportWalk(candidateId: string, walk: ImportWalk): void;
   commitResumeImport(
     candidateId: string,
     input: ResumeImportCommit,

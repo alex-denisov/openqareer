@@ -48,17 +48,20 @@ export function commitNewResumeImport(
         .list(candidateId)
         .find((connection) => connection.platform === input.sourceReceipt?.platform)
     : undefined;
+  const evidenceInput = input.sourceReceipt
+    ? { ...input.evidence, platform: input.evidence.platform ?? input.sourceReceipt.platform }
+    : input.evidence;
   const prepared = prepareResumeImport(
     dependencies,
     candidateId,
-    input.evidence,
+    evidenceInput,
     Boolean(input.sourceReceipt),
     replaced?.receipt.sourceMessageId,
   );
   const evidence = writeResumeImportEvidence(
     dependencies,
     candidateId,
-    input.evidence,
+    evidenceInput,
     prepared,
     replaced?.receipt.sourceMessageId,
   );
