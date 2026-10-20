@@ -7,7 +7,7 @@ import {
   CaretDown,
   CaretRight,
   CheckCircle,
-  ChatCircle,
+  ChatsCircle,
   LinkedinLogo,
   PaperPlaneTilt,
   UserCircle,
@@ -54,7 +54,7 @@ import {
   consultantTargetView,
   queueMobileSubtitle,
   formatQueueTitle,
-  queueActionTitle,
+  queueMobileTitle,
   queueKey,
 } from './todayFormat';
 export { consultantTargetView, queueItemTarget } from './todayFormat';
@@ -604,7 +604,7 @@ function TodayMobileQueueRow({
           <TodayMobileQueueIcon item={item} />
         </span>
         <span className="pm-main">
-          <b>{queueActionTitle(item)}</b>
+          <b>{queueMobileTitle(item)}</b>
           <small>{queueMobileSubtitle(item, isWarn)}</small>
         </span>
         <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />
@@ -628,7 +628,7 @@ function TodayMobileQueueIcon({ item }: { readonly item: TodayQueueItem }) {
     return <LinkedinLogo aria-hidden="true" weight="regular" />;
   }
   if (item.kind === 'follow_up') return <Bell aria-hidden="true" weight="regular" />;
-  if (item.kind === 'interview') return <ChatCircle aria-hidden="true" weight="regular" />;
+  if (item.kind === 'interview') return <ChatsCircle aria-hidden="true" weight="regular" />;
   if (item.kind === 'candidate_turn') return <PaperPlaneTilt aria-hidden="true" weight="regular" />;
   if (item.kind === 'shortlist') return <BookmarkSimple aria-hidden="true" weight="regular" />;
   return <Briefcase aria-hidden="true" weight="regular" />;

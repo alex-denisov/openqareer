@@ -1,3 +1,4 @@
+import { dativeNameRu } from './dativeNameRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type {
   TodayDigest,
@@ -240,11 +241,12 @@ export function queueActionTitle(item: {
   readonly material?: 'cover_letter';
   readonly company: string | null;
   readonly title: string;
+  readonly contactName?: string;
+  readonly afterInterview?: boolean;
 }): string {
   const company = item.company?.trim();
   const named = company && !isPersonName(company) ? company : null;
-  if (item.kind === 'follow_up')
-    return named ? `Напомнить компании ${named}` : 'Напомнить компании';
+  if (item.kind === 'follow_up') return followUpTitle(item, named);
   if (item.kind === 'interview') return 'Подготовиться к интервью';
   if (item.kind === 'linkedin_post')
     return /^(о|об|про)\s/u.test(item.title)
@@ -255,6 +257,23 @@ export function queueActionTitle(item: {
   if (item.kind === 'candidate_turn') return `Ваш ход: ${item.title}`;
   if (item.kind === 'shortlist') return `Из подборки: ${item.title}`;
   return `Новая вакансия: ${item.title}`;
+}
+
+function followUpTitle(
+  item: { readonly contactName?: string; readonly afterInterview?: boolean },
+  company: string | null,
+): string {
+  const contact = item.contactName?.trim();
+  if (contact) {
+    return `Напомнить ${dativeNameRu(contact)} ${item.afterInterview ? 'про итог интервью' : 'про ответ'}`;
+  }
+  return company ? `Напомнить компании ${company} про ответ` : 'Напомнить компании про ответ';
+}
+
+/** Заголовок строки 390 по макету: напоминание называет только человека, компания — в подписи. */
+export function queueMobileTitle(item: Parameters<typeof queueActionTitle>[0]): string {
+  const contact = item.kind === 'follow_up' ? item.contactName?.trim() : undefined;
+  return contact ? `Напомнить ${dativeNameRu(contact)}` : queueActionTitle(item);
 }
 
 export function queueDiscussionContext(item: TodayQueueItem): string {
@@ -269,6 +288,8 @@ export function queueDiscussionContext(item: TodayQueueItem): string {
     .filter(Boolean)
     .join(' ');
 }
+
+export { dativeNameRu };
 
 /** Компания строки очереди; имя рекрутера в роли компании не показываем. */
 export function queueCompanyLabel(company: string | null | undefined): string {

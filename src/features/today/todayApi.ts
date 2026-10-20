@@ -46,6 +46,10 @@ export interface TodayQueueItem {
   readonly clusterId?: string;
   readonly title: string;
   readonly company: string | null;
+  /** Рекрутер или собеседник из карточки отклика: напоминание называет человека. */
+  readonly contactName?: string;
+  /** Отклик уже прошёл интервью: напоминание просит итог, а не ответ. */
+  readonly afterInterview?: boolean;
   readonly eyebrow: string | null;
   readonly dueAt: string | null;
   readonly salary?: TodaySalary;

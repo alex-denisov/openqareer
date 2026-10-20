@@ -8,6 +8,9 @@ import {
   queueDiscussionContext,
   queueActionTitle,
   queueCompanyLabel,
+  queueMobileSubtitle,
+  queueMobileTitle,
+  dativeNameRu,
 } from './todayFormat';
 
 describe('todayFormat (B255 returning user digest)', () => {
@@ -176,7 +179,9 @@ describe('todayFormat (B255 returning user digest)', () => {
 describe('queueActionTitle', () => {
   it('writes the row as an action, as in the approved Today mockup', () => {
     const base = { company: 'Вектор Банк', title: 'Head of Platform' } as const;
-    expect(queueActionTitle({ ...base, kind: 'follow_up' })).toBe('Напомнить компании Вектор Банк');
+    expect(queueActionTitle({ ...base, kind: 'follow_up' })).toBe(
+      'Напомнить компании Вектор Банк про ответ',
+    );
     expect(queueActionTitle({ ...base, kind: 'interview' })).toBe('Подготовиться к интервью');
     expect(queueActionTitle({ ...base, kind: 'candidate_turn' })).toBe('Ваш ход: Head of Platform');
   });
@@ -201,7 +206,48 @@ describe('queueActionTitle', () => {
   it('never uses a recruiter name as the company', () => {
     expect(
       queueActionTitle({ kind: 'follow_up', company: 'Глушкова Ксения Евгеньевна', title: 'X' }),
-    ).toBe('Напомнить компании');
+    ).toBe('Напомнить компании про ответ');
     expect(queueCompanyLabel('Глушкова Ксения Евгеньевна')).toBe('Компания не указана');
+  });
+});
+
+describe('B542: reminder names the person, as in mockup 1', () => {
+  const base = {
+    kind: 'follow_up' as const,
+    company: 'Вектор Банк',
+    title: 'Head of Engineering',
+    eyebrow: 'ответа нет 6 дней',
+    dueAt: null,
+    fit: null,
+  };
+
+  it('names the contact in the dative case and the topic after an interview', () => {
+    expect(queueActionTitle({ ...base, contactName: 'Мария Орлова', afterInterview: true })).toBe(
+      'Напомнить Марии Орловой про итог интервью',
+    );
+    expect(queueActionTitle({ ...base, contactName: 'Иван Петров' })).toBe(
+      'Напомнить Ивану Петрову про ответ',
+    );
+  });
+
+  it('falls back to the company and the reply when there is no contact', () => {
+    expect(queueActionTitle(base)).toBe('Напомнить компании Вектор Банк про ответ');
+  });
+
+  it('keeps the 390 title short: the person only, the caption carries the company', () => {
+    expect(queueMobileTitle({ ...base, contactName: 'Мария Орлова', afterInterview: true })).toBe(
+      'Напомнить Марии Орловой',
+    );
+    expect(queueMobileSubtitle({ ...base, contactName: 'Мария Орлова' }, false)).toBe(
+      'Вектор Банк · ответа нет 6 дней',
+    );
+  });
+
+  it('declines common Russian names into the dative case', () => {
+    expect(dativeNameRu('Мария Орлова')).toBe('Марии Орловой');
+    expect(dativeNameRu('Анна Смирнова')).toBe('Анне Смирновой');
+    expect(dativeNameRu('Алексей Ковальский')).toBe('Алексею Ковальскому');
+    expect(dativeNameRu('Ольга Белая')).toBe('Ольге Белой');
+    expect(dativeNameRu('John Smith')).toBe('John Smith');
   });
 });
