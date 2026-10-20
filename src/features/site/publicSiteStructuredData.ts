@@ -176,6 +176,7 @@ export function supportStructuredData(): Node {
           contactType: 'customer support',
           email: SUPPORT_EMAIL,
           availableLanguage: 'ru',
+          description: 'Поддержка отвечает в течение рабочего дня.',
           url: TELEGRAM_BOT_URL,
         },
       },

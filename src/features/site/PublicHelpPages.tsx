@@ -264,8 +264,8 @@ export function SupportPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
       <Crumbs current="Поддержка" onNavigate={onNavigate} />
       <h1>Поддержка openqareer</h1>
       <p className="ps-intro">
-        Вопрос по аккаунту, оплате или работе кабинета: выберите удобный канал. Частые ответы
-        собраны в разделе{' '}
+        Вопрос по аккаунту, оплате или работе кабинета: выберите удобный канал. Поддержка отвечает в
+        течение рабочего дня. Частые ответы собраны в разделе{' '}
         <SiteLink to="/faq" onNavigate={onNavigate}>
           «Вопросы и ответы»
         </SiteLink>
