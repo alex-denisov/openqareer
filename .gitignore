@@ -58,3 +58,4 @@ private-research/
 data/private/
 .serena/
 prototypes/
+.vitest-reports/
