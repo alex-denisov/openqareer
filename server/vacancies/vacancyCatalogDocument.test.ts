@@ -74,7 +74,28 @@ describe('документ публичного каталога (B209)', () => 
 
   it('печатает микроразметку списка и карточки', () => {
     expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).toContain('"@type":"ItemList"');
-    expect(renderVacancyDocument(buildVacancyDetail(cluster())!)).toContain('"@type":"JobPosting"');
+    const paid = cluster({ salary: { from: 200000, to: 300000, currency: 'USD' } });
+    const html = renderVacancyDocument(
+      buildVacancyDetail(paid, undefined, undefined, new Date('2026-09-06T12:00:00.000Z'))!,
+    );
+    expect(html).toContain('"@type":"JobPosting"');
+    expect(html).not.toContain('noindex');
+  });
+
+  it('закрывает от индекса карточку вне индексируемого набора, но оставляет ссылки', () => {
+    const html = renderVacancyDocument(buildVacancyDetail(cluster())!);
+    expect(html).toContain('<meta name="robots" content="noindex, follow">');
+    expect(html).not.toContain('"@type":"JobPosting"');
+  });
+
+  it('закрывает от индекса глубокие страницы каталога, но не первые десять', () => {
+    const many = Array.from({ length: 24 * 11 + 1 }, (_, index) =>
+      cluster({ id: `c${index}`, canonicalTitle: `Data Analyst ${index}` }),
+    );
+    expect(renderCatalogDocument(buildCatalogPage(many, 10))).not.toContain('noindex');
+    expect(renderCatalogDocument(buildCatalogPage(many, 11))).toContain(
+      '<meta name="robots" content="noindex, follow">',
+    );
   });
 
   it('ведёт на первоисточник и называет его, а не выдаёт вакансию за свою', () => {

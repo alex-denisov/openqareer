@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, config, noSessions, successProvider } from './appTestHarness';
 import { buildApp } from './app';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
 import { MultiSourceVacancyEngine } from './vacancies/multiSourceVacancyEngine';
 import type { UnifiedVacancy } from './domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
+import { resetCatalogSitemaps, setCatalogSitemaps } from './seo/catalogSitemapSchedule';
+import { buildSitemapFiles } from './seo/sitemapXml';
 
 function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): UnifiedVacancy {
   return {
@@ -26,7 +28,9 @@ function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): Unifie
       // выбрасывает записи источника, которого продукт не знает.
       sourceId: 'src-himalayas',
       sourceUrl: `https://boards.example.com/job/${index}`,
-      observedAt: '2026-09-07T00:00:00.000Z',
+      // Seen now: an old observation would drop every card out of the
+      // indexable set (seo/catalogIndexing).
+      observedAt: new Date().toISOString(),
     },
     publishedAt: new Date().toISOString(),
     status: 'active',
@@ -119,8 +123,10 @@ describe('B209: публичный каталог вакансий', () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/xml');
-    expect(response.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
-    expect(response.body).toContain('<loc>https://openqareer.com/legal/terms</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-static.xml</loc>');
+    const statics = await app.inject({ method: 'GET', url: '/sitemap-static.xml' });
+    expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
+    expect(statics.body).toContain('<loc>https://openqareer.com/legal/terms</loc>');
   });
 
   it('сводит нечисловую и отрицательную страницу к первой, а не падает', async () => {
@@ -212,7 +218,7 @@ describe('B209: публичный каталог вакансий', () => {
 
   it('кладёт списки в карту сайта рядом с вакансиями', async () => {
     const app = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
-    const response = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+    const response = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
     expect(response.body).toContain('<loc>https://openqareer.com/vacancies/berlin</loc>');
     expect(response.body).toContain(
       '<loc>https://openqareer.com/vacancies/berlin/frontend-developer</loc>',
@@ -220,7 +226,9 @@ describe('B209: публичный каталог вакансий', () => {
   });
 
   it('показывает полный текст вакансии и его же в разметке', async () => {
-    const app = await appWithPool([vacancy(1)]);
+    const app = await appWithPool([
+      vacancy(1, { salary: { from: 5000, to: 6000, currency: 'USD' } }),
+    ]);
     const catalog = await app.inject({ method: 'GET', url: '/vacancies' });
     const href = /href="(\/vacancies\/job\/[^"]+)"/u.exec(catalog.body)?.[1];
     expect(href).toBeTruthy();
@@ -232,5 +240,94 @@ describe('B209: публичный каталог вакансий', () => {
     expect(detail.body).toContain('описание вакансии номер 1');
     const description = /"description":"([^"]+)"/u.exec(detail.body)?.[1] ?? '';
     expect(description.length).toBeGreaterThan(300);
+  });
+});
+
+const SALARY = { from: 5000, to: 6000, currency: 'USD' } as const;
+
+async function cardHref(app: Awaited<ReturnType<typeof appWithPool>>): Promise<string> {
+  const catalog = await app.inject({ method: 'GET', url: '/vacancies' });
+  const href = /href="(\/vacancies\/job\/[^"]+)"/u.exec(catalog.body)?.[1];
+  expect(href).toBeTruthy();
+  return href!;
+}
+
+describe('SEO review 20.10: sitemap index and card indexing', () => {
+  afterEach(() => resetCatalogSitemaps());
+
+  it('serves /sitemap.xml as an index of static, listing and job files', async () => {
+    const app = await appWithPool(
+      Array.from({ length: 5 }, (_, index) => vacancy(index, { salary: SALARY })),
+    );
+    const response = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('application/xml');
+    expect(response.body).toContain('<sitemapindex');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-static.xml</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-listings.xml</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-jobs-1.xml</loc>');
+    expect(response.body).not.toContain('<urlset');
+  });
+
+  it('serves each child file and keeps deep pages and unsalaried cards out', async () => {
+    const app = await appWithPool([
+      ...Array.from({ length: 30 }, (_, index) => vacancy(index)),
+      vacancy(40, { title: 'Data Engineer', company: 'Paid Co', salary: SALARY }),
+    ]);
+    const statics = await app.inject({ method: 'GET', url: '/sitemap-static.xml' });
+    expect(statics.statusCode).toBe(200);
+    expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
+    expect(statics.body).toContain('<loc>https://openqareer.com/legal/terms</loc>');
+
+    const listings = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
+    expect(listings.body).toContain('<loc>https://openqareer.com/vacancies/berlin</loc>');
+
+    const jobs = await app.inject({ method: 'GET', url: '/sitemap-jobs-1.xml' });
+    expect(jobs.statusCode).toBe(200);
+    const locs = [...jobs.body.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]);
+    expect(locs).toHaveLength(1);
+    expect(locs[0]).toContain('/vacancies/job/data-engineer-at-paid-co-');
+
+    const all = statics.body + listings.body + jobs.body;
+    expect(all).not.toContain('/vacancies/page/');
+  });
+
+  it('answers 404 for a job file that does not exist', async () => {
+    const app = await appWithPool([vacancy(1, { salary: SALARY })]);
+    const response = await app.inject({ method: 'GET', url: '/sitemap-jobs-7.xml' });
+    expect(response.statusCode).toBe(404);
+  });
+
+  it('serves the files written by the maintenance process when they are loaded', async () => {
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [{ path: '/vacancies/moscow', lastmod: '2026-10-19' }],
+        jobs: [],
+      }),
+    );
+    const app = await appWithPool([vacancy(1, { salary: SALARY })]);
+    const index = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+    expect(index.body).toContain(
+      '<sitemap><loc>https://openqareer.com/sitemap-listings.xml</loc><lastmod>2026-10-19</lastmod></sitemap>',
+    );
+    expect(index.body).not.toContain('sitemap-jobs-1.xml');
+    const listings = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
+    expect(listings.body).toContain('/vacancies/moscow');
+  });
+
+  it('marks a card outside the indexable set noindex, follow and drops its JobPosting', async () => {
+    const app = await appWithPool([vacancy(1)]);
+    const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
+    expect(detail.statusCode).toBe(200);
+    expect(detail.body).toContain('<meta name="robots" content="noindex, follow">');
+    expect(detail.body).not.toContain('"@type":"JobPosting"');
+  });
+
+  it('indexes a valuable card with JobPosting and validThrough', async () => {
+    const app = await appWithPool([vacancy(1, { salary: SALARY })]);
+    const detail = await app.inject({ method: 'GET', url: await cardHref(app) });
+    expect(detail.body).not.toContain('noindex');
+    expect(detail.body).toContain('"@type":"JobPosting"');
+    expect(detail.body).toMatch(/"validThrough":"\d{4}-\d{2}-\d{2}T/u);
   });
 });

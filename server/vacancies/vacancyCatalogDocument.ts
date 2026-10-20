@@ -23,6 +23,7 @@ import type {
   VacancyDetail,
 } from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
+import { isIndexablePage } from '../seo/catalogIndexing';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -299,8 +300,8 @@ export function renderCatalogDocument(
       canonicalPath: page.canonicalPath,
       jsonLd: page.jsonLd,
       // Пустой каталог индексировать нечего: пустая страница в выдаче вредит
-      // и читателю, и домену.
-      ...(empty ? { noindex: true } : {}),
+      // и читателю, и домену. Глубокие страницы — только ради ссылок.
+      ...(empty || !isIndexablePage(page.page) ? { noindex: true } : {}),
       ...(page.previousPath ? { previousPath: page.previousPath } : {}),
       ...(page.nextPath ? { nextPath: page.nextPath } : {}),
     }),
@@ -342,6 +343,8 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
       description,
       canonicalPath: entry.path,
       jsonLd: detail.jsonLd,
+      // Outside the indexable set: reachable and followed, not indexed.
+      ...(detail.indexable ? {} : { noindex: true }),
     }),
     body,
   );

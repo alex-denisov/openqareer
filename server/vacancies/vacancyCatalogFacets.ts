@@ -52,7 +52,9 @@ export function catalogPlaceOf(entry: CatalogEntry): { slug: string; label: stri
   return entry.isRemote ? { slug: REMOTE_PLACE, label: 'Удалённо' } : null;
 }
 
-export function catalogRoleOf(entry: CatalogEntry): { slug: string; label: string } | null {
+export function catalogRoleOf(
+  entry: Pick<CatalogEntry, 'title'>,
+): { slug: string; label: string } | null {
   const slug = buildVacancySlug(entry.title.replace(TITLE_NOISE, ' '));
   if (!slug) return null;
   const label = slug

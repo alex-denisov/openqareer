@@ -4,9 +4,12 @@
  * Чистый слой между пулом и HTML: он решает, какая вакансия вообще получает
  * публичный адрес, и собирает микроразметку. Здесь же держится главное
  * обещание продукта — **не выдумывать**: поле, которого площадка не назвала, в
- * `JobPosting` не появляется. Пустое `hiringOrganization` или придуманный
- * `validThrough` — это ложь в машинно читаемом виде, которую поисковик
- * растиражирует.
+ * `JobPosting` не появляется. Пустое `hiringOrganization` — это ложь в машинно
+ * читаемом виде, которую поисковик растиражирует. `validThrough` — не поле
+ * площадки, а наш собственный срок: дата снятия, если площадка её назвала,
+ * иначе публикация + 30 дней; снятую раньше вакансию закрывает ответ `410`.
+ * `JobPosting` получает только карточка из индексируемого набора
+ * (`seo/catalogIndexing`).
  */
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import {
@@ -18,6 +21,7 @@ import {
 } from '../../shared/vacancyCatalogRoutes';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
+import { isIndexableCard, validThroughOf } from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
 export const CATALOG_PAGE_SIZE = 24;
@@ -76,6 +80,8 @@ export interface VacancyDetail {
   readonly description: string;
   readonly jsonLd: StructuredGraph;
   readonly vacancy?: UnifiedVacancy;
+  /** False → the page is `noindex, follow` and carries no `JobPosting`. */
+  readonly indexable: boolean;
 }
 
 function isoDate(value: string): string {
@@ -236,16 +242,19 @@ function jobPosting(
   cluster: VacancyCluster,
   entry: CatalogEntry,
   description: string,
+  withdrawnAt?: string,
 ): StructuredNode {
   const salary = cluster.salary;
   const hasSalary = salary && (salary.from !== undefined || salary.to !== undefined);
   const company = cluster.canonicalCompany.trim();
+  const validThrough = validThroughOf(entry.publishedAt, withdrawnAt);
 
   return {
     '@type': 'JobPosting',
     title: entry.title,
     description,
     datePosted: isoDate(entry.publishedAt),
+    ...(validThrough ? { validThrough } : {}),
     identifier: { '@type': 'PropertyValue', name: 'openqareer', value: entry.key },
     url: `${SITE_ORIGIN}${entry.path}`,
     // Языка вакансии мы не знаем: текст пришёл от работодателя и бывает любым.
@@ -292,24 +301,27 @@ export function buildVacancyDetail(
   cluster: VacancyCluster,
   fullDescription?: string,
   vacancy?: UnifiedVacancy,
+  now: Date = new Date(),
 ): VacancyDetail | null {
   const entry = toCatalogEntry(cluster);
   if (!entry) return null;
   const description = vacancy
     ? renderUnifiedVacancyView(vacancy)
     : fullDescription?.trim() || entry.summary;
+  const indexable = isIndexableCard(entry, now);
+  const crumbs = breadcrumbs({ name: entry.title, path: entry.path });
 
   return {
     entry,
     description,
     jsonLd: {
       '@context': 'https://schema.org',
-      '@graph': [
-        jobPosting(cluster, entry, description),
-        breadcrumbs({ name: entry.title, path: entry.path }),
-      ],
+      '@graph': indexable
+        ? [jobPosting(cluster, entry, description, vacancy?.archivedAt), crumbs]
+        : [crumbs],
     },
     ...(vacancy ? { vacancy } : {}),
+    indexable,
   };
 }
 

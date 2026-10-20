@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { readServerConfig } from './config';
 import { scheduleLandingStatsRefresh } from './landing/landingStatsSchedule';
+import { scheduleCatalogSitemapRefresh } from './seo/catalogSitemapSchedule';
 import { buildCoachProvider } from './providers/coachProviderFactory';
 import { buildResumeStructurer } from './providers/resumeStructurer';
 import { buildRoleNamer } from './providers/roleNamer';
@@ -375,10 +376,13 @@ process.once('SIGTERM', () => void shutdown('SIGTERM'));
 try {
   await app.listen({ host: config.host, port: config.port });
   // B535: the landing's pool numbers, one primary-key read every 5 minutes.
-  scheduleLandingStatsRefresh(config.databasePath, {
-    info: (details, message) => app.log.info(details, message),
-    error: (details, message) => app.log.error(details, message),
-  });
+  const scheduleLog = {
+    info: (details: Record<string, unknown>, message: string) => app.log.info(details, message),
+    error: (details: Record<string, unknown>, message: string) => app.log.error(details, message),
+  };
+  scheduleLandingStatsRefresh(config.databasePath, scheduleLog);
+  // Sitemap files written by the maintenance process; the HTTP path reads memory only.
+  scheduleCatalogSitemapRefresh(config.databasePath, scheduleLog);
   // Сервер слушает и отвечает на /health мгновенно (<10 мс). Пул читается
   // из базы постранично, пополняет его обслуживатель (B230) — на этом цикле
   // событий ни восстановления, ни сведения, ни опросов нет.

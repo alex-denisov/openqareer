@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../appTestHarness';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 import { buildVacancyDetail } from './vacancyCatalogPage';
@@ -22,14 +22,23 @@ function sampleCluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster 
       },
     ],
     firstObservedAt: '2026-09-08T10:00:00.000Z',
-    lastSeenAt: '2026-09-17T08:00:00.000Z',
+    lastSeenAt: '2026-09-14T08:00:00.000Z',
     status: 'active',
     vacanciesCount: 1,
+    // Salary keeps the card in the indexable set, the only one with JobPosting.
+    salary: { from: 90000, to: 110000, currency: 'EUR' },
     ...overrides,
   };
 }
 
 describe('B227: аудит разметки Google for Jobs (Schema.org JobPosting)', () => {
+  // Fixture dates are fresh at this moment: posted 6 days ago, seen 4 h ago.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-14T12:00:00.000Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('формирует обязательные поля JobPosting согласно спецификации Google for Jobs', () => {
     const cluster = sampleCluster();
     const fullText = 'Полное описание требований, задач и условий вакансии. '.repeat(10);
@@ -111,7 +120,7 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
     });
   });
 
-  it('не придумывает поля validThrough, hiringOrganization и baseSalary, если они не заданы', () => {
+  it('не размечает JobPosting карточку без работодателя и вилки — вместо выдуманных полей', () => {
     const minimalCluster = sampleCluster({
       canonicalCompany: '',
       canonicalLocation: undefined,
@@ -121,10 +130,14 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
     const detail = buildVacancyDetail(minimalCluster);
     const posting = detail!.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
 
-    // Запрет вымышленных полей:
-    expect(posting).not.toHaveProperty('validThrough');
-    expect(posting).not.toHaveProperty('hiringOrganization');
-    expect(posting).not.toHaveProperty('baseSalary');
+    expect(posting).toBeUndefined();
+    expect(detail!.indexable).toBe(false);
+  });
+
+  it('ставит validThrough через 30 дней после публикации и не выдумывает остальное', () => {
+    const detail = buildVacancyDetail(sampleCluster({ canonicalLocation: undefined }));
+    const posting = detail!.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
+    expect(posting!.validThrough).toBe('2026-10-08T10:00:00.000Z');
     expect(posting).not.toHaveProperty('jobLocation');
     expect(posting).not.toHaveProperty('inLanguage');
   });
