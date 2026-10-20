@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { BellSimple, X } from '@phosphor-icons/react';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
+import type { NavigationOptions } from '../shell/pathIndicator';
 import type { TodaySinceLastVisit } from './todayApi';
 import { todayChangeTarget, todayChangesSentence } from './todayFormat';
 
 interface TodayChangesNoticeProps {
   readonly sinceLastVisit: TodaySinceLastVisit;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   /** Отметка «скрыто» на сервере; при ошибке полоса возвращается. */
   readonly onDismiss: () => Promise<void>;
 }
@@ -52,7 +53,10 @@ export function TodayChangesNotice({
           <button
             className="career-today-changes-link"
             type="button"
-            onClick={() => onNavigate(todayChangeTarget(first))}
+            onClick={() => {
+              const target = todayChangeTarget(first);
+              onNavigate(target.view, target.options);
+            }}
           >
             Смотреть
           </button>

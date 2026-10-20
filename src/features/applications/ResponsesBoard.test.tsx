@@ -733,3 +733,33 @@ function pageMeta(total: number): ApplicationListPageMeta {
     },
   };
 }
+
+describe('ResponsesBoard deep link (B542 «Смотреть»)', () => {
+  it('opens the card the Today changes strip pointed at', () => {
+    const applications = [
+      application({
+        id: 'a1',
+        vacancy: { title: 'CTO', company: 'FinCloud', url: 'https://x', source: 'hh' },
+      }),
+      application({
+        id: 'a2',
+        vacancy: {
+          title: 'Head of Engineering',
+          company: 'Вектор Банк',
+          url: 'https://y',
+          source: 'hh',
+        },
+      }),
+    ];
+    const html = renderToStaticMarkup(
+      <ResponsesBoard
+        state={readyState(applications)}
+        onOpenVacancies={() => {}}
+        initialApplicationId="a2"
+      />,
+    );
+    const panel = html.slice(html.indexOf('career-responses-selected"'));
+    expect(panel).toContain('Вектор Банк');
+    expect(panel).not.toContain('FinCloud');
+  });
+});

@@ -1,5 +1,6 @@
 import { dativeNameRu } from './dativeNameRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
+import type { NavigationOptions } from '../shell/pathIndicator';
 import type {
   TodayChange,
   TodayDigest,
@@ -436,7 +437,12 @@ export function todayChangesSentence(changes: readonly TodayChange[]): string {
   return parts.length ? `${parts.join(', ')}.` : '';
 }
 
-/** «Смотреть» ведёт к первому событию: вакансии — в «Вакансии», письмо и ответ — в «Отклики». */
-export function todayChangeTarget(change: TodayChange): CareerCabinetView {
-  return change.kind === 'vacancies' ? 'opportunities' : 'responses';
+/** «Смотреть» ведёт к первому событию: вакансии — с фильтром по роли, письмо и ответ — в карточку отклика. */
+export function todayChangeTarget(change: TodayChange): {
+  readonly view: CareerCabinetView;
+  readonly options: NavigationOptions;
+} {
+  return change.kind === 'vacancies'
+    ? { view: 'opportunities', options: { focusRoleFilter: true, focusFilter: 'role' } }
+    : { view: 'responses', options: { applicationId: change.applicationId } };
 }

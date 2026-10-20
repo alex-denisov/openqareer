@@ -14,6 +14,8 @@ import {
 import './today-desktop.css';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { CareerActionReason, ReasonedCareerAction } from '../next-action/careerActionPolicy';
+import type { NavigationOptions } from '../shell/pathIndicator';
+import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';
@@ -58,7 +60,7 @@ interface TodayDesktopContentProps {
   readonly onPostpone: () => void | Promise<void>;
   readonly postponeBusy?: boolean;
   readonly postponeError?: string;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly queueRemainderLoading?: boolean;
@@ -175,7 +177,7 @@ function DecisionReason({
 }: {
   readonly action: ReasonedCareerAction;
   readonly onDiscuss?: () => void;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   const isCoachAction = action.destination === 'coach';
   if (action.reasons?.length) {
@@ -300,7 +302,7 @@ function TodayNothingToDecide({
   onNavigate,
 }: {
   readonly onDiscuss?: () => void;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   return (
     <section className="career-today-next-decision" aria-label="Следующее решение">
@@ -332,7 +334,7 @@ function TodayNextDecisionUnavailable({
 }: {
   readonly onDiscuss?: () => void;
   readonly nothingToDecide: boolean;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   if (nothingToDecide)
     return <TodayNothingToDecide onDiscuss={onDiscuss} onNavigate={onNavigate} />;
@@ -370,7 +372,7 @@ function TodayNextDecision({
   readonly onPostpone: () => void | Promise<void>;
   readonly postponeBusy: boolean;
   readonly postponeError?: string;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   return (
     <section
@@ -424,7 +426,7 @@ function TodayQueueDesktopRow({
   onDiscussQueueItem,
 }: {
   readonly item: TodayQueueItem;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
   const ItemIcon = queueIcon(item.kind);
@@ -485,7 +487,7 @@ function TodayQueueDesktop({
   readonly queueRemainderLoading?: boolean;
   readonly queueRemainderFailed?: boolean;
   readonly onLoadQueueRemainder?: () => Promise<void>;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
   const remaining = Math.max(0, queueTotal - queue.length);
@@ -540,7 +542,7 @@ function TodayQueueRows({
   onDiscussQueueItem,
 }: {
   readonly queue: readonly TodayQueueItem[];
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
 }) {
   return (

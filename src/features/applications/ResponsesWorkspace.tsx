@@ -43,6 +43,7 @@ export interface ResponsesWorkspaceScreenProps {
   readonly onOpenVacancies: () => void;
   readonly onOpenAutomation?: () => void;
   readonly initialTab?: 'board' | 'analytics';
+  readonly initialApplicationId?: string;
   readonly onOpenExpert?: (
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,

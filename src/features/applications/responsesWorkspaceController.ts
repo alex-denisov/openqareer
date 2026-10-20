@@ -24,6 +24,8 @@ export interface WorkspaceControllerProps {
   readonly onStageFilterChange: (stage: ApplicationStage | null) => void;
   readonly onClearFilter?: () => void;
   readonly initialTab?: 'board' | 'analytics';
+  /** Карточка, открытая по ссылке «Смотреть» с «Сегодня» (B542). */
+  readonly initialApplicationId?: string;
 }
 
 export const OPEN_APPLICATION_STAGES: readonly ApplicationStage[] = [
@@ -81,7 +83,7 @@ export interface WorkspaceController {
 }
 
 export function useWorkspaceController(props: WorkspaceControllerProps): WorkspaceController {
-  const selection = useWorkspaceSelection();
+  const selection = useWorkspaceSelection(props.initialApplicationId);
   const pagination = useWorkspacePagination();
   const { resetPagination } = pagination;
   const { clearSelection } = selection;
@@ -116,10 +118,10 @@ interface WorkspaceSelection {
   readonly clearSelection: () => void;
 }
 
-function useWorkspaceSelection(): WorkspaceSelection {
+function useWorkspaceSelection(initialId?: string): WorkspaceSelection {
   const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(new Set());
   const [allSelectedByFilter, setAllSelectedByFilter] = useState(false);
-  const [selectedId, setSelectedId] = useState<string>();
+  const [selectedId, setSelectedId] = useState<string | undefined>(initialId);
   const toggleSelected = useCallback((id: string) => {
     setAllSelectedByFilter(false);
     setSelectedIds((current) => toggleId(current, id));

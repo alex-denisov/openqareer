@@ -8,7 +8,7 @@ import { isResponseNeedingAction } from './responsesFiltering';
 import { ResponsesCard } from './ResponsesCard';
 import { ManualCardForm } from './ManualCardForm';
 import { ArchivedResponsesSection } from './ArchivedResponsesSection';
-import { ResponsesWorkspaceScreen } from './ResponsesWorkspace';
+import { ResponsesWorkspaceScreen, type ResponsesWorkspaceScreenProps } from './ResponsesWorkspace';
 
 interface Column {
   readonly key: string;
@@ -44,12 +44,15 @@ export function ResponsesBoard({
   initialStageFilter,
   initialArchiveOpen,
   initialTab,
+  initialApplicationId,
   onOpenExpert,
 }: {
   state: UseApplications;
   onOpenVacancies: () => void;
   initialStageFilter?: ApplicationStage;
   initialArchiveOpen?: boolean;
+  /** Карточка, которую открыть сразу: «Смотреть» в полосе «Сегодня» (B542). */
+  initialApplicationId?: string;
   initialTab?: 'board' | 'analytics';
   onOpenAutomation?: () => void;
   onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
@@ -72,6 +75,7 @@ export function ResponsesBoard({
       onStageFilterChange={setStageFilter}
       initialArchiveOpen={initialArchiveOpen}
       initialTab={initialTab}
+      initialApplicationId={initialApplicationId}
       onClearFilter={() => setStageFilter(null)}
       onOpenExpert={onOpenExpert}
     />
@@ -331,37 +335,15 @@ function BoardTabColumnsContent({
   );
 }
 
-function ReadyBoard({
-  state,
-  onOpenVacancies,
-  onOpenAutomation,
-  stageFilter,
-  onStageFilterChange,
-  initialArchiveOpen,
-  initialTab,
-  onClearFilter,
-  onOpenExpert,
-}: {
-  state: UseApplications;
-  onOpenVacancies: () => void;
-  onOpenAutomation?: () => void;
-  stageFilter?: ApplicationStage | null;
-  onStageFilterChange: (stage: ApplicationStage | null) => void;
-  initialArchiveOpen?: boolean;
-  initialTab?: 'board' | 'analytics';
-  onClearFilter?: () => void;
-  onOpenExpert?: (stage: CoachTurnStage, subject?: CoachTurnSubject, subjectTitle?: string) => void;
-}) {
+type ReadyBoardProps = Omit<ResponsesWorkspaceScreenProps, 'columnsContent' | 'emptyContent'> & {
+  readonly initialArchiveOpen?: boolean;
+};
+
+function ReadyBoard({ initialArchiveOpen, ...props }: ReadyBoardProps) {
+  const { state, stageFilter, onOpenExpert, onOpenVacancies } = props;
   return (
     <ResponsesWorkspaceScreen
-      state={state}
-      stageFilter={stageFilter}
-      onStageFilterChange={onStageFilterChange}
-      onClearFilter={onClearFilter}
-      onOpenVacancies={onOpenVacancies}
-      onOpenAutomation={onOpenAutomation}
-      onOpenExpert={onOpenExpert}
-      initialTab={initialTab}
+      {...props}
       columnsContent={(input) => (
         <BoardColumnsView
           {...input}

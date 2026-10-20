@@ -415,7 +415,7 @@ export function CareerCabinet(props: CareerCabinetProps) {
 function TodaySection(props: {
   candidateId?: string;
   consultantAction?: ReasonedCareerAction;
-  onNavigate?: (view: CareerCabinetView) => void;
+  onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
   onDiscussQueueItem?: (item: TodayQueueItem) => void;
@@ -691,6 +691,7 @@ function CabinetSection({
         onOpenAutomation={onOpenAutomation}
         initialStageFilter={navigationOptions?.stage}
         initialArchiveOpen={navigationOptions?.openArchive}
+        initialApplicationId={navigationOptions?.applicationId}
         onOpenExpert={onOpenExpert}
       />
     );

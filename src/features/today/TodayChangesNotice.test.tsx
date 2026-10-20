@@ -52,7 +52,10 @@ describe('Today changes strip (B542, mockup 1)', () => {
   it('«Смотреть» opens the first event: vacancies, then the application', () => {
     const { root, onNavigate } = render();
     act(() => root.querySelector<HTMLButtonElement>('.career-today-changes-link')?.click());
-    expect(onNavigate).toHaveBeenCalledWith('opportunities');
+    expect(onNavigate).toHaveBeenCalledWith('opportunities', {
+      focusRoleFilter: true,
+      focusFilter: 'role',
+    });
 
     document.body.innerHTML = '';
     const letterOnly = render({
@@ -61,7 +64,7 @@ describe('Today changes strip (B542, mockup 1)', () => {
     act(() =>
       letterOnly.root.querySelector<HTMLButtonElement>('.career-today-changes-link')?.click(),
     );
-    expect(letterOnly.onNavigate).toHaveBeenCalledWith('responses');
+    expect(letterOnly.onNavigate).toHaveBeenCalledWith('responses', { applicationId: 'app-1' });
   });
 
   it('«Скрыть уведомление» hides the strip through the server', async () => {

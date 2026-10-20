@@ -15,6 +15,7 @@ import {
 } from '@phosphor-icons/react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
+import type { NavigationOptions } from '../shell/pathIndicator';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import { todayDecisionAction } from '../next-action/teamSizeAction';
 import {
@@ -95,7 +96,7 @@ export interface TodayScreenProps {
   /** Решение дня из карьерного дневника (макет 1 «Вы работаете»). */
   readonly diaryDecision?: TodayDiaryDecisionProp;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
   readonly onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
 }
@@ -111,7 +112,7 @@ function useTodayConsultantAction({
   candidateId?: string;
   snapshot: TodaySnapshot | null;
   consultantAction?: ReasonedCareerAction;
-  onNavigate?: (view: CareerCabinetView) => void;
+  onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   onOpenExpert?: () => void;
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
 }) {
@@ -168,7 +169,7 @@ function acceptConsultantAction(
   candidateId: string | undefined,
   action: ReasonedCareerAction | undefined,
   actionKey: string | null,
-  onNavigate: ((view: CareerCabinetView) => void) | undefined,
+  onNavigate: ((view: CareerCabinetView, options?: NavigationOptions) => void) | undefined,
   onOpenExpert: (() => void) | undefined,
   onNavigateProfileAction: ((action: ReasonedCareerAction) => void) | undefined,
   setResolvedActionKey: (key: string | null) => void,
@@ -275,7 +276,7 @@ interface TodayContentProps {
   readonly queueRemainderLoading?: boolean;
   readonly queueRemainderFailed?: boolean;
   readonly onLoadQueueRemainder?: () => Promise<void>;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onNavigateProfileTarget?: (target: TodayProfileFocus) => void;
 }
 
@@ -398,7 +399,7 @@ function TodayMobileDecision({
   onOpenExpert,
 }: {
   readonly nothingToDecide: boolean;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly action?: ReasonedCareerAction;
   readonly onAccept: () => void;
   readonly onPostpone: () => void | Promise<void>;
@@ -433,7 +434,7 @@ function TodayMobileNothingToDecide({
   onNavigate,
   onOpenExpert,
 }: {
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
   readonly onOpenExpert?: () => void;
 }) {
   return (
@@ -553,7 +554,7 @@ function TodayMobileQueue({
 }: {
   readonly queue: readonly TodayQueueItem[];
   readonly followUps: readonly TodayFollowUp[];
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   const visibleQueue = queue.slice(0, 4);
   return (
@@ -585,7 +586,7 @@ function TodayMobileQueueRow({
 }: {
   readonly item: TodayQueueItem;
   readonly followUps: readonly TodayFollowUp[];
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   const isWarn = isOverdueMobileQueueItem(item, followUps);
   const openItem = useOpenQueueItem(onNavigate);
@@ -688,7 +689,7 @@ function TodayMobileProfileRow({
   onNavigate,
 }: {
   readonly profileDraft?: ResumeDraft;
-  readonly onNavigate?: (view: CareerCabinetView) => void;
+  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
 }) {
   const actionCount = profileDraft
     ? profileCompleteness(profileDraft).missingSections.length

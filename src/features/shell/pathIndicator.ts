@@ -14,6 +14,8 @@ export interface NavigationOptions {
   readonly focusRoleFilter?: boolean;
   readonly focusFilter?: 'role';
   readonly openArchive?: boolean;
+  /** Открыть карточку этого отклика сразу (B542, «Смотреть» на «Сегодня»). */
+  readonly applicationId?: string;
 }
 
 /**
