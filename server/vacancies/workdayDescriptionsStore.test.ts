@@ -96,3 +96,24 @@ describe.each([
     expect(store.getVacancy(workday(1).id)?.description).toBe('');
   });
 });
+
+describe('SqliteVacancyPoolStore write transactions (B535)', () => {
+  it('takes the write lock up front, so a read before the write cannot hit "database is locked"', () => {
+    // Detail-text sources read the stored rows inside the write transaction.
+    // A deferred BEGIN then upgrades a read snapshot to a write, and SQLite
+    // answers SQLITE_BUSY at once if another process committed in between
+    // (CI aa1925f0: src-habr-career failed a wave with "database is locked").
+    const store = openSqlite();
+    const database = (store as unknown as { database: { exec(sql: string): void } }).database;
+    const issued: string[] = [];
+    const exec = database.exec.bind(database);
+    database.exec = (sql: string) => {
+      issued.push(sql.trim());
+      exec(sql);
+    };
+    store.mergeSourceSlice(SOURCE, [workday(1)]);
+    const begins = issued.filter((sql) => sql.startsWith('BEGIN'));
+    expect(begins.length).toBeGreaterThan(0);
+    expect(begins.every((sql) => sql === 'BEGIN IMMEDIATE')).toBe(true);
+  });
+});

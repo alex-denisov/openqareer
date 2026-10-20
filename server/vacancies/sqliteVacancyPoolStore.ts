@@ -2246,8 +2246,14 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     }
   }
 
+  /**
+   * Блокировка записи берётся сразу: транзакция читает свои строки до записи
+   * (сохранение дочитанного текста, B535), и отложенный BEGIN тогда поднимает
+   * снимок чтения до записи — SQLite отвечает «database is locked» без ожидания,
+   * если другой процесс успел закоммитить. IMMEDIATE ждёт по busy_timeout.
+   */
   private inTransaction(operation: () => void): void {
-    this.database.exec('BEGIN');
+    this.database.exec('BEGIN IMMEDIATE');
     try {
       operation();
       this.database.exec('COMMIT');
