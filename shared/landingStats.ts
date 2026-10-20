@@ -140,3 +140,19 @@ export function applyLandingStats(html: string, stats: LandingStats): string {
   }
   return out;
 }
+
+const ENTRY_SCRIPT =
+  /<script type="module" crossorigin src="(\/assets\/index-[^"]+\.js)"><\/script>/u;
+
+/**
+ * B535: public pages (landing, /faq, /support) are complete prerendered HTML;
+ * the application bundle is fetched after the first interaction or a few
+ * seconds, so it never competes with the first paint. Every other path keeps
+ * the module script exactly as built.
+ */
+export function deferEntryScript(html: string): string {
+  return html.replace(
+    ENTRY_SCRIPT,
+    '<script defer src="/assets/oq-entry-loader-2.js" data-entry="$1"></script>',
+  );
+}

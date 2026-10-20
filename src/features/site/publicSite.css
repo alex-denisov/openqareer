@@ -13,7 +13,7 @@
   --ps-ink: oklch(20% 0.02 260);
   --ps-soft: oklch(42% 0.02 260);
   --ps-mute: oklch(52% 0.015 260);
-  --ps-blue: oklch(55% 0.19 256);
+  --ps-blue: oklch(50% 0.19 256);
   --ps-blue-ink: oklch(98% 0.01 256);
   --ps-blue-soft: oklch(95% 0.03 256);
   --ps-ok: oklch(48% 0.12 155);
@@ -709,7 +709,13 @@
   font-size: 13px;
   color: var(--ps-mute);
 }
-.ps-dl-meta a {
+.ps-dl-links {
+  display: flex;
+  gap: 20px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.ps-dl-links a {
   color: var(--ps-blue);
 }
 

@@ -141,6 +141,10 @@ export default function App() {
 
   const navigate = useCallback((path: string) => {
     if (typeof window !== 'undefined') {
+      // B535: navigating to the page already open (the session check sends an
+      // anonymous visitor to `/`) must not throw the reader back to the top.
+      const here = `${window.location.pathname}${window.location.search}`;
+      if (path === here) return;
       window.history.pushState(null, '', path);
       setCurrentPath(path);
       window.scrollTo(0, 0);

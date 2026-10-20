@@ -12,7 +12,7 @@ import {
   SUPPORT_TITLE,
   SupportPage,
 } from '../src/features/site/PublicHelpPages';
-import { landingTokenStats } from '../shared/landingStats';
+import { deferEntryScript, landingTokenStats } from '../shared/landingStats';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
 import { CATALOG_STYLE, CATALOG_STYLESHEET_PATH } from '../server/vacancies/vacancyCatalogDocument';
@@ -150,14 +150,14 @@ function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): strin
 async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
   await writeFile(
     `${distDirectory}/faq.html`,
-    helpHead(html, HELP_PAGES[0]).replace(
+    deferEntryScript(helpHead(html, HELP_PAGES[0])).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<FaqPage onNavigate={() => {}} />)),
     ),
   );
   await writeFile(
     `${distDirectory}/support.html`,
-    helpHead(html, HELP_PAGES[1]).replace(
+    deferEntryScript(helpHead(html, HELP_PAGES[1])).replace(
       EMPTY_ROOT,
       bootstrapRoot(renderToStaticMarkup(<SupportPage onNavigate={() => {}} />)),
     ),

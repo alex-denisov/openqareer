@@ -4,7 +4,7 @@ import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
-import { applyLandingStats } from '../../shared/landingStats';
+import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
@@ -44,10 +44,14 @@ function entryDocumentHtml(staticRoot: string): string {
   return applyLandingStats(entryCache.raw, getLandingStats());
 }
 
-function sendEntryDocument(reply: FastifyReply, document: string, staticRoot: string) {
+function sendEntryDocument(reply: FastifyReply, document: string, staticRoot: string, url: string) {
   reply.header('Cache-Control', 'no-store, max-age=0');
   if (document !== ENTRY_DOCUMENT) return reply.sendFile(document);
-  return reply.type('text/html; charset=utf-8').send(entryDocumentHtml(staticRoot));
+  const html = entryDocumentHtml(staticRoot);
+  // B535: only the landing defers the application bundle; deep links keep it.
+  const path = url.split('?')[0] ?? '';
+  const landing = path === '/' || path === '/index.html';
+  return reply.type('text/html; charset=utf-8').send(landing ? deferEntryScript(html) : html);
 }
 
 /**
@@ -364,6 +368,7 @@ function registerEntryFallback(app: FastifyInstance, config: ServerConfig): void
         reply,
         entryDocumentFor(request.url, config.staticRoot),
         config.staticRoot,
+        request.url,
       );
     }
     return sendError(reply, request, 404, 'route_not_found', 'Такого маршрута нет.', false);

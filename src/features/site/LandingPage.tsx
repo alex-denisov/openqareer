@@ -470,11 +470,10 @@ function DownloadSection() {
               <small>Скачать для</small>macOS
             </span>
           </a>
-          <p className="ps-dl-meta">
-            Версия 1.0.0 · 36,5 МБ · <a href="/faq#mac-install">как установить</a>
-          </p>
-          <p className="ps-dl-meta">
-            Windows: в разработке. <a href="/faq#windows">Подробнее</a>
+          <p className="ps-dl-meta">Версия 1.0.0 · 36,5 МБ · Windows: в разработке.</p>
+          <p className="ps-dl-links">
+            <a href="/faq#mac-install">Как установить</a>
+            <a href="/faq#windows">Про Windows</a>
           </p>
         </div>
       </div>

@@ -2,7 +2,7 @@
  * B535: Яндекс Метрика 113691129 и Google Analytics G-WHV17PST41.
  * Отдельный файл, потому что CSP прода запрещает встроенные скрипты.
  * Грузится только на публичных страницах (лендинг, /faq, /support, /legal),
- * после загрузки и в простое браузера: на скорость первого экрана не влияет.
+ * по первому действию человека или через 12 секунд: на скорость первого экрана не влияет.
  * В кабинете (/app) счётчиков и вебвизора нет: там личные данные кандидатов.
  */
 (function () {
@@ -48,11 +48,20 @@
     load('https://www.googletagmanager.com/gtag/js?id=G-WHV17PST41');
   }
 
-  function whenIdle() {
-    if ('requestIdleCallback' in window) window.requestIdleCallback(start, { timeout: 3000 });
-    else setTimeout(start, 1500);
+  // Счётчики грузятся по первому действию человека или через 12 секунд:
+  // ни первая отрисовка, ни отклик страницы их не ждут.
+  var started = false;
+  var events = ['pointerdown', 'keydown', 'scroll', 'touchstart'];
+  function once() {
+    if (started) return;
+    started = true;
+    events.forEach(function (name) {
+      window.removeEventListener(name, once, { passive: true });
+    });
+    start();
   }
-
-  if (document.readyState === 'complete') whenIdle();
-  else window.addEventListener('load', whenIdle, { once: true });
+  events.forEach(function (name) {
+    window.addEventListener(name, once, { passive: true });
+  });
+  setTimeout(once, 12000);
 })();
