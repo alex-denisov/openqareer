@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { renderUnifiedVacancyView } from './renderVacancyTemplate';
+import {
+  employmentLabel,
+  experienceLabel,
+  renderUnifiedVacancyView,
+} from './renderVacancyTemplate';
 
 function sampleVacancy(overrides: Partial<UnifiedVacancy> = {}): UnifiedVacancy {
   return {
@@ -358,5 +362,26 @@ describe('renderUnifiedVacancyView without recognised section headings (B535)', 
     expect(view).toContain('Final sentence of the posting.');
     expect(view).not.toContain('Staff Engineer…');
     expect(view).not.toContain('Equal Employment Opportunity');
+  });
+});
+
+describe('renderUnifiedVacancyView with hh.ru dictionary ids (SEO round 4)', () => {
+  it('prints Russian labels instead of FULL and between3And6', () => {
+    const view = renderUnifiedVacancyView(
+      sampleVacancy({ employmentType: 'FULL', experienceLevel: 'between3And6' }),
+    );
+    expect(view).toContain('`Полная занятость`');
+    expect(view).toContain('`Опыт 3–6 лет`');
+    expect(view).not.toMatch(/\bFULL\b|between3And6/u);
+  });
+
+  it('maps every known id and keeps free text from other sources', () => {
+    expect(employmentLabel('PART')).toBe('Частичная занятость');
+    expect(employmentLabel('FLY_IN_FLY_OUT')).toBe('Вахта');
+    expect(experienceLabel('noExperience')).toBe('Без опыта');
+    expect(experienceLabel('between1And3')).toBe('Опыт 1–3 года');
+    expect(experienceLabel('moreThan6')).toBe('Опыт более 6 лет');
+    expect(employmentLabel(' Full-time ')).toBe('Full-time');
+    expect(experienceLabel('Staff')).toBe('Staff');
   });
 });

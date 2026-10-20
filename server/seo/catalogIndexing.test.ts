@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isIndexableListing,
+  INDEXED_CARD_SUMMARY_MIN,
   CARD_POSTED_WITHIN_DAYS,
   CARD_SEEN_WITHIN_DAYS,
   DEEP_PAGE_NOINDEX_AFTER,
@@ -19,6 +20,7 @@ const valuable = {
   title: 'Frontend Developer',
   company: 'Acme',
   salaryLabel: '5 000 — 6 000 USD',
+  summary: 'Build the hiring product end to end. '.repeat(4),
   publishedAt: daysAgo(2),
   lastSeenAt: daysAgo(0),
 };
@@ -32,6 +34,14 @@ describe('isIndexableCard', () => {
     expect(isIndexableCard({ ...valuable, salaryLabel: undefined }, NOW)).toBe(false);
     expect(isIndexableCard({ ...valuable, company: '  ' }, NOW)).toBe(false);
     expect(isIndexableCard({ ...valuable, title: 'Щебень' }, NOW)).toBe(false);
+  });
+
+  it('drops a card whose source passed no job text, so JobPosting would hold only the title', () => {
+    expect(isIndexableCard({ ...valuable, summary: '' }, NOW)).toBe(false);
+    expect(isIndexableCard({ ...valuable, summary: 'Бухгалтер' }, NOW)).toBe(false);
+    expect(
+      isIndexableCard({ ...valuable, summary: 'x'.repeat(INDEXED_CARD_SUMMARY_MIN) }, NOW),
+    ).toBe(true);
   });
 
   it('drops a card nobody has seen for more than the seen window', () => {

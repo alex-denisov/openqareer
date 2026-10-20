@@ -10,7 +10,8 @@ function sampleCluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster 
     canonicalCompany: 'OpenTelemetry Systems',
     canonicalLocation: 'Berlin, Germany',
     isRemote: false,
-    descriptionSummary: 'Разработка высоконагруженной распределенной платформы телеметрии.',
+    descriptionSummary:
+      'Разработка высоконагруженной распределенной платформы телеметрии: сбор, хранение и анализ событий в реальном времени.',
     skills: ['Go', 'Kubernetes', 'gRPC'],
     primaryUrl: 'https://boards.greenhouse.io/opentelemetry/jobs/42',
     sources: [

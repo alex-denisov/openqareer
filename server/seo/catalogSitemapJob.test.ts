@@ -31,7 +31,10 @@ interface Row {
   status?: 'active' | 'archived';
   posted?: number;
   seen?: number;
+  summary?: string;
 }
+
+const JOB_TEXT = 'Build and run the hiring product. '.repeat(4);
 
 function database(rows: readonly Row[]): DatabaseSync {
   const db = new DatabaseSync(':memory:');
@@ -41,7 +44,7 @@ function database(rows: readonly Row[]): DatabaseSync {
        cluster_id, entry_key, path, title, company, location, is_remote, salary_label, summary,
        skills_json, source_url, source_name, published_at, last_seen_at, source_count, status,
        place_slug, place_label, role_slug, role_label, published_ms, last_seen_ms
-     ) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, '', '[]', 'https://x', NULL, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, '[]', 'https://x', NULL, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const row of rows) {
     const posted = iso(row.posted ?? 1);
@@ -55,6 +58,7 @@ function database(rows: readonly Row[]): DatabaseSync {
       row.title ?? 'Frontend Developer',
       row.company ?? 'Acme',
       row.salary === undefined ? '5 000 USD' : row.salary,
+      row.summary ?? JOB_TEXT,
       posted,
       seen,
       row.status ?? 'active',
@@ -101,6 +105,8 @@ describe('computeCatalogSitemaps', () => {
         { id: 'stale', seen: 20 },
         { id: 'old', posted: 30 },
         { id: 'gone', status: 'archived' },
+        { id: 'notext', summary: '' },
+        { id: 'titleonly', summary: 'Бухгалтер' },
       ]),
       NOW,
     );

@@ -96,6 +96,37 @@ function formatProvenanceSource(provenance?: VacancyProvenance): string {
   );
 }
 
+/**
+ * hh.ru passes dictionary ids (`employment_form`, `experience`), not words; the
+ * card and its meta description printed «FULL» and «between3And6» (SEO review,
+ * round 4). Known ids become Russian labels, unknown free text stays as given.
+ */
+const HH_EMPLOYMENT_LABELS: Readonly<Record<string, string>> = {
+  full: 'Полная занятость',
+  part: 'Частичная занятость',
+  project: 'Проектная работа',
+  fly_in_fly_out: 'Вахта',
+  volunteer: 'Волонтёрство',
+  probation: 'Стажировка',
+};
+
+const HH_EXPERIENCE_LABELS: Readonly<Record<string, string>> = {
+  noexperience: 'Без опыта',
+  between1and3: 'Опыт 1–3 года',
+  between3and6: 'Опыт 3–6 лет',
+  morethan6: 'Опыт более 6 лет',
+};
+
+export function employmentLabel(value: string): string {
+  const trimmed = value.trim();
+  return HH_EMPLOYMENT_LABELS[trimmed.toLowerCase()] ?? trimmed;
+}
+
+export function experienceLabel(value: string): string {
+  const trimmed = value.trim();
+  return HH_EXPERIENCE_LABELS[trimmed.toLowerCase()] ?? trimmed;
+}
+
 function formatSubHeroLine(vacancy: UnifiedVacancy): string {
   const parts: string[] = [`**${vacancy.company.trim()}**`];
   if (vacancy.location?.trim()) {
@@ -107,7 +138,7 @@ function formatSubHeroLine(vacancy: UnifiedVacancy): string {
     parts.push('`On-site`');
   }
   if (vacancy.employmentType?.trim()) {
-    parts.push(`\`${vacancy.employmentType.trim()}\``);
+    parts.push(`\`${employmentLabel(vacancy.employmentType)}\``);
   }
   return parts.join(' · ');
 }
@@ -116,7 +147,7 @@ function formatHeroBlock(vacancy: UnifiedVacancy): string {
   const lines: string[] = [`# ${vacancy.title.trim()}`, formatSubHeroLine(vacancy)];
 
   if (vacancy.experienceLevel?.trim()) {
-    lines.push(`💼 **Уровень роли:** \`${vacancy.experienceLevel.trim()}\``);
+    lines.push(`💼 **Уровень роли:** \`${experienceLabel(vacancy.experienceLevel)}\``);
   }
 
   const salaryLabel = formatSalary(vacancy.salary);

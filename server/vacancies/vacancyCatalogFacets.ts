@@ -52,16 +52,21 @@ export function catalogPlaceOf(entry: CatalogEntry): { slug: string; label: stri
   return entry.isRemote ? { slug: REMOTE_PLACE, label: 'Удалённо' } : null;
 }
 
+/**
+ * The label is the title as published («Программист 1С», «QA Engineer»):
+ * rebuilding it from the slug gave «Programmist 1c» and «Qa».
+ */
+export function roleLabelFromTitle(title: string): string {
+  const cleaned = title.replace(TITLE_NOISE, ' ').replace(/\s+/gu, ' ').trim();
+  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+}
+
 export function catalogRoleOf(
   entry: Pick<CatalogEntry, 'title'>,
 ): { slug: string; label: string } | null {
   const slug = buildVacancySlug(entry.title.replace(TITLE_NOISE, ' '));
   if (!slug) return null;
-  // The label is the title as published («Программист 1С», «QA Engineer»):
-  // rebuilding it from the slug gave «Programmist 1c» and «Qa».
-  const cleaned = entry.title.replace(TITLE_NOISE, ' ').replace(/\s+/gu, ' ').trim();
-  const label = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
-  return { slug, label };
+  return { slug, label: roleLabelFromTitle(entry.title) };
 }
 
 interface Bucket {

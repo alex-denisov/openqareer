@@ -8,6 +8,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import {
   CATALOG_ROOT,
+  listingPath,
   parseListingPath,
   parseVacancyPath,
   vacancyKey,
@@ -100,6 +101,21 @@ function cursorOf(request: FastifyRequest) {
   return decodeCatalogCursor(queryValue(request, 'after'));
 }
 
+/**
+ * Pages after the first exist only behind a cursor (`?after=`). A bare
+ * `/page/12` or `?page=12` used to answer 200 with a copy of page 1 (SEO
+ * review, round 4); it now moves permanently to the list's first page.
+ */
+function cursorlessPageTarget(
+  request: FastifyRequest,
+  basePath: string,
+  pathPage: number | undefined,
+): string | null {
+  if (cursorOf(request)) return null;
+  const pageQuery = queryValue(request, 'page');
+  return (pathPage !== undefined && pathPage > 1) || pageQuery !== undefined ? basePath : null;
+}
+
 function withCursor(path: string, cursor: ReturnType<typeof decodeCatalogCursor>): string {
   return cursor ? `${path}?after=${encodeCatalogCursor(cursor)}` : path;
 }
@@ -136,6 +152,9 @@ function projectedPage(
 }
 
 async function handleCatalog(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const pathPage = (request.params as { page?: string }).page ? pageNumber(request) : undefined;
+  const redirect = cursorlessPageTarget(request, CATALOG_ROOT, pathPage);
+  if (redirect) return reply.redirect(redirect, 301);
   const cursor = cursorOf(request);
   const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
     limit: CATALOG_PAGE_SIZE,
@@ -199,6 +218,9 @@ function handleProjectedListing(
 
 async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   const listing = parseListingPath(request.url);
+  const basePath = listing ? listingPath(listing.place, listing.role) : null;
+  const redirect = basePath ? cursorlessPageTarget(request, basePath, listing?.page) : null;
+  if (redirect) return reply.redirect(redirect, 301);
   const projectedReply = handleProjectedListing(deps, request, reply, listing);
   if (projectedReply) return projectedReply;
   const clusters = deps.multiSourceEngine.getPublicCatalogClusters();

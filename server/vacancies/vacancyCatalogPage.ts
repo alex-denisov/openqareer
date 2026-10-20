@@ -280,12 +280,34 @@ function salaryUnit(salary: { from?: number; to?: number; currency?: string }): 
   return ANNUAL_RANGE_CURRENCIES.has(currency) && top >= ANNUAL_RANGE_MIN ? 'YEAR' : 'MONTH';
 }
 
+/**
+ * Google for Jobs `employmentType` enum from what the source passed: hh.ru ids
+ * (`FULL`, `PART`, `PROJECT`) or ATS free text («Full-time», «Contract»).
+ * Anything else is left out rather than guessed.
+ */
+const EMPLOYMENT_TYPES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/^(?:full|full[\s_-]?time|полная занятость)$/iu, 'FULL_TIME'],
+  [/^(?:part|part[\s_-]?time|частичная занятость)$/iu, 'PART_TIME'],
+  [/^(?:project|contract|contractor|проектная работа)$/iu, 'CONTRACTOR'],
+  [/^(?:temporary|temp)$/iu, 'TEMPORARY'],
+  [/^(?:intern|internship|probation|стажировка)$/iu, 'INTERN'],
+  [/^(?:volunteer)$/iu, 'VOLUNTEER'],
+];
+
+export function googleEmploymentType(value?: string): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  return EMPLOYMENT_TYPES.find(([pattern]) => pattern.test(trimmed))?.[1];
+}
+
 function jobPosting(
   cluster: VacancyCluster,
   entry: CatalogEntry,
   description: string,
-  withdrawnAt?: string,
+  vacancy?: UnifiedVacancy,
 ): StructuredNode {
+  const withdrawnAt = vacancy?.archivedAt;
+  const employmentType = googleEmploymentType(vacancy?.employmentType);
   const salary = cluster.salary;
   const hasSalary = salary && (salary.from !== undefined || salary.to !== undefined);
   const company = cluster.canonicalCompany.trim();
@@ -317,6 +339,7 @@ function jobPosting(
         }
       : {}),
     ...(cluster.isRemote ? { jobLocationType: 'TELECOMMUTE' } : {}),
+    ...(employmentType ? { employmentType } : {}),
     ...(entry.skills.length > 0 ? { skills: entry.skills.join(', ') } : {}),
     ...(hasSalary
       ? {
@@ -360,9 +383,7 @@ export function buildVacancyDetail(
     description,
     jsonLd: {
       '@context': 'https://schema.org',
-      '@graph': indexable
-        ? [jobPosting(cluster, entry, description, vacancy?.archivedAt), crumbs]
-        : [crumbs],
+      '@graph': indexable ? [jobPosting(cluster, entry, description, vacancy), crumbs] : [crumbs],
     },
     ...(vacancy ? { vacancy } : {}),
     indexable,

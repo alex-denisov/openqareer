@@ -36,6 +36,14 @@ export const DEEP_PAGE_NOINDEX_AFTER = 10;
  * renders (`noindex, follow`, links count) but is left out of the sitemap.
  */
 export const INDEXED_PLACE_MIN = 10;
+/**
+ * A card whose source passed no job text (hh.ru search-page rows, measured on
+ * prod 21.10: 11 of 60 sampled sitemap cards) carries only the title as
+ * `JobPosting.description`. Google for Jobs treats that as thin and Yandex as a
+ * copy, so such a card stays `noindex, follow`. `summary` is the first 300
+ * characters of the job text, so the same rule runs in SQL on the stored column.
+ */
+export const INDEXED_CARD_SUMMARY_MIN = 100;
 export const INDEXED_PLACE_ROLE_MIN = 5;
 
 const DAY_MS = 86_400_000;
@@ -44,6 +52,7 @@ export interface IndexableCardFields {
   readonly title: string;
   readonly company: string;
   readonly salaryLabel?: string;
+  readonly summary: string;
   readonly publishedAt: string;
   readonly lastSeenAt: string;
 }
@@ -57,6 +66,7 @@ function withinDays(value: string, days: number, now: Date): boolean {
 export function isIndexableCard(entry: IndexableCardFields, now: Date): boolean {
   return (
     Boolean(entry.salaryLabel) &&
+    entry.summary.trim().length >= INDEXED_CARD_SUMMARY_MIN &&
     entry.company.trim().length > 0 &&
     catalogRoleOf(entry) !== null &&
     withinDays(entry.lastSeenAt, CARD_SEEN_WITHIN_DAYS, now) &&

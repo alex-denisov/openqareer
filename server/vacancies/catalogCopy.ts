@@ -54,7 +54,12 @@ function topSkills(entries: readonly FactsEntry[], limit: number): readonly stri
     .filter(([, count]) => count >= 2)
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
     .slice(0, limit)
-    .map(([skill]) => skill);
+    .map(([skill]) => readableTag(skill));
+}
+
+/** Kebab-case tags from sources ("Account-Manager") read as plain words. */
+function readableTag(skill: string): string {
+  return /^[A-Z][a-z]+(-[A-Z][a-z]+)+$/.test(skill) ? skill.replace(/-/g, ' ') : skill;
 }
 
 /**
@@ -73,9 +78,13 @@ export function pageFacts(total: number, entries: readonly FactsEntry[]): readon
       .at(-1) ?? '';
   const skills = topSkills(entries, 5);
   const sample = entries.length === total ? 'всех' : `${entries.length} на этой странице`;
+  const counted = [
+    salaried > 0 ? `с указанной зарплатой — ${salaried}` : '',
+    remote > 0 ? `удалённых — ${remote}` : '',
+    `работодателей — ${employers}`,
+  ].filter(Boolean);
   return [
-    `В разделе ${countLabel(total)}. Из ${sample}: с указанной зарплатой — ${salaried}, ` +
-      `удалённых — ${remote}, работодателей — ${employers}.`,
+    `В разделе ${countLabel(total)}. Из ${sample}: ${counted.join(', ')}.`,
     ...(skills.length > 0 ? [`Чаще всего в требованиях: ${skills.join(', ')}.`] : []),
     ...(updated ? [`Данные проверены ${formatRuDate(updated)}.`] : []),
   ];

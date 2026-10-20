@@ -16,7 +16,8 @@ function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
     canonicalCompany: 'Reddit',
     canonicalLocation: 'San Francisco, USA',
     isRemote: false,
-    descriptionSummary: 'Мы ищем директора по правовым вопросам приватности.',
+    descriptionSummary:
+      'Мы ищем директора по правовым вопросам приватности. Он отвечает за политику данных, проверки и обучение команд.',
     skills: ['Privacy'],
     primaryUrl: 'https://boards.greenhouse.io/reddit/jobs/1',
     sources: [
@@ -340,5 +341,28 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain('<h2>Basic Qualifications</h2>');
     const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.exec(html);
     expect(emoji ? html.slice(emoji.index - 80, emoji.index + 20) : null).toBeNull();
+  });
+});
+
+describe('описание карточки для поисковиков', () => {
+  it('не несёт шапку шаблона «Статус: Опубликовано»', () => {
+    const vacancy: UnifiedVacancy = {
+      id: 'v-status',
+      sourceId: 'src-hh',
+      title: 'Data Engineer',
+      company: 'Acme',
+      location: 'Moscow',
+      url: 'https://hh.ru/vacancy/1',
+      description:
+        'Строим платформу данных для розницы: потоковая загрузка, витрины, качество данных и мониторинг пайплайнов.',
+      publishedAt: '2026-10-20T00:00:00.000Z',
+      observedAt: '2026-10-20T00:00:00.000Z',
+    } as unknown as UnifiedVacancy;
+    const html = renderVacancyDocument(
+      buildVacancyDetail(cluster({ canonicalTitle: 'Data Engineer' }), undefined, vacancy)!,
+    );
+    const description = /<meta name="description" content="([^"]*)">/u.exec(html)?.[1] ?? '';
+    expect(description).not.toContain('Статус');
+    expect(description).toContain('платформу данных');
   });
 });

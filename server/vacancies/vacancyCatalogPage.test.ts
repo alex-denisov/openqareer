@@ -4,6 +4,7 @@ import {
   buildListingPage,
   buildVacancyDetail,
   CATALOG_PAGE_SIZE,
+  googleEmploymentType,
 } from './vacancyCatalogPage';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 
@@ -14,7 +15,8 @@ function cluster(overrides: Partial<VacancyCluster> = {}): VacancyCluster {
     canonicalCompany: 'Reddit',
     canonicalLocation: 'San Francisco, USA',
     isRemote: false,
-    descriptionSummary: 'Мы ищем директора по правовым вопросам приватности.',
+    descriptionSummary:
+      'Мы ищем директора по правовым вопросам приватности. Он отвечает за политику данных, проверки и обучение команд.',
     skills: ['Privacy', 'GDPR'],
     primaryUrl: 'https://boards.greenhouse.io/reddit/jobs/1',
     sources: [
@@ -145,6 +147,23 @@ describe('страница публичного каталога ваканси�
     expect(detail.indexable).toBe(false);
   });
 
+  it('не размечает JobPosting карточку, у которой площадка не передала текст', () => {
+    for (const descriptionSummary of ['', 'Бухгалтер']) {
+      const detail = buildVacancyDetail(cluster({ descriptionSummary }))!;
+      expect(detail.indexable).toBe(false);
+      expect(detail.jsonLd['@graph'].map((node) => node['@type'])).toEqual(['BreadcrumbList']);
+    }
+  });
+
+  it('переводит вид занятости площадки в employmentType Google и не угадывает остальное', () => {
+    expect(googleEmploymentType('FULL')).toBe('FULL_TIME');
+    expect(googleEmploymentType('Part-time')).toBe('PART_TIME');
+    expect(googleEmploymentType('PROJECT')).toBe('CONTRACTOR');
+    expect(googleEmploymentType('Internship')).toBe('INTERN');
+    expect(googleEmploymentType('Hybrid')).toBeUndefined();
+    expect(googleEmploymentType(undefined)).toBeUndefined();
+  });
+
   it('берёт validThrough из даты снятия, когда площадка её назвала', () => {
     const vacancy: UnifiedVacancy = {
       id: 'v1',
@@ -165,10 +184,12 @@ describe('страница публичного каталога ваканси�
       publishedAt: '2026-09-01T00:00:00.000Z',
       status: 'active',
       archivedAt: '2026-09-20T00:00:00.000Z',
+      employmentType: 'FULL',
     };
     const detail = buildVacancyDetail(cluster(), undefined, vacancy)!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting');
     expect(posting?.validThrough).toBe('2026-09-20T00:00:00.000Z');
+    expect(posting?.employmentType).toBe('FULL_TIME');
   });
 
   it('называет удалённую вакансию удалённой так, как это понимает поисковик', () => {

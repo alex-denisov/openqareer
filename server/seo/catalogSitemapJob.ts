@@ -8,7 +8,11 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
-import { INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN } from './catalogIndexing';
+import {
+  INDEXED_CARD_SUMMARY_MIN,
+  INDEXED_PLACE_MIN,
+  INDEXED_PLACE_ROLE_MIN,
+} from './catalogIndexing';
 import { CARD_POSTED_WITHIN_DAYS, CARD_SEEN_WITHIN_DAYS } from './catalogIndexing';
 import { buildSitemapFiles, type SitemapFile, type SitemapUrl } from './sitemapXml';
 
@@ -31,12 +35,14 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
         WHERE status = 'active' AND path <> ''
           AND published_ms >= ? AND last_seen_ms >= ?
           AND salary_label IS NOT NULL AND salary_label <> ''
+          AND length(trim(summary)) >= ?
           AND trim(company) <> '' AND role_slug IS NOT NULL
         ORDER BY published_ms DESC, entry_key ASC`,
     )
     .all(
       now.getTime() - CARD_POSTED_WITHIN_DAYS * DAY_MS,
       now.getTime() - CARD_SEEN_WITHIN_DAYS * DAY_MS,
+      INDEXED_CARD_SUMMARY_MIN,
     ) as Array<{ path: string; published_at: string }>;
   return rows.map((row) => ({ path: row.path, lastmod: row.published_at.slice(0, 10) }));
 }

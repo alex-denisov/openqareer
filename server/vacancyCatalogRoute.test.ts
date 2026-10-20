@@ -85,11 +85,23 @@ describe('B209: публичный каталог вакансий', () => {
     expect(response.body).toContain('"@type":"ItemList"');
   });
 
-  it('отдаёт страницу каталога по номеру', async () => {
+  /**
+   * Страницы после первой живут только за курсором. Голый номер раньше отдавал
+   * копию первой страницы под 200 (SEO, круг 4) — теперь он ведёт на первую.
+   */
+  it('переводит номер страницы без курсора на первую страницу списка (301)', async () => {
     const app = await createApp();
-    const response = await app.inject({ method: 'GET', url: '/vacancies/page/2' });
-    expect(response.statusCode).toBe(200);
-    expect(response.body).toContain('<!doctype html>');
+    for (const [url, target] of [
+      ['/vacancies/page/2', '/vacancies'],
+      ['/vacancies?page=12', '/vacancies'],
+      ['/vacancies/moscow/page/2', '/vacancies/moscow'],
+      ['/vacancies/remote/frontend-developer/page/3', '/vacancies/remote/frontend-developer'],
+      ['/vacancies/moscow?page=4', '/vacancies/moscow'],
+    ] as const) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(301);
+      expect(response.headers.location, url).toBe(target);
+    }
   });
 
   it('передаёт страницу 2 курсором materialized catalog, а не OFFSET', async () => {
@@ -154,12 +166,7 @@ describe('B209: публичный каталог вакансий', () => {
    */
   it('отвечает 410 на список, который не проходит порог публикации', async () => {
     const app = await createApp();
-    for (const url of [
-      '/vacancies/moscow',
-      '/vacancies/remote/frontend-developer',
-      '/vacancies/moscow/page/2',
-      '/vacancies/remote/frontend-developer/page/2',
-    ]) {
+    for (const url of ['/vacancies/moscow', '/vacancies/remote/frontend-developer']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(410);
       expect(response.body, url).toContain('В этом разделе сейчас нет вакансий');
@@ -170,7 +177,7 @@ describe('B209: публичный каталог вакансий', () => {
     const app = await createApp();
     const page = await app.inject({ method: 'GET', url: '/vacancies/page/2' });
     const job = await app.inject({ method: 'GET', url: '/vacancies/job/data-analyst-x' });
-    expect(page.statusCode).toBe(200);
+    expect(page.statusCode).toBe(301);
     expect(job.statusCode).toBe(410);
   });
 

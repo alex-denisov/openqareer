@@ -57,7 +57,7 @@ import {
   type CatalogEntriesQuery,
   type CatalogEntryRow,
 } from './vacancyCatalogProjection';
-import type { CatalogListingSummary } from './vacancyCatalogFacets';
+import { roleLabelFromTitle, type CatalogListingSummary } from './vacancyCatalogFacets';
 import {
   clusterKeys,
   parseRepresentative,
@@ -219,6 +219,40 @@ export interface SqliteVacancyPoolStoreOptions {
   readonly onWrite?: (event: PoolWriteEvent) => void;
   /** Подбор по смыслу вместо LIKE по описанию (B267 S3); по умолчанию старое поведение. */
   readonly matchMode?: 'legacy' | 'semantic';
+}
+
+interface CatalogListingRow {
+  place_slug: string;
+  place_label: string;
+  role_slug: string | null;
+  role_label: string | null;
+  role_title: string | null;
+  count: number;
+}
+
+// Importing the path helper here would make the table's SQL shape leak into
+// the route. The values are already validated slugs from the same helper that
+// created the projection, so constructing the route is safe.
+function listingSummaryOf(row: CatalogListingRow): CatalogListingSummary {
+  const path = row.role_slug
+    ? `/vacancies/${row.place_slug}/${row.role_slug}`
+    : `/vacancies/${row.place_slug}`;
+  return {
+    place: row.place_slug,
+    placeLabel: row.place_label,
+    ...(row.role_slug
+      ? {
+          role: row.role_slug,
+          // Rows projected before B535 stored a label rebuilt from the
+          // transliterated slug («Programmist 1c»): read it from a title.
+          roleLabel: row.role_title
+            ? roleLabelFromTitle(row.role_title)
+            : (row.role_label ?? row.role_slug),
+        }
+      : {}),
+    path,
+    count: row.count,
+  };
 }
 
 export class SqliteVacancyPoolStore implements VacancyPoolStore {
@@ -2137,14 +2171,16 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     const rows = this.database
       .prepare(
         `SELECT place_slug, max(place_label) AS place_label,
-                NULL AS role_slug, NULL AS role_label, count(*) AS count
+                NULL AS role_slug, NULL AS role_label, NULL AS role_title,
+                count(*) AS count
            FROM catalog_entries
           WHERE status = 'active' AND path <> '' AND place_slug IS NOT NULL
           GROUP BY place_slug
          HAVING count(*) >= 3
           UNION ALL
          SELECT place_slug, max(place_label) AS place_label,
-                role_slug, max(role_label) AS role_label, count(*) AS count
+                role_slug, max(role_label) AS role_label, min(title) AS role_title,
+                count(*) AS count
            FROM catalog_entries
           WHERE status = 'active' AND path <> ''
             AND place_slug IS NOT NULL AND role_slug IS NOT NULL
@@ -2157,27 +2193,10 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
       place_label: string;
       role_slug: string | null;
       role_label: string | null;
+      role_title: string | null;
       count: number;
     }>;
-    // Importing the path helper here would make the table's SQL shape leak
-    // into the route. The values are already validated slugs from the same
-    // helper that created the projection, so constructing the route is safe.
-    return rows.flatMap((row) => {
-      const path = row.role_slug
-        ? `/vacancies/${row.place_slug}/${row.role_slug}`
-        : `/vacancies/${row.place_slug}`;
-      return [
-        {
-          place: row.place_slug,
-          placeLabel: row.place_label,
-          ...(row.role_slug
-            ? { role: row.role_slug, roleLabel: row.role_label ?? row.role_slug }
-            : {}),
-          path,
-          count: row.count,
-        },
-      ];
-    });
+    return rows.map(listingSummaryOf);
   }
 
   getCatalogEntry(key: string): CatalogEntryRow | undefined {

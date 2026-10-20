@@ -16,7 +16,7 @@ export const FAQ_DESCRIPTION =
   'Как найти работу с openqareer: проверка резюме на ATS, подбор вакансий по резюме, сопроводительные письма, отклики, тарифы и данные.';
 export const SUPPORT_TITLE = 'Поддержка openqareer: почта, Telegram-бот и сообщество';
 export const SUPPORT_DESCRIPTION =
-  'Связаться с поддержкой openqareer: support@openqareer.com, Telegram-бот @openqareer_bot и сообщество пользователей. Ответим на вопросы о резюме, вакансиях и тарифах.';
+  'Поддержка openqareer: support@openqareer.com, Telegram-бот @openqareer_bot. Отвечаем в течение рабочего дня на вопросы о резюме, вакансиях и тарифах.';
 
 interface HelpPageProps {
   readonly onNavigate: (path: string) => void;

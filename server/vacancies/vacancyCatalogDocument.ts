@@ -372,7 +372,9 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
   const employer = employerLabel(entry.company);
   const title = `${entry.title} — ${employer} · openqareer`;
   const description = plainSummary(
-    `${entry.title}, ${employer}, ${placeLabel(entry)}${entry.salaryLabel ? `, ${entry.salaryLabel}` : ''}. ${detail.description}`,
+    // The body goes through plainSummary on its own first: the generated
+    // template preamble («Статус: Опубликовано…») is only dropped at its start.
+    `${entry.title}, ${employer}, ${placeLabel(entry)}${entry.salaryLabel ? `, ${entry.salaryLabel}` : ''}. ${plainSummary(meaningfulText(detail.description, entry.title) || meaningfulText(entry.summary, entry.title), 400)}`,
     160,
   );
 
