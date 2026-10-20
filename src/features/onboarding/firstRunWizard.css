@@ -585,9 +585,14 @@
 .first-run-state-status {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: var(--career-space-2);
-  color: var(--career-text-soft);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface-raised);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
 }
 
 .first-run-state-message {

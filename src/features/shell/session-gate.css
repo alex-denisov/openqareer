@@ -73,10 +73,9 @@
       var(--career-mobile-nav-height) + var(--career-space-2) + env(safe-area-inset-bottom)
     );
     align-items: center;
-    justify-content: space-between;
     margin: 0;
-    padding: var(--career-space-2) var(--career-space-2) var(--career-space-2) var(--career-space-4);
-    border-radius: var(--career-radius-md);
-    background: var(--career-surface-raised);
+  }
+  .career-session-gate > .career-session-gate-actions > .first-run-state-status {
+    flex: 1;
   }
 }

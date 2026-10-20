@@ -130,7 +130,7 @@
   }
   /* Макет 390: пилюли 44 px, текст 14/600, поля 12, «Отклонить» основным цветом текста. */
   .career-expert-proposal .career-expert-actions button {
-    border: 0;
+    border: var(--career-space-1) solid transparent;
     border-radius: var(--career-radius-pill);
     padding-inline: var(--career-space-3);
     background: var(--career-bg-elevated);

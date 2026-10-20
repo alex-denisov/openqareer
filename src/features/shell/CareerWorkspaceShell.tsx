@@ -532,7 +532,9 @@ export function CareerWorkspaceShell({
           <DesktopCabinetTopbar
             title={desktopPageTitle}
             railHint={railHint}
-            bootStatus={sessionPending ? 'Проверяем вход и читаем ваш профиль' : null}
+            bootStatus={
+              sessionPending && !sessionError ? 'Проверяем вход и читаем ваш профиль' : null
+            }
             showNotifications={!isCompactViewport}
             showConsultantButton={false}
             onOpenConsultant={() => openExpert()}
