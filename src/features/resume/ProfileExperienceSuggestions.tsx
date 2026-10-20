@@ -3,6 +3,7 @@ import { APPLIED_SUGGESTION_NOTE } from './InlineConsultantSuggestion';
 import { useId, useRef, useState } from 'react';
 import type { ResumeDraft } from './resumeTypes';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
+import { teamSizeLabel } from './ProfileTeamSizeTag';
 import './profileExperienceSuggestions.css';
 
 export interface ProfileExperienceSuggestionsProps {
@@ -210,8 +211,18 @@ function AppliedRowState({
   );
 }
 
+const FIELD_PREFIX = {
+  startDate: 'начало: ',
+  endDate: 'окончание: ',
+  teamSize: 'Размер команды: ',
+} as const;
+
 function displayedSuggestionText(suggestion: InlineSuggestionItem, value: string): string {
   if (!suggestion.field) return value;
+  if (suggestion.field === 'teamSize') {
+    const size = Number(value);
+    return Number.isInteger(size) && size > 0 ? teamSizeLabel(size) : 'неизвестно';
+  }
   return /^(\d{4})-(\d{2})(?:-(\d{2}))?$/u.test(value)
     ? value.split('-').reverse().join('.')
     : value;
@@ -239,9 +250,7 @@ function SuggestionRow({
     >
       <span className="profile-experience-suggestions__employer">{group.employer}</span>
       <span className="profile-experience-suggestions__change">
-        {suggestion.field ? (
-          <span>{suggestion.field === 'endDate' ? 'окончание: ' : 'начало: '}</span>
-        ) : null}
+        {suggestion.field ? <span>{FIELD_PREFIX[suggestion.field]}</span> : null}
         {suggestion.currentText !== undefined ? (
           <>
             <span className="career-sr-only">Сейчас: </span>

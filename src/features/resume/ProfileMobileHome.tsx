@@ -320,9 +320,16 @@ export function ProfileMobileEmptyResume({
 }
 
 /** What the pending edits touch, as far as the command says: dates or experience bullets. */
-function suggestionTopics(pending: readonly InlineSuggestionItem[]): string {
-  const topics = new Set(pending.map((item) => (item.field ? 'даты' : 'пункты опыта')));
-  return [...topics].sort((a) => (a === 'даты' ? 1 : -1)).join(' и ');
+const SUGGESTION_TOPIC_ORDER = ['размер команды', 'пункты опыта', 'даты'] as const;
+
+function suggestionTopic(item: InlineSuggestionItem): (typeof SUGGESTION_TOPIC_ORDER)[number] {
+  if (item.field === 'teamSize') return 'размер команды';
+  return item.field ? 'даты' : 'пункты опыта';
+}
+
+export function suggestionTopics(pending: readonly InlineSuggestionItem[]): string {
+  const topics = new Set(pending.map(suggestionTopic));
+  return SUGGESTION_TOPIC_ORDER.filter((topic) => topics.has(topic)).join(' и ');
 }
 
 /** The pending edits lead to one nested page: «Опыт» when it has any, otherwise «Обо мне». */

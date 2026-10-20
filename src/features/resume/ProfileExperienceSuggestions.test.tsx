@@ -131,6 +131,17 @@ describe('ProfileExperienceSuggestions', () => {
     expect(container.textContent).not.toContain('Предлагается консультантом');
   });
 
+  it('writes a team size revision as unknown → people (B540)', () => {
+    const container = render([
+      item('team', 'experience-1', { field: 'teamSize', currentText: '', proposedText: '38' }),
+    ]);
+    const row = container.querySelector('[data-suggestion-id="team"]');
+    expect(row?.textContent).toContain('Финтех Лаб');
+    expect(row?.textContent).toContain('Размер команды: ');
+    expect(row?.querySelector('del')?.textContent).toBe('неизвестно');
+    expect(row?.querySelector('ins')?.textContent).toBe('38 человек');
+  });
+
   it('does not infer a missing employer or parse proposal text into fields', () => {
     const container = render([
       item('unknown-employer', 'missing-experience', {
@@ -328,14 +339,18 @@ describe('ProfileExperienceSuggestions', () => {
     });
 
     const appliedRow = container.querySelector('[data-suggestion-id="already-applied"]');
-    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
+    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe(
+      'Правка принята, квитанция консультанта сохранена. Её можно отменить позже.',
+    );
     expect(appliedRow?.querySelectorAll('button')).toHaveLength(1);
     expect(container.textContent).not.toContain('Откатить все');
     expect(container.querySelectorAll('button')).toHaveLength(3);
 
     await click(container, 'Отменить правку');
     expect(onRevertSuggestion).toHaveBeenCalledExactlyOnceWith(applied);
-    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
+    expect(appliedRow?.querySelector('[role="status"]')?.textContent).toBe(
+      'Правка принята, квитанция консультанта сохранена. Её можно отменить позже.',
+    );
   });
 
   it('keeps applied state and announces a failed row revert', async () => {
@@ -346,6 +361,8 @@ describe('ProfileExperienceSuggestions', () => {
 
     await click(container, 'Отменить правку');
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('Откат не подтверждён');
-    expect(container.querySelector('[role="status"]')?.textContent).toBe('Правка принята, квитанция консультанта сохранена. Её можно отменить позже.');
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      'Правка принята, квитанция консультанта сохранена. Её можно отменить позже.',
+    );
   });
 });

@@ -28,6 +28,7 @@ import { useFootprintFindingCount } from './useFootprintFindingCount';
 import { useConsultantSuggestions } from './useConsultantSuggestions';
 import type { InlineSuggestionItem } from './InlineConsultantSuggestion';
 import type { ResumeDraft, ResumeStudioView } from './resumeTypes';
+import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { VacancyProfileRequirementRequest } from '../vacancies/vacancyProfileRequirement';
 import { ProfileResumeVersions, ProfileReviewAndVersions } from './ProfileReviewAndVersions';
 import { getRelocationQuestionnaire } from '../relocation/relocationApi';
@@ -595,7 +596,7 @@ function focusTopcardField(section: 'name' | 'contacts'): boolean {
 
 function focusExperienceField(
   experienceId: string | undefined,
-  field: 'startDate' | 'endDate' | 'teamSize',
+  field: ExperienceRevisionField,
 ): boolean {
   const position = Array.from(document.querySelectorAll<HTMLElement>('[data-experience-id]')).find(
     (element) => element.dataset.experienceId === experienceId,

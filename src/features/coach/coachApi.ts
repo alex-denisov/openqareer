@@ -1,4 +1,5 @@
 import { receiveCoachResult } from './coachResultDelivery';
+import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
 export type { CoachTurnStage, CoachTurnSubject };
 import type { ResumeDraft } from '../../../server/domain/resumeDraft';
@@ -300,7 +301,7 @@ export interface CareerCommand {
   };
   executionTarget?: {
     targetType?: 'resume_block';
-    field?: 'startDate' | 'endDate';
+    field?: ExperienceRevisionField;
     section?: 'headline' | 'about' | 'experience';
     experienceId?: string;
     memoryId?: string;

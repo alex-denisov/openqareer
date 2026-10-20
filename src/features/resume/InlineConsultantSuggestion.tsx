@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { ArrowsClockwise, CheckCircle, Spinner } from '@phosphor-icons/react';
+import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 
 export interface InlineSuggestionItem {
   readonly id: string;
   readonly section: 'headline' | 'about' | 'experience';
   readonly experienceId?: string;
-  readonly field?: 'startDate' | 'endDate';
+  readonly field?: ExperienceRevisionField;
   readonly title?: string;
   readonly rationale?: string;
   readonly currentText?: string;
