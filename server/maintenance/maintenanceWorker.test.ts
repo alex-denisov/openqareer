@@ -158,7 +158,12 @@ describe('MaintenanceWorker (B230)', () => {
     const stats = await rival.stop();
 
     expect(wave.synced).toBeGreaterThan(0);
-    expect(wave.failed).toEqual([]);
+    // Name the reason, not just the source: a bare id in CI says nothing.
+    const reasons = composed.engine
+      .getSources()
+      .filter((source) => wave.failed.includes(source.id))
+      .map((source) => `${source.id}: ${source.lastErrorMessage ?? 'no message'}`);
+    expect(reasons).toEqual([]);
     expect(composed.engine.poolSize).toBeGreaterThan(0);
     expect(stats.errors).toBe(0);
     expect(stats.writes).toBeGreaterThan(0);
