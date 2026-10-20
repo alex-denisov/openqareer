@@ -1244,10 +1244,6 @@
   .ps-facts small {
     grid-column: 1 / -1;
   }
-  /* Each row already carries the country badge. */
-  .ps-board-head span {
-    display: none;
-  }
   /* The macOS app cannot be installed from a phone. */
   .ps-hero .ps-dl-link {
     display: none;
@@ -1402,5 +1398,104 @@
 @media (prefers-reduced-motion: reduce) {
   .oq-consent {
     animation: none;
+  }
+}
+
+/* B173 legal documents inside the public chrome. */
+.legal-main {
+  display: grid;
+  grid-template-columns: minmax(0, 46rem) 15rem;
+  justify-content: space-between;
+  gap: 48px;
+  align-items: start;
+  padding-top: 56px;
+  padding-bottom: 96px;
+}
+.legal-document {
+  min-width: 0;
+}
+.legal-document h1 {
+  font-size: clamp(30px, 3.6vw, 44px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+}
+.legal-meta {
+  margin-top: 12px;
+  margin-bottom: 32px;
+  font-size: 14px;
+  color: var(--ps-mute);
+}
+.legal-document h2 {
+  margin: 36px 0 12px;
+  font-size: 20px;
+  line-height: 1.3;
+}
+.legal-document p,
+.legal-document li {
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--ps-soft);
+}
+.legal-document p,
+.legal-document ul {
+  margin-bottom: 12px;
+}
+.legal-document ul {
+  padding-left: 20px;
+}
+.legal-document li {
+  margin-bottom: 6px;
+}
+.legal-table-scroll {
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+.legal-document table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.legal-document th,
+.legal-document td {
+  border-bottom: 1px solid var(--ps-line-2);
+  padding: 10px 12px 10px 0;
+  text-align: left;
+  vertical-align: top;
+}
+.legal-nav {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 10px;
+  padding: 20px;
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-line);
+  border-radius: 16px;
+  font-size: 14px;
+}
+.legal-nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.legal-nav a {
+  color: var(--ps-blue);
+  font-weight: 500;
+}
+.legal-nav [aria-current='page'] {
+  color: var(--ps-mute);
+}
+@media (max-width: 900px) {
+  .legal-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+    padding-top: 32px;
+    padding-bottom: 64px;
+  }
+  .legal-nav {
+    position: static;
+    order: -1;
   }
 }

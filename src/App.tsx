@@ -590,7 +590,11 @@ export default function App() {
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>
-          <HelpPage onNavigate={navigate} signedIn={Boolean(state.session)} />
+          <HelpPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
         </Suspense>
       </AppErrorBoundary>
     );
@@ -601,7 +605,12 @@ export default function App() {
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>
-          <LegalDocumentPage slug={legalSlug} onNavigate={navigate} />
+          <LegalDocumentPage
+            slug={legalSlug}
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
         </Suspense>
       </AppErrorBoundary>
     );

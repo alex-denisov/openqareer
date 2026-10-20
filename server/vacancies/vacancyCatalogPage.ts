@@ -21,6 +21,7 @@ import {
 } from '../../shared/vacancyCatalogRoutes';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { renderUnifiedVacancyView } from './renderVacancyTemplate';
+import { renderDescriptionHtml } from './catalogMarkdown';
 import { isIndexableCard, validThroughOf } from '../seo/catalogIndexing';
 
 /** Сколько карточек на странице каталога. */
@@ -252,7 +253,9 @@ function jobPosting(
   return {
     '@type': 'JobPosting',
     title: entry.title,
-    description,
+    // Google reads HTML here; the raw template would leak markdown and emoji.
+    description:
+      renderDescriptionHtml(description) || renderDescriptionHtml(entry.summary) || entry.title,
     datePosted: isoDate(entry.publishedAt),
     ...(validThrough ? { validThrough } : {}),
     identifier: { '@type': 'PropertyValue', name: 'openqareer', value: entry.key },

@@ -111,7 +111,7 @@ describe('страница публичного каталога ваканси�
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
 
     expect(detail.description).toBe(full.trim());
-    expect(posting.description).toBe(full.trim());
+    expect(posting.description).toBe(`<p>${full.trim()}</p>`);
     expect(String(posting.description).length).toBeGreaterThan(300);
   });
 

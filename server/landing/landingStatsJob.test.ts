@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 import {
+  cleanLandingTitle,
   computeLandingStats,
   formatLandingSalary,
   isLandingTitle,
@@ -135,5 +136,14 @@ describe('isLandingTitle and Cyrillic word parts', () => {
   it('does not mistake «руководитель» for «водитель»', () => {
     expect(isLandingTitle('Руководитель разработки')).toBe(true);
     expect(isLandingTitle('Водитель-экспедитор, менеджер')).toBe(false);
+  });
+});
+
+describe('cleanLandingTitle', () => {
+  it('drops board hashtags and keeps the role', () => {
+    expect(cleanLandingTitle('(#Удалёнка) Junior Frontend-разработчик (React)')).toBe(
+      'Junior Frontend-разработчик (React)',
+    );
+    expect(cleanLandingTitle('Аналитик данных #remote #fulltime')).toBe('Аналитик данных');
   });
 });

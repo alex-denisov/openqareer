@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrandMark } from '../brand/BrandMark';
+import { PublicFooter, PublicHeader } from '../site/PublicSiteChrome';
 import { SiteLink } from '../site/SiteLink';
 import { LEGAL_CONTENT, type LegalBlock, type LegalSection } from './legalContent';
 import { legalStructuredData } from './legalStructuredData';
@@ -13,7 +13,6 @@ import {
   type LegalDocSlug,
 } from '../../../shared/legalRegistry';
 
-
 export function legalDocumentTitle(slug: LegalDocSlug): string {
   return `${legalDocMeta(slug).title} · OpenQareer`;
 }
@@ -22,9 +21,13 @@ export function legalDocumentTitle(slug: LegalDocSlug): string {
 export function LegalDocumentPage({
   slug,
   onNavigate,
+  signedIn = false,
+  isAdmin = false,
 }: {
   slug: LegalDocSlug;
   onNavigate: (path: string) => void;
+  signedIn?: boolean;
+  isAdmin?: boolean;
 }) {
   const meta = legalDocMeta(slug);
   const sections = LEGAL_CONTENT[slug];
@@ -36,17 +39,23 @@ export function LegalDocumentPage({
   }, [meta.description, slug]);
 
   return (
-    <div className="site-layout legal-layout">
+    <div className="ps legal-layout">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(legalStructuredData(slug)) }}
       />
-      <LegalPageHeader onNavigate={onNavigate} />
-      <main id="main-content" className="legal-main">
+      <PublicHeader
+        onNavigate={onNavigate}
+        onLanding={false}
+        signedIn={signedIn}
+        isAdmin={isAdmin}
+      />
+      <main id="main" className="ps-wrap legal-main">
         <article className="legal-document">
           <h1>{meta.title}</h1>
           <p className="legal-meta">
-            Редакция {LEGAL_PACK_VERSION} · опубликована {formatPublishedAt(LEGAL_PACK_PUBLISHED_AT)}
+            Редакция {LEGAL_PACK_VERSION} · опубликована{' '}
+            {formatPublishedAt(LEGAL_PACK_PUBLISHED_AT)}
           </p>
           {sections.map((section) => (
             <LegalSectionView key={section.heading} section={section} />
@@ -54,18 +63,8 @@ export function LegalDocumentPage({
         </article>
         <LegalPageNav slug={slug} onNavigate={onNavigate} />
       </main>
-      <LegalPageFooter onNavigate={onNavigate} />
+      <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
     </div>
-  );
-}
-
-function LegalPageHeader({ onNavigate }: { onNavigate: (path: string) => void }) {
-  return (
-    <header className="legal-header">
-      <SiteLink to="/" className="legal-brand" onNavigate={onNavigate}>
-        <BrandMark variant="lockup" size={24} />
-      </SiteLink>
-    </header>
   );
 }
 
@@ -93,17 +92,6 @@ function LegalPageNav({
         ))}
       </ul>
     </nav>
-  );
-}
-
-function LegalPageFooter({ onNavigate }: { onNavigate: (path: string) => void }) {
-  return (
-    <footer className="legal-footer">
-      <SiteLink to="/" onNavigate={onNavigate}>
-        На главную
-      </SiteLink>
-      <span>&copy; {new Date().getFullYear()} OpenQareer</span>
-    </footer>
   );
 }
 

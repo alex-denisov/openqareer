@@ -110,6 +110,15 @@ const ROLE_WORDS =
 const NOISE_WORDS =
   /(physician|nurse|dentist|teacher|tutor|instructor|driver|per diem|cashier|courier|closer|intern|future opening|assistant|ассистент|стажер|стажёр|курьер|(?:^|[^а-яё])водител|оператор|продав|кассир)/iu;
 
+/** Drops board decorations such as «(#Удалёнка)» or trailing hashtags. */
+export function cleanLandingTitle(raw: string): string {
+  return raw
+    .replace(/\(\s*#[^)]*\)/gu, ' ')
+    .replace(/(^|\s)#[\p{L}\p{N}_-]+/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
 export function isLandingTitle(title: string): boolean {
   return title.length <= 48 && ROLE_WORDS.test(title) && !NOISE_WORDS.test(title);
 }
@@ -120,7 +129,7 @@ export function pickLandingVacancies(payloads: readonly PoolPayload[]): LandingV
   const titles = new Set<string>();
   for (const payload of payloads) {
     if (picked.length >= LANDING_VACANCY_ROWS) break;
-    const title = typeof payload.title === 'string' ? payload.title.trim() : '';
+    const title = typeof payload.title === 'string' ? cleanLandingTitle(payload.title) : '';
     if (!title || !isLandingTitle(title) || titles.has(title.toLowerCase())) continue;
     const salary = formatLandingSalary(payload.salary);
     const country = landingCountry(payload);

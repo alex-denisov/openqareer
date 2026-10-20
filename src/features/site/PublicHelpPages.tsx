@@ -21,11 +21,13 @@ export const SUPPORT_DESCRIPTION =
 interface HelpPageProps {
   readonly onNavigate: (path: string) => void;
   readonly signedIn?: boolean;
+  readonly isAdmin?: boolean;
 }
 
 function HelpShell({
   onNavigate,
   signedIn = false,
+  isAdmin = false,
   title,
   structuredData,
   children,
@@ -48,7 +50,12 @@ function HelpShell({
           __html: JSON.stringify(structuredData).replace(/</gu, '\\u003c'),
         }}
       />
-      <PublicHeader onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
+      <PublicHeader
+        onNavigate={onNavigate}
+        onLanding={false}
+        signedIn={signedIn}
+        isAdmin={isAdmin}
+      />
       <main id="main" className="ps-wrap ps-page">
         {children}
       </main>
@@ -213,11 +220,12 @@ function SupportExtras({ onNavigate }: { onNavigate: (p: string) => void }) {
   );
 }
 
-export function FaqPage({ onNavigate, signedIn }: HelpPageProps) {
+export function FaqPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
   return (
     <HelpShell
       onNavigate={onNavigate}
       signedIn={signedIn}
+      isAdmin={isAdmin}
       title={FAQ_TITLE}
       structuredData={faqStructuredData()}
     >
@@ -242,11 +250,12 @@ const QUICK_LINKS = [
   { href: '/faq#remote', text: 'Как найти удалённую работу' },
 ] as const;
 
-export function SupportPage({ onNavigate, signedIn }: HelpPageProps) {
+export function SupportPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
   return (
     <HelpShell
       onNavigate={onNavigate}
       signedIn={signedIn}
+      isAdmin={isAdmin}
       title={SUPPORT_TITLE}
       structuredData={supportStructuredData()}
     >

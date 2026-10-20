@@ -24,6 +24,10 @@ import type {
 } from './vacancyCatalogPage';
 import type { CatalogFilterGroup } from './vacancyCatalogFilters';
 import { isIndexablePage } from '../seo/catalogIndexing';
+import { escapeHtml } from './catalogHtml';
+import { CATALOG_STYLE } from './catalogStyle';
+import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
+import { plainSummary, renderDescriptionHtml } from './catalogMarkdown';
 
 /**
  * ПОЧЕМУ ФАЙЛ, А НЕ ИНЛАЙН. Боевая политика безопасности — `style-src 'self'`
@@ -37,51 +41,8 @@ import { isIndexablePage } from '../seo/catalogIndexing';
  * вёрстку, которой здесь нет. Значения токенов взяты из `src/App.css`, чтобы
  * каталог читался как тот же продукт.
  */
-const CATALOG_STYLE = `:root{color-scheme:dark;--bg-dark:oklch(15% 0.015 255);--surface:oklch(20% 0.018 255/0.9);--surface-raised:oklch(24% 0.02 255/0.94);--line:oklch(93% 0.015 255/0.13);--primary-accent:oklch(79% 0.14 255);--text-main:oklch(95% 0.008 255);--text-muted:oklch(72% 0.025 255);--font-main:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif}
-*{box-sizing:border-box}
-body.catalog-body{margin:0;background:var(--bg-dark);color:var(--text-main);font-family:var(--font-main);line-height:1.55;-webkit-font-smoothing:antialiased}
-a{color:var(--primary-accent);text-decoration:none}
-a:hover{text-decoration:underline}
-a:focus-visible{outline:2px solid var(--primary-accent);outline-offset:2px;border-radius:4px}
-.catalog-header,.catalog-footer,.catalog-main{max-width:60rem;margin:0 auto;padding:1rem 1.25rem}
-.catalog-header{display:flex;align-items:center;justify-content:space-between;gap:1rem;border-bottom:1px solid var(--line)}
-.catalog-brand{font-weight:650;letter-spacing:-0.01em;color:var(--text-main)}
-.catalog-nav{display:flex;gap:1rem}
-.catalog-main{padding-block:2rem 3rem}
-.catalog-main h1{font-size:clamp(1.6rem,4vw,2.2rem);line-height:1.2;margin:0 0 .5rem}
-.catalog-lead,.catalog-empty{color:var(--text-muted);margin:0 0 1.5rem}
-.catalog-list{list-style:none;margin:0;padding:0;display:grid;gap:.75rem}
-.catalog-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem 1.1rem}
-.catalog-card h2{font-size:1.05rem;margin:0 0 .35rem;line-height:1.35}
-.catalog-card-meta{color:var(--text-muted);font-size:.9rem;margin:0 0 .5rem}
-.catalog-card-summary,.catalog-detail-summary{margin:0;color:var(--text-muted)}
-.catalog-detail-summary{color:var(--text-main);margin-block:1rem;white-space:pre-wrap}
-.catalog-pagination{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-top:1.5rem;color:var(--text-muted);flex-wrap:wrap}
-.catalog-breadcrumbs{color:var(--text-muted);font-size:.9rem;margin-bottom:.75rem}
-.catalog-skills{list-style:none;display:flex;flex-wrap:wrap;gap:.4rem;padding:0;margin:1rem 0}
-.catalog-skills li{background:var(--surface-raised);border:1px solid var(--line);border-radius:999px;padding:.2rem .7rem;font-size:.85rem;color:var(--text-muted)}
-.catalog-provenance{color:var(--text-muted);font-size:.9rem}
-.catalog-apply{margin:1.5rem 0 0}
-.catalog-apply a{display:inline-block;background:var(--primary-accent);color:oklch(15% 0.015 255);font-weight:600;padding:.65rem 1.2rem;border-radius:12px}
-.catalog-apply a:hover{text-decoration:none;filter:brightness(1.08)}
-.catalog-footer{border-top:1px solid var(--line);color:var(--text-muted);font-size:.85rem}
-.catalog-filters{margin-top:2rem;border-top:1px solid var(--line);padding-top:1.25rem}
-.catalog-filters h2{font-size:1rem;margin:0 0 1rem}
-.catalog-filter-group{margin:0 0 1rem}
-.catalog-filter-group h3{font-size:.85rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);margin:0 0 .5rem;font-weight:600}
-.catalog-filters ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem}
-.catalog-filters li{background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:.3rem .8rem;font-size:.9rem}
-.catalog-filters span{color:var(--text-muted)}
-@media (max-width:520px){.catalog-header{flex-direction:column;align-items:flex-start}}`;
 
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/gu, '&amp;')
-    .replace(/</gu, '&lt;')
-    .replace(/>/gu, '&gt;')
-    .replace(/"/gu, '&quot;')
-    .replace(/'/gu, '&#39;');
-}
+export { escapeHtml };
 
 /**
  * JSON внутри `<script>` закрывается не кавычкой, а строкой `</script>` в
@@ -118,7 +79,7 @@ function head(options: {
   return [
     '<meta charset="UTF-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
-    '<meta name="theme-color" content="#090d12">',
+    '<meta name="theme-color" content="#f9fafc">',
     `<title>${escapeHtml(options.title)}</title>`,
     `<meta name="description" content="${escapeHtml(options.description)}">`,
     `<link rel="canonical" href="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
@@ -137,36 +98,77 @@ function head(options: {
     `<meta property="og:url" content="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
     `<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`,
     jsonLdScript(options.jsonLd),
+    '<script src="/assets/oq-analytics-2.js" defer></script>',
   ]
     .filter(Boolean)
     .join('');
 }
 
 function shell(headHtml: string, bodyHtml: string): string {
-  return `<!doctype html><html lang="ru"><head>${headHtml}</head><body class="catalog-body">${bodyHtml}</body></html>`;
+  return `<!doctype html><html lang="ru"><head>${headHtml}</head><body><div class="ps"><a class="ps-skip" href="#main">К содержимому</a>${bodyHtml}</div></body></html>`;
 }
 
 function siteHeader(): string {
-  return (
-    '<header class="catalog-header">' +
-    `<a class="catalog-brand" href="/">openqareer</a>` +
-    '<nav class="catalog-nav">' +
-    `<a href="${CATALOG_ROOT}">Вакансии</a>` +
-    '<a href="/login">Войти</a>' +
-    '</nav></header>'
-  );
+  return catalogChromeHeader();
 }
 
 function siteFooter(): string {
-  return (
-    '<footer class="catalog-footer">' +
-    '<p>Вакансии собраны с открытых площадок и досок работодателей. ' +
-    'Отклик подаётся на площадке работодателя. openqareer не кадровое агентство ' +
-    'и не обещает интервью, оффер или трудоустройство.</p>' +
-    '<p><a href="/legal/terms">Пользовательское соглашение</a> · ' +
-    '<a href="/legal/privacy">Персональные данные</a></p>' +
-    '</footer>'
-  );
+  return CATALOG_CHROME_FOOTER;
+}
+
+const CTA_BOX =
+  '<div class="cat-box"><h2>Подберём вакансии под ваше резюме</h2>' +
+  '<p>Загрузите резюме: openqareer покажет, какие вакансии подходят и почему, ' +
+  'проверит резюме на ATS и подготовит отклик.</p>' +
+  '<a class="ps-btn is-primary" href="/signup">Загрузить резюме бесплатно</a></div>';
+
+const MONTHS = [
+  'января',
+  'февраля',
+  'марта',
+  'апреля',
+  'мая',
+  'июня',
+  'июля',
+  'августа',
+  'сентября',
+  'октября',
+  'ноября',
+  'декабря',
+];
+
+function formatDate(iso: string): string {
+  const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+  if (!year || !month || !day) return iso.slice(0, 10);
+  return `${day} ${MONTHS[month - 1]} ${year}`;
+}
+
+function formatCount(value: number): string {
+  return value.toLocaleString('ru-RU').replace(/\u00a0/gu, '\u202f');
+}
+
+function vacancyWord(value: number): string {
+  const tens = value % 100;
+  const ones = value % 10;
+  if (tens >= 11 && tens <= 14) return 'вакансий';
+  if (ones === 1) return 'вакансия';
+  if (ones >= 2 && ones <= 4) return 'вакансии';
+  return 'вакансий';
+}
+
+function descriptionBlock(markdown: string, summary: string): string {
+  const html = renderDescriptionHtml(markdown) || renderDescriptionHtml(summary);
+  return html
+    ? `<div class="cat-body">${html}</div>`
+    : '<div class="cat-body"><p>Источник не передал текст вакансии. Полное описание — на сайте работодателя.</p></div>';
+}
+
+function crumbs(trail: readonly { readonly label: string; readonly path: string }[]): string {
+  if (trail.length === 0) return '';
+  const links = [{ label: 'openqareer', path: '/' }, ...trail]
+    .map((item) => `<a href="${escapeHtml(item.path)}">${escapeHtml(item.label)}</a>`)
+    .join(' / ');
+  return `<nav class="ps-crumbs" aria-label="Навигационная цепочка">${links}</nav>`;
 }
 
 function placeLabel(entry: CatalogEntry): string {
@@ -175,14 +177,22 @@ function placeLabel(entry: CatalogEntry): string {
   return entry.location ?? 'Место не указано';
 }
 
+function metaLine(entry: CatalogEntry): string {
+  return (
+    '<p class="cat-meta">' +
+    (entry.salaryLabel ? `<span class="cat-salary">${escapeHtml(entry.salaryLabel)}</span>` : '') +
+    `<span>${escapeHtml(employerLabel(entry.company))}</span>` +
+    `<span>${escapeHtml(placeLabel(entry))}</span>` +
+    '</p>'
+  );
+}
+
 function entryCard(entry: CatalogEntry): string {
   return (
-    '<li class="catalog-card">' +
+    '<li class="cat-card">' +
     `<h2><a href="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</a></h2>` +
-    `<p class="catalog-card-meta">${escapeHtml(employerLabel(entry.company))} · ${escapeHtml(placeLabel(entry))}` +
-    (entry.salaryLabel ? ` · ${escapeHtml(entry.salaryLabel)}` : '') +
-    '</p>' +
-    `<p class="catalog-card-summary">${escapeHtml(entry.summary.slice(0, 240))}</p>` +
+    metaLine(entry) +
+    `<p class="cat-summary">${escapeHtml(plainSummary(entry.summary, 220))}</p>` +
     '</li>'
   );
 }
@@ -199,11 +209,11 @@ function filterPanel(groups: readonly CatalogFilterGroup[]): string {
   const filled = groups.filter((group) => group.links.length > 0);
   if (filled.length === 0) return '';
   return (
-    '<nav class="catalog-filters"><h2>Сузить выборку</h2>' +
+    '<nav class="cat-box cat-filters" aria-label="Фильтры каталога"><h2>Сузить выборку</h2>' +
     filled
       .map(
         (group) =>
-          `<section class="catalog-filter-group"><h3>${escapeHtml(group.title)}</h3><ul>` +
+          `<section class="cat-filter"><h3>${escapeHtml(group.title)}</h3><ul>` +
           group.links
             .map(
               (link) =>
@@ -225,7 +235,7 @@ function pagination(page: CatalogPage): string {
   const next = page.nextPath
     ? `<a rel="next" href="${escapeHtml(page.nextPath)}">Следующая →</a>`
     : '';
-  return `<nav class="catalog-pagination">${previous}<span>Страница ${page.page} из ${page.pageCount}</span>${next}</nav>`;
+  return `<nav class="cat-pager" aria-label="Страницы каталога">${previous}<span>Страница ${page.page} из ${page.pageCount}</span>${next}</nav>`;
 }
 
 /**
@@ -238,14 +248,18 @@ function pagination(page: CatalogPage): string {
 export function renderGoneDocument(page: CatalogPage): string {
   const body =
     siteHeader() +
-    '<main class="catalog-main">' +
-    '<h1>Этой вакансии больше нет</h1>' +
-    '<p class="catalog-lead">Запись пропала из пула: площадка сняла её или перестала ' +
-    'отдавать. Мы не держим карточку, которую нечем подтвердить. Ниже — то, что в пуле есть сейчас.</p>' +
+    '<main id="main" class="ps-wrap ps-page">' +
+    crumbs([]) +
+    '<div class="cat-head"><h1>Этой вакансии больше нет</h1>' +
+    '<p class="cat-lead">Площадка сняла запись или перестала её отдавать. Мы не держим ' +
+    'карточку, которую нечем подтвердить. Ниже — вакансии, которые есть в пуле сейчас.</p></div>' +
+    '<div class="cat-layout"><div>' +
     (page.entries.length > 0
-      ? `<ul class="catalog-list">${page.entries.map(entryCard).join('')}</ul>`
+      ? `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>`
       : '') +
-    '</main>' +
+    '</div><aside class="cat-side">' +
+    CTA_BOX +
+    '</aside></div></main>' +
     siteFooter();
 
   return shell(
@@ -275,22 +289,25 @@ export function renderCatalogDocument(
   const title = page.documentTitle;
   const description = page.description;
 
+  const root = page.canonicalPath === CATALOG_ROOT;
   const body =
     siteHeader() +
-    '<main class="catalog-main">' +
-    (page.canonicalPath === CATALOG_ROOT
-      ? ''
-      : `<nav class="catalog-breadcrumbs"><a href="/">openqareer</a> · <a href="${CATALOG_ROOT}">Вакансии</a></nav>`) +
-    `<h1>${escapeHtml(page.heading)}</h1>` +
+    '<main id="main" class="ps-wrap ps-page">' +
+    crumbs(root ? [] : [{ label: 'Вакансии', path: CATALOG_ROOT }]) +
+    `<div class="cat-head"><h1>${escapeHtml(page.heading)}</h1>` +
     (empty
-      ? '<p class="catalog-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
-        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p>'
-      : `<p class="catalog-lead">Всего ${page.total} вакансий. ` +
-        'Каждая карточка ведёт на первоисточник — отклик подаётся там.</p>' +
-        `<ul class="catalog-list">${page.entries.map(entryCard).join('')}</ul>` +
-        pagination(page)) +
+      ? '<p class="cat-empty">Каталог пока пуст: ни одной вакансии с публичным адресом ' +
+        'в пуле сейчас нет. Это состояние данных, а не ошибка страницы.</p></div>'
+      : `<p class="cat-lead">${formatCount(page.total)} ${vacancyWord(page.total)} с открытых площадок и сайтов работодателей. ` +
+        'У каждой указаны источник и дата, отклик подаётся на сайте работодателя.</p></div>') +
+    '<div class="cat-layout"><div>' +
+    (empty
+      ? ''
+      : `<ul class="cat-list">${page.entries.map(entryCard).join('')}</ul>` + pagination(page)) +
+    '</div><aside class="cat-side">' +
+    CTA_BOX +
     filterPanel(filters) +
-    '</main>' +
+    '</aside></div></main>' +
     siteFooter();
 
   return shell(
@@ -313,28 +330,40 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
   const { entry } = detail;
   const employer = employerLabel(entry.company);
   const title = `${entry.title} — ${employer} · openqareer`;
-  const description = `${entry.title}, ${employer}, ${placeLabel(entry)}. Источник и дата наблюдения указаны на странице.`;
+  const description = plainSummary(
+    `${entry.title}, ${employer}, ${placeLabel(entry)}${entry.salaryLabel ? `, ${entry.salaryLabel}` : ''}. ${detail.description}`,
+    160,
+  );
 
   const body =
     siteHeader() +
-    '<main class="catalog-main catalog-detail">' +
-    '<nav class="catalog-breadcrumbs"><a href="/">openqareer</a> · ' +
-    `<a href="${CATALOG_ROOT}">Вакансии</a></nav>` +
+    '<main id="main" class="ps-wrap ps-page">' +
+    crumbs([{ label: 'Вакансии', path: CATALOG_ROOT }]) +
+    '<div class="cat-detail"><article>' +
     `<h1>${escapeHtml(entry.title)}</h1>` +
-    `<p class="catalog-card-meta">${escapeHtml(employer)} · ${escapeHtml(placeLabel(entry))}` +
-    (entry.salaryLabel ? ` · ${escapeHtml(entry.salaryLabel)}` : '') +
-    '</p>' +
-    `<p class="catalog-detail-summary">${escapeHtml(detail.description)}</p>` +
+    metaLine(entry) +
     (entry.skills.length > 0
-      ? `<ul class="catalog-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
+      ? `<ul class="cat-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +
-    '<p class="catalog-provenance">' +
-    `Наблюдалась ${escapeHtml(entry.lastSeenAt.slice(0, 10))}, впервые ${escapeHtml(entry.publishedAt.slice(0, 10))}` +
-    (entry.sourceCount > 1 ? `, найдена на ${entry.sourceCount} площадках` : '') +
-    (entry.sourceName ? `, источник — ${escapeHtml(entry.sourceName)}` : '') +
-    '.</p>' +
-    `<p class="catalog-apply"><a class="site-btn is-primary" rel="nofollow noopener" target="_blank" href="${escapeHtml(entry.sourceUrl)}">Открыть у работодателя</a></p>` +
-    '</main>' +
+    descriptionBlock(detail.description, entry.summary) +
+    '<p class="cat-note">openqareer не кадровое агентство: вакансия собрана с открытого источника, ' +
+    'отклик подаётся на сайте работодателя.</p>' +
+    '</article><aside class="cat-side">' +
+    '<div class="cat-box"><h2>О вакансии</h2><dl class="cat-facts">' +
+    (entry.salaryLabel ? `<dt>Зарплата</dt><dd>${escapeHtml(entry.salaryLabel)}</dd>` : '') +
+    `<dt>Работодатель</dt><dd>${escapeHtml(employer)}</dd>` +
+    `<dt>Где</dt><dd>${escapeHtml(placeLabel(entry))}</dd>` +
+    `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
+    `<dt>Проверена</dt><dd>${escapeHtml(formatDate(entry.lastSeenAt))}</dd>` +
+    (entry.sourceName ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName)}</dd>` : '') +
+    (entry.sourceCount > 1
+      ? `<dt>Площадок с этой вакансией</dt><dd>${entry.sourceCount}</dd>`
+      : '') +
+    '</dl>' +
+    `<a class="ps-btn is-primary" rel="nofollow noopener" target="_blank" href="${escapeHtml(entry.sourceUrl)}">Открыть у работодателя</a>` +
+    '</div>' +
+    CTA_BOX +
+    '</aside></div></main>' +
     siteFooter();
 
   return shell(

@@ -12,6 +12,7 @@ import {
 } from '../../../shared/landingStats';
 import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
 import { SiteLink } from './SiteLink';
+import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
 import { FaqAnswer, PublicFooter, PublicHeader } from './PublicSiteChrome';
 import {
@@ -40,6 +41,8 @@ export const LANDING_HERO_TITLE = 'Ваш опыт стоит больше, че
 /** Snapshot embedded by the server; the real 20.10 reading otherwise. */
 export function readEmbeddedLandingStats(): LandingStats {
   if (typeof document === 'undefined') return LANDING_STATS_SNAPSHOT;
+  const captured = capturedLandingStats();
+  if (captured) return captured;
   const node = document.getElementById(LANDING_STATS_SCRIPT_ID);
   try {
     const parsed = node?.textContent ? (JSON.parse(node.textContent) as LandingStats) : null;
@@ -103,7 +106,7 @@ function VacancyBoard({ stats, c }: { stats: LandingStats; c: Counts }) {
     <div className="ps-board" aria-label="Удалённые вакансии из пула">
       <div className="ps-board-head">
         <h2>Свежие удалённые вакансии: {c.remote} в пуле</h2>
-        <span>страна работодателя</span>
+        <span>зарплата</span>
       </div>
       {stats.vacancies.map((vacancy, index) => (
         <div className="ps-job" key={index}>

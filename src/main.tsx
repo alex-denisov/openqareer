@@ -12,18 +12,20 @@ import '@fontsource/onest/latin-600.css';
 import '@fontsource/onest/latin-700.css';
 import './features/site/publicSite.css';
 import './features/shell/session-gate.css';
+import { captureEmbeddedLandingStats } from './features/site/embeddedLandingStats';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
 import { installExternalLinkInterceptor } from './services/desktop/externalLinkInterceptor';
 import { openExternalLink } from './services/desktop/openExternalLink';
 import { installTitleTooltips } from './services/desktop/titleTooltips';
 
-document.documentElement.dataset.release =
-  import.meta.env.VITE_OPENQAREER_RELEASE || 'local';
+document.documentElement.dataset.release = import.meta.env.VITE_OPENQAREER_RELEASE || 'local';
 
 if (isTauriEnvironment()) {
   installExternalLinkInterceptor(document, openExternalLink);
   installTitleTooltips(document);
 }
+
+captureEmbeddedLandingStats();
 
 const root = document.getElementById('root');
 if (!root) throw new Error('openqareer root mount point is missing');
@@ -31,5 +33,5 @@ if (!root) throw new Error('openqareer root mount point is missing');
 ReactDOM.createRoot(root).render(
   <React.StrictMode>
     <App />
-  </React.StrictMode>
+  </React.StrictMode>,
 );
