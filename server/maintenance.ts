@@ -20,6 +20,7 @@ import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/m
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
+import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -150,6 +151,8 @@ try {
   restoreInFlight = undefined;
   worker.reportMemory();
   worker.start();
+  // B535: landing numbers are counted here, never on the web server's event loop.
+  scheduleLandingStatsJob(semanticDatabase, log);
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {
   log.error(
