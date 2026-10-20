@@ -3,7 +3,7 @@ import { ArrowsClockwise, CheckCircle, LinkSimple } from '@phosphor-icons/react'
 import { disconnectConnection, type CandidateConnection } from '../coach/coachApi';
 import { ImportModalShell } from '../connections/ImportModalShell';
 import { PLATFORM_LABELS } from '../connections/platformLabels';
-import { factCountLabel, importDateLabel } from './profileSourceLabels';
+import { importDateLabel } from './profileSourceLabels';
 
 export interface ProfileSourceDialogProps {
   readonly platform: CandidateConnection['platform'];
@@ -158,6 +158,7 @@ export function importSummary(
   if (factCount === undefined) return 'Импорта из этого источника ещё не было.';
   const date = importDateLabel(importedAt);
   const kept = keptFactCount ?? factCount;
-  const noun = factCountLabel(factCount).replace(/^\d+ /u, '');
+  // «из N» takes the genitive: «из 1 факта», «из 4 фактов».
+  const noun = factCount % 10 === 1 && factCount % 100 !== 11 ? 'факта' : 'фактов';
   return `Импортировано ${kept} из ${factCount} ${noun}${date ? `, ${date}` : ''}.`;
 }
