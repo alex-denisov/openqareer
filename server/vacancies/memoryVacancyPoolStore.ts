@@ -29,6 +29,7 @@ import {
 import { catalogListings } from './vacancyCatalogFacets';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
+import { isWorkdaySource, mergeWorkdaySnapshot } from './workdayDescriptions';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface StoredRow {
@@ -252,11 +253,15 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
   /** Как в базе: обновляется запись, но не дата смерти. */
   private upsert(sourceId: string, vacancy: UnifiedVacancy): void {
     const existing = this.rows.get(vacancy.id);
+    const previous = existing?.sourceId === sourceId ? existing.vacancy : undefined;
     this.rows.set(vacancy.id, {
-      vacancy:
-        sourceId === HH_SEARCH_SOURCE_ID && existing?.sourceId === sourceId
-          ? mergeHhVacancySnapshot(existing.vacancy, vacancy)
-          : vacancy,
+      vacancy: !previous
+        ? vacancy
+        : sourceId === HH_SEARCH_SOURCE_ID
+          ? mergeHhVacancySnapshot(previous, vacancy)
+          : isWorkdaySource(sourceId)
+            ? mergeWorkdaySnapshot(previous, vacancy)
+            : vacancy,
       sourceId,
       ...(existing?.expiredAt ? { expiredAt: existing.expiredAt } : {}),
     });
@@ -425,6 +430,26 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
 
   pendingCatalogEntries(): number {
     return 0;
+  }
+
+  /** Как в базе: живые записи площадки без дочитанного текста, новые первыми (B535). */
+  loadVacanciesWithoutFullText(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[],
+  ): UnifiedVacancy[] {
+    const excluded = new Set(excludeIds);
+    return [...this.rows.values()]
+      .reverse()
+      .filter(
+        (row) =>
+          row.sourceId === sourceId &&
+          row.expiredAt === undefined &&
+          !excluded.has(row.vacancy.id) &&
+          !row.vacancy.fullDescription?.trim(),
+      )
+      .slice(0, Math.max(1, Math.trunc(limit)))
+      .map((row) => row.vacancy);
   }
 
   backfillDescriptionSkillsStep(chunk = 100): {

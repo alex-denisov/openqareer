@@ -396,8 +396,9 @@ const ADAPTERS: Readonly<Record<string, Adapter>> = {
 
 /**
  * Workday (B216): список отдаёт заголовок, место, относительный путь и «Posted
- * 3 Days Ago» вместо даты. Описания в списке нет — карточка честно несёт
- * заголовок и место, а публичная ссылка собирается из адреса сайта тенанта:
+ * 3 Days Ago» вместо даты. Описания в списке нет — поле пустое, текст дочитывает
+ * воркер обслуживания (`workdayDescriptions.ts`, B535); склейка «название —
+ * город» описанием не была. Публичная ссылка собирается из адреса сайта тенанта:
  * `…/wday/cxs/<tenant>/<site>/jobs` → `https://<host>/<site><externalPath>`.
  */
 const workday: Adapter = (payload, context, sourceId) =>
@@ -413,7 +414,7 @@ const workday: Adapter = (payload, context, sourceId) =>
       company: context.sourceName ?? '',
       location,
       isRemote: /remote/i.test(location ?? ''),
-      description: [text(job.title), location].filter(Boolean).join(' — '),
+      description: '',
       skills: [],
       url: workdayPublicUrl(context.sourceUrl, path),
       publishedAt: fromWorkdayPostedOn(job.postedOn, context.observedAt),

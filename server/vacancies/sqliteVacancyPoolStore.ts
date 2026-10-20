@@ -25,6 +25,7 @@ import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions'
 import { LEVEL_RANK } from './levelMatcher';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
+import { isWorkdaySource, mergeWorkdaySnapshot } from './workdayDescriptions';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
@@ -814,14 +815,15 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     );
   }
 
-  /** Loads only the HH records in one write chunk so collection snapshots can
-   * preserve useful descriptions without hydrating the 500k-record slice. */
+  /** Loads only the HH and Workday records in one write chunk so collection
+   * snapshots can preserve loaded descriptions without hydrating the
+   * 500k-record slice (Workday since B535). */
   private loadExistingHhVacancies(
     sourceId: string,
     chunk: readonly UnifiedVacancy[],
   ): Map<string, UnifiedVacancy> {
     const existing = new Map<string, UnifiedVacancy>();
-    if (sourceId !== HH_SEARCH_SOURCE_ID) return existing;
+    if (sourceId !== HH_SEARCH_SOURCE_ID && !isWorkdaySource(sourceId)) return existing;
     const ids = Array.from(new Set(chunk.map((vacancy) => vacancy.id)));
     const bindLimit = 800;
     for (let offset = 0; offset < ids.length; offset += bindLimit) {
@@ -867,10 +869,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         const existing = this.loadExistingHhVacancies(sourceId, chunk);
         for (const vacancy of chunk) {
           const previous = existing.get(vacancy.id);
-          const stored =
-            previous && sourceId === HH_SEARCH_SOURCE_ID
-              ? mergeHhVacancySnapshot(previous, vacancy)
-              : vacancy;
+          const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
           existing.set(vacancy.id, stored);
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
@@ -897,10 +896,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
         const existing = this.loadExistingHhVacancies(sourceId, chunk);
         for (const vacancy of chunk) {
           const previous = existing.get(vacancy.id);
-          const stored =
-            previous && sourceId === HH_SEARCH_SOURCE_ID
-              ? mergeHhVacancySnapshot(previous, vacancy)
-              : vacancy;
+          const stored = previous ? mergeStoredSnapshot(sourceId, previous, vacancy) : vacancy;
           existing.set(vacancy.id, stored);
           insert.run(stored.id, sourceId, stored.publishedAt, storedAt, JSON.stringify(stored));
           index.run(...indexColumns(stored, sourceId), 0);
@@ -1549,6 +1545,33 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
+   * Живые записи площадки без дочитанного текста, новые первыми (B535).
+   * Точечный запрос по индексу `source_id`: на проде это до ~1 300 строк.
+   */
+  loadVacanciesWithoutFullText(
+    sourceId: string,
+    limit: number,
+    excludeIds: readonly string[],
+  ): UnifiedVacancy[] {
+    const boundedLimit = Math.max(1, Math.min(Math.trunc(limit), 100));
+    const rows = this.database
+      .prepare(
+        `SELECT id, payload FROM vacancy_pool
+          WHERE source_id = ? AND expired_at IS NULL
+            AND length(trim(coalesce(json_extract(payload, '$.fullDescription'), ''))) = 0
+          ORDER BY rowid DESC
+          LIMIT ?`,
+      )
+      .all(sourceId, boundedLimit + excludeIds.length) as Array<{ id: string; payload: string }>;
+    const excluded = new Set(excludeIds);
+    return rows
+      .filter((row) => !excluded.has(row.id))
+      .slice(0, boundedLimit)
+      .map((row) => parseVacancy(row.payload))
+      .filter((vacancy): vacancy is UnifiedVacancy => vacancy !== undefined);
+  }
+
+  /**
    * Один шаг обогащения вакансий с описанием, но без ключевых навыков (B307).
    * Идёт пачками по `rowid`, не перегружая память и уступая цикл событий.
    */
@@ -1591,7 +1614,12 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   private collectDescriptionSkillsUpdates(
-    rows: ReadonlyArray<{ id: string; source_id: string; payload: string; expired_at: string | null }>,
+    rows: ReadonlyArray<{
+      id: string;
+      source_id: string;
+      payload: string;
+      expired_at: string | null;
+    }>,
   ): Array<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }> {
     const toUpdate: Array<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }> = [];
     for (const row of rows) {
@@ -1616,9 +1644,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     toUpdate: ReadonlyArray<{ vacancy: UnifiedVacancy; sourceId: string; isExpired: boolean }>,
   ): void {
     if (toUpdate.length === 0) return;
-    const updatePool = this.database.prepare(
-      'UPDATE vacancy_pool SET payload = ? WHERE id = ?',
-    );
+    const updatePool = this.database.prepare('UPDATE vacancy_pool SET payload = ? WHERE id = ?');
     const index = this.prepareIndexUpsert();
     const projection = this.prepareProjectionUpsert();
 
@@ -2214,6 +2240,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 interface WriteTally {
   transactions: number;
   maxTransactionMs: number;
+}
+
+/** Повторная запись площадки не стирает дочитанный текст (hh — B304, Workday — B535). */
+function mergeStoredSnapshot(
+  sourceId: string,
+  previous: UnifiedVacancy,
+  incoming: UnifiedVacancy,
+): UnifiedVacancy {
+  if (sourceId === HH_SEARCH_SOURCE_ID) return mergeHhVacancySnapshot(previous, incoming);
+  if (isWorkdaySource(sourceId)) return mergeWorkdaySnapshot(previous, incoming);
+  return incoming;
 }
 
 export function parseVacancy(payload: string): UnifiedVacancy | undefined {
