@@ -321,8 +321,11 @@ jobs:
           # the document: the head also loads a plain desktop-bootstrap script,
           # and picking that one made the release-stamp check below fail on a
           # perfectly good deployment (B148).
+          # B535: the landing defers the bundle, so its path sits in the entry
+          # loader's data-entry attribute instead of a module script.
           entry_asset="$(sed -nE \
-            's#.*<script[^>]*type="module"[^>]*src="(/assets/[^"]+\.js)".*#\1#p' \
+            -e 's#.*<script[^>]*type="module"[^>]*src="(/assets/[^"]+\.js)".*#\1#p' \
+            -e 's#.*<script[^>]*data-entry="(/assets/[^"]+\.js)".*#\1#p' \
             "$release_index" | head -n 1)"
           case "$entry_asset" in
             /assets/*.js) ;;
@@ -347,12 +350,14 @@ jobs:
           while IFS= read -r sheet_path; do
             [ -n "$sheet_path" ] || continue
             sheet_count=$((sheet_count + 1))
-            sheet="$(mktemp)"
-            curl -fsS --max-time 30 --retry 3 --retry-all-errors "https://openqareer.com$sheet_path" > "$sheet"
-            sheet_bytes="$(wc -c < "$sheet")"
-            rm -f "$sheet"
+            # B535: measure what the route carries — browsers always ask for
+            # gzip, and Caddy compresses CSS — not the decoded size curl sees
+            # without Accept-Encoding.
+            sheet_bytes="$(curl -fsS --max-time 30 --retry 3 --retry-all-errors \
+              -H 'Accept-Encoding: gzip' -o /dev/null -w '%{size_download}' \
+              "https://openqareer.com$sheet_path")"
             if [ "$sheet_bytes" -gt 12288 ]; then
-              printf 'first-paint stylesheet %s is %s bytes, over one 12 KiB part\n' \
+              printf 'first-paint stylesheet %s is %s bytes on the wire, over one 12 KiB part\n' \
                 "$sheet_path" "$sheet_bytes" >&2
               exit 1
             fi

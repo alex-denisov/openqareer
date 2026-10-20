@@ -172,6 +172,15 @@ describe('static release delivery', () => {
     }
   });
 
+  it('answers HEAD on public pages like GET instead of 404 (B535)', async () => {
+    const app = await createStaticApp();
+    for (const url of ['/', '/faq', '/support']) {
+      const response = await app.inject({ method: 'HEAD', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.headers['cache-control'], url).toContain('no-store');
+    }
+  });
+
   it('answers the administrator deep link with the administrator document', async () => {
     const app = await createStaticApp();
 

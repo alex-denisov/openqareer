@@ -360,7 +360,9 @@ function registerEntryFallback(app: FastifyInstance, config: ServerConfig): void
         false,
       );
     }
-    if (request.method === 'GET') {
+    // HEAD answers like GET (Node drops the body): crawlers and link checkers
+    // probe pages with HEAD, and the landing left the static plugin in B535.
+    if (request.method === 'GET' || request.method === 'HEAD') {
       // Each surface has its own prerendered first paint. Serving the
       // workspace document on `/admin` left administrators looking at the
       // candidate cabinet for seconds while the bundle arrived (B089).
