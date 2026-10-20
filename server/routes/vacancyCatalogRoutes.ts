@@ -46,6 +46,7 @@ import {
 } from '../vacancies/vacancyCatalogDocument';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
+import { createTtlMemo, type TtlMemo } from './ttlMemo';
 
 /** Сколько подборок печатать ссылками на странице. */
 
@@ -321,21 +322,30 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
   return sendDocument(reply, renderVacancyDocument(detail));
 }
 
-async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+const SITEMAP_TTL_MS = 15 * 60 * 1000;
+const sitemapMemos = new WeakMap<RouteDeps, TtlMemo<string>>();
+
+function buildSitemap(deps: RouteDeps): string {
   const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
     limit: SITEMAP_URL_LIMIT,
   });
   const listings = deps.multiSourceEngine.getPublicCatalogListings();
-  if (projected && listings) {
-    return reply
-      .header('Content-Type', 'application/xml; charset=utf-8')
-      .header('Cache-Control', 'public, max-age=900')
-      .send(buildCatalogSitemapFromProjection(projected.items, listings));
+  if (projected && listings) return buildCatalogSitemapFromProjection(projected.items, listings);
+  return buildCatalogSitemap(deps.multiSourceEngine.getPublicCatalogClusters());
+}
+
+async function handleSitemap(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  // The pool read costs ~2 s of the event loop on prod; build once per
+  // window, matching the max-age crawlers are told (B535).
+  let memo = sitemapMemos.get(deps);
+  if (!memo) {
+    memo = createTtlMemo<string>(SITEMAP_TTL_MS);
+    sitemapMemos.set(deps, memo);
   }
   return reply
     .header('Content-Type', 'application/xml; charset=utf-8')
     .header('Cache-Control', 'public, max-age=900')
-    .send(buildCatalogSitemap(deps.multiSourceEngine.getPublicCatalogClusters()));
+    .send(memo.get(() => buildSitemap(deps)));
 }
 
 export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDeps): void {
