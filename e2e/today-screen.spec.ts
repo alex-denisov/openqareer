@@ -602,8 +602,8 @@ test.describe('B251 today screen', () => {
     expect(Math.abs((boxes.list?.width ?? 0) - 358)).toBeLessThanOrEqual(1);
     expect(boxes.queueRowHeights).toHaveLength(4);
     expect(
-      boxes.queueRowHeights.every(
-        (height) => [60, 79, 84].some((expected) => Math.abs(height - expected) <= 1),
+      boxes.queueRowHeights.every((height) =>
+        [60, 79, 84].some((expected) => Math.abs(height - expected) <= 1),
       ),
       `queue row heights ${boxes.queueRowHeights.join(',')}`,
     ).toBe(true);
