@@ -57,8 +57,22 @@ export function catalogPlaceOf(entry: CatalogEntry): { slug: string; label: stri
  * rebuilding it from the slug gave «Programmist 1c» and «Qa».
  */
 export function roleLabelFromTitle(title: string): string {
-  const cleaned = title.replace(TITLE_NOISE, ' ').replace(/\s+/gu, ' ').trim();
-  return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  const cleaned = title
+    .replace(/\([^)]*\)|\[[^\]]*\]/gu, ' ')
+    .replace(TITLE_NOISE, ' ')
+    .replace(/\s+/gu, ' ')
+    .replace(/[\s,.;:—–-]+$/u, '')
+    .trim();
+  // «ГЛАВНЫЙ БУХГАЛТЕР» reads as shouting; acronyms like «QA» stay as they are.
+  const words = cleaned
+    .split(' ')
+    .map((word) =>
+      word.length > 3 && word === word.toUpperCase() && /\p{Lu}/u.test(word)
+        ? word.toLowerCase()
+        : word,
+    );
+  const label = words.join(' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 export function catalogRoleOf(
