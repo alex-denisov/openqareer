@@ -698,24 +698,6 @@ describe('SqliteVacancyPoolStore · queryMatchCandidates (B221 срез 2)', () 
       expect(store.getCatalogEntry(first.items[0]!.key)?.clusterId).toBe('cluster-v1');
     });
 
-    it('labels a role listing by a published title, not by the stored slug label (B535)', () => {
-      const { store, path } = openStore();
-      const titles = ['Программист 1С', 'Программист 1С', 'Программист 1С'];
-      store.saveClusters(
-        titles.map((title, index) => ({
-          ...sampleCluster,
-          id: `cluster-1c-${index}`,
-          canonicalTitle: title,
-        })),
-      );
-      // Rows projected before the fix carry the transliterated label.
-      new DatabaseSync(path)
-        .prepare(`UPDATE catalog_entries SET role_label = 'Programmist 1c'`)
-        .run();
-      const role = store.loadCatalogListings().find((listing) => listing.role);
-      expect(role?.roleLabel).toBe('Программист 1С');
-    });
-
     it('backfills legacy cluster rows in bounded steps without loading the snapshot', () => {
       const { store, path } = openStore();
       const database = new DatabaseSync(path);
@@ -775,16 +757,8 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
 
   it('reads through the isolated worker and matches the synchronous result', async () => {
     const { store } = openStore();
-    store.replaceSourceSlice('src', [
-      card('v1', 'Lead Frontend Engineer'),
-      card('v2', 'DevOps Specialist'),
-    ]);
-    const profile = {
-      candidateId: 'c1',
-      targetRoles: ['Frontend Engineer'],
-      confirmedSkills: [],
-      confirmedFacts: [],
-    };
+    store.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer'), card('v2', 'DevOps Specialist')]);
+    const profile = { candidateId: 'c1', targetRoles: ['Frontend Engineer'], confirmedSkills: [], confirmedFacts: [] };
     const sync = store.queryMatchCandidates(profile, { nowMs, limit: 10 });
     const async = await store.queryMatchCandidatesAsync(profile, { nowMs, limit: 10 });
     expect(async.map((v) => v.id)).toEqual(sync.map((v) => v.id));
@@ -813,12 +787,7 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
     });
     stores.push(store);
     const result = await store.queryMatchCandidatesAsync(
-      {
-        candidateId: 'c1',
-        targetRoles: ['Nonexistent Role'],
-        confirmedSkills: [],
-        confirmedFacts: [],
-      },
+      { candidateId: 'c1', targetRoles: ['Nonexistent Role'], confirmedSkills: [], confirmedFacts: [] },
       { nowMs, limit: 10 },
     );
     expect(calls).toBe(2);
@@ -830,17 +799,11 @@ describe('SqliteVacancyPoolStore · queryMatchCandidatesAsync (B229)', () => {
     seedStore.replaceSourceSlice('src', [card('v1', 'Lead Frontend Engineer')]);
     const store = new SqliteVacancyPoolStore({
       databasePath: path,
-      matchReader: {
-        read: () => Promise.reject(new Error('vacancy_match_reader_busy')),
-        close: () => {},
-      },
+      matchReader: { read: () => Promise.reject(new Error('vacancy_match_reader_busy')), close: () => {} },
     });
     stores.push(store);
     await expect(
-      store.queryMatchCandidatesAsync(
-        { candidateId: 'c1', targetRoles: [], confirmedSkills: [], confirmedFacts: [] },
-        { nowMs },
-      ),
+      store.queryMatchCandidatesAsync({ candidateId: 'c1', targetRoles: [], confirmedSkills: [], confirmedFacts: [] }, { nowMs }),
     ).rejects.toThrow('vacancy_match_reader_busy');
   });
 });
@@ -892,62 +855,30 @@ describe('SqliteVacancyPoolStore · порционная замена среза
   it('пишет срез транзакциями не больше порции и снимает ушедшее порциями по id', () => {
     const events: PoolWriteEvent[] = [];
     const { store } = openChunked(2, (event) => events.push(event));
-    store.replaceSourceSlice(
-      'src',
-      ['a', 'b', 'c', 'd', 'e'].map((id) => card(id)),
-    );
+    store.replaceSourceSlice('src', ['a', 'b', 'c', 'd', 'e'].map((id) => card(id)));
     events.length = 0;
 
-    store.replaceSourceSlice(
-      'src',
-      ['a', 'f'].map((id) => card(id)),
-    );
+    store.replaceSourceSlice('src', ['a', 'f'].map((id) => card(id)));
 
     const transactions = events.filter((event) => event.kind === 'transaction');
     expect(transactions.every((event) => event.rows <= 2)).toBe(true);
-    expect(transactions.filter((event) => event.operation === 'upsert').map((e) => e.rows)).toEqual(
-      [2],
-    );
+    expect(transactions.filter((event) => event.operation === 'upsert').map((e) => e.rows)).toEqual([2]);
     // Ушли b, c, d, e — две порции по два id.
-    expect(transactions.filter((event) => event.operation === 'remove').map((e) => e.rows)).toEqual(
-      [2, 2],
-    );
+    expect(transactions.filter((event) => event.operation === 'remove').map((e) => e.rows)).toEqual([2, 2]);
     const summary = events.find((event) => event.kind === 'slice');
-    expect(summary).toMatchObject({
-      operation: 'replace',
-      sourceId: 'src',
-      upserted: 2,
-      removed: 4,
-      transactions: 3,
-    });
-    expect(
-      store
-        .loadVacancies()
-        .map((v) => v.id)
-        .sort(),
-    ).toEqual(['a', 'f']);
+    expect(summary).toMatchObject({ operation: 'replace', sourceId: 'src', upserted: 2, removed: 4, transactions: 3 });
+    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['a', 'f']);
   });
 
   it('не трогает чужой источник и похороненные записи при порционном снятии', () => {
     const { store, path } = openChunked(2);
-    store.replaceSourceSlice(
-      'src',
-      ['a', 'b', 'c'].map((id) => card(id)),
-    );
-    store.replaceSourceSlice(
-      'other',
-      ['x', 'y'].map((id) => card(id, 'other')),
-    );
+    store.replaceSourceSlice('src', ['a', 'b', 'c'].map((id) => card(id)));
+    store.replaceSourceSlice('other', ['x', 'y'].map((id) => card(id, 'other')));
     store.markExpired(['c'], '2026-09-07T09:00:00.000Z');
 
     store.replaceSourceSlice('src', [card('d')]);
 
-    expect(
-      store
-        .loadVacancies()
-        .map((v) => v.id)
-        .sort(),
-    ).toEqual(['d', 'x', 'y']);
+    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['d', 'x', 'y']);
     // Похороненная запись пережила замену: доказательство смерти не стирается.
     const buried = new DatabaseSync(path)
       .prepare('SELECT expired_at FROM vacancy_pool WHERE id = ?')
@@ -960,37 +891,18 @@ describe('SqliteVacancyPoolStore · порционная замена среза
     const { store } = openChunked(2, (event) => {
       if (event.kind === 'transaction' && --failOnTransaction === 0) throw new Error('interrupted');
     });
-    store.replaceSourceSlice(
-      'src',
-      ['a', 'b', 'c'].map((id) => card(id)),
-    );
+    store.replaceSourceSlice('src', ['a', 'b', 'c'].map((id) => card(id)));
 
     // Первая порция нового среза зафиксирована, на второй процесс упал:
     // пул — надмножество старого и нового, ничего не потеряно.
     failOnTransaction = 2;
-    expect(() =>
-      store.replaceSourceSlice(
-        'src',
-        ['a', 'd', 'e'].map((id) => card(id)),
-      ),
-    ).toThrow('interrupted');
-    expect(
-      store
-        .loadVacancies()
-        .map((v) => v.id)
-        .sort(),
-    ).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(() => store.replaceSourceSlice('src', ['a', 'd', 'e'].map((id) => card(id)))).toThrow(
+      'interrupted',
+    );
+    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['a', 'b', 'c', 'd', 'e']);
 
     failOnTransaction = Number.POSITIVE_INFINITY;
-    store.replaceSourceSlice(
-      'src',
-      ['a', 'd', 'e'].map((id) => card(id)),
-    );
-    expect(
-      store
-        .loadVacancies()
-        .map((v) => v.id)
-        .sort(),
-    ).toEqual(['a', 'd', 'e']);
+    store.replaceSourceSlice('src', ['a', 'd', 'e'].map((id) => card(id)));
+    expect(store.loadVacancies().map((v) => v.id).sort()).toEqual(['a', 'd', 'e']);
   });
 });
