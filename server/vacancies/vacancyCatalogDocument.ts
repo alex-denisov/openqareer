@@ -68,6 +68,11 @@ export const CATALOG_STYLESHEET_PATH = `/assets/catalog-${styleFingerprint()}.cs
 
 export { CATALOG_STYLE };
 
+/** og/twitter title without the site suffix: og:site_name already names it. */
+function shareTitle(title: string): string {
+  return title.replace(/\s+[·|]\s+openqareer$/u, '');
+}
+
 function head(options: {
   title: string;
   description: string;
@@ -94,16 +99,16 @@ function head(options: {
       : '',
     '<link rel="icon" href="/favicon.svg" type="image/svg+xml">',
     `<meta property="og:type" content="${options.ogType ?? 'website'}">`,
-    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover-3.jpg">`,
-    '<meta property="og:image:width" content="600">',
-    '<meta property="og:image:height" content="315">',
+    `<meta property="og:image" content="${SITE_ORIGIN}/og-cover-4.png">`,
+    '<meta property="og:image:width" content="1200">',
+    '<meta property="og:image:height" content="630">',
     '<meta property="og:locale" content="ru_RU">',
     '<meta name="twitter:card" content="summary_large_image">',
-    `<meta name="twitter:title" content="${escapeHtml(options.title)}">`,
+    `<meta name="twitter:title" content="${escapeHtml(shareTitle(options.title))}">`,
     `<meta name="twitter:description" content="${escapeHtml(options.description)}">`,
-    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover-3.jpg">`,
+    `<meta name="twitter:image" content="${SITE_ORIGIN}/og-cover-4.png">`,
     '<meta property="og:site_name" content="openqareer">',
-    `<meta property="og:title" content="${escapeHtml(options.title)}">`,
+    `<meta property="og:title" content="${escapeHtml(shareTitle(options.title))}">`,
     `<meta property="og:description" content="${escapeHtml(options.description)}">`,
     `<meta property="og:url" content="${SITE_ORIGIN}${escapeHtml(options.canonicalPath)}">`,
     `<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`,

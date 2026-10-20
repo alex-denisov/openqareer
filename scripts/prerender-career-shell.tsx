@@ -79,7 +79,10 @@ function pageHead(
       /<meta property="og:url" content="[^"]*">/u,
       `<meta property="og:url" content="${url}">`,
     )
-    .replace(/(<meta (?:property|name)="(?:og|twitter):title" content=")[^"]*/gu, `$1${title}`)
+    .replace(
+      /(<meta (?:property|name)="(?:og|twitter):title" content=")[^"]*/gu,
+      `$1${title.replace(/\s+(?:·|\||&amp;#124;)\s+openqareer$/u, '')}`,
+    )
     .replace(
       /(<meta (?:property|name)="(?:og|twitter):description" content=")[^"]*/gu,
       `$1${description}`,
