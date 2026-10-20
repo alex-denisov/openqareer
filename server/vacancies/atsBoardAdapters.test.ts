@@ -52,9 +52,7 @@ describe('ats board source id', () => {
     expect(atsBoardEndpoint('pinpoint', 'pinpoint')).toBe(
       'https://pinpoint.pinpointhq.com/postings.json',
     );
-    expect(atsBoardEndpoint('personio', 'personio')).toBe(
-      'https://personio.jobs.personio.de/xml',
-    );
+    expect(atsBoardEndpoint('personio', 'personio')).toBe('https://personio.jobs.personio.de/xml');
   });
 
   it('разрешает SmartRecruiters, Breezy HR и Pinpoint в контрактах', () => {
@@ -147,6 +145,37 @@ describe('ats board adapters', () => {
     });
     expect(vacancy?.salary).toEqual({ from: 90000, to: 120000, currency: 'AUD' });
     expect(vacancy?.publishedAt).toBe(new Date(1746452423978).toISOString());
+  });
+
+  it('собирает текст Lever целиком: вступление, списки и заключение (B535)', () => {
+    const [vacancy] = normalizeAtsBoard(
+      'ats-lever-crypto',
+      [
+        {
+          id: 'd0b3e43e-92e6-42b3-8b6b-19c4902c611d',
+          text: 'Treasury Analyst',
+          categories: { location: 'Singapore' },
+          descriptionPlain: 'The F&A team optimizes our finances.',
+          lists: [
+            {
+              text: 'Responsibilities',
+              content: '<li>Run daily cash positioning</li><li>Own FX hedging</li>',
+            },
+            { text: 'Requirements', content: '<li>Five years in treasury</li>' },
+          ],
+          additionalPlain: 'Equal opportunity employer.',
+          createdAt: 1746452423978,
+          hostedUrl: 'https://jobs.lever.co/crypto/d0b3e43e-92e6-42b3-8b6b-19c4902c611d',
+        },
+      ],
+      { observedAt: OBSERVED_AT, sourceName: 'Crypto.com' },
+    );
+    const description = vacancy?.description ?? '';
+    expect(description.indexOf('F&A team')).toBeLessThan(description.indexOf('Responsibilities'));
+    expect(description).toContain('Own FX hedging');
+    expect(description).toContain('Requirements');
+    expect(description).toContain('Five years in treasury');
+    expect(description.trimEnd().endsWith('Equal opportunity employer.')).toBe(true);
   });
 
   it('читает запись Ashby с настоящей датой публикации', () => {

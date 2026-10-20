@@ -22,6 +22,8 @@ import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
  *   карточек разрешил владелец 20.10 со случайным темпом 10–20 с между запросами (B535, к
  *   решению B218 о поиске). Учётки пула не участвуют: это гостевой GET.
  *
+ * - Apple: страница вакансии, данные роутера (см. `apple`).
+ *
  * Нет здесь: Himalayas (страница
  * отвечает 403 боту, а текст уже несёт JSON-источник `src-himalayas-api`),
  * hh (текст дочитывается по запросу, B304).
@@ -190,10 +192,49 @@ const linkedin: DetailTextSource = {
   },
 };
 
+const APPLE_DATA = /__staticRouterHydrationData\s*=\s*JSON\.parse\(("(?:[^"\\]|\\.)*")\)/;
+const APPLE_PARTS = [
+  'jobSummary',
+  'description',
+  'responsibilities',
+  'minimumQualifications',
+  'preferredQualifications',
+] as const;
+
+/**
+ * Apple: список отдаёт только `jobSummary`; страница вакансии несёт весь текст
+ * в данных роутера `loaderData.jobDetails.jobsData`. robots.txt у
+ * jobs.apple.com нет (замер 20.10).
+ */
+const apple: DetailTextSource = {
+  format: 'html',
+  detailUrl: (_sourceId, vacancy) => {
+    const url = httpsUrl(vacancy.url, 'jobs.apple.com');
+    return url && /^\/[a-z]{2}-[a-z]{2}\/details\/[A-Za-z0-9-]+(\/[^/]*)?$/.test(url.pathname)
+      ? `${url.origin}${url.pathname}`
+      : undefined;
+  },
+  readText: (payload) => {
+    const literal = typeof payload === 'string' ? payload.match(APPLE_DATA)?.[1] : undefined;
+    if (!literal) return '';
+    let data: unknown;
+    try {
+      data = JSON.parse(JSON.parse(literal) as string);
+    } catch {
+      return '';
+    }
+    const job = record(record(record(record(data).loaderData).jobDetails).jobsData);
+    return APPLE_PARTS.map((key) => htmlText(text(job[key])))
+      .filter(Boolean)
+      .join('\n\n');
+  },
+};
+
 const BY_ID: Readonly<Record<string, DetailTextSource>> = {
   'src-microsoft-careers': eightfoldPcsx('apply.careers.microsoft.com', 'microsoft.com'),
   'src-qualcomm-careers': eightfoldPcsx('careers.qualcomm.com', 'qualcomm.com'),
   'src-netflix': netflix,
+  'src-apple-jobs': apple,
   'src-linkedin-guest': linkedin,
   'src-habr-career': jsonLdPage('career.habr.com', /^\/vacancies\/\d+\/?$/),
   'src-yc-work-at-startup': jsonLdPage(

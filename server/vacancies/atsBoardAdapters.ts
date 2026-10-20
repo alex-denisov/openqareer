@@ -1,4 +1,5 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
+import { htmlToFeedText } from '../connectors/feedText';
 import {
   asArray,
   buildJsonVacancy,
@@ -15,6 +16,27 @@ import {
   type JsonAdapterContext,
   type JsonRecord,
 } from './jsonVacancyRecord';
+
+/**
+ * Текст Lever лежит в трёх местах: вступление, списки («Requirements»,
+ * «Responsibilities» — HTML) и заключение. Раньше бралось только вступление,
+ * и требования терялись (B535).
+ */
+function leverText(job: JsonRecord): string {
+  const lists = (asArray(job.lists) ?? []).map((item) => {
+    const list = record(item);
+    const body = htmlToFeedText(text(list.content)).trim();
+    return body ? [text(list.text).trim(), body].filter(Boolean).join('\n') : '';
+  });
+  const parts = [
+    text(job.descriptionPlain) || htmlToFeedText(text(job.description)),
+    ...lists,
+    text(job.additionalPlain) || htmlToFeedText(text(job.additional)),
+  ]
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length ? parts.join('\n\n') : text(job.text);
+}
 
 /**
  * B202 — вакансии прямо с карьерной доски работодателя.
@@ -254,7 +276,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         company: employer('', context, board),
         location: text(categories.location) || undefined,
         isRemote: text(job.workplaceType).toLowerCase() === 'remote',
-        description: text(job.descriptionPlain) || text(job.description) || text(job.text),
+        description: leverText(job),
         skills: [],
         employmentType: text(categories.commitment) || undefined,
         salary: rangeSalary(job.salaryRange),
@@ -291,11 +313,9 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
     const accountName = text(account.name);
     return listOf(payload, (value) => asArray(record(value).jobs)).map((item) => {
       const job = record(item);
-      const descParts = [
-        text(job.description),
-        text(job.requirements),
-        text(job.benefits),
-      ].filter(Boolean);
+      const descParts = [text(job.description), text(job.requirements), text(job.benefits)].filter(
+        Boolean,
+      );
       const description = descParts.join('\n\n') || text(job.title);
       return buildJsonVacancy({
         sourceId,
@@ -463,9 +483,10 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         isRemote: offices.some((office) => /remote|remotely|удалён/i.test(office)),
         description: description || title,
         skills: [],
-        employmentType: [xmlTag(position, 'employmentType'), xmlTag(position, 'schedule')]
-          .filter(Boolean)
-          .join(' · ') || undefined,
+        employmentType:
+          [xmlTag(position, 'employmentType'), xmlTag(position, 'schedule')]
+            .filter(Boolean)
+            .join(' · ') || undefined,
         experienceLevel: xmlTag(position, 'seniority') || undefined,
         url: id ? `https://${board}.jobs.personio.de/job/${id}` : '',
         publishedAt: fromIso(xmlTag(position, 'createdAt')),

@@ -375,3 +375,43 @@ describe('detail backfill pacing (B535)', () => {
     expect(asked[1]).toBe(asked[0]);
   });
 });
+
+describe('Apple job text (B535)', () => {
+  const apple = detailTextSourceFor('src-apple-jobs')!;
+  const link = 'https://jobs.apple.com/en-us/details/200646270/display-architect';
+  const page = (jobsData: unknown) =>
+    `<script>window.__staticRouterHydrationData = JSON.parse(${JSON.stringify(
+      JSON.stringify({ loaderData: { jobDetails: { jobsData } } }),
+    )});</script>`;
+
+  it('reads the public details page of the same position', () => {
+    expect(apple.format).toBe('html');
+    expect(apple.detailUrl('src-apple-jobs', { url: link })).toBe(link);
+    expect(
+      apple.detailUrl('src-apple-jobs', { url: 'https://evil.com/en-us/details/1/x' }),
+    ).toBeUndefined();
+  });
+
+  it('joins summary, description, responsibilities and qualifications', () => {
+    const text = apple.readText(
+      page({
+        jobSummary: 'Bring new display features to life.',
+        description: 'You will own the display <b>architecture</b>.',
+        responsibilities: 'Drive cross-functional reviews.',
+        minimumQualifications: '<ul><li>BS in EE</li></ul>',
+        preferredQualifications: 'Swift experience.',
+      }),
+    );
+    for (const part of [
+      'Bring new display',
+      'display architecture',
+      'cross-functional',
+      'BS in EE',
+      'Swift experience',
+    ]) {
+      expect(text).toContain(part);
+    }
+    expect(text.indexOf('Bring new display')).toBeLessThan(text.indexOf('BS in EE'));
+    expect(apple.readText('<html>no data</html>')).toBe('');
+  });
+});
