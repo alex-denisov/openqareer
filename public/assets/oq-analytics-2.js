@@ -20,14 +20,14 @@
   function storageGet(key) {
     try {
       return window.localStorage.getItem(key);
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
   }
   function storageSet(key, value) {
     try {
       window.localStorage.setItem(key, value);
-    } catch (error) {
+    } catch (_error) {
       // Хранилище недоступно (приватный режим): выбор действует до перезагрузки.
     }
   }
@@ -58,7 +58,7 @@
       return (
         /^(Europe|Atlantic|Asia|Africa)\//.test(zone) && GDPR_ZONES.split(' ').indexOf(city) !== -1
       );
-    } catch (error) {
+    } catch (_error) {
       return false;
     }
   }
@@ -74,7 +74,7 @@
       if (fresh && typeof saved.ym === 'boolean' && typeof saved.ga === 'boolean') {
         return { ym: saved.ym, ga: saved.ga };
       }
-    } catch (error) {
+    } catch (_error) {
       return null;
     }
     return null;

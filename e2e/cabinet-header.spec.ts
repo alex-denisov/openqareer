@@ -33,11 +33,11 @@ test('B213: signed-in public header stays inside the viewport', async ({ page },
   await page.goto('/cabinet', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#root')).not.toHaveAttribute('aria-busy');
 
-  const headerActions = page.locator('.site-header-actions');
+  const headerActions = page.locator('.ps-top-actions');
   await expect(headerActions.getByRole('link', { name: 'Открыть кабинет' })).toBeVisible();
 
   const layout = await page.evaluate(() => {
-    const actions = document.querySelector('.site-header-actions')?.getBoundingClientRect();
+    const actions = document.querySelector('.ps-top-actions')?.getBoundingClientRect();
     return {
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
       actionsRight: actions?.right ?? Number.POSITIVE_INFINITY,
@@ -72,7 +72,7 @@ test('B213: signed-in public header stays inside the viewport', async ({ page },
 
   await page.screenshot({ path: testInfo.outputPath('header.png') });
 
-  const accessibility = await new AxeBuilder({ page }).include('.site-header').analyze();
+  const accessibility = await new AxeBuilder({ page }).include('.ps-top').analyze();
   expect(accessibility.violations.filter((violation) => violation.impact === 'critical')).toEqual(
     [],
   );

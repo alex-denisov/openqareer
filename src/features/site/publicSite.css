@@ -70,15 +70,16 @@
 }
 .ps-skip {
   position: absolute;
-  left: -9999px;
+  left: 16px;
   top: 8px;
+  transform: translateY(-200%);
   z-index: 20;
   padding: 10px 14px;
   background: var(--ps-surface);
   border-radius: 8px;
 }
 .ps-skip:focus {
-  left: 16px;
+  transform: none;
 }
 .ps-wrap {
   max-width: 1180px;

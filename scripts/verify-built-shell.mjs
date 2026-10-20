@@ -3,6 +3,9 @@ import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
 import { preview } from 'vite';
 
+// B535: hero of the v18 landing.
+const LANDING_HEADING = /Ваш опыт стоит больше/u;
+
 const BROWSER_WALK_MESSAGES = [
   {
     id: 'message-long-user',
@@ -1238,9 +1241,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await page.goto(`${baseUrl}?built-shell=${viewport.name}`, {
     waitUntil: 'commit',
   });
-  const landingHeading = page.getByRole('heading', {
-    name: 'Поиск работы с опорой на проверенные факты',
-  });
+  const landingHeading = page.getByRole('heading', { level: 1, name: LANDING_HEADING });
   await landingHeading.waitFor({ state: 'visible', timeout: 2_000 });
   const shellMs = Math.round(performance.now() - startedAt);
 
@@ -1254,9 +1255,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
     `${viewport.name}: landing links are inert before hydration`,
   );
   assert(
-    (await page
-      .getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' })
-      .count()) === 1,
+    (await page.getByRole('heading', { level: 1, name: LANDING_HEADING }).count()) === 1,
     `${viewport.name}: landing page heading is absent from initial HTML`,
   );
 
@@ -1569,7 +1568,7 @@ async function verifyViewport(browser, baseUrl, viewport) {
   const signOutDialog = page.getByRole('alertdialog', { name: 'Выйти из аккаунта?' });
   await signOutDialog.getByRole('button', { name: 'Выйти из аккаунта' }).click();
   await logoutResponse;
-  await page.getByRole('heading', { name: 'Поиск работы с опорой на проверенные факты' }).waitFor();
+  await page.getByRole('heading', { level: 1, name: LANDING_HEADING }).waitFor();
   assert(
     (await page.locator('.career-account-container').count()) === 0,
     `${viewport.name}: account screen remained open after logout`,
