@@ -42,6 +42,10 @@ export interface TodayQueueItem {
   readonly clusterId?: string;
   readonly title: string;
   readonly company: string | null;
+  /** Рекрутер или собеседник из карточки отклика: напоминание называет человека (B542). */
+  readonly contactName?: string;
+  /** Отклик уже прошёл интервью: напоминание просит итог, а не ответ. */
+  readonly afterInterview?: boolean;
   /** Короткая причина строкой — «6 дней без ответа», «сегодня», «через 2 дня». `null` — нечего честно сказать. */
   readonly eyebrow: string | null;
   readonly dueAt: string | null;
@@ -88,9 +92,32 @@ export interface TodayFollowUp {
   readonly status: TodayFollowUpStatus;
 }
 
+/** Событие компании по отклику с прошлого визита (из уведомлений кандидата). */
+export interface TodayChangeEvent {
+  readonly kind: 'letter_opened' | 'employer_reply';
+  readonly applicationId: string;
+  readonly at: string;
+}
+
+/** Строка полосы «С ДД.ММ, ЧЧ:ММ: …» (макет 1); первая — цель «Смотреть». */
+export type TodayChange =
+  | {
+      readonly kind: 'vacancies';
+      readonly count: number;
+      readonly role: string | null;
+      readonly at: string;
+    }
+  | {
+      readonly kind: TodayChangeEvent['kind'];
+      readonly company: string;
+      readonly applicationId: string;
+      readonly at: string;
+    };
+
 export interface TodaySinceLastVisit {
   readonly since: string | null;
   readonly items: readonly string[];
+  readonly changes: readonly TodayChange[];
   readonly newVacanciesCount: number;
   readonly applicationsWaitingOver7Days: number;
   readonly nearestInterview: TodayNextInterview | null;
@@ -202,6 +229,12 @@ export interface BuildTodaySnapshotInput {
   readonly shortlist?: readonly TodayNewVacancy[];
   /** Черновики постов LinkedIn со статусом «черновик»: публикует только кандидат. */
   readonly pendingLinkedinPosts?: readonly TodayPendingPost[];
+  /** Контакты откликов: id отклика → «Имя Фамилия» (B542). */
+  readonly contacts?: ReadonlyMap<string, string>;
+  /** События компаний с прошлого визита, из уведомлений кандидата. */
+  readonly changeEvents?: readonly TodayChangeEvent[];
+  /** Кандидат скрыл полосу изменений: она вернётся только с более новым событием. */
+  readonly changesDismissedAt?: string | null;
 }
 
 export interface TodayPendingPost {
@@ -487,18 +520,13 @@ export function buildTodaySnapshot(input: BuildTodaySnapshotInput): TodaySnapsho
     },
     queue: buildQueue(
       queueApplications,
+      input.contacts ?? new Map(),
       input.newVacancies,
       shortlistToReview(input),
       input.pendingLinkedinPosts ?? [],
     ),
     followUps: buildFollowUps(input.applications),
-    sinceLastVisit: {
-      since: input.since,
-      items: sinceLastVisitItemsOf(input),
-      newVacanciesCount: input.newVacancies?.length ?? 0,
-      applicationsWaitingOver7Days,
-      nearestInterview,
-    },
+    sinceLastVisit: sinceLastVisitOf(input, applicationsWaitingOver7Days, nearestInterview),
     vacanciesPending: input.newVacancies === undefined,
     momentum: computeSearchMomentum(input.applications, now),
     funnel: computeTodayFunnel(input.applications, now),
@@ -530,6 +558,7 @@ function postQueueItem(post: TodayPendingPost): TodayQueueItem {
 
 function buildQueue(
   waitingApplications: readonly ApplicationView[],
+  contacts: ReadonlyMap<string, string>,
   newVacancies: BuildTodaySnapshotInput['newVacancies'],
   shortlist: readonly TodayNewVacancy[],
   pendingPosts: readonly TodayPendingPost[],
@@ -543,6 +572,7 @@ function buildQueue(
       applicationId: application.id,
       title: application.vacancy?.title ?? '',
       company: companyOf(application),
+      ...followUpContact(application, contacts),
       eyebrow: eyebrowFor(application),
       dueAt: application.followUp?.dueAt ?? application.nearestInterview?.scheduledAt ?? null,
       fit: null,
@@ -612,6 +642,21 @@ function buildFollowUps(applications: readonly ApplicationView[]): TodayFollowUp
     }));
 }
 
+function sinceLastVisitOf(
+  input: BuildTodaySnapshotInput,
+  applicationsWaitingOver7Days: number,
+  nearestInterview: TodayNextInterview | null,
+): TodaySinceLastVisit {
+  return {
+    since: input.since,
+    items: sinceLastVisitItemsOf(input),
+    changes: changesSinceLastVisit(input),
+    newVacanciesCount: input.newVacancies?.length ?? 0,
+    applicationsWaitingOver7Days,
+    nearestInterview,
+  };
+}
+
 function sinceLastVisitItemsOf(input: BuildTodaySnapshotInput): string[] {
   const items: string[] = [];
   const freshCount = input.newVacancies?.length ?? 0;
@@ -634,4 +679,42 @@ function sinceLastVisitItemsOf(input: BuildTodaySnapshotInput): string[] {
     );
   }
   return items;
+}
+
+function followUpContact(
+  application: ApplicationView,
+  contacts: ReadonlyMap<string, string>,
+): Pick<TodayQueueItem, 'contactName' | 'afterInterview'> {
+  const contactName = contacts.get(application.id)?.trim();
+  if (queueKindFor(application) !== 'follow_up' || !contactName) return {};
+  const interviewed =
+    application.stage === 'interview' ||
+    (application.reachedStages ?? []).includes('interview') ||
+    (application.interviewScheduledAt ?? []).length > 0;
+  return { contactName, ...(interviewed ? { afterInterview: true } : {}) };
+}
+
+/** Полоса изменений (B542): новые подходящие вакансии и события компаний с прошлого визита. */
+function changesSinceLastVisit(input: BuildTodaySnapshotInput): TodayChange[] {
+  if (!input.since) return [];
+  const fresh = input.newVacancies ?? [];
+  const latestVacancyAt = fresh.reduce<string | null>(
+    (latest, vacancy) =>
+      latest === null || vacancy.firstObservedAt > latest ? vacancy.firstObservedAt : latest,
+    null,
+  );
+  const vacancies: TodayChange[] = latestVacancyAt
+    ? [{ kind: 'vacancies', count: fresh.length, role: input.campaignRole, at: latestVacancyAt }]
+    : [];
+  const byId = new Map(input.applications.map((application) => [application.id, application]));
+  const events: TodayChange[] = [...(input.changeEvents ?? [])]
+    .sort((left, right) => left.at.localeCompare(right.at))
+    .flatMap((event) => {
+      const application = byId.get(event.applicationId);
+      const company = application ? companyOf(application) : null;
+      return company ? [{ ...event, company }] : [];
+    });
+  const changes = [...vacancies, ...events];
+  const dismissedAt = input.changesDismissedAt;
+  return dismissedAt && changes.every((change) => change.at <= dismissedAt) ? [] : changes;
 }

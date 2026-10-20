@@ -1,6 +1,7 @@
 import { currentTodayDecision, isTodayActionDeferred } from '../../shared/todayDecision';
 import { buildTodayTeamSizeDecision } from '../domain/todayTeamSizeDecision';
 import { registerTodayDecisionRoutes } from './todayDecisionRoutes';
+import { registerTodayChangesRoutes } from './todayChangesRoutes';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -21,7 +22,10 @@ import { registerStarStoryRoutes } from './starStoryRoutes';
 import { registerInterviewSimulatorRoutes } from './interviewSimulatorRoutes';
 import { registerVacancySkipRoutes } from './vacancySkipRoutes';
 import { registerCandidateAutomationRoutes } from './candidateAutomationRoutes';
-import { recordNotificationFromSource } from './notificationRepositoryAccess';
+import {
+  notificationRepositoryFor,
+  recordNotificationFromSource,
+} from './notificationRepositoryAccess';
 import { readCampaign } from './campaignContext';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
@@ -399,6 +403,16 @@ async function readTodaySnapshot(
       since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
     shortlist: newVacancies,
     pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
+    contacts: candidateStore.listApplicationContacts?.(candidateId),
+    changeEvents:
+      since === null
+        ? []
+        : notificationRepositoryFor(deps).listCompanyEventsSince(
+            candidateId,
+            since,
+            now.toISOString(),
+          ),
+    changesDismissedAt: candidateStore.getCandidateWorkspace(candidateId)?.todayChangesDismissedAt,
     now: now.toISOString(),
   });
   recordFreshVacancyNotification(deps, request, candidateId, freshNewVacancies);
@@ -534,6 +548,7 @@ export function registerApplicationRoutes(app: FastifyInstance, deps: RouteDeps)
     withDeps(deps, handleRecordVisit),
   );
   registerTodayDecisionRoutes(app, deps);
+  registerTodayChangesRoutes(app, deps);
   app.get('/api/v1/candidate/today', withDeps(deps, handleToday));
   registerApplicationMaterialsRoutes(app, deps);
   registerApplicationInterviewRoutes(app, deps);

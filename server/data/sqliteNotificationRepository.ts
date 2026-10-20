@@ -181,6 +181,31 @@ export class SqliteNotificationRepository {
     };
   }
 
+  /** B542: письмо открыто и ответ работодателя по откликам после `since`, для полосы «Сегодня». */
+  listCompanyEventsSince(
+    candidateId: string,
+    since: string,
+    now = new Date().toISOString(),
+  ): { kind: 'letter_opened' | 'employer_reply'; applicationId: string; at: string }[] {
+    const rows = this.database
+      .prepare(
+        `SELECT event_kind, source_id, created_at FROM candidate_notifications
+         WHERE candidate_id = ? AND source_type = 'application' AND created_at > ? AND expires_at > ?
+           AND event_kind IN ('employer_opened_letter', 'employer_reply')
+         ORDER BY created_at, id LIMIT 50`,
+      )
+      .all(candidateId, since, now) as unknown as {
+      event_kind: string;
+      source_id: string;
+      created_at: string;
+    }[];
+    return rows.map((row) => ({
+      kind: row.event_kind === 'employer_reply' ? 'employer_reply' : 'letter_opened',
+      applicationId: row.source_id,
+      at: row.created_at,
+    }));
+  }
+
   markRead(candidateId: string, notificationId: string, now = new Date().toISOString()): boolean {
     this.deleteExpired(now);
     const result = this.database

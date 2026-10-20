@@ -54,6 +54,8 @@ export const candidateWorkspaceSchema = z
     /** Candidate-local visit marks used by the Today digest; kept with the encrypted workspace JSON. */
     lastVisitedAt: z.string().datetime().optional(),
     previousVisitedAt: z.string().datetime().optional(),
+    /** B542: «Скрыть уведомление» у полосы изменений «Сегодня»; вернётся с более новым событием. */
+    todayChangesDismissedAt: z.string().datetime().optional(),
     /**
      * The candidate's own explicit choice of what the matcher searches for —
      * "кампания" (B247). Absent means the candidate has not chosen yet, and

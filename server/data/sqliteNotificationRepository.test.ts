@@ -165,3 +165,29 @@ describe('SQLite candidate notification repository', () => {
     expect(reopened.getTelegramLinkStatus('candidate-a').connected).toBe(true);
   });
 });
+
+describe('company events since the last visit (B542)', () => {
+  it('returns opened letters and replies on applications after the given time', () => {
+    const repository = createRepository();
+    repository.recordEvent('candidate-a', event('old', 'employer_reply', '2026-10-09T10:00:00.000Z'), NOW);
+    repository.recordEvent('candidate-a', event('new', 'employer_reply', '2026-10-10T10:00:00.000Z'), NOW);
+    repository.recordEvent('candidate-a', event('mail', 'email_approval', '2026-10-10T11:00:00.000Z'), NOW);
+    repository.recordEvent(
+      'candidate-a',
+      {
+        idempotencyKey: 'opened',
+        kind: 'employer_opened_letter',
+        sourceType: 'application',
+        sourceId: 'app-1',
+        createdAt: '2026-10-10T12:00:00.000Z',
+      },
+      NOW,
+    );
+    repository.recordEvent('candidate-b', event('other', 'employer_reply', '2026-10-10T10:00:00.000Z'), NOW);
+
+    expect(repository.listCompanyEventsSince('candidate-a', '2026-10-09T12:00:00.000Z', NOW)).toEqual([
+      { kind: 'employer_reply', applicationId: 'source-new', at: '2026-10-10T10:00:00.000Z' },
+      { kind: 'letter_opened', applicationId: 'app-1', at: '2026-10-10T12:00:00.000Z' },
+    ]);
+  });
+});

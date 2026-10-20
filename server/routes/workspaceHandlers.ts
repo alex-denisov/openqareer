@@ -53,6 +53,7 @@ function serverOwnedWorkspaceFields(
     | 'campaign'
     | 'lastVisitedAt'
     | 'previousVisitedAt'
+    | 'todayChangesDismissedAt'
     | 'todayDecisionSelection'
     | 'todayActionDeferral'
   >
@@ -64,5 +65,8 @@ function serverOwnedWorkspaceFields(
     ...(stored.campaign ? { campaign: stored.campaign } : {}),
     ...(stored.lastVisitedAt ? { lastVisitedAt: stored.lastVisitedAt } : {}),
     ...(stored.previousVisitedAt ? { previousVisitedAt: stored.previousVisitedAt } : {}),
+    ...(stored.todayChangesDismissedAt
+      ? { todayChangesDismissedAt: stored.todayChangesDismissedAt }
+      : {}),
   };
 }

@@ -720,3 +720,90 @@ describe('LinkedIn posts waiting for approval in the queue (block 0 mockup)', ()
     });
   });
 });
+
+describe('B542: reminder names the person and the changes strip comes from events', () => {
+  const overdue = application({
+    id: 'app-vector',
+    vacancy: { title: 'Head of Engineering', company: 'Вектор Банк', url: '', source: '' },
+    followUp: { urgency: 'overdue', daysSinceContact: 6, dueAt: '2026-09-22T00:00:00.000Z' },
+  } as Partial<ApplicationView>);
+
+  it('puts the application contact and the interview topic on the follow-up row', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      applications: [
+        { ...overdue, reachedStages: ['applied', 'interview'] } as ApplicationView,
+        application({ id: 'app-other' }),
+      ],
+      newVacancies: [],
+      contacts: new Map([['app-vector', 'Мария Орлова']]),
+    });
+    const row = snapshot.queue.find((item) => item.applicationId === 'app-vector');
+    expect(row).toMatchObject({
+      kind: 'follow_up',
+      contactName: 'Мария Орлова',
+      afterInterview: true,
+    });
+    expect(snapshot.queue.find((item) => item.applicationId === 'app-other')).not.toHaveProperty(
+      'contactName',
+    );
+  });
+
+  it('builds the changes from fresh vacancies and employer events since the last visit', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      campaignRole: 'Head of Engineering',
+      applications: [overdue],
+      newVacancies: [
+        newVacancy(),
+        newVacancy({ clusterId: 'c-2', firstObservedAt: '2026-09-24T09:00:00.000Z' }),
+      ],
+      changeEvents: [
+        { kind: 'letter_opened', applicationId: 'app-vector', at: '2026-09-24T10:00:00.000Z' },
+        { kind: 'letter_opened', applicationId: 'app-missing', at: '2026-09-24T10:00:00.000Z' },
+      ],
+    });
+    expect(snapshot.sinceLastVisit.changes).toEqual([
+      { kind: 'vacancies', count: 2, role: 'Head of Engineering', at: '2026-09-24T09:00:00.000Z' },
+      {
+        kind: 'letter_opened',
+        company: 'Вектор Банк',
+        applicationId: 'app-vector',
+        at: '2026-09-24T10:00:00.000Z',
+      },
+    ]);
+  });
+
+  it('hides the changes after dismissal until a newer event arrives', () => {
+    const input = {
+      ...BASE_INPUT,
+      applications: [overdue],
+      newVacancies: [],
+      changeEvents: [
+        {
+          kind: 'letter_opened' as const,
+          applicationId: 'app-vector',
+          at: '2026-09-24T10:00:00.000Z',
+        },
+      ],
+    };
+    expect(
+      buildTodaySnapshot({ ...input, changesDismissedAt: '2026-09-24T11:00:00.000Z' })
+        .sinceLastVisit.changes,
+    ).toEqual([]);
+    expect(
+      buildTodaySnapshot({ ...input, changesDismissedAt: '2026-09-24T09:00:00.000Z' })
+        .sinceLastVisit.changes,
+    ).toHaveLength(1);
+  });
+
+  it('reports no changes on the first visit', () => {
+    const snapshot = buildTodaySnapshot({
+      ...BASE_INPUT,
+      since: null,
+      applications: [overdue],
+      newVacancies: [newVacancy()],
+    });
+    expect(snapshot.sinceLastVisit.changes).toEqual([]);
+  });
+});

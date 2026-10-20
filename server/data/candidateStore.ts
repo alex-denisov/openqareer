@@ -726,6 +726,9 @@ export interface CandidateStore {
 
   /** `GET /today`: stage moves only the company could have caused since `since`. */
   countCompanyEventsSince(candidateId: string, since: string): number;
+  /** B542: рекрутер или собеседник отклика, которого называет напоминание «Сегодня». */
+  listApplicationContacts?(candidateId: string): ReadonlyMap<string, string>;
+  setApplicationContact?(candidateId: string, applicationId: string, name: string | null): void;
   /** B266: a paid-plan request, idempotent per candidate and plan. */
   requestPlan?(candidateId: string, planId: PlanRequestId, note?: string): StoredPlanRequest;
   listPlanRequests?(candidateId: string): StoredPlanRequest[];

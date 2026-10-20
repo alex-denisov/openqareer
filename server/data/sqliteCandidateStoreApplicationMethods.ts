@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { createApplicationContactMethods, type ApplicationContactMethods } from './applicationContacts';
+import type { SealedText } from './sealedText';
 import type { VacancyApplication, VacancyApplicationSnapshot } from '../../shared/vacancyApplication';
 import type { VacancyApplicationInput } from './sqliteVacancyApplicationRepository';
 import type { CreateApplicationInput, PatchApplicationInput } from './sqliteApplicationRepository';
@@ -63,7 +65,7 @@ export class ApplicationOperationConflictError extends Error {
   }
 }
 
-export interface ApplicationTrackerMethods {
+export interface ApplicationTrackerMethods extends ApplicationContactMethods {
   getInterviewSubject(
     candidateId: string,
     interviewId: string,
@@ -377,6 +379,7 @@ export function createApplicationTrackerMethods(
   tracker: ApplicationTrackerController,
   requireCandidate: RequireCandidate,
   database: DatabaseSync,
+  sealedText: SealedText,
 ): ApplicationTrackerMethods {
   ensureApplicationOperationsSchema(database);
   return {
@@ -385,6 +388,7 @@ export function createApplicationTrackerMethods(
     ...createInterviewApplicationMethods(tracker, requireCandidate, database),
     ...createVacancyJourneyMethods(tracker, requireCandidate),
     ...createApplicationOperationsMethods(requireCandidate, database),
+    ...createApplicationContactMethods(database, sealedText, requireCandidate),
   };
 }
 

@@ -291,7 +291,7 @@ export class SqliteCandidateStore implements CandidateStore {
 
   /** See `sqliteCandidateStoreApplicationMethods.ts` for what this wires in. */
   private wireApplicationTrackerMethods(): void {
-    Object.assign(this, createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id), this.database));
+    Object.assign(this, createApplicationTrackerMethods(this.applicationTracker, (id) => this.requireCandidate(id), this.database, this.sealedText));
   }
 
   private wireDocumentMethods(): void {
