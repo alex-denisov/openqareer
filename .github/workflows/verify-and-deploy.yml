@@ -18,10 +18,11 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
-    name: Verify
+  # Independent gates run side by side; the slowest one sets the wall time.
+  static:
+    name: Lint, types, audit
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 15
     steps:
       - name: Check out exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -35,29 +36,109 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Install Playwright Chromium for connector tests
-        run: npx playwright install --with-deps chromium
-
       - name: Audit dependencies
         run: npm audit --audit-level=high
 
       - name: Lint and check adopted formatting baseline
         run: npm run lint
 
-      - name: Run unit tests
-        run: npm test
-
-      - name: Enforce coverage thresholds
-        run: npm run test:coverage
-
       - name: Typecheck
         run: npx tsc --noEmit
+
+  unit:
+    name: Unit tests with coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # One run both executes every unit test and enforces the thresholds.
+      - name: Run unit tests and enforce coverage thresholds
+        run: npm run test:coverage
+
+  e2e:
+    name: Browser tests (shard ${{ matrix.shard }}/6)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: true
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Build production artifact
         run: npm run build
 
       - name: Verify built shell in real Chromium
-        run: npm run test:e2e
+        run: npx playwright test --shard=${{ matrix.shard }}/6
+
+  built-shell:
+    name: Built shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out exact commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build production artifact
+        run: npm run build
+
+      - name: Verify built shell, intake fits and wizard source step
+        run: |
+          node scripts/verify-built-shell.mjs
+          node scripts/verify-intake-fits.mjs
+          node scripts/verify-wizard-source-step.mjs
+
+  verify:
+    name: Verify
+    if: always()
+    needs: [static, unit, e2e, built-shell]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every gate to pass
+        run: |
+          printf '%s\n' '${{ toJSON(needs) }}'
+          test '${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}' = 'false'
 
   deploy:
     name: Deploy production
