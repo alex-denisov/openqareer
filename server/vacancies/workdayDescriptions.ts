@@ -1,7 +1,6 @@
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
-import { htmlToFeedText } from '../connectors/feedText';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
-import { record, text } from './jsonVacancyRecord';
+import { detailTextSourceFor, isDetailTextSource, type DetailFormat } from './detailTextSources';
 import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
 
 /**
@@ -14,6 +13,9 @@ import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
  * 5 613 в 13 тенантах, поэтому дочитывание — фоновый шаг воркера обслуживания:
  * не больше `perSource` запросов на хост за тик, хосты параллельно, внутри
  * хоста по одному с паузой. Новые записи идут первыми.
+ *
+ * Тот же шаг дочитывает и другие площадки без текста в списке —
+ * SmartRecruiters, Eightfold, Habr Career, YC (`detailTextSources.ts`).
  */
 
 const DESCRIPTION_SNIPPET_CHARS = 500;
@@ -21,17 +23,22 @@ const DEFAULT_PER_SOURCE = 2;
 const DEFAULT_MAX_ATTEMPTS = 3;
 const DEFAULT_DELAY_MS = 1_500;
 const DETAIL_TIMEOUT_MS = 20_000;
-const FETCH_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)',
-  Accept: 'application/json',
-} as const;
+const USER_AGENT = 'Mozilla/5.0 (compatible; openqareer/1.0; +https://openqareer.com)';
+const ACCEPT: Readonly<Record<DetailFormat, string>> = {
+  json: 'application/json',
+  html: 'text/html,application/xhtml+xml',
+};
 
 export interface WorkdayDetailResponse {
   readonly status: number;
   readonly payload?: unknown;
 }
 
-export type WorkdayDetailFetch = (url: string) => Promise<WorkdayDetailResponse>;
+/** `payload` — разобранный JSON для `json` и строка страницы для `html`. */
+export type WorkdayDetailFetch = (
+  url: string,
+  format: DetailFormat,
+) => Promise<WorkdayDetailResponse>;
 
 /** Ровно то, что шагу нужно от хранилища пула. */
 export interface WorkdayDescriptionPool {
@@ -62,22 +69,11 @@ export function isWorkdaySource(sourceId: string): boolean {
  */
 export function workdayDetailUrl(sourceId: string, publicUrl: string): string | undefined {
   if (!isWorkdaySource(sourceId)) return undefined;
-  const tenant = sourceId.slice(WORKDAY_SOURCE_PREFIX.length);
-  let url: URL;
-  try {
-    url = new URL(publicUrl);
-  } catch {
-    return undefined;
-  }
-  if (url.protocol !== 'https:' || !url.hostname.endsWith('.myworkdayjobs.com')) return undefined;
-  const [site, ...rest] = url.pathname.split('/').filter(Boolean);
-  if (!tenant || !site || rest.length === 0) return undefined;
-  return `${url.origin}/wday/cxs/${tenant}/${site}/${rest.join('/')}`;
+  return detailTextSourceFor(sourceId)?.detailUrl(sourceId, { url: publicUrl });
 }
 
 export function readWorkdayDescription(payload: unknown): string {
-  const html = text(record(record(payload).jobPostingInfo).jobDescription);
-  return html.trim() ? htmlToFeedText(html).trim() : '';
+  return detailTextSourceFor(WORKDAY_SOURCE_PREFIX)?.readText(payload) ?? '';
 }
 
 /**
@@ -119,16 +115,16 @@ export function withWorkdayText(vacancy: UnifiedVacancy, fullText: string): Unif
   };
 }
 
-export const fetchWorkdayDetail: WorkdayDetailFetch = async (url) => {
+export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
   const res = await fetch(url, {
-    headers: FETCH_HEADERS,
+    headers: { 'User-Agent': USER_AGENT, Accept: ACCEPT[format] },
     signal: AbortSignal.timeout(DETAIL_TIMEOUT_MS),
   });
   if (!res.ok) {
     await res.body?.cancel().catch(() => undefined);
     return { status: res.status };
   }
-  return { status: res.status, payload: await res.json() };
+  return { status: res.status, payload: format === 'json' ? await res.json() : await res.text() };
 };
 
 type Outcome = 'loaded' | 'gone' | 'failed';
@@ -168,7 +164,7 @@ export class WorkdayDescriptionBackfill {
     if (this.running) return { requested: 0, loaded: 0, gone: 0, failed: 0 };
     this.running = true;
     try {
-      const sources = this.sourceIds().filter(isWorkdaySource);
+      const sources = this.sourceIds().filter(isDetailTextSource);
       const outcomes = await Promise.all(sources.map((sourceId) => this.stepSource(sourceId)));
       const flat = outcomes.flat();
       return {
@@ -201,11 +197,12 @@ export class WorkdayDescriptionBackfill {
   }
 
   private async loadOne(sourceId: string, vacancy: UnifiedVacancy): Promise<Outcome> {
-    const url = workdayDetailUrl(sourceId, vacancy.url);
-    if (!url) return this.fail(vacancy.id, this.maxAttempts);
+    const source = detailTextSourceFor(sourceId);
+    const url = source?.detailUrl(sourceId, vacancy);
+    if (!source || !url) return this.fail(vacancy.id, this.maxAttempts);
     let response: WorkdayDetailResponse;
     try {
-      response = await this.fetchDetail(url);
+      response = await this.fetchDetail(url, source.format);
     } catch {
       return this.fail(vacancy.id);
     }
@@ -214,7 +211,7 @@ export class WorkdayDescriptionBackfill {
       this.attempts.delete(vacancy.id);
       return 'gone';
     }
-    const fullText = response.status === 200 ? readWorkdayDescription(response.payload) : '';
+    const fullText = response.status === 200 ? source.readText(response.payload) : '';
     if (!fullText) return this.fail(vacancy.id);
     this.pool.mergeSourceSlice(sourceId, [withWorkdayText(vacancy, fullText)]);
     this.attempts.delete(vacancy.id);

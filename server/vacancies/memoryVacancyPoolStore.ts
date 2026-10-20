@@ -29,7 +29,8 @@ import {
 import { catalogListings } from './vacancyCatalogFacets';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
-import { isWorkdaySource, mergeWorkdaySnapshot } from './workdayDescriptions';
+import { isDetailTextSource } from './detailTextSources';
+import { mergeWorkdaySnapshot } from './workdayDescriptions';
 import { extractSkillsFromText } from '../connectors/telegramChannelParser';
 
 interface StoredRow {
@@ -259,7 +260,7 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
         ? vacancy
         : sourceId === HH_SEARCH_SOURCE_ID
           ? mergeHhVacancySnapshot(previous, vacancy)
-          : isWorkdaySource(sourceId)
+          : isDetailTextSource(sourceId)
             ? mergeWorkdaySnapshot(previous, vacancy)
             : vacancy,
       sourceId,

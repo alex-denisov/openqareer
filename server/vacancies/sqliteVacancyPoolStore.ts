@@ -25,7 +25,8 @@ import { candidateRoleFunctionCodes } from './titleParse/candidateRoleFunctions'
 import { LEVEL_RANK } from './levelMatcher';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import { mergeHhVacancySnapshot } from './hhVacancySnapshot';
-import { isWorkdaySource, mergeWorkdaySnapshot } from './workdayDescriptions';
+import { isDetailTextSource } from './detailTextSources';
+import { mergeWorkdaySnapshot } from './workdayDescriptions';
 import type { SourceObservations } from './sourceHealthVerdict';
 import type { CandidateMatchProfile } from './vacancyMatcher';
 import type { FunctionCode } from '../../shared/roleTaxonomy';
@@ -817,13 +818,13 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 
   /** Loads only the HH and Workday records in one write chunk so collection
    * snapshots can preserve loaded descriptions without hydrating the
-   * 500k-record slice (Workday since B535). */
+   * 500k-record slice (detail-text sources since B535). */
   private loadExistingHhVacancies(
     sourceId: string,
     chunk: readonly UnifiedVacancy[],
   ): Map<string, UnifiedVacancy> {
     const existing = new Map<string, UnifiedVacancy>();
-    if (sourceId !== HH_SEARCH_SOURCE_ID && !isWorkdaySource(sourceId)) return existing;
+    if (sourceId !== HH_SEARCH_SOURCE_ID && !isDetailTextSource(sourceId)) return existing;
     const ids = Array.from(new Set(chunk.map((vacancy) => vacancy.id)));
     const bindLimit = 800;
     for (let offset = 0; offset < ids.length; offset += bindLimit) {
@@ -2242,14 +2243,14 @@ interface WriteTally {
   maxTransactionMs: number;
 }
 
-/** Повторная запись площадки не стирает дочитанный текст (hh — B304, Workday — B535). */
+/** Повторная запись площадки не стирает дочитанный текст (hh — B304, Workday и др. — B535). */
 function mergeStoredSnapshot(
   sourceId: string,
   previous: UnifiedVacancy,
   incoming: UnifiedVacancy,
 ): UnifiedVacancy {
   if (sourceId === HH_SEARCH_SOURCE_ID) return mergeHhVacancySnapshot(previous, incoming);
-  if (isWorkdaySource(sourceId)) return mergeWorkdaySnapshot(previous, incoming);
+  if (isDetailTextSource(sourceId)) return mergeWorkdaySnapshot(previous, incoming);
   return incoming;
 }
 

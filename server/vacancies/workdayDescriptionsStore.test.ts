@@ -77,6 +77,18 @@ describe.each([
     expect(saved?.requiredSkills).toContain('Python');
   });
 
+  it.each(['ats-smartrecruiters-BoschGroup', 'src-netflix', 'src-habr-career'])(
+    'keeps loaded %s text when the list writes the record again with its stand-in',
+    (sourceId) => {
+      const store = open();
+      const record = { ...workday(9), id: `${sourceId}:9`, fingerprint: `${sourceId}:9` };
+      store.mergeSourceSlice(sourceId, [withWorkdayText(record, 'Loaded text about Python.')]);
+      store.mergeSourceSlice(sourceId, [{ ...record, description: 'Role 9 — Team' }]);
+      expect(store.getVacancy(record.id)?.fullDescription).toBe('Loaded text about Python.');
+      expect(store.getVacancy(record.id)?.description).toBe('Loaded text about Python.');
+    },
+  );
+
   it('drops an old "title — city" stand-in on the next sync', () => {
     const store = open();
     store.mergeSourceSlice(SOURCE, [{ ...workday(1), description: 'Role 1 — London' }]);
