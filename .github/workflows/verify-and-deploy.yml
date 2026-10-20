@@ -70,6 +70,8 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Run unit test shard with coverage
+        env:
+          COVERAGE_SHARD: '1'
         run: npx vitest run --shard=${{ matrix.shard }}/4 --coverage --reporter=blob --reporter=default
 
       - name: Keep shard report for the coverage merge
