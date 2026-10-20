@@ -9,7 +9,7 @@ import { buildApp } from '../server/app';
 import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../server/data/sqliteCandidateReputationRepository';
 import { historicalAudit } from './fixtures/block-a-footprint-fixture';
-import { seedBlockAToday } from './fixtures/block-a-today-seed';
+import { seedBlockAToday, seedBlockATodayChanges } from './fixtures/block-a-today-seed';
 import { mockupResumeDraft, seedMockupToday } from './fixtures/mockup-today-seed';
 import { seedLandingShots } from './fixtures/landing-shots-seed';
 import { SqliteCandidateDraftRepository } from '../server/candidate/sqliteCandidateDraftRepository';
@@ -55,7 +55,7 @@ const candidateStore = new SqliteCandidateStore({
   encryptionKey: config.dataEncryptionKey,
 });
 const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', locale: 'ru-RU' });
-seedBlockAToday(candidateStore, candidate.id, config.applicationArchiveStaleDays);
+const todaySeed = seedBlockAToday(candidateStore, candidate.id, config.applicationArchiveStaleDays);
 const candidateDraftRepository = new SqliteCandidateDraftRepository({ databasePath: ':memory:' });
 seedMockupToday(candidateStore, candidateDraftRepository, candidate.id);
 if (process.env.LANDING_SHOTS === '1') seedLandingShots(candidateStore, candidate.id);
@@ -118,6 +118,7 @@ candidateStore.saveCandidateWorkspace(candidate.id, {
   constraints: '',
   urgency: 'active',
 });
+seedBlockATodayChanges(candidateStore, candidate.id, todaySeed.applicationIds.followUp);
 const planner = new CareerCommandPlanner({ createId: randomUUID });
 const availableEvidenceRefs = new Set(memory.map((fact) => `memory:${fact.id}`));
 for (const fixture of createCommands()) {

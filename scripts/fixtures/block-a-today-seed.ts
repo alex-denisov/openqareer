@@ -234,3 +234,49 @@ export function seedBlockAToday(
 
   return { applicationIds, funnel: store.applicationFunnel(candidateId) };
 }
+
+type TodayChangesSeedStore = Pick<
+  CandidateStore,
+  | 'createApplicationInterview'
+  | 'getCandidateWorkspace'
+  | 'saveCandidateWorkspace'
+  | 'setApplicationContact'
+  | 'notificationRepository'
+>;
+
+/**
+ * B542: макет 1 «Напомнить Марии Орловой про итог интервью» и полоса
+ * «С ДД.ММ, 18:40: … Вектор Банк открыл письмо». Контакт отклика, прошедшее
+ * интервью, прошлый визит и событие письма — настоящие записи хранилища;
+ * всё синтетическое и только в локальном демо.
+ */
+export function seedBlockATodayChanges(
+  store: TodayChangesSeedStore,
+  candidateId: string,
+  vectorApplicationId: string,
+  now = new Date(),
+): void {
+  store.setApplicationContact?.(candidateId, vectorApplicationId, 'Мария Орлова');
+  store.createApplicationInterview(candidateId, vectorApplicationId, {
+    round: 1,
+    scheduledAt: relativeDate(now, -8, 9),
+    format: 'video',
+  });
+  const since = relativeDate(now, -2, 15);
+  const sinceAt = new Date(Date.parse(since) + 40 * 60_000).toISOString();
+  const workspace = store.getCandidateWorkspace(candidateId);
+  if (workspace) {
+    store.saveCandidateWorkspace(candidateId, {
+      ...workspace,
+      lastVisitedAt: sinceAt,
+      previousVisitedAt: sinceAt,
+    });
+  }
+  store.notificationRepository?.recordEvent(candidateId, {
+    idempotencyKey: `block-a-letter-opened:${vectorApplicationId}`,
+    kind: 'employer_opened_letter',
+    sourceType: 'application',
+    sourceId: vectorApplicationId,
+    createdAt: new Date(now.getTime() - 3 * 3_600_000).toISOString(),
+  });
+}
