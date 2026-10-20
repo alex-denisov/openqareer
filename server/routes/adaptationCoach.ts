@@ -76,7 +76,11 @@ export function scopeAdaptationKnowledge(knowledge: NonNullable<CoachTurnInput['
 
 export function decorateAdaptationResult(output: CoachProviderResult, input: CoachTurnInput): CoachProviderResult {
   const context = adaptationContextFromInput(input);
-  if (!context) return { ...output, result: { ...output.result, adaptationContext: undefined, adaptationTask: null } };
+  if (!context) {
+    // Outside the diary the result is served exactly as generated (B198); only stray adaptation fields are dropped.
+    if (!('adaptationTask' in output.result) && !('adaptationContext' in output.result)) return output;
+    return { ...output, result: { ...output.result, adaptationContext: undefined, adaptationTask: null } };
+  }
   if (output.result.message.length > 6000) throw new CoachProviderError('provider_output_invalid', 502, true);
   const suggestion = adaptationTaskSuggestionSchema.safeParse(output.result.adaptationTask);
   return { ...output, result: { ...output.result, message: `[${context.label}]\n${output.result.message}`, adaptationContext: context,
