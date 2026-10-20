@@ -40,10 +40,20 @@ test('loading shell has an honest notification placeholder', async ({ page }) =>
   const expectedHeights = page.viewportSize()!.width === 390 ? [180, 275, 184] : [214, 293, 202];
   const cards = page.locator('.career-today-skeleton-card');
   await expect(cards).toHaveCount(3);
-  for (let index = 0; index < expectedHeights.length; index += 1) {
-    const box = await cards.nth(index).boundingBox();
-    expect(Math.abs(box!.height - expectedHeights[index])).toBeLessThanOrEqual(1);
-  }
+  // The prerendered skeleton is swapped for the same React skeleton once the
+  // bundle mounts; one read of all three keeps the check off that instant.
+  await expect
+    .poll(() =>
+      cards.evaluateAll(
+        (nodes, expected) =>
+          nodes.length === expected.length &&
+          nodes.every(
+            (node, index) => Math.abs(node.getBoundingClientRect().height - expected[index]) <= 1,
+          ),
+        expectedHeights,
+      ),
+    )
+    .toBe(true);
   await capture(page, 'session-loading');
   release();
   await expect(page.locator('.career-today')).toBeVisible();
