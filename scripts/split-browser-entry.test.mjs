@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, it } from 'vitest';
-import { buildSplitDelivery } from './split-browser-entry.mjs';
+import { buildSplitDelivery, exportBridge } from './split-browser-entry.mjs';
 
 const temporaryDirectories = [];
 
@@ -48,6 +48,22 @@ afterEach(() => {
 });
 
 describe('split browser entry delivery', () => {
+  it('keeps a shared entry with 150 exports within the delivery budget and preserves exports', async () => {
+    const names = Array.from({ length: 150 }, (_, index) => `a${index}`);
+    const values = Object.fromEntries(names.map((name, index) => [name, index]));
+    values.default = 'default-value';
+    const source = `const ${names.map((name, index) => `v${index}=${index}`).join(',')};export{${names.map((name, index) => `v${index} as ${name}`).join(',')}};/*${'padding'.repeat(2000)}*/`;
+    const directory = makeFixture(source);
+    const result = buildSplitDelivery({ distDirectory: directory, release: 'many-shared-exports' });
+    const entry = result.modules.find((module) => module.kind === 'app');
+    assert.ok(entry.bootstrapBytes <= 12288);
+    const moduleSource = `const loadedModule=${JSON.stringify(values)};${exportBridge([...names, 'default'])}`;
+    const loaded = await import(
+      `data:text/javascript;base64,${Buffer.from(moduleSource).toString('base64')}`
+    );
+    for (const name of [...names, 'default']) assert.equal(loaded[name], values[name]);
+  });
+
   it('publishes bounded parts and a small integrity-checking bootstrap', () => {
     const source = `const release="release-test";const preloadMap=["assets/pdf-test.js","assets/small-test.js","assets/site-test.css"];${'x'.repeat(10_000)};import("./pdf-test.js");new Worker(new URL("./pdfInspector.worker-test.js",import.meta.url))`;
     const directory = makeFixture(source);

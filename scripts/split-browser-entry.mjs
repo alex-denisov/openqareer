@@ -157,15 +157,13 @@ function exportedNames(source) {
   );
 }
 
-function exportBridge(names) {
-  const declarations = names
-    .filter((name) => name !== 'default')
-    .map((name, index) => `const __oqExport${index}=loadedModule[${JSON.stringify(name)}];`)
-    .join('');
-  const exports = names
-    .filter((name) => name !== 'default')
-    .map((name, index) => `__oqExport${index} as ${name}`)
-    .join(',');
+export function exportBridge(names) {
+  const named = names.filter((name) => name !== 'default');
+  // Snapshot the same namespace values as before, without repeating a long
+  // declaration for each shared export in the bounded bootstrap response.
+  const fields = named.map((name, index) => `${JSON.stringify(name)}:e${index}`).join(',');
+  const declarations = fields ? `const{${fields}}=loadedModule;` : '';
+  const exports = named.map((name, index) => `e${index} as ${name}`).join(',');
   const namedExport = exports ? `export{${exports}};` : '';
   const defaultExport = names.includes('default')
     ? 'const __oqDefault=loadedModule.default;export default __oqDefault;'
