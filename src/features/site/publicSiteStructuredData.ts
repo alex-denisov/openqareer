@@ -1,11 +1,13 @@
 /**
  * B535: JSON-LD for the landing, /faq and /support. One organization and one
  * website node referenced by @id everywhere (SEO audit 20.10, 10/10). FAQPage
- * text equals the visible answers; the landing carries no FAQPage, the full
- * set lives on /faq.
+ * text equals the visible answers; the landing carries no FAQPage (its six
+ * questions repeat /faq, and duplicated FAQ markup is discouraged).
+ * `dateModified` is the date the page copy changed.
  */
 import { TARIFF_LEVELS } from '../tariffs/tariffsData';
 import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
+import { LANDING_TITLE } from './siteTitles';
 import {
   FAQ_GROUPS,
   LANDING_DESCRIPTION,
@@ -19,6 +21,30 @@ import {
 } from './publicSiteContent';
 
 type Node = Record<string, unknown>;
+
+/** Last change of the public copy; bump together with the texts. */
+export const PUBLIC_COPY_UPDATED_AT = '2026-10-20';
+
+function question(item: { readonly question: string; readonly answer: string }): Node {
+  return {
+    '@type': 'Question',
+    name: item.question,
+    acceptedAnswer: { '@type': 'Answer', text: item.answer },
+  };
+}
+
+function webPage(path: string, name: string): Node {
+  return {
+    '@type': 'WebPage',
+    '@id': `${SITE_ORIGIN}${path}#webpage`,
+    url: `${SITE_ORIGIN}${path}`,
+    name,
+    inLanguage: 'ru-RU',
+    isPartOf: { '@id': WEBSITE_ID },
+    publisher: { '@id': ORG_ID },
+    dateModified: PUBLIC_COPY_UPDATED_AT,
+  };
+}
 
 const ORGANIZATION: Node = {
   '@type': 'Organization',
@@ -94,6 +120,7 @@ export function landingStructuredData(): Node {
         fileSize: '36.5MB',
         offers: offers(),
       },
+      webPage('/', LANDING_TITLE),
     ],
   };
 }
@@ -119,13 +146,8 @@ export function faqStructuredData(): Node {
         inLanguage: 'ru-RU',
         isPartOf: { '@id': WEBSITE_ID },
         publisher: { '@id': ORG_ID },
-        mainEntity: FAQ_GROUPS.flatMap((group) =>
-          group.items.map((item) => ({
-            '@type': 'Question',
-            name: item.question,
-            acceptedAnswer: { '@type': 'Answer', text: item.answer },
-          })),
-        ),
+        dateModified: PUBLIC_COPY_UPDATED_AT,
+        mainEntity: FAQ_GROUPS.flatMap((group) => group.items.map(question)),
       },
       breadcrumb('Вопросы и ответы', '/faq'),
     ],
@@ -145,6 +167,7 @@ export function supportStructuredData(): Node {
         url: `${SITE_ORIGIN}/support`,
         about: { '@id': ORG_ID },
         publisher: { '@id': ORG_ID },
+        dateModified: PUBLIC_COPY_UPDATED_AT,
       },
       {
         ...ORGANIZATION,
@@ -153,6 +176,7 @@ export function supportStructuredData(): Node {
           contactType: 'customer support',
           email: SUPPORT_EMAIL,
           availableLanguage: 'ru',
+          description: 'Поддержка отвечает в течение рабочего дня.',
           url: TELEGRAM_BOT_URL,
         },
       },

@@ -21,11 +21,13 @@ export const SUPPORT_DESCRIPTION =
 interface HelpPageProps {
   readonly onNavigate: (path: string) => void;
   readonly signedIn?: boolean;
+  readonly isAdmin?: boolean;
 }
 
 function HelpShell({
   onNavigate,
   signedIn = false,
+  isAdmin = false,
   title,
   structuredData,
   children,
@@ -42,13 +44,20 @@ function HelpShell({
       <a className="ps-skip" href="#main">
         К содержимому
       </a>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(structuredData).replace(/</gu, '\\u003c'),
-        }}
+      {Object.keys(structuredData).length > 0 ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(structuredData).replace(/</gu, '\\u003c'),
+          }}
+        />
+      ) : null}
+      <PublicHeader
+        onNavigate={onNavigate}
+        onLanding={false}
+        signedIn={signedIn}
+        isAdmin={isAdmin}
       />
-      <PublicHeader onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
       <main id="main" className="ps-wrap ps-page">
         {children}
       </main>
@@ -213,11 +222,12 @@ function SupportExtras({ onNavigate }: { onNavigate: (p: string) => void }) {
   );
 }
 
-export function FaqPage({ onNavigate, signedIn }: HelpPageProps) {
+export function FaqPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
   return (
     <HelpShell
       onNavigate={onNavigate}
       signedIn={signedIn}
+      isAdmin={isAdmin}
       title={FAQ_TITLE}
       structuredData={faqStructuredData()}
     >
@@ -242,19 +252,20 @@ const QUICK_LINKS = [
   { href: '/faq#remote', text: 'Как найти удалённую работу' },
 ] as const;
 
-export function SupportPage({ onNavigate, signedIn }: HelpPageProps) {
+export function SupportPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
   return (
     <HelpShell
       onNavigate={onNavigate}
       signedIn={signedIn}
+      isAdmin={isAdmin}
       title={SUPPORT_TITLE}
       structuredData={supportStructuredData()}
     >
       <Crumbs current="Поддержка" onNavigate={onNavigate} />
       <h1>Поддержка openqareer</h1>
       <p className="ps-intro">
-        Вопрос по аккаунту, оплате или работе кабинета: выберите удобный канал. Частые ответы
-        собраны в разделе{' '}
+        Вопрос по аккаунту, оплате или работе кабинета: выберите удобный канал. Поддержка отвечает в
+        течение рабочего дня. Частые ответы собраны в разделе{' '}
         <SiteLink to="/faq" onNavigate={onNavigate}>
           «Вопросы и ответы»
         </SiteLink>
@@ -263,6 +274,38 @@ export function SupportPage({ onNavigate, signedIn }: HelpPageProps) {
       <h2 className="ps-contact-h">Как связаться с поддержкой</h2>
       <SupportChannels />
       <SupportExtras onNavigate={onNavigate} />
+    </HelpShell>
+  );
+}
+
+export const NOT_FOUND_TITLE = 'Страница не найдена | openqareer';
+
+/** B535: unknown addresses answer 404 with a way back instead of the landing. */
+export function NotFoundPage({ onNavigate, signedIn, isAdmin }: HelpPageProps) {
+  return (
+    <HelpShell
+      onNavigate={onNavigate}
+      signedIn={signedIn}
+      isAdmin={isAdmin}
+      title={NOT_FOUND_TITLE}
+      structuredData={{}}
+    >
+      <h1>Такой страницы нет</h1>
+      <p className="ps-intro">
+        Адрес набран с ошибкой или страницу убрали. Начните с главной, каталога вакансий или ответов
+        на частые вопросы.
+      </p>
+      <p className="ps-cta">
+        <SiteLink to="/" className="ps-btn is-primary" onNavigate={onNavigate}>
+          На главную
+        </SiteLink>
+        <a href="/vacancies" className="ps-btn">
+          Каталог вакансий
+        </a>
+        <SiteLink to="/faq" className="ps-btn is-ghost" onNavigate={onNavigate}>
+          Вопросы и ответы
+        </SiteLink>
+      </p>
     </HelpShell>
   );
 }

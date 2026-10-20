@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isIndexableListing,
   CARD_POSTED_WITHIN_DAYS,
   CARD_SEEN_WITHIN_DAYS,
   DEEP_PAGE_NOINDEX_AFTER,
@@ -74,5 +75,14 @@ describe('isIndexablePage', () => {
     expect(isIndexablePage(1)).toBe(true);
     expect(isIndexablePage(DEEP_PAGE_NOINDEX_AFTER)).toBe(true);
     expect(isIndexablePage(DEEP_PAGE_NOINDEX_AFTER + 1)).toBe(false);
+  });
+});
+
+describe('isIndexableListing', () => {
+  it('indexes a place from 10 vacancies and a place+role from 5', () => {
+    expect(isIndexableListing(9, false)).toBe(false);
+    expect(isIndexableListing(10, false)).toBe(true);
+    expect(isIndexableListing(4, true)).toBe(false);
+    expect(isIndexableListing(5, true)).toBe(true);
   });
 });

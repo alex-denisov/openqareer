@@ -8,6 +8,8 @@ import {
   FAQ_DESCRIPTION,
   FAQ_TITLE,
   FaqPage,
+  NOT_FOUND_TITLE,
+  NotFoundPage,
   SUPPORT_DESCRIPTION,
   SUPPORT_TITLE,
   SupportPage,
@@ -36,16 +38,11 @@ export function legalDocumentFileName(slug: LegalDocSlug): string {
  * canonical have to be in the served HTML, not applied after hydration.
  */
 function legalHead(html: string, slug: LegalDocSlug, description: string): string {
-  return html
-    .replace(/<title>[^<]*<\/title>/u, `<title>${escapeHtml(legalDocumentTitle(slug))}</title>`)
-    .replace(
-      /<meta name="description" content="[^"]*">/u,
-      `<meta name="description" content="${escapeHtml(description)}">`,
-    )
-    .replace(
-      /<link rel="canonical" href="[^"]*">/u,
-      `<link rel="canonical" href="${SITE_ORIGIN}${legalPath(slug)}">`,
-    );
+  return pageHead(html, {
+    path: legalPath(slug),
+    title: legalDocumentTitle(slug),
+    description,
+  });
 }
 
 /** B535: /faq and /support carry their own title, description, canonical and og. */
@@ -60,6 +57,14 @@ export const HELP_PAGES = [
 ] as const;
 
 function helpHead(html: string, page: (typeof HELP_PAGES)[number]): string {
+  return pageHead(html, page);
+}
+
+/** Title, description, canonical and the og/twitter copies of them. */
+function pageHead(
+  html: string,
+  page: { readonly path: string; readonly title: string; readonly description: string },
+): string {
   const title = escapeHtml(page.title);
   const description = escapeHtml(page.description);
   const url = `${SITE_ORIGIN}${page.path}`;
@@ -130,6 +135,9 @@ export function assertSitemapUrlPolicy(urls: readonly string[]): void {
 
 const EMPTY_ROOT = '<div id="root"></div>';
 
+/** Served with status 404 for addresses no surface owns (B535). */
+export const NOT_FOUND_DOCUMENT = 'not-found.html';
+
 /**
  * Первый кадр до JavaScript. Лендинг и правовые страницы — настоящие ссылки:
  * они обязаны работать сразу, пока части приложения ещё едут (на медленном
@@ -171,6 +179,23 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
  * structured JSON-LD and instant first paint.
  * The administrator console `/admin` has its own prerendered first paint.
  */
+/** Unknown addresses: the server answers 404 with this document (B535). */
+async function writeNotFoundPage(html: string, distDirectory: string): Promise<void> {
+  await writeFile(
+    `${distDirectory}/${NOT_FOUND_DOCUMENT}`,
+    pageHead(html, {
+      path: '/',
+      title: NOT_FOUND_TITLE,
+      description: 'Страница не найдена. Перейдите на главную openqareer или в каталог вакансий.',
+    })
+      .replace(/<link rel="canonical"[^>]*>/u, '<meta name="robots" content="noindex">')
+      .replace(
+        EMPTY_ROOT,
+        bootstrapRoot(renderToStaticMarkup(<NotFoundPage onNavigate={() => {}} />)),
+      ),
+  );
+}
+
 export async function prerenderShells(
   indexPath: string,
   adminPath: string,
@@ -216,6 +241,8 @@ export async function prerenderShells(
     );
   }
   await writeHelpPages(html, distDirectory);
+  await writeNotFoundPage(html, distDirectory);
+
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
   // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
   // обязана падать на транслите до выката, а не после.

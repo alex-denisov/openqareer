@@ -58,7 +58,7 @@ describe('B227: аудит разметки Google for Jobs (Schema.org JobPosti
     // 2. Description: полный текст описания вакансии без обрезки
     expect(typeof posting!.description).toBe('string');
     expect((posting!.description as string).trim().length).toBeGreaterThan(300);
-    expect(posting!.description).toBe(fullText.trim());
+    expect(posting!.description).toBe(`<p>${fullText.trim()}</p>`);
 
     // 3. DatePosted: валидная дата в формате ISO 8601 (YYYY-MM-DD)
     expect(typeof posting!.datePosted).toBe('string');

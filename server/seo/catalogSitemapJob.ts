@@ -8,7 +8,7 @@
  */
 import type { DatabaseSync } from 'node:sqlite';
 import { listingPath } from '../../shared/vacancyCatalogRoutes';
-import { MIN_LISTING_SIZE } from '../vacancies/vacancyCatalogFacets';
+import { INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN } from './catalogIndexing';
 import { CARD_POSTED_WITHIN_DAYS, CARD_SEEN_WITHIN_DAYS } from './catalogIndexing';
 import { buildSitemapFiles, type SitemapFile, type SitemapUrl } from './sitemapXml';
 
@@ -42,7 +42,7 @@ function indexableJobs(database: DatabaseSync, now: Date): SitemapUrl[] {
 }
 
 /**
- * Published listings (same threshold as the listing pages) with the date of
+ * Indexable listings (`isIndexableListing`, same thresholds as the page's robots meta) with the date of
  * their freshest vacancy: a listing changes when a vacancy is added, and
  * `last_seen_at` moves for every row on every crawl, so it says nothing.
  */
@@ -63,7 +63,7 @@ function listings(database: DatabaseSync): SitemapUrl[] {
        HAVING count(*) >= ?
         ORDER BY count DESC, place_slug ASC, role_slug ASC`,
     )
-    .all(MIN_LISTING_SIZE, MIN_LISTING_SIZE) as Array<{
+    .all(INDEXED_PLACE_MIN, INDEXED_PLACE_ROLE_MIN) as Array<{
     place_slug: string;
     role_slug: string | null;
     freshest: string;

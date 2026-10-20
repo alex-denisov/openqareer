@@ -27,6 +27,23 @@ const ADMIN_DOCUMENT = 'admin.html';
 const ENTRY_DOCUMENT = 'index.html';
 /** B535: public help pages prerendered at build time. */
 const HELP_DOCUMENTS: Record<string, string> = { '/faq': 'faq.html', '/support': 'support.html' };
+const NOT_FOUND_DOCUMENT = 'not-found.html';
+
+/** Paths the client router owns; anything else is a 404, not the landing (B535). */
+function isClientRoute(path: string): boolean {
+  const bare = path.replace(/\/$/u, '') || '/';
+  return (
+    bare === '/' ||
+    bare === '/index.html' ||
+    bare === '/app' ||
+    bare.startsWith('/app/') ||
+    bare === '/admin' ||
+    bare.startsWith('/admin/') ||
+    ['/login', '/signup', '/reset-password', '/verify-email'].includes(bare) ||
+    bare in HELP_DOCUMENTS ||
+    legalSlugFromPath(bare) !== undefined
+  );
+}
 
 let entryCache: { mtimeMs: number; raw: string } | null = null;
 
@@ -366,6 +383,11 @@ function registerEntryFallback(app: FastifyInstance, config: ServerConfig): void
       // Each surface has its own prerendered first paint. Serving the
       // workspace document on `/admin` left administrators looking at the
       // candidate cabinet for seconds while the bundle arrived (B089).
+      const path = request.url.split('?')[0] ?? '';
+      if (!isClientRoute(path) && existsSync(join(config.staticRoot, NOT_FOUND_DOCUMENT))) {
+        reply.code(404);
+        return sendEntryDocument(reply, NOT_FOUND_DOCUMENT, config.staticRoot, request.url);
+      }
       return sendEntryDocument(
         reply,
         entryDocumentFor(request.url, config.staticRoot),

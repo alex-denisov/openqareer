@@ -211,7 +211,7 @@ async function handleListing(deps: RouteDeps, request: FastifyRequest, reply: Fa
     : undefined;
 
   if (!listing || !summary) {
-    return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1)), 410);
+    return sendDocument(reply, renderGoneDocument(buildCatalogPage(clusters, 1), 'listing'), 410);
   }
 
   const chosen = listingEntries(entries, listing);

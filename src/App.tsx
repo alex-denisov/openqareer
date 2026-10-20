@@ -50,6 +50,7 @@ const CareerWorkspaceShell = lazy(async () => {
 const LandingPage = lazy(loadLandingPage);
 const FaqPage = lazy(() => loadHelpPage('FaqPage'));
 const SupportPage = lazy(() => loadHelpPage('SupportPage'));
+const NotFoundPage = lazy(() => loadHelpPage('NotFoundPage'));
 const LegalDocumentPage = lazy(loadLegalDocumentPage);
 const LoginPage = lazy(() => loadAuthPages().then((module) => ({ default: module.LoginPage })));
 const SignupPage = lazy(() => loadAuthPages().then((module) => ({ default: module.SignupPage })));
@@ -86,7 +87,7 @@ async function loadLandingPage() {
   return { default: module.LandingPage };
 }
 
-async function loadHelpPage(name: 'FaqPage' | 'SupportPage') {
+async function loadHelpPage(name: 'FaqPage' | 'SupportPage' | 'NotFoundPage') {
   const module = await import('./features/site/PublicHelpPages');
   markAppReady();
   return { default: module[name] };
@@ -579,7 +580,10 @@ export default function App() {
 
     return (
       <AppErrorBoundary>
-        <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+        {/* B535: on the web the auth pages wear the public site palette. */}
+        <div className="ps ps-auth">
+          <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+        </div>
       </AppErrorBoundary>
     );
   }
@@ -590,7 +594,11 @@ export default function App() {
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>
-          <HelpPage onNavigate={navigate} signedIn={Boolean(state.session)} />
+          <HelpPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
         </Suspense>
       </AppErrorBoundary>
     );
@@ -601,7 +609,12 @@ export default function App() {
     return (
       <AppErrorBoundary>
         <Suspense fallback={null}>
-          <LegalDocumentPage slug={legalSlug} onNavigate={navigate} />
+          <LegalDocumentPage
+            slug={legalSlug}
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
         </Suspense>
       </AppErrorBoundary>
     );
@@ -631,6 +644,20 @@ export default function App() {
             </Suspense>
           </div>
         </div>
+      </AppErrorBoundary>
+    );
+  }
+
+  if (currentPath !== '/' && currentPath !== '/index.html') {
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <NotFoundPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
+        </Suspense>
       </AppErrorBoundary>
     );
   }

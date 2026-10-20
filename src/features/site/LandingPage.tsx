@@ -12,6 +12,7 @@ import {
 } from '../../../shared/landingStats';
 import { DESKTOP_DOWNLOAD_PATH } from './DesktopDownload';
 import { SiteLink } from './SiteLink';
+import { capturedLandingStats } from './embeddedLandingStats';
 import { preloadAuthPages } from './authPagesLoader';
 import { FaqAnswer, PublicFooter, PublicHeader } from './PublicSiteChrome';
 import {
@@ -40,6 +41,8 @@ export const LANDING_HERO_TITLE = 'Ваш опыт стоит больше, че
 /** Snapshot embedded by the server; the real 20.10 reading otherwise. */
 export function readEmbeddedLandingStats(): LandingStats {
   if (typeof document === 'undefined') return LANDING_STATS_SNAPSHOT;
+  const captured = capturedLandingStats();
+  if (captured) return captured;
   const node = document.getElementById(LANDING_STATS_SCRIPT_ID);
   try {
     const parsed = node?.textContent ? (JSON.parse(node.textContent) as LandingStats) : null;
@@ -103,7 +106,7 @@ function VacancyBoard({ stats, c }: { stats: LandingStats; c: Counts }) {
     <div className="ps-board" aria-label="Удалённые вакансии из пула">
       <div className="ps-board-head">
         <h2>Свежие удалённые вакансии: {c.remote} в пуле</h2>
-        <span>страна работодателя</span>
+        <span>зарплата</span>
       </div>
       {stats.vacancies.map((vacancy, index) => (
         <div className="ps-job" key={index}>
@@ -352,22 +355,25 @@ function ToolsSection({ remote }: { remote: string }) {
             <p className="ps-label">Инструменты</p>
             <h2 id="tools-heading">Каталог вакансий без регистрации</h2>
           </div>
-          <p>Свежие вакансии по ролям и странам, с зарплатой и ссылкой на источник.</p>
+          <p>Свежие вакансии по ролям, городам и странам: источник и дата у каждой.</p>
         </div>
         <div className="ps-tools">
           <a className="ps-tool" href="/vacancies">
             <span className="ps-chip is-ok">работает</span>
             <h3>Каталог вакансий</h3>
             <p>
-              Удалённые и офисные вакансии из пула openqareer: роль, страна, зарплата и прямая
-              ссылка.
+              Удалённые и офисные вакансии по городам и ролям: зарплата, где она указана, дата и
+              прямая ссылка на источник.
             </p>
             <span className="ps-go">Открыть каталог →</span>
           </a>
           <a className="ps-tool" href="/vacancies/remote">
             <span className="ps-chip is-ok">работает</span>
             <h3>Удалённые вакансии</h3>
-            <p>{remote} удалённых вакансий, в том числе за рубежом.</p>
+            <p>
+              {remote} удалённых вакансий в пуле, в том числе за рубежом. В каталоге открыта их
+              часть: роль, зарплата, источник.
+            </p>
             <span className="ps-go">Открыть удалённые →</span>
           </a>
         </div>

@@ -162,7 +162,7 @@ describe('B209: публичный каталог вакансий', () => {
     ]) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(410);
-      expect(response.body, url).toContain('Этой вакансии больше нет');
+      expect(response.body, url).toContain('В этом разделе сейчас нет вакансий');
     }
   });
 

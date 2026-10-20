@@ -50,7 +50,7 @@ describe('документ публичного каталога (B209)', () => 
     expect(html).toContain(`<link rel="stylesheet" href="${CATALOG_STYLESHEET_PATH}">`);
     expect(html).not.toContain('<style>');
     expect(html).not.toContain('oqpart');
-    expect(CATALOG_STYLE).toContain('--primary-accent');
+    expect(CATALOG_STYLE).toContain('--ps-blue');
   });
 
   /**
@@ -122,10 +122,10 @@ describe('документ публичного каталога (B209)', () => 
         }),
       )!,
     );
-    expect(html).toContain('источник — Remotive (Global Remote)');
+    expect(html).toContain('<dt>Источник</dt><dd>Remotive (Global Remote)</dd>');
     // Без имени в реестре площадка не выдумывается.
     const nameless = renderVacancyDocument(buildVacancyDetail(cluster())!);
-    expect(nameless).not.toContain('источник —');
+    expect(nameless).not.toContain('<dt>Источник</dt>');
   });
 
   it('печатает постраничную навигацию ссылками, а не кнопками на скрипте', () => {
@@ -192,12 +192,12 @@ describe('документ публичного каталога (B209)', () => 
       )!,
     );
     expect(html).toContain('RUB');
-    expect(html).toContain('найдена на 2 площадках');
+    expect(html).toContain('<dt>Площадок с этой вакансией</dt><dd>2</dd>');
   });
 
   it('не печатает список навыков, когда их нет', () => {
     const html = renderVacancyDocument(buildVacancyDetail(cluster({ skills: [] }))!);
-    expect(html).not.toContain('catalog-skills');
+    expect(html).not.toContain('cat-skills');
   });
 
   it('печатает ссылку назад на средней странице', () => {
@@ -225,7 +225,7 @@ describe('документ публичного каталога (B209)', () => 
     const html = renderGoneDocument(buildCatalogPage([cluster()], 1));
     expect(html).toContain('Этой вакансии больше нет');
     expect(html).toContain('noindex');
-    expect(html).toContain('catalog-card');
+    expect(html).toContain('cat-card');
   });
 
   /**
@@ -289,10 +289,10 @@ describe('документ публичного каталога (B209)', () => 
         1,
       ),
     );
-    expect(listing).toContain('catalog-breadcrumbs');
+    expect(listing).toContain('<a href="/vacancies">Вакансии</a>');
     expect(listing).toContain('<h1>Вакансии — Москва</h1>');
     expect(renderCatalogDocument(buildCatalogPage([cluster()], 1))).not.toContain(
-      'catalog-breadcrumbs',
+      '<a href="/vacancies">Вакансии</a></nav>',
     );
   });
 
@@ -332,13 +332,13 @@ describe('документ публичного каталога (B209)', () => 
     )!;
     const html = renderVacancyDocument(detail);
 
-    expect(html).toContain('# Senior Distributed Systems Engineer');
-    expect(html).toContain('**Databricks** · Amsterdam, Netherlands · `Remote` · `Full-time`');
-    expect(html).toContain('### Top Skills &amp; Match');
-    expect(html).toContain('`[Rust]` `[Distributed Systems]`');
-    expect(html).toContain('### About the Role');
-    expect(html).toContain('### What You&#39;ll Do');
-    expect(html).toContain('- Build high-scale ingestion systems');
-    expect(html).toContain('### Basic Qualifications');
+    // The generated preamble repeats title, meta and skills shown by the page itself.
+    expect(html).not.toContain('# Senior Distributed Systems Engineer');
+    expect(html).not.toContain('Top Skills');
+    expect(html).toContain('<h2>What You&#39;ll Do</h2>');
+    expect(html).toContain('<li>Build high-scale ingestion systems');
+    expect(html).toContain('<h2>Basic Qualifications</h2>');
+    const emoji = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]/u.exec(html);
+    expect(emoji ? html.slice(emoji.index - 80, emoji.index + 20) : null).toBeNull();
   });
 });
