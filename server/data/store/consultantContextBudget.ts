@@ -45,6 +45,7 @@ export function relatedConsultantStages(stage: CoachTurnStage): readonly CoachTu
     vacancies: ['vacancies', 'career', 'responses'],
     responses: ['responses', 'vacancies', 'interviews'],
     interviews: ['interviews', 'responses'],
+    diary: ['diary'],
   };
   return related[stage];
 }

@@ -1,3 +1,5 @@
+import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
+import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { useEffect, useRef, useState } from 'react';
@@ -164,6 +166,26 @@ export function CareerExpertPanel({
       setSkillQuizApplying(false);
     }
   }
+  const contextKey = JSON.stringify([stage, subject]);
+  const currentContext = useRef(contextKey);
+  currentContext.current = contextKey;
+  const previousContext = useRef(contextKey);
+  const draftByContext = useRef(new Map<string, string>());
+  const contentRef = useRef(content);
+  contentRef.current = content;
+  useEffect(() => {
+    if (previousContext.current === contextKey) return;
+    draftByContext.current.set(previousContext.current, contentRef.current);
+    previousContext.current = contextKey;
+    setContent(draftByContext.current.get(contextKey) ?? initialPrompt ?? '');
+    pendingOperation.current = undefined;
+    setLiveResult(undefined);
+    setLiveTurnIdempotencyKey(undefined);
+    setError(undefined);
+    setSending(false);
+    setPendingQuestion(undefined);
+  }, [contextKey, initialPrompt]);
+
   const pendingOperation = useRef<{
     user: AuthUser;
     content: string;
@@ -279,6 +301,7 @@ export function CareerExpertPanel({
     await sendContent(content);
   }
   async function sendContent(message: string): Promise<boolean> {
+    const operationContext = currentContext.current;
     const clean = message.trim();
     if (!clean || !user) return false;
     // На телефоне шторка свёрнута и прячет ленту: отправка раскрывает её, чтобы ответ был виден.
@@ -313,6 +336,7 @@ export function CareerExpertPanel({
         idempotencyKey,
         messageId,
       });
+      if (currentContext.current !== operationContext) return false;
       pendingOperation.current = undefined;
       setLiveResult(result);
       setQuickRepliesDismissed(false);
@@ -321,20 +345,29 @@ export function CareerExpertPanel({
       setVoiceDraft(false);
       delivered = true;
     } catch (reason) {
-      setError(messageFrom(reason));
+      if (currentContext.current === operationContext) setError(messageFrom(reason));
     } finally {
-      setSending(false);
-      setPendingQuestion(undefined);
+      if (currentContext.current === operationContext) {
+        setSending(false);
+        setPendingQuestion(undefined);
+      }
     }
     if (!delivered) return false;
     try {
-      setSnapshot(await getCandidateWithMessages(stage));
+      const updated = await getCandidateWithMessages(stage);
+      if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
-      setError('Ответ сохранён, но историю пока не удалось обновить.');
+      if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
     return true;
   }
   const turns = consultantTurns(snapshot?.messages);
+  const latestContextTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationContext);
+  const contextResult = liveResult?.adaptationContext ? liveResult : latestContextTurn?.result;
+  const contextTurnKey = liveResult?.adaptationContext ? liveTurnIdempotencyKey : latestContextTurn?.idempotencyKey;
+  const latestAdaptationTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext);
+  const adaptationResult = liveResult?.adaptationTask ? liveResult : latestAdaptationTurn?.result;
+  const adaptationTurnKey = liveResult?.adaptationTask ? liveTurnIdempotencyKey : latestAdaptationTurn?.idempotencyKey;
   const showLiveMessage =
     liveResult &&
     !snapshot?.messages.some(
@@ -542,7 +575,8 @@ export function CareerExpertPanel({
         >
           {loadingSession ? <ExpertPanelSkeleton /> : null}
           {!loadingSession && (turns.length || showLiveMessage) ? (
-            <div className="career-dialogue-history" aria-label="История диалога">
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
+            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
               {turns.map((message) => (
                 <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
                   <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
@@ -582,10 +616,18 @@ export function CareerExpertPanel({
                   ) : null}
                 </article>
               ) : null}
+          {stage === 'diary' && contextResult?.adaptationContext && !contextResult.adaptationTask && contextTurnKey ? <AdaptationAdviceContext key={contextTurnKey} turnKey={contextTurnKey} /> : null}
+          {stage === 'diary' && adaptationResult?.adaptationTask && adaptationResult.adaptationContext && adaptationTurnKey ? (
+            <AdaptationTaskProposal key={adaptationTurnKey} turnKey={adaptationTurnKey}
+              context={adaptationResult.adaptationContext} suggestion={adaptationResult.adaptationTask}
+              currentSubject={subject} />
+          ) : null}
+
               <div ref={historyEndRef} aria-hidden="true" />
             </div>
           ) : !loadingSession ? (
-            <div className="career-dialogue-history" aria-label="История диалога">
+            // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
+            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
               <article className="career-dialogue-turn is-assistant">
                 <span>Карьерный консультант</span>
                 <ConsultantMessage
@@ -618,6 +660,7 @@ export function CareerExpertPanel({
               ) : null}
             </div>
           ) : null}
+          {subjectTitle && stage === 'diary' ? <p className="career-diary-note">Контекст: {subjectTitle}</p> : null}
           {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
@@ -692,6 +735,7 @@ export function CareerExpertPanel({
             <textarea
               ref={inputRef}
               id="career-expert-input"
+              maxLength={subject?.kind === 'adaptation' ? 7000 : 8000}
               value={content}
               onChange={(event) => {
                 setContent(event.target.value);

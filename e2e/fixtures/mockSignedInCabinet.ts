@@ -160,7 +160,7 @@ function mockCareerDiaryWorkplaces(
   return fixture.workplaces;
 }
 
-function mockProfileSnapshot(fixture?: MockCareerDiaryFixture) {
+export function mockProfileSnapshot(fixture?: MockCareerDiaryFixture) {
   const snapshot = structuredClone(candidateSnapshot);
   const experience = fixture?.profileExperience;
   if (experience && snapshot.resume) {
@@ -332,7 +332,7 @@ async function mockGoalRequest(
   return true;
 }
 
-async function mockCareerDiaryRoutes(
+export async function mockCareerDiaryRoutes(
   route: Route,
   path: string,
   fixture?: MockCareerDiaryFixture,

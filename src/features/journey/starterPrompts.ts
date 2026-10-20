@@ -1,6 +1,7 @@
 import type { CoachTurnStage } from '../coach/coachApi';
 
 export const STARTER_PROMPTS_BY_STAGE: Readonly<Record<CoachTurnStage, readonly string[]>> = {
+  diary: ['Как уточнить ожидания?', 'Что мешает двигаться по плану?', 'Как проверить результат?'],
   today: ['С чего начать сегодня?', 'Как оценить этот шаг?', 'Что проверить перед решением?'],
   profile: [
     'Что проверить в моём профиле?',

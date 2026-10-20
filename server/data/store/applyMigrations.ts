@@ -1,3 +1,5 @@
+import { MIGRATION_ADAPTATION_APPLICATIONS } from '../adaptationApplications';
+import { MIGRATION_DIARY_COACH_STAGE } from '../diaryCoachMigration';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   MIGRATION_1,
@@ -96,6 +98,8 @@ export const MIGRATIONS = [
   RESUME_VERSION_MIGRATION,
   PROFILE_REVISION_EXPERIENCE_LINKS_MIGRATION,
   MIGRATION_PRO_TRIAL,
+  MIGRATION_DIARY_COACH_STAGE,
+  MIGRATION_ADAPTATION_APPLICATIONS,
 ] as const;
 
 export function applyMigrations(

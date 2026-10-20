@@ -1,3 +1,6 @@
+import { AdaptationApplications } from './adaptationApplications';
+import { applyAdaptationTask } from './applyAdaptationTask';
+import type { AdaptationContext, AdaptationTaskSuggestion } from '../../shared/adaptationCoach';
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
@@ -76,12 +79,14 @@ function sameMeasurementInput(
 }
 
 export class SqliteCareerDiaryRepository {
+  readonly adaptationApplications: AdaptationApplications;
   constructor(
     private readonly database: DatabaseSync,
     private readonly sealedText: SealedText,
     private readonly inTransaction: InTransaction = (operation) => operation(),
   ) {
     this.database.exec(MIGRATION_44);
+    this.adaptationApplications = new AdaptationApplications(database, sealedText);
   }
 
   saveInterviewPractice(candidateId: string, session: import('../domain/interviewSimulator').InterviewSession): import('../../shared/careerDiary').CareerDiaryInterviewPractice {
@@ -654,6 +659,11 @@ export class SqliteCareerDiaryRepository {
   this.writeWorkplace(candidateId, updated);
   return updated;
 }
+
+  applyAdaptationTask(candidateId: string, context: AdaptationContext, key: string, edits: AdaptationTaskSuggestion & { dueDate: string }, targetTaskId: string | null = null) {
+    return this.inTransaction(() => applyAdaptationTask(candidateId, context, key, edits,
+      id => this.getWorkplace(candidateId, id), workplace => this.writeWorkplace(candidateId, workplace), this.adaptationApplications, targetTaskId));
+  }
 
   setPrimaryWorkplace(
     candidateId: string,

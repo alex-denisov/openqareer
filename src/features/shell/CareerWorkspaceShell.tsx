@@ -1,3 +1,4 @@
+import { useAdaptationPanelContext } from '../diary/adaptationDiscussion';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
@@ -302,6 +303,8 @@ export function CareerWorkspaceShell({
       ),
     [activeView, isCompactViewport],
   );
+
+  useAdaptationPanelContext(activeView, setExpertConfig);
 
   const closeExpert = useCallback(
     () => closeExpertPanel(setExpertConfig, setExpertSheetExpanded, focusConsultantTrigger),

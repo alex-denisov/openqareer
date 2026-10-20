@@ -9,6 +9,7 @@ const stages: CoachTurnStage[] = [
   'vacancies',
   'responses',
   'interviews',
+  'diary',
 ];
 
 describe('consultant starter prompts', () => {

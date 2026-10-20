@@ -194,6 +194,8 @@ interface StoredGermanyMarket {
 }
 
 export interface CoachResult {
+  adaptationTask?: import('../../../shared/adaptationCoach').AdaptationTaskSuggestion | null;
+  adaptationContext?: import('../../../shared/adaptationCoach').AdaptationContext;
   message: string;
   phase: CoachPhase;
   nextQuestion: string | null;

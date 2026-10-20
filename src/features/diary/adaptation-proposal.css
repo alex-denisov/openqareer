@@ -1,0 +1,8 @@
+.adaptation-task-proposal {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.adaptation-task-proposal :is(input, textarea) {
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}

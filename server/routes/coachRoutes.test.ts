@@ -138,6 +138,117 @@ describe('Coach Stage Routes (B340)', () => {
     };
   }
 
+  it('B357 resolves the owned adaptation plan on the server and continues one diary thread', async () => {
+    const { app, headers, store, candidate, getLastInput, coachProvider } = await createTestServer();
+    const workplace = store.careerDiaryRepo.createWorkplace(candidate.id, { company: 'Тестовая компания', title: 'Инженер', startDate: '2026-10-01' });
+    const plan = { id: 'plan-test', workplaceId: workplace.id, startDate: workplace.startDate, createdAt: workplace.createdAt, status: 'active', closedAt: null, tasks: [] };
+    store.careerDiaryRepo.updateWorkplace(candidate.id, workplace.id, { company: workplace.company, planning: { adaptationPlan: plan } } as Parameters<typeof store.careerDiaryRepo.updateWorkplace>[2]);
+    const subject = { kind: 'adaptation', id: workplace.id, planId: plan.id, adaptationStage: 'days_1_30' };
+    const tooLong = await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { messageId: randomUUID(), content: 'а'.repeat(7001), stage: 'diary', subject } });
+    expect(tooLong.statusCode).toBe(400);
+    for (const content of ['Как уточнить ожидания?', 'Пока не знаю']) {
+      const response = await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { messageId: randomUUID(), content, stage: 'diary', subject } });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.json().data.adaptationContext.workplaceId).toBe(workplace.id);
+    }
+    expect(getLastInput()?.stageContext).toContain('Тестовая компания');
+    expect(getLastInput()?.stageContext).toContain('не является подтверждённым достижением');
+    expect(getLastInput()?.messages.some(message => message.content.includes('Как уточнить ожидания?'))).toBe(true);
+    const history = await app.inject({ method: 'GET', url: '/api/v1/candidate/me/messages?stage=diary', headers });
+    expect(history.statusCode).toBe(200);
+    expect(JSON.stringify(history.json())).toContain('Пока не знаю');
+    coachProvider.createTurn.mockImplementationOnce(async input => ({ ...output, result: { ...output.result, phase: input.phase, actionProposals: [], message: 'а'.repeat(6001) } }));
+    const oversized = await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { messageId: randomUUID(), content: 'Проверить ответ', stage: 'diary', subject } });
+    expect(oversized.statusCode).toBe(502);
+    const missing = await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { messageId: randomUUID(), content: 'Обсудим', stage: 'diary', subject: { ...subject, id: randomUUID() } } });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it('B357 confirms only a stored suggestion, retries once, rejects stale and archived plans', async () => {
+    const { app, headers, store, candidate, coachProvider } = await createTestServer();
+    const workplace = store.careerDiaryRepo.createWorkplace(candidate.id, { company: 'Тест', title: 'Инженер', startDate: '2026-10-01' });
+    const plan = { id: 'plan-confirm', workplaceId: workplace.id, startDate: workplace.startDate, createdAt: workplace.createdAt, status: 'active', closedAt: null, tasks: [] };
+    store.careerDiaryRepo.updateWorkplace(candidate.id, workplace.id, { company: workplace.company, planning: { adaptationPlan: plan } } as Parameters<typeof store.careerDiaryRepo.updateWorkplace>[2]);
+    const otherCandidate = createCandidate(store);
+    const key = randomUUID();
+    coachProvider.createTurn.mockImplementationOnce(async input => ({ ...output, result: { ...output.result, phase: input.phase, actionProposals: [], adaptationTask: { title: 'Уточнить ожидания', description: 'Согласовать критерий результата.', dueDate: null } } }));
+    const generated = await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': key }, payload: { messageId: randomUUID(), content: 'Предложи задачу', stage: 'diary', subject: { kind: 'adaptation', id: workplace.id, planId: plan.id, adaptationStage: 'days_1_30' } } });
+    expect(generated.statusCode, generated.body).toBe(200);
+    const foreignHeaders = { ...headers, authorization: `Bearer ${otherCandidate.accessToken}` };
+    expect((await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-proposals/' + key, headers: foreignHeaders })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers: foreignHeaders, payload: { title: 'Чужая задача', description: '', dueDate: '2026-11-01' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers: { origin: 'https://untrusted.example' }, payload: { title: 'Подмена', description: '', dueDate: '2026-11-01' } })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers, payload: { title: 'Подмена', description: '', dueDate: '2026-11-01', result: { completed: true } } })).statusCode).toBe(400);
+    const confirm = () => app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers, payload: { title: 'Согласовать ожидания', description: 'Обсудить критерий с руководителем.', dueDate: '2026-11-01' } });
+    expect((await confirm()).statusCode).toBe(200);
+    const replay = await confirm();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().data.planning.adaptationPlan.tasks).toHaveLength(1);
+    expect(replay.json().data.planning.adaptationPlan.tasks[0].completed).toBe(false);
+    const state = await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-proposals/' + key, headers });
+    expect(state.json().data.status).toBe('applied');
+    const secondKey = randomUUID();
+    coachProvider.createTurn.mockImplementationOnce(async input => ({ ...output, result: { ...output.result, phase: input.phase, actionProposals: [], adaptationTask: { title: 'Вторая задача', description: 'Уточнить результат.', dueDate: null } } }));
+    await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': secondKey }, payload: { messageId: randomUUID(), content: 'Ещё задача', stage: 'diary', subject: { kind: 'adaptation', id: workplace.id, planId: plan.id, adaptationStage: 'days_1_30' } } });
+    store.careerDiaryRepo.updateWorkplace(candidate.id, workplace.id, { title: 'Новая роль' });
+    const stale = await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + secondKey, headers, payload: { title: 'Вторая задача', description: '', dueDate: '2026-11-01' } });
+    expect(stale.statusCode).toBe(409);
+    const rejected = await app.inject({ method: 'POST', url: '/api/v1/coach/proposals/reject', headers, payload: { proposalKey: 'adaptation:' + secondKey } });
+    expect(rejected.statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-proposals/' + secondKey, headers })).json().data.status).toBe('dismissed');
+    store.careerDiaryRepo.updateWorkplace(candidate.id, workplace.id, { endDate: '2026-10-20' });
+    expect((await confirm()).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + randomUUID(), headers, payload: { title: 'Fake', description: '', dueDate: '2026-11-01' } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, payload: { title: 'Fake' } })).statusCode).toBeGreaterThanOrEqual(400);
+  });
+
+  it('B357 replays the same question after its workplace label changes without a second model call', async () => {
+    const { app, headers, store, candidate, coachProvider } = await createTestServer();
+    const place = store.careerDiaryRepo.createWorkplace(candidate.id, { company: 'Тест', title: 'Инженер', startDate: '2026-10-01' });
+    const plan = { id: 'retry-plan', workplaceId: place.id, startDate: place.startDate, createdAt: place.createdAt, status: 'active', closedAt: null, tasks: [] };
+    store.careerDiaryRepo.updateWorkplace(candidate.id, place.id, { company: place.company, planning: { adaptationPlan: plan } } as Parameters<typeof store.careerDiaryRepo.updateWorkplace>[2]);
+    const key = randomUUID();
+    const payload = { messageId: randomUUID(), content: 'Как уточнить ожидания?', stage: 'diary', subject: { kind: 'adaptation', id: place.id, planId: plan.id, adaptationStage: 'prep' } };
+    const request = () => app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': key }, payload });
+    const original = await request();
+    expect(original.statusCode).toBe(200);
+    store.careerDiaryRepo.updateWorkplace(candidate.id, place.id, { title: 'Новая должность' });
+    const replay = await request();
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().data).toEqual(original.json().data);
+    const contextState = await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-context/' + key, headers });
+    expect(contextState.json().data.stale).toBe(true);
+    expect(coachProvider.createTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it('B357 edits an existing task only after confirmation, keeps completion, and exports its receipt', async () => {
+    const { app, headers, store, candidate, coachProvider } = await createTestServer();
+    const place = store.careerDiaryRepo.createWorkplace(candidate.id, { company: 'Тест', title: 'Инженер', startDate: '2026-10-01' });
+    const task = { id: 'task-existing', title: 'Сверить ожидания', description: 'Исходный критерий', dueDate: '2026-11-01', stage: 'prep', category: 'alignment', completed: true, source: 'template' };
+    const plan = { id: 'edit-plan', workplaceId: place.id, startDate: place.startDate, createdAt: place.createdAt, status: 'active', closedAt: null, tasks: [task] };
+    store.careerDiaryRepo.updateWorkplace(candidate.id, place.id, { company: place.company, planning: { adaptationPlan: plan } } as Parameters<typeof store.careerDiaryRepo.updateWorkplace>[2]);
+    const key = randomUUID();
+    const suggestion = { title: 'Уточнить критерий готовности', description: 'Согласовать наблюдаемый результат', dueDate: '2026-11-05', targetTaskId: task.id };
+    coachProvider.createTurn.mockImplementationOnce(async input => ({ ...output, result: { ...output.result, phase: input.phase, actionProposals: [], adaptationTask: suggestion } }));
+    await app.inject({ method: 'POST', url: '/api/v1/coach/turn', headers: { ...headers, 'idempotency-key': key }, payload: { messageId: randomUUID(), content: 'Уточни существующую задачу', stage: 'diary', subject: { kind: 'adaptation', id: place.id, planId: plan.id, adaptationStage: 'prep' } } });
+    const before = await app.inject({ method: 'GET', url: '/api/v1/coach/adaptation-proposals/' + key, headers });
+    expect(before.json().data.target.title).toBe('Сверить ожидания');
+    const edits = { title: suggestion.title, description: suggestion.description, dueDate: suggestion.dueDate };
+    expect((await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers, payload: { ...edits, targetTaskId: 'another-task' } })).statusCode).toBe(400);
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const confirmed = await app.inject({ method: 'POST', url: '/api/v1/coach/adaptation-proposals/' + key, headers, payload: edits });
+      expect(confirmed.statusCode).toBe(200);
+      const tasks = confirmed.json().data.planning.adaptationPlan.tasks;
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]).toMatchObject({ id: task.id, title: suggestion.title, completed: true });
+    }
+    const exported = await app.inject({ method: 'GET', url: '/api/v1/candidate/export', headers });
+    expect(exported.json().data.adaptationApplications).toHaveLength(1);
+    expect(exported.json().data.adaptationApplications[0].targetTaskId).toBe(task.id);
+    expect(store.deleteCandidate(candidate.id)).toBe(true);
+    expect(store.careerDiaryRepo.adaptationApplications.exportApplications(candidate.id)).toEqual([]);
+  });
+
   it('B528 removes invented candidate quick answers before delivery and replay', async () => {
     const { app, headers, coachProvider } = await createTestServer();
     coachProvider.createTurn.mockImplementationOnce(async (input) => ({

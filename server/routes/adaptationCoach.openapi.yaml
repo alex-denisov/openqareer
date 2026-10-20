@@ -1,0 +1,134 @@
+openapi: 3.1.0
+info:
+  title: Candidate adaptation dialogue
+  version: 1.0.0
+  description: B357/B419/B459 additive coach v1 contract. Existing candidate authentication and origin policy apply.
+security:
+  - candidateBearer: []
+paths:
+  /api/v1/coach/turn:
+    post:
+      summary: Continue the existing diary conversation
+      description: >-
+        Existing turn request with stage=diary and subject {kind: adaptation, id: workplaceId,
+        planId, adaptationStage: prep|days_1_30|days_31_60|days_61_90}.
+        Idempotency-Key UUID and messageId are required. Adaptation question content is capped at7000 characters to retain the server context label without truncation. The server loads only the owned plan.
+        Context is not accepted from the client. Opening the panel does not generate a turn.
+        Normal receipt/poll delivery remains unchanged. The result adds optional adaptationTask
+        and server-owned adaptationContext. Context labels are preserved in encrypted messages.
+        Suggestions create no plan changes. Adaptation turns do not create profile facts or actions.
+      responses:
+        '200':
+          description: Existing coach result with adaptation context and optional task suggestion
+        '202':
+          description: Receipt mode, existing coach result polling protocol
+        '400':
+          description: Adaptation subject requires diary stage
+        '401':
+          description: Candidate authentication required
+        '402':
+          description: Existing LLM entitlement gate
+        '404':
+          description: Candidate-owned work or matching plan not found
+        '409':
+          description: Retry key conflicts with a different request
+        '429':
+          description: Existing coach generation rate limit
+  /api/v1/coach/adaptation-proposals/{key}:
+    parameters:
+      - in: path
+        name: key
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Recover the current proposal state
+      description: >-
+        Reads a completed turn owned by the authenticated candidate. Returns data.status:
+        available, applied, dismissed, stale, or read_only. Private, no-store.
+        Returns the owned current target task for an edit preview, together with stale/readOnly flags.
+        No model call. Missing or foreign turn returns the same 404.
+      responses:
+        '200':
+          description: Candidate-owned proposal state
+        '401':
+          description: Candidate authentication required
+        '404':
+          description: No candidate-owned stored suggestion
+        '429':
+          description: Read rate limit
+    post:
+      summary: Confirm an edited task suggestion
+      description: >-
+        Requires a stored completed suggestion owned by the candidate. The plan, stage and
+        expected version come from the stored server context. Title/description/date may be
+        edited by the candidate. The targetTaskId comes only from the stored suggestion; null creates
+        a task, an existing ID updates that same task while retaining completion. The client cannot
+        change the target. An encrypted candidate/workplace-scoped application receipt makes replay
+        durable; receipts are included in candidate export and cascade on workplace/account deletion.
+        Atomic bounded plan update, at most 100 tasks. No implicit
+        task completion or achievement. Retry of the same turn and same edits returns the
+        saved workplace without another task; changed edits or changed plan return 409.
+        Closed and archived plans cannot be changed. Origin/CSRF policy, 8192-byte body cap,
+        rate limit and private/no-store apply. There is no external platform operation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [title, description, dueDate]
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+                description:
+                  type: string
+                  maxLength: 1500
+                dueDate:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Updated workplace, including the saved adaptation plan
+        '400':
+          description: Invalid fields, date or unexpected fields
+        '401':
+          description: Candidate authentication required
+        '403':
+          description: Origin denied or plan is closed/archived
+        '404':
+          description: Stored suggestion or owned plan not found
+        '409':
+          description: Rejected suggestion, different retry, full or changed plan
+        '429':
+          description: Mutation rate limit
+  /api/v1/coach/adaptation-context/{key}:
+    get:
+      summary: Recover context freshness for an advice-only response
+      description: Candidate-owned completed adaptation turn; returns stale/readOnly context without generating a response. Private, no-store.
+      parameters:
+        - in: path
+          name: key
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Owned context status and optional current task target
+        '401':
+          description: Candidate authentication required
+        '404':
+          description: No candidate-owned completed adaptation turn
+        '429':
+          description: Read rate limit
+components:
+  securitySchemes:
+    candidateBearer:
+      type: http
+      scheme: bearer
+      description: Existing browser session cookies are also supported by the application.

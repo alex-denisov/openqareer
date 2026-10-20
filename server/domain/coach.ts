@@ -1,3 +1,4 @@
+import { adaptationStageSchema, adaptationTaskSuggestionSchema, adaptationContextSchema } from '../../shared/adaptationCoach';
 import { z } from 'zod';
 
 const COACH_PHASES = [
@@ -17,6 +18,7 @@ export const COACH_TURN_STAGES = [
   'vacancies',
   'responses',
   'interviews',
+  'diary',
 ] as const;
 
 const MEMORY_KINDS = ['fact', 'preference', 'hypothesis', 'open-question'] as const;
@@ -331,7 +333,10 @@ function normalizeQuickReplies(value: unknown): string[] {
 }
 
 export const coachTurnResultSchema = z.object({
-  message: z.string().trim().min(1).max(6_000),
+  adaptationTask: adaptationTaskSuggestionSchema.nullable().optional(),
+  adaptationContext: adaptationContextSchema.optional(),
+  // Server-owned context labels may add at most 603 characters to a model's 6000-character answer.
+  message: z.string().trim().min(1).max(6_700),
   phase: z.enum(COACH_PHASES),
   memoryCandidates: z.array(memoryCandidateSchema).max(20),
   nextQuestion: z.string().trim().min(1).max(1_000).nullable(),
@@ -390,6 +395,8 @@ export const coachTurnResultSchema = z.object({
 
 export type CoachTurnInput = z.infer<typeof coachTurnInputSchema>;
 export type ResumeRevisionProposal = z.infer<typeof resumeRevisionProposalSchema>;
+// The provider limit stays unchanged; only stored server-labeled replies have extra headroom.
+export const coachProviderTurnResultSchema = coachTurnResultSchema.extend({ message: z.string().trim().min(1).max(6_000) });
 export type CoachTurnResult = z.infer<typeof coachTurnResultSchema>;
 export type CoachMessage = z.infer<typeof coachMessageSchema>;
 export type MemoryCandidate = z.infer<typeof memoryCandidateSchema>;
@@ -401,10 +408,10 @@ export type MarketObservation = z.infer<typeof marketObservationSchema>;
 export const coachTurnStageSchema = z.enum(COACH_TURN_STAGES);
 export type CoachTurnStage = (typeof COACH_TURN_STAGES)[number];
 
-export const coachTurnSubjectSchema = z.object({
-  kind: z.enum(['vacancy', 'application', 'interview']),
-  id: z.string().trim().min(1).max(200),
-});
+export const coachTurnSubjectSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('adaptation'), id: z.string().trim().min(1).max(200), planId: z.string().trim().min(1).max(200), adaptationStage: adaptationStageSchema }).strict(),
+  z.object({ kind: z.enum(['vacancy', 'application', 'interview']), id: z.string().trim().min(1).max(200) }),
+]);
 export type CoachTurnSubject = z.infer<typeof coachTurnSubjectSchema>;
 
 export const STAGE_TO_PHASE: Record<CoachTurnStage, CoachPhase> = {
@@ -414,6 +421,7 @@ export const STAGE_TO_PHASE: Record<CoachTurnStage, CoachPhase> = {
   vacancies: 'market',
   responses: 'targeting',
   interviews: 'interview',
+  diary: 'discovery',
 };
 
 export const COACH_TURN_JSON_SCHEMA = {
@@ -529,6 +537,9 @@ export const COACH_TURN_JSON_SCHEMA = {
         { type: 'null' },
       ],
     },
+    adaptationTask: {
+      anyOf: [{ type: 'object', properties: { targetTaskId: { anyOf: [{ type: 'string', minLength: 1, maxLength: 80 }, { type: 'null' }] }, title: { type: 'string', minLength: 1, maxLength: 200 }, description: { type: 'string', maxLength: 1500 }, dueDate: { anyOf: [{ type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' }, { type: 'null' }] } }, required: ['targetTaskId', 'title', 'description', 'dueDate'], additionalProperties: false }, { type: 'null' }],
+    },
     quickReplies: {
       type: 'array',
       maxItems: 3,
@@ -611,6 +622,7 @@ export const COACH_TURN_JSON_SCHEMA = {
     'careerTrack',
     'actionProposals',
     'quickReplies',
+    'adaptationTask',
   ],
   additionalProperties: false,
 } as const;

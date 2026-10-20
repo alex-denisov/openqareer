@@ -78,6 +78,8 @@ function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
       return 'vacancies';
     case 'responses':
       return 'responses';
+    case 'diary':
+      return 'diary';
     case 'today':
     default:
       return 'today';
@@ -662,6 +664,7 @@ function CabinetSection({
   if (view === 'diary') {
     return (
       <CareerDiaryPage
+        onOpenAdaptation={onOpenExpert ? ({ subject, title }) => onOpenExpert('diary', subject, title) : undefined}
         onOpenConsultant={(goal) => {
           const latestMeasurement = goal.latestMeasurement
             ? `Последний замер от ${goal.latestMeasurement.measuredAt}: ${String(goal.latestMeasurement.value)} ${goal.unit} (источник: ${goal.latestMeasurement.source}).`
@@ -673,7 +676,7 @@ function CabinetSection({
             `Срок: ${goal.dueDate}.`,
             `Статус риска: ${goal.risk.status}. ${goal.risk.explanation}`,
           ].join(' ');
-          onOpenExpert?.('today', undefined, `По цели: ${goal.title}`, initialPrompt);
+          onOpenExpert?.('diary', undefined, `По цели: ${goal.title}`, initialPrompt);
         }}
       />
     );

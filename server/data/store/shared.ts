@@ -74,6 +74,7 @@ export function turnRequestDigest(request: TurnRequest): string {
         request.messageId,
         request.content,
         request.marketQuery ?? null,
+        ...(request.subject?.kind === 'adaptation' ? [request.stage, request.subject] : []),
       ]),
     )
     .digest('hex');

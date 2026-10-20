@@ -14,7 +14,8 @@ import {
   type CareerDiaryAdaptationPlan,
   type CareerDiaryAdaptationStage,
 } from './careerDiaryPlanning';
-import { useCareerDiaryAdaptationConsultant } from './useCareerDiaryAdaptationConsultant';
+import { useAdaptationDiscussion } from './adaptationDiscussion';
+import { ADAPTATION_STAGE_LABELS } from '../../../shared/adaptationCoach';
 import { useCareerDiaryAdaptationPlan } from './useCareerDiaryAdaptationPlan';
 
 interface CareerDiaryAdaptationPlanProps {
@@ -482,37 +483,20 @@ function StageTabs({
   );
 }
 
-function CareerDiaryAdaptationConsultant({
-  workplace,
-  plan,
-  activeStage,
-}: {
+function CareerDiaryAdaptationConsultant({ workplace, plan, activeStage }: {
   readonly workplace: CareerDiaryWorkplace;
   readonly plan: CareerDiaryAdaptationPlan;
   readonly activeStage: CareerDiaryAdaptationStage;
 }) {
-  const result = useCareerDiaryAdaptationConsultant(workplace, plan, activeStage);
+  const open = useAdaptationDiscussion({
+    subject: { kind: 'adaptation', id: workplace.id, planId: plan.id, adaptationStage: activeStage },
+    title: `${workplace.company} · ${workplace.title} · ${ADAPTATION_STAGE_LABELS[activeStage]}`,
+  });
   return (
     <div className="career-diary-adaptation-consultant">
-      <button
-        className="career-btn is-ghost"
-        type="button"
-        disabled={result.sending}
-        aria-busy={result.sending}
-        onClick={() => void result.ask()}
-      >
-        {result.sending ? 'Спрашиваем консультанта…' : 'Обсудить план с консультантом'}
+      <button data-adaptation-consultant-trigger className="career-btn is-ghost" type="button" disabled={!open} onClick={open}>
+        Обсудить план с консультантом
       </button>
-      {result.answer ? (
-        <p className="career-diary-consultant-response" role="status">
-          {result.answer}
-        </p>
-      ) : null}
-      {result.error ? (
-        <p className="career-diary-error" role="alert">
-          {result.error}
-        </p>
-      ) : null}
     </div>
   );
 }

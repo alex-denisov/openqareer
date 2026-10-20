@@ -1,6 +1,6 @@
 import {
   COACH_TURN_JSON_SCHEMA,
-  coachTurnResultSchema,
+  coachProviderTurnResultSchema as coachTurnResultSchema,
   serializeCoachInput,
   type CoachTurnInput,
 } from '../domain/coach';

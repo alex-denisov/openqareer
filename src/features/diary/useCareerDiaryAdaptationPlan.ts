@@ -1,3 +1,4 @@
+import { ADAPTATION_SAVED_EVENT } from './adaptationDiscussion';
 import { useCallback, useEffect, useState } from 'react';
 import type { CareerDiaryWorkplace } from '../../../shared/careerDiary';
 import { apiErrorMessage } from '../coach/apiClient';
@@ -130,6 +131,11 @@ export function useCareerDiaryAdaptationPlan(
   asOf: string | null,
 ) {
   const data = useCareerDiaryWorkplace(enabled, primaryWorkplace, asOf);
+  useEffect(() => {
+    const saved = () => data.reload();
+    window.addEventListener(ADAPTATION_SAVED_EVENT, saved);
+    return () => window.removeEventListener(ADAPTATION_SAVED_EVENT, saved);
+  }, [data.reload]);
   const mutations = useCareerDiaryPlanMutations(data.workplace, data.setWorkplace);
   const actions = useCareerDiaryPlanActions(data.workplace, asOf, mutations.savePlan, mutations.setError);
   const phase = data.workplace && asOf

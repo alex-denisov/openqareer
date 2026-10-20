@@ -27,7 +27,7 @@ interface CandidateExportDependencies {
     SqliteRelocationQuestionnaireRepository,
     'getProfile' | 'getConsent' | 'scenarios'
   >;
-  readonly careerDiaryRepo: Pick<import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository, 'exportInterviewPractices'>;
+  readonly careerDiaryRepo: Pick<import('./sqliteCareerDiaryRepository').SqliteCareerDiaryRepository, 'exportInterviewPractices' | 'adaptationApplications'>;
   readonly exportConsultantConversations: (
     candidateId: string,
   ) => ConsultantConversationExport[];
@@ -55,6 +55,7 @@ export function createSqliteCandidateStoreExportMethods(
         starStories: dependencies.starStoriesRepo.list(candidateId),
         interviewSession: dependencies.interviewSimulatorRepo.getCurrent(candidateId),
         interviewPractices: dependencies.careerDiaryRepo.exportInterviewPractices(candidateId),
+        adaptationApplications: dependencies.careerDiaryRepo.adaptationApplications.exportApplications(candidateId),
         relocationScenarios: dependencies.relocationQuestionnaireRepo.scenarios.list(candidateId, 50).items,
         consultantConversations: dependencies.exportConsultantConversations(candidateId),
         documentContents: snapshot.documents.flatMap((document) => {

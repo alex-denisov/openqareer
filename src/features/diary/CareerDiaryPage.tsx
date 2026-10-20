@@ -1,3 +1,4 @@
+import { AdaptationDiscussionProvider, type AdaptationDiscussionTarget } from './adaptationDiscussion';
 import { CareerDiaryInterviewPractices } from './CareerDiaryInterviewPractices';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CaretLeft, Plus } from '@phosphor-icons/react';
@@ -24,17 +25,18 @@ import './career-diary.css';
 import './career-diary-planning.css';
 
 export interface CareerDiaryPageProps {
+  readonly onOpenAdaptation?: (target: AdaptationDiscussionTarget) => void;
   readonly onOpenConsultant: (goal: CareerDiaryGoalSummary) => void;
 }
 
-export function CareerDiaryPage({ onOpenConsultant }: CareerDiaryPageProps) {
+export function CareerDiaryPage({ onOpenConsultant, onOpenAdaptation }: CareerDiaryPageProps) {
   const controller = useCareerDiaryController(onOpenConsultant);
   useDiaryNavigationFocus(
     controller.activeTab,
     controller.selectedGoalId,
     controller.formGoal !== undefined,
   );
-  return <CareerDiaryScreen {...controller} />;
+  return <AdaptationDiscussionProvider onOpen={onOpenAdaptation}><CareerDiaryScreen {...controller} /></AdaptationDiscussionProvider>;
 }
 
 function useDiaryNavigationFocus(

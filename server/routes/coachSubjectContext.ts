@@ -1,3 +1,4 @@
+import { buildAdaptationContext } from './adaptationCoach';
 import type { CoachTurnSubject } from '../domain/coach';
 import type { RouteDeps } from './deps';
 
@@ -108,6 +109,7 @@ export async function buildCoachSubjectContext(
   candidateId: string,
   subject: CoachTurnSubject,
 ): Promise<string | null> {
+  if (subject.kind === 'adaptation') return buildAdaptationContext(deps, candidateId, subject);
   if (subject.kind === 'vacancy') {
     return buildVacancyContext(deps, candidateId, subject.id);
   }

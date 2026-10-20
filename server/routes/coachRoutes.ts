@@ -1,3 +1,4 @@
+import { adaptationContextFromInput, decorateAdaptationResult, labelAdaptationMessage, scopeAdaptationKnowledge, registerAdaptationCoachRoutes } from './adaptationCoach';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -98,7 +99,7 @@ async function completeTurnWithProvider(
   input: Parameters<CoachProvider['createTurn']>[0],
 ) {
   try {
-    const generated = await deps.coachProvider.createTurn(input, key);
+    const generated = decorateAdaptationResult(await deps.coachProvider.createTurn(input, key), input);
     // Quick replies are proposed candidate answers, unlike the consultant's
     // general advice. Check them before persistence so replay cannot restore
     // an invented achievement that was suppressed in the initial response.
@@ -298,6 +299,10 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   }
   const key = parsedKey.data;
   const body = coachTurnRequestSchema.parse(request.body);
+  if (body.subject?.kind === 'adaptation' && body.content.length > 7000) return sendError(reply, request, 400, 'adaptation_message_too_long', 'Сократите вопрос до 7000 символов.', false);
+  if (body.subject?.kind === 'adaptation' && body.stage !== 'diary') {
+    return sendError(reply, request, 400, 'adaptation_stage_required', 'Откройте обсуждение из карьерного дневника.', false);
+  }
   const phase = body.stage
     ? STAGE_TO_PHASE[body.stage]
     : nextCoachPhase(candidateStore.getSnapshot(candidate.id), body.content);
@@ -311,7 +316,10 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
     stageContext = context;
   }
 
+  const adaptationContext = adaptationContextFromInput({ stageContext });
+  if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
+  if (body.stage === 'diary' && started.state === 'ready') started.input.knowledgeContext = scopeAdaptationKnowledge(started.input.knowledgeContext, stageContext ?? '');
   return continueStartedTurn(deps, request, reply, candidate.id, key, started, body.marketQuery);
 };
 
@@ -353,6 +361,7 @@ const handleVerifySkillQuiz: Handler = async (deps, request, reply) => {
 
 export async function registerCoachRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
   registerCoachResultRoute(app, deps);
+  registerAdaptationCoachRoutes(app, deps);
   registerRoleSkillAssessmentRoutes(app, deps);
   app.post(
     '/api/v1/coach/turn',

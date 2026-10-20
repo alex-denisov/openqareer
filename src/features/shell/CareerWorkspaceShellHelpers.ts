@@ -78,11 +78,9 @@ export function updateExpertStage(
 }
 
 export function focusConsultantTrigger() {
-  const trigger = Array.from(
-    document.querySelectorAll<HTMLButtonElement>(
-      '.career-mobile-consultant-trigger, .consultant-strip-button',
-    ),
-  ).find((candidate) => candidate.getClientRects().length > 0);
+  const visible = (candidate: HTMLButtonElement) => candidate.getClientRects().length > 0;
+  const trigger = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-adaptation-consultant-trigger]')).find(visible)
+    ?? Array.from(document.querySelectorAll<HTMLButtonElement>('.career-mobile-consultant-trigger, .consultant-strip-button')).find(visible);
   trigger?.focus();
 }
 
@@ -113,6 +111,7 @@ export const pageNames: Record<ShellView, string> = {
 };
 
 export function stageForView(view: ShellView): CoachTurnStage {
+  if (view === 'diary') return 'diary';
   if (view === 'profile') return 'profile';
   if (view === 'career') return 'career';
   if (view === 'opportunities') return 'vacancies';
@@ -326,6 +325,7 @@ export const STAGE_TITLE: Record<CoachTurnStage, string> = {
   vacancies: 'Вакансии',
   responses: 'Отклики',
   interviews: 'Интервью',
+  diary: 'Карьерный дневник',
   today: 'Сегодня',
 };
 export const STAGE_INITIAL_REPLICA: Record<CoachTurnStage, string> = {
@@ -334,6 +334,7 @@ export const STAGE_INITIAL_REPLICA: Record<CoachTurnStage, string> = {
   vacancies: 'Выберите вакансию — сравню её требования с вашим опытом и скажу, где пробелы.',
   responses: 'Подскажу, кому и когда напомнить о себе и что написать.',
   interviews: 'Соберу вопросы, которые вам вероятно зададут, и ответы из вашего опыта.',
+  diary: 'Обсудим план адаптации, ожидания и следующий проверяемый шаг.',
   today: 'Скажу, какой шаг сегодня даст больше всего.',
 };
 
