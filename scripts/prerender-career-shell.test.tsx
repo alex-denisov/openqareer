@@ -41,10 +41,12 @@ describe('production career shell prerender', () => {
     expect(html).toContain('class="career-bootstrap-shell" data-bootstrap-shell="true">');
     expect(html).not.toContain('data-bootstrap-shell="true" inert');
     expect(html).toContain('href="/login"');
-    expect(html).toContain('Поиск работы с опорой на проверенные факты');
-    expect(html).toContain('Основной путь бесплатен и без срока');
-    expect(html).toContain('Профиль по фактам');
-    expect(html).toContain('Один следующий шаг');
+    expect(html).toContain('Ваш опыт стоит больше');
+    // B535: pool numbers are server tokens, replaced on every request.
+    expect(html).toContain('%%OQ_ACTIVE%%');
+    expect(html).toContain('Как это работает');
+    expect(readFileSync(join(directory, 'faq.html'), 'utf8')).toContain('Вопросы о поиске работы');
+    expect(readFileSync(join(directory, 'support.html'), 'utf8')).toContain('Поддержка openqareer');
     expect(html).toContain('Тарифы');
     expect(html).toContain('Вопросы');
     expect(html).toContain('application/ld+json');

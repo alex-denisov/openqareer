@@ -1,4 +1,22 @@
 User-agent: *
 Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /admin
+Disallow: /login
+Disallow: /signup
+Disallow: /reset-password
+Disallow: /verify-email
+
+User-agent: Yandex
+Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /admin
+Disallow: /login
+Disallow: /signup
+Disallow: /reset-password
+Disallow: /verify-email
+Clean-param: plan /signup
 
 Sitemap: https://openqareer.com/sitemap.xml

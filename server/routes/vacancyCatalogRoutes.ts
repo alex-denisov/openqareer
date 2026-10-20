@@ -67,6 +67,9 @@ export function buildCatalogSitemap(clusters: readonly VacancyCluster[]): string
 
   const urls = [
     urlEntry('/'),
+    // B535: help pages next to the landing.
+    urlEntry('/faq'),
+    urlEntry('/support'),
     ...LEGAL_DOCS.map((doc) => urlEntry(legalPath(doc.slug), LEGAL_PACK_PUBLISHED_AT)),
     urlEntry(CATALOG_ROOT),
     ...Array.from({ length: Math.max(0, pageCount - 1) }, (_, index) =>
@@ -87,6 +90,9 @@ export function buildCatalogSitemapFromProjection(
 ): string {
   const urls = [
     urlEntry('/'),
+    // B535: help pages next to the landing.
+    urlEntry('/faq'),
+    urlEntry('/support'),
     ...LEGAL_DOCS.map((doc) => urlEntry(legalPath(doc.slug), LEGAL_PACK_PUBLISHED_AT)),
     urlEntry(CATALOG_ROOT),
     ...listings.map((listing) => urlEntry(listing.path)),

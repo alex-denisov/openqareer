@@ -1,9 +1,11 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import fastifyStatic from '@fastify/static';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
+import { applyLandingStats } from '../../shared/landingStats';
+import { getLandingStats } from '../landing/landingStatsCache';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -22,6 +24,31 @@ import { sendError } from './helpers';
 import { rateLimitMessage, retryAfterSeconds } from './rateLimitMessage';
 
 const ADMIN_DOCUMENT = 'admin.html';
+const ENTRY_DOCUMENT = 'index.html';
+/** B535: public help pages prerendered at build time. */
+const HELP_DOCUMENTS: Record<string, string> = { '/faq': 'faq.html', '/support': 'support.html' };
+
+let entryCache: { mtimeMs: number; raw: string } | null = null;
+
+/**
+ * The workspace/landing document with the landing tokens replaced by the
+ * cached pool reading (B535). The file is read once per release; the stats
+ * come from memory, so serving it never touches the vacancy pool.
+ */
+function entryDocumentHtml(staticRoot: string): string {
+  const file = join(staticRoot, ENTRY_DOCUMENT);
+  const mtimeMs = statSync(file).mtimeMs;
+  if (!entryCache || entryCache.mtimeMs !== mtimeMs) {
+    entryCache = { mtimeMs, raw: readFileSync(file, 'utf8') };
+  }
+  return applyLandingStats(entryCache.raw, getLandingStats());
+}
+
+function sendEntryDocument(reply: FastifyReply, document: string, staticRoot: string) {
+  reply.header('Cache-Control', 'no-store, max-age=0');
+  if (document !== ENTRY_DOCUMENT) return reply.sendFile(document);
+  return reply.type('text/html; charset=utf-8').send(entryDocumentHtml(staticRoot));
+}
 
 /**
  * Which prerendered document answers a deep link. Only surfaces that actually
@@ -34,12 +61,14 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   if (path === '/admin' || path.startsWith('/admin/')) {
     if (existsSync(join(staticRoot, ADMIN_DOCUMENT))) return ADMIN_DOCUMENT;
   }
+  const helpDocument = HELP_DOCUMENTS[path.replace(/\/$/u, '')];
+  if (helpDocument && existsSync(join(staticRoot, helpDocument))) return helpDocument;
   const legalSlug = legalSlugFromPath(path);
   if (legalSlug) {
     const document = `legal-${legalSlug}.html`;
     if (existsSync(join(staticRoot, document))) return document;
   }
-  return 'index.html';
+  return ENTRY_DOCUMENT;
 }
 
 /**
@@ -311,6 +340,36 @@ export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((error, request, reply) => handleRouteError(error, request, reply));
 }
 
+/** Deep links get their surface's prerendered document; unknown API and asset paths get 404. */
+function registerEntryFallback(app: FastifyInstance, config: ServerConfig): void {
+  app.setNotFoundHandler(async (request, reply) => {
+    if (request.url.startsWith('/api/')) {
+      return sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false);
+    }
+    if (isBuildAssetPath(request.url)) {
+      return sendError(
+        reply,
+        request,
+        404,
+        'asset_not_found',
+        'Такого файла в этом релизе нет.',
+        false,
+      );
+    }
+    if (request.method === 'GET') {
+      // Each surface has its own prerendered first paint. Serving the
+      // workspace document on `/admin` left administrators looking at the
+      // candidate cabinet for seconds while the bundle arrived (B089).
+      return sendEntryDocument(
+        reply,
+        entryDocumentFor(request.url, config.staticRoot),
+        config.staticRoot,
+      );
+    }
+    return sendError(reply, request, 404, 'route_not_found', 'Такого маршрута нет.', false);
+  });
+}
+
 export async function registerStaticDelivery(
   app: FastifyInstance,
   config: ServerConfig,
@@ -324,14 +383,15 @@ export async function registerStaticDelivery(
       // статики заводит маршрут на каждый файл сборки, и оставленный в `dist`
       // файл сталкивался бы с живым маршрутом — `FST_ERR_DUPLICATED_ROUTE` и
       // процесс не поднимается вовсе.
-      globIgnore: ['server.mjs', 'health', 'sitemap.xml'],
+      globIgnore: ['server.mjs', 'health', 'sitemap.xml', ENTRY_DOCUMENT],
       etag: false,
       lastModified: false,
       cacheControl: false,
       setHeaders: (reply, filePath) => {
         reply.header(
           'Cache-Control',
-          filePath.endsWith('/index.html')
+          // Documents change with every release; only hashed assets are immutable.
+          filePath.endsWith('.html')
             ? 'no-store, max-age=0'
             : 'public, max-age=31536000, immutable',
         );
@@ -339,30 +399,7 @@ export async function registerStaticDelivery(
       allowedPath: (pathName) => pathName !== '/server.mjs' && pathName !== '/health',
     });
 
-    app.setNotFoundHandler(async (request, reply) => {
-      if (request.url.startsWith('/api/')) {
-        return sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false);
-      }
-      if (isBuildAssetPath(request.url)) {
-        return sendError(
-          reply,
-          request,
-          404,
-          'asset_not_found',
-          'Такого файла в этом релизе нет.',
-          false,
-        );
-      }
-      if (request.method === 'GET') {
-        // Each surface has its own prerendered first paint. Serving the
-        // workspace document on `/admin` left administrators looking at the
-        // candidate cabinet for seconds while the bundle arrived (B089).
-        return reply
-          .header('Cache-Control', 'no-store, max-age=0')
-          .sendFile(entryDocumentFor(request.url, config.staticRoot));
-      }
-      return sendError(reply, request, 404, 'route_not_found', 'Такого маршрута нет.', false);
-    });
+    registerEntryFallback(app, config);
   } else {
     app.setNotFoundHandler((request, reply) =>
       sendError(reply, request, 404, 'route_not_found', 'Такого API-маршрута нет.', false),

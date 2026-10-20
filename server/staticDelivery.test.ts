@@ -45,13 +45,15 @@ const provider: CoachProvider = {
 };
 
 async function createStaticApp(
-  options: { adminDocument?: boolean; legalDocuments?: boolean } = {},
+  options: { adminDocument?: boolean; legalDocuments?: boolean; indexHtml?: string } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-static-'));
   writeFileSync(
     join(directory, 'index.html'),
-    '<!doctype html><title>current release</title>',
+    options.indexHtml ?? '<!doctype html><title>current release</title>',
   );
+  writeFileSync(join(directory, 'faq.html'), '<!doctype html><title>faq document</title>');
+  writeFileSync(join(directory, 'support.html'), '<!doctype html><title>support document</title>');
   if (options.legalDocuments !== false) {
     writeFileSync(
       join(directory, 'legal-privacy.html'),
@@ -119,6 +121,40 @@ describe('static release delivery', () => {
    * so the console's visitors watched the candidate cabinet for seconds while
    * the bundle arrived. Each surface now answers with its own first paint.
    */
+  /**
+   * B535 — the landing is prerendered with tokens; the served document carries
+   * the pool numbers and featured vacancies, never a raw token.
+   */
+  it('serves the landing with pool numbers instead of prerender tokens', async () => {
+    const app = await createStaticApp({
+      indexHtml:
+        '<!doctype html><b>%%OQ_ACTIVE%%</b> <b>%%OQ_SOURCES%%</b> %%OQ_SOURCES_WORD%% <i>%%OQ_DATE%%</i> <u>%%OQ_V0_TITLE%%</u>',
+    });
+    for (const url of ['/', '/index.html', '/career']) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.headers['content-type'], url).toContain('text/html');
+      expect(response.headers['cache-control'], url).toContain('no-store');
+      expect(response.body, url).not.toContain('%%OQ_');
+      expect(response.body, url).toContain('<b>1,1 млн</b>');
+      expect(response.body, url).toContain('<b>324</b> источника');
+      expect(response.body, url).toContain('<i>20.10.2026</i>');
+      expect(response.body, url).toContain('<u>Manager II, Developer Advocacy</u>');
+    }
+  });
+
+  it('answers /faq and /support with their own prerendered documents', async () => {
+    const app = await createStaticApp();
+    for (const [url, marker] of [
+      ['/faq', 'faq document'],
+      ['/support', 'support document'],
+    ] as const) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).toContain(marker);
+    }
+  });
+
   it('answers the administrator deep link with the administrator document', async () => {
     const app = await createStaticApp();
 

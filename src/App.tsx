@@ -48,6 +48,8 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
+const FaqPage = lazy(() => loadHelpPage('FaqPage'));
+const SupportPage = lazy(() => loadHelpPage('SupportPage'));
 const LegalDocumentPage = lazy(loadLegalDocumentPage);
 const LoginPage = lazy(() => loadAuthPages().then((module) => ({ default: module.LoginPage })));
 const SignupPage = lazy(() => loadAuthPages().then((module) => ({ default: module.SignupPage })));
@@ -82,6 +84,12 @@ async function loadLandingPage() {
   const module = await import('./features/site/LandingPage');
   markAppReady();
   return { default: module.LandingPage };
+}
+
+async function loadHelpPage(name: 'FaqPage' | 'SupportPage') {
+  const module = await import('./features/site/PublicHelpPages');
+  markAppReady();
+  return { default: module[name] };
 }
 
 async function loadLegalDocumentPage() {
@@ -568,6 +576,18 @@ export default function App() {
     return (
       <AppErrorBoundary>
         <Suspense fallback={<AuthLoadingFallback />}>{renderAuthContent()}</Suspense>
+      </AppErrorBoundary>
+    );
+  }
+
+  const helpPath = currentPath.replace(/\/$/u, '');
+  if ((helpPath === '/faq' || helpPath === '/support') && !isDesktop) {
+    const HelpPage = helpPath === '/faq' ? FaqPage : SupportPage;
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <HelpPage onNavigate={navigate} signedIn={Boolean(state.session)} />
+        </Suspense>
       </AppErrorBoundary>
     );
   }

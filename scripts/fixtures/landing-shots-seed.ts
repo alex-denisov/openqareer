@@ -3,7 +3,7 @@ import type { VacancyApplicationSnapshot } from '../../shared/vacancyApplication
 
 /**
  * Extra synthetic data for landing screenshots (B535): every sent application has a collected
- * cover letter and the funnel shows different roles, not one title. Loopback demo only; the
+ * cover letter and the funnel shows neighbouring engineering-leadership roles of one candidate. Loopback demo only; the
  * companies are invented and nothing is sent anywhere. Enabled with LANDING_SHOTS=1.
  */
 type LandingSeedStore = Pick<
@@ -16,10 +16,10 @@ type LandingSeedStore = Pick<
 >;
 
 const EXTRA = [
-  { title: 'Продуктовый аналитик', company: 'Северный Ритейл', stage: 'responded' },
-  { title: 'Ведущий бухгалтер', company: 'Стройинвест', stage: 'responded' },
-  { title: 'Data Engineer', company: 'Облако Плюс', stage: 'interview' },
-  { title: 'Руководитель отдела продаж', company: 'Дистрибуция Плюс', stage: 'interview' },
+  { title: 'Engineering Manager', company: 'Северный Ритейл', stage: 'responded' },
+  { title: 'Head of Platform', company: 'Стройинвест Диджитал', stage: 'responded' },
+  { title: 'VP Engineering', company: 'Облако Плюс', stage: 'interview' },
+  { title: 'Director of Engineering', company: 'Дистрибуция Плюс', stage: 'interview' },
 ] as const;
 
 const SENT_STAGES = new Set(['applied', 'responded', 'interview', 'offer']);

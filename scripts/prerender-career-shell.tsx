@@ -4,12 +4,18 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminConsole } from '../src/features/admin/AdminConsole';
 import { LandingPage } from '../src/features/site/LandingPage';
+import {
+  FAQ_DESCRIPTION,
+  FAQ_TITLE,
+  FaqPage,
+  SUPPORT_DESCRIPTION,
+  SUPPORT_TITLE,
+  SupportPage,
+} from '../src/features/site/PublicHelpPages';
+import { landingTokenStats } from '../shared/landingStats';
 import { LegalDocumentPage, legalDocumentTitle } from '../src/features/legal/LegalDocumentPage';
 import { buildLlmsFullTxt, buildLlmsTxt } from '../shared/aeoSurface';
-import {
-  CATALOG_STYLE,
-  CATALOG_STYLESHEET_PATH,
-} from '../server/vacancies/vacancyCatalogDocument';
+import { CATALOG_STYLE, CATALOG_STYLESHEET_PATH } from '../server/vacancies/vacancyCatalogDocument';
 import { publicPathViolation } from '../shared/seoSlugPolicy';
 import {
   LEGAL_DOCS,
@@ -42,6 +48,39 @@ function legalHead(html: string, slug: LegalDocSlug, description: string): strin
     );
 }
 
+/** B535: /faq and /support carry their own title, description, canonical and og. */
+export const HELP_PAGES = [
+  { path: '/faq', file: 'faq.html', title: FAQ_TITLE, description: FAQ_DESCRIPTION },
+  {
+    path: '/support',
+    file: 'support.html',
+    title: SUPPORT_TITLE,
+    description: SUPPORT_DESCRIPTION,
+  },
+] as const;
+
+function helpHead(html: string, page: (typeof HELP_PAGES)[number]): string {
+  const title = escapeHtml(page.title);
+  const description = escapeHtml(page.description);
+  const url = `${SITE_ORIGIN}${page.path}`;
+  return html
+    .replace(/<title>[^<]*<\/title>/u, `<title>${title}</title>`)
+    .replace(
+      /<meta name="description" content="[^"]*">/u,
+      `<meta name="description" content="${description}">`,
+    )
+    .replace(/<link rel="canonical" href="[^"]*">/u, `<link rel="canonical" href="${url}">`)
+    .replace(
+      /<meta property="og:url" content="[^"]*">/u,
+      `<meta property="og:url" content="${url}">`,
+    )
+    .replace(/(<meta (?:property|name)="(?:og|twitter):title" content=")[^"]*/gu, `$1${title}`)
+    .replace(
+      /(<meta (?:property|name)="(?:og|twitter):description" content=")[^"]*/gu,
+      `$1${description}`,
+    );
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/gu, '&amp;')
@@ -54,6 +93,10 @@ function escapeHtml(value: string): string {
 export function buildSitemap(): string {
   const urls = [
     { loc: `${SITE_ORIGIN}/`, lastmod: undefined as string | undefined },
+    ...HELP_PAGES.map((page) => ({
+      loc: `${SITE_ORIGIN}${page.path}`,
+      lastmod: undefined as string | undefined,
+    })),
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -103,6 +146,24 @@ function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): strin
   );
 }
 
+/** B535: /faq and /support are indexed documents with their own first paint. */
+async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
+  await writeFile(
+    `${distDirectory}/faq.html`,
+    helpHead(html, HELP_PAGES[0]).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<FaqPage onNavigate={() => {}} />)),
+    ),
+  );
+  await writeFile(
+    `${distDirectory}/support.html`,
+    helpHead(html, HELP_PAGES[1]).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<SupportPage onNavigate={() => {}} />)),
+    ),
+  );
+}
+
 /**
  * Two documents, one bundle.
  *
@@ -127,7 +188,9 @@ export async function prerenderShells(
     indexPath,
     html.replace(
       EMPTY_ROOT,
-      bootstrapRoot(renderToStaticMarkup(<LandingPage onNavigate={() => {}} />)),
+      bootstrapRoot(
+        renderToStaticMarkup(<LandingPage onNavigate={() => {}} stats={landingTokenStats()} />),
+      ),
     ),
   );
   // The console's own pending state, rendered by the console itself, so the
@@ -152,6 +215,7 @@ export async function prerenderShells(
       ),
     );
   }
+  await writeHelpPages(html, distDirectory);
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
   // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
   // обязана падать на транслите до выката, а не после.

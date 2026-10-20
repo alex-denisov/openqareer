@@ -1,148 +1,115 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
+import type { AuthUser } from '../coach/coachApi';
+import { LANDING_STATS_SNAPSHOT, landingTokenStats } from '../../../shared/landingStats';
 import { LandingPage } from './LandingPage';
+import { FAQ_GROUPS } from './publicSiteContent';
 
-describe('LandingPage', () => {
-  it('states free access without inventing an invite gate', () => {
-    const handleNavigate = vi.fn();
-    const html = renderToStaticMarkup(<LandingPage onNavigate={handleNavigate} />);
+const candidate = {
+  id: 'u1',
+  candidateId: 'c1',
+  username: 'maria',
+  displayName: 'Мария',
+  role: 'candidate',
+} as unknown as AuthUser;
+const admin = { ...candidate, role: 'admin' } as unknown as AuthUser;
 
-    // Hero — вариант B отчёта маркетолога (B236, решение владельца 2026-09-21).
-    expect(html).toContain('Поиск работы с опорой на проверенные факты');
-    expect(html).toContain('Основной путь бесплатен и без срока');
-    expect(html).toContain('ничего не отправляет без вашего');
-    expect(html).toContain('Один профиль по фактам');
-    expect(html).toContain('один следующий шаг');
-    expect(html).toContain('Вопросы перед регистрацией');
-    expect(html).toContain('Войти');
-    expect(html).toContain('Создать аккаунт');
-    expect(html).toContain('Собрать профиль бесплатно');
-    expect(html).toContain('application/ld+json');
-    // Площадок много: ни одна строка не подаёт hh.ru или LinkedIn как единственный путь.
-    expect(html).not.toContain('десктопн');
-    expect(html).not.toContain('в десктопном приложении');
-    expect(html).toContain('LinkedIn, hh.ru и другие');
-    // Внутренние слова продукта не показываются кандидату.
-    expect(html).not.toContain('диагностик');
-    expect(html).not.toContain('операционная система');
-    expect(html).not.toContain('выборк');
-    for (const unprovenClaim of [
-      'Никаких галлюцинаций',
-      'полная безопасность аккаунтов',
-      'в реальном времени',
-      '10+ источников',
-      'Telegram-канал',
-      'профильные сообщества',
-      'форматах PDF и DOCX',
-      'Подключить тариф',
-      'Пилот по приглашениям',
-      'Закрытый H1-пилот',
-      'приглашённых участников',
-      'Приглашённый пилот',
-    ]) {
-      expect(html).not.toContain(unprovenClaim);
+function render(session?: AuthUser | null) {
+  return renderToStaticMarkup(
+    <LandingPage onNavigate={vi.fn()} session={session} stats={LANDING_STATS_SNAPSHOT} />,
+  );
+}
+
+describe('LandingPage (B535, approved mockup v18)', () => {
+  it('leads with the approved hero and both registration actions', () => {
+    const html = render();
+    expect(html).toContain('Ваш опыт стоит больше, <span>чем видно в резюме</span>');
+    expect(html).toContain('Сервис для поиска работы с ИИ');
+    expect(html).toContain('подберёт вакансии из всех источников');
+    expect(html).toMatch(/href="\/signup" class="ps-btn is-primary is-lg">Найти работу</u);
+    expect(html).toMatch(/href="\/signup" class="ps-btn is-lg">Подобрать вакансии</u);
+    expect(html).toContain('Загрузить резюме бесплатно');
+    expect(html).toContain('href="#download"');
+    expect(html).toContain('Скачать приложение');
+  });
+
+  it('shows pool numbers with a date and only salaried rows without company names', () => {
+    const html = render();
+    expect(html).toContain('<b>1,1 млн</b> активных вакансий');
+    expect(html).toContain('<b>324</b> источника');
+    expect(html).toContain('Пул openqareer, обновлено 20.10.2026');
+    for (const row of LANDING_STATS_SNAPSHOT.vacancies) {
+      expect(html).toContain(row.title);
+      expect(html).toContain(row.salary);
+    }
+    for (const company of ['Datadog', 'Moderna', 'Reddit', 'Скопа', 'ROSSKO', 'FT capital']) {
+      expect(html).not.toContain(company);
     }
   });
 
-  it('publishes the same access boundary in structured data and FAQ semantics', () => {
-    const html = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
-
-    expect(html).toContain('"@type":"SoftwareApplication"');
-    expect(html).toContain('"inLanguage":"ru-RU"');
-    expect(html).toContain('"isAccessibleForFree":true');
-    expect(html).toContain('"description":"Бесплатный доступ');
-    expect(html).toContain('"@type":"FAQPage"');
-    expect(html).toContain('Что я увижу после загрузки резюме?');
-    expect(html).toContain('Как добавить профили с площадок, где я ищу работу?');
-    expect(html).toContain('Отправляет ли OpenQareer отклики за меня?');
-    expect(html).not.toContain('"offers"');
-  });
-
-  /**
-   * «Пилот» is the owner's internal word for the current stage of the product.
-   * It leaked into the public page — the hero badge, the section that used to
-   * be «Тарифы», the FAQ and the structured data — and told visitors they were
-   * joining a programme rather than using a product.
-   */
-  it('never uses the internal word for the current stage on the public page', () => {
-    const html = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
-
-    expect(html.toLowerCase()).not.toContain('пилот');
-  });
-
-  it('presents the access section as tariffs, with no diagnostic-gated badge', () => {
-    const html = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
-
-    expect(html).toContain('id="tariffs"');
-    expect(html).toContain('Тарифы');
-    expect(html).not.toContain('После диагностики');
-  });
-
-  it('renders "Открыть кабинет" CTA and user badge when candidate session is present', () => {
-    const handleNavigate = vi.fn();
+  it('prerenders tokens the server replaces, never a stale number', () => {
     const html = renderToStaticMarkup(
-      <LandingPage
-        session={{
-          username: 'alexey',
-          email: 'alexey@example.com',
-          displayName: 'Мария',
-          role: 'candidate',
-          isTest: false,
-          candidateId: 'c-1',
-        }}
-        onNavigate={handleNavigate}
-      />,
+      <LandingPage onNavigate={vi.fn()} stats={landingTokenStats()} />,
     );
+    expect(html).toContain('%%OQ_ACTIVE%%');
+    expect(html).toContain('%%OQ_V0_TITLE%%');
+    expect(html).toContain('%%OQ_STATS_JSON%%');
+    expect(html).not.toContain('1 119 270');
+  });
 
+  it('keeps owner-rejected and unproven wording off the page', () => {
+    const html = render();
+    for (const banned of [
+      '—',
+      'квитанц',
+      'анонимн',
+      'Вход через вашу сессию',
+      'человек-эксперт',
+      'тянете',
+      'Бесплатно и без срока',
+      'Найти работу бесплатно',
+      'чаще выбирают',
+      'в тот же день',
+    ]) {
+      expect(html, banned).not.toContain(banned);
+    }
+  });
+
+  it('publishes one organization graph with offers and no FAQPage on the landing', () => {
+    const html = render();
+    expect(html).toContain('"@type":"WebSite"');
+    expect(html).toContain('"@id":"https://openqareer.com/#org"');
+    expect(html).toContain('"operatingSystem":"Web, macOS"');
+    expect(html).toContain('"billingDuration":"P1M"');
+    expect(html).toContain('"minPrice":150000');
+    expect(html).not.toContain('"@type":"FAQPage"');
+    expect(html).not.toContain('Windows"');
+  });
+
+  it('shows six landing questions taken verbatim from the /faq set', () => {
+    const html = render();
+    const all = FAQ_GROUPS.flatMap((group) => group.items);
+    const shown = all.filter((item) => html.includes(item.question));
+    expect(shown).toHaveLength(6);
+    expect(html).toContain('href="/faq"');
+  });
+
+  it('switches the header to the cabinet for a signed-in candidate', () => {
+    const html = render(candidate);
     expect(html).toContain('Открыть кабинет');
-    expect(html).toContain('Мария');
+    expect(html).toContain('href="/app"');
     expect(html).not.toContain('Администрирование');
   });
 
-  it('renders "Администрирование" and admin panel buttons when admin session is present', () => {
-    const handleNavigate = vi.fn();
-    const html = renderToStaticMarkup(
-      <LandingPage
-        session={{
-          username: 'admin.test',
-          email: 'admin@openqareer.com',
-          displayName: 'Администратор',
-          role: 'admin',
-          isTest: true,
-          candidateId: null,
-        }}
-        onNavigate={handleNavigate}
-      />,
-    );
-
+  it('adds the console link for an administrator', () => {
+    const html = render(admin);
     expect(html).toContain('Администрирование');
-    expect(html).toContain('Панель администратора');
-    expect(html).toContain('Открыть кабинет');
+    expect(html).toContain('href="/admin"');
   });
 
-  it('renders landing actions as semantic anchor links without button site-btn or link-btn elements', () => {
-    const guestHtml = renderToStaticMarkup(<LandingPage onNavigate={vi.fn()} />);
-    const adminHtml = renderToStaticMarkup(
-      <LandingPage
-        session={{
-          username: 'admin.test',
-          email: 'admin@openqareer.com',
-          displayName: 'Администратор',
-          role: 'admin',
-          isTest: true,
-          candidateId: null,
-        }}
-        onNavigate={vi.fn()}
-      />,
-    );
-
-    expect(guestHtml).toContain('href="/signup"');
-    expect(guestHtml).toContain('href="/login"');
-    expect(adminHtml).toContain('href="/app"');
-    expect(adminHtml).toContain('href="/admin"');
-
-    for (const html of [guestHtml, adminHtml]) {
-      expect(html).not.toMatch(/<button[^>]*class="[^"]*(site-btn|link-btn)[^"]*"/u);
+  it('renders every action as a link, never a styled button', () => {
+    for (const html of [render(), render(candidate), render(admin)]) {
+      expect(html).not.toMatch(/<button[^>]*class="[^"]*ps-btn/u);
     }
   });
 });
