@@ -52,8 +52,21 @@ async function verifyUploadMenu(page, viewport, baseUrl) {
   await page.getByTestId('first-run-wizard').waitFor({ timeout: 20_000 });
   await page.getByTestId('goal-textarea').fill('Хочу найти работу по своему опыту.');
   await page.getByTestId('save-goal-btn').click();
+  if (viewport.width > 760) {
+    // B538: on 1440 «Файл резюме → Загрузить» opens the system file picker at once, without the 390 menu.
+    const chooser = page.waitForEvent('filechooser', { timeout: 10_000 });
+    await page.getByTestId('source-opt-file').click();
+    await page
+      .getByRole('button', { name: 'Загрузить', exact: true })
+      .click({ timeout: 2_000 })
+      .catch(() => undefined);
+    await chooser;
+    await page.getByTestId('pick-photo-btn').waitFor({ state: 'hidden' });
+    await page.screenshot({ path: `${OUT}/first-run-source-${viewport.name}-file-picker.png` });
+    return;
+  }
   await page.getByTestId('source-opt-file').click();
-  if (viewport.width <= 760) await page.getByTestId('source-next-btn').click();
+  await page.getByTestId('source-next-btn').click();
   await page.getByTestId('pick-photo-btn').click();
   await page
     .locator('.first-run-source-menu-notice')
