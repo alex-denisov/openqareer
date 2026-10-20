@@ -120,3 +120,13 @@ export function plainSummary(markdown: string, limit: number): string {
   const space = cut.lastIndexOf(' ');
   return `${(space > limit * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,.;:—-]+$/u, '')}…`;
 }
+
+/**
+ * Some sources send no description, and the pool fills the summary with
+ * «Title — Place». Repeating the heading is not content: treat it as empty.
+ */
+export function meaningfulText(text: string, title: string): string {
+  const norm = (value: string) => value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+  const rest = norm(text).replace(norm(title), '');
+  return rest.length < 40 ? '' : text;
+}

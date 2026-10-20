@@ -27,7 +27,7 @@ import { isIndexablePage } from '../seo/catalogIndexing';
 import { escapeHtml } from './catalogHtml';
 import { CATALOG_STYLE } from './catalogStyle';
 import { CATALOG_CHROME_FOOTER, catalogChromeHeader } from './catalogChrome';
-import { plainSummary, renderDescriptionHtml } from './catalogMarkdown';
+import { meaningfulText, plainSummary, renderDescriptionHtml } from './catalogMarkdown';
 import { countLabel, formatRuDate, pageFacts } from './catalogCopy';
 
 /**
@@ -173,12 +173,17 @@ function metaLine(entry: CatalogEntry): string {
   );
 }
 
+function summaryLine(entry: CatalogEntry): string {
+  const text = meaningfulText(entry.summary, entry.title);
+  return text ? `<p class="cat-summary">${escapeHtml(plainSummary(text, 220))}</p>` : '';
+}
+
 function entryCard(entry: CatalogEntry): string {
   return (
     '<li class="cat-card">' +
     `<h2><a href="${escapeHtml(entry.path)}">${escapeHtml(entry.title)}</a></h2>` +
     metaLine(entry) +
-    `<p class="cat-summary">${escapeHtml(plainSummary(entry.summary, 220))}</p>` +
+    summaryLine(entry) +
     '</li>'
   );
 }
@@ -336,6 +341,24 @@ export function renderCatalogDocument(
   );
 }
 
+function aboutBox(entry: CatalogEntry, employer: string): string {
+  return (
+    '<div class="cat-box"><h2>О вакансии</h2><dl class="cat-facts">' +
+    (entry.salaryLabel ? `<dt>Зарплата</dt><dd>${escapeHtml(entry.salaryLabel)}</dd>` : '') +
+    `<dt>Работодатель</dt><dd>${escapeHtml(employer)}</dd>` +
+    `<dt>Где</dt><dd>${escapeHtml(placeLabel(entry))}</dd>` +
+    `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
+    `<dt>Проверена</dt><dd>${escapeHtml(formatDate(entry.lastSeenAt))}</dd>` +
+    (entry.sourceName ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName)}</dd>` : '') +
+    (entry.sourceCount > 1
+      ? `<dt>Площадок с этой вакансией</dt><dd>${entry.sourceCount}</dd>`
+      : '') +
+    '</dl>' +
+    `<a class="ps-btn is-primary" rel="nofollow noopener" target="_blank" href="${escapeHtml(entry.sourceUrl)}">Открыть у работодателя</a>` +
+    '</div>'
+  );
+}
+
 export function renderVacancyDocument(detail: VacancyDetail): string {
   const { entry } = detail;
   const employer = employerLabel(entry.company);
@@ -355,23 +378,14 @@ export function renderVacancyDocument(detail: VacancyDetail): string {
     (entry.skills.length > 0
       ? `<ul class="cat-skills">${entry.skills.map((skill) => `<li>${escapeHtml(skill)}</li>`).join('')}</ul>`
       : '') +
-    descriptionBlock(detail.description, entry.summary) +
+    descriptionBlock(
+      meaningfulText(detail.description, entry.title),
+      meaningfulText(entry.summary, entry.title),
+    ) +
     '<p class="cat-note">openqareer не кадровое агентство: вакансия собрана с открытого источника, ' +
     'отклик подаётся на сайте работодателя.</p>' +
     '</article><aside class="cat-side">' +
-    '<div class="cat-box"><h2>О вакансии</h2><dl class="cat-facts">' +
-    (entry.salaryLabel ? `<dt>Зарплата</dt><dd>${escapeHtml(entry.salaryLabel)}</dd>` : '') +
-    `<dt>Работодатель</dt><dd>${escapeHtml(employer)}</dd>` +
-    `<dt>Где</dt><dd>${escapeHtml(placeLabel(entry))}</dd>` +
-    `<dt>Опубликована</dt><dd>${escapeHtml(formatDate(entry.publishedAt))}</dd>` +
-    `<dt>Проверена</dt><dd>${escapeHtml(formatDate(entry.lastSeenAt))}</dd>` +
-    (entry.sourceName ? `<dt>Источник</dt><dd>${escapeHtml(entry.sourceName)}</dd>` : '') +
-    (entry.sourceCount > 1
-      ? `<dt>Площадок с этой вакансией</dt><dd>${entry.sourceCount}</dd>`
-      : '') +
-    '</dl>' +
-    `<a class="ps-btn is-primary" rel="nofollow noopener" target="_blank" href="${escapeHtml(entry.sourceUrl)}">Открыть у работодателя</a>` +
-    '</div>' +
+    aboutBox(entry, employer) +
     CTA_BOX +
     '</aside></div></main>' +
     siteFooter();

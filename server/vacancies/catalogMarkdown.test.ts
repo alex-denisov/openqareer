@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderDescriptionHtml, plainSummary } from './catalogMarkdown';
+import { meaningfulText, renderDescriptionHtml, plainSummary } from './catalogMarkdown';
 
 describe('renderDescriptionHtml', () => {
   it('renders headings, emphasis, lists and paragraphs', () => {
@@ -54,5 +54,14 @@ describe('plainSummary', () => {
       30,
     );
     expect(text).toBe('Bold start with code and link…');
+  });
+});
+
+describe('meaningfulText', () => {
+  it('drops a summary that only repeats the title and place', () => {
+    const title = 'Data Quality & Systems Intern - Student Placement Year';
+    expect(meaningfulText(`${title} — Weybridge`, title)).toBe('');
+    const real = `${title}. You will own data checks across three product lines and ship tooling.`;
+    expect(meaningfulText(real, title)).toBe(real);
   });
 });
