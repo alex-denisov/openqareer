@@ -886,7 +886,7 @@ export class MultiSourceVacancyEngine {
   public runWorkdayDescriptionStep(): Promise<WorkdayDescriptionReport> {
     const pool = this.pool;
     if (typeof pool.loadVacanciesWithoutFullText !== 'function') {
-      return Promise.resolve({ requested: 0, loaded: 0, gone: 0, failed: 0 });
+      return Promise.resolve({ requested: 0, loaded: 0, gone: 0, failed: 0, throttled: 0 });
     }
     this.workdayDescriptions ??= new WorkdayDescriptionBackfill({
       pool: {
@@ -899,6 +899,8 @@ export class MultiSourceVacancyEngine {
         [...this.sources.values()]
           .filter((source) => source.enabled && this.rights.get(source.id) === 'live')
           .map((source) => source.id),
+      // Такт воркера — 10 с; источник без своего темпа спрашивается раз в 20 с.
+      defaultIntervalMs: 20_000,
       ...(this.workdayDetailFetch ? { fetchDetail: this.workdayDetailFetch } : {}),
     });
     return this.workdayDescriptions.step();

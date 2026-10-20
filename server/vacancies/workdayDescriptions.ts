@@ -56,6 +56,8 @@ export interface WorkdayDescriptionReport {
   readonly loaded: number;
   readonly gone: number;
   readonly failed: number;
+  /** Ответы 429: источник поставлен на паузу, запись не считается неудачной. */
+  readonly throttled: number;
 }
 
 export function isWorkdaySource(sourceId: string): boolean {
@@ -127,7 +129,16 @@ export const fetchWorkdayDetail: WorkdayDetailFetch = async (url, format) => {
   return { status: res.status, payload: format === 'json' ? await res.json() : await res.text() };
 };
 
-type Outcome = 'loaded' | 'gone' | 'failed';
+type Outcome = 'loaded' | 'gone' | 'failed' | 'throttled';
+
+const DEFAULT_THROTTLE_PAUSE_MS = 15 * 60_000;
+const EMPTY_REPORT: WorkdayDescriptionReport = {
+  requested: 0,
+  loaded: 0,
+  gone: 0,
+  failed: 0,
+  throttled: 0,
+};
 
 export class WorkdayDescriptionBackfill {
   private readonly pool: WorkdayDescriptionPool;
@@ -137,6 +148,12 @@ export class WorkdayDescriptionBackfill {
   private readonly perSource: number;
   private readonly maxAttempts: number;
   private readonly delayMs: number;
+  private readonly now: () => number;
+  private readonly random: () => number;
+  /** Темп источника без своего `intervalMs`; 0 — каждый такт. */
+  private readonly defaultIntervalMs: number;
+  /** Когда источник снова можно спрашивать (темп и пауза после 429). */
+  private readonly nextDueAt = new Map<string, number>();
   /** Неудачи по id: после `maxAttempts` запись больше не запрашивается до перезапуска. */
   private readonly attempts = new Map<string, number>();
   private running = false;
@@ -149,6 +166,9 @@ export class WorkdayDescriptionBackfill {
     perSource?: number;
     maxAttempts?: number;
     delayMs?: number;
+    now?: () => number;
+    random?: () => number;
+    defaultIntervalMs?: number;
   }) {
     this.pool = options.pool;
     this.sourceIds = options.sourceIds;
@@ -157,14 +177,20 @@ export class WorkdayDescriptionBackfill {
     this.perSource = options.perSource ?? DEFAULT_PER_SOURCE;
     this.maxAttempts = options.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
     this.delayMs = options.delayMs ?? DEFAULT_DELAY_MS;
+    this.now = options.now ?? Date.now;
+    this.random = options.random ?? Math.random;
+    this.defaultIntervalMs = options.defaultIntervalMs ?? 0;
   }
 
   /** Один тик; если прошлый ещё идёт, новый не начинается. */
   async step(): Promise<WorkdayDescriptionReport> {
-    if (this.running) return { requested: 0, loaded: 0, gone: 0, failed: 0 };
+    if (this.running) return EMPTY_REPORT;
     this.running = true;
     try {
-      const sources = this.sourceIds().filter(isDetailTextSource);
+      const startedAt = this.now();
+      const sources = this.sourceIds()
+        .filter(isDetailTextSource)
+        .filter((sourceId) => (this.nextDueAt.get(sourceId) ?? 0) <= startedAt);
       const outcomes = await Promise.all(sources.map((sourceId) => this.stepSource(sourceId)));
       const flat = outcomes.flat();
       return {
@@ -172,6 +198,7 @@ export class WorkdayDescriptionBackfill {
         loaded: flat.filter((o) => o === 'loaded').length,
         gone: flat.filter((o) => o === 'gone').length,
         failed: flat.filter((o) => o === 'failed').length,
+        throttled: flat.filter((o) => o === 'throttled').length,
       };
     } finally {
       this.running = false;
@@ -183,15 +210,27 @@ export class WorkdayDescriptionBackfill {
   }
 
   private async stepSource(sourceId: string): Promise<Outcome[]> {
+    const source = detailTextSourceFor(sourceId);
+    const paced = source?.intervalMs !== undefined;
+    const interval = paced
+      ? source.intervalMs! + Math.round(this.random() * (source.intervalJitterMs ?? 0))
+      : this.defaultIntervalMs;
+    this.nextDueAt.set(sourceId, this.now() + interval);
     const batch = this.pool.loadVacanciesWithoutFullText(
       sourceId,
-      this.perSource,
+      paced ? 1 : this.perSource,
       this.exhaustedIds(),
     );
     const outcomes: Outcome[] = [];
     for (let index = 0; index < batch.length; index += 1) {
       if (index > 0) await this.sleep(this.delayMs);
-      outcomes.push(await this.loadOne(sourceId, batch[index]!));
+      const outcome = await this.loadOne(sourceId, batch[index]!);
+      outcomes.push(outcome);
+      if (outcome === 'throttled') {
+        const pause = source?.throttlePauseMs ?? DEFAULT_THROTTLE_PAUSE_MS;
+        this.nextDueAt.set(sourceId, this.now() + pause);
+        break;
+      }
     }
     return outcomes;
   }
@@ -206,6 +245,7 @@ export class WorkdayDescriptionBackfill {
     } catch {
       return this.fail(vacancy.id);
     }
+    if (response.status === 429) return 'throttled';
     if (response.status === 404 || response.status === 410) {
       this.pool.markExpired([vacancy.id], new Date().toISOString());
       this.attempts.delete(vacancy.id);

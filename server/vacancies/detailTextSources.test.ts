@@ -30,7 +30,7 @@ const ldPage = (description: string) =>
    <script type="application/ld+json">${JSON.stringify({ '@type': 'JobPosting', title: 'Engineer', description })}</script></head></html>`;
 
 describe('detail text sources (B535)', () => {
-  it('covers Workday, SmartRecruiters, Eightfold, Habr and YC, nothing else', () => {
+  it('covers Workday, SmartRecruiters, Eightfold, Habr, YC and LinkedIn, nothing else', () => {
     for (const id of [
       'ats-workday-nvidia',
       'ats-smartrecruiters-BoschGroup',
@@ -39,10 +39,11 @@ describe('detail text sources (B535)', () => {
       'src-qualcomm-careers',
       'src-habr-career',
       'src-yc-work-at-startup',
+      'src-linkedin-guest',
     ]) {
       expect(isDetailTextSource(id), id).toBe(true);
     }
-    for (const id of ['src-linkedin-guest', 'src-himalayas', 'src-hh-search', 'ats-greenhouse-x']) {
+    for (const id of ['src-himalayas', 'src-hh-search', 'ats-greenhouse-x']) {
       expect(isDetailTextSource(id), id).toBe(false);
     }
   });
@@ -263,5 +264,114 @@ describe('MultiSourceVacancyEngine detail step for registry sources (B535)', () 
     for (const sourceId of Object.keys(links)) {
       expect(engine.getVacancy(`${sourceId}:7`)?.fullDescription, sourceId).toContain('Python');
     }
+  });
+});
+
+const LINKEDIN_PAGE = `<div class="description__text description__text--rich"><section class="show-more-less-html" data-max-lines="5">
+  <div class="show-more-less-html__markup show-more-less-html__markup--clamp-after-5 relative overflow-hidden">
+    <p>Lead the <strong>Kubernetes</strong> platform.</p><ul><li>Own SLOs</li></ul>
+  </div>
+  <button class="show-more-less-html__button show-more-less-button" aria-label="Show more">Show more</button>
+</section></div>`;
+
+describe('LinkedIn guest job text (B535)', () => {
+  const li = detailTextSourceFor('src-linkedin-guest')!;
+
+  it('asks the guest jobPosting page by the id of the public link, every 10–20 s at random', () => {
+    expect(li.format).toBe('html');
+    expect([li.intervalMs, li.intervalJitterMs]).toEqual([10_000, 10_000]);
+    expect(
+      li.detailUrl('src-linkedin-guest', { url: 'https://www.linkedin.com/jobs/view/4466903873' }),
+    ).toBe('https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4466903873');
+    expect(
+      li.detailUrl('src-linkedin-guest', { url: 'https://evil.com/jobs/view/1' }),
+    ).toBeUndefined();
+    expect(
+      li.detailUrl('src-linkedin-guest', { url: 'https://www.linkedin.com/in/someone' }),
+    ).toBeUndefined();
+  });
+
+  it('reads the description markup and nothing of the buttons around it', () => {
+    const text = li.readText(LINKEDIN_PAGE);
+    expect(text).toContain('Lead the Kubernetes platform.');
+    expect(text).toContain('Own SLOs');
+    expect(text).not.toContain('Show more');
+    expect(li.readText('<html>login wall</html>')).toBe('');
+  });
+});
+
+describe('detail backfill pacing (B535)', () => {
+  function linkedinPool(count: number) {
+    const rows = Array.from({ length: count }, (_, i) =>
+      vacancy(`li:${i}`, 'src-linkedin-guest', `https://www.linkedin.com/jobs/view/${i + 1}`),
+    );
+    const pool: WorkdayDescriptionPool = {
+      loadVacanciesWithoutFullText: (_id, limit, exclude) =>
+        rows.filter((r) => !exclude.includes(r.id)).slice(0, limit),
+      mergeSourceSlice: (_id, list) => {
+        for (const v of list)
+          rows.splice(
+            rows.findIndex((r) => r.id === v.id),
+            1,
+          );
+        return {};
+      },
+      markExpired: () => 0,
+    };
+    return pool;
+  }
+
+  it('sends LinkedIn one request, then waits 10 s plus a random part up to 10 s', async () => {
+    let now = 0;
+    const asked: string[] = [];
+    const backfill = new WorkdayDescriptionBackfill({
+      pool: linkedinPool(5),
+      sourceIds: () => ['src-linkedin-guest'],
+      fetchDetail: async (url) => {
+        asked.push(url);
+        return { status: 200, payload: LINKEDIN_PAGE };
+      },
+      sleep: async () => undefined,
+      now: () => now,
+      random: () => 0.5,
+    });
+    await backfill.step();
+    expect(asked).toHaveLength(1);
+    now = 10_000;
+    await backfill.step();
+    expect(asked).toHaveLength(1);
+    now = 15_000;
+    await backfill.step();
+    expect(asked).toHaveLength(2);
+  });
+
+  it('stops LinkedIn for an hour after 429 without counting it as a failure', async () => {
+    let now = 0;
+    let status = 429;
+    const asked: string[] = [];
+    const backfill = new WorkdayDescriptionBackfill({
+      pool: linkedinPool(2),
+      sourceIds: () => ['src-linkedin-guest'],
+      fetchDetail: async (url) => {
+        asked.push(url);
+        return status === 200 ? { status, payload: LINKEDIN_PAGE } : { status };
+      },
+      sleep: async () => undefined,
+      now: () => now,
+      maxAttempts: 1,
+    });
+    expect(await backfill.step()).toMatchObject({
+      requested: 1,
+      loaded: 0,
+      failed: 0,
+      throttled: 1,
+    });
+    now = 30 * 60_000;
+    await backfill.step();
+    expect(asked).toHaveLength(1);
+    status = 200;
+    now = 60 * 60_000;
+    expect(await backfill.step()).toMatchObject({ loaded: 1 });
+    expect(asked[1]).toBe(asked[0]);
   });
 });

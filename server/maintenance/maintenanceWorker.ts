@@ -111,8 +111,9 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   titleParseMs: 5 * 1_000,
   titleModelMs: 30 * 1_000,
   descriptionSkillsMs: 10 * 1_000,
-  // До двух запросов на хост Workday за тик: ~6 в минуту на тенанта (B535).
-  workdayDescriptionMs: 20 * 1_000,
+  // Такт дочитывания текста (B535): Workday и др. — до двух запросов на хост
+  // раз в 20 с, LinkedIn — один раз в 10–20 с случайно; темп держит сам шаг.
+  workdayDescriptionMs: 10 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
 };

@@ -17,8 +17,12 @@ import { WORKDAY_SOURCE_PREFIX } from './workdayBoardSources';
  * - Habr Career и YC: публичная страница вакансии, `JobPosting` в JSON-LD;
  *   robots разрешает `/vacancies/<id>` и `/companies/<slug>/jobs/<slug>`.
  *
- * Нет здесь: LinkedIn (40К записей против канала продвижения и робота,
- * запрещающего `/jobs-guest/` — решение владельца), Himalayas (страница
+ * - LinkedIn: гостевая карточка `/jobs-guest/jobs/api/jobPosting/<id>`, текст
+ *   в `show-more-less-html__markup`. robots запрещает `/jobs-guest/`; чтение
+ *   карточек разрешил владелец 20.10 со случайным темпом 10–20 с между запросами (B535, к
+ *   решению B218 о поиске). Учётки пула не участвуют: это гостевой GET.
+ *
+ * Нет здесь: Himalayas (страница
  * отвечает 403 боту, а текст уже несёт JSON-источник `src-himalayas-api`),
  * hh (текст дочитывается по запросу, B304).
  */
@@ -28,6 +32,12 @@ export interface DetailTextSource {
   readonly format: DetailFormat;
   detailUrl(sourceId: string, vacancy: Pick<UnifiedVacancy, 'url'>): string | undefined;
   readText(payload: unknown): string;
+  /** Не чаще одного запроса за столько мс; без поля — каждый такт воркера. */
+  readonly intervalMs?: number;
+  /** Случайная добавка к `intervalMs` (0…jitter), чтобы такт не был ровным. */
+  readonly intervalJitterMs?: number;
+  /** Пауза источника после 429: площадка просит остановиться. */
+  readonly throttlePauseMs?: number;
 }
 
 const SMARTRECRUITERS_PREFIX = 'ats-smartrecruiters-';
@@ -158,10 +168,33 @@ function jsonLdPage(host: string, path: RegExp): DetailTextSource {
   };
 }
 
+const LINKEDIN_MARKUP =
+  /show-more-less-html__markup[^>]*>([\s\S]*?)(?:<button[^>]*show-more-less-html__button|<\/section>)/;
+
+const linkedin: DetailTextSource = {
+  format: 'html',
+  intervalMs: 10_000,
+  intervalJitterMs: 10_000,
+  throttlePauseMs: 60 * 60_000,
+  detailUrl: (_sourceId, vacancy) => {
+    const match = httpsUrl(vacancy.url, 'www.linkedin.com')?.pathname.match(
+      /^\/jobs\/view\/(\d+)\/?$/,
+    );
+    return match
+      ? `https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/${match[1]}`
+      : undefined;
+  },
+  readText: (payload) => {
+    const markup = typeof payload === 'string' ? payload.match(LINKEDIN_MARKUP)?.[1] : undefined;
+    return markup ? htmlText(markup.replace(/<\/div>\s*$/, '')) : '';
+  },
+};
+
 const BY_ID: Readonly<Record<string, DetailTextSource>> = {
   'src-microsoft-careers': eightfoldPcsx('apply.careers.microsoft.com', 'microsoft.com'),
   'src-qualcomm-careers': eightfoldPcsx('careers.qualcomm.com', 'qualcomm.com'),
   'src-netflix': netflix,
+  'src-linkedin-guest': linkedin,
   'src-habr-career': jsonLdPage('career.habr.com', /^\/vacancies\/\d+\/?$/),
   'src-yc-work-at-startup': jsonLdPage(
     'www.ycombinator.com',
