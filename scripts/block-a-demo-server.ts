@@ -11,6 +11,7 @@ import { SqliteCandidateReputationRepository } from '../server/data/sqliteCandid
 import { historicalAudit } from './fixtures/block-a-footprint-fixture';
 import { seedBlockAToday } from './fixtures/block-a-today-seed';
 import { mockupResumeDraft, seedMockupToday } from './fixtures/mockup-today-seed';
+import { seedLandingShots } from './fixtures/landing-shots-seed';
 import { SqliteCandidateDraftRepository } from '../server/candidate/sqliteCandidateDraftRepository';
 import type { SessionAuth } from '../server/auth/authService';
 import type { ServerConfig } from '../server/config';
@@ -57,6 +58,7 @@ const candidate = candidateStore.createCandidate({ dataClass: 'synthetic', local
 seedBlockAToday(candidateStore, candidate.id, config.applicationArchiveStaleDays);
 const candidateDraftRepository = new SqliteCandidateDraftRepository({ databasePath: ':memory:' });
 seedMockupToday(candidateStore, candidateDraftRepository, candidate.id);
+if (process.env.LANDING_SHOTS === '1') seedLandingShots(candidateStore, candidate.id);
 // Two imports, as in the approved Profile mockup: LinkedIn and hh.ru each own their facts,
 // so the source chips and provenance read real import labels, not a synthetic one.
 const fromHh = (fact: (typeof syntheticResumeMemory)[number]) => /marketing/u.test(fact.id);
