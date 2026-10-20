@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, X } from '@phosphor-icons/react';
 import {
+  TEAM_SIZE_HINT,
   usePositionFormState,
   usePositionSubmit,
   type PositionEditorProps,
@@ -69,7 +70,7 @@ function MonthField({
 
 function MobileIdentityFields({ form }: { readonly form: PositionFormState }) {
   return (
-    <ProfileMobileGroup>
+    <ProfileMobileGroup foot={`Размер команды: ${TEAM_SIZE_HINT.toLowerCase()}`}>
       <TextField
         label="Должность"
         value={form.title}

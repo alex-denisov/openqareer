@@ -52,6 +52,8 @@ export interface PositionFormState extends PositionFormBasics, PositionFormFacts
   readonly teamSizeInvalid: boolean;
 }
 
+export const TEAM_SIZE_HINT = 'Все люди в вашей вертикали, включая руководителей команд.';
+
 const TEAM_SIZE_PATTERN = /^\d{1,6}$/u;
 
 /** Empty means unknown; anything else must be a whole number of people from 1. */
@@ -433,6 +435,7 @@ function PositionTeamSizeField({ form }: { readonly form: PositionFormState }) {
         />
         <span className="profile-position-editor__unit">человек</span>
       </span>
+      <small className="profile-position-editor__hint">{TEAM_SIZE_HINT}</small>
     </label>
   );
 }

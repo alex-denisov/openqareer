@@ -125,6 +125,9 @@ describe('mobile position form', () => {
     const field = input(container, '[name="teamSize"]', '38');
     expect(field.closest('label')?.textContent).toContain('Размер команды');
     expect(field.closest('label')?.textContent).toContain('человек');
+    expect(container.textContent).toContain(
+      'Размер команды: все люди в вашей вертикали, включая руководителей команд.',
+    );
     await act(async () =>
       container
         .querySelector('form')!

@@ -535,6 +535,9 @@ describe('PositionEditForm team size (B540)', () => {
     const input = container.querySelector<HTMLInputElement>('input[name="teamSize"]');
     expect(input?.closest('label')?.textContent).toContain('Размер команды');
     expect(input?.closest('label')?.textContent).toContain('человек');
+    expect(input?.closest('label')?.textContent).toContain(
+      'Все люди в вашей вертикали, включая руководителей команд.',
+    );
     changeTeamSize(container, '38');
     await submitForm(container);
     expect(onSave).toHaveBeenCalledTimes(1);

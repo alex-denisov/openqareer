@@ -241,3 +241,8 @@
   flex: none;
   color: var(--career-muted);
 }
+
+.profile-position-editor__hint {
+  color: var(--career-muted);
+  font-size: var(--career-text-aux);
+}
