@@ -53,11 +53,12 @@ it('keeps only skill names on legacy chips, without matcher prefixes or role poi
         'Подтверждённый навык: Engineering management',
         'Частичное совпадение по роли: CTO',
         'Подтверждённый навык: Платёжные системы',
+        'React',
       ],
       ['Kafka', 'Kubernetes'],
     ),
   ).toEqual({
-    confirmed: ['Engineering management', 'Платёжные системы'],
+    confirmed: ['Engineering management', 'Платёжные системы', 'React'],
     unconfirmed: ['Kafka', 'Kubernetes'],
   });
 });

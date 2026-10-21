@@ -1474,8 +1474,9 @@ test.describe('B250 vacancies screen', () => {
       if (getComputedStyle(main).overflowY === 'auto') main.scrollTop += delta;
       else window.scrollBy(0, delta);
     });
-    await expect(moscowChip).toBeVisible();
-    const mobileChipBox = await moscowChip.boundingBox();
+    const mobilePin = mapView.getByRole('button', { name: 'Город Москва: 2 вакансий' });
+    await expect(mobilePin).toBeVisible();
+    const mobileChipBox = await mobilePin.boundingBox();
     expect(mobileChipBox?.width).toBeGreaterThanOrEqual(44);
     expect(mobileChipBox?.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
@@ -1835,7 +1836,9 @@ test.describe('B250 vacancies screen', () => {
     });
   });
 
-  test('B371: fit status is visible beside the level value', async ({ page }) => {
+  test('B371: fit status is visible beside the level value', async ({ page }, testInfo) => {
+    // B446-g4: на 390 колонки уровня нет — статус строки «Подходит / Другой город» справа.
+    test.skip(testInfo.project.name === 'mobile-390', '390 shows the row status instead');
     await stubSession(page, { facets: null });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });

@@ -9969,6 +9969,13 @@
   fill: transparent;
 }
 
+/* На 390 карта сжата примерно в 2,5 раза — зона касания растёт в координатах SVG. */
+@media (max-width: 760px) {
+  .career-map-hit {
+    r: 56px;
+  }
+}
+
 .career-map-cluster-group {
   cursor: pointer;
 }

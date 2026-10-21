@@ -67,8 +67,9 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   completed = true;
   await evidence.getByRole('button', { name: 'Обновить результат' }).click();
   await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
-  await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-percent')).toHaveText(
-    '50%',
+  // B446-g4: строка списка — «Соответствие 50 %» мелким под «компания · источник».
+  await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-inline')).toHaveText(
+    'Соответствие 50\u00a0%',
   );
   await expect(evidence.getByRole('table')).toContainText('Требуется опыт управления продуктом.');
   await expect(evidence.getByRole('table')).toContainText(

@@ -82,6 +82,8 @@ function measure(minFontPx: number): ReadabilityFacts {
     return new DOMRect(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
   };
   for (const element of withText) {
+    // B446-g4: текст только для экранного диктора (career-sr-only) не виден и не меряется.
+    if (getComputedStyle(element).clipPath === 'inset(50%)') continue;
     const fontSize = Number.parseFloat(getComputedStyle(element).fontSize);
     const isMicro = fontSize === microPx;
     if (!isMicro) sizes.set(fontSize, (sizes.get(fontSize) ?? 0) + 1);
