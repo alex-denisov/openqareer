@@ -219,3 +219,13 @@
     display: none;
   }
 }
+
+.vacancies-mobile-sort-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  margin-block-start: var(--career-space-3);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}

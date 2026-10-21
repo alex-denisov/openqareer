@@ -82,7 +82,12 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+  // B446-g4: на 1440 порядок — в строке заголовков колонок, на 390 — строка в листе фильтров.
+  if (testInfo.project.name === 'mobile-390')
+    await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
   await page.getByLabel('Порядок вакансий').selectOption('freshness');
+  if (testInfo.project.name === 'mobile-390')
+    await page.locator('.vacancies-mobile-sheet-cta').click();
   await expect.poll(() => sorts.includes('freshness')).toBe(true);
 });
 
