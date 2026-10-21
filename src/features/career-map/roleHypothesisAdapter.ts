@@ -6,6 +6,7 @@ import type {
   RoleStatus,
   RolesMarketSummary,
 } from './careerScreenTypes';
+import { vacancySourceLabel } from '../../../shared/vacancySourceLabel';
 import { calculateRoleWageFork, formatVacancyCount, MIN_WAGE_SAMPLE } from './careerWageFork';
 
 /** Решения кандидата, которые меняют статус роли (B445). */
@@ -15,12 +16,12 @@ export interface RoleDecisions {
   readonly offersDismissed: readonly string[];
 }
 
-const SOURCE_LABELS: Readonly<Record<string, string>> = {
-  hh: 'hh.ru',
+/** Коды, которых нет в общей подписи источников: подвал не должен показывать сырой код. */
+const EXTRA_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  hh_search: 'hh.ru',
   linkedin: 'LinkedIn',
+  career_site: 'сайты компаний',
   habr: 'Хабр Карьера',
-  telegram: 'Telegram',
-  remotive: 'Remotive',
   indeed: 'Indeed',
   workday: 'Workday',
 };
@@ -28,7 +29,7 @@ const SOURCE_LABELS: Readonly<Record<string, string>> = {
 const SKILLS_SECTION = 'Профиль, Навыки';
 
 function sourceLabel(source: string): string {
-  return SOURCE_LABELS[source.toLowerCase()] ?? source;
+  return EXTRA_SOURCE_LABELS[source] ?? vacancySourceLabel({ sourceType: source });
 }
 
 function dayMonth(iso: string | undefined): string | null {
@@ -75,7 +76,7 @@ function readEvidence(proposed: ProposedRole): RoleEvidence {
     return {
       vacancyCount: conf.sampleSize,
       observedAt: conf.observedTo || null,
-      sources: conf.sources.map((entry) => sourceLabel(entry.source)),
+      sources: [...new Set(conf.sources.map((entry) => sourceLabel(entry.source)))],
       confirmedItems: conf.repeatedRequirements.filter((req) => matched.has(req)),
       missingItems: conf.repeatedRequirements
         .filter((req) => !matched.has(req))
