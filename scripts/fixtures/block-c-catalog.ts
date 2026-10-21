@@ -358,7 +358,35 @@ export function featuredBlockCRows(now: Date): UnifiedVacancy[] {
   );
 }
 
-const CATALOG_SIZE = 1_620;
+/** Rows, not clusters: head rows of one employer merge, and about 1 620 clusters remain. */
+const CATALOG_SIZE = 1_752;
+const COMPANY_SUFFIXES: readonly string[] = [
+  'Тех',
+  'Лаб',
+  'Сервис',
+  'Диджитал',
+  'Системс',
+  'Групп',
+  'Консалт',
+  'Инжиниринг',
+  'Онлайн',
+  'Студия',
+  'Платформа',
+  'Решения',
+  'Партнёры',
+  'Девелопмент',
+  'Ритейл',
+  'Медиа',
+  'Логистика',
+  'Капитал',
+  'Софт',
+  'Аналитика',
+  'Сеть',
+  'Клауд',
+  'Маркет',
+  'Финанс',
+  'Холдинг',
+];
 /** Team suffixes keep «role × company» rows distinct, so the pool does not merge them into one cluster. */
 const TEAMS: readonly string[] = [
   '',
@@ -413,9 +441,14 @@ export function buildBlockCCatalog(now: Date): Map<string, UnifiedVacancy[]> {
     const head = index < HEAD_SHARE;
     const title = head
       ? `${HEAD_TITLES[index % HEAD_TITLES.length]!}${TEAMS[Math.floor(index / HEAD_TITLES.length) % TEAMS.length]!}`
-      : pick(random, OTHER_TITLES);
-    const company =
+      : `${pick(random, OTHER_TITLES)}${TEAMS[index % TEAMS.length]!}`;
+    const stem =
       COMPANY_STEMS[FEATURED_COMPANIES + (index % (COMPANY_STEMS.length - FEATURED_COMPANIES))]!;
+    // Other rows belong to their own employers: the pool merges same-employer rows with
+    // similar titles, and the catalog would shrink far below the mockup's 1 620.
+    const company = head
+      ? stem
+      : `${stem} ${COMPANY_SUFFIXES[Math.floor(index / COMPANY_STEMS.length) % COMPANY_SUFFIXES.length]!}`;
     const place = locationFor(random, index);
     const salary = salaryFor(random, title, place.location);
     rows.push(
