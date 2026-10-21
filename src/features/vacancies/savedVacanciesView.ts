@@ -27,6 +27,8 @@ export interface SavedVacancyEntry {
   readonly company: string;
   readonly savedAt: string;
   readonly state?: SavedVacancyState;
+  /** B446-g4: состояние ещё читается — «нет в каталоге» говорить рано. */
+  readonly pending?: boolean;
 }
 
 export type SavedStateFilter = 'all' | 'open' | 'closed';

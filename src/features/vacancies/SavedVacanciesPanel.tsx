@@ -78,6 +78,7 @@ function useSavedStates(applications: readonly ApplicationView[]) {
   const key = JSON.stringify(savedRefs(applications));
   const [states, setStates] = useState<Readonly<Record<string, SavedVacancyState>>>({});
   const [failed, setFailed] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string>();
   useEffect(() => {
     const refs = JSON.parse(key) as ReturnType<typeof savedRefs>;
     if (!refs.length) return undefined;
@@ -89,17 +90,22 @@ function useSavedStates(applications: readonly ApplicationView[]) {
       })
       .catch(() => {
         if (!controller.signal.aborted) setFailed(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadedKey(key);
       });
     return () => controller.abort();
   }, [key]);
-  return { states, failed };
+  return { states, failed, pending: loadedKey !== key };
 }
 
 function toEntry(
   application: ApplicationView,
   states: Readonly<Record<string, SavedVacancyState>>,
+  pending = false,
 ): SavedVacancyEntry {
   return {
+    pending,
     id: application.id,
     title: application.vacancy?.title ?? 'Название вакансии не сохранено',
     company: application.vacancy?.company || 'Компания не указана',
@@ -112,12 +118,13 @@ function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
   const closed = savedClosedLabel(entry.state);
   const salary = entry.state?.salary;
   const known = salary && (salary.from !== undefined || salary.to !== undefined);
+  const missing = entry.state ? 'Зарплата не указана' : entry.pending ? '…' : 'Зарплата неизвестна';
   return (
     <div className="saved-row-money">
       {known ? (
         <strong>{formatCompensationCompact(salary)}</strong>
       ) : (
-        <span className="saved-row-money-missing">Зарплата не указана</span>
+        <span className="saved-row-money-missing">{missing}</span>
       )}
       {closed ? <span className="saved-row-closed">{closed}</span> : null}
     </div>
@@ -140,17 +147,24 @@ const LEVEL_FIT_LABEL = {
 } as const;
 
 /** Вакансии нет в каталоге: уровень и гео неизвестны, так и пишем. */
-function SavedOutOfCatalog({ label }: { readonly label: string }) {
+function SavedOutOfCatalog({ label, note }: { readonly label: string; readonly note: string }) {
   return (
     <div className="saved-row-cell" data-label={label}>
       <span>—</span>
-      <span className="saved-row-fit">нет в каталоге</span>
+      <span className="saved-row-fit">{note}</span>
     </div>
   );
 }
 
-function SavedLevel({ state }: { readonly state: SavedVacancyState | undefined }) {
-  if (!state?.inCatalog) return <SavedOutOfCatalog label="Уровень" />;
+/** Пока состояние читается — «проверяем каталог»; не прочиталось — «неизвестно». */
+function catalogNote(entry: SavedVacancyEntry): string {
+  if (entry.state) return 'нет в каталоге';
+  return entry.pending ? 'проверяем каталог' : 'неизвестно';
+}
+
+function SavedLevel({ entry }: { readonly entry: SavedVacancyEntry }) {
+  const state = entry.state;
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Уровень" note={catalogNote(entry)} />;
   const levelMatch = state.levelMatch ?? 'unknown';
   return (
     <div className="saved-row-cell" data-label="Уровень">
@@ -165,8 +179,9 @@ function SavedLevel({ state }: { readonly state: SavedVacancyState | undefined }
   );
 }
 
-function SavedGeo({ state }: { readonly state: SavedVacancyState | undefined }) {
-  if (!state?.inCatalog) return <SavedOutOfCatalog label="Гео" />;
+function SavedGeo({ entry }: { readonly entry: SavedVacancyEntry }) {
+  const state = entry.state;
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Гео" note={catalogNote(entry)} />;
   return (
     <div className="saved-row-cell" data-label="Гео">
       <span>{state.location ?? (state.isRemote ? 'Удалённо' : 'Не указано')}</span>
@@ -257,8 +272,8 @@ function SavedRow({
           {savedDate ? ` · сохранено ${savedDate}` : ''}
         </p>
       </div>
-      <SavedLevel state={entry.state} />
-      <SavedGeo state={entry.state} />
+      <SavedLevel entry={entry} />
+      <SavedGeo entry={entry} />
       <SavedMoney entry={entry} />
       <div className="saved-row-actions">
         <SavedWantButton company={application.vacancy?.company} want={want} />
@@ -384,14 +399,14 @@ function useSavedPanelState(saved: readonly ApplicationView[]) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<StoredView>(readStoredView);
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const { states, failed } = useSavedStates(saved);
+  const { states, failed, pending } = useSavedStates(saved);
   const visible = useMemo(
     () =>
       savedVacanciesView(
-        saved.map((item) => toEntry(item, states)),
+        saved.map((item) => toEntry(item, states, pending)),
         { query, ...view },
       ),
-    [saved, states, query, view],
+    [saved, states, pending, query, view],
   );
   return {
     query,
