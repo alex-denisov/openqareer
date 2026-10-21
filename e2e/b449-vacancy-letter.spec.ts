@@ -428,7 +428,10 @@ async function openLetter(page: Page): Promise<void> {
   if ((await row.getAttribute('aria-expanded')) !== 'true') await row.click();
   // B446-g4: макет 4 — вход в письмо из круга 3 «Пути к компании» (1440) и push-экрана (390),
   // а не из окна «Полное описание».
-  await page.getByRole('button', { name: /^Путь к компании/u }).first().click();
+  await page
+    .getByRole('button', { name: /^Путь к компании/u })
+    .first()
+    .click();
   // На 390 круг 3 — отдельный push-экран с кнопкой внизу; пока круги грузятся — ссылка в статусе.
   const circleThree = page.getByRole('button', { name: /^Круг 3/u });
   const prepare = page.getByRole('button', { name: 'Подготовить письмо', exact: true }).first();
