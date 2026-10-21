@@ -13,7 +13,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
-import { fitRequirementChips } from './vacancyRequirementChips';
+import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 
 interface VacancyScreenDetailRowProps {
@@ -185,7 +185,7 @@ function DiscussAction({
   return (
     <button
       type="button"
-      className="btn btn-secondary action-btn"
+      className="btn btn-secondary action-btn is-accent"
       onClick={() => rowProps.onDiscussWithConsultant?.(cluster)}
     >
       <ChatCircleText size={15} aria-hidden="true" />
@@ -210,8 +210,9 @@ export function VacancyScreenRequirementChips({
     explanation.missingPoints,
     cluster.skills,
   );
-  const skillMatching = fromFit ? fromFit.confirmed : legacy.skillMatching;
-  const skillMissing = fromFit ? fromFit.unconfirmed : legacy.skillMissing;
+  const chips = fromFit ?? legacySkillChips(legacy.skillMatching, legacy.skillMissing);
+  const skillMatching = chips.confirmed;
+  const skillMissing = chips.unconfirmed;
   const hasRequirements = skillMatching.length + skillMissing.length > 0;
 
   return (

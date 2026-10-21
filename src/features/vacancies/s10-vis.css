@@ -356,6 +356,22 @@
   max-inline-size: 100%;
 }
 
+/* B446-g4: кнопки ряда как career-btn макета 4: 14 px, 600, поле 16 px. */
+.vacancies-screen-detail-actions .action-btn,
+.vacancies-screen-full-description {
+  padding-block: 0;
+  padding-inline: var(--career-space-4);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.vacancies-screen-detail-actions .action-btn.is-accent {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
 .vacancies-screen-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
