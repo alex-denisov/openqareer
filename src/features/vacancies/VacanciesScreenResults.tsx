@@ -4,6 +4,7 @@ import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import { VacancyFitSortControl } from './VacancyFitSort';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
+import type { SavedCardRenderer } from './SavedVacanciesPanel';
 import { catalogSnapshotLabel } from './VacanciesScreenSummary';
 import {
   VacanciesEmptyFilterState,
@@ -155,5 +156,15 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
       />
       <VacanciesListContent {...props.listProps} />
     </>
+  );
+}
+
+/** B446-g4: «раскрыть» в «Сохранённых» — та же строка подборки, раскрытая; её шеврон сворачивает. */
+export function savedCardRenderer(listProps: ListContentProps): SavedCardRenderer {
+  return (item, onCollapse) => (
+    <VacancyScreenRow
+      item={item}
+      props={{ ...listProps, selectedId: item.cluster.id, onToggleSelect: onCollapse }}
+    />
   );
 }

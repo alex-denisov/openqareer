@@ -23,7 +23,7 @@ import {
   VacanciesFilters,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
-import { VacanciesMainBody } from './VacanciesScreenResults';
+import { VacanciesMainBody, savedCardRenderer } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
 import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
 import { VacanciesScreenSummary } from './VacanciesScreenSummary';
@@ -658,6 +658,7 @@ function OpportunityContent({
       <SavedVacanciesPanel
         collections={screenState.collections}
         onOpenSelection={() => screenState.chooseTab('selection')}
+        renderCard={savedCardRenderer(buildListProps(input, screenState, onOpenLetter))}
       />
     );
   }

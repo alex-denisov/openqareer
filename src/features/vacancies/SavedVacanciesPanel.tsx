@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CaretDown, Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/react';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { companyLookupKey, type VacancyCollectionsState } from './vacancyScreenCollections';
 import { formatCompensationCompact } from './vacancyCompensation';
@@ -11,6 +12,7 @@ import {
   formatShortDate,
   savedClosedLabel,
   savedVacanciesView,
+  savedVacancyItem,
   type SavedSort,
   type SavedStateFilter,
   type SavedVacancyEntry,
@@ -209,18 +211,41 @@ function SavedWantButton({
   );
 }
 
+function SavedExpandButton({
+  title,
+  onExpand,
+}: {
+  readonly title: string;
+  readonly onExpand?: () => void;
+}) {
+  if (!onExpand) return null;
+  return (
+    <button
+      type="button"
+      className="saved-row-want"
+      aria-label={`Раскрыть: ${title}`}
+      aria-expanded="false"
+      onClick={onExpand}
+    >
+      <CaretDown aria-hidden="true" />
+    </button>
+  );
+}
+
 function SavedRow({
   entry,
   application,
   busy,
   onRemove,
   want,
+  onExpand,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
   readonly busy: boolean;
   readonly onRemove: (application: ApplicationView) => void;
   readonly want?: SavedWant;
+  readonly onExpand?: () => void;
 }) {
   const savedDate = formatShortDate(entry.savedAt);
   return (
@@ -247,6 +272,7 @@ function SavedRow({
         >
           <Star weight="fill" aria-hidden="true" />
         </button>
+        <SavedExpandButton title={entry.title} onExpand={onExpand} />
       </div>
     </li>
   );
@@ -386,18 +412,41 @@ function useSavedPanelState(saved: readonly ApplicationView[]) {
   };
 }
 
+/** B446-g4: раскрытая сохранённая — та же карточка, что в подборке; сворачивает себя сама. */
+export type SavedCardRenderer = (item: MatchedVacancyItem, onCollapse: () => void) => ReactNode;
+
+function savedItemFor(entry: SavedVacancyEntry, application: ApplicationView) {
+  return savedVacancyItem(
+    {
+      clusterId: application.clusterId ?? undefined,
+      title: entry.title,
+      company: application.vacancy?.company ?? '',
+      url: application.vacancy?.url,
+    },
+    entry.state,
+  );
+}
+
 function SavedList({
   collections,
   entries,
+  renderCard,
 }: {
   readonly collections: VacancyCollectionsState;
   readonly entries: readonly SavedVacancyEntry[];
+  readonly renderCard?: SavedCardRenderer;
 }) {
+  const [expandedId, setExpandedId] = useState<string>();
   const byId = new Map(collections.savedApplications.map((item) => [item.id, item]));
   return (
     <ul className="saved-list">
       {entries.map((entry) => {
         const application = byId.get(entry.id);
+        const item = application && renderCard ? savedItemFor(entry, application) : undefined;
+        if (item && renderCard && expandedId === entry.id)
+          return (
+            <Fragment key={entry.id}>{renderCard(item, () => setExpandedId(undefined))}</Fragment>
+          );
         return application ? (
           <SavedRow
             key={entry.id}
@@ -406,6 +455,7 @@ function SavedList({
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
             want={savedWant(collections, application.vacancy?.company)}
+            onExpand={item ? () => setExpandedId(entry.id) : undefined}
           />
         ) : null;
       })}
@@ -449,9 +499,11 @@ function SavedIntro() {
 export function SavedVacanciesPanel({
   collections,
   onOpenSelection,
+  renderCard,
 }: {
   readonly collections: VacancyCollectionsState;
   readonly onOpenSelection: () => void;
+  readonly renderCard?: SavedCardRenderer;
 }) {
   const saved = collections.savedApplications;
   const panel = useSavedPanelState(saved);
@@ -472,7 +524,7 @@ export function SavedVacanciesPanel({
             onView={panel.changeView}
           />
           {!panel.visible.length ? <p>По этим условиям сохранённых вакансий нет.</p> : null}
-          <SavedList collections={collections} entries={shown} />
+          <SavedList collections={collections} entries={shown} renderCard={renderCard} />
           <SavedFooter
             shown={shown.length}
             total={saved.length}
