@@ -91,6 +91,7 @@ function MobileTabContent(
   }
   return (
     <RelocationProfile
+      mobile
       profile={snapshot.profile}
       consent={snapshot.consent}
       alerts={snapshot.alerts}
@@ -111,7 +112,7 @@ function MobileModeScreen(props: MobileProps) {
   const profile = props.input.snapshot.profile;
   if (workspace.mode.kind === 'questionnaire') {
     return (
-      <MobilePush title="Анкета" onBack={() => workspace.showTab('profile')}>
+      <div className="career-relocation career-relocation-mobile">
         <RelocationQuestionnaire
           mobile
           profile={profile}
@@ -120,7 +121,7 @@ function MobileModeScreen(props: MobileProps) {
           onShowCountries={() => workspace.showTab('countries')}
           onProfileUpdated={props.onProfileUpdated}
         />
-      </MobilePush>
+      </div>
     );
   }
   return (

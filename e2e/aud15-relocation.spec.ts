@@ -5,6 +5,7 @@ import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 const EVIDENCE = e2eEvidenceDirectory('AUD-15');
+const STEP_TITLES = ['Диплом и опыт', 'Семья и сроки', 'Языки'];
 const isMobile = (info: TestInfo) => info.project.name === 'mobile-390';
 
 async function openCareer(page: Page, info: TestInfo): Promise<void> {
@@ -78,13 +79,13 @@ test('consent, questionnaire to the summary, countries, comparison and economy',
   await openRelocation(page, info);
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Заполнить анкету' }).click();
-  await expect(page.getByText(/Шаг 1 из 4/u)).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Гражданство и документы' })).toBeVisible();
 
   await pickCountry(page, 'relocation-citizenship-first', 'Рос', 'Россия');
   await capture(page, info, 'relocation-questionnaire-1');
   for (const step of [2, 3, 4]) {
     await page.getByRole('button', { name: 'Дальше' }).click();
-    await expect(page.getByText(new RegExp(`Шаг ${step} из 4`, 'u'))).toBeVisible();
+    await expect(page.getByRole('heading', { name: STEP_TITLES[step - 2] }).first()).toBeVisible();
   }
   await page.getByRole('button', { name: 'Показать итог' }).click();
   await expect(page.getByRole('heading', { name: 'Анкета заполнена' })).toBeVisible();
@@ -153,8 +154,8 @@ test('«Мои данные»: delete a document, edit opens the questionnaire, 
   await capture(page, info, 'relocation-data');
 
   await page.getByRole('button', { name: 'Изменить: Гражданство: Россия' }).click();
-  await expect(page.getByText(/Шаг 1 из 4/u)).toBeAttached();
-  await page.getByRole('button', { name: 'Назад' }).first().click();
+  await expect(page.getByRole('heading', { name: 'Гражданство и документы' })).toBeVisible();
+  await page.getByRole('button', { name: 'Назад', exact: true }).first().click();
 
   await page.getByRole('tab', { name: /^(Мои данные|Данные)$/u }).click();
   await page
@@ -186,12 +187,12 @@ test('390: country push screen, scenario sheet and document screen', async ({ pa
   await page.locator('.career-relocation-group-list button', { hasText: 'Германия' }).click();
   await expect(page.getByRole('heading', { name: 'Почему так' })).toBeVisible();
   await capture(page, info, 'relocation-country-push');
-  await page.getByRole('button', { name: 'Назад' }).first().click();
+  await page.getByRole('button', { name: 'Назад', exact: true }).first().click();
 
   await page.getByRole('tab', { name: 'Данные' }).click();
   await page.getByRole('button', { name: 'Изменить: Гражданство: Россия' }).click();
   await page.getByRole('button', { name: 'Добавить документ' }).click();
-  await expect(page.getByRole('heading', { name: 'Документ' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Документ', exact: true })).toBeVisible();
   await pickCountry(page, 'relocation-new-document-country', 'Серб', 'Сербия');
   await capture(page, info, 'relocation-document-push');
   await page.getByRole('button', { name: 'Сохранить' }).click();

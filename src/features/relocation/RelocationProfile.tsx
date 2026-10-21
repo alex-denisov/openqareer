@@ -36,6 +36,7 @@ export interface RelocationProfileProps {
   readonly onProfileUpdated: (profile: RelocationQuestionnaireData, alerts?: readonly RelocationAlert[]) => void;
   readonly onConsentRevoked: (consent: RelocationConsentState) => void;
   readonly onShowCountries: () => void;
+  readonly mobile?: boolean;
 }
 
 export function RelocationProfile(props: RelocationProfileProps) {
@@ -43,6 +44,7 @@ export function RelocationProfile(props: RelocationProfileProps) {
   if (actions.editingStep) {
     return (
       <RelocationQuestionnaire
+        mobile={props.mobile}
         profile={props.profile}
         initialStep={actions.editingStep}
         onClose={() => actions.setEditingStep(undefined)}

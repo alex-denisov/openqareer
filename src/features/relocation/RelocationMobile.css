@@ -160,7 +160,20 @@
 }
 
 .career-relocation-mobile .career-relocation-questionnaire > .career-relocation-header {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.career-relocation-mobile .career-relocation-questionnaire > .career-relocation-header > p,
+.career-relocation-mobile .career-relocation-questionnaire .career-relocation-stepper,
+.career-relocation-mobile .career-relocation-questionnaire .career-relocation-title-row .career-relocation-status {
   display: none;
+}
+
+.career-relocation-mobile .career-relocation-questionnaire .career-relocation-back {
+  border: 0;
+  background: transparent;
 }
 
 .career-relocation-mobile .career-relocation-questionnaire-layout {
