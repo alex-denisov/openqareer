@@ -70,7 +70,7 @@ function MonthField({
 
 function MobileIdentityFields({ form }: { readonly form: PositionFormState }) {
   return (
-    <ProfileMobileGroup foot={`Размер команды: ${TEAM_SIZE_HINT.toLowerCase()}`}>
+    <ProfileMobileGroup>
       <TextField
         label="Должность"
         value={form.title}
@@ -89,6 +89,14 @@ function MobileIdentityFields({ form }: { readonly form: PositionFormState }) {
         onChange={form.setLocation}
         placeholder="Город"
       />
+    </ProfileMobileGroup>
+  );
+}
+
+// Размер команды — отдельной группой после описания: геометрия полей макета 2 на 390 не сдвигается.
+function MobileTeamSizeFields({ form }: { readonly form: PositionFormState }) {
+  return (
+    <ProfileMobileGroup title="Команда" foot={`Размер команды: ${TEAM_SIZE_HINT.toLowerCase()}`}>
       <label className="pm-field profile-mobile-team-size">
         <span>Размер команды</span>
         <input
@@ -364,6 +372,7 @@ export function ProfileMobilePositionEditor(props: PositionEditorProps) {
           onChange={(event) => form.setDescription(event.target.value)}
         />
       </ProfileMobileGroup>
+      <MobileTeamSizeFields form={form} />
       <MobileAchievements form={form} />
       <MobilePositionSkills form={form} />
       {submit.error ? (

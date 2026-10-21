@@ -679,10 +679,8 @@ test.describe('B441 Profile screen from mockup 2', () => {
     for (const category of ['Структура', 'Ключевые слова', 'Даты', 'Формат']) {
       await expect(ats.getByText(category, { exact: false })).toBeVisible();
     }
-    await expect(page.getByRole('button', { name: /LinkedIn.*9 фактов.*12\.09/u })).toBeVisible();
-    await expect(page.getByRole('button', { name: /hh\.ru.*8 фактов.*07\.10/u })).toBeVisible();
-    await expect(profileHeader).not.toContainText('из 9');
-    await expect(profileHeader).not.toContainText('из 8');
+    await expect(page.getByRole('button', { name: /LinkedIn.*9 из 9.*12\.09/u })).toBeVisible();
+    await expect(page.getByRole('button', { name: /hh\.ru.*8 из 8.*07\.10/u })).toBeVisible();
     await expect(page.getByRole('button', { name: /JSON/u })).toHaveCount(0);
     await expect(page.getByText('Full professional proficiency')).toHaveCount(0);
     await captureS10Profile(page, `profile-${page.viewportSize()?.width ?? 'unknown'}`);
@@ -694,12 +692,12 @@ test.describe('B441 Profile screen from mockup 2', () => {
     await expect(page.getByLabel('Требования вакансии')).toBeVisible();
     await captureB441View(page, b441Screenshot(`${testInfo.project.name}-ats-editor`));
 
-    const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 фактов/u });
+    const sourceButton = page.getByRole('button', { name: /LinkedIn.*9 из 9/u });
     await sourceButton.click();
     if (testInfo.project.name !== 'mobile-390') {
       // Mockup 2 «Модальное окно: источник»: the chip opens the source dialog first.
       const dialog = page.getByRole('dialog', { name: 'LinkedIn' });
-      await expect(dialog).toContainText('В профиле 9 фактов');
+      await expect(dialog).toContainText('Импортировано 9 из 9 фактов');
       await dialog.getByRole('button', { name: /Импортировать заново|Подключить/u }).click();
     }
     const account = page.getByTestId('career-shell').getByRole('main');
@@ -1383,7 +1381,7 @@ test.describe('B265 Profile screen', () => {
       const mobileProfile = page.locator('.career-profile-mobile');
       await expect(mobileProfile).toHaveAttribute('data-mobile-profile-page', 'home');
       const source = page.getByRole('button', { name: /^LinkedIn/u });
-      await expect(source).toContainText('9 фактов');
+      await expect(source).toContainText('9 из 9');
       await source.click();
       await expect(mobileProfile).toHaveAttribute('data-mobile-profile-page', 'src');
       await expect(mobileProfile.getByRole('button', { name: /^LinkedIn/u })).toBeVisible();

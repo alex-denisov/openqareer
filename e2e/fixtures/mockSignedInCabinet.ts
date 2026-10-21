@@ -1795,6 +1795,12 @@ export async function mockSignedInCabinet(
       };
       return route.fulfill({ json: { data: snapshotWithMomentum } });
     }
+    // B542: контакт отклика (имя человека для напоминания); в фикстуре контакта нет.
+    if (/^\/api\/v1\/candidate\/applications\/[^/]+\/contact$/u.test(path)) {
+      const method = route.request().method();
+      const body = method === 'GET' ? null : (route.request().postDataJSON() as unknown);
+      return route.fulfill({ json: { data: method === 'DELETE' ? null : body } });
+    }
     // Saved vacancies use the same candidate application tracker as the Responses screen.
     if (path === '/api/v1/candidate/applications') {
       if (route.request().method() === 'GET')
