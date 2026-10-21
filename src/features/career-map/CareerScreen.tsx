@@ -165,7 +165,7 @@ function CareerRolesSection({
           Ролей пока нет. Консультант назовёт их, когда в профиле будет опыт.
         </p>
       ) : (
-        <div className="career-roles-list">
+        <div className="career-role-cards">
           {roles.map((role) => (
             <CareerRoleCard
               key={role.id}

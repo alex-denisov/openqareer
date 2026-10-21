@@ -240,7 +240,7 @@
 }
 
 /* Роли */
-.career-roles-list {
+.career-role-cards {
   display: flex;
   flex-direction: column;
   gap: var(--career-space-4);

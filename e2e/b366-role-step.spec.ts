@@ -3,6 +3,7 @@ import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { waitForCareerShell } from './helpers/waitForCareerShell';
 import { seedReadabilityWorkspace } from './helpers/seedReadabilityWorkspace';
 import * as fs from 'node:fs';
+import { CAREER_FIXTURE_PROPOSED_ROLES } from '../src/features/career-map/careerMockData';
 
 test.describe('B366: Career rail entry opens the existing role filter', () => {
   test('opens «Вакансии» with role filter in focus and captures after screenshots', async ({
@@ -13,7 +14,10 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
       'runs multi-viewport capture once from desktop-1440',
     );
     fs.mkdirSync('output/playwright/B366', { recursive: true });
-    await mockSignedInCabinet(page);
+    // B445: «Открыть вакансии роли» есть у роли, открытой для поиска или с проверенными навыками.
+    await mockSignedInCabinet(page, {
+      careerRoles: { roles: CAREER_FIXTURE_PROPOSED_ROLES, acceptedTitle: 'Head of Engineering' },
+    });
     await seedReadabilityWorkspace(page);
 
     // 1440

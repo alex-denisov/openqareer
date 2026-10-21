@@ -83,7 +83,8 @@ test.describe('B445: «Карьера» по макету 3', () => {
     await expect(offer).toContainText('Принять роль Director of Engineering');
     await expect(offer).toContainText('88 вакансий');
     await offer.getByRole('button', { name: 'Принять' }).click();
-    await expect(offer).toHaveCount(0);
+    // «Стратегия» хранит одну выбранную роль: предложение переходит к следующей.
+    await expect(offer).not.toContainText('Director of Engineering');
     await expect(
       role(page, 'Director of Engineering').locator('summary').getByText('Открыта для поиска'),
     ).toBeVisible();
