@@ -25,6 +25,7 @@ import {
 } from './VacanciesScreenFilters';
 import { VacanciesMainBody } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
+import { CompanySelectionFilterChip } from './CompaniesAndPeopleControls';
 import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
 import { VacanciesScreenSummary } from './VacanciesScreenSummary';
 import { SavedVacanciesPanel } from './SavedVacanciesPanel';
@@ -458,6 +459,7 @@ function screenFilteredCount(
   const hasClientFilters =
     state.selectedCity !== undefined ||
     salaryFilter ||
+    Boolean(state.companyName) ||
     Boolean(state.selectedLocations?.length || state.locationRemote) ||
     (!input.onFiltersChange && countActiveFilters(state) > 0);
   if (hasClientFilters && input.poolComplete !== false) return localCount;
@@ -594,6 +596,10 @@ function VacanciesScreenContent({
         }
         viewMode={screenState.viewMode}
       />
+      <CompanySelectionFilterChip
+        companyName={board.state.companyName}
+        onClear={() => board.setState((previous) => ({ ...previous, companyName: undefined }))}
+      />
       {!input.loading && !input.failed && <VacancySourceHealthNotice facets={input.facets} />}
       <VacanciesMainBody {...mainBodyProps(input, screenState, onOpenLetter)} />
     </div>
@@ -663,6 +669,10 @@ function OpportunityContent({
       onOpenConnections={input.onOpenConnections}
       onOpenLetter={onOpenCompanyLetter}
       onOpenCareer={careerPathAction(input.pathIndicator)}
+      onOpenCompanyVacancies={(companyName) => {
+        screenState.board.setState((previous) => ({ ...previous, companyName }));
+        screenState.chooseTab('selection');
+      }}
       initialSearch={screenState.companyPathSearch}
     />
   );

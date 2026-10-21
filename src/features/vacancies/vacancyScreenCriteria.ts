@@ -98,6 +98,10 @@ function matchesScreenLocation(
   return true;
 }
 
+function sameCompany(company: string, wanted: string): boolean {
+  return company.trim().toLocaleLowerCase('ru-RU') === wanted.trim().toLocaleLowerCase('ru-RU');
+}
+
 function matchesScreenCriteria(
   item: MatchedVacancyItem,
   state: VacanciesScreenState,
@@ -106,6 +110,7 @@ function matchesScreenCriteria(
   const { cluster } = item;
   if (state.roles.length && !state.roles.some((role) => titleMatchesRole(cluster.canonicalTitle, role))) return false;
   if (state.remoteOnly && !cluster.isRemote) return false;
+  if (state.companyName && !sameCompany(cluster.canonicalCompany, state.companyName)) return false;
   if (state.sources?.length && !cluster.sources.some((source) => state.sources?.includes(source.sourceId))) return false;
   if (!matchesScreenLocation(item, state, allItems) || !matchesSalaryRange(item, state)) return false;
   return !state.formats?.length || state.formats.includes(vacancyFormat(item));

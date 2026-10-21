@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleNotch, MagnifyingGlass, SlidersHorizontal, Target } from '@phosphor-icons/react';
+import {
+  CircleNotch,
+  MagnifyingGlass,
+  SlidersHorizontal,
+  Target,
+  UsersThree,
+  X,
+} from '@phosphor-icons/react';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
 import type {
   CandidateCompanyFilter,
@@ -7,17 +14,19 @@ import type {
   CandidateCompanyPage,
   CandidateCompanySort,
 } from '../../../shared/candidateCompany';
-import { companyContactSummary, companyVacancySummary } from './companiesAndPeopleUtils';
+import { companyVacancySummary, isContactImportStale } from './companiesAndPeopleUtils';
+import { CompanyAvatar } from './CompanyDetailPanel';
 
 const FILTERS: readonly { value: CandidateCompanyFilter; label: string }[] = [
   { value: 'all', label: 'Все' },
   { value: 'want', label: 'Хочу' },
-  { value: 'contacts', label: 'Есть контакты' },
+  { value: 'contacts', label: 'Есть контакты в сети' },
   { value: 'recruiter', label: 'Рекрутер известен' },
 ];
 
 interface CompanyToolbarProps {
   readonly search: string;
+  readonly total: number;
   readonly sort: CandidateCompanySort;
   readonly filter: CandidateCompanyFilter;
   readonly filterCounts: CandidateCompanyPage['filterCounts'];
@@ -29,16 +38,18 @@ interface CompanyToolbarProps {
 
 function CompanySearchField({
   search,
+  total,
   onSearch,
-}: Pick<CompanyToolbarProps, 'search' | 'onSearch'>) {
+}: Pick<CompanyToolbarProps, 'search' | 'total' | 'onSearch'>) {
+  const placeholder = `Поиск среди ${total}`;
   return (
     <label className="companies-people-search">
       <MagnifyingGlass aria-hidden="true" />
       <input
         value={search}
         onChange={(event) => onSearch(event.target.value)}
-        placeholder="Поиск среди компаний"
-        aria-label="Поиск среди компаний"
+        placeholder={placeholder}
+        aria-label={placeholder}
       />
     </label>
   );
@@ -55,14 +66,14 @@ function CompanySortSelect({
 }) {
   return (
     <label className="companies-people-select-wrap">
-      <span className="visually-hidden">Сортировка компаний</span>
+      <span className="career-sr-only">Сортировка компаний</span>
       <select
         className="companies-people-select"
         aria-label="Сортировка компаний"
         value={sort}
         onChange={(event) => onSort(event.target.value as CandidateCompanySort)}
       >
-        <option value="default">«Хочу», затем вакансии</option>
+        <option value="default">«Хочу», затем по вакансиям</option>
         <option value="contacts" disabled={!contactsKnown}>
           По контактам в сети
         </option>
@@ -83,7 +94,7 @@ function CompanyFilterChips({
 }) {
   return (
     <div className="companies-people-filter-chips" role="group" aria-label="Фильтры компаний">
-      {FILTERS.map((item) => (
+      {FILTERS.filter((item) => item.value !== 'all').map((item) => (
         <CompanyFilterChip
           key={item.value}
           item={item}
@@ -125,7 +136,7 @@ function CompanyFilterChip({
       aria-pressed={filter === item.value}
       disabled={disabled}
       title={disabled ? 'Список импортированных контактов неизвестен.' : undefined}
-      onClick={() => onFilter(item.value)}
+      onClick={() => onFilter(filter === item.value ? 'all' : item.value)}
     >
       {item.value === 'contacts' && disabled
         ? `${item.label} · неизвестно`
@@ -136,51 +147,45 @@ function CompanyFilterChip({
 
 export function CompanyToolbar(props: CompanyToolbarProps) {
   return (
-    <>
-      <div className="companies-people-toolbar">
-        <CompanySearchField search={props.search} onSearch={props.onSearch} />
-        <CompanySortSelect
-          sort={props.sort}
-          contactsKnown={props.filterCounts.contacts !== null}
-          onSort={props.onSort}
-        />
-        <button
-          type="button"
-          className="companies-people-filter-button"
-          onClick={props.onOpenFilters}
-        >
-          <SlidersHorizontal aria-hidden="true" /> Фильтры
-        </button>
-      </div>
+    <div className="companies-people-toolbar">
+      <CompanySearchField search={props.search} total={props.total} onSearch={props.onSearch} />
+      <CompanySortSelect
+        sort={props.sort}
+        contactsKnown={props.filterCounts.contacts !== null}
+        onSort={props.onSort}
+      />
+      <button
+        type="button"
+        className="companies-people-filter-button"
+        onClick={props.onOpenFilters}
+      >
+        <SlidersHorizontal aria-hidden="true" /> Фильтры
+      </button>
       <CompanyFilterChips
         filter={props.filter}
         counts={props.filterCounts}
         onFilter={props.onFilter}
       />
-    </>
+    </div>
   );
 }
 
 export function CompanyList({
   companies,
   selectedKey,
-  busyKey,
   filter,
   allCount,
   search,
   onSelect,
-  onToggleWant,
   onOpenCareer,
   onWantsChanged,
 }: {
   readonly companies: readonly CandidateCompanyOpportunity[];
   readonly selectedKey: string | null;
-  readonly busyKey: string | null;
   readonly filter: CandidateCompanyFilter;
   readonly allCount: number;
   readonly search: string;
   readonly onSelect: (key: string) => void;
-  readonly onToggleWant: (company: CandidateCompanyOpportunity) => void;
   readonly onOpenCareer?: () => void;
   readonly onWantsChanged?: () => void;
 }) {
@@ -202,9 +207,7 @@ export function CompanyList({
           key={company.key}
           company={company}
           selected={selectedKey === company.key}
-          busy={busyKey === company.key}
           onSelect={onSelect}
-          onToggleWant={onToggleWant}
         />
       ))}
     </div>
@@ -251,50 +254,67 @@ function CompanyListEmptyState({
   return <p className="companies-people-empty">Нет компаний по этим условиям.</p>;
 }
 
+function companyContactsCount(company: CandidateCompanyOpportunity): number | null {
+  return company.contactsCount === null || isContactImportStale(company.contactsImportedAt)
+    ? null
+    : company.contactsCount;
+}
+
+function CompanyRowMetrics({ company }: { readonly company: CandidateCompanyOpportunity }) {
+  const contacts = companyContactsCount(company);
+  return (
+    <span className="companies-people-company-metrics">
+      <span
+        className="companies-people-contacts"
+        title={contacts === null ? 'Контакты в сети неизвестны' : 'Контакты в вашей сети'}
+      >
+        <UsersThree aria-hidden="true" />
+        {contacts === null ? (
+          <span className="career-sr-only">контакты неизвестны</span>
+        ) : (
+          <>
+            {contacts}
+            <span className="companies-people-mobile-only"> в сети</span>
+          </>
+        )}
+      </span>
+      {company.want ? (
+        <span className="companies-people-want-chip is-compact">
+          <Target aria-hidden="true" /> Хочу
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function CompanyListRow({
   company,
   selected,
-  busy,
   onSelect,
-  onToggleWant,
 }: {
   readonly company: CandidateCompanyOpportunity;
   readonly selected: boolean;
-  readonly busy: boolean;
   readonly onSelect: (key: string) => void;
-  readonly onToggleWant: (company: CandidateCompanyOpportunity) => void;
 }) {
   return (
-    <article
-      className={`companies-people-company-row${selected ? ' is-selected' : ''}`}
-      role="listitem"
-    >
+    <div className="companies-people-company-row-wrap" role="listitem">
       <button
         type="button"
-        className="companies-people-company-select"
+        className={`companies-people-company-row${selected ? ' is-selected' : ''}`}
         aria-label={`Открыть компанию ${company.name}`}
         aria-pressed={selected}
         onClick={() => onSelect(company.key)}
       >
-        <strong>{company.name}</strong>
-        <span>
-          {company.location ?? 'Место вакансий неизвестно'} · {companyVacancySummary(company)}
+        <CompanyAvatar name={company.name} />
+        <span className="companies-people-company-text">
+          <strong>{company.name}</strong>
+          <span>
+            {company.location ?? 'Место неизвестно'} · {companyVacancySummary(company)}
+          </span>
         </span>
-        <span>{companyContactSummary(company)}</span>
+        <CompanyRowMetrics company={company} />
       </button>
-      <div className="companies-people-company-metrics">
-        <button
-          type="button"
-          className="companies-people-want-toggle"
-          aria-pressed={company.want}
-          disabled={busy}
-          onClick={() => onToggleWant(company)}
-        >
-          <Target aria-hidden="true" /> {company.want ? 'Хочу' : 'Добавить'}
-        </button>
-        {company.hasRecruiter ? <span>Рекрутер найден</span> : null}
-      </div>
-    </article>
+    </div>
   );
 }
 
@@ -475,7 +495,7 @@ function SortOptions({
     <fieldset>
       <legend>Сортировка</legend>
       {[
-        ['default', '«Хочу», затем вакансии'],
+        ['default', '«Хочу», затем по вакансиям'],
         ['contacts', 'По контактам в сети'],
         ['alphabetical', 'По алфавиту'],
       ].map(([option, label]) => (
@@ -501,5 +521,26 @@ export function CompanyLoadingState() {
       <CircleNotch className="career-spin" aria-hidden="true" /> Загружаем компании текущей
       подборки…
     </div>
+  );
+}
+
+/** B439: the selection narrowed from «Компании и люди» says so and can be widened again. */
+export function CompanySelectionFilterChip({
+  companyName,
+  onClear,
+}: {
+  readonly companyName?: string;
+  readonly onClear: () => void;
+}) {
+  if (!companyName) return null;
+  return (
+    <button
+      type="button"
+      className="vacancies-company-filter-chip"
+      aria-label={`Убрать фильтр компании ${companyName}`}
+      onClick={onClear}
+    >
+      Компания: {companyName} <X aria-hidden="true" />
+    </button>
   );
 }

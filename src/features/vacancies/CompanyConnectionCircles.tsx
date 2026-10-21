@@ -1,47 +1,29 @@
 import { useEffect, useState } from 'react';
-import { CircleNotch, Info, WarningCircle } from '@phosphor-icons/react';
+import { EnvelopeSimple, LinkSimple, UsersThree } from '@phosphor-icons/react';
 import type { CandidateCompanyOpportunity } from '../../../shared/candidateCompany';
-import { formatObservedDate } from './companiesAndPeopleUtils';
+import {
+  groupCompanyPeople,
+  type CompanyPeople,
+  type CompanyPerson,
+} from './companiesAndPeopleUtils';
 import {
   getVacancyConnectionCircles,
   type ConnectionCircleNumber,
-  type ConnectionCirclePath,
-  type ConnectionCircleResult,
   type VacancyConnectionCircles as VacancyCircles,
 } from './vacancyLetterApi';
 import type { VacancyLetterTarget } from './VacancyLetterScreen';
 
-interface CompanyConnectionPath {
-  readonly vacancyId: string;
-  readonly data: VacancyCircles;
-  readonly circle: ConnectionCircleResult;
-  readonly path: ConnectionCirclePath;
+type CompanyVacancy = CandidateCompanyOpportunity['vacancies'][number];
+
+export interface CompanyPeopleState extends CompanyPeople {
+  readonly importedAt: string | null;
+  readonly importedCount: number | null;
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly retry: () => void;
 }
 
-function actionLabel(nextStep: ConnectionCirclePath['nextStep']): string {
-  if (nextStep === 'write_known_contact') return 'Написать знакомому';
-  if (nextStep === 'ask_for_introduction') return 'Попросить представить';
-  return 'Холодный отклик';
-}
-
-function strengthLabel(strength: ConnectionCirclePath['strength']): string {
-  if (strength === 'direct') return 'Связь прямая';
-  if (strength === 'strong') return 'Связь подтверждена';
-  if (strength === 'weak') return 'Слабая связь';
-  return 'Сила связи неизвестна';
-}
-
-function sourceLabel(source: ConnectionCirclePath['source']): string {
-  if (source === 'linkedin_import') return 'Импорт контактов';
-  if (source === 'work_history') return 'История работы';
-  if (source === 'manual') return 'Добавлено вручную';
-  return 'Холодный отклик';
-}
-
-function toLetterTarget(
-  companyName: string,
-  vacancy: CandidateCompanyOpportunity['vacancies'][number],
-): VacancyLetterTarget {
+export function toLetterTarget(companyName: string, vacancy: CompanyVacancy): VacancyLetterTarget {
   return {
     id: vacancy.id,
     canonicalTitle: vacancy.title,
@@ -54,27 +36,24 @@ function toLetterTarget(
   };
 }
 
-function useCompanyConnectionCircles(company: CandidateCompanyOpportunity) {
-  const vacancyIds = company.vacancies.slice(0, 3).map(({ id }) => id);
-  const vacancyKey = vacancyIds.join('\u0000');
+/** B448 paths for the company's top three vacancies, grouped into people (B439). */
+export function useCompanyPeople(company: CandidateCompanyOpportunity): CompanyPeopleState {
+  const vacancyKey = company.vacancies
+    .slice(0, 3)
+    .map(({ id }) => id)
+    .join('\u0000');
   const [responses, setResponses] = useState<readonly VacancyCircles[]>([]);
-  const [loading, setLoading] = useState(vacancyIds.length > 0);
+  const [loading, setLoading] = useState(vacancyKey.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
     const ids = vacancyKey ? vacancyKey.split('\u0000') : [];
     let active = true;
-    if (ids.length === 0) {
-      setResponses([]);
-      setLoading(false);
-      setError(null);
-      return () => {
-        active = false;
-      };
-    }
-    setLoading(true);
+    setResponses([]);
     setError(null);
+    setLoading(ids.length > 0);
+    if (ids.length === 0) return undefined;
     void Promise.all(ids.map(getVacancyConnectionCircles))
       .then((result) => {
         if (active) setResponses(result);
@@ -91,170 +70,73 @@ function useCompanyConnectionCircles(company: CandidateCompanyOpportunity) {
     };
   }, [company.key, retryKey, vacancyKey]);
 
-  return { responses, loading, error, retry: () => setRetryKey((current) => current + 1) };
+  const imported = responses.find((item) => item.linkedinImport.state === 'imported');
+  return {
+    ...groupCompanyPeople(responses),
+    importedAt: imported?.linkedinImport.importedAt ?? null,
+    importedCount: imported?.linkedinImport.importedCount ?? null,
+    loading,
+    error,
+    retry: () => setRetryKey((current) => current + 1),
+  };
 }
 
-function collectPaths(responses: readonly VacancyCircles[]): CompanyConnectionPath[] {
-  const unique = new Map<string, CompanyConnectionPath>();
-  for (const data of responses) {
-    for (const circle of data.circles) {
-      for (const path of circle.paths) {
-        const key = `${path.circle}:${path.recipient.id || path.id}`;
-        if (!unique.has(key)) unique.set(key, { vacancyId: data.vacancyId, data, circle, path });
-      }
-    }
-  }
-  return [...unique.values()];
-}
-
-function CirclePathCard({
-  item,
-  vacancy,
-  companyName,
+function PersonCard({
+  person,
+  company,
   onOpenLetter,
 }: {
-  readonly item: CompanyConnectionPath;
-  readonly vacancy: CandidateCompanyOpportunity['vacancies'][number];
-  readonly companyName: string;
+  readonly person: CompanyPerson;
+  readonly company: CandidateCompanyOpportunity;
   readonly onOpenLetter?: (target: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
 }) {
-  const { path, circle, data } = item;
-  const contactChain = path.path.map((contact) => contact.fullName).filter(Boolean);
+  const vacancy = company.vacancies.find((item) => item.id === person.vacancyId);
+  const Icon = person.circle === 1 ? EnvelopeSimple : UsersThree;
   return (
-    <article className="companies-people-circle-path">
-      <div>
-        <strong>{path.recipient.fullName}</strong>
-        <span>
-          {path.recipient.roleTitle ?? 'Роль не указана'} · Круг {path.circle}
+    <article className="companies-people-person" aria-label={person.fullName}>
+      <span className="companies-people-avatar is-small" aria-hidden="true">
+        {person.fullName.trim().charAt(0).toLocaleUpperCase('ru-RU')}
+      </span>
+      <div className="companies-people-person-body">
+        <strong>{person.fullName}</strong>
+        <span className="companies-people-person-role">
+          {person.roleTitle ?? 'Роль не указана'}
         </span>
+        <span>{person.relation}</span>
+        <small>
+          <LinkSimple aria-hidden="true" /> {person.source}
+        </small>
+        <div className="companies-people-actions">
+          <span className="companies-people-circle-badge">Круг {person.circle}</span>
+          {vacancy && onOpenLetter ? (
+            <button
+              type="button"
+              className="companies-people-action"
+              onClick={() => onOpenLetter(toLetterTarget(company.name, vacancy), person.circle)}
+            >
+              <Icon aria-hidden="true" /> {person.action}
+            </button>
+          ) : null}
+        </div>
       </div>
-      {contactChain.length ? <p>Путь через: {contactChain.join(' → ')}</p> : null}
-      <p>{path.evidence.join(' · ') || circle.message}</p>
-      <small>
-        {strengthLabel(path.strength)} · {sourceLabel(path.source)}
-        {data.linkedinImport.importedAt
-          ? `, ${formatObservedDate(data.linkedinImport.importedAt)}`
-          : ''}
-      </small>
-      {onOpenLetter ? (
-        <button
-          type="button"
-          className="companies-people-action"
-          onClick={() => onOpenLetter(toLetterTarget(companyName, vacancy), path.circle)}
-        >
-          {actionLabel(path.nextStep)}
-        </button>
-      ) : (
-        <p className="companies-people-data-note">Переход к письму недоступен из этого раздела.</p>
-      )}
     </article>
   );
 }
 
-function CirclePathList({
+export function CompanyPeopleCards({
   company,
-  paths,
+  people,
   onOpenLetter,
 }: {
   readonly company: CandidateCompanyOpportunity;
-  readonly paths: readonly CompanyConnectionPath[];
+  readonly people: readonly CompanyPerson[];
   readonly onOpenLetter?: (target: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
 }) {
-  const vacancyById = new Map(company.vacancies.map((vacancy) => [vacancy.id, vacancy]));
   return (
-    <div className="companies-people-circle-paths">
-      {paths.map((item) => {
-        const vacancy = vacancyById.get(item.vacancyId);
-        return vacancy ? (
-          <CirclePathCard
-            key={`${item.vacancyId}:${item.path.id}`}
-            item={item}
-            vacancy={vacancy}
-            companyName={company.name}
-            onOpenLetter={onOpenLetter}
-          />
-        ) : null;
-      })}
+    <div className="companies-people-person-list">
+      {people.map((person) => (
+        <PersonCard key={person.id} person={person} company={company} onOpenLetter={onOpenLetter} />
+      ))}
     </div>
-  );
-}
-
-function NoCompanyConnections({ unknown }: { readonly unknown: boolean }) {
-  return (
-    <p className="companies-people-data-note" role="status">
-      <Info aria-hidden="true" />{' '}
-      {unknown
-        ? 'Связи неизвестны: импорт контактов не подтверждён.'
-        : 'В импортированных контактах связи с людьми этой компании не найдены.'}
-    </p>
-  );
-}
-
-function CompanyConnectionCircleContent({
-  company,
-  onOpenLetter,
-  responses,
-  loading,
-  error,
-  retry,
-}: {
-  readonly company: CandidateCompanyOpportunity;
-  readonly onOpenLetter?: (target: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
-  readonly responses: readonly VacancyCircles[];
-  readonly loading: boolean;
-  readonly error: string | null;
-  readonly retry: () => void;
-}) {
-  const paths = collectPaths(responses);
-  const noKnownPaths = responses.length > 0 && paths.length === 0;
-  const connectionsUnknown = responses.some((item) => item.linkedinImport.state === 'unknown');
-
-  if (loading) {
-    return (
-      <p className="companies-people-status" role="status" aria-busy="true">
-        <CircleNotch className="career-spin" aria-hidden="true" /> Загружаем пути связи…
-      </p>
-    );
-  }
-  if (error) {
-    return (
-      <p className="companies-people-error" role="alert">
-        <WarningCircle aria-hidden="true" /> {error}{' '}
-        <button type="button" className="companies-people-action" onClick={retry}>
-          Повторить
-        </button>
-      </p>
-    );
-  }
-  if (company.vacancies.length === 0) {
-    return <p className="companies-people-empty">Нет вакансий, чтобы построить пути к людям.</p>;
-  }
-  return noKnownPaths ? (
-    <NoCompanyConnections unknown={connectionsUnknown} />
-  ) : (
-    <CirclePathList company={company} paths={paths} onOpenLetter={onOpenLetter} />
-  );
-}
-
-export function CompanyConnectionCircles({
-  company,
-  onOpenLetter,
-}: {
-  readonly company: CandidateCompanyOpportunity;
-  readonly onOpenLetter?: (target: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
-}) {
-  const state = useCompanyConnectionCircles(company);
-  const connectionDataUnknown =
-    !state.loading &&
-    !state.error &&
-    state.responses.length > 0 &&
-    collectPaths(state.responses).length === 0 &&
-    state.responses.every((item) => item.linkedinImport.state === 'unknown');
-  if (company.vacancies.length === 0 || connectionDataUnknown) return null;
-  return (
-    <section className="companies-people-circles" aria-label="Связи с людьми компании">
-      <h4>Пути к людям компании</h4>
-      <CompanyConnectionCircleContent company={company} onOpenLetter={onOpenLetter} {...state} />
-    </section>
   );
 }

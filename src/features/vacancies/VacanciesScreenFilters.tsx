@@ -67,6 +67,7 @@ export function countActiveFilters(state: VacanciesScreenState): number {
     Boolean(state.salaryMinimum !== undefined || state.salaryMaximum !== undefined),
     Boolean(state.remoteOnly || state.formats?.length),
     Boolean(state.sources?.length),
+    Boolean(state.companyName),
   ];
   return groupIsActive.filter(Boolean).length;
 }

@@ -2,6 +2,7 @@ import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
+import { CompaniesContactProposal } from '../vacancies/CompaniesAndPeopleProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
   STAGE_TITLE,
@@ -651,6 +652,7 @@ export function CareerExpertPanel({
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
+          {stage === 'vacancies' && user && !loadingSnapshot ? <CompaniesContactProposal /> : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
           ) : null}

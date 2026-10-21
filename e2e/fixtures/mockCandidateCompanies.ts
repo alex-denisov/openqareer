@@ -4,8 +4,11 @@ import type {
   CandidateCompanyOpportunity,
   CandidateCompanyPage,
 } from '../../shared/candidateCompany';
+import { companyConnectionCircles } from './mockCompanyConnectionCircles';
 
 const wantedSteps = new Map<string, { text: string; dueAt: string | null }>();
+const dismissedProposals = new Set<string>();
+let peopleCompany: string | null = null;
 let searchConsentGranted = false;
 type MutableCompany = {
   -readonly [Key in keyof CandidateCompanyOpportunity]: CandidateCompanyOpportunity[Key];
@@ -233,6 +236,7 @@ function sortedCompanies(sort: string): CandidateCompanyOpportunity[] {
     ...company,
     want: wantedSteps.has(company.key) || company.want,
     nextStep: wantedSteps.get(company.key) ?? company.nextStep,
+    contactProposalDismissed: dismissedProposals.has(company.key),
   }));
   if (sort === 'alphabetical') return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   if (sort === 'contacts') return rows.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
@@ -250,7 +254,7 @@ function filteredCompanies(searchParams: URLSearchParams): CandidateCompanyOppor
   return sortedCompanies(searchParams.get('sort') ?? 'default').filter((company) => {
     if (filter === 'want' && !company.want) return false;
     if (filter === 'recruiter' && !company.hasRecruiter) return false;
-    if (filter === 'contacts') return false;
+    if (filter === 'contacts' && !((company.contactsCount ?? 0) > 0)) return false;
     return !search || company.name.toLocaleLowerCase('ru-RU').includes(search);
   });
 }
@@ -270,7 +274,9 @@ function pageFor(url: URL): CandidateCompanyPage {
     filterCounts: {
       all: companies.length,
       want: companies.filter((company) => company.want || wantedSteps.has(company.key)).length,
-      contacts: null,
+      contacts: contactImport
+        ? companies.filter((company) => (company.contactsCount ?? 0) > 0).length
+        : null,
       recruiter: companies.filter((company) => company.hasRecruiter).length,
     },
     linkedin: {
@@ -308,6 +314,8 @@ export interface MockCandidateCompanyOptions {
     readonly companyName: string;
     readonly count: number;
     readonly importedAt: string;
+    /** B439: the import knows people at this company (circle 1 and 2 paths). */
+    readonly people?: boolean;
   };
   readonly recruiterSearch?: {
     readonly companyName: string;
@@ -321,6 +329,8 @@ export async function mockCandidateCompanies(
 ): Promise<void> {
   searchConsentGranted = options.recruiterSearch !== undefined;
   wantedSteps.clear();
+  dismissedProposals.clear();
+  peopleCompany = options.contactImport?.people ? options.contactImport.companyName : null;
   companies = createCompanyFixtures(options.companyCount ?? 400, options);
   await page.route('**/api/v1/candidate/vacancies/*/connection-circles', async (route) => {
     const vacancyId = decodeURIComponent(
@@ -331,6 +341,9 @@ export async function mockCandidateCompanies(
     );
     const vacancy = company?.vacancies.find((item) => item.id === vacancyId);
     if (!company || !vacancy) return route.fallback();
+    if (company.name === peopleCompany) {
+      return route.fulfill({ json: { data: companyConnectionCircles(vacancyId) } });
+    }
     const state = company.contactsCount === null ? 'unknown' : 'none';
     return route.fulfill({
       json: {
@@ -380,7 +393,7 @@ export async function mockCandidateCompanies(
       });
     }
     const mutation = path.match(
-      /^\/api\/v1\/candidate\/companies\/([^/]+)\/(want|next-step|recruiter-search)$/u,
+      /^\/api\/v1\/candidate\/companies\/([^/]+)\/(want|next-step|recruiter-search|contact-proposal-dismissal)$/u,
     );
     if (!mutation) return route.fallback();
     const company = companies.find((item) => item.key === mutation[1]);
@@ -393,6 +406,10 @@ export async function mockCandidateCompanies(
         company.want = true;
       }
       return route.fulfill({ json: { data: { want: route.request().method() !== 'DELETE' } } });
+    }
+    if (mutation[2] === 'contact-proposal-dismissal') {
+      dismissedProposals.add(company.key);
+      return route.fulfill({ json: { data: { dismissed: true } } });
     }
     if (mutation[2] === 'next-step') {
       const body = route.request().postDataJSON() as { text: string; dueAt: string | null };
