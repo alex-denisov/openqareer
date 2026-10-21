@@ -452,7 +452,22 @@ function withFirstFitView(
   const [first, ...rest] = page.data;
   return {
     ...page,
-    data: [{ ...first!, explanation: { ...first!.explanation, fitView } }, ...rest],
+    // As the server does (compactFitView): the list carries only the summary; the full
+    // analysis comes from /fit when the row opens.
+    data: [
+      {
+        ...first!,
+        explanation: {
+          ...first!.explanation,
+          fitView: {
+            ...fitView,
+            requirements: [],
+            ...(fitView.result ? { result: { ...fitView.result, assessments: [] } } : {}),
+          },
+        },
+      },
+      ...rest,
+    ],
   };
 }
 
