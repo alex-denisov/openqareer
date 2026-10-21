@@ -44,6 +44,14 @@ function joinRu(items: readonly string[]): string {
   return `${items.slice(0, -1).join(', ')} и ${items[items.length - 1]}`;
 }
 
+/** «данные с …» takes the genitive: declinable platform labels change form, brand names stay. */
+const GENITIVE_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  'Telegram-каналы': 'Telegram-каналов',
+  'Страница вакансий': 'страницы вакансий',
+  'Открытый API': 'открытого API',
+  'сайты компаний': 'сайтов компаний',
+};
+
 /** «данные с hh.ru и LinkedIn, 06.10.2026»: one mention per platform, dated by the latest one. */
 export function companySourceSummary(sources: readonly CandidateCompanySource[]): string | null {
   const names = [...new Set(sources.map((source) => source.name.trim()).filter(Boolean))];
@@ -55,7 +63,8 @@ export function companySourceSummary(sources: readonly CandidateCompanySource[])
   const date = Number.isFinite(latest)
     ? `, ${formatObservedDate(new Date(latest).toISOString())}`
     : '';
-  return `данные с ${joinRu(names)}${date}`;
+  const genitive = names.map((name) => GENITIVE_SOURCE_LABELS[name] ?? name);
+  return `данные с ${joinRu(genitive)}${date}`;
 }
 
 export interface CompanyPerson {

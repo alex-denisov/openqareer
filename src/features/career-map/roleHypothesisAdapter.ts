@@ -14,6 +14,8 @@ export interface RoleDecisions {
   /** Роль, выбранная в «Стратегии»: по ней пересчитывается подборка. */
   readonly acceptedTitle: string | null;
   readonly offersDismissed: readonly string[];
+  /** Роли с завершённой проверкой навыков (B445). */
+  readonly checkedTitles?: readonly string[];
 }
 
 /** Коды, которых нет в общей подписи источников: подвал не должен показывать сырой код. */
@@ -45,6 +47,9 @@ function sameTitle(left: string, right: string): boolean {
 function determineRoleStatus(proposed: ProposedRole, decisions: RoleDecisions): RoleStatus {
   if (decisions.acceptedTitle && sameTitle(decisions.acceptedTitle, proposed.title)) {
     return 'open_for_search';
+  }
+  if (decisions.checkedTitles?.some((title) => sameTitle(title, proposed.title))) {
+    return 'skills_checked';
   }
   const conf = proposed.confirmation;
   return conf.state === 'observed' && conf.matchedRequirements > 0
@@ -152,15 +157,28 @@ export function mapProposedRolesToCareerRoles(
   return roles.map((role) => mapProposedRoleToCareerRole(role, decisions));
 }
 
-export function summarizeRolesMarket(roles: readonly CareerRoleModel[]): RolesMarketSummary {
-  const latest = roles
-    .map((role) => role.observedAt)
+/** Дата и площадки выборки, из которой сервер назвал роли (B445). */
+export interface RolesSample {
+  readonly observedAt: string | null;
+  readonly sources: readonly string[];
+}
+
+export function summarizeRolesMarket(
+  roles: readonly CareerRoleModel[],
+  sample?: RolesSample | null,
+): RolesMarketSummary {
+  const latest = [...roles.map((role) => role.observedAt), sample?.observedAt]
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
   return {
     vacancyTotal: roles.reduce((sum, role) => sum + role.vacancyCount, 0),
     asOf: dayMonth(latest),
-    sources: [...new Set(roles.flatMap((role) => role.sources))],
+    sources: [
+      ...new Set([
+        ...roles.flatMap((role) => role.sources),
+        ...(sample?.sources ?? []).map(sourceLabel),
+      ]),
+    ],
   };
 }

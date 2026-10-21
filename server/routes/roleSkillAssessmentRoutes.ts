@@ -36,7 +36,43 @@ import {
   withDeps,
 } from './helpers';
 
-const startSchema = z.object({ consent: z.literal(true) }).strict();
+const roleSchema = z.string().trim().min(1).max(200);
+const startSchema = z.object({ consent: z.literal(true), role: roleSchema.optional() }).strict();
+const currentQuerySchema = z.object({ role: roleSchema.optional() });
+
+/** Роль проверки: нажатая на «Карьере» или, без неё, роль «Стратегии» (B445). */
+interface AssessedRole {
+  readonly title: string;
+  readonly version: number;
+  readonly fromStrategy: boolean;
+}
+
+function sameRoleTitle(left: string, right: string): boolean {
+  return titleKey(left) === titleKey(right);
+}
+
+function resolveAssessedRole(
+  deps: RouteDeps,
+  candidateId: string,
+  requested: string | undefined,
+): AssessedRole | null {
+  const strategy = deps.candidateStore.getCareerStrategy(candidateId);
+  const strategyRole = strategy
+    ? { title: strategy.current.role.title, version: strategy.current.version, fromStrategy: true }
+    : null;
+  if (!requested) return strategyRole;
+  if (strategyRole && sameRoleTitle(strategyRole.title, requested)) return strategyRole;
+  // Роль не из «Стратегии»: выбор «Стратегии» не меняется, у роли своя первая версия.
+  return { title: requested, version: 1, fromStrategy: false };
+}
+
+function latestRunFor(deps: RouteDeps, candidateId: string, role: AssessedRole | null) {
+  const runs = deps.candidateStore.roleSkillAssessments.list(candidateId);
+  if (!role) return runs[0];
+  // Прогон ищется по названию роли: проверка роли с «Карьеры» не перекрывает роль
+  // «Стратегии», а смена роли «Стратегии» открывает свежую проверку новой роли.
+  return runs.find((run) => sameRoleTitle(run.roleTitle, role.title));
+}
 const dialogueSchema = requestBase.extend({ answer: z.string().trim().min(1).max(8_000) }).strict();
 const suggestionDecisionSchema = requestBase
   .extend({
@@ -100,6 +136,11 @@ export function registerRoleSkillAssessmentRoutes(app: FastifyInstance, deps: Ro
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     withDeps(deps, handleCurrent),
   );
+  app.get(
+    '/api/v1/candidate/role-skill-assessments/checked-roles',
+    { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
+    withDeps(deps, handleCheckedRoles),
+  );
   app.post(
     '/api/v1/candidate/role-skill-assessments/start',
     { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } },
@@ -132,14 +173,12 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
     deps.config,
   );
   if (!candidate) return undefined;
-  const latest = deps.candidateStore.roleSkillAssessments.list(candidate.id)[0];
-  const strategy = deps.candidateStore.getCareerStrategy(candidate.id);
+  const { role: requested } = currentQuerySchema.parse(request.query ?? {});
+  const role = resolveAssessedRole(deps, candidate.id, requested);
+  const latest = latestRunFor(deps, candidate.id, role);
   if (latest) {
-    if (!strategy) return reply.send({ data: { state: 'role_changed', run: latest } });
-    if (
-      latest.roleVersion !== strategy.current.version ||
-      latest.roleTitle !== strategy.current.role.title
-    ) {
+    if (!role) return reply.send({ data: { state: 'role_changed', run: latest } });
+    if (latest.roleVersion !== role.version || latest.roleTitle !== role.title) {
       return reply.send({ data: { state: 'role_changed', run: latest } });
     }
     if (latest.status !== 'complete') return reply.send({ data: { state: 'run', run: latest } });
@@ -150,8 +189,32 @@ async function handleCurrent(deps: RouteDeps, request: FastifyRequest, reply: Fa
     return reply.send({ data: { state: 'result', run: latest, stale } });
   }
 
-  const context = await readAssessmentContext(deps, candidate.id);
+  const context = await readAssessmentContext(deps, candidate.id, role);
   return reply.send({ data: context });
+}
+
+/** Роли с завершённой проверкой: «Карьера» ставит им статус «Навыки проверены» (B445). */
+async function handleCheckedRoles(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const seen = new Set<string>();
+  const checked = deps.candidateStore.roleSkillAssessments
+    .list(candidate.id)
+    .filter((run) => run.status === 'complete' && run.completedAt)
+    .filter((run) => {
+      const key = titleKey(run.roleTitle);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((run) => ({ roleTitle: run.roleTitle, completedAt: run.completedAt }));
+  return reply.send({ data: checked });
 }
 
 async function handleStart(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
@@ -164,12 +227,14 @@ async function handleStart(deps: RouteDeps, request: FastifyRequest, reply: Fast
     deps.config,
   );
   if (!candidate) return undefined;
-  startSchema.parse(request.body);
+  const { role: requested } = startSchema.parse(request.body);
   const starts = activeStarts.get(deps) ?? new Map<string, Promise<unknown>>();
   activeStarts.set(deps, starts);
   const pending = starts.get(candidate.id);
   if (pending) return pending;
-  const operation = startRun(deps, candidate, reply).finally(() => starts.delete(candidate.id));
+  const operation = startRun(deps, candidate, reply, requested).finally(() =>
+    starts.delete(candidate.id),
+  );
   starts.set(candidate.id, operation);
   return operation;
 }
@@ -178,20 +243,21 @@ async function startRun(
   deps: RouteDeps,
   candidate: NonNullable<ReturnType<typeof authenticateCandidate>>,
   reply: FastifyReply,
+  requested?: string,
 ) {
-  const latest = deps.candidateStore.roleSkillAssessments.list(candidate.id)[0];
-  const strategy = deps.candidateStore.getCareerStrategy(candidate.id);
-  if (!strategy) return reply.send({ data: { state: 'role_not_selected' } });
+  const role = resolveAssessedRole(deps, candidate.id, requested);
+  if (!role) return reply.send({ data: { state: 'role_not_selected' } });
+  const latest = latestRunFor(deps, candidate.id, role);
   if (
     latest &&
-    latest.roleVersion === strategy.current.version &&
-    latest.roleTitle === strategy.current.role.title &&
+    latest.roleVersion === role.version &&
+    latest.roleTitle === role.title &&
     latest.status !== 'complete'
   ) {
     return reply.send({ data: { state: 'run', run: latest } });
   }
 
-  const context = await readAssessmentContext(deps, candidate.id);
+  const context = await readAssessmentContext(deps, candidate.id, role);
   if (context.state !== 'ready') return reply.send({ data: context });
   const run = createInitialAssessmentRun(context);
   deps.candidateStore.roleSkillAssessments.create(candidate.id, run);
@@ -269,16 +335,12 @@ function createInitialAssessmentSkills(
 async function readAssessmentContext(
   deps: RouteDeps,
   candidateId: string,
+  role: AssessedRole | null,
 ): Promise<AssessmentContext> {
-  const strategy = deps.candidateStore.getCareerStrategy(candidateId);
-  if (!strategy) return { state: 'role_not_selected' };
-  const snapshot = await readRoleSnapshot(deps, candidateId, strategy.current.role.title);
+  if (!role) return { state: 'role_not_selected' };
+  const snapshot = await readRoleSnapshot(deps, candidateId, role.title);
   if (snapshot.state !== 'matched') return snapshot;
-  return summarizeAssessmentContext(
-    strategy.current.role.title,
-    strategy.current.version,
-    snapshot.vacancies,
-  );
+  return summarizeAssessmentContext(role.title, role.version, snapshot.vacancies);
 }
 
 async function readRoleSnapshot(

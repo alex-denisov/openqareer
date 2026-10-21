@@ -21,6 +21,7 @@ import {
   MarketSourceStamp,
   type EditableConditionField,
 } from './CareerConditionsComponents';
+import { formatVacancyCount } from './careerWageFork';
 
 export function MobileHeader({
   title,
@@ -57,7 +58,7 @@ function MobileRoleRow({
         <span className="career-m-row-main">
           <span className="career-m-row-title">{role.title}</span>
           <span className="career-role-meta">
-            {role.wageDisplay} · {role.vacancyCount} вакансий
+            {role.wageDisplay} · {formatVacancyCount(role.vacancyCount)}
           </span>
           <span className="career-m-row-foot">
             <RoleStatusBadge status={role.status} />
@@ -149,11 +150,14 @@ function MobileConditionsGroup({
   summary,
   onEditField,
   onOpenRelocation,
+  relocationEnabled = conditions.geography.isRelocationEnabled,
 }: {
   conditions: SearchConditionsDraft;
   summary: RolesMarketSummary;
   onEditField: (field: Exclude<EditableConditionField, null>) => void;
   onOpenRelocation: () => void;
+  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1). */
+  relocationEnabled?: boolean;
 }): ReactElement {
   return (
     <section className="career-m-group" aria-labelledby="m-cond-h">
@@ -175,10 +179,7 @@ function MobileConditionsGroup({
         ))}
       </ul>
       <ConditionsMarketLine summary={summary} />
-      <MobileRelocationRow
-        enabled={conditions.geography.isRelocationEnabled}
-        onOpen={onOpenRelocation}
-      />
+      <MobileRelocationRow enabled={relocationEnabled} onOpen={onOpenRelocation} />
     </section>
   );
 }
@@ -189,12 +190,14 @@ export function MobileCareerHome({
   summary,
   onPush,
   onOpenRelocation,
+  relocationEnabled,
 }: {
   roles: readonly CareerRoleModel[];
   conditions: SearchConditionsDraft;
   summary: RolesMarketSummary;
   onPush: (view: CareerPushView) => void;
   onOpenRelocation: () => void;
+  relocationEnabled?: boolean;
 }): ReactElement {
   return (
     <div className="career-screen career-screen-mobile" data-testid="career-screen">
@@ -205,6 +208,7 @@ export function MobileCareerHome({
         summary={summary}
         onEditField={(field) => onPush(field)}
         onOpenRelocation={onOpenRelocation}
+        relocationEnabled={relocationEnabled}
       />
       <MarketSourceStamp summary={summary} />
     </div>
@@ -227,7 +231,7 @@ export function MobileRolePush({
         <h3 className="career-role-title">{role.title}</h3>
         <RoleStatusBadge status={role.status} />
         <p className="career-role-meta">
-          {role.wageDisplay} · {role.vacancyCount} вакансий
+          {role.wageDisplay} · {formatVacancyCount(role.vacancyCount)}
           {role.observedDate ? ` · ${role.observedDate}` : ''}
         </p>
         <CareerRoleBody role={role} handlers={handlers} />

@@ -13,6 +13,7 @@ import {
   X,
 } from '@phosphor-icons/react';
 import type { CareerRoleModel, RoleStatus } from './careerScreenTypes';
+import { formatVacancyCount } from './careerWageFork';
 
 export interface RoleHandlers {
   readonly onConsultant: (role: CareerRoleModel) => void;
@@ -38,9 +39,14 @@ export function RoleStatusBadge({ status }: { status: RoleStatus }): ReactElemen
   );
 }
 
+/** Причина гипотезы склеивается с «. Это вывод…»: своя конечная точка дала бы «..». */
+export function withoutTrailingPeriod(text: string): string {
+  return text.trim().replace(/[.…]+$/u, '');
+}
+
 /** «вилка · N вакансий · дата» — числа только с выборкой и датой. */
 export function roleMetaLine(role: CareerRoleModel): string {
-  const parts = [role.wageDisplay, `${role.vacancyCount} вакансий`];
+  const parts = [role.wageDisplay, formatVacancyCount(role.vacancyCount)];
   if (role.wageSampleNote) {
     parts.push(
       role.observedDate ? `${role.wageSampleNote}, ${role.observedDate}` : role.wageSampleNote,
@@ -282,8 +288,8 @@ export function CareerRoleBody({
         <p className="career-note">
           <Lightbulb size={16} aria-hidden />
           <span>
-            Гипотеза консультанта: {role.hypothesisReason}. Это вывод из профиля, пока не
-            проверенный.
+            Гипотеза консультанта: {withoutTrailingPeriod(role.hypothesisReason)}. Это вывод из
+            профиля, пока не проверенный.
           </span>
         </p>
       ) : null}

@@ -41,6 +41,7 @@ describe('решения кандидата по ролям «Карьеры» (
     });
     const roleId = first.json().data[0].id as string;
     expect(first.json().meta.roleDecisions).toEqual({ rejected: [], offersDismissed: [] });
+    expect(first.json().meta.sample).toEqual({ observedAt: null, sources: [] });
 
     for (const proposalKey of [`career-role:${roleId}`, `career-role-offer:${roleId}`]) {
       const saved = await app.inject({

@@ -1,4 +1,4 @@
-import { useState, type ReactElement } from 'react';
+import { useState, type KeyboardEvent, type ReactElement } from 'react';
 import {
   Buildings,
   CaretDown,
@@ -19,6 +19,8 @@ import {
   formatConditionsFormat,
   formatSalaryFloor,
 } from './careerConditionsStorage';
+import { formatVacancyCount } from './careerWageFork';
+import { useEscapeLayer } from '../shell/escapeLayers';
 
 function EditorError({ message }: { message?: string | null }): ReactElement | null {
   if (!message) return null;
@@ -61,6 +63,19 @@ function SalaryActionButtons({
   );
 }
 
+/**
+ * Enter сохраняет правку условия, как галочка; Escape отменяет её. Редактор
+ * регистрируется верхним слоем Escape, чтобы клавиша не свернула консультанта.
+ */
+function useEditorKeys(onSubmit: () => void, onCancel: () => void) {
+  useEscapeLayer(onCancel);
+  return (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    onSubmit();
+  };
+}
+
 export function CareerInlineSalaryEditor({
   initialSalary,
   initialShowWithoutSalary,
@@ -81,6 +96,7 @@ export function CareerInlineSalaryEditor({
     const digits = val.replace(/\D+/g, '');
     onSave(digits ? Number(digits) : null, showNoWage);
   };
+  const onKeyDown = useEditorKeys(handleSave, onCancel);
 
   return (
     <div className="career-inline-edit" aria-label="Редактирование зарплаты">
@@ -89,6 +105,7 @@ export function CareerInlineSalaryEditor({
       </label>
       <div className="career-inline-row">
         <input
+          onKeyDown={onKeyDown}
           id="salary-input"
           className="career-inline-input"
           inputMode="numeric"
@@ -100,6 +117,7 @@ export function CareerInlineSalaryEditor({
       </div>
       <label className="career-checkbox-label">
         <input
+          onKeyDown={onKeyDown}
           type="checkbox"
           checked={showNoWage}
           onChange={(e) => setShowNoWage(e.target.checked)}
@@ -143,6 +161,7 @@ export function CareerInlineStopListEditor({
       setName('');
     }
   };
+  const onKeyDown = useEditorKeys(handleAdd, onClose);
 
   return (
     <div className="career-inline-edit" aria-label="Редактирование стоп-листа">
@@ -150,6 +169,7 @@ export function CareerInlineStopListEditor({
       <StopListItemsList items={stopList} />
       <div className="career-inline-row">
         <input
+          onKeyDown={onKeyDown}
           className="career-inline-input"
           placeholder="Название компании"
           value={name}
@@ -190,23 +210,28 @@ export function CareerInlineFormatEditor({
   const handleSave = () => {
     onSave({ office, hybrid, remote });
   };
+  const onKeyDown = useEditorKeys(handleSave, onCancel);
+  const formatOptions = [
+    ['Офис', office, setOffice],
+    ['Гибрид', hybrid, setHybrid],
+    ['Удалённо', remote, setRemote],
+  ] as const;
 
   return (
     <div className="career-inline-edit" aria-label="Редактирование формата">
       <h4 className="career-section-subhead">Формат работы</h4>
       <div className="career-format-options">
-        <label className="career-format-option">
-          <input type="checkbox" checked={office} onChange={(e) => setOffice(e.target.checked)} />
-          <span className="career-checkbox-text">Офис</span>
-        </label>
-        <label className="career-format-option">
-          <input type="checkbox" checked={hybrid} onChange={(e) => setHybrid(e.target.checked)} />
-          <span className="career-checkbox-text">Гибрид</span>
-        </label>
-        <label className="career-format-option">
-          <input type="checkbox" checked={remote} onChange={(e) => setRemote(e.target.checked)} />
-          <span className="career-checkbox-text">Удалённо</span>
-        </label>
+        {formatOptions.map(([label, checked, setChecked]) => (
+          <label key={label} className="career-format-option">
+            <input
+              onKeyDown={onKeyDown}
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => setChecked(e.target.checked)}
+            />
+            <span className="career-checkbox-text">{label}</span>
+          </label>
+        ))}
       </div>
       <div className="career-inline-row">
         <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
@@ -236,6 +261,7 @@ export function CareerInlineGeoEditor({
       .filter(Boolean);
     onSave(list);
   };
+  const onKeyDown = useEditorKeys(handleSave, onCancel);
 
   return (
     <div className="career-inline-edit" aria-label="Редактирование географии">
@@ -244,6 +270,7 @@ export function CareerInlineGeoEditor({
       </label>
       <div className="career-inline-row">
         <input
+          onKeyDown={onKeyDown}
           id="geo-input"
           className="career-inline-input"
           value={val}
@@ -391,12 +418,15 @@ export function CareerConditionsCard({
   summary,
   onEditField,
   onOpenRelocation,
+  relocationEnabled = conditions.geography.isRelocationEnabled,
   editor,
 }: {
   conditions: SearchConditionsDraft;
   summary: RolesMarketSummary;
   onEditField: (field: EditableConditionField) => void;
   onOpenRelocation: () => void;
+  /** Согласие анкеты релокации — то же состояние, что в самом разделе (B445-r1). */
+  relocationEnabled?: boolean;
   editor?: ReactElement | null;
 }): ReactElement {
   return (
@@ -411,10 +441,7 @@ export function CareerConditionsCard({
       <ConditionsChipList conditions={conditions} onEditField={onEditField} />
       {editor}
       <ConditionsMarketLine summary={summary} />
-      <RelocationRow
-        isRelocationEnabled={conditions.geography.isRelocationEnabled}
-        onOpenRelocation={onOpenRelocation}
-      />
+      <RelocationRow isRelocationEnabled={relocationEnabled} onOpenRelocation={onOpenRelocation} />
     </section>
   );
 }
@@ -432,7 +459,7 @@ export function MarketSourceStamp({
     <p className="career-source-stamp career-meta-icon">
       <Clock size={14} aria-hidden />
       <span>
-        Источник: {named} · {summary.vacancyTotal} вакансий
+        Источник: {named} · {formatVacancyCount(summary.vacancyTotal)}
         {summary.asOf ? ` · ${summary.asOf}` : ''}
       </span>
     </p>

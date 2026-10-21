@@ -5,6 +5,8 @@ import {
   getCareerStrategy,
   rejectCoachProposal,
 } from '../coach/coachApi';
+import type { RolesSample } from './roleHypothesisAdapter';
+import { getCheckedRoles } from '../skills/roleSkillAssessmentApi';
 
 /** Ключи решений по ролям в хранилище отклонённых предложений консультанта. */
 export const roleRejectionKey = (roleId: string): string => `career-role:${roleId}`;
@@ -19,6 +21,17 @@ export interface RoleHypothesesWithDecisions {
   readonly roles: readonly ProposedRole[];
   readonly decisions: RoleDecisionsRead;
   readonly acceptedTitle: string | null;
+  readonly checkedTitles: readonly string[];
+  readonly sample: RolesSample | null;
+}
+
+function readSample(meta: unknown): RolesSample | null {
+  const value = (meta as { sample?: Partial<RolesSample> } | undefined)?.sample;
+  if (!value) return null;
+  return {
+    observedAt: typeof value.observedAt === 'string' ? value.observedAt : null,
+    sources: Array.isArray(value.sources) ? value.sources : [],
+  };
 }
 
 function readDecisions(meta: unknown): RoleDecisionsRead {
@@ -36,9 +49,10 @@ function readDecisions(meta: unknown): RoleDecisionsRead {
 export async function readRoleHypothesesWithDecisions(
   signal?: AbortSignal,
 ): Promise<RoleHypothesesWithDecisions> {
-  const [response, strategy] = await Promise.all([
+  const [response, strategy, checked] = await Promise.all([
     apiFetch('/api/v1/candidate/role-hypotheses', { signal }),
     getCareerStrategy(signal),
+    getCheckedRoles(signal),
   ]);
   if (!response.ok) await throwApiError(response);
   const envelope = (await response.json()) as { data?: unknown; meta?: unknown };
@@ -47,6 +61,8 @@ export async function readRoleHypothesesWithDecisions(
     roles: envelope.data as ProposedRole[],
     decisions: readDecisions(envelope.meta),
     acceptedTitle: strategy?.current.role.title ?? null,
+    checkedTitles: checked.map((role) => role.roleTitle),
+    sample: readSample(envelope.meta),
   };
 }
 

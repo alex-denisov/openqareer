@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useRelocationConsent } from './useRelocationConsent';
 import type {
   CareerPushView,
   CareerRoleModel,
@@ -168,8 +169,9 @@ function useCareerRolesState(props: CareerScreenProps) {
       mapProposedRolesToCareerRoles(store.roles, {
         acceptedTitle: store.acceptedTitle,
         offersDismissed: store.offersDismissed,
+        checkedTitles: store.checkedTitles,
       }).filter((role) => !store.rejected.includes(role.id)),
-    [store.roles, store.acceptedTitle, store.offersDismissed, store.rejected],
+    [store.roles, store.acceptedTitle, store.offersDismissed, store.checkedTitles, store.rejected],
   );
   const [localRejected, setLocalRejected] = useState<readonly string[]>([]);
   const roles: readonly CareerRoleModel[] = provided
@@ -179,7 +181,7 @@ function useCareerRolesState(props: CareerScreenProps) {
 
   return {
     activeRoles: roles,
-    summary: summarizeRolesMarket(roles) as RolesMarketSummary,
+    summary: summarizeRolesMarket(roles, provided ? null : store.sample) as RolesMarketSummary,
     actionError: provided ? null : store.actionError,
     handleRejectRole: async (roleId: string): Promise<boolean> => {
       if (provided) {
@@ -199,6 +201,16 @@ export function useCareerScreenState(props: CareerScreenProps) {
   const rolesState = useCareerRolesState(props);
   const condState = useCareerConditionsState(props.initialConditions, props.onSaveConditions);
   const [pushView, setPushView] = useState<CareerPushView>(props.initialPushView ?? 'home');
+  const [relocationRevision, setRelocationRevision] = useState(0);
+  const relocationConsent = useRelocationConsent(!props.initialRoles, relocationRevision);
+  const focusRoleId = rolesState.activeRoles.find(
+    (role) => role.title === props.focusRoleTitle,
+  )?.id;
+
+  // Возврат из проверки навыков на 390: открыть ту же роль, как только роли прочитаны (B445).
+  useEffect(() => {
+    if (props.isMobile && focusRoleId) setPushView(`role:${focusRoleId}`);
+  }, [props.isMobile, focusRoleId]);
 
   const handleRejectRole = async (roleId: string): Promise<void> => {
     const ok = await rolesState.handleRejectRole(roleId);
@@ -211,6 +223,9 @@ export function useCareerScreenState(props: CareerScreenProps) {
     pushView,
     setPushView,
     handleRejectRole,
+    focusRoleTitle: props.focusRoleTitle,
+    relocationEnabled: relocationConsent ?? condState.conditions.geography.isRelocationEnabled,
+    refreshRelocation: () => setRelocationRevision((revision) => revision + 1),
     isMobile: props.isMobile ?? false,
   };
 }

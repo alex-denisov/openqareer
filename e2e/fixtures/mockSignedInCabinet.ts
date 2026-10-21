@@ -592,6 +592,8 @@ async function mockLineCRoutes(
   }
 
   let body: Record<string, unknown> = {};
+  const roleQuery = new URL(route.request().url()).searchParams.get('role');
+  if (method === 'GET' && roleQuery) body = { role: roleQuery };
   if (method === 'POST' || method === 'PATCH') {
     try {
       body = route.request().postDataJSON() as Record<string, unknown>;

@@ -43,6 +43,8 @@ export interface CareerScreenProps {
   readonly onSaveConditions?: (conditions: SearchConditionsDraft) => Promise<void>;
   readonly isMobile?: boolean;
   readonly initialPushView?: CareerPushView;
+  /** Роль, к которой вернуться после проверки навыков: раскрыта на 1440, открыта на 390. */
+  readonly focusRoleTitle?: string;
 }
 
 const ROLES_EXPLAIN =
@@ -142,7 +144,10 @@ function CareerRolesSection({
   handlers: RoleHandlers;
 }): ReactElement {
   const roles = state.activeRoles;
-  const firstOpen = roles.find((role) => role.status === 'skills_checked') ?? roles[0];
+  const firstOpen =
+    roles.find((role) => role.title === state.focusRoleTitle) ??
+    roles.find((role) => role.status === 'skills_checked') ??
+    roles[0];
   return (
     <section className="career-card" aria-labelledby="roles-heading">
       <div className="career-card-head">
@@ -222,6 +227,7 @@ function CareerMobileContent({
         summary={state.summary}
         onPush={state.setPushView}
         onOpenRelocation={onOpenRelocation}
+        relocationEnabled={state.relocationEnabled}
       />
     </>
   );
@@ -255,6 +261,7 @@ function CareerDesktopContent({
         summary={state.summary}
         onEditField={state.setEditingField}
         onOpenRelocation={onOpenRelocation}
+        relocationEnabled={state.relocationEnabled}
         editor={<ConditionEditor field={state.editingField} state={state} />}
       />
       <CareerRolesSection state={state} handlers={handlers} />
@@ -284,7 +291,10 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
     return (
       <Suspense fallback={<CareerLoadingSkeleton />}>
         <RelocationScreen
-          onNavigateBack={() => setRelocationOpen(false)}
+          onNavigateBack={() => {
+            setRelocationOpen(false);
+            state.refreshRelocation();
+          }}
           onOpenExpert={onOpenExpert ? () => onOpenExpert() : undefined}
           onOpenVacancies={onOpenVacancies ? () => onOpenVacancies() : undefined}
         />

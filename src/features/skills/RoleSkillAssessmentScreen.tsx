@@ -45,22 +45,20 @@ interface RoleSkillAssessmentScreenProps {
   session: AuthUser;
   /** Skills a vacancy's consultant offer asked to confirm (B552). */
   focus?: SkillCheckFocus;
+  /** Роль, нажатая на «Карьере»; без неё — роль «Стратегии» (B445). */
+  roleTitle?: string;
   onClose: () => void;
   onOpenOpportunities: () => void;
 }
 
-export function RoleSkillAssessmentScreen({
-  session,
-  focus,
-  onClose,
-  onOpenOpportunities,
-}: RoleSkillAssessmentScreenProps) {
+export function RoleSkillAssessmentScreen(props: RoleSkillAssessmentScreenProps) {
+  const { session, focus, roleTitle, onClose, onOpenOpportunities } = props;
   const [state, dispatch] = useReducer(roleSkillAssessmentReducer, initialRoleSkillAssessmentState);
   const requestRef = useRef<{ key: string; id: string }>();
   const busyRef = useRef(false);
   const draftTimer = useRef<number>();
   const answerRef = useRef<HTMLTextAreaElement>(null);
-  const actions = new RoleSkillAssessmentActions(state, dispatch, requestRef, busyRef);
+  const actions = new RoleSkillAssessmentActions(state, dispatch, requestRef, busyRef, roleTitle);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
   const run = getAssessmentRun(state.current);
@@ -69,6 +67,7 @@ export function RoleSkillAssessmentScreen({
 
   useAssessmentLifecycle(
     session.candidateId,
+    roleTitle,
     state,
     dispatch,
     actionsRef,
@@ -82,7 +81,7 @@ export function RoleSkillAssessmentScreen({
 
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
-      <AssessmentHeader state={state} run={run} actions={actions} onClose={onClose} />
+      <AssessmentHeader {...{ state, run, actions, onClose }} fromCareer={Boolean(roleTitle)} />
       {focus ? <SkillCheckFocusNote focus={focus} /> : null}
       {run ? (
         <ProgressTrack step={getProgressStep(run)} />
@@ -128,6 +127,7 @@ function getAssessmentScreenKey(
 
 function useAssessmentLifecycle(
   candidateId: string | null,
+  roleTitle: string | undefined,
   state: RoleSkillAssessmentUiState,
   dispatch: Dispatch<Parameters<typeof roleSkillAssessmentReducer>[1]>,
   actionsRef: MutableRefObject<RoleSkillAssessmentActions>,
@@ -136,8 +136,8 @@ function useAssessmentLifecycle(
   activeCase: ReturnType<typeof getActiveAssessmentCase>,
 ): void {
   useEffect(() => {
-    void loadInitialAssessment(dispatch);
-  }, [candidateId, dispatch]);
+    void loadInitialAssessment(dispatch, roleTitle);
+  }, [candidateId, roleTitle, dispatch]);
   useEffect(
     () => scheduleDraftSave(state, run, activeCase, actionsRef, draftTimer),
     [
@@ -177,13 +177,16 @@ function AssessmentHeader({
   run,
   actions,
   onClose,
+  fromCareer,
 }: {
   state: RoleSkillAssessmentUiState;
   run: ReturnType<typeof getAssessmentRun>;
   actions: RoleSkillAssessmentActions;
   onClose: () => void;
+  /** Проверка открыта с «Карьеры»: «Назад» ведёт туда, а не в профиль (B445). */
+  fromCareer: boolean;
 }) {
-  const details = getAssessmentHeaderDetails(state, run);
+  const details = getAssessmentHeaderDetails(state, run, fromCareer);
   const back = () => handleAssessmentHeaderBack(actions, onClose, details.backTarget);
   return (
     <header className="career-role-assessment-header">
@@ -196,7 +199,9 @@ function AssessmentHeader({
         <ArrowLeft size={20} aria-hidden="true" />
       </button>
       <div>
-        <p className="career-role-assessment-kicker">Профиль · проверка по вакансии</p>
+        <p className="career-role-assessment-kicker">
+          {fromCareer ? 'Карьера · проверка роли' : 'Профиль · проверка по вакансии'}
+        </p>
         <h1>{details.title}</h1>
         <p className="career-role-assessment-subtitle">{details.subtitle}</p>
       </div>
@@ -219,6 +224,7 @@ interface AssessmentHeaderDetails {
 function getAssessmentHeaderDetails(
   state: RoleSkillAssessmentUiState,
   run: ReturnType<typeof getAssessmentRun>,
+  fromCareer = false,
 ): AssessmentHeaderDetails {
   const roleTitle =
     run?.roleTitle ?? getCurrentRoleTitle(state.current) ?? 'Связь опыта и требований роли';
@@ -243,7 +249,9 @@ function getAssessmentHeaderDetails(
       ? 'Назад к итогу'
       : state.skillOverviewOpen
         ? 'Назад к диалогу'
-        : 'Назад к профилю',
+        : fromCareer
+          ? 'Назад к карьере'
+          : 'Назад к профилю',
     backTarget,
   };
 }
