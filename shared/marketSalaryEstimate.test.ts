@@ -17,6 +17,11 @@ describe('salaryMidpoint', () => {
     expect(salaryMidpoint({})).toBeUndefined();
     expect(salaryMidpoint({ from: 0, to: -5 })).toBeUndefined();
   });
+
+  it('drops hourly rates: they would drag a monthly or yearly range to zero', () => {
+    expect(salaryMidpoint({ from: 25, to: 40 })).toBeUndefined();
+    expect(salaryMidpoint({ from: 900 })).toBeUndefined();
+  });
 });
 
 describe('estimateFromMidpoints', () => {

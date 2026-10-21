@@ -14,6 +14,8 @@
 import { pluralWordRu } from './pluralRu';
 
 export const MARKET_SALARY_MIN_SAMPLE = 5;
+/** Below this a stated amount is an hourly rate, not a monthly or yearly salary. */
+const MIN_PERIOD_SALARY = 1_000;
 
 export interface MarketSalaryEstimate {
   /** Absent when the sample is below the minimum: no number is shown. */
@@ -38,8 +40,9 @@ export function salaryMidpoint(salary: {
 }): number | undefined {
   const from = typeof salary.from === 'number' && salary.from > 0 ? salary.from : undefined;
   const to = typeof salary.to === 'number' && salary.to > 0 ? salary.to : undefined;
-  if (from !== undefined && to !== undefined) return (from + to) / 2;
-  return from ?? to;
+  const midpoint = from !== undefined && to !== undefined ? (from + to) / 2 : (from ?? to);
+  // Hourly rates (USD 25–60) would drag a monthly or yearly range to zero.
+  return midpoint !== undefined && midpoint >= MIN_PERIOD_SALARY ? midpoint : undefined;
 }
 
 function quantile(sorted: readonly number[], share: number): number {
