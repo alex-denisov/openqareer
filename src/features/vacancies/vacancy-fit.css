@@ -161,3 +161,20 @@
     transition: none;
   }
 }
+
+/* B446-g4: компактный выбор порядка в правом конце строки заголовков колонок. */
+.vacancies-table-header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.vacancies-table-header-actions .vacancy-fit-sort select {
+  border-color: transparent;
+  background: transparent;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  padding-inline: var(--career-space-2);
+}
+.vacancies-table-header-actions .vacancy-fit-sort select:hover {
+  border-color: var(--career-line);
+}

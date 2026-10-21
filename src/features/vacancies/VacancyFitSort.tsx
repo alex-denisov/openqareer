@@ -45,9 +45,9 @@ export function VacancyFitSortControl({
 }) {
   return (
     <label className="vacancy-fit-sort">
-      Порядок вакансий
+      <span className="career-sr-only">Порядок вакансий</span>
       <select value={value} onChange={(event) => onChange(event.target.value as VacancyFitSort)}>
-        <option value="fit">По соответствию профилю</option>
+        <option value="fit">По соответствию</option>
         <option value="freshness">Сначала новые</option>
       </select>
     </label>

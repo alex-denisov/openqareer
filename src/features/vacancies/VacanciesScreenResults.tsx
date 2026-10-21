@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyRow } from './VacancyRow';
 import { VacancyMapView } from './VacancyMapView';
+import { VacancyFitSortControl } from './VacancyFitSort';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
 import { catalogSnapshotLabel } from './VacanciesScreenSummary';
@@ -27,7 +28,10 @@ interface VacanciesMainBodyProps {
   readonly onSelectCity: (city?: string) => void;
 }
 
-function VacanciesTableHeader() {
+function VacanciesTableHeader({
+  sort,
+  onSortChange,
+}: Pick<ListContentProps, 'sort' | 'onSortChange'>) {
   return (
     <div className="vacancies-table-header" role="group" aria-label="Колонки списка вакансий">
       <div className="vacancies-table-header-cells">
@@ -36,7 +40,9 @@ function VacanciesTableHeader() {
         <span>Гео</span>
         <span>Деньги</span>
       </div>
-      <span className="vacancies-table-header-actions" aria-hidden="true" />
+      <span className="vacancies-table-header-actions">
+        {onSortChange ? <VacancyFitSortControl value={sort} onChange={onSortChange} /> : null}
+      </span>
     </div>
   );
 }
@@ -86,7 +92,7 @@ function VacanciesListContent(props: ListContentProps) {
   const catalogDate = catalogSnapshotLabel(props.catalogObservedAt);
   return (
     <div className="vacancies-list-container">
-      <VacanciesTableHeader />
+      <VacanciesTableHeader sort={props.sort} onSortChange={props.onSortChange} />
       <ul className="vac-list">
         {props.items.map((item) => (
           <VacancyScreenRow key={item.cluster.id} item={item} props={props} />
