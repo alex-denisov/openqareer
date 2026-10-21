@@ -256,7 +256,8 @@ describe('VacanciesScreen (B250)', () => {
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
     expect(html).not.toContain('Все роли кампании');
-    expect(html).toContain('vacancies-mobile-filter-badge">0<');
+    // B446-g4: роли и регионы кампании считаются заданными фильтрами (макет 4: «Фильтры 5»).
+    expect(html).toMatch(/vacancies-mobile-filter-badge">[1-9]</u);
   });
 
   it('does not render without a campaign or a level', () => {

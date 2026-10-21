@@ -7,7 +7,7 @@ import {
   countActiveFilters,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
-import { summarizeVacancyFilterGroup } from './VacanciesFilterToolbar';
+import { summarizeVacancyFilterGroup, withCampaignDefaults } from './VacanciesFilterToolbar';
 
 describe('countActiveFilters', () => {
   it('returns 0 when state is empty', () => {
@@ -136,7 +136,8 @@ describe('VacanciesFilters toggle and role limit', () => {
     const toggle = container.querySelector('.vacancies-mobile-filter-toggle') as HTMLButtonElement;
     expect(toggle).not.toBeNull();
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(toggle.textContent).toContain('Фильтры 0');
+    // B446-g4: роли и регионы кампании считаются заданными фильтрами (макет 4: «Фильтры 5»).
+    expect(toggle.textContent).toMatch(/Фильтры [1-9]/u);
     for (const label of ['Роли', 'Локации', 'Зарплата', 'Формат', 'Источники']) {
       expect(container.textContent).toContain(label);
     }
@@ -213,5 +214,18 @@ describe('VacanciesFilters toggle and role limit', () => {
     expect(container.textContent).not.toContain('Добавить свою роль');
     expect(container.querySelector('.vacancy-source-filter')).toBeNull();
     act(() => root.unmount());
+  });
+});
+
+describe('withCampaignDefaults (B446-g4)', () => {
+  const empty = { roles: [], regions: [], remoteOnly: false };
+  it('shows campaign roles and regions on the buttons when nothing is picked by hand', () => {
+    const shown = withCampaignDefaults(empty, ['Head of Engineering', 'Director'], ['ru']);
+    expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('Head of Engineering, Director');
+    expect(summarizeVacancyFilterGroup(shown, 'locations')).toBeTruthy();
+  });
+  it('keeps a hand-picked choice over the campaign', () => {
+    const shown = withCampaignDefaults({ ...empty, roles: ['CTO'] }, ['Head'], []);
+    expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('CTO');
   });
 });

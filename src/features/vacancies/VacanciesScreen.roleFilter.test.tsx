@@ -91,7 +91,8 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (button) => button.textContent === 'Все роли кампании',
     );
     expect(allRolesButton).toBeUndefined();
-    expect(container.textContent).toContain('Фильтры 0');
+    // B446-g4: роли и регионы кампании считаются заданными фильтрами (макет 4: «Фильтры 5»).
+    expect(container.textContent).toMatch(/Фильтры [1-9]/u);
   });
 
   it('сужает список до выбранной роли и позволяет вернуться ко «Всем ролям»', async () => {
