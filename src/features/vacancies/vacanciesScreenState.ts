@@ -9,6 +9,8 @@ export interface VacanciesScreenState {
   readonly selectedCity?: string;
   readonly selectedLocations?: readonly string[];
   readonly locationSearch?: string;
+  /** «Удалённо, из любой страны» в фильтре «Локации» (B547). */
+  readonly locationRemote?: boolean;
   readonly salaryMinimum?: number;
   readonly salaryMaximum?: number;
   readonly salaryCurrency?: string;

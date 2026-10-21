@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check } from '@phosphor-icons/react';
+import { Check, Funnel } from '@phosphor-icons/react';
 import {
   MATCHED_VACANCY_SOURCE_GROUPS,
   type MatchedVacancyFacets,
@@ -12,6 +12,10 @@ interface VacancySourceCatalogFilterProps {
   readonly state: VacanciesScreenState;
   readonly facets: MatchedVacancyFacets;
   readonly onChange: (update: (previous: VacanciesScreenState) => VacanciesScreenState) => void;
+  /** Свой подвал только у поповера 1440; на push-экране 390 — «Показать N» листа. */
+  readonly withFooter?: boolean;
+  readonly onCancel?: () => void;
+  readonly onApply?: () => void;
 }
 
 interface SourceOption {
@@ -19,6 +23,7 @@ interface SourceOption {
   readonly name: string;
   readonly count: number;
   readonly groupId: MatchedVacancySourceGroupId | null;
+  readonly market?: string;
   readonly searchableText: string;
 }
 
@@ -34,10 +39,10 @@ const SOURCE_GROUP_BY_CATEGORY: Readonly<Record<string, MatchedVacancySourceGrou
 export function VacancySourceCatalogFilter(props: VacancySourceCatalogFilterProps) {
   const catalog = useSourceCatalog();
   const view = useSourceFilterView(props, catalog.sources);
-  return <SourceCatalogContent facets={props.facets} catalog={catalog} view={view} />;
+  return <SourceCatalogContent props={props} catalog={catalog} view={view} />;
 }
 
-function useSourceCatalog() {
+export function useSourceCatalog() {
   const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -75,6 +80,7 @@ function buildSourceOptions(
       name: source.name,
       count,
       groupId: source.category ? (SOURCE_GROUP_BY_CATEGORY[source.category] ?? null) : null,
+      market: source.market,
       searchableText: sourceSearchText(source),
     };
   });
@@ -105,128 +111,190 @@ function sourceSearchText(source: VacancySourceRegistryEntry): string {
     .toLocaleLowerCase();
 }
 
+const numberFormat = new Intl.NumberFormat('ru-RU');
+
+/** Категории со счётом источников каталога, а не вакансий (B547 / возврат B447). */
 function SourceCategoryFilters({
-  facets,
-  catalogCount,
+  options,
   group,
   onSelect,
 }: {
-  readonly facets: MatchedVacancyFacets;
-  readonly catalogCount: number;
+  readonly options: readonly SourceOption[];
   readonly group: SourceGroupSelection;
   readonly onSelect: (group: SourceGroupSelection) => void;
 }) {
-  const groupCounts = new Map(facets.sourceGroups?.map(({ id, count }) => [id, count]));
+  const groups = [
+    { id: 'all' as const, name: 'Все', count: options.length },
+    ...MATCHED_VACANCY_SOURCE_GROUPS.map((sourceGroup) => ({
+      ...sourceGroup,
+      count: options.filter(({ groupId }) => groupId === sourceGroup.id).length,
+    })),
+  ];
   return (
     <div className="vacancy-source-categories" role="group" aria-label="Категории источников">
-      <button
-        type="button"
-        className="career-btn is-sm"
-        aria-pressed={group === 'all'}
-        onClick={() => onSelect('all')}
-      >
-        Все источники · {catalogCount}
-      </button>
-      {MATCHED_VACANCY_SOURCE_GROUPS.map((sourceGroup) => {
-        const count = groupCounts.get(sourceGroup.id);
-        return (
-          <button
-            key={sourceGroup.id}
-            type="button"
-            className="career-btn is-sm"
-            aria-pressed={group === sourceGroup.id}
-            onClick={() => onSelect(sourceGroup.id)}
-          >
-            {sourceGroup.name}
-            {count === undefined ? '' : ' · ' + count}
-          </button>
-        );
-      })}
+      {groups.map((sourceGroup) => (
+        <button
+          key={sourceGroup.id}
+          type="button"
+          className="vacancy-source-category"
+          aria-pressed={group === sourceGroup.id}
+          onClick={() => onSelect(sourceGroup.id)}
+        >
+          {sourceGroup.name}
+          <span className="vacancy-location-count">{numberFormat.format(sourceGroup.count)}</span>
+        </button>
+      ))}
     </div>
+  );
+}
+
+function SourceRow({
+  source,
+  selected,
+  onToggle,
+}: {
+  readonly source: SourceOption;
+  readonly selected: boolean;
+  readonly onToggle: () => void;
+}) {
+  return (
+    <li className="vacancy-location-node">
+      <div className="vacancy-location-row">
+        <span className="vacancy-location-spacer" />
+        <label className="career-checkbox-label vacancy-location-check">
+          <input
+            type="checkbox"
+            className="career-checkbox"
+            checked={selected}
+            onChange={onToggle}
+          />
+          <span className="vacancy-location-name">{source.name}</span>
+        </label>
+        <span className="vacancy-location-sub">{source.market ?? ''}</span>
+        <span className="vacancy-location-count">{numberFormat.format(source.count)}</span>
+      </div>
+    </li>
+  );
+}
+
+function CategoryAllRow({
+  name,
+  view,
+}: {
+  readonly name: string;
+  readonly view: ReturnType<typeof useSourceFilterView>;
+}) {
+  const ids = view.filtered.map(({ sourceId }) => sourceId);
+  const chosen = ids.filter((id) => view.selected.includes(id)).length;
+  return (
+    <li className="vacancy-location-node">
+      <div className="vacancy-location-row">
+        <span className="vacancy-location-spacer" />
+        <label className="career-checkbox-label vacancy-location-check">
+          <input
+            type="checkbox"
+            className="career-checkbox"
+            checked={ids.length > 0 && chosen === ids.length}
+            ref={(input) => {
+              if (input) input.indeterminate = chosen > 0 && chosen < ids.length;
+            }}
+            disabled={!ids.length}
+            onChange={view.toggleVisibleSources}
+          />
+          <span className="vacancy-location-name">Все в «{name}»</span>
+        </label>
+        <span className="vacancy-location-count">{numberFormat.format(ids.length)}</span>
+      </div>
+    </li>
   );
 }
 
 function SourceOptionList({
   catalog,
-  sources,
-  total,
-  visibleCount,
-  selectedSources,
-  onToggleSource,
-  onShowMore,
+  view,
 }: {
   readonly catalog: ReturnType<typeof useSourceCatalog>;
-  readonly sources: readonly SourceOption[];
-  readonly total: number;
-  readonly visibleCount: number;
-  readonly selectedSources: readonly string[];
-  readonly onToggleSource: (sourceId: string) => void;
-  readonly onShowMore: () => void;
+  readonly view: ReturnType<typeof useSourceFilterView>;
 }) {
+  const groupName = MATCHED_VACANCY_SOURCE_GROUPS.find(({ id }) => id === view.group)?.name;
   return (
-    <fieldset className="vacancy-source-group">
-      <legend>Источники в каталоге</legend>
+    <div className="vacancy-location-body vacancy-source-group">
       {catalog.loading ? <p role="status">Загружаем каталог источников…</p> : null}
       {catalog.failed ? (
         <p role="status">Каталог не загрузился. Показаны источники из текущей подборки.</p>
       ) : null}
-      {sources.length > 0 ? (
-        <div className="chip-row vacancy-source-options">
-          {sources.map((source) => (
-            <SourceOptionButton
-              key={source.sourceId}
-              source={source}
-              selected={selectedSources.includes(source.sourceId)}
-              onClick={() => onToggleSource(source.sourceId)}
-            />
-          ))}
-        </div>
-      ) : (
-        <p role="status">
-          {total === 0 ? 'Источников по этому запросу нет.' : 'Список источников пока пуст.'}
+      <ul className="vacancy-location-tree" aria-label="Источники">
+        {groupName ? <CategoryAllRow name={groupName} view={view} /> : null}
+        {view.visible.map((source) => (
+          <SourceRow
+            key={source.sourceId}
+            source={source}
+            selected={view.selected.includes(source.sourceId)}
+            onToggle={() => view.toggleSource(source.sourceId)}
+          />
+        ))}
+      </ul>
+      {view.filtered.length === 0 && !catalog.loading ? (
+        <p role="status" className="vacancy-location-found">
+          Источников по этому запросу нет.
         </p>
-      )}
-      {visibleCount < total ? (
-        <button type="button" className="career-btn is-sm is-ghost" onClick={onShowMore}>
+      ) : null}
+      {view.visible.length < view.filtered.length ? (
+        <button
+          type="button"
+          className="filters-reset vacancy-location-more"
+          onClick={view.showMore}
+        >
           Показать ещё 20
         </button>
       ) : null}
-    </fieldset>
+    </div>
   );
 }
 
-function SourceSelectionActions({
-  selectedCount,
-  catalogCount,
-  visibleCount,
-  allVisibleSelected,
-  onToggleAll,
-  onClear,
+function SourceFooter({
+  view,
+  compact,
+  onCancel,
+  onApply,
 }: {
-  readonly selectedCount: number;
-  readonly catalogCount: number;
-  readonly visibleCount: number;
-  readonly allVisibleSelected: boolean;
-  readonly onToggleAll: () => void;
-  readonly onClear: () => void;
+  readonly view: ReturnType<typeof useSourceFilterView>;
+  readonly compact: boolean;
+  readonly onCancel?: () => void;
+  readonly onApply?: () => void;
 }) {
+  const total = numberFormat.format(view.options.length);
   return (
-    <div className="vacancy-source-selection" role="group" aria-label="Выбор источников">
-      <span aria-live="polite">
-        Выбрано {selectedCount} из {catalogCount}
+    <div className="vacancy-location-foot" role="group" aria-label="Выбор источников">
+      <span className="vacancy-location-chosen" aria-live="polite">
+        Выбрано {numberFormat.format(view.selected.length)} из {total}
       </span>
+      <button type="button" className="filters-reset" onClick={view.selectAll}>
+        Все {total}
+      </button>
       <button
         type="button"
-        className="career-btn is-sm is-ghost"
-        disabled={visibleCount === 0}
-        aria-pressed={allVisibleSelected}
-        onClick={onToggleAll}
+        className="filters-reset"
+        disabled={!view.selected.length}
+        onClick={view.clearSources}
       >
-        Все {visibleCount}
-      </button>
-      <button type="button" className="career-btn is-sm is-ghost" onClick={onClear}>
         Снять все
       </button>
+      {compact ? null : (
+        <>
+          <button type="button" className="filters-reset" onClick={onCancel}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary vacancies-filter-apply"
+            onClick={onApply}
+          >
+            <Check size={16} weight="bold" aria-hidden="true" />
+            Применить
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -283,6 +351,11 @@ function useSourceFilterView(
     toggleSource,
     toggleVisibleSources,
     clearSources: () => props.onChange((previous) => ({ ...previous, sources: [] })),
+    selectAll: () =>
+      props.onChange((previous) => ({
+        ...previous,
+        sources: options.map(({ sourceId }) => sourceId),
+      })),
     showMore: () => setVisibleCount((count) => count + 20),
     resetVisibleCount: () => setVisibleCount(20),
   };
@@ -302,50 +375,40 @@ function selectionAfterToggle(
 }
 
 function SourceCatalogContent({
-  facets,
+  props,
   catalog,
   view,
 }: {
-  readonly facets: MatchedVacancyFacets;
+  readonly props: VacancySourceCatalogFilterProps;
   readonly catalog: ReturnType<typeof useSourceCatalog>;
   readonly view: ReturnType<typeof useSourceFilterView>;
 }) {
   return (
-    <div className="field-group vacancy-source-filter">
-      <h4>Источники</h4>
-      <SourceCatalogSearch
-        count={view.options.length}
-        value={view.query}
-        onChange={(value) => {
-          view.setQuery(value);
-          view.resetVisibleCount();
-        }}
-      />
+    <div className="vacancy-location-filter vacancy-source-filter">
+      <div className="vacancy-location-head">
+        <SourceCatalogSearch
+          count={view.options.length}
+          value={view.query}
+          onChange={(value) => {
+            view.setQuery(value);
+            view.resetVisibleCount();
+          }}
+        />
+      </div>
       <SourceCategoryFilters
-        facets={facets}
-        catalogCount={view.options.length}
+        options={view.options}
         group={view.group}
         onSelect={(group) => {
           view.setGroup(group);
           view.resetVisibleCount();
         }}
       />
-      <SourceOptionList
-        catalog={catalog}
-        sources={view.visible}
-        total={view.filtered.length}
-        visibleCount={view.visible.length}
-        selectedSources={view.selected}
-        onToggleSource={view.toggleSource}
-        onShowMore={view.showMore}
-      />
-      <SourceSelectionActions
-        selectedCount={view.selected.length}
-        catalogCount={view.options.length}
-        visibleCount={view.filtered.length}
-        allVisibleSelected={view.allVisibleSelected}
-        onToggleAll={view.toggleVisibleSources}
-        onClear={view.clearSources}
+      <SourceOptionList catalog={catalog} view={view} />
+      <SourceFooter
+        view={view}
+        compact={!props.withFooter}
+        onCancel={props.onCancel}
+        onApply={props.onApply}
       />
     </div>
   );
@@ -360,46 +423,18 @@ function SourceCatalogSearch({
   readonly value: string;
   readonly onChange: (value: string) => void;
 }) {
-  const label = `Найти среди ${count} источников: название, домен, страна`;
+  const label = `Найти среди ${numberFormat.format(count)}: название, домен, страна`;
   return (
-    <label className="career-field vacancy-source-search">
-      <span className="career-sr-only">{label}</span>
+    <label className="vacancy-location-search vacancy-source-search">
+      <Funnel size={16} aria-hidden="true" />
       <input
         type="search"
+        className="career-input"
         aria-label={label}
-        placeholder="Найти по названию, домену или стране"
+        placeholder={label}
         value={value}
         onChange={(event) => onChange(event.currentTarget.value)}
       />
     </label>
-  );
-}
-
-function SourceOptionButton({
-  source,
-  selected,
-  onClick,
-}: {
-  readonly source: SourceOption;
-  readonly selected: boolean;
-  readonly onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`chip-btn vacancies-chip vacancy-facet-chip${selected ? ' is-selected' : ''}`}
-      aria-pressed={selected}
-      onClick={onClick}
-    >
-      <span className="vacancy-facet-chip-indicator" aria-hidden="true">
-        {selected ? (
-          <Check className="vacancy-facet-chip-check" weight="bold" aria-hidden="true" />
-        ) : null}
-      </span>
-      <span className="vacancy-facet-chip-copy">
-        <span>{source.name}</span>
-        <span className="vacancy-facet-count">{source.count}</span>
-      </span>
-    </button>
   );
 }

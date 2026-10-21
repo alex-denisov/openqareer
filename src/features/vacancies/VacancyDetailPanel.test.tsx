@@ -265,7 +265,10 @@ describe('VacancyDetailPanel (B250)', () => {
 
     expect(onMarkAlreadyApplied).toHaveBeenCalledWith(
       'c-1',
-      expect.objectContaining({ title: 'Business Information Architect', url: 'https://example.com/vacancy' }),
+      expect.objectContaining({
+        title: 'Business Information Architect',
+        url: 'https://example.com/vacancy',
+      }),
     );
     expect(openSpy).not.toHaveBeenCalled();
     openSpy.mockRestore();

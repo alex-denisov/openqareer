@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { pickLocation } from './fixtures/locationTree';
+import { applyFilters, openFilterGroup } from './fixtures/vacancyFilters';
 
 async function openVacancies(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -42,11 +44,6 @@ async function capture(page: Page, name: string, width: number, height: number):
     return '<!doctype html>' + root.outerHTML;
   });
   writeFileSync('output/playwright/S11-VAC/' + name + '-' + width + '.html', markup);
-}
-
-async function closeFilterPanel(page: Page): Promise<void> {
-  const close = page.getByRole('button', { name: 'Свернуть', exact: true });
-  if (await close.isVisible()) await close.click();
 }
 
 test('S11-VAC: capture all approved vacancy views through the real screen controls', async ({
@@ -112,82 +109,40 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
 
   await openVacancies(page);
   await capture(page, 'list', width, viewportHeight);
+  // B547: 1440 — поповер группы, 390 — лист фильтров со строками и push-экранами.
   if (mobile) {
     await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
-    await expect(page.locator('.vacancies-filters.is-mobile-open')).toBeVisible();
-    await expect(page.locator('.vacancies-tabs-row')).toBeHidden();
+    await expect(page.locator('.vacancies-mobile-sheet')).toBeVisible();
     await capture(page, 'filters', width, viewportHeight);
-    await capture(page, 'roles', width, viewportHeight);
-    await closeFilterPanel(page);
-  } else {
-    await page.locator('[data-filter-group="roles"]').click();
-    await expect(page.locator('.vacancies-filters')).toBeVisible();
-    await expect(
-      page.locator('.vacancies-filters[data-active-group="roles"] .filters-panel-head'),
-    ).toBeHidden();
-    const premises = page.locator('.career-route-premises');
-    await expect(premises).toBeVisible();
-    await expect(premises.locator('dl')).toBeHidden();
-    await expect(premises.getByRole('button', { name: 'Изменить условия' })).toBeEnabled();
-    await capture(page, 'roles', width, viewportHeight);
-    await premises.getByRole('button', { name: 'Изменить условия' }).click();
-    const premisesEditor = page.locator('.career-route-premises-editor');
-    await expect(premisesEditor).toBeVisible();
-    await premisesEditor.getByRole('button', { name: 'Отмена' }).click();
-    await page.locator('[data-filter-group="locations"]').click();
   }
+  await openFilterGroup(page, 'roles');
+  await expect(page.getByTestId('role-tree-filter')).toBeVisible();
+  await capture(page, 'roles', width, viewportHeight);
 
-  const locations = page.locator('.vacancies-filters');
-  if (mobile && !(await locations.isVisible())) {
-    await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
-  }
-  if (mobile) {
-    const locationChip = page.getByRole('button', { name: /Изменить фильтр Локации/u });
-    if (await locationChip.isVisible()) await locationChip.click();
-  }
+  await openFilterGroup(page, 'locations');
   await expect(
     page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }),
   ).toBeVisible();
   await capture(page, 'locations', width, viewportHeight);
-
-  const search = page.getByRole('searchbox', {
-    name: 'Страна, регион, штат или город',
-  });
-  await search.fill('Berlin');
+  await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Берлин');
   await capture(page, 'search-location', width, viewportHeight);
 
-  if (mobile) {
-    const backToAll = page.getByRole('button', { name: 'Все фильтры', exact: true });
-    if (await backToAll.isVisible()) await backToAll.click();
-    const sourcesChip = page.getByRole('button', { name: /Изменить фильтр Источники/u });
-    if (await sourcesChip.isVisible()) await sourcesChip.click();
-  } else {
-    await page.locator('[data-filter-group="sources"]').click();
-  }
+  await openFilterGroup(page, 'sources');
   await expect(page.locator('.vacancy-source-filter')).toBeVisible();
   await capture(page, 'sources', width, viewportHeight);
 
-  if (mobile) {
-    const backToAll = page.getByRole('button', { name: 'Все фильтры', exact: true });
-    if (await backToAll.isVisible()) await backToAll.click();
-    const locationsChip = page.getByRole('button', { name: /Изменить фильтр Локации/u });
-    if (await locationsChip.isVisible()) await locationsChip.click();
-  } else {
-    await page.locator('[data-filter-group="locations"]').click();
-  }
+  await openFilterGroup(page, 'locations');
   await capture(page, 'countries', width, viewportHeight);
 
   if (mobile) {
-    const backToAll = page.getByRole('button', { name: 'Все фильтры', exact: true });
-    if (await backToAll.isVisible()) await backToAll.click();
+    await page.getByRole('button', { name: 'Назад к фильтрам' }).click();
+    await page.locator('.vacancies-mobile-sheet-reset').click();
+  } else {
+    await page.locator('.vacancies-summary-reset').click();
   }
-  await page.locator(mobile ? '.vacancies-sheet-reset' : '.vacancies-summary-reset').click();
-  await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Berlin');
-  const apply = page.getByRole('button', {
-    name: mobile ? 'Показать результаты' : 'Применить',
-  });
-  await expect(apply).toBeVisible();
-  await apply.click();
+  await openFilterGroup(page, 'locations');
+  await pickLocation(page, 'Берлин');
+  await applyFilters(page);
 
   const target = page
     .locator('.vac-list-item')

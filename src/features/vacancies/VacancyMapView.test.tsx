@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
-import { renderToStaticMarkup } from "react-dom/server";
-import { VacancyMapView } from "./VacancyMapView";
-import type { MatchedVacancyItem } from "../coach/cabinetTypes";
+import { describe, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { VacancyMapView } from './VacancyMapView';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 function makeItem(
   id: string,
@@ -16,13 +16,20 @@ function makeItem(
       canonicalCompany: company,
       canonicalLocation: city ? `${city}, Страна` : undefined,
       isRemote: false,
-      descriptionSummary: "",
-      skills: ["React"],
+      descriptionSummary: '',
+      skills: ['React'],
       primaryUrl: `https://test.example/${id}`,
-      sources: [{ sourceType: "json_api", sourceId: "ats-test", sourceUrl: "https://test.example", observedAt: "2026-09-01" }],
-      firstObservedAt: "2026-09-01T00:00:00.000Z",
-      lastSeenAt: "2026-09-06T00:00:00.000Z",
-      status: "active",
+      sources: [
+        {
+          sourceType: 'json_api',
+          sourceId: 'ats-test',
+          sourceUrl: 'https://test.example',
+          observedAt: '2026-09-01',
+        },
+      ],
+      firstObservedAt: '2026-09-01T00:00:00.000Z',
+      lastSeenAt: '2026-09-06T00:00:00.000Z',
+      status: 'active',
       vacanciesCount: 1,
       companyFeatures: {
         city,
@@ -32,29 +39,31 @@ function makeItem(
     },
     explanation: {
       clusterId: id,
-      roleMatch: "target",
-      levelMatch: "unknown",
+      roleMatch: 'target',
+      levelMatch: 'unknown',
       requirements: { matched: 1, total: 1 },
-      matchingPoints: ["React"],
+      matchingPoints: ['React'],
       missingPoints: [],
-      summary: "1 из 1",
-      calculatedAt: "2026-09-06T00:00:00.000Z",
+      summary: '1 из 1',
+      calculatedAt: '2026-09-06T00:00:00.000Z',
     },
   };
 }
 
-describe("B203: VacancyMapView Component", () => {
+describe('B203: VacancyMapView Component', () => {
   const items: MatchedVacancyItem[] = [
-    makeItem("v1", "Miro", "Амстердам", { lat: 52.3676, lng: 4.9041 }),
-    makeItem("v2", "ASML", "Велдховен", { lat: 51.4172, lng: 5.4055 }),
-    makeItem("v3", "UnknownLocationCo"),
+    makeItem('v1', 'Miro', 'Амстердам', { lat: 52.3676, lng: 4.9041 }),
+    makeItem('v2', 'ASML', 'Велдховен', { lat: 51.4172, lng: 5.4055 }),
+    makeItem('v3', 'UnknownLocationCo'),
   ];
 
-  it("renders map header with honest denominators and missing-place counts", () => {
-    const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
+  it('renders map header with honest denominators and missing-place counts', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
+    );
 
     // B485: заметка макета 4 — числа из выдачи и причина, почему у части нет точки.
-    expect(html).toContain("На карте 2 из 3: без точки 1 без города.");
+    expect(html).toContain('На карте 2 из 3: без точки 1 без города.');
     expect(html.indexOf('career-map-canvas-container')).toBeLessThan(
       html.indexOf('career-map-header'),
     );
@@ -72,9 +81,7 @@ describe("B203: VacancyMapView Component", () => {
       />,
     );
 
-    expect(html).toContain(
-      'На карте 1 из 3: без точки 1 без города, 1 с нераспознанным городом.',
-    );
+    expect(html).toContain('На карте 1 из 3: без точки 1 без города, 1 с нераспознанным городом.');
   });
 
   it('разделяет город и моноширинный счётчик в списке и на карте', () => {
@@ -113,12 +120,13 @@ describe("B203: VacancyMapView Component", () => {
     expect(html).toContain('Frontend Engineer en');
   });
 
+  it('renders city pins and list with names and counts', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
+    );
 
-  it("renders city pins and list with names and counts", () => {
-    const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
-
-    expect(html).toContain("Амстердам");
-    expect(html).toContain("Велдховен");
+    expect(html).toContain('Амстердам');
+    expect(html).toContain('Велдховен');
   });
 
   it('рисует локальные контуры стран, а город выбирается доступной кнопкой', () => {
@@ -133,29 +141,33 @@ describe("B203: VacancyMapView Component", () => {
     expect(html).not.toContain('role="button" aria-label="Город Амстердам: 1 вакансий"');
   });
 
-  it("highlights selected city when passed", () => {
-    const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity="Амстердам" />);
+  it('highlights selected city when passed', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity="Амстердам" />,
+    );
 
-    expect(html).toContain("Показаны вакансии в городе: <strong>Амстердам</strong>");
-    expect(html).toContain("Все города на карте");
+    expect(html).toContain('Показаны вакансии в городе: <strong>Амстердам</strong>');
+    expect(html).toContain('Все города на карте');
   });
 
-  it("renders unmapped vacancies section honestly", () => {
-    const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
+  it('renders unmapped vacancies section honestly', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
+    );
 
-    expect(html).toContain("Не показаны на карте");
-    expect(html).toContain("UnknownLocationCo");
+    expect(html).toContain('Не показаны на карте');
+    expect(html).toContain('UnknownLocationCo');
   });
 });
 
-describe("кластеризация и подписи на карте (B375)", () => {
-  it("близкие хабы объединяются в кластер с числом вакансий и списком в подсказке", () => {
+describe('кластеризация и подписи на карте (B375)', () => {
+  it('близкие хабы объединяются в кластер с числом вакансий и списком в подсказке', () => {
     const html = renderToStaticMarkup(
       <VacancyMapView
         items={[
-          makeItem("v-1", "Alpha", "Amsterdam", { lat: 52.37, lng: 4.9 }),
-          makeItem("v-2", "Alpha", "Amsterdam", { lat: 52.37, lng: 4.9 }),
-          makeItem("v-3", "Beta", "Haarlem", { lat: 52.38, lng: 4.63 }),
+          makeItem('v-1', 'Alpha', 'Amsterdam', { lat: 52.37, lng: 4.9 }),
+          makeItem('v-2', 'Alpha', 'Amsterdam', { lat: 52.37, lng: 4.9 }),
+          makeItem('v-3', 'Beta', 'Haarlem', { lat: 52.38, lng: 4.63 }),
         ]}
         selectedCity={undefined}
         onSelectCity={() => {}}
@@ -165,22 +177,20 @@ describe("кластеризация и подписи на карте (B375)", 
     expect(html).toContain('career-map-cluster-count');
     expect(html).toContain('>3</text>');
     expect(html).toContain('Кластер: 3 вакансий');
-    expect(html).toContain("Город Haarlem: 1 вакансий");
+    expect(html).toContain('Город Haarlem: 1 вакансий');
   });
 
-  it("показывает Сидней без AU: и страну во всплывающей подсказке", () => {
+  it('показывает Сидней без AU: и страну во всплывающей подсказке', () => {
     const html = renderToStaticMarkup(
       <VacancyMapView
-        items={[
-          makeItem("v-au", "Atlassian", "AU: Sydney", { lat: -33.8688, lng: 151.2093 }),
-        ]}
+        items={[makeItem('v-au', 'Atlassian', 'AU: Sydney', { lat: -33.8688, lng: 151.2093 })]}
         selectedCity={undefined}
         onSelectCity={() => {}}
       />,
     );
 
-    expect(html).toContain("Сидней");
-    expect(html).not.toContain("AU: Sydney");
-    expect(html).toContain("Австралия");
+    expect(html).toContain('Сидней');
+    expect(html).not.toContain('AU: Sydney');
+    expect(html).toContain('Австралия');
   });
 });

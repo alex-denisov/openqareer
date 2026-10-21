@@ -219,16 +219,17 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).not.toContain('показаны совпадающие по роли и уровню');
   });
 
-  it('shows every role hypothesis as a chip with its vacancy count, and marks the hypothesis', () => {
+  it('lists campaign roles as checkboxes with their vacancy counts (B547)', () => {
     const html = render();
-    expect(html).toContain('VP Technology Ops ·');
-    expect(html).toContain('COO ·');
-    expect(html).toContain('vacancy-facet-count');
+    expect(html).toContain('data-testid="role-tree-filter"');
+    expect(html).toContain('VP Technology Ops');
+    expect(html).toContain('vacancy-location-count');
   });
 
-  it('shows that level is derived from profile experience without an edit link (D28)', () => {
-    expect(render().toString()).toContain('Уровень берётся из опыта в профиле');
-    expect(render().toString()).not.toContain('изменить в профиле');
+  it('keeps level and premises out of the roles popover, as in mockup 4 (B547)', () => {
+    const html = render().toString();
+    expect(html).not.toContain('Уровень берётся из опыта в профиле');
+    expect(html).not.toContain('Добавить свою роль');
   });
 
   it('lists every matched vacancy as a row', () => {
@@ -255,7 +256,7 @@ describe('VacanciesScreen (B250)', () => {
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
     expect(html).not.toContain('Все роли кампании');
-    expect(html).toContain('Фильтры 0');
+    expect(html).toContain('vacancies-mobile-filter-badge">0<');
   });
 
   it('does not render without a campaign or a level', () => {

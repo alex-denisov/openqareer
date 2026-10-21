@@ -1,6 +1,7 @@
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
-import { CaretDown, Funnel } from '@phosphor-icons/react';
+import { CaretDown, SlidersHorizontal } from '@phosphor-icons/react';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
+import { LOCATION_PATH_SEPARATOR } from '../../../shared/locationTree';
 
 export type VacancyFilterGroup = 'roles' | 'locations' | 'salary' | 'format' | 'sources';
 
@@ -39,6 +40,7 @@ export function filterGroupIsActive(
       state.regions.length ||
       state.selectedCity ||
       state.selectedLocations?.length ||
+      state.locationRemote ||
       state.locationSearch?.trim(),
     );
   if (group === 'salary')
@@ -79,9 +81,12 @@ function compactSalary(amount: number): string {
 }
 
 function summarizeLocations(state: VacanciesScreenState): string | undefined {
-  const selected = state.selectedLocations ?? [];
+  const selected = [
+    ...(state.locationRemote ? ['Удалённо'] : []),
+    ...(state.selectedLocations ?? []),
+  ];
   if (selected.length) {
-    const first = selected[0]!;
+    const first = selected[0]!.split(LOCATION_PATH_SEPARATOR).at(-1)!;
     return selected.length > 1 ? `${first} +${selected.length - 1}` : first;
   }
   if (state.selectedCity) return state.selectedCity;
@@ -154,8 +159,8 @@ export function VacanciesFilterToolbar({
         aria-label="Фильтры"
         onClick={onToggle}
       >
-        <Funnel weight="bold" aria-hidden="true" />
-        <span>Фильтры {activeCount}</span>
+        <SlidersHorizontal size={18} aria-hidden="true" />
+        <span>Фильтры</span> <span className="vacancies-mobile-filter-badge">{activeCount}</span>
       </button>
     </div>
   );

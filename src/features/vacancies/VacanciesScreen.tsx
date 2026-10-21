@@ -1,4 +1,4 @@
-import { VacancyFitSortControl, sortVacancyFitItems } from './VacancyFitSort';
+import { VacancyFitSortControl } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
@@ -31,10 +31,20 @@ import { SavedVacanciesPanel } from './SavedVacanciesPanel';
 
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
-import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
+import { buildVacancyFilterOptions } from './vacancyScreenCriteria';
+import {
+  useLocationTreeBuilder,
+  useResultCountBuilder,
+  type LocationTreeBuilder,
+} from './useLocationTreeForState';
 export { filterByScreenState } from './vacancyScreenCriteria';
 import { companyLookupKey, useVacancyCollections } from './vacancyScreenCollections';
 
+import {
+  extractBoardRegions,
+  filterBoardVacancies,
+  initialSelectedId,
+} from './vacanciesBoardHelpers';
 import './vacancies-screen.css';
 import './s10-vis.css';
 
@@ -90,38 +100,6 @@ export interface VacanciesScreenProps {
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRoleFilter?: boolean;
-}
-
-function extractBoardRegions(campaign?: CampaignMetaView) {
-  const isProfile = campaign?.regions.origin === 'profile';
-  return {
-    roles: campaign?.roles.value ?? [],
-    regions: isProfile ? [] : (campaign?.regions.value ?? []),
-    suggestedRegions: campaign?.suggestedRegions?.length
-      ? campaign.suggestedRegions
-      : isProfile
-        ? (campaign?.regions.value ?? [])
-        : [],
-  };
-}
-
-function initialSelectedId(matched: readonly MatchedVacancyItem[]): string | undefined {
-  // B549: on a narrow screen a selected row opens a push screen; nothing is preselected.
-  if (typeof window !== 'undefined' && window.innerWidth > 760) {
-    return matched[0]?.cluster.id;
-  }
-  return undefined;
-}
-
-function filterBoardVacancies(
-  matched: readonly MatchedVacancyItem[],
-  state: VacanciesScreenState,
-  now: string,
-  onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
-) {
-  const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
-  const items = filterByScreenState(matched, filters, now);
-  return onFiltersChange ? items : sortVacancyFitItems(items, state.sort);
 }
 
 function useVacanciesScreenBoard(
@@ -268,7 +246,10 @@ interface VacanciesFiltersSectionProps {
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
-  readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions>;
+  readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions> & {
+    readonly locationTreeFor: LocationTreeBuilder;
+    readonly resultCountFor: (state: VacanciesScreenState) => number | undefined;
+  };
 }
 
 function buildVacanciesFilterProps({
@@ -364,6 +345,7 @@ function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) 
     remoteOnly: false,
     selectedCity: undefined,
     selectedLocations: [],
+    locationRemote: false,
     locationSearch: '',
     salaryMinimum: undefined,
     salaryMaximum: undefined,
@@ -476,6 +458,7 @@ function screenFilteredCount(
   const hasClientFilters =
     state.selectedCity !== undefined ||
     salaryFilter ||
+    Boolean(state.selectedLocations?.length || state.locationRemote) ||
     (!input.onFiltersChange && countActiveFilters(state) > 0);
   if (hasClientFilters && input.poolComplete !== false) return localCount;
   return input.total ?? localCount;
@@ -541,7 +524,17 @@ function VacanciesFilterContent({
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
 }) {
   const { board, actions, resetFilters } = screenState;
-  const filterOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
+  const baseOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
+  const locationTreeFor = useLocationTreeBuilder(input.matched, Boolean(input.onFiltersChange));
+  const resultCountFor = useResultCountBuilder(
+    input.matched,
+    board.state,
+    Boolean(input.onFiltersChange),
+  );
+  const filterOptions = useMemo(
+    () => ({ ...baseOptions, locationTreeFor, resultCountFor }),
+    [baseOptions, locationTreeFor, resultCountFor],
+  );
   return (
     <div className="vacancies-filter-section">
       <VacanciesScreenSummary

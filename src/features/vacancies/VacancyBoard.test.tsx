@@ -236,7 +236,14 @@ describe('VacancyBoard · ручной отклик', () => {
       />,
     );
 
-    const labels = ['>Отклик<', '>Нетворкинг<', '>Рекрутер<', 'Открыть на ', '>Откликнулся<', '>Интервью<'];
+    const labels = [
+      '>Отклик<',
+      '>Нетворкинг<',
+      '>Рекрутер<',
+      'Открыть на ',
+      '>Откликнулся<',
+      '>Интервью<',
+    ];
     const positions = labels.map((label) => html.indexOf(label));
     expect(positions.every((position) => position >= 0)).toBe(true);
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);

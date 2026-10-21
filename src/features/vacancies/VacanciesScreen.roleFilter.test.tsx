@@ -110,10 +110,15 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
     const rolesGroup = () =>
       container.querySelector<HTMLButtonElement>('button[data-filter-group="roles"]');
     await act(async () => rolesGroup()?.click());
-    let cooButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.vacancy-facet-chip')).find((button) =>
-      button.textContent?.startsWith('COO'),
-    );
-    await act(async () => cooButton?.click());
+    // B547: «Роли» — чекбоксы ролей кампании; снятие VP оставляет COO.
+    const roleBox = (role: string) =>
+      Array.from(
+        container.querySelectorAll<HTMLLabelElement>('[data-testid="role-tree-filter"] label'),
+      )
+        .find((label) => label.textContent === role)
+        ?.querySelector('input');
+    expect(roleBox('COO')?.checked).toBe(true);
+    await act(async () => roleBox('VP Technology Ops')?.click());
     const apply = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Применить',
     );
@@ -133,11 +138,9 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
     expect(rolesGroup()?.getAttribute('aria-expanded')).toBe('false');
     await act(async () => rolesGroup()?.click());
     expect(rolesGroup()?.getAttribute('aria-expanded')).toBe('true');
-    cooButton = Array.from(container.querySelectorAll<HTMLButtonElement>('.vacancy-facet-chip')).find((button) =>
-      button.textContent?.startsWith('COO'),
-    );
-    await act(async () => cooButton?.click());
-    expect(cooButton?.getAttribute('aria-pressed')).toBe('false');
+    expect(roleBox('VP Technology Ops')?.checked).toBe(false);
+    await act(async () => roleBox('VP Technology Ops')?.click());
+    expect(roleBox('VP Technology Ops')?.checked).toBe(true);
     const applyAgain = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Применить',
     );
@@ -172,20 +175,23 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (button) => button.textContent === 'Локации',
     );
     await act(async () => locations?.click());
-    const region = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('MENA · 2'),
+    // B547: «Локации» — дерево по выдаче, макрорегионов кампании в нём нет.
+    expect(container.textContent).not.toContain('MENA · 2');
+    const remote = container.querySelector<HTMLInputElement>(
+      '[data-testid="location-tree-filter"] input[type="checkbox"]',
     );
-    await act(async () => region?.click());
+    await act(async () => remote?.click());
     const apply = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Применить',
     );
     await act(async () => apply?.click());
     expect(changes.at(-1)).toEqual({
       roles: [],
-      regions: ['mena'],
+      regions: [],
       levels: [],
       sources: [],
       remoteOnly: false,
+      locationRemote: true,
     });
   });
   it('счётчик учитывает выбранный на карте город и возвращает серверный total при очистке', async () => {
@@ -212,7 +218,8 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
         />,
       ),
     );
-    const counter = () => container.querySelector('.list-hint[aria-live="polite"]')?.getAttribute('aria-label');
+    const counter = () =>
+      container.querySelector('.list-hint[aria-live="polite"]')?.getAttribute('aria-label');
     expect(counter()).toBe('Показано 8 из 12');
     const mapTab = Array.from(container.querySelectorAll('[role="tab"]')).find(
       (tab) => tab.textContent === 'Карта',

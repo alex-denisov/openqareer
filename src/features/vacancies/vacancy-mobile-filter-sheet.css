@@ -1,0 +1,221 @@
+/* B547 / возврат B446: лист фильтров 390 по макету 4 (`?frame&sheet=filters`). */
+@media (max-width: 760px) {
+  /* The wrapper is a stacking context (z 20) under the sticky topbar (z 25): lift it while the sheet is open. */
+  .vacancies-filter-wrap:has(.vacancies-filters.is-mobile-open) {
+    z-index: 70;
+  }
+
+  .vacancies-mobile-sheet-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    border: 0;
+    background: color-mix(in oklch, black 55%, transparent);
+    cursor: pointer;
+  }
+
+  .vacancies-filters.filters-panel.is-mobile-open {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 61;
+    inline-size: 100%;
+    max-block-size: calc(100dvh - var(--career-space-8));
+    margin: 0;
+    padding: 0 var(--career-space-4) calc(var(--career-space-4) + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border: 0;
+    border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
+    background: var(--career-bg-elevated);
+    box-shadow: 0 -8px 32px color-mix(in oklch, black 45%, transparent);
+  }
+
+  .vacancies-filters.is-mobile-open > .filters-panel-head {
+    display: none;
+  }
+
+  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .career-mobile-nav {
+    display: none;
+  }
+
+  .vacancies-mobile-sheet {
+    display: grid;
+    gap: var(--career-space-4);
+  }
+
+  .vacancies-mobile-sheet-grab {
+    justify-self: center;
+    inline-size: 36px;
+    block-size: 5px;
+    margin-block-start: var(--career-space-2);
+    border-radius: 3px;
+    background: var(--career-line-strong);
+  }
+
+  .vacancies-mobile-sheet-head {
+    display: flex;
+    align-items: center;
+    gap: var(--career-space-2);
+    min-block-size: var(--career-target-min);
+  }
+
+  .vacancies-mobile-sheet-head h3 {
+    flex: 1;
+    margin: 0;
+    font-size: var(--career-text-lg);
+    font-weight: 700;
+  }
+
+  .vacancies-mobile-sheet-back {
+    display: grid;
+    place-items: center;
+    inline-size: var(--career-target-min);
+    block-size: var(--career-target-min);
+    border: 0;
+    border-radius: 50%;
+    background: var(--career-surface);
+    color: var(--career-text);
+    cursor: pointer;
+  }
+
+  .vacancies-mobile-sheet-reset {
+    min-block-size: var(--career-target-min);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--career-text-soft);
+    font: inherit;
+    font-size: var(--career-text-md);
+    cursor: pointer;
+  }
+
+  .vacancies-mobile-sheet-subtitle {
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .vacancies-mobile-filter-overview {
+    display: grid;
+    padding-inline: var(--career-space-4);
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .vacancies-mobile-filter-row {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--career-space-3);
+    min-block-size: 56px;
+    padding: 0;
+    border: 0;
+    border-block-end: var(--career-border-width) solid var(--career-line);
+    background: transparent;
+    color: var(--career-text);
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+  }
+
+  .vacancies-mobile-filter-row:last-child {
+    border-block-end: 0;
+  }
+
+  .vacancies-mobile-filter-row-icon {
+    display: grid;
+    place-items: center;
+    inline-size: 32px;
+    block-size: 32px;
+    border-radius: var(--career-radius-sm);
+    background: var(--career-bg-elevated);
+    color: var(--career-text-soft);
+  }
+
+  .vacancies-mobile-filter-row-label {
+    font-size: var(--career-text-md);
+    font-weight: 600;
+  }
+
+  .vacancies-mobile-filter-row-value {
+    justify-self: end;
+    min-inline-size: 0;
+    overflow: hidden;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vacancies-mobile-filter-row > svg {
+    color: var(--career-text-dim);
+  }
+
+  .vacancies-mobile-sheet-body {
+    display: grid;
+    gap: var(--career-space-3);
+  }
+
+  .vacancies-mobile-sheet-body .field-group,
+  .vacancies-mobile-sheet-body .vacancy-source-group {
+    display: grid;
+    gap: var(--career-space-2);
+  }
+
+  .vacancies-mobile-sheet-body .vacancy-location-body {
+    max-block-size: none;
+  }
+
+  .vacancies-mobile-sheet-cta {
+    position: sticky;
+    inset-block-end: 0;
+    min-block-size: 52px;
+    border: 0;
+    border-radius: 26px;
+    background: var(--career-accent);
+    color: var(--career-accent-ink);
+    font: inherit;
+    font-size: var(--career-text-md);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+
+  .vacancies-mobile-filter-chip {
+    border: 0;
+    border-radius: 22px;
+    background: var(--career-surface);
+  }
+
+  .vacancies-mobile-filter-toggle {
+    align-items: center;
+    gap: var(--career-space-2);
+    padding-inline: var(--career-space-3);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: 22px;
+    background: var(--career-bg-elevated);
+    color: var(--career-text);
+    font: inherit;
+    font-size: var(--career-text-sm);
+    font-weight: 600;
+  }
+
+  .vacancies-mobile-filter-badge {
+    display: grid;
+    place-items: center;
+    min-inline-size: 20px;
+    block-size: 20px;
+    border-radius: 10px;
+    background: var(--career-accent);
+    color: var(--career-accent-ink);
+    font-size: var(--career-text-xs);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media (min-width: 761px) {
+  .vacancies-mobile-sheet-scrim {
+    display: none;
+  }
+}

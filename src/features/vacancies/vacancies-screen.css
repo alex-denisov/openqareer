@@ -788,39 +788,6 @@
     display: none;
   }
 
-  /* The filter sheet is a full-screen step with its own action footer: the floating nav would cover it. */
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .career-mobile-nav {
-    display: none;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-tabs-row,
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-content,
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-saved-panel,
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .companies-and-people,
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
-    .vacancies-mobile-results-summary {
-    display: none;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-filter-section {
-    order: 0;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-search-summary {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    padding-block-end: var(--career-space-2);
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-count {
-    font-size: var(--career-text-xl);
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-summary-reset {
-    display: none;
-  }
-
   .vacancies-content,
   .vacancies-saved-panel,
   .companies-and-people {
@@ -858,66 +825,6 @@
     background: var(--career-bg-elevated);
     font: inherit;
     cursor: pointer;
-  }
-
-  .vacancies-mobile-filter-overview {
-    display: flex;
-    flex-direction: column;
-    gap: var(--career-space-2);
-  }
-
-  .vacancies-mobile-filter-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--career-space-3);
-    min-block-size: var(--career-target-min);
-    padding: var(--career-space-3);
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    color: var(--career-text);
-    background: var(--career-bg-elevated);
-    font: inherit;
-    text-align: start;
-    cursor: pointer;
-  }
-
-  .vacancies-mobile-filter-row-copy {
-    display: flex;
-    flex-direction: column;
-    gap: var(--career-space-1);
-    min-inline-size: 0;
-  }
-
-  .vacancies-mobile-filter-row-label {
-    color: var(--career-text-soft);
-    font-size: var(--career-text-xs);
-  }
-
-  .vacancies-mobile-filter-row-value {
-    color: var(--career-text);
-    font-size: var(--career-text-sm);
-    font-weight: 600;
-    overflow-wrap: anywhere;
-  }
-
-  .vacancies-filter-actions.is-mobile {
-    position: sticky;
-    inset-block-end: 0;
-    z-index: 1;
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--career-space-2);
-    margin-block-start: auto;
-    padding-block-start: var(--career-space-2);
-    border-block-start: var(--career-border-width) solid var(--career-line);
-    background: var(--career-bg-elevated);
-  }
-
-  .vacancies-filter-actions.is-mobile .vacancies-filter-apply {
-    min-block-size: var(--career-target-min);
-    width: 100%;
   }
 
   .vacancies-mobile-filter-toggle {
@@ -1021,68 +928,6 @@
   .vacancies-screen-row-item > .vac-detail {
     grid-column: 1;
   }
-
-  .vacancies-filters.filters-panel.is-mobile-open {
-    position: static;
-    inset: auto;
-    z-index: auto;
-    width: 100%;
-    max-block-size: none;
-    margin: 0;
-    overflow: visible;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .vacancies-filters.is-mobile-open .filters-panel-head {
-    padding-block: var(--career-space-2);
-    border: 0;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
-    .filters-bar.vacancies-filter-toolbar {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-mobile-filter-toggle {
-    display: none;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open) .vacancies-mobile-filter-chips {
-    grid-column: 1;
-  }
-
-  .vacancies-filters.is-mobile-open .vacancies-filter-back {
-    margin-block-end: var(--career-space-2);
-  }
-
-  .vacancies-filters.is-mobile-open .field-group,
-  .vacancies-filters.is-mobile-open .vacancy-source-group {
-    display: grid;
-    gap: var(--career-space-2);
-    padding-block: var(--career-space-3);
-    border-block-end: var(--career-border-width) solid var(--career-line);
-  }
-
-  .vacancies-filters.is-mobile-open .vacancy-source-filter .chip-row {
-    display: grid;
-    gap: var(--career-space-2);
-  }
-
-  .vacancies-filters.is-mobile-open .vacancy-source-filter .vacancy-facet-chip {
-    justify-content: space-between;
-    min-block-size: var(--career-target-min);
-    text-align: start;
-  }
-
-  .career-shell--vacancies:has(.vacancies-filters.is-mobile-open)
-    .vacancies-filter-actions.is-mobile {
-    position: sticky;
-    inset-block-end: 0;
-  }
 }
 
 /* B430 экран 4, 1440: вкладки слева по ширине подписи, как в макете. */
@@ -1100,11 +945,34 @@
 .vacancy-source-categories {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--career-space-2);
+  margin-block: var(--career-space-2);
+  overflow: hidden;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
 }
 
-.vacancy-source-search {
-  min-inline-size: 0;
+.vacancy-source-category {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  padding-inline: var(--career-space-3);
+  border: 0;
+  background: transparent;
+  color: var(--career-text-soft);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.vacancy-source-category[aria-pressed='true'] {
+  background: var(--career-accent-soft, var(--career-surface));
+  color: var(--career-accent);
+}
+
+.vacancy-source-category[aria-pressed='true'] .vacancy-location-count {
+  color: inherit;
 }
 
 .vacancy-source-group {
@@ -1112,31 +980,6 @@
   margin: 0;
   padding: 0;
   border: 0;
-}
-
-.vacancy-source-group > legend {
-  padding: 0;
-  margin-block-end: var(--career-space-2);
-  color: var(--career-text-soft);
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-}
-
-.vacancy-source-selection {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--career-space-2);
-}
-
-.vacancy-source-selection > span {
-  margin-inline-end: auto;
-}
-
-.vacancy-source-categories .career-btn,
-.vacancy-source-selection .career-btn {
-  min-block-size: var(--career-target-min);
 }
 
 /* B546: salary popover toggles and the estimate note (mockup 4, pop «Зарплата»). */

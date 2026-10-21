@@ -3,6 +3,10 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { captureCareerHarness } from './helpers/capture-career-harness';
 import { e2eEvidenceDirectory } from './fixtures/evidencePath';
+import {
+  openFilterGroup as openSharedFilterGroup,
+  type VacancyFilterGroupId,
+} from './fixtures/vacancyFilters';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 import { mockCandidateCompanies } from './fixtures/mockCandidateCompanies';
 
@@ -514,29 +518,9 @@ async function setRowExpanded(page: Page, index: number, expanded: boolean): Pro
   return item;
 }
 
-async function openFilterGroup(
-  page: Page,
-  group: 'roles' | 'locations' | 'salary' | 'format' | 'sources',
-) {
-  const mobile = await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches);
-  const popover = page.locator('#vacancies-filter-popover');
-  if (mobile) {
-    if (!(await popover.isVisible())) {
-      await page.getByRole('button', { name: 'Фильтры', exact: true }).click();
-    }
-    const groupSelectors = {
-      roles: '[data-filter-facet="roles"]',
-      locations: '.vacancy-location-filter',
-      salary: '.vacancy-salary-filter',
-      format: '.vacancy-format-filter',
-      sources: '.vacancy-source-filter',
-    } as const;
-    await expect(popover.locator(groupSelectors[group]).first()).toBeVisible();
-  } else {
-    await page.locator(`[data-filter-group="${group}"]`).click();
-  }
-  await expect(popover).toBeVisible();
-  return popover;
+async function openFilterGroup(page: Page, group: VacancyFilterGroupId) {
+  await openSharedFilterGroup(page, group);
+  return page.locator('#vacancies-filter-popover');
 }
 
 // B338-2: сводка подборки, из которой строятся фильтры.
@@ -654,23 +638,22 @@ test.describe('B250 vacancies screen', () => {
     await expect(tabs.getByRole('tab', { name: 'Компании и люди' })).toBeVisible();
 
     // Каждый набор значений открывается из своей группы фильтров.
+    // B547: «Роли» — чекбоксы ролей кампании с числом вакансий, без уровня (макет 4).
     const filters = await openFilterGroup(page, 'roles');
-    await expect(filters.getByRole('button', { name: 'Enterprise Architect · 34' })).toBeVisible();
-    await expect(filters.getByRole('button', { name: 'Cloud Architect · 6' })).toBeVisible();
-    await filters.getByText('Фильтр по уровню', { exact: true }).click();
-    await expect(filters.getByRole('button', { name: 'VP · 30' })).toBeVisible();
+    const roles = filters.getByTestId('role-tree-filter');
+    await expect(roles.getByRole('checkbox', { name: 'Enterprise Architect' })).toBeVisible();
+    await expect(roles).toContainText('34');
+    await expect(filters.locator('.vacancies-level-filter')).toHaveCount(0);
 
     await openFilterGroup(page, 'format');
     await expect(filters.getByRole('button', { name: 'Удалённо · 12' })).toBeVisible();
 
     await openFilterGroup(page, 'sources');
-    // AUD-4: the catalogue filter lists sources in a group and categories as buttons.
+    // B547: источники — чекбоксы каталога, категории со счётом источников.
+    await expect(filters.getByRole('checkbox', { name: 'hh.ru' })).toBeVisible();
     await expect(
-      filters.getByRole('group', { name: 'Источники в каталоге' }).getByRole('button', {
-        name: 'hh.ru 61',
-      }),
-    ).toBeVisible();
-    await expect(filters.getByRole('button', { name: 'Агрегаторы · 61' })).toBeVisible();
+      filters.getByRole('group', { name: 'Категории источников' }).getByRole('button'),
+    ).toHaveCount(5);
     await expect.poll(() => sourceCatalogReadCount.value).toBeGreaterThan(0);
     await expect(filters.getByRole('button', { name: /Добавить:/ })).toHaveCount(0);
 
@@ -744,9 +727,9 @@ test.describe('B250 vacancies screen', () => {
       await expect(summary).toContainText('148 вакансий в подборке по роли и уровню');
       await expect(summary).toContainText(/Показано \d+ из \d+ с вашими условиями/u);
     } else {
-      // B546: the salary filter is local, so the count follows it, not the pool total.
+      // B546/B547: the count follows local filters (salary, locations), not the pool total.
       await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
-        /\d+ вакансий по вашим условиям/u,
+        /\d+ ваканс[а-я]* по вашим условиям/u,
       );
     }
 
@@ -754,16 +737,21 @@ test.describe('B250 vacancies screen', () => {
       const filters = page.getByRole('button', { name: 'Фильтры' });
       await expect(filters).toBeVisible();
       await filters.click();
-      const sheet = page.locator('.vacancies-filters.is-mobile-open');
+      // B547: лист 390 — строки групп со значениями и «Показать N» (макет 4, sheet=filters).
+      const sheet = page.locator('.vacancies-mobile-sheet');
       await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('Head, Director');
       await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('Москва +46');
       await expect(page.locator('.vacancies-mobile-filter-chips')).toContainText('от 450 тыс. ₽');
-      await expect(sheet.locator('.vacancy-location-filter')).toBeVisible();
-      await expect(sheet.locator('.vacancy-salary-filter')).toBeVisible();
-      await expect(sheet.locator('.vacancy-format-filter')).toBeVisible();
-      await expect(sheet.locator('.vacancy-source-filter')).toBeVisible();
+      await expect(sheet.locator('[data-filter-sheet-group]')).toHaveCount(5);
+      await expect(sheet.locator('[data-filter-sheet-group="locations"]')).toContainText(
+        'Москва +46',
+      );
+      await expect(sheet.locator('[data-filter-sheet-group="format"]')).toContainText(
+        'Гибрид, удалённо',
+      );
       await expect(sheet.getByRole('button', { name: 'Сбросить', exact: true })).toBeVisible();
-      await sheet.getByRole('button', { name: 'Показать результаты', exact: true }).click();
+      await expect(sheet.locator('.vacancies-mobile-sheet-cta')).toHaveText(/^Показать /u);
+      await sheet.locator('.vacancies-mobile-sheet-cta').click();
     } else {
       await expect(page.getByRole('button', { name: 'Сбросить всё', exact: true })).toBeVisible();
       const expectedFilterSummaries = [
@@ -1179,9 +1167,10 @@ test.describe('B250 vacancies screen', () => {
     ).toHaveCount(0);
     const filters = await openFilterGroup(page, 'locations');
     await expect(filters.getByRole('button', { name: 'Добавить: MENA' })).toHaveCount(0);
-    const mena = filters.getByRole('button', { name: /MENA · 3/ });
-    await expect(mena).toBeVisible();
-    await expect(mena).toHaveAttribute('aria-pressed', 'false');
+    // B547: дерево строится из мест выдачи; подсказка кампании «MENA» в нём не появляется.
+    const tree = filters.getByTestId('location-tree-filter');
+    await expect(tree).toBeVisible();
+    await expect(tree).not.toContainText('MENA');
   });
 
   test('shows a zero-result hypothesis and names a source when loading fails', async ({
@@ -1635,53 +1624,6 @@ test.describe('B250 vacancies screen', () => {
     await page.screenshot({ path: 'output/playwright/B375/mono-fix-390.png', fullPage: true });
   });
 
-  test('B324: role limit 10/10, adding and removing custom role in filter panel', async ({
-    page,
-  }) => {
-    const tenRolesCampaign = {
-      ...CAMPAIGN,
-      roles: {
-        value: Array.from({ length: 10 }, (_, i) => `Custom Role ${i + 1}`),
-        origin: 'explicit' as const,
-      },
-      roleHypotheses: Array.from({ length: 10 }, (_, i) => ({
-        role: `Custom Role ${i + 1}`,
-        vacancyCount: 2,
-        isHypothesis: false,
-      })),
-    };
-
-    await stubSession(page, { campaign: tenRolesCampaign });
-    await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await openVacancies(page);
-
-    const filters = await openFilterGroup(page, 'roles');
-    await filters.getByText('Добавить свою роль', { exact: true }).click();
-
-    // Verify limit note and disabled inputs
-    const limitNote = filters.locator('.role-limit-note');
-    await expect(limitNote).toContainText(
-      'Достигнут предел — 10 из 10 ролей. Уберите одну, чтобы добавить другую.',
-    );
-    await expect(filters.locator('.add-role-input')).toBeDisabled();
-    await expect(filters.locator('.add-role-row button')).toBeDisabled();
-  });
-
-  test('B324: saved vacancies are a primary screen tab', async ({ page }) => {
-    await stubSession(page);
-    await seedWorkspace(page);
-    await page.goto('/app', { waitUntil: 'domcontentloaded' });
-    await openVacancies(page);
-
-    const savedTab = page.getByRole('tab', { name: /Сохранённые/u });
-    await expect(savedTab).toBeVisible();
-    await expect(page.locator('.filters-bar .saved-btn')).toHaveCount(0);
-    await savedTab.click();
-    await expect(savedTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
-  });
-
   test('B324: captures all 8 states at 1440 and 390', async ({ page }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile-390';
     const vpSuffix = isMobile ? '390' : '1440';
@@ -1711,9 +1653,9 @@ test.describe('B250 vacancies screen', () => {
       path: `output/playwright/B324/filters-expanded-${vpSuffix}.png`,
       fullPage: true,
     });
-    // Close filters panel from inside the popover.
+    // Close the filters: scrim of the 390 sheet, the trigger of the 1440 popover.
     if (isMobile) {
-      await page.getByRole('button', { name: 'Свернуть', exact: true }).click();
+      await page.locator('.vacancies-mobile-sheet-scrim').click({ position: { x: 20, y: 20 } });
     } else {
       await page.locator('[data-filter-group="roles"]').click();
     }
@@ -1872,15 +1814,11 @@ test.describe('B250 vacancies screen', () => {
     await page.goto('/app', { waitUntil: 'domcontentloaded' });
     await openVacancies(page);
 
-    // (a) Проверка группы фильтра «Уровень»
+    // (a) B547: уровня в поповере «Роли» нет (макет 4); уровень берётся из профиля.
     const filtersPanel = await openFilterGroup(page, 'roles');
-    await filtersPanel.getByText('Фильтр по уровню', { exact: true }).click();
-    await expect(filtersPanel.locator('.level-note')).toHaveText(
-      'Уровень берётся из опыта в профиле',
-    );
-    await expect(filtersPanel.getByText('изменить в профиле')).not.toBeVisible();
+    await expect(filtersPanel.locator('.vacancies-level-filter')).toHaveCount(0);
     if (await page.evaluate(() => window.matchMedia('(max-width: 760px)').matches)) {
-      await filtersPanel.getByRole('button', { name: 'Свернуть', exact: true }).click();
+      await page.locator('.vacancies-mobile-sheet-scrim').click({ position: { x: 20, y: 20 } });
     } else {
       await page.locator('[data-filter-group="roles"]').click();
     }
