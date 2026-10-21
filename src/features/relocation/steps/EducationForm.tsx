@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash } from '@phosphor-icons/react';
+import { Info, Plus, Trash } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireStepFormProps } from '../RelocationQuestionnaireSteps';
 import {
@@ -23,23 +23,33 @@ interface NewCertificateDraft {
   readonly expiresAt: string;
 }
 
+/** Mockup 15 `i2`: education rows and the add form; certificates open by a checkbox. */
 export function EducationForm(props: RelocationQuestionnaireStepFormProps) {
+  const [certificates, setCertificates] = useState(props.profile.education.certificates.length > 0);
   return (
     <div className="career-relocation-step-content">
       <EducationEntries {...props} />
       <NewEducationForm {...props} />
-      <CertificateEntries {...props} />
-      <NewCertificateForm {...props} />
+      <label className="career-relocation-check">
+        <input type="checkbox" checked={certificates} onChange={(event) => setCertificates(event.target.checked)} />
+        <span>Есть ассессменты или сертификаты, которые стоит учесть</span>
+      </label>
+      {certificates ? (
+        <section className="career-relocation-add-form career-relocation-certificates" aria-labelledby="relocation-certificates-title">
+          <h3 id="relocation-certificates-title">Ассессменты и сертификаты</h3>
+          <CertificateEntries {...props} />
+          <NewCertificateForm {...props} />
+        </section>
+      ) : null}
     </div>
   );
 }
 
 function EducationEntries({ profile, onProfileChange }: RelocationDraftProps) {
   const entries = profile.education.education;
-  if (!entries.length) return <p className="career-relocation-empty">Образование не указано.</p>;
+  if (!entries.length) return null;
   return (
-    <section className="career-relocation-step-card" aria-labelledby="relocation-education-title">
-      <h3 id="relocation-education-title">Образование</h3>
+    <section className="career-relocation-step-card" aria-label="Образование">
       <div className="career-relocation-edit-list">
         {entries.map((entry) => (
           <EducationRow key={entry.id} entry={entry} profile={profile} onProfileChange={onProfileChange} />
@@ -127,11 +137,11 @@ function EducationDraft({
     <section className="career-relocation-add-form" aria-labelledby="relocation-add-education-title">
       <h3 id="relocation-add-education-title">Добавить образование</h3>
       <div className="career-relocation-form-grid">
-        <RelocationFormField id={`${prefix}-title`} label="Учебное заведение"><input id={`${prefix}-title`} value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-title`} label="Учебное заведение"><input id={`${prefix}-title`} placeholder="Например, МГУ им. Ломоносова" value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-level`} label="Степень"><EducationLevelSelect id={`${prefix}-level`} value={draft.level} onChange={(level) => onChange({ ...draft, level })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-field`} label="Направление"><input id={`${prefix}-field`} value={draft.fieldOfStudy} onChange={(event) => onChange({ ...draft, fieldOfStudy: event.target.value })} /></RelocationFormField>
+        <div className="career-relocation-field-wide"><RelocationFormField id={`${prefix}-field`} label="Направление, специальность"><input id={`${prefix}-field`} placeholder="Например, Прикладная математика" value={draft.fieldOfStudy} onChange={(event) => onChange({ ...draft, fieldOfStudy: event.target.value })} /></RelocationFormField></div>
         <RelocationFormField id={`${prefix}-country`} label="Страна диплома"><CountrySelect id={`${prefix}-country`} value={draft.countryCode} onChange={(countryCode) => onChange({ ...draft, countryCode })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-recognition`} label="Признание"><RecognitionSelect id={`${prefix}-recognition`} value={draft.recognitionStatus} onChange={(recognitionStatus) => onChange({ ...draft, recognitionStatus })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-recognition`} label="Признание диплома за рубежом"><RecognitionSelect id={`${prefix}-recognition`} value={draft.recognitionStatus} onChange={(recognitionStatus) => onChange({ ...draft, recognitionStatus })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-started`} label="Дата начала"><input id={`${prefix}-started`} type="date" value={draft.startedAt} onChange={(event) => onChange({ ...draft, startedAt: event.target.value })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><input id={`${prefix}-completed`} type="date" value={draft.completedAt} onChange={(event) => onChange({ ...draft, completedAt: event.target.value })} /></RelocationFormField>
       </div>
@@ -152,18 +162,20 @@ function initialEducationDraft() {
 
 function CertificateEntries({ profile, onProfileChange }: RelocationDraftProps) {
   const entries = profile.education.certificates;
+  if (!entries.length) {
+    return (
+      <p className="career-relocation-summary-note">
+        <Info aria-hidden="true" size={16} />
+        <span>В профиле сертификатов нет. Добавьте вручную.</span>
+      </p>
+    );
+  }
   return (
-    <section className="career-relocation-step-card" aria-labelledby="relocation-certificates-title">
-      <h3 id="relocation-certificates-title">Ассессменты и сертификаты</h3>
-      {entries.length ? (
-        <div className="career-relocation-edit-list">
-          {entries.map((entry) => (
-            <CertificateRow key={entry.id} entry={entry} profile={profile} onProfileChange={onProfileChange} />
-          ))}
-        </div>
-      ) : <p>Сертификаты не указаны.</p>}
-      <p>Импорт сертификатов пока не поддержан. Языки можно перенести из подключённого профиля.</p>
-    </section>
+    <div className="career-relocation-edit-list">
+      {entries.map((entry) => (
+        <CertificateRow key={entry.id} entry={entry} profile={profile} onProfileChange={onProfileChange} />
+      ))}
+    </div>
   );
 }
 
@@ -210,8 +222,8 @@ function CertificateFields({
 }) {
   return (
     <div className="career-relocation-form-grid">
-      <RelocationFormField id={`${prefix}-title`} label="Название"><input id={`${prefix}-title`} value={entry.title} onChange={(event) => onChange({ title: event.target.value })} /></RelocationFormField>
-      <RelocationFormField id={`${prefix}-issuer`} label="Выдавшая организация"><input id={`${prefix}-issuer`} value={entry.issuer ?? ''} onChange={(event) => onChange({ issuer: event.target.value || undefined })} /></RelocationFormField>
+      <RelocationFormField id={`${prefix}-title`} label="Название"><input id={`${prefix}-title`} placeholder="Например, AWS Certified Solutions Architect" value={entry.title} onChange={(event) => onChange({ title: event.target.value })} /></RelocationFormField>
+      <RelocationFormField id={`${prefix}-issuer`} label="Выдавшая организация"><input id={`${prefix}-issuer`} placeholder="Например, Amazon Web Services" value={entry.issuer ?? ''} onChange={(event) => onChange({ issuer: event.target.value || undefined })} /></RelocationFormField>
       <RelocationFormField id={`${prefix}-country`} label="Страна"><CountrySelect id={`${prefix}-country`} value={entry.countryCode} onChange={(countryCode) => onChange({ countryCode })} /></RelocationFormField>
       <RelocationFormField id={`${prefix}-recognition`} label="Признание"><RecognitionSelect id={`${prefix}-recognition`} value={entry.recognitionStatus} onChange={(recognitionStatus) => onChange({ recognitionStatus })} /></RelocationFormField>
       <RelocationFormField id={`${prefix}-issued`} label="Дата выдачи"><input id={`${prefix}-issued`} type="date" value={entry.issuedAt ?? ''} onChange={(event) => onChange({ issuedAt: event.target.value || undefined })} /></RelocationFormField>
@@ -254,8 +266,7 @@ function CertificateDraft({
   readonly onAdd: () => void;
 }) {
   return (
-    <section className="career-relocation-add-form" aria-labelledby="relocation-add-certificate-title">
-      <h3 id="relocation-add-certificate-title">Добавить сертификат</h3>
+    <div className="career-relocation-certificate-draft">
       <CertificateFields
         prefix="relocation-new-certificate"
         entry={draft}
@@ -264,6 +275,6 @@ function CertificateDraft({
       <button className="career-btn career-btn-secondary" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
         <Plus aria-hidden="true" size={16} />Добавить сертификат
       </button>
-    </section>
+    </div>
   );
 }

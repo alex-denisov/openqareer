@@ -5,7 +5,7 @@ import { e2eEvidenceDirectory } from './fixtures/evidencePath';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 const EVIDENCE = e2eEvidenceDirectory('AUD-15');
-const STEP_TITLES = ['Диплом и опыт', 'Семья и сроки', 'Языки'];
+const STEP_TITLES = ['Образование', 'Семья и сроки', 'Языки'];
 const isMobile = (info: TestInfo) => info.project.name === 'mobile-390';
 
 async function openCareer(page: Page, info: TestInfo): Promise<void> {

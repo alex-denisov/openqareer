@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from 'react';
-import { ArrowRight, ChatCircle } from '@phosphor-icons/react';
+import { ArrowRight, ChatCircle, PencilSimple } from '@phosphor-icons/react';
 import { CountryComparisonPanel } from './CountryComparisonPanel';
 import { RelocationAddCountry } from './RelocationAddCountry';
 import { RelocationCountryWorkspace } from './RelocationCountryWorkspace';
@@ -126,6 +126,9 @@ function DesktopComparison({
       <CountryComparisonPanel
         countries={workspace.comparisonCountries}
         title={comparisonTitle(workspace.comparisonCountries)}
+        showParetoSummary={false}
+        meanings={workspace.comparisonMeanings}
+        titleAction={<EditCountriesAction onClick={() => workspace.showTab('countries')} />}
       />
       <div className="career-relocation-footer-actions">
         <button
@@ -135,13 +138,6 @@ function DesktopComparison({
         >
           <ArrowRight aria-hidden="true" size={17} />
           Посчитать экономику
-        </button>
-        <button
-          className="career-btn career-btn-secondary"
-          type="button"
-          onClick={() => workspace.showTab('countries')}
-        >
-          Изменить страны
         </button>
         {onOpenExpert ? (
           <button className="career-relocation-text-action" type="button" onClick={onOpenExpert}>
@@ -220,4 +216,13 @@ function comparisonTitle(countries: RelocationWorkspaceState['comparisonCountrie
   return countries.length
     ? `Сравнение: ${countries.map(({ countryName }) => countryName).join(', ')}`
     : 'Сравнение стран';
+}
+
+function EditCountriesAction({ onClick }: { readonly onClick: () => void }) {
+  return (
+    <button className="career-relocation-text-action" type="button" onClick={onClick}>
+      <PencilSimple aria-hidden="true" size={16} />
+      Изменить страны
+    </button>
+  );
 }

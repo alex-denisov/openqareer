@@ -797,3 +797,34 @@
 .career-relocation-save-note.is-error {
   color: var(--career-warning);
 }
+
+/* B468-r3 return: country card by mockup 15 `main`. */
+.career-relocation-country-card .career-relocation-country-scenario {
+  margin-block-start: calc(var(--career-space-3) * -1);
+}
+
+.career-relocation-country-meta {
+  flex-wrap: nowrap;
+}
+
+.career-relocation-country-meta span {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.career-relocation-country-meta span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.career-relocation-header .career-relocation-tabs {
+  inline-size: 100%;
+}
+
+.career-relocation-header:has(.career-relocation-tabs) {
+  padding-block-end: var(--career-space-4);
+}
+
+.career-relocation-country-card .career-relocation-country-name {
+  min-block-size: var(--career-space-6);
+}

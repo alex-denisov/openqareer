@@ -43,7 +43,9 @@ export function summarizeRelocationCountry(
     status: fit.status,
     statusLabel: relocationStatusLabel(fit.status),
     scenarioLabel: lead
-      ? (RELOCATION_SCENARIO_LABELS[lead.id] ?? lead.label)
+      ? (permitLabel(country.countryCode, lead.id, lead.status, profile) ??
+        RELOCATION_SCENARIO_LABELS[lead.id] ??
+        lead.label)
       : 'Сценарий не определён',
     reason:
       lead?.reasons[0] ??
@@ -121,4 +123,22 @@ function documentOpens(countryCode: string, profile: RelocationQuestionnaire | n
       (document) => document.countryCode === countryCode,
     ) && countryFitForQuestionnaire(countryCode, profile).status === 'available',
   );
+}
+
+/** A home market opened by a permit, not by citizenship, is named after the permit. */
+function permitLabel(
+  countryCode: string,
+  scenarioId: MobilityScenarioId,
+  status: string,
+  profile: RelocationQuestionnaire | null,
+): string | null {
+  if (scenarioId !== 'domestic_market' || status !== 'available' || !profile) return null;
+  const { citizenshipCountryCodes, documents } = profile.citizenshipDocuments;
+  if (citizenshipCountryCodes.includes(countryCode)) return null;
+  const kinds = documents
+    .filter((item) => item.countryCode === countryCode)
+    .map(({ kind }) => kind);
+  if (kinds.includes('residence_permit')) return 'Вид на жительство';
+  if (kinds.includes('work_permit')) return 'Разрешение на работу';
+  return null;
 }

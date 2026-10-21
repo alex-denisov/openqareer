@@ -34,6 +34,7 @@ const PARTNER: Readonly<Record<string, string>> = {
   unknown: 'Состав семьи не указан',
 };
 const TIMEFRAME: Readonly<Record<string, string>> = {
+  under_two_weeks: 'оформление не больше 2 недель',
   under_three_months: 'оформление до 3 месяцев',
   three_to_six_months: 'оформление 3–6 месяцев',
   six_to_twelve_months: 'оформление 6–12 месяцев',

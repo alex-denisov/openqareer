@@ -21,9 +21,9 @@ describe('RelocationCountryWorkspace', () => {
     await clickButton('Германия');
 
     expect(host?.textContent).toContain('Доступные сведения по стране');
-    expect(host?.textContent).toContain('Порог дохода для статуса');
+    expect(host?.textContent).toContain('Порог зарплаты для доступа');
     expect(host?.textContent).toContain('EU Blue Card');
-    expect(host?.textContent).toContain('Вакансии с релокацией');
+    expect(host?.textContent).toContain('Вакансий с релокацией');
     expect(host?.textContent).toContain('Нет проверенных данных');
     expect(host?.textContent).toContain('2026');
   });

@@ -121,6 +121,7 @@ export const relocationQuestionnaireStepSchemas = {
       partnerStatus: z.enum(['has_partner', 'no_partner', 'undecided', 'unknown']),
       childrenCount: z.number().int().min(0).max(10).optional(),
       relocationTimeframe: z.enum([
+        'under_two_weeks',
         'under_three_months',
         'three_to_six_months',
         'six_to_twelve_months',
@@ -128,6 +129,12 @@ export const relocationQuestionnaireStepSchemas = {
         'unknown',
       ]),
       familyMovePlan: z.enum(['together', 'later', 'not_applicable', 'undecided']),
+      /** «Что важно в перспективе» of mockup 15 `i3` (B468-r3). */
+      priorities: z
+        .array(z.enum(['permanent_residence', 'citizenship', 'partner_work']))
+        .max(3)
+        .refine((items) => new Set(items).size === items.length)
+        .optional(),
     })
     .strict(),
   languages: z

@@ -55,6 +55,7 @@ const PARTNER_OPTIONS: readonly (readonly [FamilyStep['partnerStatus'], string])
 ];
 
 const TIMEFRAME_OPTIONS: readonly (readonly [FamilyStep['relocationTimeframe'], string])[] = [
+  ['under_two_weeks', 'Не больше 2 недель'],
   ['under_three_months', 'Не больше трёх месяцев'],
   ['three_to_six_months', 'От трёх до шести месяцев'],
   ['six_to_twelve_months', 'От шести до двенадцати месяцев'],

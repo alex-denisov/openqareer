@@ -4,23 +4,32 @@ import {
   type CountryComparisonCountry,
   type CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
+import type { ReactNode } from 'react';
+import { Info } from '@phosphor-icons/react';
+import { COUNTRY_FIT_DISCLAIMER } from '../../../shared/countryFit';
 import './CountryComparisonPanel.css';
 import { relocationDay } from './relocationDates';
 
 type FactKey = keyof CountryComparisonCountry['facts'];
 type PanelState = 'ready' | 'loading' | 'empty' | 'error';
 
+/** Rows and their order as in mockup 15 `cmp`. */
 const CRITERIA: readonly { readonly key: FactKey; readonly label: string }[] = [
-  { key: 'netIncome', label: 'Чистый доход после налогов' },
-  { key: 'monthlyRemainder', label: 'Остаток после жилья и расходов' },
-  { key: 'access', label: 'Доступ к работе и переезду' },
+  { key: 'access', label: 'Тип доступа' },
   { key: 'processingTime', label: 'Срок оформления' },
-  { key: 'relocationVacancies', label: 'Вакансии с релокацией' },
-  { key: 'salaryThreshold', label: 'Порог дохода для статуса' },
-  { key: 'incomeTax', label: 'Эффективная ставка налога' },
-  { key: 'workingLanguage', label: 'Рабочий язык' },
-  { key: 'familyAndResidence', label: 'Семья и дальнейшее проживание' },
+  { key: 'relocationVacancies', label: 'Вакансий с релокацией' },
+  { key: 'salaryThreshold', label: 'Порог зарплаты для доступа' },
+  { key: 'incomeTax', label: 'Налог на доход' },
+  { key: 'monthlyRemainder', label: 'Свободный остаток в месяц' },
+  { key: 'workingLanguage', label: 'Язык работы' },
+  { key: 'familyAndResidence', label: 'Семья и ПМЖ' },
 ];
+
+export interface ComparisonMeaning {
+  readonly countryCode: string;
+  readonly name: string;
+  readonly text: string;
+}
 
 export interface CountryComparisonPanelProps {
   readonly countries?: readonly CountryComparisonCountry[];
@@ -29,6 +38,8 @@ export interface CountryComparisonPanelProps {
   readonly onRetry?: () => void;
   readonly title?: string;
   readonly showParetoSummary?: boolean;
+  readonly meanings?: readonly ComparisonMeaning[];
+  readonly titleAction?: ReactNode;
 }
 
 export function CountryComparisonPanel({
@@ -38,6 +49,8 @@ export function CountryComparisonPanel({
   onRetry,
   title = 'Сравнение стран',
   showParetoSummary = true,
+  meanings = [],
+  titleAction,
 }: CountryComparisonPanelProps) {
   if (state === 'loading')
     return <PanelStateMessage busy>Загружаем проверенные данные по странам…</PanelStateMessage>;
@@ -46,7 +59,15 @@ export function CountryComparisonPanel({
     return <PanelStateMessage>Выберите страны для сравнения.</PanelStateMessage>;
   if (countries.length > 3)
     return <PanelStateMessage>Для читаемого сравнения выберите до трёх стран.</PanelStateMessage>;
-  return <ReadyComparison countries={countries} title={title} showParetoSummary={showParetoSummary} />;
+  return (
+    <ReadyComparison
+      countries={countries}
+      title={title}
+      showParetoSummary={showParetoSummary}
+      meanings={meanings}
+      titleAction={titleAction}
+    />
+  );
 }
 
 function PanelStateMessage({
@@ -86,10 +107,14 @@ function ReadyComparison({
   countries,
   title,
   showParetoSummary,
+  meanings,
+  titleAction,
 }: {
   readonly countries: readonly CountryComparisonCountry[];
   readonly title: string;
   readonly showParetoSummary: boolean;
+  readonly meanings: readonly ComparisonMeaning[];
+  readonly titleAction?: ReactNode;
 }) {
   const pareto = calculateParetoFrontier(countries);
   return (
@@ -97,12 +122,16 @@ function ReadyComparison({
       className="career-country-comparison"
       aria-labelledby="career-country-comparison-title"
     >
-      <h2 id="career-country-comparison-title" className="career-country-comparison-title">
-        {title}
-      </h2>
+      <div className="career-country-comparison-head">
+        <h2 id="career-country-comparison-title" className="career-country-comparison-title">
+          {title}
+        </h2>
+        {titleAction}
+      </div>
       <DesktopMatrix countries={countries} />
       <MobileStack countries={countries} />
       {showParetoSummary ? <ParetoSummary countries={countries} result={pareto} /> : null}
+      <ComparisonMeanings meanings={meanings} />
     </section>
   );
 }
@@ -111,13 +140,13 @@ function DesktopMatrix({ countries }: { readonly countries: readonly CountryComp
   return (
     <div className="career-country-comparison-desktop">
       <table className="career-country-comparison-table">
-        <caption>
+        <caption className="career-sr-only">
           Сопоставимые показатели по выбранным странам. Каждое значение сопровождается источником
           или причиной отсутствия данных.
         </caption>
         <thead>
           <tr>
-            <th scope="col">Критерий</th>
+            <th scope="col">Параметр</th>
             {countries.map((country) => (
               <th scope="col" key={country.countryCode}>
                 {country.countryName}
@@ -142,26 +171,60 @@ function DesktopMatrix({ countries }: { readonly countries: readonly CountryComp
   );
 }
 
+/** Mockup 15 `vt=cmp` at 390: grouped rows «country — value», sources in one footnote. */
 function MobileStack({ countries }: { readonly countries: readonly CountryComparisonCountry[] }) {
+  const sources = mobileSources(countries);
   return (
     <div className="career-country-comparison-mobile">
-      {CRITERIA.map((criterion) => (
+      {CRITERIA.filter(({ key }) => key !== 'monthlyRemainder').map((criterion) => (
         <section className="career-country-comparison-mobile-criterion" key={criterion.key}>
           <h3>{criterion.label}</h3>
           <dl>
-            {countries.map((country) => (
-              <div className="career-country-comparison-mobile-entry" key={country.countryCode}>
-                <dt>{country.countryName}</dt>
-                <dd>
-                  <FactContent fact={country.facts[criterion.key]} metric={criterion.key} />
-                </dd>
-              </div>
-            ))}
+            {countries.map((country) => {
+              const visible = visibleFact(
+                country.facts[criterion.key] as CountryComparisonFact<unknown>,
+                criterion.key,
+              );
+              return (
+                <div className="career-country-comparison-mobile-entry" key={country.countryCode}>
+                  <dt>{country.countryName}</dt>
+                  <dd title={visible.status === 'available' ? undefined : visible.reason}>
+                    {visible.status === 'available'
+                      ? formatFact(criterion.key, visible.value)
+                      : 'нет данных'}
+                  </dd>
+                </div>
+              );
+            })}
           </dl>
         </section>
       ))}
+      <p className="career-country-comparison-mobile-foot">
+        Баллов и общего места нет: вес параметров вы определяете сами.
+        {sources
+          ? ` Источники: ${sources}.`
+          : ' Проверенных источников по этим показателям пока нет.'}
+      </p>
     </div>
   );
+}
+
+function mobileSources(countries: readonly CountryComparisonCountry[]): string {
+  const seen = new Map<string, string>();
+  for (const country of countries) {
+    for (const criterion of CRITERIA) {
+      const visible = visibleFact(
+        country.facts[criterion.key] as CountryComparisonFact<unknown>,
+        criterion.key,
+      );
+      if (visible.status !== 'available') continue;
+      for (const source of visible.sources) {
+        if (!seen.has(source.title))
+          seen.set(source.title, `${source.title}, ${relocationDay(source.capturedAt)}`);
+      }
+    }
+  }
+  return [...seen.values()].join('; ');
 }
 
 function FactContent({
@@ -250,5 +313,28 @@ function ParetoSummary({
         <p>Граница Парето пока не рассчитывается. {result.reason}</p>
       )}
     </aside>
+  );
+}
+
+/** «Что это значит» of mockup 15 `cmp`: one line per country from its own status and reason. */
+function ComparisonMeanings({ meanings }: { readonly meanings: readonly ComparisonMeaning[] }) {
+  if (!meanings.length) return null;
+  return (
+    <section
+      className="career-country-comparison-meanings"
+      aria-labelledby="career-country-meanings-title"
+    >
+      <h3 id="career-country-meanings-title">Что это значит</h3>
+      <ul>
+        {meanings.map((meaning) => (
+          <li key={meaning.countryCode}>
+            <Info className="career-country-comparison-meaning-icon" aria-hidden="true" size={18} />
+            <strong>{meaning.name}</strong>
+            <p>{meaning.text}</p>
+          </li>
+        ))}
+      </ul>
+      <p className="career-country-comparison-disclaimer">{COUNTRY_FIT_DISCLAIMER}</p>
+    </section>
   );
 }

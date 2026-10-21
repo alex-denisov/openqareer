@@ -262,6 +262,13 @@ function accessFact(
   };
 }
 
+const THRESHOLD_PERIOD_LABELS: Readonly<Record<string, string>> = {
+  annual: 'в год',
+  monthly: 'в месяц',
+  points: 'баллов',
+  years: 'лет',
+};
+
 function salaryThresholdFact(
   scenarios: readonly MobilityScenarioEvaluation[],
 ): CountryComparisonCountry['facts']['salaryThreshold'] {
@@ -277,7 +284,7 @@ function salaryThresholdFact(
     value: {
       amount: threshold.amount,
       currency: threshold.currency ?? '',
-      basis: `${threshold.label}, ${threshold.period}`,
+      basis: `${threshold.label}, ${THRESHOLD_PERIOD_LABELS[threshold.period]}`,
     },
     sources: [comparisonEvidence(threshold.source)],
   };

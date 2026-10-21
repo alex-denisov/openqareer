@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { ArrowRight, CaretLeft, Check, CheckCircle, FloppyDisk, Info, LockKey, PencilSimple, WarningCircle, XCircle } from '@phosphor-icons/react';
+import { ArrowRight, CaretLeft, CheckCircle, ShieldCheck, LockKey, PencilSimple, WarningCircle, XCircle } from '@phosphor-icons/react';
 import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
@@ -113,9 +113,9 @@ function QuestionnaireView({
   return (
     <div className="career-relocation career-relocation-questionnaire">
       <QuestionnaireHeader step={step} isDirty={isDirty} onClose={onClose} onConfirmLeave={() => controller.setConfirmLeave(true)}>
-        <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
+        <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} skipped={controller.savedProfile.skippedSteps} onSelect={controller.selectStep} />
       </QuestionnaireHeader>
-      <QuestionnaireStatus notice={controller.notice} error={controller.error} />
+      <QuestionnaireStatus notice={step === 'summary' ? undefined : controller.notice} error={controller.error} />
       <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} />
       <QuestionnaireDialogs controller={controller} onClose={onClose} />
     </div>
@@ -143,35 +143,62 @@ function QuestionnaireHeader({
         </button>
         <h2 id="career-relocation-questionnaire-title">Условия для переезда</h2>
         <span className="career-relocation-status"><LockKey aria-hidden="true" size={14} />Видите только вы</span>
-        <span className="career-relocation-save-note"><FloppyDisk aria-hidden="true" size={14} />Прогресс сохраняется</span>
+        <span className="career-relocation-save-note"><CheckCircle aria-hidden="true" size={14} />Прогресс сохраняется</span>
       </div>
-      <p>{step === 'summary' ? 'Анкета заполнена. Ничего не отправлено, всё сохранено в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_DESCRIPTIONS[step]}`}</p>
+      <p>{step === 'summary' ? 'Анкета заполнена. Ничего не отправлено, всё сохранено в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${DESKTOP_STEP_DESCRIPTIONS[step]}`}</p>
       {children}
     </header>
   );
+}
+
+type StepState = 'done' | 'current' | 'future' | 'skipped';
+
+/** Mockup 15 `i1…i5`: a filled step is a green check, the current one a blue dot, a skipped one stays empty. */
+function stepState(
+  item: RelocationCurrentStep,
+  step: RelocationCurrentStep,
+  skipped: readonly RelocationStepId[],
+): StepState {
+  if (item === step) return 'current';
+  const order = [...RELOCATION_STEPS, 'summary'] as const;
+  if (order.indexOf(item) > order.indexOf(step)) return 'future';
+  return item !== 'summary' && skipped.includes(item) ? 'skipped' : 'done';
+}
+
+function StepMark({ state }: { readonly state: StepState }) {
+  if (state === 'done') return <CheckCircle className="career-relocation-step-mark" aria-hidden="true" size={16} />;
+  return <span className="career-relocation-step-mark" aria-hidden="true" />;
 }
 
 function QuestionnaireStepper({
   step,
   dirty,
   busy,
+  skipped,
   onSelect,
 }: {
   readonly step: RelocationCurrentStep;
   readonly dirty: boolean;
   readonly busy: boolean;
+  readonly skipped: readonly RelocationStepId[];
   readonly onSelect: (step: RelocationStepId) => void;
 }) {
+  const summaryState = stepState('summary', step, skipped);
   return (
     <ol className="career-relocation-stepper" aria-label="Шаги анкеты">
-      {RELOCATION_STEPS.map((item, index) => (
-        <li key={item} aria-current={step === item ? 'step' : undefined}>
-          <button type="button" disabled={busy || (dirty && step !== item)} aria-current={step === item ? 'step' : undefined} onClick={() => onSelect(item)}>
-            {step === 'summary' ? <Check className="career-relocation-stepper-done" aria-hidden="true" size={14} /> : <span>{index + 1}</span>}{STEP_TITLES[item]}
-          </button>
-        </li>
-      ))}
-      <li aria-current={step === 'summary' ? 'step' : undefined}><span className="career-relocation-stepper-current">Итог</span></li>
+      {RELOCATION_STEPS.map((item) => {
+        const state = stepState(item, step, skipped);
+        return (
+          <li key={item} data-state={state} aria-current={state === 'current' ? 'step' : undefined}>
+            <button type="button" disabled={busy || (dirty && step !== item)} aria-current={state === 'current' ? 'step' : undefined} onClick={() => onSelect(item)}>
+              <StepMark state={state} />{STEP_TITLES[item]}{state === 'skipped' ? <span className="career-sr-only"> (пропущен)</span> : null}
+            </button>
+          </li>
+        );
+      })}
+      <li data-state={summaryState} aria-current={summaryState === 'current' ? 'step' : undefined}>
+        <span className="career-relocation-stepper-current"><StepMark state={summaryState} />Итог</span>
+      </li>
     </ol>
   );
 }
@@ -202,7 +229,7 @@ function QuestionnaireStepEditor({ controller, step }: {
   return (
     <div className="career-relocation-questionnaire-layout">
       <section className="career-relocation-questionnaire-form" aria-labelledby={`relocation-step-title-${step}`}>
-        <h2 id={`relocation-step-title-${step}`}>{STEP_TITLES[step]}</h2>
+        <h2 id={`relocation-step-title-${step}`}>{step === 'education' ? 'Образование' : STEP_TITLES[step]}</h2>
         <RelocationQuestionnaireStepForm
           step={step}
           profile={draft}
@@ -443,20 +470,37 @@ function questionnaireError(reason: unknown): string {
   return apiErrorMessage(reason, 'Не удалось сохранить шаг анкеты. Повторите запрос.');
 }
 
-function QuestionnaireReason({ step }: { readonly step: RelocationStepId }) {
-  const text: Readonly<Record<RelocationStepId, string>> = {
-    citizenship_documents: 'Гражданство и действующие документы влияют на право въезда и работы. Неизвестные правила остаются неизвестными.',
-    education: 'Признание диплома влияет на требования конкретного визового пути. Стаж берётся из профиля, если он там указан.',
-    family: 'Состав семьи и срок переезда учитываются только в тех правилах, где есть проверенные условия.',
-    languages: 'Уровень языка помогает проверить требования пути. Импортированные значения нужно подтвердить.',
-  };
+const REASON_TEXT: Readonly<Record<RelocationStepId, string>> = {
+  citizenship_documents: 'Гражданство и ВНЖ решают, нужна ли вам рабочая виза вообще. Например, с ВНЖ Сербии в стране можно работать, а в ЕАЭС работа без разрешения возможна только гражданам стран союза.',
+  education: 'Признание диплома и сертификаты влияют на Blue Card и Skilled Worker: без них порог зарплаты выше или доступа нет. Стаж мы не просим вводить заново, он берётся из подтверждённого опыта.',
+  family: 'Семья меняет сценарии: у одних виз партнёр может работать сразу, у других нет. Срок оформления отделяет «мгновенный старт» от «долго, но надёжно».',
+  languages: 'Язык работы определяет, хватит ли английского. В Германии он часто решающий для собеседований и быта; для ОАЭ и Казахстана достаточно английского или русского.',
+};
+
+/** Desktop step lines of mockup 15 `i1…i4`. */
+const DESKTOP_STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
+  citizenship_documents: 'гражданство и действующие документы. Это определяет, какие страны вам доступны без визы.',
+  education: 'образование и сертификаты. Всё, что есть в профиле, уже подставлено, проверьте.',
+  family: 'с кем вы едете и сколько готовы ждать оформление.',
+  languages: 'языки. Уровни взяты из профиля, дополните местные.',
+};
+
+function QuestionnaireAside({ text }: { readonly text: string }) {
   return (
     <aside className="career-relocation-questionnaire-reason" aria-labelledby="relocation-reason-title">
       <h2 id="relocation-reason-title">Зачем это нужно</h2>
-      <p>{text[step]}</p>
-      <p className="career-relocation-privacy-note">Данные хранятся в зашифрованном профиле и удаляются при отзыве согласия.</p>
+      <p>{text}</p>
+      <p className="career-relocation-privacy-note">
+        <ShieldCheck aria-hidden="true" size={16} />
+        <span>Данные хранятся в разделе «Страны и релокация», вкладка «Мои данные», в профиле только сводка. Третьим лицам не передаются, удалить можно в любой момент.</span>
+      </p>
+      <p>Любое поле можно пропустить: страны, зависящие от него, получат статус «нужно уточнить», а не угаданный.</p>
     </aside>
   );
+}
+
+function QuestionnaireReason({ step }: { readonly step: RelocationStepId }) {
+  return <QuestionnaireAside text={REASON_TEXT[step]} />;
 }
 
 function RelocationSummary({
@@ -496,12 +540,7 @@ function RelocationSummary({
           <button className="career-btn career-btn-secondary" type="button" onClick={onEdit}><PencilSimple aria-hidden="true" size={17} />Дополнить данные</button>
         </div>
       </section>
-      <aside className="career-relocation-questionnaire-reason" aria-labelledby="relocation-reason-title">
-        <h2 id="relocation-reason-title">Зачем это нужно</h2>
-        <p>Подборка теперь учитывает отмеченные страны. Данные можно править на вкладке «Мои данные» и в блоке «Условия и география».</p>
-        <p className="career-relocation-privacy-note">Данные хранятся в разделе «Страны и релокация», вкладка «Мои данные», в профиле только сводка. Третьим лицам не передаются, удалить можно в любой момент.</p>
-        <p>Любое поле можно пропустить: страны, зависящие от него, получат статус «нужно уточнить», а не угаданный.</p>
-      </aside>
+      <QuestionnaireAside text="Подборка теперь учитывает отмеченные страны. Данные можно править на вкладке «Мои данные» и в блоке «Условия и география»." />
     </div>
   );
 }
@@ -510,7 +549,7 @@ function SummaryNote({ overview }: { readonly overview: RelocationSummaryOvervie
   const clarify = overview.unknown.slice(0, 2);
   return (
     <p className="career-relocation-summary-note">
-      <Info aria-hidden="true" size={16} />
+      <CheckCircle aria-hidden="true" size={16} />
       <span>
         {relocationCountsSentence(overview.counts)}
         {clarify.length ? ' Нужно уточнить: ' : ''}

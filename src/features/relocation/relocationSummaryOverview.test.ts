@@ -31,6 +31,13 @@ describe('relocation summary overview (B468-r3)', () => {
     expect(total).toBe(listRelocationCountries().length);
   });
 
+  it('shows one open country and one barrier, not three open ones', () => {
+    const overview = buildRelocationSummaryOverview(serbianPermitProfile());
+    expect(overview.key.map(({ status }) => status)[0]).toBe('available');
+    expect(overview.key).toHaveLength(2);
+    expect(overview.key[1]?.status).not.toBe('available');
+  });
+
   it('a reason comes from the leading scenario, not the first scenario', () => {
     const overview = buildRelocationSummaryOverview(serbianPermitProfile());
     for (const summary of overview.key) {

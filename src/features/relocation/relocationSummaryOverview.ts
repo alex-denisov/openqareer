@@ -13,8 +13,6 @@ export interface RelocationSummaryOverview {
   readonly key: readonly RelocationCountrySummary[];
 }
 
-const KEY_COUNTRIES = 3;
-
 /** Real numbers for «Что получилось»: counts by status, countries to clarify, key countries. */
 export function buildRelocationSummaryOverview(
   profile: RelocationQuestionnaire,
@@ -38,12 +36,18 @@ export function buildRelocationSummaryOverview(
     (left, right) =>
       Number(documented.has(right.countryCode)) - Number(documented.has(left.countryCode)),
   );
+  const open = byDocuments.find(
+    ({ status, countryCode }) =>
+      status === 'available' && (documented.has(countryCode) || !home.has(countryCode)),
+  );
+  const barrier =
+    summaries.find(({ status }) => status === 'high_barriers') ??
+    summaries.find(({ status }) => status === 'unknown');
   return {
     counts,
     unknown: summaries.filter(({ status }) => status === 'unknown'),
-    key: byDocuments
-      .filter(({ status, countryCode }) => status !== 'unknown' && !home.has(countryCode))
-      .slice(0, KEY_COUNTRIES),
+    // Mockup i5: one open country (by document first), then the most telling barrier.
+    key: [open, barrier].filter((item): item is RelocationCountrySummary => Boolean(item)),
   };
 }
 

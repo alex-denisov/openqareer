@@ -216,7 +216,7 @@ describe('RelocationScreen', () => {
     await clickButton('Мои данные');
     await clickButton('Продолжить с шага 2');
 
-    expect(host?.textContent).toContain('Шаг 2 из 4: диплом и опыт');
+    expect(host?.textContent).toContain('Шаг 2 из 4: образование и сертификаты');
   });
 
   it('opens economy for the country selected from its details', async () => {
