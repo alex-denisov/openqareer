@@ -17,7 +17,8 @@ export const RELOCATION_TAB_DESCRIPTIONS: Readonly<Record<RelocationTab, string>
   countries: 'Какие страны реально доступны вам по жизненным сценариям, без юридических тупиков.',
   comparison: 'Выбранные страны рядом по одним и тем же показателям, с источником и датой.',
   economy: 'Остаток после налогов по проверенной шкале страны. Нет шкалы — нет расчёта.',
-  profile: 'Все ваши данные для релокации в одном месте. Видите только вы. Изменение пересчитывает статусы стран.',
+  profile:
+    'Все ваши данные для релокации в одном месте. Видите только вы. Изменение пересчитывает статусы стран.',
 };
 
 export interface RelocationWorkspaceInput {
@@ -25,24 +26,27 @@ export interface RelocationWorkspaceInput {
   readonly startInQuestionnaire: boolean;
 }
 
-export function useRelocationWorkspace({ snapshot, startInQuestionnaire }: RelocationWorkspaceInput) {
+export function useRelocationWorkspace({
+  snapshot,
+  startInQuestionnaire,
+}: RelocationWorkspaceInput) {
   const [tab, setTab] = useState<RelocationTab>('countries');
-  const [mode, setMode] = useState<RelocationMode>(() => startInQuestionnaire
-    ? { kind: 'questionnaire', step: firstOpenStep(snapshot.profile) }
-    : { kind: 'tabs' });
+  const [mode, setMode] = useState<RelocationMode>(() =>
+    startInQuestionnaire
+      ? { kind: 'questionnaire', step: firstOpenStep(snapshot.profile) }
+      : { kind: 'tabs' },
+  );
   const [selectedCountryCodes, setSelectedCountryCodes] = useState<readonly string[]>([]);
   const [pinnedCountryCodes, setPinnedCountryCodes] = useState<readonly string[]>([]);
   const [economyCountryCode, setEconomyCountryCode] = useState('');
   const [grossAnnualIncome, setGrossAnnualIncome] = useState<number>();
   const countries = useMemo(() => listRelocationCountries(), []);
   const counts = relocationTabCounts(countries, selectedCountryCodes);
-  const comparisonCountries = useMemo(
-    () => selectedCountryCodes.map((countryCode) => buildCountryComparisonCountry(
-      countryCode,
-      snapshot.profile,
-      countryCode === economyCountryCode ? grossAnnualIncome : undefined,
-    )),
-    [economyCountryCode, grossAnnualIncome, selectedCountryCodes, snapshot.profile],
+  const comparisonCountries = useComparisonCountries(
+    snapshot.profile,
+    selectedCountryCodes,
+    economyCountryCode,
+    grossAnnualIncome,
   );
   const showTab = (next: RelocationTab) => {
     setMode({ kind: 'tabs' });
@@ -64,9 +68,8 @@ export function useRelocationWorkspace({ snapshot, startInQuestionnaire }: Reloc
     openQuestionnaire: (step: RelocationStepId) => setMode({ kind: 'questionnaire', step }),
     openAddCountry: () => setMode({ kind: 'add' }),
     closeMode: () => setMode({ kind: 'tabs' }),
-    pinCountry: (countryCode: string) => setPinnedCountryCodes((current) => (
-      current.includes(countryCode) ? current : [...current, countryCode]
-    )),
+    pinCountry: (countryCode: string) =>
+      setPinnedCountryCodes((current) => pin(current, countryCode)),
     calculateEconomy: (countryCode: string) => {
       setEconomyCountryCode(countryCode);
       showTab('economy');
@@ -78,4 +81,27 @@ export type RelocationWorkspaceState = ReturnType<typeof useRelocationWorkspace>
 
 function firstOpenStep(profile: RelocationProfileData): RelocationStepId {
   return profile.currentStep === 'summary' ? 'citizenship_documents' : profile.currentStep;
+}
+
+function useComparisonCountries(
+  profile: RelocationProfileData,
+  selectedCountryCodes: readonly string[],
+  economyCountryCode: string,
+  grossAnnualIncome: number | undefined,
+) {
+  return useMemo(
+    () =>
+      selectedCountryCodes.map((countryCode) =>
+        buildCountryComparisonCountry(
+          countryCode,
+          profile,
+          countryCode === economyCountryCode ? grossAnnualIncome : undefined,
+        ),
+      ),
+    [economyCountryCode, grossAnnualIncome, selectedCountryCodes, profile],
+  );
+}
+
+function pin(current: readonly string[], countryCode: string): readonly string[] {
+  return current.includes(countryCode) ? current : [...current, countryCode];
 }

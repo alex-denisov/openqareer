@@ -12,7 +12,10 @@ export function RelocationScreenState({
   const Tag = busy ? 'div' : 'section';
   return (
     <Tag className="career-relocation-state" aria-busy={busy} role={busy ? 'status' : 'alert'}>
-      <p>{busy ? null : <WarningCircle aria-hidden="true" size={18} />}{message}</p>
+      <p>
+        {busy ? null : <WarningCircle aria-hidden="true" size={18} />}
+        {message}
+      </p>
       {onRetry ? (
         <button className="career-btn career-btn-secondary" type="button" onClick={onRetry}>
           Повторить загрузку

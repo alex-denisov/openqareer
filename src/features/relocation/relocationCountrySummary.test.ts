@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { listRelocationCountries } from './relocationCountryData';
-import { relocationTabCounts, summarizeRelocationCountry, visibleRelocationCountries } from './relocationCountrySummary';
+import {
+  relocationTabCounts,
+  summarizeRelocationCountry,
+  visibleRelocationCountries,
+} from './relocationCountrySummary';
 
 function russianProfile() {
   const profile = emptyRelocationQuestionnaire();
@@ -41,8 +45,14 @@ describe('relocation country summary', () => {
 describe('relocation tab counters', () => {
   it('counts the candidate list and the comparison selection, not literals', () => {
     const countries = listRelocationCountries();
-    expect(relocationTabCounts(countries, [])).toEqual({ countries: countries.length, comparison: 0 });
-    expect(relocationTabCounts(countries.slice(0, 4), ['DE', 'AE'])).toEqual({ countries: 4, comparison: 2 });
+    expect(relocationTabCounts(countries, [])).toEqual({
+      countries: countries.length,
+      comparison: 0,
+    });
+    expect(relocationTabCounts(countries.slice(0, 4), ['DE', 'AE'])).toEqual({
+      countries: 4,
+      comparison: 2,
+    });
   });
 
   it('pins added countries into the visible preview', () => {

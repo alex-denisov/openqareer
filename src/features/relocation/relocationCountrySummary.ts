@@ -49,7 +49,11 @@ export function relocationStatusLabel(status: CountryFitStatus | ScenarioAvailab
  */
 function leadingScenario(scenarios: readonly MobilityScenarioEvaluation[]) {
   const rank = (scenario: MobilityScenarioEvaluation) =>
-    scenario.status === 'available' ? 0 : scenario.sources.length ? 1 : 2 + SCENARIO_RANK[scenario.status];
+    scenario.status === 'available'
+      ? 0
+      : scenario.sources.length
+        ? 1
+        : 2 + SCENARIO_RANK[scenario.status];
   return [...scenarios].sort((left, right) => rank(left) - rank(right))[0];
 }
 
@@ -65,7 +69,9 @@ export function summarizeRelocationCountry(
     name: country.name,
     status: fit.status,
     statusLabel: relocationStatusLabel(fit.status),
-    scenarioLabel: lead ? (RELOCATION_SCENARIO_LABELS[lead.id] ?? lead.label) : 'Сценарий не определён',
+    scenarioLabel: lead
+      ? (RELOCATION_SCENARIO_LABELS[lead.id] ?? lead.label)
+      : 'Сценарий не определён',
     reason: lead?.reasons[0] ?? 'В правилах нет пояснения для вашего профиля.',
     source: source ? { title: source.title, retrievedAt: source.retrievedAt } : null,
     scenarios: fit.scenarios,
@@ -93,7 +99,9 @@ export function visibleRelocationCountries(
 ): readonly RelocationCountry[] {
   const preview = countries.slice(0, previewCount);
   const pinned = countries.filter(
-    ({ countryCode }) => pinnedCountryCodes.includes(countryCode) && !preview.some((item) => item.countryCode === countryCode),
+    ({ countryCode }) =>
+      pinnedCountryCodes.includes(countryCode) &&
+      !preview.some((item) => item.countryCode === countryCode),
   );
   return [...preview, ...pinned];
 }

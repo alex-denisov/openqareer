@@ -19,7 +19,9 @@ export function useRelocationSnapshot() {
     } catch (reason) {
       // A superseded load (unmount, remount) must not paint its abort over the next one.
       if (signal?.aborted) return;
-      setError(apiErrorMessage(reason, 'Не удалось загрузить данные о релокации. Повторите запрос.'));
+      setError(
+        apiErrorMessage(reason, 'Не удалось загрузить данные о релокации. Повторите запрос.'),
+      );
     }
     setLoading(false);
   }, []);
@@ -30,17 +32,23 @@ export function useRelocationSnapshot() {
     return () => controller.abort();
   }, [reload]);
 
-  const updateProfile = useCallback((
-    profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
-    alerts: RelocationQuestionnaireResponse['alerts'] = [],
-  ) => {
-    setSnapshot((current) => current ? { ...current, profile, alerts } : current);
-  }, []);
+  const updateProfile = useCallback(
+    (
+      profile: NonNullable<RelocationQuestionnaireResponse['profile']>,
+      alerts: RelocationQuestionnaireResponse['alerts'] = [],
+    ) => {
+      setSnapshot((current) => (current ? { ...current, profile, alerts } : current));
+    },
+    [],
+  );
   const updateConsent = useCallback((consent: RelocationQuestionnaireResponse['consent']) => {
-    setSnapshot((current) => current ? { ...current, consent, profile: null } : current);
+    setSnapshot((current) => (current ? { ...current, consent, profile: null } : current));
   }, []);
-  const updateGrantedConsent = useCallback((consent: RelocationQuestionnaireResponse['consent']) => {
-    setSnapshot((current) => (current ? { ...current, consent } : current));
-  }, []);
+  const updateGrantedConsent = useCallback(
+    (consent: RelocationQuestionnaireResponse['consent']) => {
+      setSnapshot((current) => (current ? { ...current, consent } : current));
+    },
+    [],
+  );
   return { snapshot, error, loading, reload, updateProfile, updateConsent, updateGrantedConsent };
 }

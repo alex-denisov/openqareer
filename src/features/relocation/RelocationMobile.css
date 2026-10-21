@@ -193,7 +193,8 @@
   margin: 0;
   border: 0;
   border-radius: var(--career-radius-lg) var(--career-radius-lg) 0 0;
-  padding: var(--career-space-5) var(--career-space-4) calc(var(--career-space-6) + env(safe-area-inset-bottom));
+  padding: var(--career-space-5) var(--career-space-4)
+    calc(var(--career-space-6) + env(safe-area-inset-bottom));
   color: var(--career-text);
   background: var(--career-bg-elevated);
 }

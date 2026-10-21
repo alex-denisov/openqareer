@@ -14,21 +14,32 @@ const OPTIONS: readonly RelocationScenarioFilter[] = [
 ];
 
 /** Mockup 15 `sheet=rls`: the scenario filter as a modal bottom sheet (Escape closes it). */
-export function RelocationScenarioSheet({ value, onChange, onClose }: {
+export function RelocationScenarioSheet({
+  value,
+  onChange,
+  onClose,
+}: {
   readonly value: RelocationScenarioFilter;
   readonly onChange: (value: RelocationScenarioFilter) => void;
   readonly onClose: () => void;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog && typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
-  }, []);
+  const ref = useModalDialog();
   return (
-    <dialog ref={ref} className="career-relocation-sheet" aria-labelledby="career-relocation-sheet-title" onClose={onClose} onCancel={onClose}>
+    <dialog
+      ref={ref}
+      className="career-relocation-sheet"
+      aria-labelledby="career-relocation-sheet-title"
+      onClose={onClose}
+      onCancel={onClose}
+    >
       <header>
         <h3 id="career-relocation-sheet-title">Сценарий переезда</h3>
-        <button className="career-relocation-icon-button" type="button" aria-label="Закрыть" onClick={onClose}>
+        <button
+          className="career-relocation-icon-button"
+          type="button"
+          aria-label="Закрыть"
+          onClick={onClose}
+        >
           <X aria-hidden="true" size={18} />
         </button>
       </header>
@@ -39,12 +50,25 @@ export function RelocationScenarioSheet({ value, onChange, onClose }: {
             className="career-relocation-filter-chip"
             type="button"
             aria-pressed={value === option}
-            onClick={() => { onChange(option); onClose(); }}
+            onClick={() => {
+              onChange(option);
+              onClose();
+            }}
           >
-            {option === 'all' ? 'Все' : RELOCATION_SCENARIO_LABELS[option] ?? option}
+            {option === 'all' ? 'Все' : (RELOCATION_SCENARIO_LABELS[option] ?? option)}
           </button>
         ))}
       </div>
     </dialog>
   );
+}
+
+/** Opens the native dialog as modal: focus trap and Escape come from the platform. */
+function useModalDialog() {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal();
+  }, []);
+  return ref;
 }
