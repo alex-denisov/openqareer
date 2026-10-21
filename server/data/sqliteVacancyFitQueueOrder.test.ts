@@ -67,3 +67,24 @@ describe('vacancy fit queue order (B524 return)', () => {
     database.close();
   });
 });
+
+describe('vacancy fit queue migration under concurrent start (B524)', () => {
+  it('two stores opening one database, the second after the columns already exist, do not throw', () => {
+    const database = new DatabaseSync(':memory:');
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    new SqliteVacancyFitStore(database, sealed);
+    expect(() => new SqliteVacancyFitStore(database, sealed)).not.toThrow();
+    database.close();
+  });
+  it('a column added by the other process between check and ALTER is not an error', () => {
+    const database = new DatabaseSync(':memory:');
+    const sealed = new SealedText(Buffer.alloc(32, 7));
+    new SqliteVacancyFitStore(database, sealed);
+    const realPrepare = database.prepare.bind(database);
+    // The racing process sees a table_info snapshot taken before the other one added the columns.
+    database.prepare = ((sql: string) => sql.startsWith('PRAGMA table_info(vacancy_fit_queue)')
+      ? { all: () => [] } : realPrepare(sql)) as typeof database.prepare;
+    expect(() => new SqliteVacancyFitStore(database, sealed)).not.toThrow();
+    database.close();
+  });
+});

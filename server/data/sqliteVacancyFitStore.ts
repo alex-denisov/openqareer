@@ -24,6 +24,18 @@ const LATE_COLUMNS = [
   ['last_error', 'TEXT'],
 ] as const;
 
+/**
+ * The HTTP server and the mechanics worker open the store at the same moment on deploy:
+ * the other process may add the column between our check and ALTER. Only that error is benign.
+ */
+function addColumnOnce(database: DatabaseSync, name: string, type: string): void {
+  try {
+    database.exec(`ALTER TABLE vacancy_fit_queue ADD COLUMN ${name} ${type}`);
+  } catch (error) {
+    if (!(error instanceof Error && /duplicate column name/iu.test(error.message))) throw error;
+  }
+}
+
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
@@ -44,7 +56,7 @@ export class SqliteVacancyFitStore {
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_candidate ON vacancy_fit_queue(candidate_key);`);
     const columns = new Set((database.prepare('PRAGMA table_info(vacancy_fit_queue)').all() as { name: string }[]).map((column) => column.name));
     // The queue holds a few thousand rows: ADD COLUMN is a metadata change, not a table rewrite.
-    for (const [name, type] of LATE_COLUMNS) if (!columns.has(name)) database.exec(`ALTER TABLE vacancy_fit_queue ADD COLUMN ${name} ${type}`);
+    for (const [name, type] of LATE_COLUMNS) if (!columns.has(name)) addColumnOnce(database, name, type);
   }
 
   private candidateKey(candidateId: string): string {
