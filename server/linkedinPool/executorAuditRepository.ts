@@ -58,6 +58,20 @@ export function pauseLinkedinPoolAccountForManualReview(
   }
 }
 
+/** Records a successful provider read without invalidating admin edit revisions. */
+export function recordLinkedinExecutorHeartbeat(
+  database: DatabaseSync,
+  accountId: string,
+  now: Date,
+): void {
+  database
+    .prepare(
+      `UPDATE linkedin_pool_accounts SET last_heartbeat_at = ?
+       WHERE id = ? AND state = 'ready'`,
+    )
+    .run(now.toISOString(), accountId);
+}
+
 export function recordLinkedinExecutorCompanyAttempt(
   database: DatabaseSync,
   accountId: string,
