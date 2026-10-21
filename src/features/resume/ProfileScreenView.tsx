@@ -338,7 +338,11 @@ function ProfileScreenSurfaceBody(props: ProfileScreenSurfaceProps) {
           aria-labelledby="profile-tab-trace"
           tabIndex={0}
         >
-          <CandidateFootprintAuditView key={candidateId} candidateId={candidateId} />
+          <CandidateFootprintAuditView
+            key={candidateId}
+            candidateId={candidateId}
+            onOpenResumeVersions={() => openResumeDocuments(props.onTabChange)}
+          />
         </div>
       ) : (
         <div
@@ -562,6 +566,21 @@ function profileFocusDestination(
         : 'resume',
     targetId: sections[request.section],
   };
+}
+
+/** B544 «Пересобрать PDF»: «Резюме и версии» lives on the resume tab; focus it once it renders. */
+function openResumeDocuments(onTabChange: ((tab: ProfileTab) => void) | undefined): void {
+  onTabChange?.('resume');
+  let attempts = 0;
+  const focus = () => {
+    attempts += 1;
+    const section = document.getElementById('sec-documents');
+    if (section) {
+      section.scrollIntoView({ block: 'start' });
+      focusSectionTarget('sec-documents');
+    } else if (attempts < 20) window.requestAnimationFrame(focus);
+  };
+  window.requestAnimationFrame(focus);
 }
 
 function focusSectionTarget(targetId: string): boolean {

@@ -99,6 +99,26 @@ describe('buildFootprintChecklist (B544)', () => {
     expect(list.items[3]).toMatchObject({ done: true, status: 'Старых аккаунтов нет' });
   });
 
+  it('counts metadata from the real file check', () => {
+    const base = audit([finding('1', { review: 'not_self' })]);
+    const dirty = {
+      checkedAt: 'now',
+      checkedFiles: 2,
+      files: [{ documentId: 'd', fileName: 'cv.pdf', problems: ['Метаданные документа: автор'] }],
+    };
+    expect(buildFootprintChecklist(base, dirty).items[2]).toMatchObject({
+      done: false,
+      status: 'Осталось 1',
+    });
+    expect(buildFootprintChecklist(base, { ...dirty, files: [] }).items[2]).toMatchObject({
+      done: true,
+      status: 'Сделано',
+    });
+    expect(
+      buildFootprintChecklist(base, { ...dirty, checkedFiles: 0, files: [] }).items[2],
+    ).toMatchObject({ done: false, status: 'Резюме не загружено' });
+  });
+
   it('never reports done without a completed audit', () => {
     expect(buildFootprintChecklist(null).done).toBe(0);
   });

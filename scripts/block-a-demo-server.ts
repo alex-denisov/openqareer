@@ -142,6 +142,18 @@ const candidateReputationRepo = new SqliteCandidateReputationRepository({
   encryptionKey: config.dataEncryptionKey,
 });
 candidateReputationRepo.saveFootprintAudit(historicalAudit(candidate.id));
+// B544: an uploaded resume whose PDF metadata still names the author and the company,
+// so «Метаданные файлов чисты» is counted by the real inspector.
+candidateStore.saveDocument(candidate.id, {
+  kind: 'resume',
+  source: 'upload',
+  fileName: 'Lebedev-CV.pdf',
+  mimeType: 'application/pdf',
+  contentBase64: Buffer.from(
+    '%PDF-1.4\n1 0 obj\n<< /Author (Andrey Lebedev) /Company (Fintech Lab) /Producer (Word) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF',
+  ).toString('base64'),
+  parseStatus: 'ready',
+});
 // Mockup 2: «1 Согласие · дано 05.10» — the demo candidate granted the current consent.
 const capabilityConsentStore = new SqliteCapabilityConsentStore({ databasePath: ':memory:' });
 capabilityConsentStore.recordConsent({

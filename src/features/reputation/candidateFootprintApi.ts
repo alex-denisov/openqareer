@@ -1,3 +1,4 @@
+import type { FootprintMetadataCheck } from '../../../shared/footprintChecklist';
 import type {
   CandidateFootprintAdapterStatus,
   CandidateFootprintAudit,
@@ -122,4 +123,11 @@ export function statusMessage(status: CandidateFootprintAdapterStatus): string {
     case 'checked':
       return status.findingsCount ? 'проверено' : 'ничего не найдено';
   }
+}
+
+/** B544: the metadata inspector over the candidate's latest resume files. */
+export async function getCandidateFootprintMetadataCheck(): Promise<FootprintMetadataCheck> {
+  const response = await apiFetch('/api/v1/candidate/footprint/metadata');
+  const data = await readData<{ check: FootprintMetadataCheck }>(response);
+  return data.check;
 }

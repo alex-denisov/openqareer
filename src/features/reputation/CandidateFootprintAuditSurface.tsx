@@ -25,7 +25,10 @@ import {
 } from '../../../shared/candidateFootprint';
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
-import { buildFootprintChecklist } from '../../../shared/footprintChecklist';
+import {
+  buildFootprintChecklist,
+  type FootprintMetadataCheck,
+} from '../../../shared/footprintChecklist';
 import { FootprintPrivacyDialog } from './FootprintPrivacyDialog';
 import {
   FootprintSanitationChecklist,
@@ -85,6 +88,8 @@ export interface CandidateFootprintAuditSurfaceProps {
   readonly onAddToProfile?: (findingId: string) => void;
   /** «Пересобрать PDF» leads to «Резюме и версии»; without it the item shows status only. */
   readonly onOpenResumeVersions?: () => void;
+  /** B544: the resume-file metadata check; null until it answers. */
+  readonly metadataCheck?: FootprintMetadataCheck | null;
 }
 function adapterState(
   adapterId: FootprintAdapterId,
@@ -759,7 +764,7 @@ function reviewCounts(audit: CandidateFootprintAudit | null) {
 
 type ProfileFootprintStepState = Pick<
   CandidateFootprintAuditSurfaceProps,
-  'consent' | 'audit' | 'ownershipConfirmed'
+  'consent' | 'audit' | 'ownershipConfirmed' | 'metadataCheck'
 >;
 
 const PROFILE_FOOTPRINT_STEP_META: ReadonlyArray<
@@ -827,7 +832,7 @@ function findingsStepStatus(state: ProfileFootprintStepState) {
 
 function checklistStepStatus(state: ProfileFootprintStepState) {
   if (state.audit?.state !== 'completed') return 'После проверки';
-  const checklist = buildFootprintChecklist(state.audit);
+  const checklist = buildFootprintChecklist(state.audit, state.metadataCheck);
   return `${checklist.done} из ${checklist.total} пунктов`;
 }
 
@@ -845,6 +850,7 @@ function profileFootprintSteps(
     consent: props.consent,
     audit: props.audit,
     ownershipConfirmed: props.ownershipConfirmed,
+    metadataCheck: props.metadataCheck,
   };
   return PROFILE_FOOTPRINT_STEP_META.map((step) => ({
     ...step,
@@ -974,6 +980,7 @@ function ProfileFootprintStepContent({
   return (
     <FootprintSanitationChecklist
       audit={props.audit}
+      metadataCheck={props.metadataCheck}
       busyFindingId={props.busyFindingId}
       onOpenFindings={onOpenFindings}
       onMarkFinding={props.onMarkFinding}

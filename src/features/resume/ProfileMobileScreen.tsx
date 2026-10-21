@@ -184,7 +184,10 @@ function MobileHome(
           role="tabpanel"
           aria-labelledby="profile-mobile-tab-trace"
         >
-          <CandidateFootprintAuditView candidateId={props.candidateId} />
+          <CandidateFootprintAuditView
+            candidateId={props.candidateId}
+            onOpenResumeVersions={() => props.open({ page: 'docs' })}
+          />
         </div>
       )}
     </>

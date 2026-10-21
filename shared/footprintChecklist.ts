@@ -17,6 +17,18 @@ export interface FootprintChecklistItem {
   readonly findingIds: readonly string[];
 }
 
+/** B544: the result of inspecting the candidate's resume files for metadata. */
+export interface FootprintMetadataCheck {
+  readonly checkedAt: string;
+  readonly checkedFiles: number;
+  /** Only the files that still carry an author, company, edits, a path or GPS. */
+  readonly files: readonly {
+    readonly documentId: string;
+    readonly fileName: string;
+    readonly problems: readonly string[];
+  }[];
+}
+
 export interface FootprintChecklist {
   readonly items: readonly FootprintChecklistItem[];
   readonly done: number;
@@ -77,11 +89,19 @@ function leaksItem(audit: CandidateFootprintAudit): FootprintChecklistItem {
   return item('leaks', pending, leaks.length ? 'Сделано' : 'Утечек не найдено');
 }
 
-/** No metadata check runs on uploaded files yet: the item never claims they are clean. */
-function metadataItem(audit: CandidateFootprintAudit): FootprintChecklistItem {
-  const found = audit.findings.filter((finding) => finding.kind === 'metadata');
-  if (!found.length) return notDone('metadata', 'Файлы не проверялись');
-  return { ...notDone('metadata', `Осталось ${found.length}`), remaining: found.length };
+/** Clean only when the inspector read at least one resume and found nothing personal in it. */
+function metadataItem(check: FootprintMetadataCheck | null | undefined): FootprintChecklistItem {
+  if (!check) return notDone('metadata', 'Файлы не проверялись');
+  if (check.checkedFiles === 0) return notDone('metadata', 'Резюме не загружено');
+  const remaining = check.files.length;
+  return {
+    id: 'metadata',
+    title: TITLES.metadata,
+    done: remaining === 0,
+    remaining,
+    status: remaining === 0 ? 'Сделано' : `Осталось ${remaining}`,
+    findingIds: [],
+  };
 }
 
 function confirmedItem(
@@ -106,7 +126,10 @@ function confirmedItem(
   return item(id, pending, relevant.length ? 'Сделано' : none);
 }
 
-export function buildFootprintChecklist(audit: CandidateFootprintAudit | null): FootprintChecklist {
+export function buildFootprintChecklist(
+  audit: CandidateFootprintAudit | null,
+  metadata?: FootprintMetadataCheck | null,
+): FootprintChecklist {
   if (!audit || audit.state !== 'completed') {
     const items = (Object.keys(TITLES) as FootprintChecklistItemId[]).map((id) =>
       notDone(id, 'После проверки'),
@@ -116,7 +139,7 @@ export function buildFootprintChecklist(audit: CandidateFootprintAudit | null): 
   const items = [
     item('review', audit.findings.filter(isUnanswered), 'Сделано'),
     leaksItem(audit),
-    metadataItem(audit),
+    metadataItem(metadata),
     confirmedItem(audit, 'old_accounts'),
     confirmedItem(audit, 'artifacts'),
   ];

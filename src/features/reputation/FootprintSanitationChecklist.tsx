@@ -8,12 +8,14 @@ import type {
 import {
   buildFootprintChecklist,
   type FootprintChecklistItem,
+  type FootprintMetadataCheck,
 } from '../../../shared/footprintChecklist';
 
 export type FootprintManualMark = Exclude<FootprintChecklistMark, 'added_to_profile'>;
 
 export interface FootprintSanitationChecklistProps {
   readonly audit: CandidateFootprintAudit | null;
+  readonly metadataCheck?: FootprintMetadataCheck | null;
   readonly busyFindingId?: string;
   readonly onOpenFindings: () => void;
   readonly onMarkFinding?: (findingId: string, mark: FootprintManualMark) => void;
@@ -94,7 +96,7 @@ function ItemLink({
   const target =
     item.id === 'review' && !item.done
       ? { label: 'Разобрать находки', run: props.onOpenFindings }
-      : item.id === 'metadata' && props.onOpenResumeVersions
+      : item.id === 'metadata' && !item.done && props.onOpenResumeVersions
         ? { label: 'Пересобрать PDF', run: props.onOpenResumeVersions }
         : null;
   if (!target) return null;
@@ -110,12 +112,29 @@ function ItemLink({
   );
 }
 
+/** «cv.pdf: автор, организация/компания» — what the inspector found in each file. */
+function MetadataFiles({ check }: { readonly check?: FootprintMetadataCheck | null }) {
+  if (!check?.files.length) return null;
+  return (
+    <ul className="profile-footprint-checklist-finds">
+      {check.files.map((file) => (
+        <li key={file.documentId}>
+          <span>
+            {file.fileName}:{' '}
+            {file.problems.map((problem) => problem.replace(/^[^:]+:\s*/u, '')).join(', ')}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** Макет 2, шаг 4: «Чек-лист санации» — пять пунктов, статус и действие у каждого (B544). */
 export function FootprintSanitationChecklist(
   props: FootprintSanitationChecklistProps,
 ): JSX.Element | null {
   if (!props.audit || props.audit.state !== 'completed') return null;
-  const checklist = buildFootprintChecklist(props.audit);
+  const checklist = buildFootprintChecklist(props.audit, props.metadataCheck);
   const findings = new Map(props.audit.findings.map((finding) => [finding.id, finding]));
   return (
     <section className="profile-footprint-checklist" aria-label="Пункты чек-листа санации">
@@ -135,6 +154,7 @@ export function FootprintSanitationChecklist(
               <strong>{item.title}</strong>
               <span>{item.status}</span>
               <PendingFindings item={item} findings={findings} props={props} />
+              {item.id === 'metadata' ? <MetadataFiles check={props.metadataCheck} /> : null}
             </div>
             <ItemLink item={item} props={props} />
           </li>

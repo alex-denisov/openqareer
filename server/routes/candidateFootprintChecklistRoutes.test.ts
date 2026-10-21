@@ -142,4 +142,33 @@ describe('footprint checklist routes (B544)', () => {
     });
     expect(response.statusCode).toBe(409);
   });
+
+  it('checks the metadata of uploaded resume files', async () => {
+    const { app, headers, candidateStore, candidate } = await setup();
+    const empty = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/footprint/metadata',
+      headers,
+    });
+    expect(empty.json().data.check).toMatchObject({ checkedFiles: 0, files: [] });
+    candidateStore.saveDocument(candidate.id, {
+      kind: 'resume',
+      source: 'upload',
+      fileName: 'cv.pdf',
+      mimeType: 'application/pdf',
+      contentBase64: Buffer.from(
+        '%PDF-1.4\n1 0 obj\n<< /Author (Andrey Lebedev) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF',
+      ).toString('base64'),
+      parseStatus: 'ready',
+    });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/footprint/metadata',
+      headers,
+    });
+    expect(response.json().data.check).toMatchObject({
+      checkedFiles: 1,
+      files: [{ fileName: 'cv.pdf' }],
+    });
+  });
 });

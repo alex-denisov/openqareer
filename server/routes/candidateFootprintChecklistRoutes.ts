@@ -8,6 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { CandidateFootprintFinding } from '../../shared/candidateFootprint';
 import { ARTIFACT_FINDING_KINDS } from '../../shared/footprintChecklist';
+import { checkResumeFileMetadata } from '../osint/resumeMetadataCheck';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -141,6 +142,28 @@ async function handleAddToProfile(
   return { data: { audit }, meta: { requestId: request.id } };
 }
 
+async function handleMetadataCheck(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<unknown> {
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const documents = deps.candidateStore
+    .getSnapshot(candidate.id)
+    .documents.filter((document) => document.kind === 'resume')
+    .map((document) => deps.candidateStore.getDocument(candidate.id, document.id))
+    .filter((document) => document !== null);
+  const check = await checkResumeFileMetadata(documents);
+  return { data: { check }, meta: { requestId: request.id } };
+}
+
 export function registerCandidateFootprintChecklistRoutes(
   app: FastifyInstance,
   deps: RouteDeps,
@@ -149,6 +172,11 @@ export function registerCandidateFootprintChecklistRoutes(
     '/api/v1/candidate/footprint/findings/:findingId/checklist',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
     withDeps(deps, handleMarkFinding),
+  );
+  app.get(
+    '/api/v1/candidate/footprint/metadata',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleMetadataCheck),
   );
   app.post(
     '/api/v1/candidate/footprint/findings/:findingId/profile-fact',

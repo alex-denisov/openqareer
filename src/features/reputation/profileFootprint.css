@@ -440,10 +440,8 @@
     justify-self: stretch;
   }
 
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    > .career-footprint-header,
-  .career-footprint-surface--findings:not(.career-footprint-surface--privacy-open)
-    > .profile-footprint-step-nav {
+  /* B544: the 2×2 step tiles stay above the findings so «4 Чек-лист» is reachable on 390. */
+  .career-footprint-surface--findings > .career-footprint-header {
     display: none;
   }
 

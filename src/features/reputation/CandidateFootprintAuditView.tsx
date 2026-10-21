@@ -20,6 +20,7 @@ import {
 } from './candidateFootprintApi';
 import { CandidateFootprintAuditSurface } from './CandidateFootprintAuditSurface';
 import type { FootprintManualMark } from './FootprintSanitationChecklist';
+import { useFootprintMetadataCheck } from './useFootprintMetadataCheck';
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -411,7 +412,20 @@ function useFootprintAuditSurfaceProps(candidateId: string) {
   };
 }
 
-export function CandidateFootprintAuditView({ candidateId }: { readonly candidateId: string }) {
+export function CandidateFootprintAuditView({
+  candidateId,
+  onOpenResumeVersions,
+}: {
+  readonly candidateId: string;
+  readonly onOpenResumeVersions?: () => void;
+}) {
   const props = useFootprintAuditSurfaceProps(candidateId);
-  return <CandidateFootprintAuditSurface {...props} />;
+  const metadataCheck = useFootprintMetadataCheck(candidateId);
+  return (
+    <CandidateFootprintAuditSurface
+      {...props}
+      metadataCheck={metadataCheck}
+      onOpenResumeVersions={onOpenResumeVersions}
+    />
+  );
 }

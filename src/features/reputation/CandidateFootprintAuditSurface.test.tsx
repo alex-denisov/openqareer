@@ -231,6 +231,25 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     expect(container.textContent).toContain('Файлы не проверялись');
   });
 
+  it('counts resume metadata from the real check and leads to «Резюме и версии»', async () => {
+    const props = baseProps({
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      ownershipConfirmed: true,
+      audit: completedAudit('confirmed_self'),
+      metadataCheck: {
+        checkedAt: '2026-10-21T10:00:00.000Z',
+        checkedFiles: 1,
+        files: [{ documentId: 'd1', fileName: 'cv.pdf', problems: ['Метаданные документа: автор'] }],
+      },
+      onOpenResumeVersions: vi.fn(),
+    });
+    await renderSurface(props);
+    expect(container.textContent).toContain('cv.pdf: автор');
+    expect(container.textContent).toContain('Осталось 1');
+    await click('Пересобрать PDF');
+    expect(props.onOpenResumeVersions).toHaveBeenCalledTimes(1);
+  });
+
   it('uses the loaded audit for the initial step and keeps a step selected during loading', async () => {
     await renderSurface(baseProps({ loading: true }));
     expect(button('1 Согласие')?.getAttribute('aria-current')).toBe('step');
