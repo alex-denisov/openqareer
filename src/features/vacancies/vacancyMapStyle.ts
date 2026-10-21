@@ -30,6 +30,7 @@ function placeLabel(
   filter: unknown[],
   minzoom: number,
   size: number,
+  opacity: number,
 ) {
   return {
     id,
@@ -39,7 +40,12 @@ function placeLabel(
     minzoom,
     filter,
     layout: { 'text-field': LOCAL_NAME, 'text-font': LABEL_FONT, 'text-size': size },
-    paint: { 'text-color': palette.label, 'text-halo-color': palette.halo, 'text-halo-width': 1 },
+    paint: {
+      'text-color': palette.label,
+      'text-halo-color': palette.halo,
+      'text-halo-width': 1,
+      'text-opacity': opacity,
+    },
   };
 }
 
@@ -79,15 +85,18 @@ export function buildVacancyMapStyle(palette: VacancyMapPalette): StyleSpecifica
         source: 'openmaptiles',
         'source-layer': 'boundary',
         filter: ['all', ['<=', ['get', 'admin_level'], 2], ['!=', ['get', 'maritime'], 1]],
-        paint: { 'line-color': palette.line, 'line-width': 0.8 },
+        paint: { 'line-color': palette.line, 'line-width': 0.6, 'line-opacity': 0.6 },
       },
-      placeLabel(palette, 'country-label', ['==', ['get', 'class'], 'country'], 1, 12),
+      // B553: карта — фон. Страны тусклее и мельче; города подложки только при сильном
+      // приближении — на старте их заменяют капсулы выдачи.
+      placeLabel(palette, 'country-label', ['==', ['get', 'class'], 'country'], 1, 10, 0.55),
       placeLabel(
         palette,
         'place-label',
         ['in', ['get', 'class'], ['literal', ['city', 'town']]],
-        4,
+        8,
         11,
+        0.7,
       ),
     ],
   } as StyleSpecification;

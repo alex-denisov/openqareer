@@ -1,153 +1,68 @@
-import { Map as MapLibreMap, setWorkerUrl, type MapOptions } from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
-import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
-import { Minus, Plus } from '@phosphor-icons/react';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import React from 'react';
+import { pluralRu } from '../../../shared/pluralRu';
 import type { CityFacet } from './vacancyFacets';
 import {
   buildMapMarkers,
   cityBounds,
-  focusBounds,
+  clampMarker,
   formatCityDisplay,
   markerLabel,
   type MapNode,
 } from './vacancyMapCluster';
-import { buildVacancyMapStyle, type VacancyMapPalette } from './vacancyMapStyle';
-
-// B553: воркер MapLibre — отдельный файл с нашего origin (CSP `worker-src 'self'`,
-// в Tauri адрес относительно import.meta.url не строится).
-setWorkerUrl(workerUrl);
+import { MapCapsuleButton, MapZoomControls } from './VacancyMapControls';
+import { prefersReducedMotion, useVacancyMapLibre } from './useVacancyMapLibre';
 
 export interface VacancyMapCanvasProps {
   readonly cities: readonly CityFacet[];
   readonly selectedCity?: string;
   readonly onSelectCity: (city?: string) => void;
   readonly onUnavailable: () => void;
+  /** 390: капсула выбирает город в карточке внизу, а не сразу открывает список. */
+  readonly compact?: boolean;
 }
 
-const FIT_PADDING = 64;
+const FIT_PADDING = 96;
 const FIT_MAX_ZOOM = 6;
-const WORLD_VIEW = { center: [40, 50] as [number, number], zoom: 2 };
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+function nodeCount(node: MapNode): number {
+  return node.isCluster ? node.totalCount : node.count;
 }
 
-/** MapLibre не понимает oklch: токен рисуется в пиксель холста и читается обратно как rgba. */
-function tokenColor(element: HTMLElement, token: string, fallback: string): string {
-  const value = getComputedStyle(element).getPropertyValue(token).trim();
-  const context = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-  if (!value || !context) return fallback;
-  context.fillStyle = value;
-  context.fillRect(0, 0, 1, 1);
-  const [r, g, b, a] = context.getImageData(0, 0, 1, 1).data;
-  return `rgba(${r}, ${g}, ${b}, ${((a ?? 255) / 255).toFixed(2)})`;
+function nodeHasCity(node: MapNode, city: string | undefined): boolean {
+  return node.isCluster ? node.cities.some((item) => item.city === city) : node.city.city === city;
 }
 
-function readPalette(element: HTMLElement): VacancyMapPalette {
-  return {
-    land: tokenColor(element, '--career-surface', '#1b2029'),
-    water: tokenColor(element, '--career-bg', '#0d1016'),
-    line: tokenColor(element, '--career-line-strong', '#3a3f48'),
-    label: tokenColor(element, '--career-text-soft', '#aab0bb'),
-    halo: tokenColor(element, '--career-bg', '#0d1016'),
-  };
+interface PlacedNode {
+  readonly node: MapNode;
+  readonly x: number;
+  readonly y: number;
 }
 
-/** На узком экране капсулы слипаются раньше: в кадре только основная половина выдачи. */
-const NARROW_WIDTH = 600;
-const NARROW_FOCUS_SHARE = 0.65;
-/** Снизу на 390 — карточка «Показать список» и атрибуция: точки не должны уходить под них. */
-const NARROW_PADDING = { top: 56, bottom: 168, left: 48, right: 64 };
-
-function initialView(cities: readonly CityFacet[], width: number): Partial<MapOptions> {
-  const narrow = width < NARROW_WIDTH;
-  const bounds = narrow ? focusBounds(cities, NARROW_FOCUS_SHARE) : focusBounds(cities);
-  if (!bounds) return WORLD_VIEW;
-  return {
-    bounds: bounds as MapOptions['bounds'],
-    fitBoundsOptions: { padding: narrow ? NARROW_PADDING : FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
-  };
-}
-
-/**
- * Карта честно падает в «недоступна», если ни один тайл так и не загрузился
- * (офлайн, блокировка хоста, нет WebGL). Ошибка отдельного тайла после этого — не повод.
- */
-function useMapLibre(
-  container: React.RefObject<HTMLDivElement | null>,
-  cities: readonly CityFacet[],
-  onUnavailable: () => void,
-): { readonly map: MapLibreMap | undefined; readonly frame: number } {
-  const [map, setMap] = React.useState<MapLibreMap>();
-  const [frame, setFrame] = React.useState(0);
-  const failRef = React.useRef(onUnavailable);
-  failRef.current = onUnavailable;
-  const citiesRef = React.useRef(cities);
-
-  React.useEffect(() => {
-    const element = container.current;
-    if (!element) return undefined;
-    let instance: MapLibreMap;
-    try {
-      instance = new MapLibreMap({
-        container: element,
-        style: buildVacancyMapStyle(readPalette(element)),
-        attributionControl: { compact: true },
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        renderWorldCopies: false,
-        ...initialView(citiesRef.current, element.clientWidth),
-      });
-    } catch {
-      failRef.current();
-      return undefined;
-    }
-    let tileLoaded = false;
-    let pending = 0;
-    instance.on('data', (event) => {
-      if (event.dataType === 'source' && 'tile' in event && event.tile) tileLoaded = true;
-    });
-    instance.on('error', () => {
-      if (!tileLoaded) failRef.current();
-    });
-    instance.on('move', () => {
-      cancelAnimationFrame(pending);
-      pending = requestAnimationFrame(() => setFrame((value) => value + 1));
-    });
-    instance.touchZoomRotate.disableRotation();
-    setMap(instance);
-    return () => {
-      cancelAnimationFrame(pending);
-      instance.remove();
-    };
-  }, [container]);
-
-  return { map, frame };
-}
-
-export default function VacancyMapCanvas({
-  cities,
-  selectedCity,
-  onSelectCity,
-  onUnavailable,
-}: VacancyMapCanvasProps): React.JSX.Element {
-  const container = React.useRef<HTMLDivElement>(null);
-  const { map, frame } = useMapLibre(container, cities, onUnavailable);
-  const nodes = React.useMemo(
-    () =>
-      map
-        ? buildMapMarkers(cities, (point) => map.project([point.lng, point.lat]), selectedCity)
-        : [],
-    // frame пересчитывает капсулы при каждом сдвиге и зуме карты.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [map, frame, cities, selectedCity],
+function placeNodes(map: MapLibreMap | undefined, cities: readonly CityFacet[], selected?: string) {
+  if (!map) return [];
+  const canvas = map.getCanvas();
+  const view = { width: canvas.clientWidth, height: canvas.clientHeight };
+  return buildMapMarkers(cities, (point) => map.project([point.lng, point.lat]), selected).flatMap(
+    (node): PlacedNode[] => {
+      const place = clampMarker(node, `${markerLabel(node)} ${nodeCount(node)}`, view);
+      return place ? [{ node, ...place }] : [];
+    },
   );
-  const animate = !prefersReducedMotion();
+}
 
-  const openCluster = (node: MapNode) => {
-    const bounds = node.isCluster ? cityBounds(node.cities) : undefined;
+function useMapActions(
+  map: MapLibreMap | undefined,
+  options: {
+    readonly compact: boolean;
+    readonly selectedCity?: string;
+    readonly onSelectCity: (city?: string) => void;
+    readonly onCardCity: (city: string) => void;
+  },
+) {
+  const animate = !prefersReducedMotion();
+  const zoomTo = (node: MapNode) => {
+    const bounds = cityBounds(node.isCluster ? node.cities : [node.city]);
     if (!map || !bounds) return;
     map.fitBounds(bounds as [[number, number], [number, number]], {
       padding: FIT_PADDING,
@@ -155,104 +70,119 @@ export default function VacancyMapCanvas({
       animate,
     });
   };
+  // Кластер приближается; на 390 город выбирается в карточку, на 1440 — сразу в список.
+  const choose = (node: MapNode) => {
+    if (node.isCluster) return zoomTo(node);
+    if (options.compact) return options.onCardCity(node.city.city);
+    const city = node.city.city;
+    return options.onSelectCity(options.selectedCity === city ? undefined : city);
+  };
+  return { animate, zoomTo, choose };
+}
+
+export default function VacancyMapCanvas({
+  cities,
+  selectedCity,
+  onSelectCity,
+  onUnavailable,
+  compact = false,
+}: VacancyMapCanvasProps): React.JSX.Element {
+  const container = React.useRef<HTMLDivElement>(null);
+  const { map, frame } = useVacancyMapLibre(container, cities, onUnavailable);
+  const [cardCity, setCardCity] = React.useState(selectedCity);
+  const placed = React.useMemo(
+    () => placeNodes(map, cities, selectedCity),
+    // frame пересчитывает капсулы при каждом кадре движения и зума карты.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [map, frame, cities, selectedCity],
+  );
+  const { animate, zoomTo, choose } = useMapActions(map, {
+    compact,
+    selectedCity,
+    onSelectCity,
+    onCardCity: setCardCity,
+  });
+  const cardNode =
+    placed.find((item) => nodeHasCity(item.node, cardCity))?.node ??
+    [...placed].sort((a, b) => nodeCount(b.node) - nodeCount(a.node))[0]?.node;
 
   return (
     <>
       <div ref={container} className="career-map-gl" />
-      <div className="career-map-markers">
-        {nodes.map((node) => (
-          <MapCapsuleButton
-            key={node.id}
-            node={node}
-            active={!node.isCluster && node.city.city === selectedCity}
-            onClick={() =>
-              node.isCluster
-                ? openCluster(node)
-                : onSelectCity(selectedCity === node.city.city ? undefined : node.city.city)
-            }
-          />
-        ))}
-      </div>
+      <MapMarkers
+        placed={placed}
+        activeCity={compact ? cardCity : selectedCity}
+        onChoose={choose}
+      />
       <MapZoomControls
         onZoomIn={() => map?.zoomIn({ animate })}
         onZoomOut={() => map?.zoomOut({ animate })}
       />
+      {compact && cardNode ? (
+        <MapCityCard
+          node={cardNode}
+          onShowList={(city) => onSelectCity(city)}
+          onZoom={() => zoomTo(cardNode)}
+        />
+      ) : null}
     </>
   );
 }
 
-function capsuleAccessibleName(node: MapNode): string {
-  if (!node.isCluster) {
-    return `Город ${formatCityDisplay(node.city.city, node.city.country).city}: ${node.count} вакансий`;
-  }
-  const names = node.cities
-    .map((city) => `${formatCityDisplay(city.city, city.country).city} (${city.count})`)
-    .join(', ');
-  return `Кластер: ${node.totalCount} вакансий (${names}). Нажмите для приближения`;
-}
-
-/** B446-g4/B553: капсула «Москва 74» поверх карты; зона касания не меньше 44 px. */
-function MapCapsuleButton({
-  node,
-  active,
-  onClick,
+function MapMarkers({
+  placed,
+  activeCity,
+  onChoose,
 }: {
-  readonly node: MapNode;
-  readonly active: boolean;
-  readonly onClick: () => void;
+  readonly placed: readonly PlacedNode[];
+  readonly activeCity?: string;
+  readonly onChoose: (node: MapNode) => void;
 }) {
-  const count = node.isCluster ? node.totalCount : node.count;
-  const tooltip = node.isCluster
-    ? capsuleAccessibleName(node)
-    : formatCityDisplay(node.city.city, node.city.country).tooltip;
   return (
-    <button
-      type="button"
-      className={`career-map-marker${node.isCluster ? ' career-map-cluster-node' : ''}${active ? ' is-active' : ''}`}
-      ref={(element) => {
-        // Позиция меняется на каждом кадре движения карты; CSSOM, а не атрибут style (CSP).
-        element?.style.setProperty(
-          'transform',
-          `translate(${Math.round(node.x)}px, ${Math.round(node.y)}px)`,
-        );
-      }}
-      aria-label={capsuleAccessibleName(node)}
-      aria-pressed={node.isCluster ? undefined : active}
-      title={tooltip}
-      onClick={onClick}
-    >
-      <span className="career-map-capsule">
-        <span>{markerLabel(node)}</span>
-        <span className="career-map-label-count">{count}</span>
-      </span>
-    </button>
+    <div className="career-map-markers">
+      {placed.map(({ node, x, y }) => (
+        <MapCapsuleButton
+          key={node.id}
+          node={node}
+          x={x}
+          y={y}
+          count={nodeCount(node)}
+          active={!node.isCluster && nodeHasCity(node, activeCity)}
+          onClick={() => onChoose(node)}
+        />
+      ))}
+    </div>
   );
 }
 
-function MapZoomControls({
-  onZoomIn,
-  onZoomOut,
+/**
+ * B553: на 390 внизу карты — город из капсулы с тем же числом (макет 390m).
+ * У кластера список одного города дал бы другое число, поэтому он предлагает приблизить.
+ */
+function MapCityCard({
+  node,
+  onShowList,
+  onZoom,
 }: {
-  readonly onZoomIn: () => void;
-  readonly onZoomOut: () => void;
+  readonly node: MapNode;
+  readonly onShowList: (city: string) => void;
+  readonly onZoom: () => void;
 }) {
+  const name = node.isCluster
+    ? `${markerLabel(node)} и рядом`
+    : formatCityDisplay(node.city.city, node.city.country).city;
   return (
-    <div className="career-map-zoom-controls" role="group" aria-label="Управление масштабом карты">
+    <div className="career-map-city-card">
+      <div>
+        <strong>{name}</strong>
+        <small>{pluralRu(nodeCount(node), ['вакансия', 'вакансии', 'вакансий'])} на карте</small>
+      </div>
       <button
         type="button"
-        className="career-map-zoom-btn"
-        aria-label="Приблизить карту"
-        onClick={onZoomIn}
+        className="career-map-city-card-cta"
+        onClick={() => (node.isCluster ? onZoom() : onShowList(node.city.city))}
       >
-        <Plus size={16} aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        className="career-map-zoom-btn"
-        aria-label="Отдалить карту"
-        onClick={onZoomOut}
-      >
-        <Minus size={16} aria-hidden="true" />
+        {node.isCluster ? 'Приблизить' : 'Показать список'}
       </button>
     </div>
   );

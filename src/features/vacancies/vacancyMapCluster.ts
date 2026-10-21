@@ -114,9 +114,9 @@ export type ScreenProjector = (point: { readonly lat: number; readonly lng: numb
 export type MapBounds = readonly [readonly [number, number], readonly [number, number]];
 
 const CAPSULE_CHAR_WIDTH = 7.4;
-const CAPSULE_PADDING = 20;
+const CAPSULE_PADDING = 32; // 12 px по бокам + 8 px между названием и числом
 const CAPSULE_MIN_WIDTH = 44;
-const CAPSULE_HEIGHT = 28;
+const CAPSULE_HEIGHT = 44;
 const CAPSULE_GAP = 4;
 
 /** Ширина капсулы «Москва 74» на экране: шрифт 13 px, поля по 10 px, не уже зоны касания. */
@@ -124,12 +124,11 @@ export function capsuleWidth(text: string): number {
   return Math.max(CAPSULE_MIN_WIDTH, text.length * CAPSULE_CHAR_WIDTH + CAPSULE_PADDING);
 }
 
-/** Кластер называет самый крупный город и сколько ещё рядом: «Москва +2». */
+/** Кластер называет самый крупный город, число — сумма кластера: «Москва 94» (макет 4). */
 export function markerLabel(node: MapNode): string {
   if (!node.isCluster) return formatCityDisplay(node.city.city, node.city.country).city;
   const top = [...node.cities].sort((a, b) => b.count - a.count)[0];
-  const name = top ? formatCityDisplay(top.city, top.country).city : 'Города';
-  return node.cities.length > 1 ? `${name} +${node.cities.length - 1}` : name;
+  return top ? formatCityDisplay(top.city, top.country).city : 'Города';
 }
 
 function nodeCount(node: MapNode): number {
@@ -207,26 +206,68 @@ export function cityBounds(cities: readonly CityFacet[]): MapBounds | undefined 
   ];
 }
 
-const FOCUS_SHARE = 0.8;
+const CORE_LIMIT = 5;
+const CORE_RADIUS_KM = 3500;
+const EARTH_RADIUS_KM = 6371;
+
+function distanceKm(
+  a: { readonly lat: number; readonly lng: number },
+  b: { readonly lat: number; readonly lng: number },
+): number {
+  const rad = Math.PI / 180;
+  const h =
+    Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
+}
+
+function weightedMedian(values: readonly { readonly value: number; readonly weight: number }[]) {
+  const sorted = [...values].sort((a, b) => a.value - b.value);
+  const half = sorted.reduce((sum, item) => sum + item.weight, 0) / 2;
+  let covered = 0;
+  for (const item of sorted) {
+    covered += item.weight;
+    if (covered >= half) return item.value;
+  }
+  return sorted.at(-1)?.value ?? 0;
+}
 
 /**
- * B553: карта открывается на крупнейших городах, где вместе не меньше 80 % вакансий
- * на карте (макет 4 — Москва, Петербург, Казань в кадре); дальние одиночки видны при отдалении.
+ * B553: карта открывается на ядре выдачи (макет 4 — Москва, Петербург, Казань,
+ * Екатеринбург, Новосибирск): до 5 крупнейших городов не дальше 3 500 км от
+ * взвешенной медианы. Выбросы (Лондон, Владивосток) видны при отдалении.
  */
-export function focusBounds(
-  cities: readonly CityFacet[],
-  share = FOCUS_SHARE,
-): MapBounds | undefined {
-  const placed = cities
-    .filter((city) => city.coordinates !== undefined)
-    .sort((a, b) => b.count - a.count);
-  const total = placed.reduce((sum, city) => sum + city.count, 0);
-  const focus: CityFacet[] = [];
-  let covered = 0;
-  for (const city of placed) {
-    if (covered >= total * share) break;
-    focus.push(city);
-    covered += city.count;
-  }
-  return cityBounds(focus);
+export function focusBounds(cities: readonly CityFacet[]): MapBounds | undefined {
+  const placed = cities.filter((city) => city.coordinates !== undefined);
+  if (!placed.length) return undefined;
+  const center = {
+    lat: weightedMedian(
+      placed.map((city) => ({ value: city.coordinates!.lat, weight: city.count })),
+    ),
+    lng: weightedMedian(
+      placed.map((city) => ({ value: city.coordinates!.lng, weight: city.count })),
+    ),
+  };
+  const core = placed
+    .filter((city) => distanceKm(center, city.coordinates!) <= CORE_RADIUS_KM)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, CORE_LIMIT);
+  return cityBounds(core.length ? core : placed);
+}
+
+/**
+ * Капсула у края сдвигается внутрь, чтобы не обрезаться; точка за краем карты не рисуется.
+ */
+export function clampMarker(
+  point: { readonly x: number; readonly y: number },
+  text: string,
+  view: { readonly width: number; readonly height: number },
+): { readonly x: number; readonly y: number } | undefined {
+  if (point.x < 0 || point.y < 0 || point.x > view.width || point.y > view.height) return undefined;
+  const half = capsuleWidth(text) / 2;
+  const halfHeight = CAPSULE_HEIGHT / 2;
+  return {
+    x: Math.min(Math.max(point.x, half), view.width - half),
+    y: Math.min(Math.max(point.y, halfHeight), view.height - halfHeight),
+  };
 }
