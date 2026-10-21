@@ -29,6 +29,8 @@ interface VacanciesMainBodyProps {
   readonly onSelectCity: (city?: string) => void;
   /** B553: карта недоступна — переход к списку. */
   readonly onShowList?: () => void;
+  /** B553: консультант из шапки push-экрана «Карта» (390). */
+  readonly onOpenExpert?: () => void;
 }
 
 function VacanciesTableHeader({
@@ -149,6 +151,7 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
         selectedCity={props.selectedCity}
         onSelectCity={props.onSelectCity}
         onShowList={props.onShowList}
+        onOpenExpert={props.onOpenExpert}
       />
     );
   }

@@ -1367,7 +1367,8 @@ test.describe('B250 vacancies screen', () => {
 
     // Возврат в список использует управление текущей раскладки.
     if (mobile) {
-      await page.getByRole('button', { name: 'Список', exact: true }).click();
+      // B553: на 390 «Карта» — push-экран, назад в список — круглой кнопкой.
+      await page.locator('.career-map-push').getByRole('button', { name: 'Назад' }).click();
     } else {
       await page
         .getByRole('tablist', { name: 'Режим просмотра' })
@@ -1467,7 +1468,7 @@ test.describe('B250 vacancies screen', () => {
       document.querySelector<HTMLElement>('.career-main')?.scrollTo(0, 0);
       window.scrollTo(0, 0);
     });
-    await expect(mapView.locator('.career-map-header')).toContainText('На карте 2 из 4');
+    await expect(mapView.locator('.vacancy-map-note')).toContainText('На карте 2 из 4');
     await expect(mapView.locator('.career-map-gl canvas')).toBeVisible();
     await page.evaluate(() => {
       const main = document.querySelector<HTMLElement>('.career-main');
@@ -1484,6 +1485,11 @@ test.describe('B250 vacancies screen', () => {
     const mobileChipBox = await mobilePin.boundingBox();
     expect(mobileChipBox?.width).toBeGreaterThanOrEqual(44);
     expect(mobileChipBox?.height).toBeGreaterThanOrEqual(44);
+    // B553: на 390 капсула выбирает город в карточке внизу — то же число, что в капсуле.
+    await mobilePin.click();
+    const cityCard = mapView.locator('.career-map-city-card');
+    await expect(cityCard).toContainText('Москва');
+    await expect(cityCard).toContainText('2 вакансии на карте');
     await page.screenshot({
       path: 'output/playwright/B365/map-390.png',
       animations: 'disabled',
@@ -1557,15 +1563,34 @@ test.describe('B250 vacancies screen', () => {
     const mapView = page.locator('.vacancy-map-view');
     await expect(mapView).toBeVisible();
 
+    // B553: карта открывается на ядре выдачи (Европа); Сидней — выброс, виден при отдалении.
+    // prefers-reduced-motion: масштаб меняется без анимации перелёта.
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    for (let step = 0; step < 6; step += 1) {
+      await mapView.getByRole('button', { name: 'Отдалить карту' }).click();
+    }
+    // Clusters should exist when zoomed out (Berlin + Prague + Vienna clustered)
+    const clusterPin = mapView.locator('.career-map-cluster-node').first();
+    await expect(clusterPin).toBeVisible();
+    await page.screenshot({ path: 'output/playwright/B375/map-before-1440.png' });
+
+    // Сидней южнее кадра даже при полном отдалении — карта сдвигается перетаскиванием.
+    const canvasBox = await mapView.locator('.career-map-gl canvas').boundingBox();
+    const drag = async (fromY: number, toY: number) => {
+      if (!canvasBox) return;
+      const x = canvasBox.x + canvasBox.width / 2;
+      await page.mouse.move(x, canvasBox.y + fromY);
+      await page.mouse.down();
+      await page.mouse.move(x, canvasBox.y + toY, { steps: 8 });
+      await page.mouse.up();
+    };
+    await drag((canvasBox?.height ?? 440) - 60, 60);
     // Sydney normalized to Сидней with tooltip showing Australia
     const sydneyPin = mapView.getByRole('button', { name: /Сидней/ });
     await expect(sydneyPin).toBeVisible();
     await expect(sydneyPin).toHaveAttribute('title', 'Австралия');
-
-    // Clusters should exist at zoom=1 (Berlin + Prague + Vienna clustered)
-    const clusterPin = mapView.locator('.career-map-cluster-node').first();
+    await drag(60, (canvasBox?.height ?? 440) - 60);
     await expect(clusterPin).toBeVisible();
-    await page.screenshot({ path: 'output/playwright/B375/map-before-1440.png' });
 
     // Expand cluster on click: MapLibre приближается к границам кластера, города расходятся.
     await clusterPin.click();
@@ -1698,8 +1723,9 @@ test.describe('B250 vacancies screen', () => {
     });
 
     // 4. saved-vacancies
+    // B553: на 390 карта — push-экран, назад в список — круглой кнопкой «Назад».
     const listControl = isMobile
-      ? page.getByRole('button', { name: 'Список' })
+      ? page.locator('.career-map-push').getByRole('button', { name: 'Назад' })
       : switchBar.getByRole('tab', { name: 'Список' });
     await listControl.click();
     await expect(page.locator('.vacancies-list-container')).toBeVisible();

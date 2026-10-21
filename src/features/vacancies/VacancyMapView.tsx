@@ -1,14 +1,8 @@
-import { Info, MapTrifold } from '@phosphor-icons/react';
+import { CaretLeft, Info, MapTrifold, Sparkle } from '@phosphor-icons/react';
 import React from 'react';
-import { pluralRu } from '../../../shared/pluralRu';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import {
-  calculateVacancyFacets,
-  hasMapCityCoordinates,
-  vacancyCityName,
-  type CityFacet,
-} from './vacancyFacets';
-import { formatCityDisplay } from './vacancyMapCluster';
+import { useCompactViewport } from './useCompactViewport';
+import { calculateVacancyFacets, hasMapCityCoordinates, vacancyCityName } from './vacancyFacets';
 import { vacancyMapNote, type VacancyMapNoteCounts } from './vacancyMapNote';
 
 // B553: MapLibre (~1 МБ) грузится отдельным чанком только при открытии «Карты».
@@ -20,68 +14,117 @@ interface VacancyMapViewProps {
   readonly onSelectCity: (city?: string) => void;
   /** Вся выдача с условиями (сервер); без неё заметка считает загруженное. */
   readonly total?: number;
-  /** «Показать список» в состоянии «Карта недоступна». */
+  /** Назад к списку: «Показать список» в ошибке и «Назад» push-экрана 390. */
   readonly onShowList?: () => void;
+  /** 390: консультант справа в шапке push-экрана «Карта». */
+  readonly onOpenExpert?: () => void;
 }
 
-export function VacancyMapView({
-  items,
-  selectedCity,
-  onSelectCity,
-  total,
-  onShowList,
-}: VacancyMapViewProps): React.JSX.Element {
-  const facets = calculateVacancyFacets(items);
-  const [unavailable, setUnavailable] = React.useState(false);
-  const markUnavailable = React.useCallback(() => setUnavailable(true), []);
-  const leadCity = facets.cities.find((city) => city.city === selectedCity) ?? facets.cities[0];
-
+export function VacancyMapView(props: VacancyMapViewProps): React.JSX.Element {
+  const compact = useCompactViewport();
+  if (compact) return <VacancyMapPush {...props} />;
   return (
     <div className="career-vacancy-map-view vacancy-map-view">
       <div className="career-map-canvas-container">
-        <div className="career-map-stage">
-          {unavailable ? (
-            <VacancyMapUnavailable onShowList={onShowList} />
-          ) : (
-            <MapChunkBoundary onError={markUnavailable}>
-              <React.Suspense fallback={<p className="career-map-status">Загружаем карту…</p>}>
-                <VacancyMapCanvas
-                  cities={facets.cities}
-                  selectedCity={selectedCity}
-                  onSelectCity={onSelectCity}
-                  onUnavailable={markUnavailable}
-                />
-              </React.Suspense>
-            </MapChunkBoundary>
-          )}
-          {!unavailable && leadCity?.coordinates ? (
-            <MapMobileCard city={leadCity} onShowList={() => onSelectCity(leadCity.city)} />
-          ) : null}
-        </div>
-        <MapHeader items={items} total={total ?? items.length} />
+        <VacancyMapStage {...props} compact={false} />
+        <MapHeader items={props.items} total={props.total ?? props.items.length} />
       </div>
     </div>
   );
 }
 
-/** B553: на 390 внизу карты — крупнейший (или выбранный) город и «Показать список» (макет 390m). */
-function MapMobileCard({
-  city,
+function VacancyMapStage({
+  items,
+  selectedCity,
+  onSelectCity,
   onShowList,
-}: {
-  readonly city: CityFacet;
-  readonly onShowList: () => void;
-}) {
+  compact,
+}: VacancyMapViewProps & { readonly compact: boolean }) {
+  const facets = calculateVacancyFacets(items);
+  const [unavailable, setUnavailable] = React.useState(false);
+  const markUnavailable = React.useCallback(() => setUnavailable(true), []);
   return (
-    <div className="career-map-mobile-card">
-      <div>
-        <strong>{formatCityDisplay(city.city, city.country).city}</strong>
-        <small>{pluralRu(city.count, ['вакансия', 'вакансии', 'вакансий'])} на карте</small>
-      </div>
-      <button type="button" className="career-btn is-primary" onClick={onShowList}>
-        Показать список
-      </button>
+    <div className="career-map-stage">
+      {unavailable ? (
+        <VacancyMapUnavailable onShowList={onShowList} />
+      ) : (
+        <MapChunkBoundary onError={markUnavailable}>
+          <React.Suspense fallback={<p className="career-map-status">Загружаем карту…</p>}>
+            <VacancyMapCanvas
+              cities={facets.cities}
+              selectedCity={selectedCity}
+              onSelectCity={onSelectCity}
+              onUnavailable={markUnavailable}
+              compact={compact}
+            />
+          </React.Suspense>
+        </MapChunkBoundary>
+      )}
     </div>
+  );
+}
+
+/** Push-экран открывается с фокусом на «Назад»; Escape — тоже назад. */
+function usePushBack(onBack?: () => void) {
+  const backRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    backRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onBack?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onBack]);
+  return backRef;
+}
+
+/**
+ * B553: на 390 «Карта» — отдельный push-экран (макет 4 `?mv=map`): круглая кнопка
+ * назад, заголовок, консультант справа; карта карточкой, заметка под ней.
+ */
+function VacancyMapPush(props: VacancyMapViewProps) {
+  const { onShowList, onOpenExpert } = props;
+  const backRef = usePushBack(onShowList);
+  return (
+    <>
+      <div className="vacancy-push-backdrop" aria-hidden="true" />
+      <div
+        className="vacancy-push vacancy-map-view career-map-push"
+        role="dialog"
+        aria-labelledby="vacancy-map-push-title"
+      >
+        <header className="vacancy-push-bar">
+          <button
+            ref={backRef}
+            type="button"
+            className="vacancy-push-back"
+            aria-label="Назад"
+            onClick={onShowList}
+          >
+            <CaretLeft size={20} aria-hidden="true" />
+          </button>
+          <h1 id="vacancy-map-push-title">Карта</h1>
+          {onOpenExpert ? (
+            <button
+              type="button"
+              className="career-map-push-expert"
+              aria-label="Спросить консультанта"
+              onClick={onOpenExpert}
+            >
+              <Sparkle size={20} aria-hidden="true" />
+            </button>
+          ) : null}
+        </header>
+        <div className="career-map-push-body">
+          <div className="career-map-canvas-container">
+            <VacancyMapStage {...props} compact />
+          </div>
+          <p className="career-map-push-note vacancy-map-note" aria-live="polite">
+            {vacancyMapNote(mapNoteCounts(props.items, props.total ?? props.items.length))}
+          </p>
+        </div>
+      </div>
+    </>
   );
 }
 

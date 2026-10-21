@@ -520,6 +520,7 @@ function mainBodyProps(
       if (city) screenState.setViewMode('list');
     },
     onShowList: () => screenState.setViewMode('list'),
+    onOpenExpert: input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined,
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }
