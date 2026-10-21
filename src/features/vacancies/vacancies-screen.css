@@ -1062,3 +1062,11 @@
     display: none;
   }
 }
+
+/* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */
+.vacancies-filter-group-value {
+  max-inline-size: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

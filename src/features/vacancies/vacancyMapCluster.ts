@@ -116,9 +116,9 @@ export function projectCoords(lat: number, lng: number): { x: number; y: number 
   return { x, y };
 }
 
-const LABEL_HALF_WIDTH = 46;
-const LABEL_HEIGHT = 16;
 const BASE_GRID_SIZE = 48;
+const CAPSULE_HALF_WIDTH = 60;
+const CAPSULE_HEIGHT = 28;
 
 function groupIntoBuckets(
   cities: readonly CityFacet[],
@@ -181,7 +181,11 @@ function resolveLabels(
   nodes: readonly MapNode[],
   occupiedSpots: { x: number; y: number }[],
   selectedCity?: string,
+  zoom = 1,
 ): readonly MapNode[] {
+  // B446-g4: капсула «Москва 74» шире кружка; её размер на экране постоянен, в SVG — делится на масштаб.
+  const halfWidth = CAPSULE_HALF_WIDTH / Math.max(1, zoom);
+  const height = CAPSULE_HEIGHT / Math.max(1, zoom);
   const cityNodes = nodes.filter((n): n is MapCityNode => !n.isCluster);
   const sortedCities = [...cityNodes].sort((a, b) => {
     if (a.city.city === selectedCity) return -1;
@@ -192,8 +196,7 @@ function resolveLabels(
   const cityVisibility = new Map<string, boolean>();
   for (const node of sortedCities) {
     const collides = occupiedSpots.some(
-      (spot) =>
-        Math.abs(spot.x - node.x) < LABEL_HALF_WIDTH && Math.abs(spot.y - node.y) < LABEL_HEIGHT,
+      (spot) => Math.abs(spot.x - node.x) < halfWidth * 2 && Math.abs(spot.y - node.y) < height,
     );
     const showLabel = node.city.city === selectedCity || !collides;
     cityVisibility.set(node.id, showLabel);
@@ -223,7 +226,7 @@ export function clusterCitiesByGrid(
   const gridSize = BASE_GRID_SIZE / Math.max(1, zoom);
   const buckets = groupIntoBuckets(validCities, gridSize);
   const { nodes, occupiedSpots } = createNodesFromBuckets(buckets, zoom);
-  return resolveLabels(nodes, occupiedSpots, selectedCity);
+  return resolveLabels(nodes, occupiedSpots, selectedCity, zoom);
 }
 
 const MAP_WIDTH = 900;

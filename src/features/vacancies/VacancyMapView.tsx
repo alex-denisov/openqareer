@@ -250,14 +250,28 @@ function MapCapsule({
   );
 }
 
+/** Город, чья капсула наехала бы на соседнюю, — точка; название в подсказке и метке доступности. */
+function MapDot({ x, y, zoom }: { x: number; y: number; zoom: number }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${1 / zoom})`}>
+      <g className="career-map-capsule-scale">
+        <rect x={-22} y={-22} width={44} height={44} className="career-map-hit" />
+        <circle r={5} className="career-map-dot" />
+      </g>
+    </g>
+  );
+}
+
 function MapPinNode({
   city,
   isSelected,
+  showLabel,
   zoom,
   onSelect,
 }: {
   city: CityFacet;
   isSelected: boolean;
+  showLabel: boolean;
   zoom: number;
   onSelect: () => void;
 }) {
@@ -280,14 +294,18 @@ function MapPinNode({
       }}
     >
       <title>{display.tooltip}</title>
-      <MapCapsule
-        x={x}
-        y={y}
-        label={display.city}
-        count={city.count}
-        zoom={zoom}
-        active={isSelected}
-      />
+      {showLabel ? (
+        <MapCapsule
+          x={x}
+          y={y}
+          label={display.city}
+          count={city.count}
+          zoom={zoom}
+          active={isSelected}
+        />
+      ) : (
+        <MapDot x={x} y={y} zoom={zoom} />
+      )}
     </g>
   );
 }
@@ -355,6 +373,7 @@ function renderMapNode(
       key={node.id}
       city={node.city}
       isSelected={selectedCity === node.city.city}
+      showLabel={node.showLabel}
       zoom={zoom}
       onSelect={() => onSelectCity(selectedCity === node.city.city ? undefined : node.city.city)}
     />
