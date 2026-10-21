@@ -154,7 +154,7 @@ export function InsufficientRequirementsState({
   return (
     <EmptyState
       title="Требований пока недостаточно"
-      text={`Есть ${current.requirementCount} повторяющихся требований из ${current.sampleSize} вакансий. Для проверки нужны пять навыков и три кейса.`}
+      text={`Есть ${repeatedRequirements(current.requirementCount)} из ${vacanciesGenitive(current.sampleSize)}. Для проверки нужны пять навыков и три кейса.`}
       action="К вакансиям"
       onAction={onOpenOpportunities}
     />
@@ -436,4 +436,27 @@ function gradeLabel(grade: RoleSkillRunGrade): string {
     : grade === 'partial'
       ? 'Частично'
       : 'Не подтверждено';
+}
+
+function pluralIndex(count: number): 0 | 1 | 2 {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod100 >= 11 && mod100 <= 19) return 2;
+  if (mod10 === 1) return 0;
+  return mod10 >= 2 && mod10 <= 4 ? 1 : 2;
+}
+
+/** «1 повторяющееся требование», «3 повторяющихся требования», «5 повторяющихся требований». */
+export function repeatedRequirements(count: number): string {
+  const forms = [
+    'повторяющееся требование',
+    'повторяющихся требования',
+    'повторяющихся требований',
+  ] as const;
+  return `${count} ${forms[pluralIndex(count)]}`;
+}
+
+/** После «из»: «из 1 вакансии», «из 21 вакансии», «из 5 вакансий». */
+export function vacanciesGenitive(count: number): string {
+  return `${count} ${pluralIndex(count) === 0 ? 'вакансии' : 'вакансий'}`;
 }

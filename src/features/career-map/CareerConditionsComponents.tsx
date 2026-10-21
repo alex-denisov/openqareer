@@ -3,6 +3,7 @@ import {
   Buildings,
   CaretDown,
   Check,
+  CheckCircle,
   Circle,
   Clock,
   FunnelSimple,
@@ -389,8 +390,14 @@ export function RelocationRow({
           <Globe size={18} aria-hidden />
           <span className="career-relocation-title">Страны и релокация</span>
         </span>
-        <span className="career-badge career-badge-muted">
-          <Circle size={12} aria-hidden />
+        <span
+          className={`career-badge ${isRelocationEnabled ? 'career-badge-ok' : 'career-badge-muted'}`}
+        >
+          {isRelocationEnabled ? (
+            <CheckCircle size={12} aria-hidden />
+          ) : (
+            <Circle size={12} aria-hidden />
+          )}
           {isRelocationEnabled ? 'Включено' : 'Не включено'}
         </span>
         <CaretDown size={18} className="career-role-caret" aria-hidden />
