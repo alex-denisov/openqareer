@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   ArrowSquareOut,
   Briefcase,
@@ -15,6 +16,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
 import { fitRequirementChips } from './vacancyRequirementChips';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
+import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
@@ -194,6 +196,23 @@ function DiscussAction({
   );
 }
 
+/** The expanded vacancy tells the consultant panel what a quiz could confirm (B552). */
+function usePublishQuizOffer(
+  cluster: MatchedVacancyItem['cluster'],
+  fitView: Parameters<typeof unconfirmedSkills>[0],
+) {
+  const skillsKey = unconfirmedSkills(fitView).join('\n');
+  useEffect(() => {
+    const skills = skillsKey ? skillsKey.split('\n') : [];
+    publishVacancyQuizOffer(
+      skills.length > 0
+        ? { vacancyId: cluster.id, roleTitle: cluster.canonicalTitle, skills }
+        : null,
+    );
+    return () => publishVacancyQuizOffer(null);
+  }, [cluster.id, cluster.canonicalTitle, skillsKey]);
+}
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -205,6 +224,7 @@ export function VacancyScreenRequirementChips({
 }) {
   const fitView = useLatestVacancyFitView(cluster.id, explanation.fitView);
   const fromFit = fitRequirementChips(fitView);
+  usePublishQuizOffer(cluster, fitView);
   const legacy = extractVacancyRequirements(
     explanation.matchingPoints,
     explanation.missingPoints,

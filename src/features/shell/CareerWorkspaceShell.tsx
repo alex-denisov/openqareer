@@ -63,6 +63,8 @@ import { CareerAutomationWorkspace } from './CareerAutomationWorkspace';
 import { NotificationsBell } from '../notifications/NotificationsBell';
 import { NotificationsScreen } from '../notifications/NotificationsScreen';
 import { RoleSkillAssessmentScreen } from '../skills/RoleSkillAssessmentScreen';
+import type { SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
+import { requestVacancyFit } from '../vacancies/vacancyFitApi';
 import type { ProfileMobileScene } from '../resume/profileMobileNavigation';
 
 interface CareerWorkspaceShellProps {
@@ -108,6 +110,7 @@ export function CareerWorkspaceShell({
     return initialView;
   });
   const [roleSkillAssessmentOpen, setRoleSkillAssessmentOpen] = useState(false);
+  const [skillCheckFocus, setSkillCheckFocus] = useState<SkillCheckFocus>();
   const [profileMobileScene, setProfileMobileScene] = useState<ProfileMobileScene | null>(null);
   const [returnToProfileSkills, setReturnToProfileSkills] = useState(false);
   const [skillQuizBankRequest, setSkillQuizBankRequest] = useState(0);
@@ -323,13 +326,17 @@ export function CareerWorkspaceShell({
     [openExpert],
   );
 
-  const openRoleSkillAssessment = useCallback(() => {
-    setProfileMobileScene(null);
-    setReturnToProfileSkills(activeView === 'profile');
-    setExpertConfig((previous) => ({ ...previous, open: false }));
-    setExpertSheetExpanded(false);
-    setRoleSkillAssessmentOpen(true);
-  }, [activeView]);
+  const openRoleSkillAssessment = useCallback(
+    (focus?: SkillCheckFocus) => {
+      setSkillCheckFocus(focus);
+      setProfileMobileScene(null);
+      setReturnToProfileSkills(activeView === 'profile');
+      setExpertConfig((previous) => ({ ...previous, open: false }));
+      setExpertSheetExpanded(false);
+      setRoleSkillAssessmentOpen(true);
+    },
+    [activeView],
+  );
 
   const openSkillQuizBank = useCallback(() => {
     setRoleSkillAssessmentOpen(false);
@@ -339,8 +346,11 @@ export function CareerWorkspaceShell({
 
   const closeRoleSkillAssessment = useCallback(() => {
     setRoleSkillAssessmentOpen(false);
+    // The check may have confirmed the vacancy's skills: queue its fit again (B552).
+    if (skillCheckFocus) void requestVacancyFit(skillCheckFocus.vacancyId).catch(() => undefined);
+    setSkillCheckFocus(undefined);
     window.requestAnimationFrame(() => document.getElementById('career-main')?.focus());
-  }, []);
+  }, [skillCheckFocus]);
 
   const handleExpertEscape = useCallback(() => closeExpert(), [closeExpert]);
 
@@ -615,6 +625,7 @@ export function CareerWorkspaceShell({
                 {roleSkillAssessmentOpen && cabinetSession ? (
                   <RoleSkillAssessmentScreen
                     session={cabinetSession}
+                    focus={skillCheckFocus}
                     onClose={closeRoleSkillAssessment}
                     onOpenOpportunities={() => navigate('opportunities')}
                   />
@@ -669,7 +680,7 @@ export function CareerWorkspaceShell({
                     onOpenNotifications={openNotifications}
                     onOpenExpert={openExpert}
                     onOpenSkillQuizBank={openSkillQuizBank}
-                    onOpenRoleSkillAssessment={openRoleSkillAssessment}
+                    onOpenRoleSkillAssessment={() => openRoleSkillAssessment()}
                     onMobileSceneChange={setProfileMobileScene}
                     onUpdateWorkspace={onUpdateWorkspace}
                   />
@@ -844,6 +855,7 @@ export function CareerWorkspaceShell({
               mobileExpanded={expertSheetExpanded}
               onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
               onProposalCountChange={setPendingProposalCount}
+              onStartSkillCheck={openRoleSkillAssessment}
               onIdentityChange={resetForAccount}
               onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
               skillQuizBankRequest={skillQuizBankRequest}

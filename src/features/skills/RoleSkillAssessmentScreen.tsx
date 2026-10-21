@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { ArrowLeft, CheckCircle } from '@phosphor-icons/react';
 import type { AuthUser } from '../coach/coachApi';
+import type { SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
 import { CaseState, ModelErrorState } from './RoleSkillAssessmentCaseViews';
 import { DialogueState, SuggestionsState } from './RoleSkillAssessmentConversationViews';
 import { ResultState } from './RoleSkillAssessmentResultView';
@@ -42,12 +43,15 @@ import './role-skill-assessment-flow.css';
 
 interface RoleSkillAssessmentScreenProps {
   session: AuthUser;
+  /** Skills a vacancy's consultant offer asked to confirm (B552). */
+  focus?: SkillCheckFocus;
   onClose: () => void;
   onOpenOpportunities: () => void;
 }
 
 export function RoleSkillAssessmentScreen({
   session,
+  focus,
   onClose,
   onOpenOpportunities,
 }: RoleSkillAssessmentScreenProps) {
@@ -79,6 +83,7 @@ export function RoleSkillAssessmentScreen({
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
       <AssessmentHeader state={state} run={run} actions={actions} onClose={onClose} />
+      {focus ? <SkillCheckFocusNote focus={focus} /> : null}
       {run ? (
         <ProgressTrack step={getProgressStep(run)} />
       ) : state.current?.state === 'ready' ? (
@@ -94,6 +99,15 @@ export function RoleSkillAssessmentScreen({
         onOpenOpportunities={onOpenOpportunities}
       />
     </section>
+  );
+}
+
+function SkillCheckFocusNote({ focus }: { focus: SkillCheckFocus }) {
+  return (
+    <p className="career-role-assessment-focus">
+      Из вакансии «{focus.roleTitle}»: подтвердить {focus.skills.join(' и ')}. Результат попадёт в
+      профиль, соответствие вакансии пересчитается.
+    </p>
   );
 }
 

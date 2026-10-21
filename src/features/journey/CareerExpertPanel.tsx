@@ -2,6 +2,7 @@ import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
+import { VacancyQuizProposal, type SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
   STAGE_TITLE,
@@ -69,6 +70,7 @@ interface CareerExpertPanelProps {
   onIdentityChange?: (user: AuthUser) => void;
   onCommandPrepared?: () => void;
   onProposalCountChange?: (count: number) => void;
+  onStartSkillCheck?: (focus: SkillCheckFocus) => void;
   skillQuizBankRequest?: number;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
@@ -93,6 +95,7 @@ export function CareerExpertPanel({
   onIdentityChange = () => undefined,
   onCommandPrepared,
   onProposalCountChange,
+  onStartSkillCheck,
   skillQuizBankRequest = 0,
   mobileExpanded = false,
   onToggleMobileExpanded,
@@ -650,6 +653,9 @@ export function CareerExpertPanel({
           {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
+          ) : null}
+          {stage === 'vacancies' && user && !loadingSnapshot && onStartSkillCheck ? (
+            <VacancyQuizProposal onStart={onStartSkillCheck} />
           ) : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
