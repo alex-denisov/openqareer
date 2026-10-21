@@ -19,6 +19,8 @@ import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import type { RouteDeps } from './deps';
+import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
+import { startFocusedRun } from './roleSkillAssessmentFocusRun';
 import {
   actionSchema,
   checkReplay,
@@ -36,7 +38,7 @@ import {
   withDeps,
 } from './helpers';
 
-const startSchema = z.object({ consent: z.literal(true) }).strict();
+const startSchema = z.object({ consent: z.literal(true), focus: focusSchema.optional() }).strict();
 const dialogueSchema = requestBase.extend({ answer: z.string().trim().min(1).max(8_000) }).strict();
 const suggestionDecisionSchema = requestBase
   .extend({
@@ -60,7 +62,7 @@ const DIALOGUE_QUESTIONS = [
   'Какие ограничения, команда или решение повлияли на этот результат?',
 ] as const;
 
-type AssessmentContext =
+export type AssessmentContext =
   | { readonly state: 'role_not_selected' }
   | { readonly state: 'source_unavailable' }
   | {
@@ -164,12 +166,28 @@ async function handleStart(deps: RouteDeps, request: FastifyRequest, reply: Fast
     deps.config,
   );
   if (!candidate) return undefined;
-  startSchema.parse(request.body);
+  const { focus: focusRequest } = startSchema.parse(request.body);
+  let focus: ValidatedFocus | undefined;
+  if (focusRequest) {
+    const validation = validateFocus(deps, focusRequest);
+    if (!validation.ok)
+      return sendError(
+        reply,
+        request,
+        validation.status,
+        validation.code,
+        validation.message,
+        false,
+      );
+    focus = validation.focus;
+  }
   const starts = activeStarts.get(deps) ?? new Map<string, Promise<unknown>>();
   activeStarts.set(deps, starts);
   const pending = starts.get(candidate.id);
   if (pending) return pending;
-  const operation = startRun(deps, candidate, reply).finally(() => starts.delete(candidate.id));
+  const operation = startRun(deps, candidate, reply, focus).finally(() =>
+    starts.delete(candidate.id),
+  );
   starts.set(candidate.id, operation);
   return operation;
 }
@@ -178,12 +196,14 @@ async function startRun(
   deps: RouteDeps,
   candidate: NonNullable<ReturnType<typeof authenticateCandidate>>,
   reply: FastifyReply,
+  focus?: ValidatedFocus,
 ) {
   const latest = deps.candidateStore.roleSkillAssessments.list(candidate.id)[0];
   const strategy = deps.candidateStore.getCareerStrategy(candidate.id);
   if (!strategy) return reply.send({ data: { state: 'role_not_selected' } });
   if (
     latest &&
+    sameFocus(latest.focus, focus) &&
     latest.roleVersion === strategy.current.version &&
     latest.roleTitle === strategy.current.role.title &&
     latest.status !== 'complete'
@@ -191,6 +211,12 @@ async function startRun(
     return reply.send({ data: { state: 'run', run: latest } });
   }
 
+  if (focus) {
+    const result = await startFocusedRun(deps, candidate.id, strategy, focus);
+    if (result.state === 'run')
+      deps.candidateStore.roleSkillAssessments.create(candidate.id, result.run);
+    return reply.send({ data: result });
+  }
   const context = await readAssessmentContext(deps, candidate.id);
   if (context.state !== 'ready') return reply.send({ data: context });
   const run = createInitialAssessmentRun(context);
@@ -198,7 +224,18 @@ async function startRun(
   return reply.send({ data: { state: 'run', run } });
 }
 
-function createInitialAssessmentRun(
+function sameFocus(
+  stored: RoleSkillAssessmentRun['focus'],
+  requested: ValidatedFocus | undefined,
+): boolean {
+  if (!requested) return true;
+  return (
+    stored?.vacancyId === requested.vacancyId &&
+    stored.skills.join('\n') === requested.skills.join('\n')
+  );
+}
+
+export function createInitialAssessmentRun(
   context: Extract<AssessmentContext, { state: 'ready' }>,
 ): RoleSkillAssessmentRun {
   const now = new Date().toISOString();
@@ -281,7 +318,7 @@ async function readAssessmentContext(
   );
 }
 
-async function readRoleSnapshot(
+export async function readRoleSnapshot(
   deps: RouteDeps,
   candidateId: string,
   roleTitle: string,
@@ -303,7 +340,7 @@ async function readRoleSnapshot(
   }
 }
 
-function summarizeAssessmentContext(
+export function summarizeAssessmentContext(
   roleTitle: string,
   roleVersion: number,
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
@@ -339,7 +376,7 @@ function summarizeAssessmentContext(
   };
 }
 
-function toAssessmentVacancies(
+export function toAssessmentVacancies(
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
   roleId: string,
   now: Date,

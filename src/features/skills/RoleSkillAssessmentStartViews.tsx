@@ -25,21 +25,29 @@ export function formatDate(value: string): string {
 }
 
 export function getProgressStep(run: RoleSkillAssessmentRun): number {
-  if (run.status === 'complete') return 5;
+  const lastCaseStep = run.cases.length + 1;
+  if (run.status === 'complete') return lastCaseStep + 1;
   if (run.status === 'dialogue' || run.status === 'suggestions') return 1;
-  if (run.status === 'cases') return Math.min(4, run.currentCaseIndex + 2);
+  if (run.status === 'cases') return Math.min(lastCaseStep, run.currentCaseIndex + 2);
   if (run.modelError?.action === 'suggestions') return 1;
   const failedIndex = run.cases.findIndex(
     (record) => record.assessmentCase.id === run.modelError?.caseId,
   );
-  return failedIndex < 0 ? 1 : Math.min(4, failedIndex + 2);
+  return failedIndex < 0 ? 1 : Math.min(lastCaseStep, failedIndex + 2);
 }
 
-export function ProgressTrack({ step }: { step: number }) {
-  const steps = ['Диалог', 'Кейс 1', 'Кейс 2', 'Кейс 3', 'Итог'];
+/** A vacancy-focused check (B552) can have fewer than three cases. */
+export function ProgressTrack({ step, caseCount = 3 }: { step: number; caseCount?: number }) {
+  const steps = [
+    'Диалог',
+    ...Array.from({ length: caseCount }, (_, index) => `Кейс ${index + 1}`),
+    'Итог',
+  ];
+  const total = steps.length;
+  const barStep = Math.min(5, Math.max(1, Math.round((step / total) * 5)));
   return (
     <div className="career-role-assessment-progress-wrap">
-      <ol className="career-role-assessment-progress" aria-label={`Шаг ${step} из 5`}>
+      <ol className="career-role-assessment-progress" aria-label={`Шаг ${step} из ${total}`}>
         {steps.map((label, index) => (
           <li
             className={index + 1 === step ? 'is-current' : index + 1 < step ? 'is-done' : ''}
@@ -58,14 +66,16 @@ export function ProgressTrack({ step }: { step: number }) {
       <div
         className="career-role-assessment-progress-mobile"
         role="progressbar"
-        aria-label={`Шаг ${step} из 5`}
+        aria-label={`Шаг ${step} из ${total}`}
         aria-valuemin={1}
-        aria-valuemax={5}
+        aria-valuemax={total}
         aria-valuenow={step}
       >
-        <span>Шаг {step} из 5</span>
+        <span>
+          Шаг {step} из {total}
+        </span>
         <div>
-          <i className={`is-step-${step}`} />
+          <i className={`is-step-${barStep}`} />
         </div>
       </div>
     </div>
@@ -310,7 +320,7 @@ function StartNotice() {
   );
 }
 
-function StartAction({
+export function StartAction({
   consent,
   busy,
   onStart,

@@ -10,17 +10,8 @@ const ready = (names: readonly string[]) =>
   }) as unknown as RoleSkillAssessmentCurrent;
 
 describe('skillCheckAvailability', () => {
-  it('offers «Начать» when the role check covers one of the skills', () => {
-    expect(skillCheckAvailability(ready(['Apache Kafka']), ['Kafka'])).toEqual({
-      kind: 'available',
-    });
-  });
-
-  it('says honestly when the check has no cases for these skills', () => {
-    expect(skillCheckAvailability(ready(['Go']), ['Kafka', 'Kubernetes'])).toEqual({
-      kind: 'unavailable',
-      reason: 'В проверке навыков роли «Engineering Manager» нет кейсов по Kafka и Kubernetes.',
-    });
+  it('leaves the skill coverage to the server once the role check is ready', () => {
+    expect(skillCheckAvailability(ready(['Go']))).toEqual({ kind: 'available' });
   });
 
   it('says honestly when the role has too few vacancies', () => {
@@ -30,6 +21,6 @@ describe('skillCheckAvailability', () => {
       sampleSize: 4,
       threshold: 20,
     } as const;
-    expect(skillCheckAvailability(current, ['Kafka']).kind).toBe('unavailable');
+    expect(skillCheckAvailability(current).kind).toBe('unavailable');
   });
 });

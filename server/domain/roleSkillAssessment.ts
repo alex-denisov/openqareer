@@ -248,6 +248,18 @@ const roleSkillAssessmentRunSchema = z
       .strict()
       .nullable(),
     lastRequest: roleAssessmentRequestSchema.nullable(),
+    /** B552: a check started from a vacancy's consultant offer. */
+    focus: z
+      .object({
+        vacancyId: z.string().trim().min(1).max(200),
+        vacancyTitle: z.string().trim().min(1).max(500),
+        skills: z.array(z.string().trim().min(1).max(200)).min(1).max(3),
+        sampleRoleTitle: z.string().trim().min(1).max(200),
+        roleNote: z.string().trim().min(1).max(500).nullable(),
+        lackingNotes: z.array(z.string().trim().min(1).max(500)).max(3),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
