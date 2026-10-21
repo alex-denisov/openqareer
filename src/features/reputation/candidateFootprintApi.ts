@@ -62,6 +62,32 @@ export async function reviewCandidateFootprintFinding(
   return data.audit;
 }
 
+/** B544: «пароль сменён», «закрыл», «оставить» — stored on the server for the checklist. */
+export async function markCandidateFootprintFinding(
+  findingId: string,
+  mark: 'password_changed' | 'account_closed' | 'account_kept',
+): Promise<CandidateFootprintAudit> {
+  const response = await apiFetch(`/api/v1/candidate/footprint/findings/${findingId}/checklist`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mark }),
+  });
+  const data = await readData<{ audit: CandidateFootprintAudit }>(response);
+  return data.audit;
+}
+
+/** B544: «Добавить в профиль» — a profile fact «из цифрового следа, ДД.ММ». */
+export async function addCandidateFootprintFindingToProfile(
+  findingId: string,
+): Promise<CandidateFootprintAudit> {
+  const response = await apiFetch(
+    `/api/v1/candidate/footprint/findings/${findingId}/profile-fact`,
+    { method: 'POST' },
+  );
+  const data = await readData<{ audit: CandidateFootprintAudit }>(response);
+  return data.audit;
+}
+
 export async function deleteCandidateFootprintFindings(): Promise<void> {
   const response = await apiFetch('/api/v1/candidate/footprint', { method: 'DELETE' });
   if (!response.ok) {

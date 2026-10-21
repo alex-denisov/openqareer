@@ -13,10 +13,13 @@ import {
   getCandidateFootprintPlan,
   grantCandidateFootprintConsent,
   reviewCandidateFootprintFinding,
+  markCandidateFootprintFinding,
+  addCandidateFootprintFindingToProfile,
   revokeCandidateFootprintConsent,
   startCandidateFootprintAudit,
 } from './candidateFootprintApi';
 import { CandidateFootprintAuditSurface } from './CandidateFootprintAuditSurface';
+import type { FootprintManualMark } from './FootprintSanitationChecklist';
 
 function errorText(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
@@ -261,12 +264,15 @@ function useFootprintReviewAction(
   isOperationCurrent: (expected: number) => boolean,
 ) {
   const [busyFindingId, setBusyFindingId] = useState<string | undefined>();
-  const review = useCallback(async (findingId: string, decision: FootprintReview) => {
+  const run = useCallback(async (
+    findingId: string,
+    request: () => Promise<CandidateFootprintAudit>,
+  ) => {
     const operationGeneration = getOperationGeneration();
     setBusyFindingId(findingId);
     setError(undefined);
     try {
-      const audit = await reviewCandidateFootprintFinding(findingId, decision);
+      const audit = await request();
       if (isOperationCurrent(operationGeneration)) setAudit(audit);
     } catch (cause) {
       if (isOperationCurrent(operationGeneration)) {
@@ -276,7 +282,22 @@ function useFootprintReviewAction(
       setBusyFindingId(undefined);
     }
   }, [getOperationGeneration, isOperationCurrent, setAudit, setError]);
-  return { busyFindingId, review };
+  const review = useCallback(
+    (findingId: string, decision: FootprintReview) =>
+      run(findingId, () => reviewCandidateFootprintFinding(findingId, decision)),
+    [run],
+  );
+  const mark = useCallback(
+    (findingId: string, value: FootprintManualMark) =>
+      void run(findingId, () => markCandidateFootprintFinding(findingId, value)),
+    [run],
+  );
+  const addToProfile = useCallback(
+    (findingId: string) =>
+      void run(findingId, () => addCandidateFootprintFindingToProfile(findingId)),
+    [run],
+  );
+  return { busyFindingId, review, mark, addToProfile };
 }
 
 function useFootprintDeleteAction(
@@ -375,6 +396,8 @@ function useFootprintAuditSurfaceProps(candidateId: string) {
     onRevokeConsent: () => void consentRevocation.revokeConsent(),
     onStart: () => void start.start(),
     onReview: findingActions.review,
+    onMarkFinding: findingActions.mark,
+    onAddToProfile: findingActions.addToProfile,
     onRequestDelete: () => findingActions.setConfirmingDelete(true),
     onCancelDelete: () => findingActions.setConfirmingDelete(false),
     onConfirmDelete: () => void findingActions.confirmDelete(),

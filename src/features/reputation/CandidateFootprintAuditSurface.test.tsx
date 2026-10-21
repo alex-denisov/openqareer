@@ -184,8 +184,13 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
 
     await click('4 Чек-лист');
     expect(button('4 Чек-лист')?.getAttribute('aria-current')).toBe('step');
-    expect(container.textContent).toContain('Нужно проверить');
-    expect(container.textContent).not.toContain('SEO');
+    expect(container.textContent).toContain('Чек-лист санации');
+    expect(container.textContent).toContain('Находки разобраны');
+    expect(container.textContent).toContain('Осталось 1');
+    expect(container.textContent).not.toContain('sherlock');
+    expect(button('Удалить сохранённые находки')).toBeUndefined();
+    await click('Разобрать находки');
+    expect(button('3 Находки')?.getAttribute('aria-current')).toBe('step');
 
     const reviewedProps = baseProps({
       consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
@@ -194,8 +199,36 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     });
     await renderSurface(reviewedProps);
     await click('4 Чек-лист');
-    expect(container.textContent).toContain('Подтверждено как ваше');
-    expect(container.textContent).toContain('1 из 1 решений');
+    expect(container.textContent).toContain('3 из 5 пунктов');
+    expect(button('4 Чек-лист')?.textContent).toContain('3 из 5 пунктов');
+  });
+
+  it('marks leaks and old accounts and adds artifacts to the profile from the checklist', async () => {
+    const base = completedAudit('confirmed_self');
+    const audit = {
+      ...base,
+      findings: [
+        { ...finding('confirmed_self'), id: 'leak', kind: 'breach', title: 'Почта в утечке' },
+        { ...finding('confirmed_self'), id: 'old', title: 'Старый аккаунт', staleAccount: true },
+        { ...finding('confirmed_self'), id: 'talk', kind: 'mention', title: 'Доклад, 2023' },
+      ],
+    };
+    const props = baseProps({
+      consent: { approved: true, granted: true, versionId: 'digital_footprint-v1.1' },
+      ownershipConfirmed: true,
+      audit,
+      onMarkFinding: vi.fn(),
+      onAddToProfile: vi.fn(),
+    });
+    await renderSurface(props);
+    expect(button('4 Чек-лист')?.getAttribute('aria-current')).toBe('step');
+    await click('Пароль сменён');
+    expect(props.onMarkFinding).toHaveBeenCalledWith('leak', 'password_changed');
+    await click('Оставить');
+    expect(props.onMarkFinding).toHaveBeenCalledWith('old', 'account_kept');
+    await click('Добавить в профиль');
+    expect(props.onAddToProfile).toHaveBeenCalledWith('talk');
+    expect(container.textContent).toContain('Файлы не проверялись');
   });
 
   it('uses the loaded audit for the initial step and keeps a step selected during loading', async () => {
@@ -249,11 +282,14 @@ describe('CandidateFootprintAuditSurface four-step profile flow', () => {
     expect(button('Удалить сохранённые находки')).toBeUndefined();
 
     await click('Находки видите только вы');
-    expect(surface?.classList.contains('career-footprint-surface--privacy-open')).toBe(true);
+    expect(container.querySelector('dialog#profile-footprint-privacy-controls')).not.toBeNull();
     expect(button('Отозвать согласие')).toBeDefined();
     expect(button('Удалить сохранённые находки')).toBeDefined();
     expect(container.textContent).toContain('Согласие выдано. Отзыв остановит текущую проверку');
 
+    await click('Отозвать согласие');
+    expect(props.onRevokeConsent).not.toHaveBeenCalled();
+    expect(container.textContent).toContain('Отозвать согласие? Проверка остановится');
     await click('Отозвать согласие');
     expect(props.onRevokeConsent).toHaveBeenCalledTimes(1);
     await click('Удалить сохранённые находки');

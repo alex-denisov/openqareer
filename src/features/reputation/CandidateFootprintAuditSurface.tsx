@@ -25,6 +25,12 @@ import {
 } from '../../../shared/candidateFootprint';
 import type { PublicFootprintQueryPlanItem } from '../../../server/osint/candidateFootprintQueryPlan';
 import { CAPABILITY_CONSENT_DOCUMENTS } from '../legal/capabilityConsents';
+import { buildFootprintChecklist } from '../../../shared/footprintChecklist';
+import { FootprintPrivacyDialog } from './FootprintPrivacyDialog';
+import {
+  FootprintSanitationChecklist,
+  type FootprintManualMark,
+} from './FootprintSanitationChecklist';
 import { statusMessage } from './candidateFootprintApi';
 /* Keep the consent, audit and result steps beside the single stateful surface they form. */
 /* eslint max-lines: ["error", 1300] */
@@ -75,6 +81,10 @@ export interface CandidateFootprintAuditSurfaceProps {
   readonly onCancelDelete: () => void;
   readonly onConfirmDelete: () => void;
   readonly onAddManualEmployer?: (employer: string) => void;
+  readonly onMarkFinding?: (findingId: string, mark: FootprintManualMark) => void;
+  readonly onAddToProfile?: (findingId: string) => void;
+  /** «Пересобрать PDF» leads to «Резюме и версии»; without it the item shows status only. */
+  readonly onOpenResumeVersions?: () => void;
 }
 function adapterState(
   adapterId: FootprintAdapterId,
@@ -358,20 +368,38 @@ function GrantedConsent({
   revokingConsent,
   onRevokeConsent,
 }: Pick<ConsentDisclosureProps, 'revokingConsent' | 'onRevokeConsent'>): JSX.Element {
+  const [confirming, setConfirming] = useState(false);
   return (
     <section className="career-footprint-consent" aria-label="Согласие на цифровой след">
       <p role="status">
         Согласие выдано. Отзыв остановит текущую проверку и удалит сохранённые находки.
       </p>
-      <button
-        type="button"
-        className="career-footprint-secondary-button"
-        disabled={revokingConsent}
-        aria-busy={revokingConsent}
-        onClick={onRevokeConsent}
-      >
-        {revokingConsent ? 'Отзываем согласие' : 'Отозвать согласие'}
-      </button>
+      {confirming ? (
+        <div className="career-footprint-delete-confirm" role="group" aria-label="Подтвердить отзыв">
+          <p>Отозвать согласие? Проверка остановится, сохранённые находки будут удалены.</p>
+          <div>
+            <button type="button" disabled={revokingConsent} onClick={() => setConfirming(false)}>
+              Отмена
+            </button>
+            <button
+              type="button"
+              disabled={revokingConsent}
+              aria-busy={revokingConsent}
+              onClick={onRevokeConsent}
+            >
+              {revokingConsent ? 'Отзываем согласие' : 'Отозвать согласие'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="career-footprint-secondary-button"
+          onClick={() => setConfirming(true)}
+        >
+          Отозвать согласие
+        </button>
+      )}
     </section>
   );
 }
@@ -754,8 +782,8 @@ const PROFILE_FOOTPRINT_STEP_META: ReadonlyArray<
   {
     id: 'checklist',
     label: 'Чек-лист',
-    heading: 'Решения по находкам',
-    description: 'Здесь показаны только находки и решения, сохранённые в этой проверке.',
+    heading: 'Чек-лист санации',
+    description: 'Пять пунктов, чтобы публичный след работал на вас. Каждый считается по вашим данным.',
   },
 ];
 
@@ -793,9 +821,9 @@ function findingsStepStatus(state: ProfileFootprintStepState) {
 }
 
 function checklistStepStatus(state: ProfileFootprintStepState) {
-  if (state.audit?.state !== 'completed') return 'После решений по находкам';
-  const counts = reviewCounts(state.audit);
-  return counts.total === 0 ? 'Нет находок' : `${counts.resolved} из ${counts.total} решений`;
+  if (state.audit?.state !== 'completed') return 'После проверки';
+  const checklist = buildFootprintChecklist(state.audit);
+  return `${checklist.done} из ${checklist.total} пунктов`;
 }
 
 function footprintStepStatus(step: ProfileFootprintStepId, state: ProfileFootprintStepState) {
@@ -888,78 +916,6 @@ function FootprintAuditDelete(props: CandidateFootprintAuditSurfaceProps) {
   );
 }
 
-function checklistReviewLabel(review: FootprintReview): string {
-  if (review === 'confirmed_self') return 'Подтверждено как ваше';
-  if (review === 'not_self') return 'Отмечено как не ваше';
-  if (review === 'hidden') return 'Скрыто';
-  return 'Нужно проверить';
-}
-
-function ReviewChecklistItem({
-  finding,
-  onOpenFindings,
-}: {
-  readonly finding: CandidateFootprintFinding;
-  readonly onOpenFindings: () => void;
-}) {
-  const needsAction = finding.review === 'unreviewed' || finding.review === 'hidden';
-  return (
-    <li className="profile-footprint-checklist-item" key={finding.id}>
-      <div className="profile-footprint-checklist-copy">
-        <strong>{finding.title}</strong>
-        <span>{checklistReviewLabel(finding.review)}</span>
-        <small>Источники: {finding.sources.join(', ')}</small>
-      </div>
-      {needsAction ? (
-        <button
-          type="button"
-          className="career-footprint-secondary-button profile-footprint-checklist-action"
-          onClick={onOpenFindings}
-        >
-          Проверить находку
-        </button>
-      ) : null}
-    </li>
-  );
-}
-
-function ReviewChecklist({
-  audit,
-  onOpenFindings,
-}: {
-  readonly audit: CandidateFootprintAudit | null;
-  readonly onOpenFindings: () => void;
-}) {
-  if (!audit || audit.state !== 'completed') return null;
-  const counts = reviewCounts(audit);
-  if (audit.findings.length === 0) {
-    return (
-      <div className="career-footprint-empty-results" role="status">
-        <ShieldCheck aria-hidden="true" />
-        <p>Проверка завершена. Находок для решения нет.</p>
-      </div>
-    );
-  }
-  return (
-    <section
-      className="profile-footprint-checklist"
-      aria-labelledby="profile-footprint-checklist-title"
-    >
-      <div className="profile-footprint-checklist-heading">
-        <h4 id="profile-footprint-checklist-title">Проверенные находки</h4>
-        <span className="career-footprint-count">
-          {counts.resolved} из {counts.total} решений
-        </span>
-      </div>
-      <ul className="profile-footprint-checklist-list">
-        {audit.findings.map((finding) => (
-          <ReviewChecklistItem key={finding.id} finding={finding} onOpenFindings={onOpenFindings} />
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 const PRIVACY_NOTE =
   'Находки видите только вы. До подтверждения они не попадают в профиль и отклики.';
 
@@ -990,62 +946,50 @@ function FootprintPrivacyToggle({
   );
 }
 
-function ProfileFootprintFindingsStep({
+function ProfileFootprintStepContent({
+  step,
   props,
-  privacyControlsOpen,
+  onOpenFindings,
 }: {
+  readonly step: ProfileFootprintStepId;
   readonly props: CandidateFootprintAuditSurfaceProps;
-  readonly privacyControlsOpen: boolean;
+  readonly onOpenFindings: () => void;
 }) {
-  return (
-    <>
-      {privacyControlsOpen ? (
-        <section
-          id="profile-footprint-privacy-controls"
-          className="profile-footprint-privacy-controls"
-          aria-label="Управление согласием и данными"
-        >
-          <ConsentStepContent {...props} />
-          <FootprintAuditDelete {...props} />
-        </section>
-      ) : null}
+  if (step === 'consent') return <ConsentStepContent {...props} />;
+  if (step === 'scan') return <FootprintPlanControls {...props} />;
+  if (step === 'findings') {
+    return (
       <FindingsSection
         audit={props.audit}
         busyFindingId={props.busyFindingId}
         onReview={props.onReview}
       />
-    </>
+    );
+  }
+  return (
+    <FootprintSanitationChecklist
+      audit={props.audit}
+      busyFindingId={props.busyFindingId}
+      onOpenFindings={onOpenFindings}
+      onMarkFinding={props.onMarkFinding}
+      onAddToProfile={props.onAddToProfile}
+      onOpenResumeVersions={props.onOpenResumeVersions}
+    />
   );
 }
 
-function ProfileFootprintStepContent({
-  step,
+function FootprintPrivacyControls({
   props,
-  onOpenFindings,
-  privacyControlsOpen,
+  onClose,
 }: {
-  readonly step: ProfileFootprintStepId;
   readonly props: CandidateFootprintAuditSurfaceProps;
-  readonly onOpenFindings: () => void;
-  readonly privacyControlsOpen: boolean;
+  readonly onClose: () => void;
 }) {
-  if (step === 'consent') return <ConsentStepContent {...props} />;
-  if (step === 'scan') {
-    return (
-      <>
-        <FootprintPlanControls {...props} />
-        <FootprintAuditDelete {...props} />
-      </>
-    );
-  }
-  if (step === 'findings') {
-    return <ProfileFootprintFindingsStep props={props} privacyControlsOpen={privacyControlsOpen} />;
-  }
   return (
-    <>
-      <ReviewChecklist audit={props.audit} onOpenFindings={onOpenFindings} />
+    <FootprintPrivacyDialog onClose={onClose}>
+      <ConsentStepContent {...props} />
       <FootprintAuditDelete {...props} />
-    </>
+    </FootprintPrivacyDialog>
   );
 }
 
@@ -1134,7 +1078,7 @@ function ProfileFootprintStepHeader({
     <header className="profile-footprint-step-panel-header">
       <h3 id="profile-footprint-step-title">{step.heading}</h3>
       <p>{step.description}</p>
-      {step.id === 'findings' ? (
+      {step.id === 'findings' || step.id === 'checklist' ? (
         <FootprintPrivacyToggle open={privacyControlsOpen} onToggle={onTogglePrivacyControls} />
       ) : null}
     </header>
@@ -1149,10 +1093,9 @@ export function CandidateFootprintAuditSurface(props: CandidateFootprintAuditSur
   const busy = Boolean(props.loading || props.starting || props.audit?.state === 'pending');
 
   useEffect(() => {
-    if (activeStep !== 'findings') setPrivacyControlsOpen(false);
+    if (activeStep !== 'findings' && activeStep !== 'checklist') setPrivacyControlsOpen(false);
   }, [activeStep]);
 
-  const privacyOpenClass = privacyControlsOpen ? ' career-footprint-surface--privacy-open' : '';
   const findingsClass =
     activeStep === 'findings' && props.audit?.state === 'completed'
       ? ' career-footprint-surface--findings'
@@ -1160,7 +1103,7 @@ export function CandidateFootprintAuditSurface(props: CandidateFootprintAuditSur
 
   return (
     <div
-      className={`career-footprint-surface${findingsClass}${privacyOpenClass}`}
+      className={`career-footprint-surface${findingsClass}`}
       role="region"
       aria-label="Цифровой след"
     >
@@ -1187,9 +1130,11 @@ export function CandidateFootprintAuditSurface(props: CandidateFootprintAuditSur
           step={activeStep}
           props={props}
           onOpenFindings={() => setActiveStep('findings')}
-          privacyControlsOpen={privacyControlsOpen}
         />
       </section>
+      {privacyControlsOpen ? (
+        <FootprintPrivacyControls props={props} onClose={() => setPrivacyControlsOpen(false)} />
+      ) : null}
     </div>
   );
 }
