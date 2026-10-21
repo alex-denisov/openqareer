@@ -323,36 +323,40 @@
   color: var(--career-text);
 }
 
-.career-relocation-toggle-row input {
+.career-shell .career-relocation-toggle-row input[type='checkbox'] {
   position: relative;
   flex: none;
   inline-size: calc(var(--career-space-8) + var(--career-space-5));
   block-size: calc(var(--career-space-6) + var(--career-space-1));
   margin: 0;
+  border: 0;
   border-radius: 999px;
+  display: block;
   background: var(--career-surface-raised);
   appearance: none;
   cursor: pointer;
   transition: background 180ms ease;
 }
 
-.career-relocation-toggle-row input::after {
+.career-shell .career-relocation-toggle-row input[type='checkbox']::after {
   position: absolute;
   inset-block-start: var(--career-space-1);
   inset-inline-start: var(--career-space-1);
   inline-size: var(--career-space-5);
   block-size: var(--career-space-5);
+  border: 0;
   border-radius: 50%;
   background: var(--career-text);
   content: '';
+  transform: none;
   transition: transform 180ms ease;
 }
 
-.career-relocation-toggle-row input:checked {
+.career-shell .career-relocation-toggle-row input[type='checkbox']:checked {
   background: var(--career-accent);
 }
 
-.career-relocation-toggle-row input:checked::after {
+.career-shell .career-relocation-toggle-row input[type='checkbox']:checked::after {
   transform: translateX(calc(var(--career-space-8) - var(--career-space-3)));
 }
 
@@ -423,7 +427,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .career-relocation-toggle-row input,
-  .career-relocation-toggle-row input::after {
+  .career-shell .career-relocation-toggle-row input[type='checkbox']::after {
     transition: none;
   }
 }

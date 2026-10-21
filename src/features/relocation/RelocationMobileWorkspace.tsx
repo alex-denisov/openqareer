@@ -98,6 +98,7 @@ function MobileTabContent(
       onProfileUpdated={props.onProfileUpdated}
       onConsentRevoked={props.onConsentRevoked}
       onShowCountries={() => workspace.showTab('countries')}
+      onEditStep={workspace.openQuestionnaire}
     />
   );
 }

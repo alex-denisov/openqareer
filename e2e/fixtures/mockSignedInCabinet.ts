@@ -439,6 +439,9 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
       readonly issuedAt?: string;
       readonly expiresAt?: string;
     }[];
+    /** B468-r2: steps 2 and 4 with data, for the 390 questionnaire frames. */
+    readonly education?: Readonly<Record<string, unknown>>;
+    readonly languages?: readonly Readonly<Record<string, unknown>>[];
   };
 }
 
@@ -1601,6 +1604,10 @@ export async function mockSignedInCabinet(
           citizenshipCountryCodes: [...(options.relocation.citizenshipCountryCodes ?? [])],
           documents: [...(options.relocation.documents ?? [])],
         },
+        ...(options.relocation.education ? { education: options.relocation.education } : {}),
+        ...(options.relocation.languages
+          ? { languages: { languages: options.relocation.languages } }
+          : {}),
       }
     : null;
   let todayDecisionSelection:

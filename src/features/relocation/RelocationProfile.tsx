@@ -12,7 +12,6 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { restartRelocationQuestionnaire, revokeRelocationConsent } from './relocationApi';
 import { listRelocationCountries } from './relocationCountryData';
 import { RelocationQuestionnaire } from './RelocationQuestionnaire';
-import { RelocationMobileQuestionnaire } from './RelocationMobileQuestionnaire';
 import {
   citizenshipRowId,
   relocationLanguageSourceLabel,
@@ -38,14 +37,15 @@ export interface RelocationProfileProps {
   readonly onConsentRevoked: (consent: RelocationConsentState) => void;
   readonly onShowCountries: () => void;
   readonly mobile?: boolean;
+  /** 390: the questionnaire is the workspace's own push screen, not nested here. */
+  readonly onEditStep?: (step: RelocationStepId) => void;
 }
 
 export function RelocationProfile(props: RelocationProfileProps) {
   const actions = useRelocationProfileActions(props);
   if (actions.editingStep) {
-    const Questionnaire = props.mobile ? RelocationMobileQuestionnaire : RelocationQuestionnaire;
     return (
-      <Questionnaire
+      <RelocationQuestionnaire
         profile={props.profile}
         initialStep={actions.editingStep}
         onClose={() => actions.setEditingStep(undefined)}
@@ -117,8 +117,10 @@ function useRelocationProfileActions({
   profile,
   onProfileUpdated,
   onConsentRevoked,
+  onEditStep,
 }: RelocationProfileProps) {
   const [editingStep, setEditingStep] = useState<RelocationStepId>();
+  const openStep = onEditStep ?? setEditingStep;
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -141,7 +143,7 @@ function useRelocationProfileActions({
     continueQuestionnaire: () => {
       if (profile.currentStep === 'summary') return;
       setNotice(undefined);
-      setEditingStep(profile.currentStep);
+      openStep(profile.currentStep);
     },
     revoke: () => run('revoke'),
     removeItem: (step: RelocationStepId, itemId: string) => void removeProfileItem(
@@ -149,7 +151,7 @@ function useRelocationProfileActions({
       setters,
     ),
     restart: () => run('restart'),
-    edit: (step: RelocationStepId) => { setNotice(undefined); setEditingStep(step); },
+    edit: (step: RelocationStepId) => { setNotice(undefined); openStep(step); },
   };
 }
 

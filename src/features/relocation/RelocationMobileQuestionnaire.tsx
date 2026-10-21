@@ -82,12 +82,17 @@ function SubScreen({
   return <MobileLanguageEditor {...editor} rowId={screen.rowId} />;
 }
 
+/** 390 shows the next step itself as feedback; only notices that say more stay. */
+const QUIET_NOTICES = new Set(['Изменения сохранены.', 'Шаг пропущен. Его можно заполнить позже.']);
+
 function Status({ controller }: { readonly controller: QuestionnaireController }) {
+  const notice =
+    controller.notice && !QUIET_NOTICES.has(controller.notice) ? controller.notice : undefined;
   return (
     <>
-      {controller.notice ? (
+      {notice ? (
         <p className="career-relocation-success" role="status">
-          {controller.notice}
+          {notice}
         </p>
       ) : null}
       {controller.error ? (
@@ -182,8 +187,19 @@ function SummaryCountries({
     country,
     fit: evaluateCountryFit(country.countryCode, candidate),
   }));
+  const counts = new Map<string, number>();
+  for (const { fit } of results) {
+    const label = shortStatus(fit.status);
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  }
+  const line = [...counts]
+    .map(([label, count]) => `${label.toLocaleLowerCase('ru')}: ${count}`)
+    .join(', ');
   return (
-    <MobileGroup caption="Что получилось">
+    <MobileGroup
+      caption="Что получилось"
+      note={`Стран в каталоге правил: ${results.length}; ${line}.`}
+    >
       {results.map(({ country, fit }) => (
         <MobileNavRow
           key={country.countryCode}
