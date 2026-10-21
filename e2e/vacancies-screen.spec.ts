@@ -1084,12 +1084,8 @@ test.describe('B250 vacancies screen', () => {
       .getByRole('tablist', { name: 'Разделы вакансий' })
       .getByRole('tab', { name: /Компании и люди/u });
     await expect(companiesTab).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByRole('textbox', { name: 'Поиск среди компаний' })).toHaveValue(
-      'Genetec',
-    );
-    await expect(page.locator('.companies-people-count')).toContainText(
-      '0 компаний в текущей подборке',
-    );
+    await expect(page.getByRole('textbox', { name: /^Поиск среди \d+$/u })).toHaveValue('Genetec');
+    await expect(page.locator('.companies-people-count')).toContainText('0 компаний в подборке');
   });
 
   test('low role coverage exposes explicit campaign changes', async ({ page }, testInfo) => {
@@ -1222,9 +1218,8 @@ test.describe('B250 vacancies screen', () => {
     await page.getByRole('tab', { name: /Компании и люди/u }).click();
     await page.getByRole('button', { name: 'Открыть компанию Вектор Банк' }).click();
 
-    const recruiter = page.locator('.companies-people-recruiter').first();
-    await expect(recruiter).toContainText('Мария Орлова');
-    await recruiter.getByRole('button', { name: 'Подготовить сообщение' }).click();
+    await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
+    await page.getByRole('button', { name: 'Написать рекрутеру' }).click();
 
     const message = page.getByRole('region', { name: 'Сообщение нанимающему' });
     await expect(message).toBeVisible();
