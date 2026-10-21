@@ -70,7 +70,6 @@ export function countActiveFilters(state: VacanciesScreenState): number {
   return groupIsActive.filter(Boolean).length;
 }
 
-
 type SelectionField = 'roles' | 'regions' | 'levels' | 'sources' | 'formats';
 
 interface FacetOption {
@@ -273,13 +272,24 @@ function FormatFilterSection({ props }: { readonly props: VacanciesScreenFilters
   );
 }
 
-function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+function SourceFacetGroups({
+  props,
+  withFooter,
+  groupActions,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly withFooter: boolean;
+  readonly groupActions: GroupActions;
+}) {
   if (!props.facets || props.facets.sources.length === 0) return null;
   return (
     <VacancySourceCatalogFilter
       state={props.state}
       facets={props.facets}
       onChange={props.onChange}
+      withFooter={withFooter}
+      onCancel={groupActions.onCancel}
+      onApply={groupActions.onApply}
     />
   );
 }
@@ -289,7 +299,7 @@ interface GroupActions {
   readonly onApply: () => void;
 }
 
-const GROUPS_WITH_OWN_FOOTER = new Set<VacancyFilterGroup>(['roles', 'locations']);
+const GROUPS_WITH_OWN_FOOTER = new Set<VacancyFilterGroup>(['roles', 'locations', 'sources']);
 
 const EMPTY_LOCATION_TREE = buildLocationTree([]);
 
@@ -373,7 +383,13 @@ function FacetGroups({
         />
       ) : null}
       {filterGroupMatches(activeGroup, 'salary') ? <SalaryFilterSection props={props} /> : null}
-      {filterGroupMatches(activeGroup, 'sources') ? <SourceFacetGroups props={props} /> : null}
+      {filterGroupMatches(activeGroup, 'sources') ? (
+        <SourceFacetGroups
+          props={props}
+          withFooter={withFooter('sources')}
+          groupActions={groupActions}
+        />
+      ) : null}
       {filterGroupMatches(activeGroup, 'format') ? <FormatFilterSection props={props} /> : null}
     </>
   );
