@@ -116,6 +116,24 @@ export function withCampaignDefaults(
   };
 }
 
+const LEVEL_PREFIX = /^(\S+)\s+(of\s+.+)$/iu;
+
+/**
+ * B446-g4: «Head of Engineering, Director of Engineering» → «Head, Director» (макет 4);
+ * роли с разной функцией — первая и «+N».
+ */
+export function shortRoleSummary(roles: readonly string[]): string {
+  if (roles.length === 1) return roles[0]!;
+  const parts = roles.map((role) => LEVEL_PREFIX.exec(role.trim()));
+  const sameFunction =
+    parts.every(Boolean) &&
+    new Set(parts.map((part) => part![2]!.toLocaleLowerCase('en'))).size === 1;
+  if (sameFunction) return parts.map((part) => part![1]).join(', ');
+  // Уже короткие подписи уровня («Head», «Director») остаются списком.
+  if (roles.length <= 3 && roles.every((role) => !/\s/u.test(role.trim()))) return roles.join(', ');
+  return `${roles[0]} +${roles.length - 1}`;
+}
+
 export function summarizeVacancyFilterGroup(
   state: VacanciesScreenState,
   group: VacancyFilterGroup,
@@ -124,7 +142,7 @@ export function summarizeVacancyFilterGroup(
     const roles = state.roles.length
       ? state.roles
       : (state.levels ?? []).map((level) => LEVEL_SUMMARY_LABELS[level] ?? level);
-    return roles.length ? roles.slice(0, 2).join(', ') : undefined;
+    return roles.length ? shortRoleSummary(roles) : undefined;
   }
   if (group === 'locations') return summarizeLocations(state);
   if (group === 'salary') {

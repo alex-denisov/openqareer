@@ -221,11 +221,24 @@ describe('withCampaignDefaults (B446-g4)', () => {
   const empty = { roles: [], regions: [], remoteOnly: false };
   it('shows campaign roles and regions on the buttons when nothing is picked by hand', () => {
     const shown = withCampaignDefaults(empty, ['Head of Engineering', 'Director'], ['ru']);
-    expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('Head of Engineering, Director');
+    expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('Head of Engineering +1');
     expect(summarizeVacancyFilterGroup(shown, 'locations')).toBeTruthy();
   });
   it('keeps a hand-picked choice over the campaign', () => {
     const shown = withCampaignDefaults({ ...empty, roles: ['CTO'] }, ['Head'], []);
     expect(summarizeVacancyFilterGroup(shown, 'roles')).toBe('CTO');
+  });
+});
+
+describe('role summary short form (B446-g4)', () => {
+  const empty = { roles: [], regions: [], remoteOnly: false };
+  it('shortens roles that differ only by the level prefix', () => {
+    const state = { ...empty, roles: ['Head of Engineering', 'Director of Engineering'] };
+    expect(summarizeVacancyFilterGroup(state, 'roles')).toBe('Head, Director');
+  });
+  it('otherwise names the first role and how many more', () => {
+    const state = { ...empty, roles: ['Head of Engineering', 'CTO', 'VP Product'] };
+    expect(summarizeVacancyFilterGroup(state, 'roles')).toBe('Head of Engineering +2');
+    expect(summarizeVacancyFilterGroup({ ...empty, roles: ['CTO'] }, 'roles')).toBe('CTO');
   });
 });
