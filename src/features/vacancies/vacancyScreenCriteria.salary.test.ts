@@ -91,6 +91,15 @@ describe('salary filter with the market estimate (B546)', () => {
     ]);
   });
 
+  it('treats ₽, RUB and RUR as one currency', () => {
+    const rouble = [item('sign', { from: 500_000, currency: '₽' }), items[1]!];
+    const state = { ...base, useMarketEstimate: true };
+    expect(
+      filterByScreenState(rouble, state, '2026-10-21').map((entry) => entry.cluster.id),
+    ).toEqual(['sign', 'estimate-high']);
+    expect(buildVacancyFilterOptions(rouble).salaryCurrencies).toEqual(['RUR']);
+  });
+
   it('offers the estimate currency even when no vacancy states a salary', () => {
     expect(buildVacancyFilterOptions([items[1]!]).salaryCurrencies).toEqual(['RUR']);
   });

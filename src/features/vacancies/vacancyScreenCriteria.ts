@@ -24,8 +24,23 @@ export function vacancyFormat(item: MatchedVacancyItem): string {
   return item.cluster.isRemote ? 'remote' : 'unknown';
 }
 
+const CURRENCY_ALIASES: Readonly<Record<string, string>> = {
+  '₽': 'RUR',
+  RUB: 'RUR',
+  $: 'USD',
+  '€': 'EUR',
+  '£': 'GBP',
+};
+
+/** hh.ru says RUR, fixtures and boards say ₽ or RUB: one currency for the filter. */
+export function normalizeSalaryCurrency(currency: string): string {
+  const code = currency.trim().toUpperCase();
+  return CURRENCY_ALIASES[code] ?? code;
+}
+
 function sameCurrency(currency: string | undefined, wanted: string | undefined): boolean {
-  return !wanted || currency?.toLocaleUpperCase('ru-RU') === wanted.toLocaleUpperCase('ru-RU');
+  if (!wanted) return true;
+  return currency !== undefined && normalizeSalaryCurrency(currency) === normalizeSalaryCurrency(wanted);
 }
 
 /** Stated salary, or the market estimate when the candidate asked to compare by it (B546). */
@@ -114,10 +129,10 @@ export function buildVacancyFilterOptions(
   for (const item of items) {
     const location = item.cluster.canonicalLocation?.trim();
     if (location) locations.set(location, (locations.get(location) ?? 0) + 1);
-    if (item.cluster.salary?.currency) currencies.add(item.cluster.salary.currency);
+    if (item.cluster.salary?.currency) currencies.add(normalizeSalaryCurrency(item.cluster.salary.currency));
     const estimate = item.explanation.marketSalary;
     if (!item.cluster.salary && estimate?.low !== undefined) {
-      currencies.add(estimate.currency);
+      currencies.add(normalizeSalaryCurrency(estimate.currency));
       marketEstimateCount += 1;
     }
     const format = vacancyFormat(item);
