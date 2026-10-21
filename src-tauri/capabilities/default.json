@@ -11,8 +11,6 @@
     "updater:allow-download-and-install",
     "notification:allow-is-permission-granted",
     "notification:allow-request-permission",
-    "notification:allow-notify",
-    "notification:allow-register-listener",
     "dialog:allow-save",
     "fs:allow-write-text-file"
   ]

@@ -1,15 +1,27 @@
 #[cfg(target_os = "macos")]
-use block2::RcBlock;
+use block2::{DynBlock, RcBlock};
 #[cfg(target_os = "macos")]
-use objc2_foundation::NSError;
+use objc2::rc::{Allocated, Retained};
+#[cfg(target_os = "macos")]
+use objc2::runtime::{AnyObject, ProtocolObject};
+#[cfg(target_os = "macos")]
+use objc2::{define_class, msg_send, AnyThread, ClassType, DefinedClass};
+#[cfg(target_os = "macos")]
+use objc2_foundation::{NSDictionary, NSError, NSObject, NSObjectProtocol, NSString};
 #[cfg(target_os = "macos")]
 use objc2_user_notifications::{
-    UNAuthorizationOptions, UNAuthorizationStatus, UNNotificationSettings, UNUserNotificationCenter,
+    UNAuthorizationOptions, UNAuthorizationStatus, UNMutableNotificationContent, UNNotification,
+    UNNotificationPresentationOptions, UNNotificationRequest, UNNotificationResponse,
+    UNNotificationSettings, UNUserNotificationCenter, UNUserNotificationCenterDelegate,
 };
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 #[cfg(target_os = "macos")]
-use std::{ptr::NonNull, sync::mpsc, time::Duration};
+use std::{
+    ptr::NonNull,
+    sync::{mpsc, OnceLock},
+    time::Duration,
+};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -17,6 +29,41 @@ use tauri::{
 };
 
 const STATE_FILE: &str = "desktop-notifications.json";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DesktopNotificationTarget {
+    Opportunities,
+    Responses,
+    Notifications,
+}
+
+impl DesktopNotificationTarget {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Opportunities => "opportunities",
+            Self::Responses => "responses",
+            Self::Notifications => "notifications",
+        }
+    }
+}
+
+fn parse_notification_target(value: &str) -> Option<DesktopNotificationTarget> {
+    match value {
+        "opportunities" => Some(DesktopNotificationTarget::Opportunities),
+        "responses" => Some(DesktopNotificationTarget::Responses),
+        "notifications" => Some(DesktopNotificationTarget::Notifications),
+        _ => None,
+    }
+}
+
+fn parse_notification_target_from_user_info(
+    user_info: &serde_json::Value,
+) -> Option<DesktopNotificationTarget> {
+    user_info
+        .get("target")
+        .and_then(serde_json::Value::as_str)
+        .and_then(parse_notification_target)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -123,6 +170,179 @@ pub async fn request_desktop_notification_permission() -> Result<PermissionStatu
     {
         Ok(PermissionStatus::Granted)
     }
+}
+
+#[tauri::command]
+pub async fn show_desktop_notification(
+    title: String,
+    body: String,
+    target: String,
+) -> Result<(), String> {
+    let target = parse_notification_target(&target)
+        .ok_or_else(|| "desktop_notification_target_invalid".to_string())?;
+    #[cfg(target_os = "macos")]
+    {
+        return tokio::task::spawn_blocking(move || show_macos_notification(title, body, target))
+            .await
+            .map_err(|_| "desktop_notification_show_failed".to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (title, body, target);
+        Err("нативные уведомления недоступны на этой платформе".to_string())
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn show_macos_notification(
+    title: String,
+    body: String,
+    target: DesktopNotificationTarget,
+) -> Result<(), String> {
+    let content = UNMutableNotificationContent::new();
+    let title = NSString::from_str(&title);
+    let body = NSString::from_str(&body);
+    content.setTitle(&title);
+    content.setBody(&body);
+    let target_key = NSString::from_str("target");
+    let target_value = NSString::from_str(target.as_str());
+    let user_info =
+        NSDictionary::<NSString, NSString>::from_slices(&[&*target_key], &[&*target_value]);
+    unsafe { content.setUserInfo(user_info.cast_unchecked()) };
+
+    let request_id = NSString::from_str(&format!("openqareer-{}", uuid::Uuid::new_v4()));
+    let request =
+        UNNotificationRequest::requestWithIdentifier_content_trigger(&request_id, &content, None);
+    add_macos_notification_request(&request)
+}
+
+#[cfg(target_os = "macos")]
+fn add_macos_notification_request(request: &UNNotificationRequest) -> Result<(), String> {
+    let (sender, receiver) = mpsc::channel();
+    let callback = RcBlock::new(move |error: *mut NSError| {
+        let result = if error.is_null() {
+            Ok(())
+        } else {
+            Err(unsafe { (&*error).localizedDescription().to_string() })
+        };
+        let _ = sender.send(result);
+    });
+    UNUserNotificationCenter::currentNotificationCenter()
+        .addNotificationRequest_withCompletionHandler(request, Some(&callback));
+    receiver
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "notification_request_timeout".to_string())?
+}
+
+#[cfg(target_os = "macos")]
+fn notification_target_from_user_info(
+    user_info: &NSDictionary<AnyObject, AnyObject>,
+) -> Option<DesktopNotificationTarget> {
+    let key = NSString::from_str("target");
+    let target = user_info
+        .objectForKey(&key)
+        .and_then(|value| value.downcast::<NSString>().ok())?
+        .to_string();
+    parse_notification_target_from_user_info(&serde_json::json!({ "target": target }))
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Default)]
+struct DesktopNotificationDelegateIvars {
+    app: OnceLock<AppHandle>,
+}
+
+#[cfg(target_os = "macos")]
+define_class!(
+    #[unsafe(super(NSObject))]
+    #[thread_kind = AnyThread]
+    #[name = "OpenQareerNotificationDelegate"]
+    #[ivars = DesktopNotificationDelegateIvars]
+    struct DesktopNotificationDelegate;
+
+    impl DesktopNotificationDelegate {
+        #[unsafe(method_id(init))]
+        fn init(this: Allocated<Self>) -> Retained<Self> {
+            let this = this.set_ivars(DesktopNotificationDelegateIvars::default());
+            unsafe { msg_send![super(this), init] }
+        }
+    }
+
+    unsafe impl NSObjectProtocol for DesktopNotificationDelegate {}
+
+    unsafe impl UNUserNotificationCenterDelegate for DesktopNotificationDelegate {
+        #[unsafe(method(userNotificationCenter:didReceiveNotificationResponse:withCompletionHandler:))]
+        fn did_receive_notification_response(
+            &self,
+            _center: &UNUserNotificationCenter,
+            response: &UNNotificationResponse,
+            completion_handler: &DynBlock<dyn Fn()>,
+        ) {
+            let target = response
+                .notification()
+                .request()
+                .content()
+                .userInfo();
+            if let Some(target) = notification_target_from_user_info(&target) {
+                if let Some(app) = self.ivars().app.get().cloned() {
+                    schedule_notification_open(app, target);
+                }
+            }
+            completion_handler.call(());
+        }
+
+        #[unsafe(method(userNotificationCenter:willPresentNotification:withCompletionHandler:))]
+        fn will_present_notification(
+            &self,
+            _center: &UNUserNotificationCenter,
+            _notification: &UNNotification,
+            completion_handler: &DynBlock<dyn Fn(UNNotificationPresentationOptions)>,
+        ) {
+            completion_handler.call((
+                UNNotificationPresentationOptions::Banner | UNNotificationPresentationOptions::List,
+            ));
+        }
+    }
+);
+
+#[cfg(target_os = "macos")]
+static NOTIFICATION_DELEGATE: OnceLock<Retained<DesktopNotificationDelegate>> = OnceLock::new();
+
+#[cfg(target_os = "macos")]
+fn install_macos_notification_delegate(app: AppHandle) {
+    let delegate = NOTIFICATION_DELEGATE.get_or_init(|| {
+        let delegate: Retained<DesktopNotificationDelegate> =
+            unsafe { msg_send![DesktopNotificationDelegate::class(), new] };
+        let _ = delegate.ivars().app.set(app);
+        delegate
+    });
+    let delegate_protocol: &ProtocolObject<dyn UNUserNotificationCenterDelegate> =
+        ProtocolObject::from_ref(&**delegate);
+    UNUserNotificationCenter::currentNotificationCenter().setDelegate(Some(delegate_protocol));
+}
+
+#[cfg(target_os = "macos")]
+fn schedule_notification_open(app: AppHandle, target: DesktopNotificationTarget) {
+    let event_app = app.clone();
+    if let Err(error) = app.run_on_main_thread(move || {
+        if let Err(reason) = focus_main_window(event_app.clone()) {
+            log_native_notification_failure("focus_main_window", &reason);
+        }
+        if let Err(reason) = event_app.emit("desktop-notify-open", target.as_str()) {
+            log_native_notification_failure("emit_notification_open", &reason.to_string());
+        }
+    }) {
+        log_native_notification_failure("dispatch_notification_open", &error.to_string());
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn log_native_notification_failure(context: &str, reason: &str) {
+    eprintln!(
+        "[desktop-notify] {}: {}",
+        safe_log_value(context),
+        safe_log_value(reason)
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -235,6 +455,9 @@ pub fn focus_main_window(app: AppHandle) -> Result<(), String> {
 }
 
 pub fn configure_tray(app: &mut App) -> tauri::Result<()> {
+    #[cfg(target_os = "macos")]
+    install_macos_notification_delegate(app.handle().clone());
+
     let open = MenuItem::with_id(app, "open_app", "Открыть openqareer", true, None::<&str>)?;
     let toggle = MenuItem::with_id(
         app,
@@ -325,7 +548,10 @@ fn write_state(path: &PathBuf, state: &DesktopNotificationState) -> Result<(), S
 mod tests {
     #[cfg(target_os = "macos")]
     use super::map_macos_permission_status;
-    use super::{format_notification_menu_label, PermissionStatus};
+    use super::{
+        format_notification_menu_label, parse_notification_target,
+        parse_notification_target_from_user_info, DesktopNotificationTarget, PermissionStatus,
+    };
 
     #[test]
     fn formats_each_notification_menu_state() {
@@ -349,6 +575,39 @@ mod tests {
             ),
             "Уведомления: недоступны — ошибка IPC"
         );
+    }
+
+    #[test]
+    fn parses_only_whitelisted_targets_from_notification_user_info() {
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({
+                "target": "opportunities"
+            })),
+            Some(DesktopNotificationTarget::Opportunities)
+        );
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({ "target": "responses" })),
+            Some(DesktopNotificationTarget::Responses)
+        );
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({
+                "target": "notifications"
+            })),
+            Some(DesktopNotificationTarget::Notifications)
+        );
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({ "target": "private" })),
+            None
+        );
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({ "other": "responses" })),
+            None
+        );
+        assert_eq!(
+            parse_notification_target_from_user_info(&serde_json::json!({ "target": 42 })),
+            None
+        );
+        assert_eq!(parse_notification_target("unknown"), None);
     }
 
     #[cfg(target_os = "macos")]

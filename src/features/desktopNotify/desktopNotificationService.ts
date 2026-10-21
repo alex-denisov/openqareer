@@ -1,4 +1,4 @@
-import { addPluginListener, invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { listNotifications, type CandidateNotification } from '../notifications/notificationsApi';
 import { isTauriEnvironment } from '../../services/desktop/desktopBridge';
@@ -19,13 +19,6 @@ type PermissionStatus = 'unknown' | 'granted' | 'denied' | 'unavailable';
 interface StoredDesktopNotificationState extends DesktopNotificationCheckpoint {
   readonly permissionStatus: PermissionStatus;
   readonly permissionReason: string | null;
-}
-
-interface NotificationActionPayload {
-  readonly actionId?: string;
-  readonly notification?: {
-    readonly extra?: Readonly<Record<string, unknown>>;
-  };
 }
 
 interface NotificationPageBatch {
@@ -57,15 +50,11 @@ async function initializeDesktopNotificationService(): Promise<void> {
   }
 
   try {
-    await addPluginListener<NotificationActionPayload>(
-      'notification',
-      'actionPerformed',
-      (payload) => {
-        void runNotificationActionSafely(payload);
-      },
-    );
+    await listen<string>('desktop-notify-open', ({ payload }) => {
+      void runNotificationActionSafely(payload);
+    });
   } catch (error) {
-    await reportFailure('register_notification_action_listener', error);
+    await reportFailure('register_notification_open_listener', error);
   }
 
   try {
@@ -168,15 +157,21 @@ function permissionGrant(status: PermissionStatus): boolean | null {
 
 async function showEnableConfirmation(): Promise<boolean> {
   try {
-    await invoke('plugin:notification|notify', {
-      options: { title: 'OpenQareer', body: 'Уведомления openqareer включены' },
+    await invoke('show_desktop_notification', {
+      title: 'OpenQareer',
+      body: 'Уведомления openqareer включены',
+      target: 'notifications',
     });
     return true;
   } catch (error) {
     if (isPermissionFailure(error)) {
       await setPermissionDenied(error, 'send_enable_confirmation');
     } else {
-      await setUnavailable('не удалось показать тестовое уведомление', error, 'send_enable_confirmation');
+      await setUnavailable(
+        `не удалось показать тестовое уведомление: ${errorMessage(error)}`,
+        error,
+        'send_enable_confirmation',
+      );
     }
     return false;
   }
@@ -243,37 +238,37 @@ async function readNotificationPages(
 
 async function showNotification(notice: DesktopNotificationNotice): Promise<boolean> {
   try {
-    await invoke('plugin:notification|notify', {
-      options: {
-        title: notice.title,
-        body: notice.body,
-        extra: { target: notice.target },
-      },
+    await invoke('show_desktop_notification', {
+      title: notice.title,
+      body: notice.body,
+      target: notice.target,
     });
     return true;
   } catch (error) {
     if (isPermissionFailure(error)) {
       await setPermissionDenied(error, 'show_notification');
     } else {
-      await setUnavailable('не удалось показать уведомление', error, 'show_notification');
+      await setUnavailable(
+        `не удалось показать уведомление: ${errorMessage(error)}`,
+        error,
+        'show_notification',
+      );
     }
     return false;
   }
 }
 
-async function runNotificationActionSafely(payload: NotificationActionPayload): Promise<void> {
+async function runNotificationActionSafely(value: unknown): Promise<void> {
   try {
-    await handleNotificationAction(payload);
+    await handleNotificationAction(value);
   } catch (error) {
     await reportFailure('open_notification_action', error);
   }
 }
 
-async function handleNotificationAction(payload: NotificationActionPayload): Promise<void> {
-  if (payload.actionId !== 'tap') return;
-  const target = safeNotificationTarget(payload.notification?.extra?.target);
+async function handleNotificationAction(value: unknown): Promise<void> {
+  const target = safeNotificationTarget(value);
   if (!target) return;
-  await invoke('focus_main_window');
   const url = new URL(window.location.href);
   url.searchParams.set('view', target);
   url.searchParams.delete('notificationSource');
