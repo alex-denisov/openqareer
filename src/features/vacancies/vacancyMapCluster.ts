@@ -206,3 +206,27 @@ export function cityBounds(cities: readonly CityFacet[]): MapBounds | undefined 
     [Math.max(...lngs), Math.max(...lats)],
   ];
 }
+
+const FOCUS_SHARE = 0.8;
+
+/**
+ * B553: карта открывается на крупнейших городах, где вместе не меньше 80 % вакансий
+ * на карте (макет 4 — Москва, Петербург, Казань в кадре); дальние одиночки видны при отдалении.
+ */
+export function focusBounds(
+  cities: readonly CityFacet[],
+  share = FOCUS_SHARE,
+): MapBounds | undefined {
+  const placed = cities
+    .filter((city) => city.coordinates !== undefined)
+    .sort((a, b) => b.count - a.count);
+  const total = placed.reduce((sum, city) => sum + city.count, 0);
+  const focus: CityFacet[] = [];
+  let covered = 0;
+  for (const city of placed) {
+    if (covered >= total * share) break;
+    focus.push(city);
+    covered += city.count;
+  }
+  return cityBounds(focus);
+}

@@ -9958,13 +9958,13 @@
   background: var(--career-surface);
 }
 
-.career-map-gl .maplibregl-ctrl-attrib {
+.career-map-stage .career-map-gl .maplibregl-ctrl.maplibregl-ctrl-attrib {
   background: var(--career-bg-elevated);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
-.career-map-gl .maplibregl-ctrl-attrib a {
+.career-map-stage .career-map-gl .maplibregl-ctrl-attrib a {
   color: var(--career-text-soft);
   text-decoration: none;
 }
@@ -10064,29 +10064,44 @@
 }
 
 .career-map-zoom-btn {
-  min-width: 44px;
-  min-height: 44px;
+  min-width: var(--career-target-min);
+  min-height: var(--career-target-min);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: var(--career-text-md);
-  font-weight: 700;
+  padding: 0;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-bg-elevated);
+  color: var(--career-text);
+  cursor: pointer;
+}
+
+.career-map-zoom-btn:hover {
+  border-color: var(--career-accent);
+}
+
+.career-map-zoom-btn:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: calc(var(--career-border-width) * 2);
+}
+
+/* B553: сцена карты — подложка, капсулы, ± и карточка 390; заметка идёт под ней. */
+.career-map-stage {
+  position: relative;
 }
 
 @media (max-width: 760px) {
   /* B553: на 390 карта на весь экран под шапкой, «Показать список» внизу (макет 390m). */
   .career-map-gl,
   .career-map-status {
-    block-size: calc(
-      100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) -
-        var(--career-space-8) * 5
-    );
+    block-size: calc(100dvh - var(--career-space-8) * 12);
   }
 
   .career-map-mobile-card {
     position: absolute;
     inset-inline: var(--career-space-3);
-    inset-block-end: calc(var(--career-space-8) * 2 + var(--career-space-3));
+    inset-block-end: calc(var(--career-space-8) * 2);
     display: flex;
     align-items: center;
     justify-content: space-between;

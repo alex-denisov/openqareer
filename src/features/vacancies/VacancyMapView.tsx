@@ -2,7 +2,12 @@ import { Info, MapTrifold } from '@phosphor-icons/react';
 import React from 'react';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { calculateVacancyFacets, hasMapCityCoordinates, vacancyCityName } from './vacancyFacets';
+import {
+  calculateVacancyFacets,
+  hasMapCityCoordinates,
+  vacancyCityName,
+  type CityFacet,
+} from './vacancyFacets';
 import { formatCityDisplay } from './vacancyMapCluster';
 import { vacancyMapNote, type VacancyMapNoteCounts } from './vacancyMapNote';
 
@@ -34,39 +39,48 @@ export function VacancyMapView({
   return (
     <div className="career-vacancy-map-view vacancy-map-view">
       <div className="career-map-canvas-container">
-        {unavailable ? (
-          <VacancyMapUnavailable onShowList={onShowList} />
-        ) : (
-          <MapChunkBoundary onError={markUnavailable}>
-            <React.Suspense fallback={<p className="career-map-status">Загружаем карту…</p>}>
-              <VacancyMapCanvas
-                cities={facets.cities}
-                selectedCity={selectedCity}
-                onSelectCity={onSelectCity}
-                onUnavailable={markUnavailable}
-              />
-            </React.Suspense>
-          </MapChunkBoundary>
-        )}
-        {!unavailable && leadCity?.coordinates ? (
-          <div className="career-map-mobile-card">
-            <div>
-              <strong>{formatCityDisplay(leadCity.city, leadCity.country).city}</strong>
-              <small>
-                {pluralRu(leadCity.count, ['вакансия', 'вакансии', 'вакансий'])} на карте
-              </small>
-            </div>
-            <button
-              type="button"
-              className="career-btn is-primary"
-              onClick={() => onSelectCity(leadCity.city)}
-            >
-              Показать список
-            </button>
-          </div>
-        ) : null}
+        <div className="career-map-stage">
+          {unavailable ? (
+            <VacancyMapUnavailable onShowList={onShowList} />
+          ) : (
+            <MapChunkBoundary onError={markUnavailable}>
+              <React.Suspense fallback={<p className="career-map-status">Загружаем карту…</p>}>
+                <VacancyMapCanvas
+                  cities={facets.cities}
+                  selectedCity={selectedCity}
+                  onSelectCity={onSelectCity}
+                  onUnavailable={markUnavailable}
+                />
+              </React.Suspense>
+            </MapChunkBoundary>
+          )}
+          {!unavailable && leadCity?.coordinates ? (
+            <MapMobileCard city={leadCity} onShowList={() => onSelectCity(leadCity.city)} />
+          ) : null}
+        </div>
         <MapHeader items={items} total={total ?? items.length} />
       </div>
+    </div>
+  );
+}
+
+/** B553: на 390 внизу карты — крупнейший (или выбранный) город и «Показать список» (макет 390m). */
+function MapMobileCard({
+  city,
+  onShowList,
+}: {
+  readonly city: CityFacet;
+  readonly onShowList: () => void;
+}) {
+  return (
+    <div className="career-map-mobile-card">
+      <div>
+        <strong>{formatCityDisplay(city.city, city.country).city}</strong>
+        <small>{pluralRu(city.count, ['вакансия', 'вакансии', 'вакансий'])} на карте</small>
+      </div>
+      <button type="button" className="career-btn is-primary" onClick={onShowList}>
+        Показать список
+      </button>
     </div>
   );
 }

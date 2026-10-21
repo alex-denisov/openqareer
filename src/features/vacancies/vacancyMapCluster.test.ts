@@ -3,6 +3,7 @@ import {
   buildMapMarkers,
   capsuleWidth,
   cityBounds,
+  focusBounds,
   formatCityDisplay,
   type ScreenProjector,
 } from './vacancyMapCluster';
@@ -72,6 +73,25 @@ describe('B375: vacancy map clustering and normalization', () => {
   it('границы охватывают все точки выдачи', () => {
     expect(cityBounds([amsterdam, moscow])).toEqual([
       [4.9, 52.37],
+      [37.62, 55.75],
+    ]);
+  });
+
+  it('карта открывается на основной массе выдачи: одиночные дальние города не отдаляют её', () => {
+    const newYork: CityFacet = {
+      city: 'New York',
+      coordinates: { lat: 40.71, lng: -74 },
+      count: 1,
+      companyCount: 1,
+    };
+    expect(focusBounds([moscow, amsterdam, newYork])).toEqual([
+      [4.9, 52.37],
+      [37.62, 55.75],
+    ]);
+    expect(focusBounds([newYork])).toEqual(cityBounds([newYork]));
+    // На узком экране (390) — меньшая доля: в кадре только крупнейший город.
+    expect(focusBounds([moscow, amsterdam, newYork], 0.5)).toEqual([
+      [37.62, 55.75],
       [37.62, 55.75],
     ]);
   });

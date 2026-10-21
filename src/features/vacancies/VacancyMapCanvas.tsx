@@ -7,6 +7,7 @@ import type { CityFacet } from './vacancyFacets';
 import {
   buildMapMarkers,
   cityBounds,
+  focusBounds,
   formatCityDisplay,
   markerLabel,
   type MapNode,
@@ -53,12 +54,19 @@ function readPalette(element: HTMLElement): VacancyMapPalette {
   };
 }
 
-function initialView(cities: readonly CityFacet[]): Partial<MapOptions> {
-  const bounds = cityBounds(cities);
+/** На узком экране капсулы слипаются раньше: в кадре только основная половина выдачи. */
+const NARROW_WIDTH = 600;
+const NARROW_FOCUS_SHARE = 0.65;
+/** Снизу на 390 — карточка «Показать список» и атрибуция: точки не должны уходить под них. */
+const NARROW_PADDING = { top: 56, bottom: 168, left: 48, right: 64 };
+
+function initialView(cities: readonly CityFacet[], width: number): Partial<MapOptions> {
+  const narrow = width < NARROW_WIDTH;
+  const bounds = narrow ? focusBounds(cities, NARROW_FOCUS_SHARE) : focusBounds(cities);
   if (!bounds) return WORLD_VIEW;
   return {
     bounds: bounds as MapOptions['bounds'],
-    fitBoundsOptions: { padding: FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
+    fitBoundsOptions: { padding: narrow ? NARROW_PADDING : FIT_PADDING, maxZoom: FIT_MAX_ZOOM },
   };
 }
 
@@ -90,7 +98,7 @@ function useMapLibre(
         pitchWithRotate: false,
         touchPitch: false,
         renderWorldCopies: false,
-        ...initialView(citiesRef.current),
+        ...initialView(citiesRef.current, element.clientWidth),
       });
     } catch {
       failRef.current();
@@ -232,7 +240,7 @@ function MapZoomControls({
     <div className="career-map-zoom-controls" role="group" aria-label="Управление масштабом карты">
       <button
         type="button"
-        className="career-chip career-map-zoom-btn"
+        className="career-map-zoom-btn"
         aria-label="Приблизить карту"
         onClick={onZoomIn}
       >
@@ -240,7 +248,7 @@ function MapZoomControls({
       </button>
       <button
         type="button"
-        className="career-chip career-map-zoom-btn"
+        className="career-map-zoom-btn"
         aria-label="Отдалить карту"
         onClick={onZoomOut}
       >
