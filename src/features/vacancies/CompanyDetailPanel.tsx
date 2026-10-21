@@ -11,7 +11,7 @@ import { CompanyPeopleSection } from './CompaniesAndPeoplePeople';
 import { useCompanyPeople, type CompanyPeopleState } from './CompanyConnectionCircles';
 import { CompanyMobilePush } from './CompanyMobilePush';
 import { RecruiterMessagePanel } from './RecruiterMessagePanel';
-import { useCompactViewport } from './useCompactViewport';
+import { useOpenedCompact } from './useCompactViewport';
 import type { VacancyLetterTarget } from './VacancyLetterScreen';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
 import {
@@ -228,7 +228,7 @@ function CompanyDetailMobile({
 export function CompanyDetailPanel(props: CompanyDetailPanelProps) {
   const people = useCompanyPeople(props.company);
   const [messageTo, setMessageTo] = useState<CandidateCompanyRecruiter | null>(null);
-  if (useCompactViewport()) return <CompanyDetailMobile props={props} people={people} />;
+  if (useOpenedCompact()) return <CompanyDetailMobile props={props} people={people} />;
   return (
     <article className="companies-people-detail" aria-label={`Компания ${props.company.name}`}>
       <CompanyDetailHeader
