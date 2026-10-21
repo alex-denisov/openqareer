@@ -14,7 +14,6 @@ import {
   getCandidateCompanyDetails,
   getCandidateCompanyPage,
   removeCandidateCompanyWant,
-  saveCandidateCompanyNextStep,
   searchCandidateCompanyRecruiter,
   setCandidateCompanyWant,
 } from './candidateCompaniesApi';
@@ -30,10 +29,18 @@ import {
 } from './CompaniesAndPeopleControls';
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
+const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
+  default: 'Порядок: «Хочу», затем по числу вакансий, контактов в сети и алфавиту.',
+  contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
+  alphabetical: 'Порядок: по алфавиту.',
+};
+
 interface CompaniesAndPeopleScreenProps {
   readonly onOpenConnections?: () => void;
   readonly onOpenCareer?: () => void;
   readonly onOpenLetter?: (vacancy: VacancyLetterTarget, circle: ConnectionCircleNumber) => void;
+  /** «Все N вакансий компании в подборке»: the selection filtered by this company. */
+  readonly onOpenCompanyVacancies?: (companyName: string) => void;
   readonly initialSearch?: string;
 }
 
@@ -241,22 +248,6 @@ function useCompanyWantAction(refresh: () => void) {
   return { busyKey, error, toggle };
 }
 
-function useCompanyNextStepAction(refresh: () => void) {
-  const [busyKey, setBusyKey] = useState<string | null>(null);
-  const save = async (companyKey: string, text: string, dueAt: string | null) => {
-    setBusyKey(companyKey);
-    try {
-      await saveCandidateCompanyNextStep(companyKey, text, dueAt);
-      refresh();
-    } catch (reason) {
-      throw new Error(readableError(reason, 'Не удалось сохранить следующий шаг.'));
-    } finally {
-      setBusyKey(null);
-    }
-  };
-  return { busyKey, save };
-}
-
 async function queueCompanyRecruiterSearch(
   companyKey: string,
   onConsentRequired: () => void,
@@ -335,13 +326,16 @@ interface CompaniesAndPeopleModel {
   readonly filterSheetOpen: boolean;
   readonly setFilterSheetOpen: (open: boolean) => void;
   readonly wantAction: ReturnType<typeof useCompanyWantAction>;
-  readonly nextStepAction: ReturnType<typeof useCompanyNextStepAction>;
   readonly recruiterSearch: ReturnType<typeof useCompanyRecruiterSearch>;
   readonly actionError: string | null;
   readonly refresh: () => void;
+  readonly onOpenCompanyVacancies?: (companyName: string) => void;
 }
 
-function useCompaniesAndPeopleModel(initialSearch?: string): CompaniesAndPeopleModel {
+function useCompaniesAndPeopleModel(
+  initialSearch?: string,
+  onOpenCompanyVacancies?: (companyName: string) => void,
+): CompaniesAndPeopleModel {
   const filters = useCompanyFilters(initialSearch);
   const page = useCompanyList(filters.search, filters.sort, filters.filter);
   const selection = useCompanySelection(page.items, initialSearch);
@@ -353,7 +347,6 @@ function useCompaniesAndPeopleModel(initialSearch?: string): CompaniesAndPeopleM
     reloadDetail();
   }, [reloadDetail, reloadPage]);
   const wantAction = useCompanyWantAction(refresh);
-  const nextStepAction = useCompanyNextStepAction(refresh);
   const recruiterSearch = useCompanyRecruiterSearch(refresh);
   const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const detailedCompany =
@@ -378,10 +371,10 @@ function useCompaniesAndPeopleModel(initialSearch?: string): CompaniesAndPeopleM
     filterSheetOpen,
     setFilterSheetOpen,
     wantAction,
-    nextStepAction,
     recruiterSearch,
     actionError: wantAction.error ?? recruiterSearch.error,
     refresh,
+    onOpenCompanyVacancies,
   };
 }
 
@@ -402,7 +395,6 @@ function SelectedCompanyDetail({
     consentGranted,
     consentRequiredKey,
     wantAction,
-    nextStepAction,
     recruiterSearch,
     actionError,
     setSelectedKey,
@@ -415,18 +407,15 @@ function SelectedCompanyDetail({
       searchConsentGranted={consentGranted}
       consentRequired={consentRequiredKey === selected.key}
       detailLoading={detail.loading}
-      detailLoadingMore={detail.loadingMore}
       detailError={detail.error}
       actionError={actionError}
       busyWant={wantAction.busyKey === selected.key}
       busySearch={recruiterSearch.busyKey === selected.key}
-      busyNextStep={nextStepAction.busyKey === selected.key}
       onBack={() => setSelectedKey(null)}
       onOpenConnections={onOpenConnections}
       onOpenLetter={onOpenLetter}
-      onLoadMoreVacancies={() => void detail.loadMore()}
+      onOpenCompanyVacancies={model.onOpenCompanyVacancies}
       onToggleWant={() => void wantAction.toggle(selected)}
-      onSaveNextStep={(text, dueAt) => nextStepAction.save(selected.key, text, dueAt)}
       onSearch={() => void recruiterSearch.search(selected.key)}
       onAllowAndSearch={() => void recruiterSearch.allowAndSearch(selected.key)}
     />
@@ -469,21 +458,24 @@ function CompanyListColumn({
   readonly model: CompaniesAndPeopleModel;
   readonly onOpenCareer?: () => void;
 }) {
-  const { page, selectedKey, wantAction, filters } = model;
+  const { page, selectedKey, filters } = model;
   return (
     <div>
       <CompanyList
         companies={page.items}
         selectedKey={selectedKey}
-        busyKey={wantAction.busyKey}
         filter={filters.filter}
         allCount={page.page?.filterCounts.all ?? 0}
         search={filters.search}
         onSelect={model.setSelectedKey}
-        onToggleWant={(company) => void wantAction.toggle(company)}
         onOpenCareer={onOpenCareer}
         onWantsChanged={page.reload}
       />
+      {page.page && page.items.length > 0 ? (
+        <p className="companies-people-list-footer">
+          Показано {page.items.length} из {page.page.total}. {COMPANY_ORDER_NOTE[filters.sort]}
+        </p>
+      ) : null}
       {page.items.length < (page.page?.total ?? 0) ? (
         <button
           type="button"
@@ -551,6 +543,7 @@ function CompanyToolbarView({
   return (
     <CompanyToolbar
       search={filters.searchInput}
+      total={counts.all}
       sort={filters.sort}
       filter={filters.filter}
       filterCounts={counts}
@@ -566,7 +559,7 @@ function CompanyDirectorySummary({ page }: { readonly page: CompanyListState }) 
   return (
     <p className="companies-people-count" aria-live="polite">
       {page.page
-        ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в текущей подборке`
+        ? `${pluralRu(page.page.total, ['компания', 'компании', 'компаний'])} в подборке`
         : 'Загружаем компании…'}
     </p>
   );
@@ -630,9 +623,10 @@ export function CompaniesAndPeopleScreen({
   onOpenConnections,
   onOpenLetter,
   onOpenCareer,
+  onOpenCompanyVacancies,
   initialSearch,
 }: CompaniesAndPeopleScreenProps) {
-  const model = useCompaniesAndPeopleModel(initialSearch);
+  const model = useCompaniesAndPeopleModel(initialSearch, onOpenCompanyVacancies);
   return (
     <CompaniesAndPeopleView
       model={model}

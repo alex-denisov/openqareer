@@ -18,4 +18,6 @@ export interface VacanciesScreenState {
   /** B546: a vacancy without salary is compared by its market estimate. */
   readonly useMarketEstimate?: boolean;
   readonly formats?: readonly string[];
+  /** B439: «Все N вакансий компании в подборке» narrows the selection to one company. */
+  readonly companyName?: string;
 }

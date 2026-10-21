@@ -3,6 +3,7 @@ import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { VacancyQuizProposal, type SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
+import { CompaniesContactProposal } from '../vacancies/CompaniesAndPeopleProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
   STAGE_TITLE,
@@ -657,6 +658,7 @@ export function CareerExpertPanel({
           {stage === 'vacancies' && user && !loadingSnapshot && onStartSkillCheck ? (
             <VacancyQuizProposal onStart={onStartSkillCheck} />
           ) : null}
+          {stage === 'vacancies' && user && !loadingSnapshot ? <CompaniesContactProposal /> : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
           ) : null}
