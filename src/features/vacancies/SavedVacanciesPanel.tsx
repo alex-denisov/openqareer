@@ -3,6 +3,7 @@ import { Info, MagnifyingGlass, Star } from '@phosphor-icons/react';
 import type { ApplicationView } from '../applications/applicationsApi';
 import type { VacancyCollectionsState } from './vacancyScreenCollections';
 import { formatCompensationCompact } from './vacancyCompensation';
+import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
 import { getSavedVacancyStates } from './savedVacancyStatesApi';
 import {
   SAVED_SORT_OPTIONS,
@@ -48,17 +49,23 @@ function writeStoredView(view: StoredView): void {
   }
 }
 
+function savedRefs(applications: readonly ApplicationView[]) {
+  return applications.flatMap((item) =>
+    item.clusterId
+      ? [{ clusterId: item.clusterId, ...(item.vacancy?.url ? { url: item.vacancy.url } : {}) }]
+      : [],
+  );
+}
+
 function useSavedStates(applications: readonly ApplicationView[]) {
-  const key = applications
-    .map((item) => item.clusterId ?? '')
-    .filter(Boolean)
-    .join(',');
+  const key = JSON.stringify(savedRefs(applications));
   const [states, setStates] = useState<Readonly<Record<string, SavedVacancyState>>>({});
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    if (!key) return undefined;
+    const refs = JSON.parse(key) as ReturnType<typeof savedRefs>;
+    if (!refs.length) return undefined;
     const controller = new AbortController();
-    getSavedVacancyStates(key.split(','), controller.signal)
+    getSavedVacancyStates(refs, controller.signal)
       .then((value) => {
         setStates(value);
         setFailed(false);
@@ -107,6 +114,62 @@ function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
   );
 }
 
+const LEVEL_LABEL = {
+  ic: 'Специалист',
+  lead: 'Лид',
+  head: 'Head',
+  vp: 'VP',
+  'c-level': 'C-level',
+} as const;
+
+const LEVEL_FIT_LABEL = {
+  match: 'совпадает',
+  above: 'не совпадает',
+  below: 'не совпадает',
+  unknown: 'не указано',
+} as const;
+
+/** Вакансии нет в каталоге: уровень и гео неизвестны, так и пишем. */
+function SavedOutOfCatalog({ label }: { readonly label: string }) {
+  return (
+    <div className="saved-row-cell" data-label={label}>
+      <span>—</span>
+      <span className="saved-row-fit">нет в каталоге</span>
+    </div>
+  );
+}
+
+function SavedLevel({ state }: { readonly state: SavedVacancyState | undefined }) {
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Уровень" />;
+  const levelMatch = state.levelMatch ?? 'unknown';
+  return (
+    <div className="saved-row-cell" data-label="Уровень">
+      <span>{state.vacancyLevel ? LEVEL_LABEL[state.vacancyLevel] : 'Не указан'}</span>
+      <span className="saved-row-fit">
+        <span aria-hidden="true">
+          <LevelFitDot levelMatch={levelMatch} />
+        </span>
+        <span>{LEVEL_FIT_LABEL[levelMatch]}</span>
+      </span>
+    </div>
+  );
+}
+
+function SavedGeo({ state }: { readonly state: SavedVacancyState | undefined }) {
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Гео" />;
+  return (
+    <div className="saved-row-cell" data-label="Гео">
+      <span>{state.location ?? (state.isRemote ? 'Удалённо' : 'Не указано')}</span>
+      <span className="saved-row-fit">
+        <span aria-hidden="true">
+          <GeoFitDot outsideGeo={state.outsideGeography} />
+        </span>
+        <span>{state.outsideGeography ? 'не совпадает' : 'совпадает'}</span>
+      </span>
+    </div>
+  );
+}
+
 function SavedRow({
   entry,
   application,
@@ -129,6 +192,8 @@ function SavedRow({
           {savedDate ? ` · сохранено ${savedDate}` : ''}
         </p>
       </div>
+      <SavedLevel state={entry.state} />
+      <SavedGeo state={entry.state} />
       <SavedMoney entry={entry} />
       <div className="saved-row-actions">
         {href ? (

@@ -31,6 +31,14 @@ test('B550: saved tab searches, filters closed, sorts by money and keeps the cho
     return;
   }
 
+  const found = page.locator('.saved-row').filter({ hasText: 'Saved role 2' });
+  await expect(found.locator('[data-label="Уровень"]')).toContainText('Head');
+  await expect(found.locator('[data-label="Уровень"]')).toContainText('совпадает');
+  await expect(found.locator('[data-label="Гео"]')).toContainText('Москва');
+  const missing = page.locator('.saved-row').filter({ hasText: 'Saved role 3' });
+  await expect(missing.locator('[data-label="Гео"]')).toContainText('нет в каталоге');
+  await expect(missing.locator('[data-label="Уровень"]')).toContainText('—');
+
   const search = page.getByRole('searchbox', { name: 'Компания или роль среди 6 сохранённых' });
   await search.fill('Saved company 3');
   expect(await roles(page)).toEqual(['Saved role 3']);

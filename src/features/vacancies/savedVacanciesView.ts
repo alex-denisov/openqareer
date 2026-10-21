@@ -9,8 +9,15 @@ export interface SavedVacancySalary {
 /** Состояние вакансии на площадке с сервера; `undefined` — сервер ничего не знает. */
 export interface SavedVacancyState {
   readonly closed: boolean;
+  /** `false` — вакансии нет в текущем каталоге: уровень и гео неизвестны. */
+  readonly inCatalog?: boolean;
   readonly closedAt?: string;
   readonly salary?: SavedVacancySalary;
+  readonly vacancyLevel?: 'ic' | 'lead' | 'head' | 'vp' | 'c-level';
+  readonly levelMatch?: 'match' | 'above' | 'below' | 'unknown';
+  readonly location?: string;
+  readonly isRemote?: boolean;
+  readonly outsideGeography?: boolean;
 }
 
 export interface SavedVacancyEntry {

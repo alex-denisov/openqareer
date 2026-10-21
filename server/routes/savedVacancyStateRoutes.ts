@@ -1,27 +1,48 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
+import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import { SAVED_VACANCY_STATES_LIMIT, savedVacancyStates } from '../vacancies/savedVacancyStates';
+import { readCampaign } from './campaignContext';
 import type { RouteDeps } from './deps';
-import { authenticateCandidate, sendError, withDeps } from './helpers';
+import {
+  authenticateCandidate,
+  csrfError,
+  hasSafeMutationOrigin,
+  sendError,
+  withDeps,
+} from './helpers';
+import { readTargetLevel } from './vacancyRoleContext';
 
-const querySchema = z.object({
-  ids: z
-    .string()
-    .max(SAVED_VACANCY_STATES_LIMIT * 120)
-    .transform((value) =>
-      value
-        .split(',')
-        .map((id) => id.trim())
-        .filter(Boolean),
+const bodySchema = z.object({
+  items: z
+    .array(
+      z.object({
+        clusterId: z.string().trim().min(1).max(120),
+        url: z.string().trim().max(2000).optional(),
+      }),
     )
-    .pipe(z.array(z.string().max(120)).max(SAVED_VACANCY_STATES_LIMIT)),
+    .max(SAVED_VACANCY_STATES_LIMIT),
 });
+
+/** Тот же контекст, что у подборки: целевой уровень и рынки кампании кандидата. */
+function matchContext(deps: RouteDeps, candidateId: string) {
+  const campaign = readCampaign(deps.candidateStore, candidateId);
+  return {
+    candidateLevel: readTargetLevel(deps.candidateStore, candidateId, [...campaign.roles.value]),
+    regions: [
+      ...(campaign.regions.value as CandidateRegion[]),
+      ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
+    ],
+    getTitleParse: (titleKey: string) => deps.titleParseStore.getByKey(titleKey),
+  };
+}
 
 async function handleSavedVacancyStates(
   deps: RouteDeps,
   request: FastifyRequest,
   reply: FastifyReply,
 ) {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(
     request,
     reply,
@@ -30,17 +51,28 @@ async function handleSavedVacancyStates(
     deps.config,
   );
   if (!candidate) return undefined;
-  const parsed = querySchema.safeParse(request.query ?? {});
+  const parsed = bodySchema.safeParse(request.body ?? {});
   if (!parsed.success) {
-    return sendError(reply, request, 400, 'invalid_ids', 'Список вакансий не распознан.', false);
+    return sendError(reply, request, 400, 'invalid_items', 'Список вакансий не распознан.', false);
   }
   return {
-    data: savedVacancyStates(deps.multiSourceEngine, parsed.data.ids),
+    data: savedVacancyStates(
+      deps.multiSourceEngine,
+      parsed.data.items,
+      matchContext(deps, candidate.id),
+    ),
     meta: { requestId: request.id },
   };
 }
 
-/** B550: деньги и закрытие на площадке для вкладки «Сохранённые». */
+/**
+ * B550: деньги, закрытие, уровень и гео для вкладки «Сохранённые». POST, потому
+ * что вместе с id идут URL вакансий; ничего не записывает.
+ */
 export function registerSavedVacancyStateRoutes(app: FastifyInstance, deps: RouteDeps): void {
-  app.get('/api/v1/candidate/saved-vacancy-states', withDeps(deps, handleSavedVacancyStates));
+  app.post(
+    '/api/v1/candidate/saved-vacancy-states',
+    { config: { rateLimit: { max: 240, timeWindow: '1 hour' } } },
+    withDeps(deps, handleSavedVacancyStates),
+  );
 }

@@ -515,22 +515,36 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
   });
 }
 
-/** B550: первая сохранённая закрылась на площадке, у чётных указана вилка. */
+/**
+ * B550: первая сохранённая закрылась на площадке, третьей нет в каталоге,
+ * у чётных указана вилка; найденные — Head в Москве, совпадают с условиями.
+ */
 function savedVacancyStateFixtures(ids: readonly string[]): Record<string, unknown> {
+  const inCatalog = {
+    inCatalog: true,
+    vacancyLevel: 'head',
+    levelMatch: 'match',
+    location: 'Москва',
+    isRemote: false,
+    outsideGeography: false,
+  };
   return Object.fromEntries(
     ids
       .filter((id) => id.startsWith('saved-cluster-'))
       .map((id) => {
         const sequence = Number(id.slice('saved-cluster-'.length));
-        if (sequence === 1) return [id, { closed: true, closedAt: '2026-10-06T09:00:00.000Z' }];
+        if (sequence === 1)
+          return [id, { ...inCatalog, closed: true, closedAt: '2026-10-06T09:00:00.000Z' }];
+        if (sequence === 3) return [id, { closed: false, inCatalog: false }];
         return [
           id,
           sequence % 2 === 0
             ? {
+                ...inCatalog,
                 closed: false,
                 salary: { from: sequence * 50_000, to: sequence * 60_000, currency: 'RUR' },
               }
-            : { closed: false },
+            : { ...inCatalog, closed: false },
         ];
       }),
   );
@@ -1834,8 +1848,9 @@ export async function mockSignedInCabinet(
         },
       });
     }
-    if (path === '/api/v1/candidate/saved-vacancy-states') {
-      const ids = (new URL(route.request().url()).searchParams.get('ids') ?? '').split(',');
+    if (path === '/api/v1/candidate/saved-vacancy-states' && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { items?: { clusterId: string }[] };
+      const ids = (body.items ?? []).map((item) => item.clusterId);
       return route.fulfill({ json: { data: savedVacancyStateFixtures(ids) } });
     }
     // Saved vacancies use the same candidate application tracker as the Responses screen.

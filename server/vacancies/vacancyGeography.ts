@@ -140,6 +140,26 @@ export interface GeographyMatch extends OrderableMatch {
 }
 
 /**
+ * Одна вакансия вне выбранных рынков: удалёнка и неизвестное место — не «вне».
+ * Общее правило подборки и вкладки «Сохранённые» (B550).
+ */
+export function isOutsideGeography(
+  cluster: {
+    readonly canonicalLocation?: string;
+    readonly isRemote?: boolean;
+    readonly companyFeatures?: { readonly country?: string };
+  },
+  regions: readonly CandidateRegion[],
+): boolean {
+  if (regions.length === 0 || cluster.isRemote) return false;
+  const region = regionOfVacancy({
+    location: cluster.canonicalLocation,
+    country: cluster.companyFeatures?.country,
+  });
+  return Boolean(region) && !new Set<PlaceRegion>(regions).has(region as PlaceRegion);
+}
+
+/**
  * Помечает записи вне выбранных или профильных рынков. При одинаковом
  * соответствии роли и требованиям такие офисы стоят после удалённых, местных
  * и неизвестных мест. Удалёнка
@@ -150,15 +170,10 @@ export function markGeography<T extends GeographyMatch>(
   regions: readonly CandidateRegion[],
 ): T[] {
   if (regions.length === 0) return [...matched];
-  const wanted = new Set<PlaceRegion>(regions);
-  const marked = matched.map((item) => {
-    if (item.cluster.isRemote) return item;
-    const region = regionOfVacancy({
-      location: item.cluster.canonicalLocation,
-      country: item.cluster.companyFeatures?.country,
-    });
-    if (!region || wanted.has(region)) return item;
-    return { ...item, explanation: { ...item.explanation, outsideGeography: true } };
-  });
+  const marked = matched.map((item) =>
+    isOutsideGeography(item.cluster, regions)
+      ? { ...item, explanation: { ...item.explanation, outsideGeography: true } }
+      : item,
+  );
   return marked.sort(compareMatchedVacancies);
 }

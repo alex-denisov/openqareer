@@ -801,6 +801,17 @@ export class MultiSourceVacancyEngine {
   }
 
   /**
+   * B550: активный кластер каталога по ключу участника (URL вакансии) — один
+   * индексированный запрос к `vacancy_cluster_keys`, без подъёма пула.
+   */
+  public getActiveClusterByMemberKey(key: string): VacancyCluster | undefined {
+    if (!key || typeof this.pool.clusterIdForMemberKey !== 'function') return undefined;
+    const clusterId = this.pool.clusterIdForMemberKey(key);
+    const cluster = clusterId ? this.getPublicCatalogCluster(clusterId) : undefined;
+    return cluster?.status === 'active' ? cluster : undefined;
+  }
+
+  /**
    * True когда `clusterId` был известной вакансией — нашлась запись
    * (возможно, снятая) или прямое совпадение кластера, — но живого активного
    * кластера для неё сейчас нет: снята или заменилась при пересборке. Клик
