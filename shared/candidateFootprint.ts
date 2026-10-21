@@ -2,6 +2,11 @@ import type { FootprintFinding } from '../server/osint/adapters/footprintAdapter
 
 export type FootprintAdapterId = 'sherlock' | 'maigret' | 'hibp' | 'wayback' | 'exa';
 export type FootprintReview = 'unreviewed' | 'confirmed_self' | 'not_self' | 'hidden';
+export type FootprintChecklistMark =
+  | 'password_changed'
+  | 'account_closed'
+  | 'account_kept'
+  | 'added_to_profile';
 export type FootprintAdapterState = 'not_run' | 'pending' | 'checked' | 'not_connected' | 'source_error';
 export type CandidateFootprintAuditState = 'pending' | 'completed' | 'failed';
 
@@ -11,6 +16,12 @@ export interface CandidateFootprintFinding extends FootprintFinding {
   readonly receipts: readonly FootprintFinding['receipt'][];
   readonly automatedMatch: 'likely_self' | 'unknown';
   readonly review: FootprintReview;
+  /** B544: the candidate's follow-up mark for the sanitation checklist, kept on the server. */
+  readonly checklistMark?: FootprintChecklistMark;
+  /** B544: the adapter saw an old or duplicate account. */
+  readonly staleAccount?: boolean;
+  /** B544: the profile fact «Добавить в профиль» created from this finding. */
+  readonly profileFactId?: string;
 }
 
 export interface CandidateFootprintAdapterStatus {
