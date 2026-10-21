@@ -11,7 +11,8 @@ import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { VacancyInfoModal } from './VacancyInfoModal';
 import { VacancyCompanyPathPanel, companyPathActions } from './VacancyCompanyPathPanel';
 import { VacancyRowPush } from './VacancyMobilePush';
-import { useCompactViewport } from './useCompactViewport';
+import { DetailTrustAlert } from './VacancyTrustAlert';
+import { useOpenedCompact } from './useCompactViewport';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { VacancyScreenRowCells } from './VacancyScreenRowCells';
@@ -460,20 +461,6 @@ function RecruiterSection({ cluster }: { readonly cluster: MatchedVacancyItem['c
   );
 }
 
-function DetailTrustAlert({ trust }: { readonly trust: ReturnType<typeof vacancyTrustSignals> }) {
-  if (trust.level === 'ok' || trust.reasons.length === 0) return null;
-  return (
-    <div
-      className={`vacancies-detail-trust-alert is-${trust.level}`}
-      role="status"
-      data-trust-level={trust.level}
-    >
-      <Warning size={16} aria-hidden="true" />
-      <span>{trust.reasons.join(' · ')}</span>
-    </div>
-  );
-}
-
 interface DetailProps {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly explanation: MatchedVacancyItem['explanation'];
@@ -642,8 +629,7 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const [pathOpen, setPathOpen] = useState(false);
-  const compact = useCompactViewport();
-  if (compact)
+  if (useOpenedCompact())
     return <VacancyRowPush item={rowProps.item} rowProps={rowProps} rowState={rowState} />;
   const pathPanelId = `vacancy-path-${cluster.id}`;
   return (

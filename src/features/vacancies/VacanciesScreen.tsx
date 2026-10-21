@@ -109,7 +109,8 @@ function extractBoardRegions(campaign?: CampaignMetaView) {
 }
 
 function initialSelectedId(matched: readonly MatchedVacancyItem[]): string | undefined {
-  if (typeof window !== 'undefined' && window.innerWidth > 640) {
+  // B549: on a narrow screen a selected row opens a push screen; nothing is preselected.
+  if (typeof window !== 'undefined' && window.innerWidth > 760) {
     return matched[0]?.cluster.id;
   }
   return undefined;

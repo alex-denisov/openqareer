@@ -21,3 +21,11 @@ export function useCompactViewport(): boolean {
   }, []);
   return compact;
 }
+
+/** A row opens as a push screen only when chosen on a narrow screen;
+ *  narrowing the window keeps an already open row inline (B549). */
+export function useOpenedCompact(): boolean {
+  const compact = useCompactViewport();
+  const [openedCompact] = useState(compact);
+  return compact && openedCompact;
+}

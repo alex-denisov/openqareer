@@ -13,6 +13,13 @@ async function openVacancies(page: Page): Promise<void> {
   await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
 }
 
+async function expandFirst(page: Page) {
+  const item = page.locator('.vac-list-item').first();
+  const trigger = item.locator('.vacancies-screen-row-trigger');
+  if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
+  return item;
+}
+
 async function shot(page: Page, name: string): Promise<void> {
   mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: true });
@@ -23,8 +30,7 @@ test('B549 1440: requirement chips, company path in the row, sectioned descripti
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'desktop-1440', 'desktop expanded row');
   await openVacancies(page);
-  const item = page.locator('.vac-list-item').first();
-  await item.locator('.vacancies-screen-row-trigger').click();
+  const item = await expandFirst(page);
   const detail = item.locator('.vac-detail');
   await expect(detail.getByRole('heading', { name: 'Требования к навыкам' })).toBeVisible();
   await expect(detail).toContainText('Из описания вакансии и тегов источника');
@@ -58,7 +64,7 @@ test('B549 390: row → «Вакансия» → «Путь к компании�
 }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-390', 'mobile push screens');
   await openVacancies(page);
-  await page.locator('.vac-list-item').first().locator('.vacancies-screen-row-trigger').click();
+  await expandFirst(page);
   const push = page.locator('.vacancy-push');
   const title = push.locator('#vacancy-push-title');
   await expect(title).toHaveText('Вакансия');
@@ -88,8 +94,7 @@ test('B549 «Обсудить» opens the consultant with the vacancy question',
   page,
 }, testInfo) => {
   await openVacancies(page);
-  const item = page.locator('.vac-list-item').first();
-  await item.locator('.vacancies-screen-row-trigger').click();
+  const item = await expandFirst(page);
   if (testInfo.project.name === 'mobile-390') {
     await page
       .locator('.vacancy-push')

@@ -57,6 +57,12 @@ describe('VacancyCompanyPathPanel (B549)', () => {
     expect(onPrepareLetter).toHaveBeenCalledTimes(1);
   });
 
+  it('treats a malformed response as an error instead of crashing', async () => {
+    vi.spyOn(api, 'getVacancyConnectionCircles').mockResolvedValue({} as never);
+    const host = await mount();
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Не удалось загрузить');
+  });
+
   it('shows an error with a retry', async () => {
     const spy = vi.spyOn(api, 'getVacancyConnectionCircles').mockRejectedValueOnce(new Error('x'));
     spy.mockResolvedValueOnce(circles);

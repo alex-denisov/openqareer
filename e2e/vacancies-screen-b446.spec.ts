@@ -239,7 +239,9 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .filter({ hasText: 'Revolut' })
     .first();
   await expect(vacancy).toBeVisible({ timeout: 15_000 });
-  const saveButton = vacancy.getByRole('button', { name: 'Сохранить', exact: true });
+  const saveButton = vacancy
+    .locator('.vacancies-screen-row-shell')
+    .getByRole('button', { name: 'Сохранить', exact: true });
   await expect(saveButton).toBeVisible();
   const actionHeights = await vacancy
     .locator('.career-vacancy-actions button')
@@ -250,34 +252,38 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     );
   expect(actionHeights.every((height) => height >= 44)).toBe(true);
   const rowTrigger = vacancy.locator('.vacancies-screen-row-trigger');
-  if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
-  const companyWantButton = vacancy
-    .locator('.vacancies-screen-detail-actions')
-    .getByRole('button', { name: 'Хочу в эту компанию' });
-  await expect(companyWantButton).toBeVisible();
-  await companyWantButton.click();
-  await expect(
-    vacancy.locator('.vacancies-screen-detail-actions').getByRole('button', {
-      name: 'Убрать из «Хочу»',
-    }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
-    fullPage: true,
-  });
-  if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
-  const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
-  await focusWithKeyboard(page, companyPathButton);
-  await page.keyboard.press('Enter');
-  // B549: the circles open inside the row; the people tab is one step further.
-  await focusWithKeyboard(
-    page,
-    vacancy
-      .locator('.vacancy-path-panel')
-      .getByRole('button', { name: 'Добавить контакты' })
-      .first(),
-  );
-  await page.keyboard.press('Enter');
+  if (testInfo.project.name === 'mobile-390') {
+    await wantAndPathOnPush(page, rowTrigger, viewportSuffix);
+  } else {
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
+    const companyWantButton = vacancy
+      .locator('.vacancies-screen-detail-actions')
+      .getByRole('button', { name: 'Хочу в эту компанию' });
+    await expect(companyWantButton).toBeVisible();
+    await companyWantButton.click();
+    await expect(
+      vacancy.locator('.vacancies-screen-detail-actions').getByRole('button', {
+        name: 'Убрать из «Хочу»',
+      }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
+      fullPage: true,
+    });
+    if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
+    const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
+    await focusWithKeyboard(page, companyPathButton);
+    await page.keyboard.press('Enter');
+    // B549: the circles open inside the row; the people tab is one step further.
+    await focusWithKeyboard(
+      page,
+      vacancy
+        .locator('.vacancy-path-panel')
+        .getByRole('button', { name: 'Добавить контакты' })
+        .first(),
+    );
+    await page.keyboard.press('Enter');
+  }
   await expect(page.getByRole('tab', { name: /Компании и люди/u })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -327,15 +333,19 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   const reloadedRowTrigger = reloadedVacancy.locator('.vacancies-screen-row-trigger');
   if ((await reloadedRowTrigger.getAttribute('aria-expanded')) !== 'true')
     await reloadedRowTrigger.click();
-  const removeCompanyWant = reloadedVacancy
-    .locator('.vacancies-screen-detail-actions')
-    .getByRole('button', { name: 'Убрать из «Хочу»' });
+  // B549: at 390 the actions live on the «Вакансия» push screen.
+  const actions =
+    testInfo.project.name === 'mobile-390'
+      ? page.locator('.vacancy-push')
+      : reloadedVacancy.locator('.vacancies-screen-detail-actions');
+  const removeCompanyWant = actions.getByRole('button', { name: /Убрать из «Хочу»/u });
   await expect(removeCompanyWant).toBeVisible();
   await removeCompanyWant.click();
-  const restoredWantAction = reloadedVacancy
-    .locator('.vacancies-screen-detail-actions')
-    .getByRole('button', { name: 'Хочу в эту компанию' });
+  const restoredWantAction = actions.getByRole('button', { name: /Хочу в эту компанию/u });
   await expect(restoredWantAction).toBeVisible();
+  if (testInfo.project.name === 'mobile-390') {
+    await page.locator('.vacancy-push').getByRole('button', { name: 'Назад' }).click();
+  }
   await expect(page.getByRole('tab', { name: 'Сохранённые 19' })).toBeVisible();
   await page.getByRole('tab', { name: 'Сохранённые 19' }).click();
   await expect(
@@ -346,3 +356,17 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     fullPage: true,
   });
 });
+
+/** B549: at 390 the row opens the «Вакансия» push screen with the same actions. */
+async function wantAndPathOnPush(page: Page, rowTrigger: Locator, viewportSuffix: string) {
+  await rowTrigger.click();
+  const push = page.locator('.vacancy-push');
+  await push.getByRole('button', { name: /Хочу в эту компанию/u }).click();
+  await expect(push.getByRole('button', { name: /Убрать из «Хочу»/u })).toBeVisible();
+  await page.screenshot({
+    path: `output/playwright/B446/B446-company-want-${viewportSuffix}.png`,
+    fullPage: true,
+  });
+  await push.getByRole('button', { name: /Путь к компании/u }).click();
+  await push.locator('.vacancy-push-circle').first().click();
+}

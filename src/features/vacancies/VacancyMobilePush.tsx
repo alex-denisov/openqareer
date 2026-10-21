@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { VacancyRowProps } from './VacancyRow';
 import { companyPathActions } from './VacancyCompanyPathPanel';
+import { DetailTrustAlert } from './VacancyTrustAlert';
+import type { vacancyTrustSignals } from '../../../shared/vacancyTrustSignals';
 import {
   ArrowSquareOut,
   BookmarkSimple,
@@ -56,6 +58,8 @@ export interface VacancyMobilePushProps {
   readonly onToggleCompanyWant?: () => void | Promise<void>;
   readonly onDiscuss?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+  /** Trust warning (stale, phantom, suspicious) shown above the vacancy. */
+  readonly notice?: ReactNode;
 }
 
 function observedDay(item: MatchedVacancyItem): string | null {
@@ -177,6 +181,7 @@ function JobPage({
         title={cluster.canonicalTitle}
         subtitle={[cluster.canonicalCompany, originLabel(props.item)].filter(Boolean).join(' · ')}
       />
+      {props.notice}
       <ConditionsGroup item={props.item} />
       <div className="vacancy-push-group vacancy-push-requirements">
         <VacancyScreenRequirementChips
@@ -334,7 +339,43 @@ export function VacancyMobilePush(props: VacancyMobilePushProps) {
   );
 }
 
+function applyCta(
+  cluster: MatchedVacancyItem['cluster'],
+  rowProps: { readonly onOpenArchive?: () => void; readonly onOpenResponses?: () => void },
+  rowState: RowPushState,
+): Pick<VacancyMobilePushProps, 'onApply' | 'applyLabel' | 'applyDisabled'> {
+  if (rowState.applicationArchived) {
+    const open = rowProps.onOpenArchive;
+    return {
+      onApply: open ?? (() => undefined),
+      applyLabel: open ? 'Открыть архив' : 'Отклик в архиве',
+      applyDisabled: !open,
+    };
+  }
+  if (rowState.alreadyApplied) {
+    const open = rowProps.onOpenResponses;
+    return {
+      onApply: open ?? (() => undefined),
+      applyLabel: open ? 'Перейти в «Отклики»' : 'Отклик отмечен',
+      applyDisabled: !open,
+    };
+  }
+  if (rowState.externalOpened) {
+    return {
+      onApply: () => void rowState.handleConfirmSent(),
+      applyLabel: 'Да, отклик отправлен',
+      applyDisabled: false,
+    };
+  }
+  return {
+    onApply: rowState.handleApplyExternal,
+    applyLabel: 'Откликнуться',
+    applyDisabled: !cluster.primaryUrl,
+  };
+}
+
 interface RowPushState {
+  readonly applicationArchived: boolean;
   readonly alreadyApplied: boolean;
   readonly externalOpened: boolean;
   readonly handleApplyExternal: () => void;
@@ -353,6 +394,8 @@ export function vacancyRowPushProps(
     readonly onToggleCompanyWant?: () => void | Promise<void>;
     readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
     readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+    readonly onOpenArchive?: () => void;
+    readonly onOpenResponses?: () => void;
   },
   rowState: RowPushState,
   pathActions: CompanyPathActions,
@@ -362,15 +405,7 @@ export function vacancyRowPushProps(
     item,
     onClose: rowProps.onSelect,
     onOpenFullDescription: () => rowState.setInfoOpen(true),
-    onApply: rowState.externalOpened
-      ? () => void rowState.handleConfirmSent()
-      : rowState.handleApplyExternal,
-    applyLabel: rowState.alreadyApplied
-      ? 'Отклик отмечен'
-      : rowState.externalOpened
-        ? 'Да, отклик отправлен'
-        : 'Откликнуться',
-    applyDisabled: rowState.alreadyApplied || !cluster.primaryUrl,
+    ...applyCta(cluster, rowProps, rowState),
     pathActions,
     isSaved: rowProps.isSaved,
     onToggleSaved: rowProps.onToggleSaved,
@@ -391,8 +426,29 @@ export function VacancyRowPush({
 }: {
   readonly item: MatchedVacancyItem;
   readonly rowProps: VacancyRowProps;
-  readonly rowState: RowPushState & { readonly setPitchOpen: (open: boolean) => void };
+  readonly rowState: RowPushState & {
+    readonly setPitchOpen: (open: boolean) => void;
+    readonly trust: ReturnType<typeof vacancyTrustSignals>;
+  };
 }) {
-  const actions = companyPathActions(item.cluster, rowProps, () => rowState.setPitchOpen(true));
-  return <VacancyMobilePush {...vacancyRowPushProps(item, rowProps, rowState, actions)} />;
+  const base = companyPathActions(item.cluster, rowProps, () => rowState.setPitchOpen(true));
+  // Leaving for another screen closes the push, so «Подборка» returns to the list.
+  const leave = (action?: () => void) =>
+    action
+      ? () => {
+          rowProps.onSelect();
+          action();
+        }
+      : undefined;
+  const actions = {
+    ...base,
+    onShowPaths: leave(base.onShowPaths),
+    onPrepareLetter: rowProps.onOpenLetter ? leave(base.onPrepareLetter) : base.onPrepareLetter,
+  };
+  return (
+    <VacancyMobilePush
+      {...vacancyRowPushProps(item, rowProps, rowState, actions)}
+      notice={<DetailTrustAlert trust={rowState.trust} />}
+    />
+  );
 }

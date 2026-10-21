@@ -1,17 +1,17 @@
 /* B549: 390 px push screens of a vacancy (mockup 4, ?mv=job|path|c1|c2|c3). */
 .vacancy-push {
   position: fixed;
-  inset: 0;
+  /* Ends above the bottom menu so the menu never covers a row of the screen. */
+  inset: 0 0
+    calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
   z-index: 26;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow-y: auto;
   background: var(--career-bg);
   color: var(--career-text);
-  padding-block-end: calc(
-    var(--career-mobile-nav-height) + var(--career-target-min) + var(--career-space-8) +
-      env(safe-area-inset-bottom)
-  );
+  scroll-padding-block: var(--career-mobile-topbar-height)
+    calc(var(--career-target-min) + var(--career-space-4));
 }
 
 .vacancy-push-bar {
@@ -277,14 +277,13 @@ div.vacancy-push-row {
 }
 
 .vacancy-push-cta {
-  position: fixed;
-  inset-inline: var(--career-space-4);
-  inset-block-end: calc(
-    var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom)
-  );
-  z-index: 27;
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
   display: flex;
   gap: var(--career-space-2);
+  padding: var(--career-space-2) var(--career-space-4);
+  background: var(--career-bg);
 }
 
 .vacancy-push-primary {
