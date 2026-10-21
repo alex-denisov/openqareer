@@ -1019,3 +1019,81 @@
   flex-wrap: wrap;
   gap: var(--career-space-2);
 }
+
+/* Макет 2 (shared.css): малая кнопка — прозрачный фон, контур inset-тенью, 13 px/600,
+   видимые 32 px внутри цели 44; career-inline-ok — акцентный контур и текст. */
+.career-profile-screen-view .career-btn.is-sm {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+  --edge: var(--career-field-edge);
+  min-block-size: var(--career-target-min);
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--edge);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.2;
+}
+.career-profile-screen-view .career-btn.is-sm:hover:not(:disabled) {
+  --edge: var(--career-accent);
+  background: transparent;
+}
+.career-profile-screen-view .career-btn.is-sm.is-ghost {
+  --edge: transparent;
+  color: var(--career-text-soft);
+}
+.career-profile-screen-view .career-btn.is-sm.is-ghost:hover:not(:disabled) {
+  color: var(--career-text);
+}
+.career-profile-screen-view .career-btn.is-sm.is-icon {
+  inline-size: var(--career-target-min);
+  padding: 0;
+}
+.career-profile-screen-view .career-btn.is-sm.career-inline-ok {
+  --edge: var(--career-accent);
+  color: var(--career-accent);
+}
+.career-profile-screen-view .career-btn.is-sm.career-inline-ok:hover:not(:disabled) {
+  background: var(--career-accent-soft);
+}
+.career-profile-screen-view .career-btn.is-sm:focus-visible {
+  outline-offset: calc(2px - var(--sm-gutter));
+}
+@media (pointer: coarse), (max-width: 600px) {
+  .career-profile-screen-view .career-btn.is-sm {
+    --sm-gutter: 0px;
+    margin-inline: 0;
+    padding: 0 var(--career-space-4);
+    font-size: var(--career-text-sm);
+  }
+  .career-profile-screen-view .career-btn.is-sm.is-icon {
+    padding: 0;
+  }
+}
+
+/* Макет 2: пункты достижений места — основной размер и яркость текста. */
+.career-profile-screen-view .career-profile-screen-position-bullets li {
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  line-height: 1.5;
+}
+
+/* Макет 2: карточка языка — имя 16/600, уровень 14 основным цветом, источник 13 приглушённым. */
+.career-profile-screen-view .career-profile-screen-lang-item {
+  padding: var(--career-space-3) var(--career-space-4);
+}
+.career-profile-screen-view .career-profile-screen-lang-name {
+  font-size: var(--career-text-md);
+}
+.career-profile-screen-view .career-profile-screen-lang-level {
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+}
+.career-profile-screen-view .career-profile-screen-lang-source {
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}

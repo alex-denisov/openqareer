@@ -100,7 +100,7 @@ function PendingActions({
     <div className="career-consultant-suggestion-actions">
       <button
         type="button"
-        className="career-primary-button"
+        className="career-btn career-inline-ok is-sm"
         onClick={onAccept}
         disabled={busy || loading || !onAccept}
         aria-busy={busy || loading || undefined}
@@ -110,7 +110,7 @@ function PendingActions({
       </button>
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm"
         onClick={onDismiss}
         disabled={busy || loading || !onDismiss}
         aria-busy={busy || loading || undefined}
