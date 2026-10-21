@@ -63,12 +63,29 @@ export function PushRow({
   );
 }
 
-export function PushCirclesStatus({ state }: { readonly state: VacancyPathCirclesState }) {
+/** B446-g4: пока круги грузятся или не загрузились, холодное письмо (круг 3) доступно. */
+function ColdLetterLink({ onPrepareLetter }: { readonly onPrepareLetter?: () => void }) {
+  if (!onPrepareLetter) return null;
+  return (
+    <button type="button" className="vacancy-push-text" onClick={onPrepareLetter}>
+      Подготовить письмо
+    </button>
+  );
+}
+
+export function PushCirclesStatus({
+  state,
+  onPrepareLetter,
+}: {
+  readonly state: VacancyPathCirclesState;
+  readonly onPrepareLetter?: () => void;
+}) {
   if (state.status === 'loading') {
     return (
-      <p className="vacancy-push-foot" role="status">
-        Загружаем связи с компанией…
-      </p>
+      <div className="vacancy-push-foot">
+        <p role="status">Загружаем связи с компанией…</p>
+        <ColdLetterLink onPrepareLetter={onPrepareLetter} />
+      </div>
     );
   }
   if (state.status === 'error') {
@@ -78,6 +95,7 @@ export function PushCirclesStatus({ state }: { readonly state: VacancyPathCircle
         <button type="button" className="vacancy-push-text" onClick={state.retry}>
           Повторить
         </button>
+        <ColdLetterLink onPrepareLetter={onPrepareLetter} />
       </div>
     );
   }

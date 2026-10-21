@@ -9919,6 +9919,18 @@
   gap: var(--career-space-4);
 }
 
+.career-map-canvas-container .career-map-header {
+  border: 0;
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  border-radius: 0;
+}
+
+.vacancy-map-note {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
 .career-map-header {
   display: flex;
   flex-wrap: wrap;
@@ -9969,10 +9981,11 @@
   fill: transparent;
 }
 
-/* На 390 карта сжата примерно в 2,5 раза — зона касания растёт в координатах SVG. */
+/* На 390 карта сжата примерно в 2,5 раза: капсула и её зона касания растут обратно,
+   чтобы на экране остаться ≥44 px. */
 @media (max-width: 760px) {
-  .career-map-hit {
-    r: 56px;
+  .career-map-capsule-scale {
+    transform: scale(2.4);
   }
 }
 
@@ -10050,6 +10063,25 @@
   stroke-width: calc(var(--career-border-width) * 3);
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* B446-g4: капсула города «Москва 74» (макет 4). */
+.career-map-capsule {
+  fill: var(--career-surface);
+  stroke: var(--career-line-strong);
+  stroke-width: var(--career-border-width);
+  vector-effect: non-scaling-stroke;
+}
+
+.career-map-pin-group:hover .career-map-capsule,
+.career-map-cluster-group:hover .career-map-capsule,
+.career-map-capsule.is-active {
+  fill: var(--career-accent-soft);
+  stroke: var(--career-accent);
+}
+
+.career-map-label.is-capsule {
+  stroke: none;
 }
 
 .career-map-label-count {

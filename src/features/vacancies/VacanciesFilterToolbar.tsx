@@ -99,6 +99,23 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
   return search || undefined;
 }
 
+/**
+ * B446-g4: роли и регионы кампании уже фильтруют подборку, значит кнопки и чипы их
+ * называют (макет 4: «Роли Head, Director»). Ручной выбор важнее кампании.
+ */
+export function withCampaignDefaults(
+  state: VacanciesScreenState,
+  campaignRoles: readonly string[] = [],
+  campaignRegions: readonly string[] = [],
+): VacanciesScreenState {
+  const locationsPicked = filterGroupIsActive(state, 'locations');
+  return {
+    ...state,
+    roles: state.roles.length || state.levels?.length ? state.roles : campaignRoles,
+    regions: locationsPicked ? state.regions : campaignRegions,
+  };
+}
+
 export function summarizeVacancyFilterGroup(
   state: VacanciesScreenState,
   group: VacancyFilterGroup,

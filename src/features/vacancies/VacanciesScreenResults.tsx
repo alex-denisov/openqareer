@@ -4,6 +4,7 @@ import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import { VacancyFitSortControl } from './VacancyFitSort';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
+import type { SavedCardRenderer } from './SavedVacanciesPanel';
 import { catalogSnapshotLabel } from './VacanciesScreenSummary';
 import {
   VacanciesEmptyFilterState,
@@ -100,8 +101,9 @@ function VacanciesListContent(props: ListContentProps) {
       </ul>
       <footer className="vacancies-screen-footer" aria-label="Навигация по подборке вакансий">
         <p className="vacancies-screen-page-count" aria-live="polite">
-          {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
-          {props.total || props.items.length}
+          {/* B446-g4: показанные из выдачи с условиями; догрузка пула — отдельной пометкой. */}
+          Показано {props.items.length} из {props.total || props.items.length}
+          {props.poolComplete === false ? ' · загружаем остальные' : null}
           <span className="vacancies-screen-catalog-date">
             {catalogDate ? `. Каталог на ${catalogDate}.` : '. Дата каталога неизвестна.'}
           </span>
@@ -155,5 +157,15 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
       />
       <VacanciesListContent {...props.listProps} />
     </>
+  );
+}
+
+/** B446-g4: «раскрыть» в «Сохранённых» — та же строка подборки, раскрытая; её шеврон сворачивает. */
+export function savedCardRenderer(listProps: ListContentProps): SavedCardRenderer {
+  return (item, onCollapse) => (
+    <VacancyScreenRow
+      item={item}
+      props={{ ...listProps, selectedId: item.cluster.id, onToggleSelect: onCollapse }}
+    />
   );
 }

@@ -3,6 +3,7 @@ import {
   formatShortDate,
   savedClosedLabel,
   savedVacanciesView,
+  savedVacancyItem,
   type SavedVacancyEntry,
 } from './savedVacanciesView';
 
@@ -100,5 +101,39 @@ describe('date labels', () => {
     expect(savedClosedLabel({ closed: true })).toBe('закрыта на площадке');
     expect(savedClosedLabel({ closed: false })).toBeUndefined();
     expect(savedClosedLabel(undefined)).toBeUndefined();
+  });
+});
+
+describe('savedVacancyItem (B446-g4)', () => {
+  it('builds the expanded-card item only for a saved vacancy found in the catalog', () => {
+    const input = { clusterId: 'c-1', title: 'Head', company: 'Вектор', url: 'https://x.test/1' };
+    expect(savedVacancyItem(input, { closed: false, inCatalog: false })).toBeUndefined();
+    expect(
+      savedVacancyItem({ ...input, clusterId: undefined }, { closed: false, inCatalog: true }),
+    ).toBeUndefined();
+    const item = savedVacancyItem(input, {
+      closed: false,
+      inCatalog: true,
+      levelMatch: 'match',
+      vacancyLevel: 'head',
+      location: 'Москва',
+      isRemote: false,
+      outsideGeography: false,
+      salary: { from: 450000, currency: 'RUB' },
+    });
+    expect(item?.cluster).toMatchObject({
+      id: 'c-1',
+      canonicalTitle: 'Head',
+      canonicalCompany: 'Вектор',
+      canonicalLocation: 'Москва',
+      primaryUrl: 'https://x.test/1',
+      salary: { from: 450000, currency: 'RUB' },
+    });
+    expect(item?.explanation).toMatchObject({
+      clusterId: 'c-1',
+      levelMatch: 'match',
+      vacancyLevel: 'head',
+    });
+    expect(item?.explanation.matchingPoints).toEqual([]);
   });
 });

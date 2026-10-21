@@ -104,9 +104,7 @@ export function formatCityDisplay(rawCity: string, rawCountry?: string): CityDis
  */
 export function formatLocationDisplay(location?: string): string | undefined {
   if (!location) return undefined;
-  return location
-    .replace(/\b([A-Za-z]{2,3}):\s*/gu, '')
-    .replace(/\bSydney\b/gu, 'Сидней');
+  return location.replace(/\b([A-Za-z]{2,3}):\s*/gu, '').replace(/\bSydney\b/gu, 'Сидней');
 }
 
 export function projectCoords(lat: number, lng: number): { x: number; y: number } {
@@ -118,9 +116,9 @@ export function projectCoords(lat: number, lng: number): { x: number; y: number 
   return { x, y };
 }
 
-const LABEL_HALF_WIDTH = 46;
-const LABEL_HEIGHT = 16;
 const BASE_GRID_SIZE = 48;
+const CAPSULE_HALF_WIDTH = 60;
+const CAPSULE_HEIGHT = 28;
 
 function groupIntoBuckets(
   cities: readonly CityFacet[],
@@ -183,7 +181,11 @@ function resolveLabels(
   nodes: readonly MapNode[],
   occupiedSpots: { x: number; y: number }[],
   selectedCity?: string,
+  zoom = 1,
 ): readonly MapNode[] {
+  // B446-g4: капсула «Москва 74» шире кружка; её размер на экране постоянен, в SVG — делится на масштаб.
+  const halfWidth = CAPSULE_HALF_WIDTH / Math.max(1, zoom);
+  const height = CAPSULE_HEIGHT / Math.max(1, zoom);
   const cityNodes = nodes.filter((n): n is MapCityNode => !n.isCluster);
   const sortedCities = [...cityNodes].sort((a, b) => {
     if (a.city.city === selectedCity) return -1;
@@ -194,9 +196,7 @@ function resolveLabels(
   const cityVisibility = new Map<string, boolean>();
   for (const node of sortedCities) {
     const collides = occupiedSpots.some(
-      (spot) =>
-        Math.abs(spot.x - node.x) < LABEL_HALF_WIDTH &&
-        Math.abs(spot.y - node.y) < LABEL_HEIGHT,
+      (spot) => Math.abs(spot.x - node.x) < halfWidth * 2 && Math.abs(spot.y - node.y) < height,
     );
     const showLabel = node.city.city === selectedCity || !collides;
     cityVisibility.set(node.id, showLabel);
@@ -226,5 +226,83 @@ export function clusterCitiesByGrid(
   const gridSize = BASE_GRID_SIZE / Math.max(1, zoom);
   const buckets = groupIntoBuckets(validCities, gridSize);
   const { nodes, occupiedSpots } = createNodesFromBuckets(buckets, zoom);
-  return resolveLabels(nodes, occupiedSpots, selectedCity);
+  return resolveLabels(
+    mergeCollidingNodes(nodes, zoom, selectedCity),
+    occupiedSpots,
+    selectedCity,
+    zoom,
+  );
+}
+
+function nodeCities(node: MapNode): readonly CityFacet[] {
+  return node.isCluster ? node.cities : [node.city];
+}
+
+function nodeCount(node: MapNode): number {
+  return node.isCluster ? node.totalCount : node.count;
+}
+
+function mergedNode(into: MapNode, other: MapNode): MapClusterNode {
+  const cities = [...nodeCities(into), ...nodeCities(other)];
+  const totalCount = nodeCount(into) + nodeCount(other);
+  return {
+    id: `cluster-${into.id}`,
+    isCluster: true,
+    x: into.x,
+    y: into.y,
+    totalCount,
+    cities,
+    label: `${totalCount}`,
+  };
+}
+
+/**
+ * B446-g4: капсула «Москва 74» шире ячейки сетки — соседние капсулы наезжали.
+ * Узлы, чьи капсулы пересеклись бы, сливаются в крупнейший (выбранный город — нет).
+ */
+function mergeCollidingNodes(
+  nodes: readonly MapNode[],
+  zoom: number,
+  selectedCity?: string,
+): MapNode[] {
+  const width = (CAPSULE_HALF_WIDTH * 2) / Math.max(1, zoom);
+  const height = CAPSULE_HEIGHT / Math.max(1, zoom);
+  const isSelected = (node: MapNode) => !node.isCluster && node.city.city === selectedCity;
+  const ordered = [...nodes].sort(
+    (a, b) => Number(isSelected(b)) - Number(isSelected(a)) || nodeCount(b) - nodeCount(a),
+  );
+  const accepted: MapNode[] = [];
+  for (const node of ordered) {
+    const index = accepted.findIndex(
+      (other) => Math.abs(other.x - node.x) < width && Math.abs(other.y - node.y) < height,
+    );
+    if (index < 0 || isSelected(node)) accepted.push(node);
+    else accepted[index] = mergedNode(accepted[index]!, node);
+  }
+  return accepted;
+}
+
+const MAP_WIDTH = 900;
+const MAP_HEIGHT = 480;
+const MAX_ZOOM = 3;
+const FIT_MARGIN = 1.6;
+
+/** B446-g4: карта открывается приближенной к точкам выдачи (макет 4), не ко всему миру. */
+export function fitMapView(points: readonly { readonly x: number; readonly y: number }[]): {
+  readonly zoom: number;
+  readonly center: { readonly x: number; readonly y: number };
+} {
+  if (!points.length) return { zoom: 1, center: { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 } };
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const [minX, maxX, minY, maxY] = [
+    Math.min(...xs),
+    Math.max(...xs),
+    Math.min(...ys),
+    Math.max(...ys),
+  ];
+  const spanX = Math.max(1, (maxX - minX) * FIT_MARGIN);
+  const spanY = Math.max(1, (maxY - minY) * FIT_MARGIN);
+  const zoom = Math.max(1, Math.min(MAX_ZOOM, MAP_WIDTH / spanX, MAP_HEIGHT / spanY));
+  return { zoom, center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 } };
 }

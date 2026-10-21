@@ -1641,7 +1641,8 @@ test.describe('B250 vacancies screen', () => {
     // 2. filters-expanded
     const filterToggle = isMobile
       ? page.locator('.vacancies-mobile-filter-toggle')
-      : page.getByRole('button', { name: 'Роли', exact: true });
+      : // B446-g4: кнопка называет и значение («Роли: Head of Engineering…»).
+        page.getByRole('button', { name: /^Роли/u });
     await filterToggle.click();
     await expect(page.locator('.filters-panel.is-expanded')).toBeVisible();
     await page.screenshot({

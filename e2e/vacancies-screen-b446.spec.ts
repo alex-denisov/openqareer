@@ -292,7 +292,8 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   const savedSearch = page.getByRole('searchbox', {
     name: 'Компания или роль среди 19 сохранённых',
   });
-  await savedSearch.fill('Merchant Onboarding');
+  // Макет 390 (mock-390m-saved): без поиска и выборов — сразу список.
+  if (await savedSearch.isVisible()) await savedSearch.fill('Merchant Onboarding');
   await expect(
     page.getByRole('heading', { name: 'Product Lead, Merchant Onboarding' }),
   ).toBeVisible();

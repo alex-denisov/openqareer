@@ -2,7 +2,7 @@ import { vacancyAge } from './vacancyFilters';
 import { pluralRu } from '../../../shared/pluralRu';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
-import { CircleNotch, Star, Target } from '@phosphor-icons/react';
+import { BookmarkSimple, CircleNotch, Star, Target } from '@phosphor-icons/react';
 
 export function vacancySnapshot(
   cluster: MatchedVacancyItem['cluster'],
@@ -91,7 +91,21 @@ function SavedVacancyAction({ props }: { readonly props: VacancyCollectionAction
         props.saveBusy ? (
           <CircleNotch size={18} className="vacancies-icon-action-spinner" aria-hidden="true" />
         ) : (
-          <Star size={18} weight={props.isSaved ? 'fill' : 'regular'} aria-hidden="true" />
+          <>
+            {/* B446-g4: 1440 — звезда, 390 — закладка (mock-390-base); видна одна по ширине. */}
+            <Star
+              size={18}
+              weight={props.isSaved ? 'fill' : 'regular'}
+              className="vacancy-save-icon-star"
+              aria-hidden="true"
+            />
+            <BookmarkSimple
+              size={20}
+              weight={props.isSaved ? 'fill' : 'regular'}
+              className="vacancy-save-icon-bookmark"
+              aria-hidden="true"
+            />
+          </>
         )
       ) : (
         label

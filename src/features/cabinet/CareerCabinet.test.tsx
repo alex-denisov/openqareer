@@ -162,12 +162,14 @@ describe('CareerCabinet composition', () => {
     expect(html).toContain('Повторить');
   });
 
-  it('projects the regions the candidate chose instead of an empty geography (B158, B160)', () => {
+  // B547/B446-g4: макет 4 — условия маршрута не повторяются карточкой на «Вакансиях»,
+  // регион живёт в фильтре «Локации»; карточка условий проверена выше отдельно.
+  it('shows the vacancies summary and filters instead of a premises card (mockup 4)', () => {
     const html = renderCabinet('opportunities');
 
-    expect(html).toContain('Где');
-    expect(html).toContain('Россия');
-    expect(html).not.toContain('Не указана');
+    expect(html).toContain('Сводка подбора');
+    expect(html).toContain('aria-label="Локации"');
+    expect(html).not.toContain('Изменить условия');
   });
 
   it('shows the campaign role instead of an old wizard direction after profile import', () => {
@@ -187,7 +189,8 @@ describe('CareerCabinet composition', () => {
 
     const html = renderCabinet('opportunities');
 
-    expect(html).toContain('<dd>VP of Technology &amp; Operations</dd>');
+    // B547: роль кампании — в дереве фильтра «Роли», не в карточке условий.
+    expect(html).toContain('VP of Technology &amp; Operations');
     expect(html).not.toContain('Senior Software Engineer');
   });
 
@@ -250,7 +253,7 @@ describe('CareerCabinet composition', () => {
   it('redirects «career» to opportunities and keeps conditions in vacancies (B366)', () => {
     const html = renderCabinet('career');
 
-    expect(html).toContain('Роль, регион, формат');
+    expect(html).toContain('Сводка подбора');
     expect(html).not.toContain('Очередь на сегодня');
     expect(html).not.toContain('Воронка');
   });
@@ -258,7 +261,7 @@ describe('CareerCabinet composition', () => {
   it('gives «Вакансии» the pool board', () => {
     const html = renderCabinet('opportunities');
 
-    expect(html).toContain('Роль, регион, формат');
+    expect(html).toContain('Сводка подбора');
     expect(html).not.toContain('Рынок и следующие шаги');
   });
 

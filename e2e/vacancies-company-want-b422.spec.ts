@@ -53,7 +53,9 @@ async function openFirstVacancy(page: Page) {
   await expect(item).toBeVisible({ timeout: 15_000 });
   const trigger = item.locator('.vacancies-screen-row-trigger');
   if ((await trigger.getAttribute('aria-expanded')) !== 'true') await trigger.click();
-  return item.locator('.vac-detail');
+  // B549/B446-g4: на 390 строка открывает push-экран вакансии, а не раскрытие в списке.
+  const push = page.locator('.vacancy-push');
+  return (await push.isVisible()) ? push : item.locator('.vac-detail');
 }
 
 test('B422: «Хочу в эту компанию» works for a company outside the candidate list', async ({

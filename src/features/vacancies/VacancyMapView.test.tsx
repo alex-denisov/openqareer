@@ -121,7 +121,8 @@ describe('B203: VacancyMapView Component', () => {
     expect(html).toContain('role="img" aria-label="Контуры стран и расположение городов"');
     expect(countryContours).toHaveLength(177);
     // B446-g4: ряда чипов нет — близкие города доступны кнопкой-кластером на карте.
-    expect(html).toMatch(/role="button"[^>]*aria-label="Кластер/u);
+    // B446-g4: карта приближена к выдаче — город доступен кнопкой-капсулой (или кластером).
+    expect(html).toMatch(/role="button"[^>]*aria-label="(Кластер|Город Амстердам)/u);
   });
 
   it('city filter bar names the chosen city and offers all cities back', () => {

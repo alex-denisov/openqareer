@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/react';
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { CaretDown, Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/react';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { companyLookupKey, type VacancyCollectionsState } from './vacancyScreenCollections';
 import { formatCompensationCompact } from './vacancyCompensation';
@@ -11,6 +12,7 @@ import {
   formatShortDate,
   savedClosedLabel,
   savedVacanciesView,
+  savedVacancyItem,
   type SavedSort,
   type SavedStateFilter,
   type SavedVacancyEntry,
@@ -76,6 +78,7 @@ function useSavedStates(applications: readonly ApplicationView[]) {
   const key = JSON.stringify(savedRefs(applications));
   const [states, setStates] = useState<Readonly<Record<string, SavedVacancyState>>>({});
   const [failed, setFailed] = useState(false);
+  const [loadedKey, setLoadedKey] = useState<string>();
   useEffect(() => {
     const refs = JSON.parse(key) as ReturnType<typeof savedRefs>;
     if (!refs.length) return undefined;
@@ -87,17 +90,22 @@ function useSavedStates(applications: readonly ApplicationView[]) {
       })
       .catch(() => {
         if (!controller.signal.aborted) setFailed(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadedKey(key);
       });
     return () => controller.abort();
   }, [key]);
-  return { states, failed };
+  return { states, failed, pending: loadedKey !== key };
 }
 
 function toEntry(
   application: ApplicationView,
   states: Readonly<Record<string, SavedVacancyState>>,
+  pending = false,
 ): SavedVacancyEntry {
   return {
+    pending,
     id: application.id,
     title: application.vacancy?.title ?? 'Название вакансии не сохранено',
     company: application.vacancy?.company || 'Компания не указана',
@@ -110,12 +118,13 @@ function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
   const closed = savedClosedLabel(entry.state);
   const salary = entry.state?.salary;
   const known = salary && (salary.from !== undefined || salary.to !== undefined);
+  const missing = entry.state ? 'Зарплата не указана' : entry.pending ? '…' : 'Зарплата неизвестна';
   return (
     <div className="saved-row-money">
       {known ? (
         <strong>{formatCompensationCompact(salary)}</strong>
       ) : (
-        <span className="saved-row-money-missing">Зарплата не указана</span>
+        <span className="saved-row-money-missing">{missing}</span>
       )}
       {closed ? <span className="saved-row-closed">{closed}</span> : null}
     </div>
@@ -138,17 +147,24 @@ const LEVEL_FIT_LABEL = {
 } as const;
 
 /** Вакансии нет в каталоге: уровень и гео неизвестны, так и пишем. */
-function SavedOutOfCatalog({ label }: { readonly label: string }) {
+function SavedOutOfCatalog({ label, note }: { readonly label: string; readonly note: string }) {
   return (
     <div className="saved-row-cell" data-label={label}>
       <span>—</span>
-      <span className="saved-row-fit">нет в каталоге</span>
+      <span className="saved-row-fit">{note}</span>
     </div>
   );
 }
 
-function SavedLevel({ state }: { readonly state: SavedVacancyState | undefined }) {
-  if (!state?.inCatalog) return <SavedOutOfCatalog label="Уровень" />;
+/** Пока состояние читается — «проверяем каталог»; не прочиталось — «неизвестно». */
+function catalogNote(entry: SavedVacancyEntry): string {
+  if (entry.state) return 'нет в каталоге';
+  return entry.pending ? 'проверяем каталог' : 'неизвестно';
+}
+
+function SavedLevel({ entry }: { readonly entry: SavedVacancyEntry }) {
+  const state = entry.state;
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Уровень" note={catalogNote(entry)} />;
   const levelMatch = state.levelMatch ?? 'unknown';
   return (
     <div className="saved-row-cell" data-label="Уровень">
@@ -163,8 +179,9 @@ function SavedLevel({ state }: { readonly state: SavedVacancyState | undefined }
   );
 }
 
-function SavedGeo({ state }: { readonly state: SavedVacancyState | undefined }) {
-  if (!state?.inCatalog) return <SavedOutOfCatalog label="Гео" />;
+function SavedGeo({ entry }: { readonly entry: SavedVacancyEntry }) {
+  const state = entry.state;
+  if (!state?.inCatalog) return <SavedOutOfCatalog label="Гео" note={catalogNote(entry)} />;
   return (
     <div className="saved-row-cell" data-label="Гео">
       <span>{state.location ?? (state.isRemote ? 'Удалённо' : 'Не указано')}</span>
@@ -209,18 +226,41 @@ function SavedWantButton({
   );
 }
 
+function SavedExpandButton({
+  title,
+  onExpand,
+}: {
+  readonly title: string;
+  readonly onExpand?: () => void;
+}) {
+  if (!onExpand) return null;
+  return (
+    <button
+      type="button"
+      className="saved-row-want"
+      aria-label={`Раскрыть: ${title}`}
+      aria-expanded="false"
+      onClick={onExpand}
+    >
+      <CaretDown aria-hidden="true" />
+    </button>
+  );
+}
+
 function SavedRow({
   entry,
   application,
   busy,
   onRemove,
   want,
+  onExpand,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
   readonly busy: boolean;
   readonly onRemove: (application: ApplicationView) => void;
   readonly want?: SavedWant;
+  readonly onExpand?: () => void;
 }) {
   const savedDate = formatShortDate(entry.savedAt);
   return (
@@ -232,8 +272,8 @@ function SavedRow({
           {savedDate ? ` · сохранено ${savedDate}` : ''}
         </p>
       </div>
-      <SavedLevel state={entry.state} />
-      <SavedGeo state={entry.state} />
+      <SavedLevel entry={entry} />
+      <SavedGeo entry={entry} />
       <SavedMoney entry={entry} />
       <div className="saved-row-actions">
         <SavedWantButton company={application.vacancy?.company} want={want} />
@@ -247,6 +287,7 @@ function SavedRow({
         >
           <Star weight="fill" aria-hidden="true" />
         </button>
+        <SavedExpandButton title={entry.title} onExpand={onExpand} />
       </div>
     </li>
   );
@@ -358,14 +399,14 @@ function useSavedPanelState(saved: readonly ApplicationView[]) {
   const [query, setQuery] = useState('');
   const [view, setView] = useState<StoredView>(readStoredView);
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const { states, failed } = useSavedStates(saved);
+  const { states, failed, pending } = useSavedStates(saved);
   const visible = useMemo(
     () =>
       savedVacanciesView(
-        saved.map((item) => toEntry(item, states)),
+        saved.map((item) => toEntry(item, states, pending)),
         { query, ...view },
       ),
-    [saved, states, query, view],
+    [saved, states, pending, query, view],
   );
   return {
     query,
@@ -386,18 +427,41 @@ function useSavedPanelState(saved: readonly ApplicationView[]) {
   };
 }
 
+/** B446-g4: раскрытая сохранённая — та же карточка, что в подборке; сворачивает себя сама. */
+export type SavedCardRenderer = (item: MatchedVacancyItem, onCollapse: () => void) => ReactNode;
+
+function savedItemFor(entry: SavedVacancyEntry, application: ApplicationView) {
+  return savedVacancyItem(
+    {
+      clusterId: application.clusterId ?? undefined,
+      title: entry.title,
+      company: application.vacancy?.company ?? '',
+      url: application.vacancy?.url,
+    },
+    entry.state,
+  );
+}
+
 function SavedList({
   collections,
   entries,
+  renderCard,
 }: {
   readonly collections: VacancyCollectionsState;
   readonly entries: readonly SavedVacancyEntry[];
+  readonly renderCard?: SavedCardRenderer;
 }) {
+  const [expandedId, setExpandedId] = useState<string>();
   const byId = new Map(collections.savedApplications.map((item) => [item.id, item]));
   return (
     <ul className="saved-list">
       {entries.map((entry) => {
         const application = byId.get(entry.id);
+        const item = application && renderCard ? savedItemFor(entry, application) : undefined;
+        if (item && renderCard && expandedId === entry.id)
+          return (
+            <Fragment key={entry.id}>{renderCard(item, () => setExpandedId(undefined))}</Fragment>
+          );
         return application ? (
           <SavedRow
             key={entry.id}
@@ -406,6 +470,7 @@ function SavedList({
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
             want={savedWant(collections, application.vacancy?.company)}
+            onExpand={item ? () => setExpandedId(entry.id) : undefined}
           />
         ) : null;
       })}
@@ -449,9 +514,11 @@ function SavedIntro() {
 export function SavedVacanciesPanel({
   collections,
   onOpenSelection,
+  renderCard,
 }: {
   readonly collections: VacancyCollectionsState;
   readonly onOpenSelection: () => void;
+  readonly renderCard?: SavedCardRenderer;
 }) {
   const saved = collections.savedApplications;
   const panel = useSavedPanelState(saved);
@@ -472,7 +539,7 @@ export function SavedVacanciesPanel({
             onView={panel.changeView}
           />
           {!panel.visible.length ? <p>По этим условиям сохранённых вакансий нет.</p> : null}
-          <SavedList collections={collections} entries={shown} />
+          <SavedList collections={collections} entries={shown} renderCard={renderCard} />
           <SavedFooter
             shown={shown.length}
             total={saved.length}

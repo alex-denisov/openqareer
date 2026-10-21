@@ -5,6 +5,7 @@ import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets'
 import {
   VACANCY_FILTER_GROUPS,
   VacanciesFilterToolbarFromState,
+  withCampaignDefaults,
   filterGroupMatches,
   type VacancyFilterGroup,
 } from './VacanciesFilterToolbar';
@@ -508,7 +509,10 @@ function MobileFilterSheetContent({
   return (
     <MobileFilterSheet
       activeGroup={activeGroup}
-      values={mobileFilterValues(draft, catalog.sources.length)}
+      values={mobileFilterValues(
+        withCampaignDefaults(draft, props.campaignRoles, props.regions),
+        catalog.sources.length,
+      )}
       subtitle={sheetSubtitle(props.facets, resultCount)}
       resultCount={resultCount}
       onSelectGroup={onSelectGroup}
@@ -604,7 +608,7 @@ function VacancyFilterPanelBody({
   return (
     <div className="vacancies-filter-wrap">
       <VacanciesFilterToolbarFromState
-        state={model.draftProps.state}
+        state={withCampaignDefaults(model.draftProps.state, props.campaignRoles, props.regions)}
         expanded={model.expanded}
         activeGroup={activeGroup}
         onToggle={onTogglePanel}

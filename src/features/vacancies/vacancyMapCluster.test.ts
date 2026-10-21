@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clusterCitiesByGrid, formatCityDisplay } from './vacancyMapCluster';
+import { clusterCitiesByGrid, formatCityDisplay, fitMapView } from './vacancyMapCluster';
 import type { CityFacet } from './vacancyFacets';
 
 describe('B375: vacancy map clustering and normalization', () => {
@@ -27,29 +27,30 @@ describe('B375: vacancy map clustering and normalization', () => {
     companyCount: 8,
   };
 
-  it('кластеризует близкие точки при zoom=1 в один кластер с суммой вакансий', () => {
+  // B446-g4: метки — капсулы шириной ~120 единиц на zoom=1; пересекающиеся сливаются.
+  it('кластеризует точки, чьи капсулы пересеклись бы, с суммой вакансий', () => {
     const nodes = clusterCitiesByGrid([amsterdam, veldhoven, moscow], 1);
     const cluster = nodes.find((n) => n.isCluster);
 
     expect(cluster).toBeDefined();
     if (cluster && cluster.isCluster) {
-      expect(cluster.totalCount).toBe(7); // 5 + 2
-      expect(cluster.cities.map((c) => c.city)).toEqual(['Amsterdam', 'Veldhoven']);
+      expect(cluster.totalCount).toBe(17); // 5 + 2 + 10
+      expect(cluster.cities.map((c) => c.city).sort()).toEqual([
+        'Amsterdam',
+        'Veldhoven',
+        'Москва',
+      ]);
     }
-
-    const moscowNode = nodes.find((n) => !n.isCluster && n.city.city === 'Москва');
-    expect(moscowNode).toBeDefined();
   });
 
-  it('при увеличении масштаба (zoom=3) распадается на отдельные города', () => {
+  it('при увеличении масштаба (zoom=3) Москва отделяется, соседние города НЛ остаются вместе', () => {
     const nodes = clusterCitiesByGrid([amsterdam, veldhoven, moscow], 3);
-    const clusters = nodes.filter((n) => n.isCluster);
-    expect(clusters).toHaveLength(0);
-
-    const amsNode = nodes.find((n) => !n.isCluster && n.city.city === 'Amsterdam');
-    const veldNode = nodes.find((n) => !n.isCluster && n.city.city === 'Veldhoven');
-    expect(amsNode).toBeDefined();
-    expect(veldNode).toBeDefined();
+    expect(nodes.find((n) => !n.isCluster && n.city.city === 'Москва')).toBeDefined();
+    const cluster = nodes.find((n) => n.isCluster);
+    expect(cluster && cluster.isCluster && cluster.cities.map((c) => c.city).sort()).toEqual([
+      'Amsterdam',
+      'Veldhoven',
+    ]);
   });
 
   it('не допускает наложения подписей городов', () => {
@@ -85,5 +86,47 @@ describe('B375: vacancy map clustering and normalization', () => {
     expect(display.city).toBe('Сидней');
     expect(display.country).toBe('Австралия');
     expect(display.tooltip).toBe('Австралия');
+  });
+});
+
+describe('fitMapView (B446-g4)', () => {
+  it('zooms to the bounds of the result points with a margin, capped at 3', () => {
+    const view = fitMapView([
+      { x: 600, y: 120 },
+      { x: 640, y: 140 },
+    ]);
+    expect(view.zoom).toBe(3);
+    expect(view.center).toEqual({ x: 620, y: 130 });
+  });
+  it('shows the whole world when points span it or there are none', () => {
+    expect(fitMapView([])).toEqual({ zoom: 1, center: { x: 450, y: 240 } });
+    expect(
+      fitMapView([
+        { x: 10, y: 10 },
+        { x: 890, y: 470 },
+      ]).zoom,
+    ).toBe(1);
+  });
+});
+
+describe('capsule collisions (B446-g4)', () => {
+  const near = (city: string, lng: number, count: number): CityFacet => ({
+    city,
+    coordinates: { lat: 55.7, lng },
+    count,
+    companyCount: 1,
+  });
+
+  it('merges nodes whose capsules would overlap into one cluster, at any zoom', () => {
+    const cities = [near('Москва', 37.6, 30), near('Тверь', 38.4, 2), near('Ижевск', 39.0, 3)];
+    for (const zoom of [1, 2, 3]) {
+      const nodes = clusterCitiesByGrid(cities, zoom);
+      for (const a of nodes)
+        for (const b of nodes)
+          if (a !== b)
+            expect(Math.abs(a.x - b.x) >= 120 / zoom || Math.abs(a.y - b.y) >= 28 / zoom).toBe(
+              true,
+            );
+    }
   });
 });

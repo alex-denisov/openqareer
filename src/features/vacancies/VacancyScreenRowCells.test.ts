@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { vacancyLevelLabel, vacancyRowStatus } from './VacancyScreenRowCells';
+import { vacancyGeoLabel, vacancyLevelLabel, vacancyRowStatus } from './VacancyScreenRowCells';
 
 function item(title: string, vacancyLevel?: MatchedVacancyItem['explanation']['vacancyLevel']) {
   return {
@@ -41,5 +41,36 @@ describe('vacancyRowStatus (B446-g4, 390)', () => {
       tone: 'unknown',
       label: 'Уровень не указан',
     });
+  });
+});
+
+describe('geo label and format status (B446-g4)', () => {
+  const make = (cluster: object, explanation: object = {}) =>
+    ({
+      cluster: { canonicalTitle: 'Head', isRemote: false, descriptionSummary: '', ...cluster },
+      explanation: { levelMatch: 'match', outsideGeography: false, ...explanation },
+    }) as unknown as MatchedVacancyItem;
+
+  it('joins the city with the work format, as «Москва, гибрид»', () => {
+    expect(vacancyGeoLabel(make({ canonicalLocation: 'Москва', workFormat: 'hybrid' }))).toBe(
+      'Москва, гибрид',
+    );
+    expect(vacancyGeoLabel(make({ canonicalLocation: 'Пермь', workFormat: 'unknown' }))).toBe(
+      'Пермь',
+    );
+  });
+
+  it('a blocked work-format gate becomes the row status on 390', () => {
+    const blocked = make(
+      { canonicalLocation: 'Москва', workFormat: 'office' },
+      {
+        fitView: {
+          state: 'ready',
+          requirements: [],
+          result: { gates: { workFormat: { status: 'blocked' } } },
+        },
+      },
+    );
+    expect(vacancyRowStatus(blocked)).toEqual({ tone: 'warn', label: 'Офис, не подходит' });
   });
 });
