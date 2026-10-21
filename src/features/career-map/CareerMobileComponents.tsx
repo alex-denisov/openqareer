@@ -1,215 +1,256 @@
-import { useState, type ReactElement } from 'react';
+import type { ReactElement } from 'react';
 import {
-  Briefcase,
   CaretLeft,
-  ChatCircleText,
-  CheckCircle,
-  ListChecks,
-  X,
+  CaretRight,
+  Coins,
+  Globe,
+  HouseLine,
+  MapPin,
+  Prohibit,
 } from '@phosphor-icons/react';
-import type { CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
-import { RoleStageStepper } from './CareerRoleComponents';
+import type {
+  CareerPushView,
+  CareerRoleModel,
+  RolesMarketSummary,
+  SearchConditionsDraft,
+} from './careerScreenTypes';
+import { CareerRoleBody, RoleStatusBadge, type RoleHandlers } from './CareerRoleComponents';
+import {
+  conditionRows,
+  ConditionsMarketLine,
+  MarketSourceStamp,
+  type EditableConditionField,
+} from './CareerConditionsComponents';
 
 export function MobileHeader({
   title,
   onBack,
 }: {
   title: string;
-  onBack?: () => void;
+  onBack: () => void;
 }): ReactElement {
   return (
     <div className="career-mobile-header">
-      {onBack ? (
-        <button
-          type="button"
-          className="career-btn career-btn-ghost career-back-button"
-          aria-label="Назад"
-          onClick={onBack}
-        >
-          <CaretLeft size={20} />
-        </button>
-      ) : null}
+      <button
+        type="button"
+        className="career-btn career-btn-ghost career-back-button"
+        aria-label="Назад"
+        onClick={onBack}
+      >
+        <CaretLeft size={20} aria-hidden />
+      </button>
       <h2 className="career-mobile-title">{title}</h2>
     </div>
   );
 }
 
-function MobileRoleConfirmedList({ items }: { items: readonly string[] }): ReactElement | null {
-  if (items.length === 0) return null;
+function MobileRoleRow({
+  role,
+  onOpen,
+}: {
+  role: CareerRoleModel;
+  onOpen: () => void;
+}): ReactElement {
   return (
-    <div>
-      <h4 className="career-section-subhead">Подтверждено</h4>
-      <ul className="career-check-list">
-        {items.map((c, i) => (
-          <li key={i} className="career-check-item">
-            <CheckCircle size={16} color="var(--career-text-success, #059669)" />
-            <span>{c}</span>
+    <li>
+      <button type="button" className="career-m-row" onClick={onOpen}>
+        <span className="career-m-row-main">
+          <span className="career-m-row-title">{role.title}</span>
+          <span className="career-role-meta">
+            {role.wageDisplay} · {role.vacancyCount} вакансий
+          </span>
+          <span className="career-m-row-foot">
+            <RoleStatusBadge status={role.status} />
+            <span
+              className={
+                role.nextAction.action === 'few_data' ? 'career-m-action-muted' : 'career-m-action'
+              }
+            >
+              {role.nextAction.label}
+            </span>
+          </span>
+        </span>
+        <CaretRight size={16} aria-hidden />
+      </button>
+    </li>
+  );
+}
+
+function MobileRolesGroup({
+  roles,
+  onOpenRole,
+}: {
+  roles: readonly CareerRoleModel[];
+  onOpenRole: (roleId: string) => void;
+}): ReactElement {
+  return (
+    <section className="career-m-group" aria-labelledby="m-roles-h">
+      <h3 id="m-roles-h" className="career-m-group-title">
+        Мои роли на рынке · {roles.length}
+      </h3>
+      {roles.length === 0 ? (
+        <p className="career-m-note">
+          Ролей пока нет: консультант назовёт их, когда в профиле будет опыт.
+        </p>
+      ) : (
+        <ul className="career-m-list">
+          {roles.map((role) => (
+            <MobileRoleRow key={role.id} role={role} onOpen={() => onOpenRole(role.id)} />
+          ))}
+        </ul>
+      )}
+      <p className="career-m-note">
+        Гипотеза — вывод консультанта, не факт. Вилка только по вакансиям с указанной зарплатой.
+        Поиск по роли открывается после проверки навыков.
+      </p>
+    </section>
+  );
+}
+
+const CONDITION_ICONS: Readonly<Record<Exclude<EditableConditionField, null>, ReactElement>> = {
+  geo: <MapPin size={18} aria-hidden />,
+  sal: <Coins size={18} aria-hidden />,
+  fmt: <HouseLine size={18} aria-hidden />,
+  stop: <Prohibit size={18} aria-hidden />,
+};
+
+function MobileRelocationRow({
+  enabled,
+  onOpen,
+}: {
+  enabled: boolean;
+  onOpen: () => void;
+}): ReactElement {
+  return (
+    <ul className="career-m-list">
+      <li>
+        <button type="button" className="career-m-row" onClick={onOpen}>
+          <span className="career-m-icon">
+            <Globe size={18} aria-hidden />
+          </span>
+          <span className="career-m-row-main">
+            <span className="career-m-row-title">Страны и релокация</span>
+            <span className="career-role-meta">
+              {enabled
+                ? 'подборка учитывает выбранные страны'
+                : 'сейчас подборка идёт только по России'}
+            </span>
+          </span>
+          <span className="career-m-value">{enabled ? 'Включено' : 'Не включено'}</span>
+          <CaretRight size={16} aria-hidden />
+        </button>
+      </li>
+    </ul>
+  );
+}
+
+function MobileConditionsGroup({
+  conditions,
+  summary,
+  onEditField,
+  onOpenRelocation,
+}: {
+  conditions: SearchConditionsDraft;
+  summary: RolesMarketSummary;
+  onEditField: (field: Exclude<EditableConditionField, null>) => void;
+  onOpenRelocation: () => void;
+}): ReactElement {
+  return (
+    <section className="career-m-group" aria-labelledby="m-cond-h">
+      <h3 id="m-cond-h" className="career-m-group-title">
+        Условия поиска
+      </h3>
+      <ul className="career-m-list">
+        {conditionRows(conditions).map((row) => (
+          <li key={row.field}>
+            <button type="button" className="career-m-row" onClick={() => onEditField(row.field)}>
+              <span className="career-m-icon">{CONDITION_ICONS[row.field]}</span>
+              <span className="career-m-row-title">{row.label}</span>
+              <span className={row.value ? 'career-m-value' : 'career-m-value career-cond-empty'}>
+                {row.value ?? 'Указать'}
+              </span>
+              <CaretRight size={16} aria-hidden />
+            </button>
           </li>
         ))}
       </ul>
-    </div>
-  );
-}
-
-function MobileRoleBottomCta({
-  role,
-  onConsultant,
-  onCheckSkills,
-}: {
-  role: CareerRoleModel;
-  onConsultant: (roleId: string) => void;
-  onCheckSkills: (roleId: string) => void;
-}): ReactElement | null {
-  if (role.nextAction.action === 'fill_with_consultant') {
-    return (
-      <div className="career-mobile-bottom-action">
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-block"
-          onClick={() => onConsultant(role.id)}
-        >
-          <ChatCircleText size={18} />
-          Дозаполнить с консультантом
-        </button>
-      </div>
-    );
-  }
-  if (role.nextAction.action === 'check_skills') {
-    return (
-      <div className="career-mobile-bottom-action">
-        <button
-          type="button"
-          className="career-btn career-btn-primary career-btn-block"
-          onClick={() => onCheckSkills(role.id)}
-        >
-          <ListChecks size={18} />
-          Проверить навыки
-        </button>
-      </div>
-    );
-  }
-  return null;
-}
-
-export function MobileRoleDetailView({
-  role,
-  onBack,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
-}: {
-  role: CareerRoleModel;
-  onBack: () => void;
-  onConsultant: (roleId: string) => void;
-  onOpenVacancies: (roleTitle: string) => void;
-  onCheckSkills: (roleId: string) => void;
-  onRejectRole: (roleId: string) => void;
-}): ReactElement {
-  return (
-    <div className="career-screen" data-mv={role.id}>
-      <MobileHeader title="Роль" onBack={onBack} />
-      <div className="career-card">
-        <h3>{role.title}</h3>
-        <p className="career-role-meta">
-          {role.wageDisplay} · {role.vacancyCount} вакансий · {role.observedDate}
-        </p>
-        <RoleStageStepper status={role.status} />
-        {role.hypothesisReason ? <p className="career-note">{role.hypothesisReason}</p> : null}
-        <MobileRoleConfirmedList items={role.confirmedItems} />
-        <button
-          type="button"
-          className="career-btn career-btn-secondary"
-          onClick={() => onOpenVacancies(role.title)}
-        >
-          <Briefcase size={18} />
-          Открыть вакансии роли
-        </button>
-        <button
-          type="button"
-          className="career-btn career-btn-ghost"
-          onClick={() => onRejectRole(role.id)}
-        >
-          <X size={16} />
-          {role.status === 'open_for_search' ? 'Снять роль' : 'Отклонить роль'}
-        </button>
-      </div>
-      <MobileRoleBottomCta role={role} onConsultant={onConsultant} onCheckSkills={onCheckSkills} />
-    </div>
-  );
-}
-
-function MobileSalaryCard({
-  val,
-  showNoWage,
-  onValChange,
-  onShowNoWageChange,
-}: {
-  val: string;
-  showNoWage: boolean;
-  onValChange: (v: string) => void;
-  onShowNoWageChange: (s: boolean) => void;
-}): ReactElement {
-  return (
-    <div className="career-card">
-      <label className="career-section-subhead" htmlFor="m-sal-in">
-        В месяц, ₽
-      </label>
-      <input
-        id="m-sal-in"
-        className="career-inline-input"
-        value={val}
-        onChange={(e) => onValChange(e.target.value)}
+      <ConditionsMarketLine summary={summary} />
+      <MobileRelocationRow
+        enabled={conditions.geography.isRelocationEnabled}
+        onOpen={onOpenRelocation}
       />
-      <label className="career-checkbox-label">
-        <input
-          type="checkbox"
-          checked={showNoWage}
-          onChange={(e) => onShowNoWageChange(e.target.checked)}
-        />
-        <span className="career-checkbox-text-sm">Показывать вакансии без зарплаты</span>
-      </label>
-      <p className="career-role-meta">
-        Для вакансий без зарплаты платформа покажет оценку рынка с пометкой «оценка».
-      </p>
-    </div>
+    </section>
   );
 }
 
-export function MobileConditionSalaryView({
+export function MobileCareerHome({
+  roles,
   conditions,
-  onBack,
-  onSave,
+  summary,
+  onPush,
+  onOpenRelocation,
 }: {
+  roles: readonly CareerRoleModel[];
   conditions: SearchConditionsDraft;
-  onBack: () => void;
-  onSave: (salary: number, showWithoutSalary: boolean) => void;
+  summary: RolesMarketSummary;
+  onPush: (view: CareerPushView) => void;
+  onOpenRelocation: () => void;
 }): ReactElement {
-  const [val, setVal] = useState(conditions.salaryFrom.amountRubles.toString());
-  const [showNoWage, setShowNoWage] = useState(conditions.salaryFrom.showWithoutSalary);
-
-  const handleSave = () => {
-    const num = parseInt(val.replace(/\s+/g, ''), 10) || conditions.salaryFrom.amountRubles;
-    onSave(num, showNoWage);
-    onBack();
-  };
-
   return (
-    <div className="career-screen" data-mv="sal">
-      <MobileHeader title="Зарплата от" onBack={onBack} />
-      <MobileSalaryCard
-        val={val}
-        showNoWage={showNoWage}
-        onValChange={setVal}
-        onShowNoWageChange={setShowNoWage}
+    <div className="career-screen career-screen-mobile" data-testid="career-screen">
+      <h1 className="career-visually-hidden">Карьера</h1>
+      <MobileRolesGroup roles={roles} onOpenRole={(id) => onPush(`role:${id}`)} />
+      <MobileConditionsGroup
+        conditions={conditions}
+        summary={summary}
+        onEditField={(field) => onPush(field)}
+        onOpenRelocation={onOpenRelocation}
       />
-      <button
-        type="button"
-        className="career-btn career-btn-primary career-btn-block career-mobile-save-btn"
-        onClick={handleSave}
-      >
-        Сохранить
-      </button>
+      <MarketSourceStamp summary={summary} />
+    </div>
+  );
+}
+
+export function MobileRolePush({
+  role,
+  onBack,
+  handlers,
+}: {
+  role: CareerRoleModel;
+  onBack: () => void;
+  handlers: RoleHandlers;
+}): ReactElement {
+  return (
+    <div className="career-screen career-screen-mobile" data-mv={`role:${role.id}`}>
+      <MobileHeader title="Роль" onBack={onBack} />
+      <div className="career-m-push">
+        <h3 className="career-role-title">{role.title}</h3>
+        <RoleStatusBadge status={role.status} />
+        <p className="career-role-meta">
+          {role.wageDisplay} · {role.vacancyCount} вакансий
+          {role.observedDate ? ` · ${role.observedDate}` : ''}
+        </p>
+        <CareerRoleBody role={role} handlers={handlers} />
+      </div>
+    </div>
+  );
+}
+
+export function MobileConditionPush({
+  title,
+  field,
+  onBack,
+  children,
+}: {
+  title: string;
+  field: Exclude<EditableConditionField, null>;
+  onBack: () => void;
+  children: ReactElement | null;
+}): ReactElement {
+  return (
+    <div className="career-screen career-screen-mobile" data-mv={field}>
+      <MobileHeader title={title} onBack={onBack} />
+      <div className="career-m-push">{children}</div>
     </div>
   );
 }

@@ -679,9 +679,11 @@ export function CareerWorkspaceShell({
                     hasProfile={true}
                     isMobile={isCompactViewport}
                     onNavigate={(v) => navigate(v as ShellView)}
-                    onOpenExpert={() => openExpert('career')}
+                    onOpenExpert={(roleTitle, prompt) =>
+                      openExpert('career', undefined, roleTitle, prompt)
+                    }
                     onOpenVacancies={() => navigate('opportunities', { focusRoleFilter: true })}
-                    onCheckSkills={() => navigate('profile')}
+                    onCheckSkills={() => openRoleSkillAssessment()}
                     onOpenProfile={() => navigate('profile')}
                   />
                 ) : null}

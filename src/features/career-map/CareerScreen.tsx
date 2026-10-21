@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, type ReactElement } from 'react';
+import { Info, WarningCircle } from '@phosphor-icons/react';
 import type { CareerPushView, CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
 import {
   CareerConditionsCard,
@@ -6,18 +7,20 @@ import {
   CareerInlineGeoEditor,
   CareerInlineSalaryEditor,
   CareerInlineStopListEditor,
+  MarketSourceStamp,
+  SectionInfoToggle,
   type EditableConditionField,
 } from './CareerConditionsComponents';
-import { CareerRoleCard } from './CareerRoleComponents';
+import { CareerRoleCard, type RoleHandlers } from './CareerRoleComponents';
 import {
   CareerEmptyProfileState,
   CareerLoadingSkeleton,
   CareerMarketErrorState,
   CareerStaleMarketNote,
 } from './CareerStateComponents';
-import { MobileConditionSalaryView, MobileRoleDetailView } from './CareerMobileComponents';
-import { applyConditionsEdit } from './careerConditionsStorage';
-import { useCareerScreenState } from './useCareerScreenState';
+import { MobileCareerHome, MobileConditionPush, MobileRolePush } from './CareerMobileComponents';
+import { useCareerScreenState, type CareerScreenState } from './useCareerScreenState';
+import { loadCareerRoles } from './careerRoleStore';
 
 // Lazy: the screen pulls CSS, which the CLI mockup renderer (tsx) cannot load, and opens only on demand.
 const RelocationScreen = lazy(() =>
@@ -31,368 +34,230 @@ export interface CareerScreenProps {
   readonly marketError?: string | null;
   readonly isLoading?: boolean;
   readonly isMarketStale?: boolean;
-  readonly onNavigate?: (view: string, params?: unknown) => void;
-  readonly onOpenExpert?: () => void;
+  readonly onNavigate?: (view: string) => void;
+  /** Консультант с контекстом роли: подпись роли и первый вопрос. */
+  readonly onOpenExpert?: (roleTitle?: string, prompt?: string) => void;
   readonly onOpenVacancies?: (roleTitle?: string) => void;
-  readonly onCheckSkills?: (roleId?: string) => void;
+  readonly onCheckSkills?: (roleTitle?: string) => void;
   readonly onOpenProfile?: () => void;
   readonly onSaveConditions?: (conditions: SearchConditionsDraft) => Promise<void>;
   readonly isMobile?: boolean;
   readonly initialPushView?: CareerPushView;
 }
 
-function RolesCardsList({
-  roles,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
-  onNavigateSection,
-}: {
-  roles: readonly CareerRoleModel[];
-  onConsultant: () => void;
-  onOpenVacancies: (t: string) => void;
-  onCheckSkills: (id: string) => void;
-  onRejectRole: (id: string) => void;
-  onNavigateSection: (s: string) => void;
-}): ReactElement {
-  return (
-    <div className="career-roles-list">
-      {roles.map((role, index) => (
-        <CareerRoleCard
-          key={role.id}
-          role={role}
-          isOpenDefault={role.id === 'dir' || index === 0}
-          onConsultant={onConsultant}
-          onOpenVacancies={onOpenVacancies}
-          onCheckSkills={onCheckSkills}
-          onRejectRole={onRejectRole}
-          onNavigateSection={onNavigateSection}
-        />
-      ))}
-    </div>
-  );
+const ROLES_EXPLAIN =
+  'Гипотеза — вывод консультанта из профиля и рынка, не факт. Вилка считается только по вакансиям с указанной зарплатой, с числом вакансий и датой среза.';
+
+const FIELD_TITLES: Readonly<Record<Exclude<EditableConditionField, null>, string>> = {
+  geo: 'География',
+  sal: 'Зарплата от',
+  fmt: 'Формат',
+  stop: 'Стоп-лист',
+};
+
+function roleHandlers(props: CareerScreenProps, state: CareerScreenState): RoleHandlers {
+  return {
+    onConsultant: (role) =>
+      props.onOpenExpert?.(
+        role.title,
+        role.status === 'hypothesis'
+          ? `Роль «${role.title}»: насколько она мне подходит и что проверить первым?`
+          : `Роль «${role.title}»: что дозаполнить в профиле, чтобы закрыть пробелы?`,
+      ),
+    onOpenVacancies: (role) => props.onOpenVacancies?.(role.title),
+    onCheckSkills: (role) => props.onCheckSkills?.(role.title),
+    onRejectRole: (roleId) => state.handleRejectRole(roleId),
+    onNavigateSection: () => props.onOpenProfile?.(),
+  };
 }
 
-function CareerRolesHeader({ count }: { count: number }): ReactElement {
-  return (
-    <>
-      <div className="career-card-head">
-        <div className="career-card-title-group">
-          <h2 id="roles-heading">Мои роли на рынке</h2>
-          <span className="career-badge career-badge-ok">{count}</span>
-        </div>
-      </div>
-      <p className="career-role-meta">
-        Гипотеза — вывод консультанта из профиля и рынка, не факт. Вилка — только по вакансиям с
-        указанной зарплатой.
-      </p>
-    </>
-  );
+function editorCallbacks(state: CareerScreenState) {
+  return {
+    close: () => {
+      if (state.isMobile) state.setPushView('home');
+      state.setEditingField(null);
+      state.setSaveError(null);
+    },
+    done: (save: Promise<boolean>) =>
+      void save.then((ok) => ok && state.isMobile && state.setPushView('home')),
+  };
+}
+
+function ConditionEditor({
+  field,
+  state,
+}: {
+  field: EditableConditionField;
+  state: CareerScreenState;
+}): ReactElement | null {
+  const { conditions, saveError } = state;
+  const { close, done } = editorCallbacks(state);
+  switch (field) {
+    case 'sal':
+      return (
+        <CareerInlineSalaryEditor
+          initialSalary={conditions.salaryFrom.amountRubles}
+          initialShowWithoutSalary={conditions.salaryFrom.showWithoutSalary}
+          onSave={(sal, noWage) => done(state.handleSaveSalary(sal, noWage))}
+          onCancel={close}
+          errorMessage={saveError}
+        />
+      );
+    case 'fmt':
+      return (
+        <CareerInlineFormatEditor
+          initialFormat={conditions.format}
+          onSave={(fmt) => done(state.handleSaveFormat(fmt))}
+          onCancel={close}
+          errorMessage={saveError}
+        />
+      );
+    case 'geo':
+      return (
+        <CareerInlineGeoEditor
+          initialSelected={conditions.geography.selected}
+          onSave={(geo) => done(state.handleSaveGeo(geo))}
+          onCancel={close}
+          errorMessage={saveError}
+        />
+      );
+    case 'stop':
+      return (
+        <CareerInlineStopListEditor
+          stopList={conditions.stopList}
+          onAddCompany={(name) => void state.handleAddStopCompany(name)}
+          onClose={close}
+        />
+      );
+    default:
+      return null;
+  }
 }
 
 function CareerRolesSection({
-  roles,
-  showAllRoles,
-  onShowAll,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
-  onNavigateSection,
+  state,
+  handlers,
 }: {
-  roles: readonly CareerRoleModel[];
-  showAllRoles: boolean;
-  onShowAll: () => void;
-  onConsultant: () => void;
-  onOpenVacancies: (t: string) => void;
-  onCheckSkills: (id: string) => void;
-  onRejectRole: (id: string) => void;
-  onNavigateSection: (s: string) => void;
+  state: CareerScreenState;
+  handlers: RoleHandlers;
 }): ReactElement {
-  const displayedRoles = showAllRoles ? roles : roles.slice(0, 5);
-
+  const roles = state.activeRoles;
+  const firstOpen = roles.find((role) => role.status === 'skills_checked') ?? roles[0];
   return (
     <section className="career-card" aria-labelledby="roles-heading">
-      <CareerRolesHeader count={roles.length} />
-      <RolesCardsList
-        roles={displayedRoles}
-        onConsultant={onConsultant}
-        onOpenVacancies={onOpenVacancies}
-        onCheckSkills={onCheckSkills}
-        onRejectRole={onRejectRole}
-        onNavigateSection={onNavigateSection}
-      />
-      {roles.length > 5 && !showAllRoles ? (
-        <button type="button" className="career-btn career-btn-ghost" onClick={onShowAll}>
-          Показать остальные
-        </button>
-      ) : null}
-      <p className="career-source-stamp">
-        Источник: каталог openqareer, hh.ru и LinkedIn · 312 вакансий · 05.10
+      <div className="career-card-head">
+        <h2 id="roles-heading">Мои роли на рынке</h2>
+        <span className="career-count-box" aria-label={`Ролей: ${roles.length}`}>
+          {roles.length}
+        </span>
+        <SectionInfoToggle id="roles-explain" text={ROLES_EXPLAIN} />
+      </div>
+      <p className="career-plate">
+        <Info size={16} aria-hidden />
+        <span>
+          Поиск по ролям открывается после проверки навыков: так подборка опирается на
+          подтверждённое, а не на догадки. Пока его нет, доступен свободный просмотр всех вакансий
+          каталога.
+        </span>
       </p>
+      {roles.length === 0 ? (
+        <p className="career-role-meta">
+          Ролей пока нет. Консультант назовёт их, когда в профиле будет опыт.
+        </p>
+      ) : (
+        <div className="career-roles-list">
+          {roles.map((role) => (
+            <CareerRoleCard
+              key={role.id}
+              role={role}
+              isOpenDefault={role.id === firstOpen?.id}
+              handlers={handlers}
+            />
+          ))}
+        </div>
+      )}
+      <MarketSourceStamp summary={state.summary} />
     </section>
   );
 }
 
-function MobilePushRouter({
-  pushView,
-  roles,
-  conditions,
-  onBack,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
-  onSaveSalary,
-}: {
-  pushView: CareerPushView;
-  roles: readonly CareerRoleModel[];
-  conditions: SearchConditionsDraft;
-  onBack: () => void;
-  onConsultant: () => void;
-  onOpenVacancies: (t: string) => void;
-  onCheckSkills: (id: string) => void;
-  onRejectRole: (id: string) => void;
-  onSaveSalary: (salary: number, showNoWage: boolean) => void;
-}): ReactElement | null {
-  const selectedRole = roles.find((r) => r.id === pushView);
-  if (selectedRole) {
-    return (
-      <MobileRoleDetailView
-        role={selectedRole}
-        onBack={onBack}
-        onConsultant={onConsultant}
-        onOpenVacancies={onOpenVacancies}
-        onCheckSkills={onCheckSkills}
-        onRejectRole={onRejectRole}
-      />
-    );
-  }
-  if (pushView === 'sal') {
-    return (
-      <MobileConditionSalaryView conditions={conditions} onBack={onBack} onSave={onSaveSalary} />
-    );
-  }
-  return null;
-}
-
-function CareerHeader({
-  marketError,
-  isMarketStale,
-  onClearError,
-}: {
-  marketError?: string | null;
-  isMarketStale?: boolean;
-  onClearError: () => void;
-}): ReactElement {
+function ActionErrorNote({ message }: { message: string | null }): ReactElement | null {
+  if (!message) return null;
   return (
-    <>
-      <header className="career-header">
-        <h1>Карьера</h1>
-      </header>
-      {marketError ? <CareerMarketErrorState onRetry={onClearError} /> : null}
-      {isMarketStale ? <CareerStaleMarketNote dateText="05.10" /> : null}
-    </>
+    <p className="career-note career-note-error" role="alert">
+      <WarningCircle size={16} aria-hidden />
+      <span>{message}</span>
+    </p>
   );
 }
 
-function renderSalaryOrFormatEditor(
-  field: 'sal' | 'fmt',
-  conditions: SearchConditionsDraft,
-  saveError: string | null,
-  onSaveSalary: (sal: number, noWage: boolean) => void,
-  onSaveFormat: (format: SearchConditionsDraft['format']) => void,
-  onCloseField: () => void,
-): ReactElement {
-  if (field === 'sal') {
-    return (
-      <CareerInlineSalaryEditor
-        initialSalary={conditions.salaryFrom.amountRubles}
-        initialShowWithoutSalary={conditions.salaryFrom.showWithoutSalary}
-        onSave={onSaveSalary}
-        onCancel={onCloseField}
-        errorMessage={saveError}
-      />
-    );
-  }
-  return (
-    <CareerInlineFormatEditor
-      initialFormat={conditions.format}
-      onSave={onSaveFormat}
-      onCancel={onCloseField}
-      errorMessage={saveError}
-    />
-  );
-}
-
-function CareerConditionsEditorRow({
-  editingField,
-  conditions,
-  saveError,
-  onSaveSalary,
-  onSaveFormat,
-  onSaveGeo,
-  onCloseField,
-  onAddCompany,
-}: {
-  editingField: EditableConditionField;
-  conditions: SearchConditionsDraft;
-  saveError: string | null;
-  onSaveSalary: (sal: number, noWage: boolean) => void;
-  onSaveFormat: (format: SearchConditionsDraft['format']) => void;
-  onSaveGeo: (selected: readonly string[]) => void;
-  onCloseField: () => void;
-  onAddCompany: (name: string) => void;
-}): ReactElement | null {
-  if (editingField === 'sal' || editingField === 'fmt') {
-    return renderSalaryOrFormatEditor(
-      editingField,
-      conditions,
-      saveError,
-      onSaveSalary,
-      onSaveFormat,
-      onCloseField,
-    );
-  }
-  if (editingField === 'geo') {
-    return (
-      <CareerInlineGeoEditor
-        initialSelected={conditions.geography.selected}
-        onSave={onSaveGeo}
-        onCancel={onCloseField}
-        errorMessage={saveError}
-      />
-    );
-  }
-  if (editingField === 'stop') {
-    return (
-      <CareerInlineStopListEditor
-        stopList={conditions.stopList}
-        onAddCompany={onAddCompany}
-        onClose={onCloseField}
-      />
-    );
-  }
-  return null;
-}
-
-interface CareerMainContentProps {
-  readonly state: ReturnType<typeof useCareerScreenState>;
-  readonly marketError: string | null;
-  readonly isMarketStale: boolean;
-  readonly onNavigate?: (view: string, params?: unknown) => void;
-  readonly onOpenExpert?: () => void;
-  readonly onOpenVacancies?: (roleTitle?: string) => void;
-  readonly onCheckSkills?: (roleId?: string) => void;
-  readonly onOpenRelocation: () => void;
-}
-
-function CareerMainConditionsBlock({
+function CareerMobileContent({
   state,
+  handlers,
   onOpenRelocation,
 }: {
-  state: ReturnType<typeof useCareerScreenState>;
+  state: CareerScreenState;
+  handlers: RoleHandlers;
   onOpenRelocation: () => void;
 }): ReactElement {
+  const view = state.pushView;
+  const back = () => state.setPushView('home');
+  if (view.startsWith('role:')) {
+    const role = state.activeRoles.find((item) => `role:${item.id}` === view);
+    if (role) return <MobileRolePush role={role} onBack={back} handlers={handlers} />;
+  } else if (view !== 'home') {
+    const field = view as Exclude<EditableConditionField, null>;
+    return (
+      <MobileConditionPush title={FIELD_TITLES[field]} field={field} onBack={back}>
+        <ConditionEditor field={field} state={state} />
+      </MobileConditionPush>
+    );
+  }
   return (
     <>
-      <CareerConditionsCard
+      <ActionErrorNote message={state.actionError} />
+      <MobileCareerHome
+        roles={state.activeRoles}
         conditions={state.conditions}
-        onEditField={(f) => (state.isMobile && f ? state.setPushView(f) : state.setEditingField(f))}
-        onEnableRelocation={() => {
-          state.setConditions((prev) =>
-            applyConditionsEdit(prev, {
-              geography: { ...prev.geography, isRelocationEnabled: true },
-            }),
-          );
-          onOpenRelocation();
-        }}
+        summary={state.summary}
+        onPush={state.setPushView}
         onOpenRelocation={onOpenRelocation}
-      />
-      <CareerConditionsEditorRow
-        editingField={state.editingField}
-        conditions={state.conditions}
-        saveError={state.saveError}
-        onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
-        onSaveFormat={(fmt) => void state.handleSaveFormat(fmt)}
-        onSaveGeo={(geo) => void state.handleSaveGeo(geo)}
-        onCloseField={() => {
-          state.setEditingField(null);
-          state.setSaveError(null);
-        }}
-        onAddCompany={(name) => void state.handleAddStopCompany(name)}
       />
     </>
   );
 }
 
-function CareerScreenContent({
+function CareerDesktopContent({
   props,
   state,
+  handlers,
   onOpenRelocation,
 }: {
   props: CareerScreenProps;
-  state: ReturnType<typeof useCareerScreenState>;
+  state: CareerScreenState;
+  handlers: RoleHandlers;
   onOpenRelocation: () => void;
 }): ReactElement {
-  if (state.isMobile && state.pushView !== 'home') {
-    return (
-      <MobilePushRouter
-        pushView={state.pushView}
-        roles={state.activeRoles}
-        conditions={state.conditions}
-        onBack={() => state.setPushView('home')}
-        onConsultant={() => props.onOpenExpert?.()}
-        onOpenVacancies={(t) => props.onOpenVacancies?.(t)}
-        onCheckSkills={(id) => props.onCheckSkills?.(id)}
-        onRejectRole={state.handleRejectRole}
-        onSaveSalary={(sal, noWage) => void state.handleSaveSalary(sal, noWage)}
-      />
-    ) as ReactElement;
-  }
-  return (
-    <CareerMainContent
-      state={state}
-      marketError={state.marketError}
-      isMarketStale={props.isMarketStale ?? false}
-      onNavigate={props.onNavigate}
-      onOpenExpert={props.onOpenExpert}
-      onOpenVacancies={props.onOpenVacancies}
-      onCheckSkills={props.onCheckSkills}
-      onOpenRelocation={onOpenRelocation}
-    />
-  );
-}
-
-function CareerMainContent({
-  state,
-  marketError,
-  isMarketStale,
-  onNavigate,
-  onOpenExpert,
-  onOpenVacancies,
-  onCheckSkills,
-  onOpenRelocation,
-}: CareerMainContentProps): ReactElement {
   return (
     <div className="career-screen" data-testid="career-screen">
-      <CareerHeader
-        marketError={marketError}
-        isMarketStale={isMarketStale}
-        onClearError={() => state.setSaveError(null)}
+      <header className="career-header">
+        <h1>Карьера</h1>
+      </header>
+      {state.marketError ? (
+        <CareerMarketErrorState onRetry={() => void loadCareerRoles(true)} />
+      ) : null}
+      {props.isMarketStale && state.summary.asOf ? (
+        <CareerStaleMarketNote dateText={state.summary.asOf} />
+      ) : null}
+      <ActionErrorNote message={state.actionError} />
+      <CareerConditionsCard
+        conditions={state.conditions}
+        summary={state.summary}
+        onEditField={state.setEditingField}
+        onOpenRelocation={onOpenRelocation}
+        editor={<ConditionEditor field={state.editingField} state={state} />}
       />
-      <CareerMainConditionsBlock state={state} onOpenRelocation={onOpenRelocation} />
-      <CareerRolesSection
-        roles={state.activeRoles}
-        showAllRoles={state.showAllRoles}
-        onShowAll={() => state.setShowAllRoles(true)}
-        onConsultant={() => onOpenExpert?.()}
-        onOpenVacancies={(t) => onOpenVacancies?.(t)}
-        onCheckSkills={(id) => onCheckSkills?.(id)}
-        onRejectRole={state.handleRejectRole}
-        onNavigateSection={(sec) => onNavigate?.(sec)}
-      />
+      <CareerRolesSection state={state} handlers={handlers} />
     </div>
   );
 }
@@ -401,12 +266,17 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
   const { hasProfile = true, onOpenExpert, onOpenVacancies, onOpenProfile } = props;
   const state = useCareerScreenState(props);
   const [relocationOpen, setRelocationOpen] = useState(false);
+  const handlers = roleHandlers(props, state);
+  const openRelocation = () => setRelocationOpen(true);
 
   if (state.isLoading) return <CareerLoadingSkeleton />;
   if (!hasProfile) {
     return (
       <div className="career-screen">
-        <CareerEmptyProfileState onOpenProfile={onOpenProfile} onOpenExpert={onOpenExpert} />
+        <CareerEmptyProfileState
+          onOpenProfile={onOpenProfile}
+          onOpenExpert={onOpenExpert ? () => onOpenExpert() : undefined}
+        />
       </div>
     );
   }
@@ -415,17 +285,20 @@ export function CareerScreen(props: CareerScreenProps): ReactElement {
       <Suspense fallback={<CareerLoadingSkeleton />}>
         <RelocationScreen
           onNavigateBack={() => setRelocationOpen(false)}
-          onOpenExpert={onOpenExpert}
+          onOpenExpert={onOpenExpert ? () => onOpenExpert() : undefined}
           onOpenVacancies={onOpenVacancies ? () => onOpenVacancies() : undefined}
         />
       </Suspense>
     );
   }
-  return (
-    <CareerScreenContent
+  return state.isMobile ? (
+    <CareerMobileContent state={state} handlers={handlers} onOpenRelocation={openRelocation} />
+  ) : (
+    <CareerDesktopContent
       props={props}
       state={state}
-      onOpenRelocation={() => setRelocationOpen(true)}
+      handlers={handlers}
+      onOpenRelocation={openRelocation}
     />
   );
 }

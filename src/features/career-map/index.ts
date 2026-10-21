@@ -6,14 +6,7 @@ export {
   isMarketSampleStale,
   MIN_WAGE_SAMPLE,
 } from './careerWageFork';
-export {
-  CareerConditionsStorage,
-  applyConditionsEdit,
-  recalculateMatchingStats,
-  rejectRoleHypothesis,
-  restoreRejectedRole,
-  addCompanyToStopList,
-} from './careerConditionsStorage';
+export { applyConditionsEdit } from './careerConditionsStorage';
 export type {
   CareerRoleModel,
   RoleStatus,

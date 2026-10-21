@@ -1,6 +1,7 @@
 import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
+import { CareerRoleOffer } from '../career-map/CareerRoleOffer';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -651,6 +652,7 @@ export function CareerExpertPanel({
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
+          {stage === 'career' && user && !loadingSnapshot ? <CareerRoleOffer /> : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
           ) : null}

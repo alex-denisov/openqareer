@@ -1,122 +1,92 @@
+import type { ProposedRole } from '../../../shared/roleProposals';
 import type { CareerRoleModel, SearchConditionsDraft } from './careerScreenTypes';
+import { mapProposedRolesToCareerRoles } from './roleHypothesisAdapter';
 
-export const DEFAULT_MOCK_ROLES: readonly CareerRoleModel[] = [
-  {
-    id: 'dir',
+/**
+ * Синтетические роли для CLI-рендера макета и тестов — не для рабочего
+ * экрана: он читает роли только с сервера (B445).
+ */
+function observedRole(input: {
+  id: string;
+  title: string;
+  sampleSize: number;
+  requirements: string[];
+  matched: string[];
+  wage?: { sampleSize: number; min?: number; max?: number };
+  reason?: string;
+}): ProposedRole {
+  return {
+    id: input.id,
+    title: input.title,
+    origin: 'model',
+    reason: input.reason ?? 'опыт руководства разработкой платёжной платформы',
+    evidenceRefs: ['memory:fixture'],
+    family: null,
+    confirmation: {
+      state: 'observed',
+      sampleSize: input.sampleSize,
+      observedFrom: '2026-09-20T08:00:00.000Z',
+      observedTo: '2026-10-05T08:00:00.000Z',
+      sources: [
+        { source: 'hh', count: Math.ceil(input.sampleSize * 0.7) },
+        { source: 'linkedin', count: Math.floor(input.sampleSize * 0.3) },
+      ],
+      repeatedRequirements: input.requirements,
+      matchedRequirements: input.matched.length,
+      matchedRequirementNames: input.matched,
+      ...(input.wage ? { wage: input.wage } : {}),
+    },
+  };
+}
+
+export const CAREER_FIXTURE_PROPOSED_ROLES: readonly ProposedRole[] = [
+  observedRole({
+    id: 'role-director-engineering',
     title: 'Director of Engineering',
-    status: 'skills_checked',
-    wageDisplay: '600–780 тыс. ₽',
-    isWageCalculated: true,
-    vacancyCount: 88,
-    observedDate: '05.10',
-    sampleNote: '88 вакансий',
-    confirmedItems: ['Платёжные системы: квиз пройден 03.10'],
-    missingItems: [
-      {
-        text: 'Бюджет разработки не указан: без него уровень не считается',
-        isWarning: true,
-        linkSection: 'Профиль, Опыт',
-        linkText: 'указать бюджет разработки',
-      },
-      {
-        text: 'Kafka и Kubernetes: нужен тест, около 15 минут',
-        isQuestion: true,
-      },
-    ],
-    nextAction: {
-      label: 'Дозаполнить',
-      action: 'fill_with_consultant',
-      href: '#',
-    },
-    hypothesisReason: 'Вывод из профиля, подтверждённый квизом.',
-  },
-  {
-    id: 'head',
+    sampleSize: 88,
+    requirements: ['Платёжные системы', 'Бюджет разработки', 'Kafka'],
+    matched: ['Платёжные системы'],
+    wage: { sampleSize: 88, min: 600_000, max: 780_000 },
+  }),
+  observedRole({
+    id: 'role-engineering-head',
     title: 'Head of Engineering',
-    status: 'open_for_search',
-    wageDisplay: '420–560 тыс. ₽',
-    isWageCalculated: true,
-    vacancyCount: 312,
-    observedDate: '05.10',
-    sampleNote: 'по 94 вакансиям, 05.10',
-    confirmedItems: ['Квиз по управлению командами пройден 01.10'],
-    missingItems: [],
-    nextAction: {
-      label: 'Открыть вакансии',
-      action: 'open_vacancies',
-      href: '4-vakansii.html',
-    },
-  },
-  {
-    id: 'cto',
+    sampleSize: 312,
+    requirements: ['Управление командами', 'Найм'],
+    matched: ['Управление командами', 'Найм'],
+    wage: { sampleSize: 94, min: 420_000, max: 560_000 },
+  }),
+  observedRole({
+    id: 'role-cto-финтехе',
     title: 'CTO в финтехе',
-    status: 'hypothesis',
-    wageDisplay: '650–900 тыс. ₽',
-    isWageCalculated: true,
-    vacancyCount: 41,
-    observedDate: '05.10',
-    sampleNote: '41 вакансия',
-    confirmedItems: ['Платёжные системы: квиз пройден 03.10'],
-    missingItems: [
-      {
-        text: 'Опыт совета директоров: в профиле не указан',
-        linkSection: 'Профиль, Опыт',
-      },
-      {
-        text: 'Регуляторика (ЦБ, PCI DSS): в профиле не указана',
-        linkSection: 'Профиль, Навыки',
-      },
-    ],
-    skillCheckBenefit:
-      'Диалог с консультантом и 3 тест-кейса, около 20 минут. После неё роль откроется для поиска.',
-    nextAction: {
-      label: 'Проверить навыки',
-      action: 'check_skills',
-      href: '11-proverka-navykov.html',
-    },
-    hypothesisReason:
-      'Гипотеза консультанта: платёжные системы в вашем опыте совпадают с типичными требованиями к CTO в финтехе. Это вывод из профиля, пока не проверенный.',
-  },
+    sampleSize: 41,
+    requirements: ['Совет директоров', 'Регуляторика ЦБ'],
+    matched: [],
+    wage: { sampleSize: 41, min: 650_000, max: 900_000 },
+    reason: 'платёжные системы в опыте совпадают с типичными требованиями к CTO в финтехе',
+  }),
   {
-    id: 'vp',
+    id: 'role-engineering-vp',
     title: 'VP Engineering',
-    status: 'hypothesis',
-    wageDisplay: 'вилка не считается',
-    isWageCalculated: false,
-    vacancyCount: 4,
-    observedDate: '05.10',
-    sampleNote: '4 вакансии',
-    confirmedItems: [],
-    missingItems: [],
-    nextAction: {
-      label: 'Мало данных',
-      action: 'few_data',
-      href: '#',
-    },
+    origin: 'model',
+    reason: 'руководил несколькими командами',
+    evidenceRefs: ['memory:fixture'],
+    family: null,
+    confirmation: { state: 'too-few', sampleSize: 4 },
   },
 ];
 
+export const DEFAULT_MOCK_ROLES: readonly CareerRoleModel[] = mapProposedRolesToCareerRoles(
+  CAREER_FIXTURE_PROPOSED_ROLES,
+  { acceptedTitle: 'Head of Engineering', offersDismissed: [] },
+);
+
 export const DEFAULT_SEARCH_CONDITIONS: SearchConditionsDraft = {
-  geography: {
-    selected: ['Москва', 'Удалённо из РФ'],
-    isRelocationEnabled: false,
-  },
-  salaryFrom: {
-    amountRubles: 450000,
-    showWithoutSalary: true,
-  },
-  format: {
-    office: false,
-    hybrid: true,
-    remote: true,
-  },
+  geography: { selected: ['Москва', 'удалённо из РФ'], isRelocationEnabled: false },
+  salaryFrom: { amountRubles: 450_000, showWithoutSalary: true },
+  format: { office: false, hybrid: true, remote: true },
   stopList: [
-    { id: 'greencode', name: 'Гринкод', origin: 'добавлено вручную' },
-    { id: 'sever', name: 'Банк Север', origin: 'из отказа 03.10' },
+    { id: 'a', name: 'Альфа', origin: 'добавлено вручную' },
+    { id: 'b', name: 'Бета', origin: 'добавлено вручную' },
   ],
-  matchingStats: {
-    matched: 148,
-    total: 214,
-    asOf: '07.10 09:12',
-  },
 };

@@ -4,187 +4,92 @@ import type {
   DecisionWorkFormatId,
 } from '../../../shared/workPreferences';
 
-export function recalculateMatchingStats(conditions: SearchConditionsDraft): {
-  matched: number;
-  total: number;
-  asOf: string;
-} {
-  let matched = 214;
-  const salary = conditions.salaryFrom.amountRubles;
-  if (salary > 450000) {
-    matched = Math.max(20, Math.round(matched * (450000 / salary)));
-  } else {
-    matched = 148;
-  }
-
-  if (!conditions.salaryFrom.showWithoutSalary) {
-    matched = Math.round(matched * 0.7);
-  }
-
-  if (conditions.format.office && !conditions.format.remote) {
-    matched = Math.round(matched * 0.4);
-  }
-
-  const stopCount = conditions.stopList.length;
-  matched = Math.max(5, matched - stopCount * 4);
-
-  return {
-    matched,
-    total: 214,
-    asOf: '07.10 09:12',
-  };
-}
-
-export function rejectRoleHypothesis(current: ReadonlySet<string>, roleId: string): Set<string> {
-  const next = new Set(current);
-  next.add(roleId);
-  return next;
-}
-
-export function restoreRejectedRole(current: ReadonlySet<string>, roleId: string): Set<string> {
-  const next = new Set(current);
-  next.delete(roleId);
-  return next;
-}
-
-export function addCompanyToStopList(
-  current: readonly StopCompany[],
-  companyName: string,
-): readonly StopCompany[] {
-  const trimmed = companyName.trim();
-  if (!trimmed) return current;
-  const id = `stop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-  return [
-    ...current,
-    {
-      id,
-      name: trimmed,
-      origin: 'добавлено вручную',
-    },
-  ];
-}
+export const EMPTY_SEARCH_CONDITIONS: SearchConditionsDraft = {
+  geography: { selected: [], isRelocationEnabled: false },
+  salaryFrom: { amountRubles: null, showWithoutSalary: true },
+  format: { office: false, hybrid: false, remote: false },
+  stopList: [],
+};
 
 export function applyConditionsEdit(
   current: SearchConditionsDraft,
   patch: Partial<SearchConditionsDraft>,
 ): SearchConditionsDraft {
-  const updated: SearchConditionsDraft = {
-    ...current,
-    ...patch,
-  };
-  return {
-    ...updated,
-    matchingStats: recalculateMatchingStats(updated),
-  };
+  return { ...current, ...patch };
 }
 
+/**
+ * Профиль ограничений → условия экрана. Чего кандидат не указал, то и не
+ * показывается: гражданство не география, а пустой пол зарплаты не 450 000 ₽.
+ */
 export function decisionProfileToSearchConditions(
-  profile: Partial<CandidateDecisionProfile>,
+  profile: Partial<CandidateDecisionProfile> | null,
   stopList: readonly StopCompany[] = [],
 ): SearchConditionsDraft {
-  const formats = profile.workFormats ?? [];
-  const selectedGeo =
-    profile.citizenship && profile.citizenship.length > 0
-      ? profile.citizenship
-      : ['Москва', 'Удалённо из РФ'];
-
-  const draft: SearchConditionsDraft = {
+  const formats = profile?.workFormats ?? [];
+  return {
     geography: {
-      selected: selectedGeo,
+      selected: profile?.searchLocations ?? [],
       isRelocationEnabled: formats.includes('relocation'),
     },
     salaryFrom: {
-      amountRubles: profile.salaryFloor ?? 450000,
+      amountRubles: profile?.salaryFloor ?? null,
       showWithoutSalary: true,
     },
     format: {
       office: formats.includes('office'),
-      hybrid: formats.includes('home_market') || formats.length === 0,
-      remote:
-        formats.includes('remote_home') ||
-        formats.includes('remote_abroad') ||
-        formats.length === 0,
+      hybrid: formats.includes('home_market'),
+      remote: formats.includes('remote_home') || formats.includes('remote_abroad'),
     },
     stopList,
-    matchingStats: {
-      matched: 148,
-      total: 214,
-      asOf: '07.10 09:12',
-    },
-  };
-
-  return {
-    ...draft,
-    matchingStats: recalculateMatchingStats(draft),
   };
 }
 
 export function searchConditionsToDecisionProfile(
   conditions: SearchConditionsDraft,
-  existing?: Partial<CandidateDecisionProfile>,
+  existing?: Partial<CandidateDecisionProfile> | null,
 ): CandidateDecisionProfile {
-  const formats: DecisionWorkFormatId[] = [];
-  if (conditions.format.remote) formats.push('remote_home');
+  const kept = (existing?.workFormats ?? []).filter((id) => id === 'remote_abroad');
+  const formats: DecisionWorkFormatId[] = [...kept];
+  if (conditions.format.remote && !kept.includes('remote_abroad')) formats.push('remote_home');
   if (conditions.format.hybrid) formats.push('home_market');
   if (conditions.format.office) formats.push('office');
   if (conditions.geography.isRelocationEnabled) formats.push('relocation');
 
   return {
-    citizenship: conditions.geography.selected,
+    citizenship: existing?.citizenship ?? [],
+    searchLocations: conditions.geography.selected,
     taxStatus: existing?.taxStatus ?? '',
     languages: existing?.languages ?? [],
     workFormats: formats,
-    salaryFloor: conditions.salaryFrom.amountRubles,
+    ...(conditions.salaryFrom.amountRubles !== null
+      ? { salaryFloor: conditions.salaryFrom.amountRubles }
+      : {}),
     salaryCurrency: existing?.salaryCurrency ?? 'RUB',
     cushionMonths: existing?.cushionMonths,
     hasFamily: existing?.hasFamily ?? false,
-    updatedAt: new Date().toISOString(),
   };
 }
 
-export class CareerConditionsStorage {
-  private committed: SearchConditionsDraft;
-  private draft: SearchConditionsDraft;
-  private simulateFailure = false;
+export function formatConditionsFormat(format: SearchConditionsDraft['format']): string | null {
+  const parts = [
+    format.office ? 'Офис' : null,
+    format.hybrid ? 'Гибрид' : null,
+    format.remote ? 'удалённо' : null,
+  ].filter((part): part is string => Boolean(part));
+  if (parts.length === 0) return null;
+  const text = parts.join(', ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
 
-  constructor(initial?: SearchConditionsDraft) {
-    const fallback = initial ?? decisionProfileToSearchConditions({});
-    this.committed = fallback;
-    this.draft = fallback;
-  }
+export function formatSalaryFloor(amount: number | null): string | null {
+  return amount === null ? null : `${amount.toLocaleString('ru-RU').replace(/\u00A0/g, ' ')} ₽`;
+}
 
-  public getConditions(): SearchConditionsDraft {
-    return this.committed;
-  }
-
-  public getDraftConditions(): SearchConditionsDraft {
-    return this.draft;
-  }
-
-  public setDraftConditions(draft: SearchConditionsDraft): void {
-    this.draft = draft;
-  }
-
-  public rollbackDraft(): void {
-    this.draft = this.committed;
-  }
-
-  public simulateNetworkFailure(shouldFail: boolean): void {
-    this.simulateFailure = shouldFail;
-  }
-
-  public async saveConditions(
-    newConditions: SearchConditionsDraft,
-  ): Promise<SearchConditionsDraft> {
-    this.draft = newConditions;
-
-    if (this.simulateFailure) {
-      throw new Error('Не сохранилось: нет связи с сервером. Значение осталось в поле.');
-    }
-
-    const calculated = applyConditionsEdit(newConditions, {});
-    this.committed = calculated;
-    this.draft = calculated;
-    return this.committed;
-  }
+export function formatCompaniesCount(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return `${count} компания`;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return `${count} компании`;
+  return `${count} компаний`;
 }

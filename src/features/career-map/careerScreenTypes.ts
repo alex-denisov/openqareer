@@ -3,18 +3,17 @@ export type RoleStatus = 'hypothesis' | 'skills_checked' | 'open_for_search';
 export interface MissingRoleRequirement {
   readonly text: string;
   readonly isWarning?: boolean;
-  readonly isQuestion?: boolean;
+  /** Раздел профиля, где этот пробел закрывается: «Профиль, Навыки». */
   readonly linkSection?: string;
-  readonly linkText?: string;
 }
 
 export type RoleActionKind =
   'fill_with_consultant' | 'open_vacancies' | 'check_skills' | 'few_data';
 
 export interface RoleNextAction {
+  /** Подпись строки-действия в списке ролей на 390. */
   readonly label: string;
   readonly action: RoleActionKind;
-  readonly href?: string;
 }
 
 export interface CareerRoleModel {
@@ -23,15 +22,24 @@ export interface CareerRoleModel {
   readonly status: RoleStatus;
   readonly wageDisplay: string;
   readonly isWageCalculated: boolean;
+  /** «вилка по 94 вакансиям с зарплатой», когда с зарплатой не все вакансии роли. */
+  readonly wageSampleNote: string | null;
   readonly vacancyCount: number;
-  readonly observedDate: string;
-  readonly sampleNote: string;
+  /** ДД.ММ последнего наблюдения роли в каталоге; `null` — вакансий не найдено. */
+  readonly observedDate: string | null;
+  /** Тот же момент в ISO — для сравнения дат в сводке. */
+  readonly observedAt: string | null;
+  /** Площадки, на которых найдены вакансии роли: «hh.ru», «LinkedIn». */
+  readonly sources: readonly string[];
   readonly confirmedItems: readonly string[];
   readonly missingItems: readonly MissingRoleRequirement[];
+  /** «Сверка с требованиями 88 вакансий, 05.10» или честное «не сверено». */
+  readonly requirementsNote: string;
   readonly skillCheckBenefit?: string;
   readonly nextAction: RoleNextAction;
   readonly hypothesisReason?: string;
-  readonly rejected?: boolean;
+  /** Кандидат ответил «Не сейчас» на предложение открыть роль для поиска. */
+  readonly offerDismissed: boolean;
 }
 
 export interface StopCompany {
@@ -40,13 +48,17 @@ export interface StopCompany {
   readonly origin: string;
 }
 
+/**
+ * Условия поиска кандидата. Пустое значение — «не указано», а не умолчание:
+ * подставлять Москву или 450 000 ₽ значило бы искать за кандидата.
+ */
 export interface SearchConditionsDraft {
   readonly geography: {
     readonly selected: readonly string[];
     readonly isRelocationEnabled: boolean;
   };
   readonly salaryFrom: {
-    readonly amountRubles: number;
+    readonly amountRubles: number | null;
     readonly showWithoutSalary: boolean;
   };
   readonly format: {
@@ -55,12 +67,13 @@ export interface SearchConditionsDraft {
     readonly remote: boolean;
   };
   readonly stopList: readonly StopCompany[];
-  readonly matchingStats: {
-    readonly matched: number;
-    readonly total: number;
-    readonly asOf: string;
-  };
 }
 
-export type CareerPushView =
-  'home' | 'dir' | 'head' | 'cto' | 'vp' | 'geo' | 'sal' | 'fmt' | 'stop';
+/** Сводка рынка по ролям — из тех же данных, что и строки ролей. */
+export interface RolesMarketSummary {
+  readonly vacancyTotal: number;
+  readonly asOf: string | null;
+  readonly sources: readonly string[];
+}
+
+export type CareerPushView = 'home' | 'geo' | 'sal' | 'fmt' | 'stop' | `role:${string}`;
