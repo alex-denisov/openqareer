@@ -157,9 +157,20 @@ describe('background vacancy mechanics with real SQLite', () => {
     } };
     const complete = vi.fn().mockRejectedValue(new Error('provider_timeout'));
     const client = { complete } as unknown as BulkLlmClient;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-21T04:00:00.000Z'));
     runtime.enqueue(source);
-    for (let attempt = 0; attempt < 3; attempt += 1) await runtime.runNext(client);
+    await runtime.runNext(client);
+    expect(runtime.view(source).state).toBe('retrying');
+    expect(await runtime.runNext(client)).toBe(false);
+    expect(complete).toHaveBeenCalledTimes(1);
+    for (let attempt = 1; attempt < 3; attempt += 1) {
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+      await runtime.runNext(client);
+    }
     expect(complete).toHaveBeenCalledTimes(3);
+    expect(runtime.takeStats()).toMatchObject({ claimed: 3, retried: 2, failed: 1, completed: 0, lastError: 'assessment_model_unavailable' });
     expect(runtime.view(source).state).toBe('failed');
     expect(await runtime.runNext(client)).toBe(false);
     expect(complete).toHaveBeenCalledTimes(3);

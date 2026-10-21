@@ -11,6 +11,19 @@ export interface VacancyFitJob {
   readonly attempts: number;
   readonly input: VacancyFitInput;
 }
+export type VacancyFitJobState = 'pending' | 'leased' | 'completed' | 'failed' | 'retrying';
+export type VacancyFitDeferOutcome = 'deferred' | 'failed' | 'lost';
+
+/** A job waiting for requirements gives up after this many pauses (~30 min at the default pause). */
+export const VACANCY_FIT_MAX_DEFERS = 30;
+const DEFER_MS = 60_000;
+const RETRY_BASE_MS = 30_000;
+const LATE_COLUMNS = [
+  ['requested_at', 'TEXT'],
+  ['defers', 'INTEGER NOT NULL DEFAULT 0'],
+  ['last_error', 'TEXT'],
+] as const;
+
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
@@ -29,6 +42,9 @@ export class SqliteVacancyFitStore {
     );
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_claim ON vacancy_fit_queue(status,lease_until,created_at);
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_candidate ON vacancy_fit_queue(candidate_key);`);
+    const columns = new Set((database.prepare('PRAGMA table_info(vacancy_fit_queue)').all() as { name: string }[]).map((column) => column.name));
+    // The queue holds a few thousand rows: ADD COLUMN is a metadata change, not a table rewrite.
+    for (const [name, type] of LATE_COLUMNS) if (!columns.has(name)) database.exec(`ALTER TABLE vacancy_fit_queue ADD COLUMN ${name} ${type}`);
   }
 
   private candidateKey(candidateId: string): string {
@@ -39,10 +55,12 @@ export class SqliteVacancyFitStore {
     return this.sealedText.indexToken(`vacancy-fit:${input.candidateId}`, JSON.stringify(fingerprint));
   }
 
-  getJobState(input: VacancyFitInput): string | undefined {
-    const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=? AND candidate_key=?')
-      .get(this.cacheKey(input), this.candidateKey(input.candidateId)) as { status: string } | undefined;
-    return row?.status;
+  /** `retrying` is a pending job whose last model call failed: the row says so instead of «в очереди». */
+  getJobState(input: VacancyFitInput): VacancyFitJobState | undefined {
+    const row = this.database.prepare('SELECT status,last_error FROM vacancy_fit_queue WHERE cache_key=? AND candidate_key=?')
+      .get(this.cacheKey(input), this.candidateKey(input.candidateId)) as { status: VacancyFitJobState; last_error: string | null } | undefined;
+    if (!row) return undefined;
+    return row.status === 'pending' && row.last_error ? 'retrying' : row.status;
   }
 
   getCache(input: VacancyFitInput): VacancyFitResult | undefined {
@@ -81,23 +99,32 @@ export class SqliteVacancyFitStore {
       ON CONFLICT(cache_key) DO UPDATE SET result_cipher=excluded.result_cipher,updated_at=excluded.updated_at`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(result), key), now);
   }
 
-  /** Input hash changes naturally enqueue a new job; identical work is idempotent across processes. */
+  /**
+   * Input hash changes naturally enqueue a new job; identical work is idempotent across processes.
+   * A repeated request (the candidate opened the page again) moves a waiting job to the front.
+   */
   enqueue(input: VacancyFitInput, now = new Date().toISOString()): { key: string; status: string } {
     const key = this.cacheKey(input);
-    this.database.prepare(`INSERT OR IGNORE INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,created_at,updated_at)
-      VALUES(?,?,?,'pending',?,?)`).run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), now, now);
+    this.database.prepare(`INSERT INTO vacancy_fit_queue(cache_key,candidate_key,input_cipher,status,requested_at,created_at,updated_at)
+      VALUES(?,?,?,'pending',?,?,?) ON CONFLICT(cache_key) DO UPDATE SET requested_at=excluded.requested_at WHERE status='pending'`)
+      .run(key, this.candidateKey(input.candidateId), this.sealedText.seal(JSON.stringify(input), key), now, now, now);
     const row = this.database.prepare('SELECT status FROM vacancy_fit_queue WHERE cache_key=?').get(key) as { status: string };
     return { key, status: row.status };
   }
 
   retryFailed(input: VacancyFitInput, now = new Date().toISOString()): void {
     const key = this.cacheKey(input);
-    this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,
-      lease_token=NULL,lease_until=NULL,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
-      .run(this.sealedText.seal(JSON.stringify(input), key), now, key, this.candidateKey(input.candidateId));
+    this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',input_cipher=?,attempts=0,defers=0,last_error=NULL,
+      lease_token=NULL,lease_until=NULL,requested_at=?,updated_at=? WHERE cache_key=? AND candidate_key=? AND status='failed'`)
+      .run(this.sealedText.seal(JSON.stringify(input), key), now, now, key, this.candidateKey(input.candidateId));
   }
 
-  /** One atomic update makes competing workers safe; expired work is retried with a new fencing token. */
+  /**
+   * One atomic update makes competing workers safe; expired work is retried with a new fencing token.
+   * Order: fresh work before work that already waited (deferred or retried), and the most recently
+   * requested first — the page the candidate is looking at now. Ordering by created_at alone let one
+   * deferred head job be reclaimed on every step while 1229 others were never taken (prod 21.10).
+   */
   claim(options: { now?: string; leaseMs?: number } = {}): VacancyFitJob | undefined {
     const now = options.now ?? new Date().toISOString();
     const leaseMs = options.leaseMs ?? 60_000;
@@ -105,7 +132,7 @@ export class SqliteVacancyFitStore {
     const leaseUntil = new Date(Date.parse(now) + leaseMs).toISOString();
     const token = randomUUID();
     const row = this.database.prepare(`UPDATE vacancy_fit_queue SET status='leased',lease_token=?,lease_until=?,attempts=attempts+1,updated_at=?
-      WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE (status='pending' AND (lease_until IS NULL OR lease_until<=?)) OR (status='leased' AND lease_until<=?) ORDER BY created_at,cache_key LIMIT 1)
+      WHERE cache_key=(SELECT cache_key FROM vacancy_fit_queue WHERE (status='pending' AND (lease_until IS NULL OR lease_until<=?)) OR (status='leased' AND lease_until<=?) ORDER BY (defers>0 OR attempts>0),COALESCE(requested_at,created_at) DESC,cache_key LIMIT 1)
       RETURNING cache_key,input_cipher,lease_token,lease_until,attempts`).get(token, leaseUntil, now, now, now) as JobRow | undefined;
     if (!row) return undefined;
     try {
@@ -134,19 +161,26 @@ export class SqliteVacancyFitStore {
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
-  defer(job: VacancyFitJob, now = new Date().toISOString(), delayMs = 5000): boolean {
+  /** Waiting for requirements is bounded: after VACANCY_FIT_MAX_DEFERS pauses the row fails honestly. */
+  defer(job: VacancyFitJob, now = new Date().toISOString(), delayMs = DEFER_MS): VacancyFitDeferOutcome {
     const available = new Date(Date.parse(now) + delayMs).toISOString();
     const update = this.database.prepare(`UPDATE vacancy_fit_queue
-      SET status='pending',lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),updated_at=?
-      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`)
-      .run(available, now, job.key, job.leaseToken, now);
-    return Number(update.changes) === 1;
+      SET status=CASE WHEN defers+1>=? THEN 'failed' ELSE 'pending' END,
+        last_error=CASE WHEN defers+1>=? THEN 'requirements_wait_timeout' ELSE last_error END,
+        lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),defers=defers+1,updated_at=?
+      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>? RETURNING status`)
+      .get(VACANCY_FIT_MAX_DEFERS, VACANCY_FIT_MAX_DEFERS, available, now, job.key, job.leaseToken, now) as { status: string } | undefined;
+    if (!update) return 'lost';
+    return update.status === 'failed' ? 'failed' : 'deferred';
   }
 
-  fail(job: VacancyFitJob, options: { retry?: boolean; now?: string } = {}): boolean {
+  /** A retried job waits 30 s, 60 s, 120 s… before the next model call; the reason is an error class only. */
+  fail(job: VacancyFitJob, options: { retry?: boolean; now?: string; reason?: string } = {}): boolean {
     const now = options.now ?? new Date().toISOString();
-    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status=?,lease_token=NULL,lease_until=NULL,updated_at=?
-      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(options.retry ? 'pending' : 'failed', now, job.key, job.leaseToken, now);
+    const reason = options.reason && /^[a-z0-9_:-]{1,80}$/iu.test(options.reason) ? options.reason : 'assessment_failed';
+    const available = options.retry ? new Date(Date.parse(now) + RETRY_BASE_MS * 2 ** Math.max(0, job.attempts - 1)).toISOString() : null;
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status=?,lease_token=NULL,lease_until=?,last_error=?,updated_at=?
+      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(options.retry ? 'pending' : 'failed', available, reason, now, job.key, job.leaseToken, now);
     return Number(update.changes) === 1;
   }
 

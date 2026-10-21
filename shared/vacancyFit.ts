@@ -1,7 +1,7 @@
 /** Percentages describe verified requirement coverage, never hiring probability. */
 import type { VacancyRequirement } from '../server/domain/vacancyRequirements';
 export interface VacancyFitView {
-  readonly state: 'not_requested' | 'processing' | 'ready' | 'no_description' | 'no_requirements' | 'failed';
+  readonly state: 'not_requested' | 'processing' | 'retrying' | 'ready' | 'no_description' | 'no_requirements' | 'failed';
   readonly requirements: readonly VacancyRequirement[];
   readonly result?: VacancyFitResult;
 }

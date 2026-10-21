@@ -3,6 +3,7 @@ import type { VacancyFitView } from '../../../shared/vacancyFit';
 const STATE_LABELS = {
   not_requested: 'Соответствие ещё не рассчитано',
   processing: 'Расчёт в очереди. Результат появится после обработки.',
+  retrying: 'Не удалось рассчитать — повторим автоматически.',
   no_description: 'Нет описания вакансии для расчёта',
   no_requirements: 'В описании пока не найдены требования',
   failed: 'Расчёт недоступен. Попробуйте ещё раз.',
