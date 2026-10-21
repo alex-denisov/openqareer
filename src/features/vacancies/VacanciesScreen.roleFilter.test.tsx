@@ -188,6 +188,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       levels: [],
       sources: [],
       remoteOnly: false,
+      locationRemote: true,
     });
   });
   it('счётчик учитывает выбранный на карте город и возвращает серверный total при очистке', async () => {

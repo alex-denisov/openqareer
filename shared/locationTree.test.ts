@@ -40,6 +40,14 @@ describe('parseVacancyLocation', () => {
     });
   });
 
+  it('names the country of a well-known city written alone', () => {
+    expect(parseVacancyLocation({ location: 'Berlin' })).toEqual({
+      country: 'Германия',
+      region: 'Регион не указан',
+      city: 'Берлин',
+    });
+  });
+
   it('keeps an unknown place unknown', () => {
     expect(parseVacancyLocation({ location: 'Remote' })).toBeUndefined();
   });

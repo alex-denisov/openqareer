@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { pickLocation } from './fixtures/locationTree';
 
 async function openVacancies(page: Page): Promise<void> {
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
@@ -153,7 +154,7 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
   const search = page.getByRole('searchbox', {
     name: 'Страна, регион, штат или город',
   });
-  await search.fill('Berlin');
+  await search.fill('Берлин');
   await capture(page, 'search-location', width, viewportHeight);
 
   if (mobile) {
@@ -182,10 +183,14 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
     if (await backToAll.isVisible()) await backToAll.click();
   }
   await page.locator(mobile ? '.vacancies-sheet-reset' : '.vacancies-summary-reset').click();
-  await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Berlin');
-  const apply = page.getByRole('button', {
-    name: mobile ? 'Показать результаты' : 'Применить',
-  });
+  if (!mobile && !(await page.getByTestId('location-tree-filter').isVisible()))
+    await page.locator('[data-filter-group="locations"]').click();
+  await pickLocation(page, 'Берлин');
+  const apply = page
+    .getByRole('button', {
+      name: mobile ? 'Показать результаты' : 'Применить',
+    })
+    .first();
   await expect(apply).toBeVisible();
   await apply.click();
 

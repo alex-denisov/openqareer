@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
+import { pickLocation } from './fixtures/locationTree';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 async function navigateToVacancies(page: Page) {
@@ -215,10 +216,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     await page.locator('.vacancies-sheet-reset').click();
   }
 
-  const locationSearch = page.getByRole('searchbox', {
-    name: 'Страна, регион, штат или город',
-  });
-  await locationSearch.fill('Berlin');
+  await pickLocation(page, 'Берлин');
   const screenError = page.locator('.career-error-boundary-details code');
   if (await screenError.count())
     throw new Error((await screenError.textContent()) ?? 'Unknown screen error');
@@ -226,6 +224,7 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     .getByRole('button', {
       name: testInfo.project.name === 'mobile-390' ? 'Показать результаты' : 'Применить',
     })
+    .first()
     .click();
   await expect(page.locator('.vacancies-filters')).toBeHidden();
   await page.screenshot({
@@ -303,11 +302,12 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   } else {
     await page.locator('.vacancies-sheet-reset').click();
   }
-  await page.getByRole('searchbox', { name: 'Страна, регион, штат или город' }).fill('Berlin');
+  await pickLocation(page, 'Берлин');
   await page
     .getByRole('button', {
       name: testInfo.project.name === 'mobile-390' ? 'Показать результаты' : 'Применить',
     })
+    .first()
     .click();
   const reloadedVacancy = page
     .locator('.vac-list-item')

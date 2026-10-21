@@ -1,4 +1,5 @@
 import {
+  CITY_COUNTRY,
   CITY_NAMES,
   COUNTRY_NAMES,
   HOME_COUNTRY,
@@ -81,6 +82,7 @@ function detectCountry(parts: string[], place: VacancyPlaceInput): string | unde
   if (given) return given;
   if (parts.length > 1 && usState(parts[1])) return 'США';
   if (parts[0] && RUSSIAN_CITY_DISTRICT[lower(cityLabel(parts[0]))]) return HOME_COUNTRY;
+  if (parts[0]) return CITY_COUNTRY[cityLabel(parts[0])];
   return undefined;
 }
 

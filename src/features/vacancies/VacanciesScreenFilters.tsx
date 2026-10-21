@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check } from '@phosphor-icons/react';
 
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
@@ -21,7 +21,8 @@ import {
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import { VacancySourceCatalogFilter } from './VacancySourceCatalogFilter';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
-import { buildLocationTree, type LocationTree } from '../../../shared/locationTree';
+import { buildLocationTree } from '../../../shared/locationTree';
+import type { LocationTreeBuilder } from './useLocationTreeForState';
 import { VacancyLocationTreeFilter } from './VacancyLocationTreeFilter';
 
 export interface VacanciesScreenFiltersProps {
@@ -45,7 +46,7 @@ export interface VacanciesScreenFiltersProps {
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
   readonly locations?: readonly FacetOption[];
-  readonly locationTree?: LocationTree;
+  readonly locationTreeFor?: LocationTreeBuilder;
   readonly salaryCurrencies?: readonly string[];
   readonly formatCounts?: Readonly<Record<string, number>>;
 }
@@ -365,6 +366,35 @@ interface LocationActions {
 
 const EMPTY_LOCATION_TREE = buildLocationTree([]);
 
+/** Дерево считается по черновику фильтров без локаций: так счётчик совпадёт со списком. */
+function LocationTreeSection({
+  props,
+  withFooter,
+  locationActions,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly withFooter: boolean;
+  readonly locationActions: LocationActions;
+}) {
+  const { selectedLocations, locationRemote, locationSearch, ...rest } = props.state;
+  const otherFilters = JSON.stringify(rest);
+  const { locationTreeFor } = props;
+  const tree = useMemo(
+    () => locationTreeFor?.(JSON.parse(otherFilters)) ?? EMPTY_LOCATION_TREE,
+    [locationTreeFor, otherFilters],
+  );
+  return (
+    <VacancyLocationTreeFilter
+      withFooter={withFooter}
+      state={props.state}
+      tree={tree}
+      onChange={props.onChange}
+      onCancel={locationActions.onCancel}
+      onApply={locationActions.onApply}
+    />
+  );
+}
+
 function FacetGroups({
   props,
   roleInputRef,
@@ -388,13 +418,10 @@ function FacetGroups({
         </details>
       ) : null}
       {filterGroupMatches(activeGroup, 'locations') ? (
-        <VacancyLocationTreeFilter
+        <LocationTreeSection
+          props={props}
           withFooter={activeGroup === 'locations'}
-          state={props.state}
-          tree={props.locationTree ?? EMPTY_LOCATION_TREE}
-          onChange={props.onChange}
-          onCancel={locationActions.onCancel}
-          onApply={locationActions.onApply}
+          locationActions={locationActions}
         />
       ) : null}
       {filterGroupMatches(activeGroup, 'salary') ? <SalaryFilterSection props={props} /> : null}

@@ -229,11 +229,15 @@ function RemoteRow({
 function SearchResults({
   query,
   context,
+  relocation,
 }: {
   readonly query: string;
   readonly context: TreeContext;
+  readonly relocation: ReturnType<typeof useRelocationSetting>;
 }) {
   const hits = searchLocationTree(context.tree, query);
+  const foreignLocked =
+    !relocation.enabled && hits.some((hit) => hit.node.country !== HOME_COUNTRY);
   return (
     <>
       <p className="vacancy-location-found">
@@ -242,6 +246,9 @@ function SearchResults({
           : `Ничего не найдено по «${query.trim()}»`}
       </p>
       <ul className="vacancy-location-tree" aria-label="Найденные локации">
+        {foreignLocked ? (
+          <ForeignNote onEnable={relocation.enable} busy={relocation.saving} />
+        ) : null}
         {hits.map((hit) => (
           <li key={hit.node.key} className="vacancy-location-hit">
             <div className="vacancy-location-row is-hit">
@@ -394,7 +401,7 @@ export function VacancyLocationTreeFilter(props: VacancyLocationTreeFilterProps)
       <LocationSearch query={query} onQuery={setQuery} />
       <div className="vacancy-location-body">
         {query.trim() ? (
-          <SearchResults query={query} context={context} />
+          <SearchResults query={query} context={context} relocation={relocation} />
         ) : (
           <TreeBody props={props} context={context} relocation={relocation} />
         )}

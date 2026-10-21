@@ -30,8 +30,7 @@ import { VacanciesScreenSummary } from './VacanciesScreenSummary';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
-import type { LocationTree } from '../../../shared/locationTree';
-import { useLocationTreeForState } from './useLocationTreeForState';
+import { useLocationTreeBuilder, type LocationTreeBuilder } from './useLocationTreeForState';
 export { filterByScreenState } from './vacancyScreenCriteria';
 import {
   SavedVacanciesPanel,
@@ -268,7 +267,7 @@ interface VacanciesFiltersSectionProps {
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
   readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions> & {
-    readonly locationTree: LocationTree;
+    readonly locationTreeFor: LocationTreeBuilder;
   };
 }
 
@@ -529,14 +528,10 @@ function VacanciesFilterContent({
 }) {
   const { board, actions, resetFilters } = screenState;
   const baseOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
-  const locationTree = useLocationTreeForState(
-    input.matched,
-    board.state,
-    Boolean(input.onFiltersChange),
-  );
+  const locationTreeFor = useLocationTreeBuilder(input.matched, Boolean(input.onFiltersChange));
   const filterOptions = useMemo(
-    () => ({ ...baseOptions, locationTree }),
-    [baseOptions, locationTree],
+    () => ({ ...baseOptions, locationTreeFor }),
+    [baseOptions, locationTreeFor],
   );
   return (
     <div className="vacancies-filter-section">

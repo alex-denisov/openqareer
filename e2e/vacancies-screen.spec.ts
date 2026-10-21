@@ -692,7 +692,10 @@ test.describe('B250 vacancies screen', () => {
       await expect(summary).toContainText('148 вакансий в подборке по роли и уровню');
       await expect(summary).toContainText(/Показано \d+ из \d+ с вашими условиями/u);
     } else {
-      await expect(page.locator('.vacancies-mobile-results-summary')).toContainText('148');
+      // B547: число — по выдаче после фильтра «Локации», а не серверный total.
+      await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
+        /\d+ ваканс[а-я]* по вашим условиям/u,
+      );
     }
 
     if (isMobile) {
@@ -1130,9 +1133,10 @@ test.describe('B250 vacancies screen', () => {
     ).toHaveCount(0);
     const filters = await openFilterGroup(page, 'locations');
     await expect(filters.getByRole('button', { name: 'Добавить: MENA' })).toHaveCount(0);
-    const mena = filters.getByRole('button', { name: /MENA · 3/ });
-    await expect(mena).toBeVisible();
-    await expect(mena).toHaveAttribute('aria-pressed', 'false');
+    // B547: дерево строится из мест выдачи; подсказка кампании «MENA» в нём не появляется.
+    const tree = filters.getByTestId('location-tree-filter');
+    await expect(tree).toBeVisible();
+    await expect(tree).not.toContainText('MENA');
   });
 
   test('shows a zero-result hypothesis and names a source when loading fails', async ({
