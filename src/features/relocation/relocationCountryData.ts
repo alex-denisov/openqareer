@@ -1,13 +1,40 @@
 import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
 import { evaluateCountryFit, getCountryMobilityData } from '../../../shared/countryFit';
-import type { MobilityCandidateProfile, MobilityScenarioEvaluation } from '../../../shared/countryFit/types';
-import { calculateAnnualIncomeTax, calculateAnnualPayroll, calculateDisposableIncome } from '../../../shared/taxCalculators';
+import type {
+  MobilityCandidateProfile,
+  MobilityScenarioEvaluation,
+} from '../../../shared/countryFit/types';
+import {
+  calculateAnnualIncomeTax,
+  calculateAnnualPayroll,
+  calculateDisposableIncome,
+} from '../../../shared/taxCalculators';
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
-import type { CountryComparisonCountry, ComparisonEvidence, CountryComparisonFact } from '../../../shared/countryFit/countryComparison';
+import type {
+  CountryComparisonCountry,
+  ComparisonEvidence,
+  CountryComparisonFact,
+} from '../../../shared/countryFit/countryComparison';
 import type { TaxDataSource } from '../../../shared/taxData/types';
 
 const RELOCATION_COUNTRY_CODES = [
-  'AE', 'AM', 'BY', 'CA', 'CY', 'DE', 'ES', 'GB', 'GE', 'KG', 'KZ', 'PT', 'RS', 'RU', 'SG', 'TR', 'US',
+  'AE',
+  'AM',
+  'BY',
+  'CA',
+  'CY',
+  'DE',
+  'ES',
+  'GB',
+  'GE',
+  'KG',
+  'KZ',
+  'PT',
+  'RS',
+  'RU',
+  'SG',
+  'TR',
+  'US',
 ] as const;
 
 export interface RelocationCountry {
@@ -125,16 +152,25 @@ export function buildCountryComparisonCountry(
     countryName: country.name,
     facts: {
       access: accessFact(fit.status, fit.scenarios, candidateSource),
-      processingTime: noData('В правилах по выбранному сценарию нет подтверждённого срока оформления.'),
-      relocationVacancies: noData('Подбор вакансий по этой стране не содержит полной датированной выборки.'),
+      processingTime: noData(
+        'В правилах по выбранному сценарию нет подтверждённого срока оформления.',
+      ),
+      relocationVacancies: noData(
+        'Подбор вакансий по этой стране не содержит полной датированной выборки.',
+      ),
       salaryThreshold: salaryThresholdFact(fit.scenarios),
       incomeTax: taxFacts.incomeTax,
       netIncome: taxFacts.netIncome,
       monthlyRemainder: noData(
-        taxData?.costOfLiving.unavailableReason ?? 'Нет проверенных данных об аренде и страховании для этой страны.',
+        taxData?.costOfLiving.unavailableReason ??
+          'Нет проверенных данных об аренде и страховании для этой страны.',
       ),
-      workingLanguage: noData('В источниках по этой стране нет подтверждённых данных о языке работы.'),
-      familyAndResidence: noData('В источниках нет сопоставимых сведений о переезде семьи и дальнейшем проживании.'),
+      workingLanguage: noData(
+        'В источниках по этой стране нет подтверждённых данных о языке работы.',
+      ),
+      familyAndResidence: noData(
+        'В источниках нет сопоставимых сведений о переезде семьи и дальнейшем проживании.',
+      ),
     },
   };
 }
@@ -146,9 +182,10 @@ function buildTaxComparisonFacts(
   grossAnnualIncome: number | undefined,
   taxData: ReturnType<typeof getCountryTaxData> | null,
 ): TaxComparisonFacts {
-  const annualIncome = grossAnnualIncome !== undefined && Number.isFinite(grossAnnualIncome) && grossAnnualIncome > 0
-    ? grossAnnualIncome
-    : undefined;
+  const annualIncome =
+    grossAnnualIncome !== undefined && Number.isFinite(grossAnnualIncome) && grossAnnualIncome > 0
+      ? grossAnnualIncome
+      : undefined;
   if (!taxData || annualIncome === undefined) return unavailableTaxFacts(taxData !== null);
   const incomeTax = calculateAnnualIncomeTax(countryCode, annualIncome);
   const payroll = calculateAnnualPayroll(countryCode, annualIncome);
@@ -156,7 +193,7 @@ function buildTaxComparisonFacts(
     incomeTax: {
       status: 'available',
       value: {
-        effectiveRate: Number((incomeTax.amount / annualIncome * 100).toFixed(2)),
+        effectiveRate: Number(((incomeTax.amount / annualIncome) * 100).toFixed(2)),
         basis: `Налог с указанной годовой зарплаты ${formatMoney(annualIncome, incomeTax.currency)}.`,
       },
       sources: [comparisonEvidence(incomeTax.source)],
@@ -168,7 +205,10 @@ function buildTaxComparisonFacts(
         currency: payroll.currency,
         basis: `В месяц после налогов и удержаний при зарплате ${formatMoney(annualIncome, payroll.currency)} в год.`,
       },
-      sources: payrollSources(payroll.incomeTax.source, payroll.employeeContributions.items.map(({ source }) => source)),
+      sources: payrollSources(
+        payroll.incomeTax.source,
+        payroll.employeeContributions.items.map(({ source }) => source),
+      ),
     },
   };
 }
@@ -187,9 +227,12 @@ function accessFact(
   status: ReturnType<typeof evaluateCountryFit>['status'],
   scenarios: readonly MobilityScenarioEvaluation[],
   candidateSources: readonly ComparisonEvidence[],
-): CountryComparisonFact<CountryComparisonCountry['facts']['access'] extends CountryComparisonFact<infer T> ? T : never> {
+): CountryComparisonFact<
+  CountryComparisonCountry['facts']['access'] extends CountryComparisonFact<infer T> ? T : never
+> {
   if (status === 'unknown') {
-    const reason = scenarios.flatMap(({ reasons }) => reasons)[0] ??
+    const reason =
+      scenarios.flatMap(({ reasons }) => reasons)[0] ??
       'В анкете недостаточно подтверждённых сведений для проверки доступа.';
     return { status: 'unknown', reason };
   }
@@ -197,7 +240,8 @@ function accessFact(
     ...scenarios.flatMap(({ sources: items }) => items.map(comparisonEvidence)),
     ...candidateSources,
   ]);
-  if (!sources.length) return { status: 'unknown', reason: 'Для этого статуса нет источника или факта анкеты.' };
+  if (!sources.length)
+    return { status: 'unknown', reason: 'Для этого статуса нет источника или факта анкеты.' };
   return {
     status: 'available',
     value: { label: accessLabel(status), status },
@@ -208,9 +252,12 @@ function accessFact(
 function salaryThresholdFact(
   scenarios: readonly MobilityScenarioEvaluation[],
 ): CountryComparisonCountry['facts']['salaryThreshold'] {
-  const threshold = scenarios.flatMap(({ thresholds }) => thresholds).find(({ requirement }) =>
-    requirement === 'minimum_annual_salary' || requirement === 'minimum_monthly_funds',
-  );
+  const threshold = scenarios
+    .flatMap(({ thresholds }) => thresholds)
+    .find(
+      ({ requirement }) =>
+        requirement === 'minimum_annual_salary' || requirement === 'minimum_monthly_funds',
+    );
   if (!threshold) return noData('Для выбранной страны нет подтверждённого порога зарплаты.');
   return {
     status: 'available',
@@ -225,11 +272,13 @@ function salaryThresholdFact(
 
 function profileEvidence(profile: RelocationQuestionnaire | null): ComparisonEvidence[] {
   if (!profile?.updatedAt) return [];
-  return [{
-    kind: 'candidate_profile',
-    title: 'Анкета кандидата',
-    capturedAt: profile.updatedAt.slice(0, 10),
-  }];
+  return [
+    {
+      kind: 'candidate_profile',
+      title: 'Анкета кандидата',
+      capturedAt: profile.updatedAt.slice(0, 10),
+    },
+  ];
 }
 
 function comparisonEvidence(source: TaxDataSource): ComparisonEvidence {

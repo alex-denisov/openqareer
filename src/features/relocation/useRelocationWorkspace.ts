@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react';
-import type { RelocationStepId } from '../../../shared/relocationQuestionnaire';
+import type {
+  RelocationAlert,
+  RelocationQuestionnaire,
+  RelocationStepId,
+} from '../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireResponse } from './relocationApi';
 import { buildCountryComparisonCountry, listRelocationCountries } from './relocationCountryData';
 import { relocationTabCounts } from './relocationCountrySummary';
 import type { RelocationProfileData } from './useRelocationSnapshot';
+import { useSavedCountrySelection } from './useSavedCountrySelection';
 
 export type RelocationTab = 'countries' | 'comparison' | 'economy' | 'profile';
 
@@ -24,19 +29,20 @@ export const RELOCATION_TAB_DESCRIPTIONS: Readonly<Record<RelocationTab, string>
 export interface RelocationWorkspaceInput {
   readonly snapshot: RelocationQuestionnaireResponse & { readonly profile: RelocationProfileData };
   readonly startInQuestionnaire: boolean;
+  readonly onProfileUpdated?: (
+    profile: RelocationQuestionnaire,
+    alerts: readonly RelocationAlert[],
+  ) => void;
 }
 
 export function useRelocationWorkspace({
   snapshot,
   startInQuestionnaire,
+  onProfileUpdated,
 }: RelocationWorkspaceInput) {
-  const [tab, setTab] = useState<RelocationTab>('countries');
-  const [mode, setMode] = useState<RelocationMode>(() =>
-    startInQuestionnaire
-      ? { kind: 'questionnaire', step: firstOpenStep(snapshot.profile) }
-      : { kind: 'tabs' },
-  );
-  const [selectedCountryCodes, setSelectedCountryCodes] = useState<readonly string[]>([]);
+  const { tab, setTab, mode, setMode } = useWorkspaceView(snapshot.profile, startInQuestionnaire);
+  const selection = useSavedCountrySelection(snapshot.profile, onProfileUpdated);
+  const selectedCountryCodes = selection.selected;
   const [pinnedCountryCodes, setPinnedCountryCodes] = useState<readonly string[]>([]);
   const [economyCountryCode, setEconomyCountryCode] = useState('');
   const [grossAnnualIncome, setGrossAnnualIncome] = useState<number>();
@@ -62,7 +68,8 @@ export function useRelocationWorkspace({
     grossAnnualIncome,
     comparisonCountries,
     showTab,
-    setSelectedCountryCodes,
+    setSelectedCountryCodes: selection.change,
+    selectionSave: selection.save,
     setEconomyCountryCode,
     setGrossAnnualIncome,
     openQuestionnaire: (step: RelocationStepId) => setMode({ kind: 'questionnaire', step }),
@@ -78,6 +85,16 @@ export function useRelocationWorkspace({
 }
 
 export type RelocationWorkspaceState = ReturnType<typeof useRelocationWorkspace>;
+
+function useWorkspaceView(profile: RelocationProfileData, startInQuestionnaire: boolean) {
+  const [tab, setTab] = useState<RelocationTab>('countries');
+  const [mode, setMode] = useState<RelocationMode>(() =>
+    startInQuestionnaire
+      ? { kind: 'questionnaire', step: firstOpenStep(profile) }
+      : { kind: 'tabs' },
+  );
+  return { tab, setTab, mode, setMode };
+}
 
 function firstOpenStep(profile: RelocationProfileData): RelocationStepId {
   return profile.currentStep === 'summary' ? 'citizenship_documents' : profile.currentStep;

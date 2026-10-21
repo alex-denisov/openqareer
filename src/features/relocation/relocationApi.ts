@@ -27,6 +27,7 @@ export interface RelocationQuestionnaireWriteResult {
 export interface RelocationQuestionnaireProgress {
   readonly currentStep: RelocationCurrentStep;
   readonly skippedSteps: readonly RelocationStepId[];
+  readonly selectedCountryCodes?: readonly string[];
 }
 
 export interface RelocationConsentWriteResult {

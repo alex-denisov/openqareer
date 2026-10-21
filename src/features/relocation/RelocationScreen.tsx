@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
+import { usePageTitleOverride } from '../shell/pageTitleOverride';
 import { RelocationConsentGate } from './RelocationConsentGate';
 import { RelocationDesktopWorkspace } from './RelocationDesktopWorkspace';
 import { RelocationMobileWorkspace } from './RelocationMobileWorkspace';
@@ -44,8 +45,11 @@ export function RelocationScreen(props: RelocationScreenProps) {
   const state = useRelocationSnapshot();
   const mobile = useRelocationMobileLayout();
   const [justGranted, setJustGranted] = useState(false);
-  if (state.loading) return <RelocationScreenState busy message="Загружаем сведения о странах и согласии…" />;
-  if (state.error) return <RelocationScreenState message={state.error} onRetry={() => void state.reload()} />;
+  usePageTitleOverride('Страны и релокация');
+  if (state.loading)
+    return <RelocationScreenState busy message="Загружаем сведения о странах и согласии…" />;
+  if (state.error)
+    return <RelocationScreenState message={state.error} onRetry={() => void state.reload()} />;
   if (!state.snapshot?.consent.granted) {
     return (
       <RelocationConsentGate
@@ -60,12 +64,15 @@ export function RelocationScreen(props: RelocationScreenProps) {
       />
     );
   }
-  const snapshot = { ...state.snapshot, profile: state.snapshot.profile ?? emptyRelocationQuestionnaire() };
+  const snapshot = {
+    ...state.snapshot,
+    profile: state.snapshot.profile ?? emptyRelocationQuestionnaire(),
+  };
   return (
     <RelocationWorkspace
       {...props}
       mobile={mobile}
-      input={{ snapshot, startInQuestionnaire: justGranted }}
+      input={{ snapshot, startInQuestionnaire: justGranted, onProfileUpdated: state.updateProfile }}
       onProfileUpdated={state.updateProfile}
       onConsentRevoked={state.updateConsent}
     />
@@ -81,7 +88,9 @@ export interface RelocationWorkspaceProps extends RelocationScreenProps {
 
 function RelocationWorkspace(props: RelocationWorkspaceProps) {
   const workspace = useRelocationWorkspace(props.input);
-  return props.mobile
-    ? <RelocationMobileWorkspace {...props} workspace={workspace} />
-    : <RelocationDesktopWorkspace {...props} workspace={workspace} />;
+  return props.mobile ? (
+    <RelocationMobileWorkspace {...props} workspace={workspace} />
+  ) : (
+    <RelocationDesktopWorkspace {...props} workspace={workspace} />
+  );
 }

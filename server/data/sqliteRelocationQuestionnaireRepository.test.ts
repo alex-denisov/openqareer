@@ -44,6 +44,33 @@ describe('SqliteRelocationQuestionnaireRepository', () => {
     expect(repository.getProfile('candidate-a')?.revision).toBe(1);
   });
 
+  it('keeps the countries chosen for comparison across reads and later progress writes (B468-r1)', () => {
+    const { repository } = setup();
+    repository.grantConsent('candidate-a', RELOCATION_CONSENT_VERSION, '2026-10-11T10:00:00.000Z');
+    const saved = repository.putProgress(
+      'candidate-a',
+      { currentStep: 'citizenship_documents', skippedSteps: [], selectedCountryCodes: ['DE', 'RS'] },
+      0,
+      '2026-10-11T10:01:00.000Z',
+    );
+    expect(saved.selectedCountryCodes).toEqual(['DE', 'RS']);
+    repository.putProgress(
+      'candidate-a',
+      { currentStep: 'education', skippedSteps: [] },
+      1,
+      '2026-10-11T10:02:00.000Z',
+    );
+    expect(repository.getProfile('candidate-a')?.selectedCountryCodes).toEqual(['DE', 'RS']);
+    expect(() =>
+      repository.putProgress(
+        'candidate-a',
+        { currentStep: 'education', skippedSteps: [], selectedCountryCodes: ['DE', 'RS', 'AE', 'KZ'] },
+        2,
+        '2026-10-11T10:03:00.000Z',
+      ),
+    ).toThrow();
+  });
+
   it('rejects stale writes instead of replacing a newer step revision', () => {
     const { repository } = setup();
     repository.grantConsent('candidate-a', RELOCATION_CONSENT_VERSION, '2026-10-11T10:00:00.000Z');

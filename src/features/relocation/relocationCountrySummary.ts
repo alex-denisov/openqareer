@@ -43,17 +43,24 @@ export function relocationStatusLabel(status: CountryFitStatus | ScenarioAvailab
   return 'Нужно уточнить';
 }
 
+/** Routes that exist only by citizenship or residence: when not open, they are not a way in. */
+const BIRTHRIGHT_SCENARIOS: ReadonlySet<MobilityScenarioId> = new Set([
+  'domestic_market',
+  'simple_mobility',
+]);
+
 /**
- * The scenario that leads a country card: an open one first, then a route
- * backed by an official source, then whatever the rules say.
+ * The scenario that leads a country card: the most open route the candidate
+ * can take, and among equal routes the one backed by an official source. A
+ * citizenship-only route that is not open (Spain is not EAEU for a Russian)
+ * never leads while another route exists.
  */
 function leadingScenario(scenarios: readonly MobilityScenarioEvaluation[]) {
-  const rank = (scenario: MobilityScenarioEvaluation) =>
-    scenario.status === 'available'
-      ? 0
-      : scenario.sources.length
-        ? 1
-        : 2 + SCENARIO_RANK[scenario.status];
+  const rank = (scenario: MobilityScenarioEvaluation) => {
+    const closed = scenario.status !== 'available' && BIRTHRIGHT_SCENARIOS.has(scenario.id);
+    const base = closed ? SCENARIO_RANK.unavailable : SCENARIO_RANK[scenario.status];
+    return base * 2 + (scenario.sources.length ? 0 : 1);
+  };
   return [...scenarios].sort((left, right) => rank(left) - rank(right))[0];
 }
 
@@ -75,7 +82,8 @@ export function summarizeRelocationCountry(
     reason:
       lead?.reasons[0] ??
       (lead?.status === 'available'
-        ? 'Правило выполнено по фактам вашей анкеты.'
+        ? (lead.paths.find(({ status }) => status === 'available')?.label ??
+          'Правило выполнено по фактам вашей анкеты.')
         : 'В правилах нет пояснения для вашего профиля.'),
     source: source ? { title: source.title, retrievedAt: source.retrievedAt } : null,
     scenarios: fit.scenarios,

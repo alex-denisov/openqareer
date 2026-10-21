@@ -38,6 +38,7 @@ export function RelocationDesktopWorkspace(props: DesktopProps) {
         description={RELOCATION_TAB_DESCRIPTIONS[workspace.tab]}
         backLabel="Назад к ролям"
         onBack={props.onNavigateBack}
+        selectionSave={workspace.selectionSave}
       >
         <RelocationTabs workspace={workspace} />
       </RelocationHeaderCard>

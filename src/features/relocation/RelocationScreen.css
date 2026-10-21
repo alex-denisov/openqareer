@@ -263,9 +263,13 @@
   color: var(--career-success);
 }
 
-.career-relocation-country-status.is-barriers,
-.career-relocation-country-status.is-high_barriers {
-  color: var(--career-warning);
+.career-relocation-country-status.is-barriers {
+  color: var(--career-accent);
+}
+
+.career-relocation-country-status.is-high_barriers,
+.career-relocation-country-status.is-unknown {
+  color: var(--career-text-soft);
 }
 
 .career-relocation-country-status.is-unavailable,
@@ -623,8 +627,8 @@
 .career-relocation-country-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--career-space-1);
+  justify-content: space-between;
+  gap: var(--career-space-2);
 }
 
 .career-relocation-country-meta span {
@@ -641,9 +645,9 @@
   display: inline-flex;
   align-items: center;
   gap: var(--career-space-1);
-  border: var(--career-border-width) solid currentColor;
-  border-radius: var(--career-radius-sm);
-  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid color-mix(in oklch, currentColor 45%, transparent);
+  border-radius: calc(var(--career-radius-sm) / 2);
+  padding: 2px var(--career-space-2);
   font-size: var(--career-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -777,7 +781,9 @@
 @media (prefers-reduced-motion: no-preference) {
   .career-relocation-filter-chip,
   .career-relocation-icon-button {
-    transition: color var(--career-motion-quick), background var(--career-motion-quick);
+    transition:
+      color var(--career-motion-quick),
+      background var(--career-motion-quick);
   }
 }
 
@@ -785,4 +791,18 @@
   .career-relocation-country-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* B468-r1: «Выбор сохраняется» on the right of the title row (mockup 15). */
+.career-relocation-save-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-inline-start: auto;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-save-note.is-error {
+  color: var(--career-warning);
 }

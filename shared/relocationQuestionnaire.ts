@@ -184,6 +184,13 @@ export type RelocationQuestionnaireStepData = {
   readonly languages: LanguagesStep;
 };
 
+/** Countries the candidate picked for comparison (mockup 15 «Выбор сохраняется»), up to three. */
+export const RELOCATION_COMPARISON_LIMIT = 3;
+const selectedCountryCodesSchema = z
+  .array(z.string().regex(/^[A-Z]{2}$/u))
+  .max(RELOCATION_COMPARISON_LIMIT)
+  .refine((codes) => new Set(codes).size === codes.length);
+
 export const relocationProgressSchema = z
   .object({
     currentStep: currentStepSchema,
@@ -191,6 +198,7 @@ export const relocationProgressSchema = z
       .array(stepIdSchema)
       .max(RELOCATION_STEPS.length)
       .refine((steps) => new Set(steps).size === steps.length),
+    selectedCountryCodes: selectedCountryCodesSchema.optional(),
   })
   .strict()
   .refine(
@@ -215,6 +223,7 @@ export const relocationQuestionnaireSchema = z
     education: relocationQuestionnaireStepSchemas.education,
     family: relocationQuestionnaireStepSchemas.family,
     languages: relocationQuestionnaireStepSchemas.languages,
+    selectedCountryCodes: selectedCountryCodesSchema.default([]),
     updatedAt: z.iso.datetime().nullable(),
   })
   .strict()
@@ -256,6 +265,7 @@ export function emptyRelocationQuestionnaire(): RelocationQuestionnaire {
       familyMovePlan: 'undecided',
     },
     languages: { languages: [] },
+    selectedCountryCodes: [],
     updatedAt: null,
   };
 }

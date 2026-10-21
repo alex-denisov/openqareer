@@ -35,6 +35,24 @@ describe('relocation country summary', () => {
     expect(summary.source?.retrievedAt).toMatch(/\d/u);
   });
 
+  it('never leads a card with a scenario the candidate cannot use (Spain is not EAEU for a Russian)', () => {
+    for (const country of listRelocationCountries()) {
+      const summary = summarizeRelocationCountry(country, russianProfile());
+      const lead = summary.scenarios.find(
+        ({ id }) =>
+          summary.scenarioLabel ===
+          ({ simple_mobility: 'Без визы, ЕАЭС' } as Record<string, string>)[id],
+      );
+      const usable = summary.scenarios.some(({ status }) => status !== 'unavailable');
+      if (lead && usable) expect(lead.status, country.countryCode).not.toBe('unavailable');
+    }
+    const spain = listRelocationCountries().find(({ countryCode }) => countryCode === 'ES');
+    if (!spain) throw new Error('catalog lost Spain');
+    expect(summarizeRelocationCountry(spain, russianProfile()).scenarioLabel).not.toBe(
+      'Без визы, ЕАЭС',
+    );
+  });
+
   it('keeps unknown status honest when citizenship is missing', () => {
     const germany = listRelocationCountries().find(({ countryCode }) => countryCode === 'DE');
     if (!germany) throw new Error('catalog lost Germany');
