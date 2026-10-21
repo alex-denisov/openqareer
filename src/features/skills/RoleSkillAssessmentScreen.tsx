@@ -90,7 +90,7 @@ export function RoleSkillAssessmentScreen({
       <AssessmentHeader state={state} run={run} actions={actions} onClose={onClose} />
       {focus ? <SkillCheckFocusNote focus={focus} run={run} /> : null}
       {run ? (
-        <ProgressTrack step={getProgressStep(run)} />
+        <ProgressTrack step={getProgressStep(run)} caseCount={run.cases.length} />
       ) : state.current?.state === 'ready' ? (
         <ProgressTrack step={1} />
       ) : null}
@@ -260,8 +260,14 @@ function buildAssessmentHeaderSubtitle(
   if (detailTitle) return 'Оценка по критериям кейса';
   const context = overviewOpen ? `${roleTitle} · данные из выборки вакансий` : roleTitle;
   return run && !overviewOpen
-    ? `${context} · около 20 минут: короткий диалог и три практических кейса.`
+    ? `${context} · около 20 минут: короткий диалог и ${caseCountText(run.cases.length)}.`
     : context;
+}
+
+function caseCountText(count: number): string {
+  if (count === 1) return 'один практический кейс';
+  if (count === 2) return 'два практических кейса';
+  return 'три практических кейса';
 }
 
 function handleAssessmentHeaderBack(
