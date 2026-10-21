@@ -552,7 +552,7 @@ function SummaryNote({ overview }: { readonly overview: RelocationSummaryOvervie
       <CheckCircle aria-hidden="true" size={16} />
       <span>
         {relocationCountsSentence(overview.counts)}
-        {clarify.length ? ' Нужно уточнить: ' : ''}
+        {clarify.length ? ' Например: ' : ''}
         {clarify.map((summary, index) => (
           <span key={summary.countryCode}>
             {index ? ' и ' : ''}<b>{summary.name}</b> ({relocationMissingNote(summary)})

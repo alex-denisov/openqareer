@@ -284,7 +284,7 @@ function salaryThresholdFact(
     value: {
       amount: threshold.amount,
       currency: threshold.currency ?? '',
-      basis: `${threshold.label}, ${THRESHOLD_PERIOD_LABELS[threshold.period]}`,
+      basis: thresholdBasis(threshold.label, threshold.period),
     },
     sources: [comparisonEvidence(threshold.source)],
   };
@@ -339,4 +339,13 @@ function accessLabel(status: ReturnType<typeof evaluateCountryFit>['status']): s
 
 function formatMoney(amount: number, currency: string): string {
   return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(amount)} ${currency}`;
+}
+
+/** «Минимальная годовая зарплата» already names its period: no «, в год» after it. */
+export function thresholdBasis(label: string, period: string): string {
+  const periodLabel = THRESHOLD_PERIOD_LABELS[period];
+  const named =
+    (period === 'annual' && /годов/i.test(label)) ||
+    (period === 'monthly' && /месячн/i.test(label));
+  return named || !periodLabel ? label : `${label}, ${periodLabel}`;
 }

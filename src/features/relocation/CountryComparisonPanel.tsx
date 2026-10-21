@@ -191,7 +191,7 @@ function MobileStack({ countries }: { readonly countries: readonly CountryCompar
                   <dd title={visible.status === 'available' ? undefined : visible.reason}>
                     {visible.status === 'available'
                       ? formatFact(criterion.key, visible.value)
-                      : 'нет данных'}
+                      : missingFactLabel(visible.reason)}
                   </dd>
                 </div>
               );
@@ -337,4 +337,9 @@ function ComparisonMeanings({ meanings }: { readonly meanings: readonly Comparis
       <p className="career-country-comparison-disclaimer">{COUNTRY_FIT_DISCLAIMER}</p>
     </section>
   );
+}
+
+/** A missing value that only waits for the candidate's salary says so instead of «нет данных». */
+export function missingFactLabel(reason: string | undefined): string {
+  return reason && /укажите[^.]*зарплат/i.test(reason) ? 'укажите зарплату' : 'нет данных';
 }
