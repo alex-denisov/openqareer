@@ -436,7 +436,14 @@ async function openFirstVacancy(page: Page): Promise<void> {
   await expect(firstItem).toBeVisible();
   if (await firstItem.locator('.vac-detail').isVisible()) return;
   await firstItem.locator('.vacancies-screen-row-trigger').click();
-  await expect(firstItem.locator('.vac-detail')).toBeVisible();
+  // B549 / макет 4: на 390 строка открывает push-экран вместо панели в строке.
+  await expect(page.locator('.vac-detail, .vacancy-push').first()).toBeVisible();
+}
+
+/** The opened vacancy: the inline actions at 1440, the push screen at 390. */
+async function openedVacancy(page: Page): Promise<Locator> {
+  const push = page.locator('.vacancy-push');
+  return (await push.isVisible()) ? push : page.locator('.vacancies-screen-detail-actions');
 }
 
 async function openResponses(page: Page): Promise<void> {
@@ -447,21 +454,22 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await openVacancies(page);
   await openFirstVacancy(page);
 
-  const detailActions = page.locator('.vacancies-screen-detail-actions');
+  const detailActions = await openedVacancy(page);
   const applyButton = detailActions.getByRole('button', { name: 'Откликнуться' });
   await applyButton.click();
   // B341: открытие сайта — ещё не отклик; отметка только по подтверждению.
-  await expect(page.locator('.vac-detail')).not.toContainText('Отклик отмечен');
+  await expect(detailActions).not.toContainText('Отклик отмечен');
   await detailActions.getByRole('button', { name: 'Да, отклик отправлен' }).click();
   const goToResponses = page.getByRole('button', { name: 'Перейти в «Отклики»' });
   await expect(goToResponses).toBeVisible();
   const viewport = page.viewportSize()?.width ?? 0;
   if (viewport < 1024) {
-    // B486: the 390 list has no inline stage editor; the interview is set from the vacancy.
-    await page.getByRole('button', { name: 'Назначили интервью' }).click();
+    // B486: the 390 list has no inline stage editor; the interview is set from the vacancy,
+    // whose push screen keeps it under «Ещё» (B510, макет 4).
+    await openInterviewFromVacancy(page);
     await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
     await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
-    await expect(page.getByRole('dialog')).toContainText('Genetec');
+    await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
     await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
     await goToResponses.click();
     await expect(
@@ -486,7 +494,7 @@ async function walkChain(page: Page, captureEvidence = false): Promise<void> {
   await card.getByRole('button', { name: 'Сохранить этап' }).click();
 
   await openInterviewPrep(page, card);
-  await expect(page.getByRole('dialog')).toContainText('Genetec');
+  await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
   if (captureEvidence) {
     await page.screenshot({ path: `output/playwright/c70-interview-prep-${viewport}.png` });
   }
@@ -517,7 +525,7 @@ async function openToday(page: Page): Promise<void> {
   await row.click();
   const todayCard = page.locator('.career-responses-card').filter({ hasText: 'Genetec' });
   await openInterviewPrep(page, todayCard);
-  await expect(page.getByRole('dialog')).toContainText('Genetec');
+  await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
   await page.getByRole('button', { name: 'Закрыть модальное окно' }).click();
 }
 
@@ -525,20 +533,32 @@ async function walkManualAppliedChain(page: Page): Promise<void> {
   await walkChain(page, true);
 }
 
+async function openInterviewFromVacancy(page: Page): Promise<void> {
+  const push = page.locator('.vacancy-push');
+  if (await push.isVisible()) {
+    await push.getByRole('button', { name: 'Ещё' }).click();
+    await page
+      .getByRole('dialog', { name: 'Ещё' })
+      .getByRole('button', { name: 'Назначили интервью' })
+      .click();
+    return;
+  }
+  await page.getByRole('button', { name: 'Назначили интервью' }).click();
+}
+
 async function walkExistingAppliedVacancyToPrep(page: Page): Promise<void> {
   await openVacancies(page);
   await openFirstVacancy(page);
   await expect(
-    page.locator('.vacancies-screen-detail-actions').getByRole('button', {
+    (await openedVacancy(page)).getByRole('button', {
       name: 'Перейти в «Отклики»',
     }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Назначили интервью' })).toBeVisible();
-  await page.getByRole('button', { name: 'Назначили интервью' }).click();
+  await openInterviewFromVacancy(page);
   await page.getByLabel('Дата и время интервью').fill('2026-09-30T13:45');
   await page.getByRole('button', { name: 'Сохранить и открыть подготовку' }).click();
 
-  await expect(page.getByRole('dialog')).toContainText('Genetec');
+  await expect(page.getByRole('dialog', { name: /^Интервью/u })).toContainText('Genetec');
 }
 
 test.describe('C47 apply-to-interview chain', () => {
