@@ -24,6 +24,7 @@ import { registerRecruiterIntelligenceRoutes } from './recruiterIntelligenceRout
 import { registerApplicationRoutes } from './applicationRoutes';
 import { registerMatchedVacancyRoutes } from './matchedVacancyRoutes';
 import { registerVacancyPitchRoutes } from './vacancyPitchRoutes';
+import { registerSavedVacancyStateRoutes } from './savedVacancyStateRoutes';
 import { registerPlanRequestRoutes } from './planRequestRoutes';
 import { registerExecutiveRequestRoutes } from './executiveRequestRoutes';
 import type { RouteDeps } from './deps';
@@ -600,6 +601,7 @@ export async function registerVacancyRoutes(app: FastifyInstance, deps: RouteDep
     withDeps(deps, handleSubmitWorkPreferences),
   );
   registerVacancyApplicationRoutes(app, deps);
+  registerSavedVacancyStateRoutes(app, deps);
   registerApplicationRoutes(app, deps);
   registerPlanRequestRoutes(app, deps);
   registerExecutiveRequestRoutes(app, deps);

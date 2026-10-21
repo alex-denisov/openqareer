@@ -351,6 +351,7 @@ interface ApplicationStub {
   archivePreviousStage: string | null;
   version: number;
   readonly vacancy: unknown;
+  readonly stageChangedAt?: string;
   readonly createdAt: string;
   updatedAt: string;
 }
@@ -506,10 +507,47 @@ function savedApplicationFixtures(count: number): ApplicationStub[] {
         url: `https://example.test/saved/${sequence}`,
         source: 'fixture',
       },
+      // B550: дата сохранения убывает с номером — порядок «по дате» совпадает с исходным.
+      stageChangedAt: new Date(Date.parse(timestamp) - index * 6 * 3_600_000).toISOString(),
       createdAt: timestamp,
       updatedAt: timestamp,
     };
   });
+}
+
+/**
+ * B550: первая сохранённая закрылась на площадке, третьей нет в каталоге,
+ * у чётных указана вилка; найденные — Head в Москве, совпадают с условиями.
+ */
+function savedVacancyStateFixtures(ids: readonly string[]): Record<string, unknown> {
+  const inCatalog = {
+    inCatalog: true,
+    vacancyLevel: 'head',
+    levelMatch: 'match',
+    location: 'Москва',
+    isRemote: false,
+    outsideGeography: false,
+  };
+  return Object.fromEntries(
+    ids
+      .filter((id) => id.startsWith('saved-cluster-'))
+      .map((id) => {
+        const sequence = Number(id.slice('saved-cluster-'.length));
+        if (sequence === 1)
+          return [id, { ...inCatalog, closed: true, closedAt: '2026-10-06T09:00:00.000Z' }];
+        if (sequence === 3) return [id, { closed: false, inCatalog: false }];
+        return [
+          id,
+          sequence % 2 === 0
+            ? {
+                ...inCatalog,
+                closed: false,
+                salary: { from: sequence * 50_000, to: sequence * 60_000, currency: 'RUR' },
+              }
+            : { ...inCatalog, closed: false },
+        ];
+      }),
+  );
 }
 
 async function mockLineCRoutes(
@@ -1800,6 +1838,20 @@ export async function mockSignedInCabinet(
       const method = route.request().method();
       const body = method === 'GET' ? null : (route.request().postDataJSON() as unknown);
       return route.fulfill({ json: { data: method === 'DELETE' ? null : body } });
+    }
+    // B422: «Хочу» по названию компании, которой ещё нет в списке кандидата.
+    if (path === '/api/v1/candidate/company-wants' && route.request().method() === 'PUT') {
+      const body = route.request().postDataJSON() as { companyName?: string };
+      return route.fulfill({
+        json: {
+          data: { key: 'f'.repeat(24), name: body.companyName ?? '', want: true, nextStep: null },
+        },
+      });
+    }
+    if (path === '/api/v1/candidate/saved-vacancy-states' && route.request().method() === 'POST') {
+      const body = route.request().postDataJSON() as { items?: { clusterId: string }[] };
+      const ids = (body.items ?? []).map((item) => item.clusterId);
+      return route.fulfill({ json: { data: savedVacancyStateFixtures(ids) } });
     }
     // Saved vacancies use the same candidate application tracker as the Responses screen.
     if (path === '/api/v1/candidate/applications') {

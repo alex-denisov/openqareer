@@ -14,23 +14,171 @@
   width: 100%;
 }
 
-.vacancies-saved-header {
-  display: grid;
+.saved-intro {
+  display: flex;
   gap: var(--career-space-3);
+  align-items: flex-start;
+  margin: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  background: var(--career-surface-soft);
+  color: var(--career-text-muted);
+  font-size: var(--career-text-sm);
 }
 
-.vac-saved-card {
+.saved-intro svg {
+  flex: none;
+  margin-block-start: var(--career-space-1);
+}
+
+.saved-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--career-space-2);
+}
+
+.saved-controls .companies-people-search input {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.saved-controls .companies-people-search:focus-within {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.saved-controls .companies-people-select-wrap,
+.saved-controls .companies-people-select {
+  display: block;
+  inline-size: 100%;
+}
+
+.saved-list {
   display: grid;
   gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.saved-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.3fr) auto;
+  gap: var(--career-space-4);
+  align-items: center;
   padding: var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-lg);
   background: var(--career-surface);
 }
 
-.vac-saved-card h3,
-.vac-saved-card p {
+.saved-row h3,
+.saved-row p {
   margin: 0;
+}
+
+.saved-row h3 {
+  font-size: var(--career-text-sm);
+}
+
+.saved-row-role p,
+.saved-row-closed {
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+}
+
+.saved-row.is-closed .saved-row-role,
+.saved-row.is-closed .saved-row-money strong {
+  color: var(--career-text-muted);
+}
+
+.saved-row-cell {
+  display: grid;
+  gap: var(--career-space-1);
+  font-size: var(--career-text-xs);
+}
+
+.saved-row-fit {
+  display: inline-flex;
+  gap: var(--career-space-1);
+  align-items: center;
+  color: var(--career-text-muted);
+}
+
+.saved-row-money {
+  display: grid;
+  gap: var(--career-space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.saved-row-actions {
+  display: flex;
+  gap: var(--career-space-2);
+  align-items: center;
+}
+
+.saved-row-star {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-accent);
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  color: var(--career-warning);
+  cursor: pointer;
+}
+
+.saved-row-star:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.saved-footer,
+.saved-empty {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+  align-items: center;
+  justify-content: space-between;
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+}
+
+.saved-footer p,
+.saved-empty p,
+.saved-note {
+  margin: 0;
+}
+
+@media (max-width: 760px) {
+  /* Макет 390 (mock-390m-saved): без поиска и выборов — пояснение, список, подвал. */
+  .saved-controls {
+    display: none;
+  }
+
+  .saved-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .saved-row-cell {
+    display: none;
+  }
+
+  .saved-row-money {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .saved-row-actions {
+    grid-row: 1 / span 2;
+    grid-column: 2;
+    flex-direction: column;
+  }
 }
 
 .vacancies-screen {

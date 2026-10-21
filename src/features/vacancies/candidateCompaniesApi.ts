@@ -46,6 +46,18 @@ export async function setCandidateCompanyWant(companyKey: string): Promise<void>
   await readData(response);
 }
 
+/** B422: «Хочу» по названию, когда компании ещё нет в списке кандидата. */
+export async function setCandidateCompanyWantByName(
+  companyName: string,
+): Promise<{ readonly key: string; readonly name: string }> {
+  const response = await apiFetch('/api/v1/candidate/company-wants', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ companyName }),
+  });
+  return readData<{ key: string; name: string }>(response);
+}
+
 export async function removeCandidateCompanyWant(companyKey: string): Promise<void> {
   const response = await apiFetch(
     `/api/v1/candidate/companies/${encodeURIComponent(companyKey)}/want`,

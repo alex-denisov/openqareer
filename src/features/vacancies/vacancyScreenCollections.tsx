@@ -13,6 +13,7 @@ import {
   getCandidateCompanyPage,
   removeCandidateCompanyWant,
   setCandidateCompanyWant,
+  setCandidateCompanyWantByName,
 } from './candidateCompaniesApi';
 
 export interface VacancyCollectionInput {
@@ -111,16 +112,23 @@ async function persistRemoveSavedVacancy(application: ApplicationView): Promise<
   });
 }
 
-async function resolveCompanyRecord(
-  companyName: string,
-  companyByName: ReadonlyMap<string, CandidateCompanyOpportunity | null>,
-): Promise<CandidateCompanyOpportunity> {
-  const known = companyByName.get(companyLookupKey(companyName));
-  if (known) return known;
-  const page = await getCandidateCompanyPage({ search: companyName });
-  const found = findCompanyByName(page.items, companyName);
-  if (!found) throw new Error('Компанию пока нельзя добавить в список «Хочу».');
-  return found;
+function companyRecordFromWant(want: { readonly key: string; readonly name: string }): CandidateCompanyOpportunity {
+  return {
+    key: want.key,
+    name: want.name,
+    location: null,
+    industry: null,
+    vacancyCount: 0,
+    contactsCount: null,
+    contactsImportedAt: null,
+    want: true,
+    nextStep: null,
+    hasRecruiter: false,
+    recruiterSearchStatus: 'idle',
+    sources: [],
+    vacancies: [],
+    recruiters: [],
+  };
 }
 
 async function persistCompanyWant(
@@ -129,6 +137,23 @@ async function persistCompanyWant(
   if (company.want) await removeCandidateCompanyWant(company.key);
   else await setCandidateCompanyWant(company.key);
   return { ...company, want: !company.want };
+}
+
+/**
+ * B422: переключает «Хочу» для компании из строки вакансии. Компании, которой
+ * нет в списке кандидата, раньше нельзя было отметить — кнопка молчала;
+ * теперь сервер заводит её по названию.
+ */
+export async function toggleCompanyWantByName(
+  companyName: string,
+  companyByName: ReadonlyMap<string, CandidateCompanyOpportunity | null>,
+): Promise<CandidateCompanyOpportunity> {
+  const known = companyByName.get(companyLookupKey(companyName));
+  if (known) return persistCompanyWant(known);
+  const page = await getCandidateCompanyPage({ search: companyName });
+  const found = findCompanyByName(page.items, companyName);
+  if (found) return persistCompanyWant(found);
+  return companyRecordFromWant(await setCandidateCompanyWantByName(companyName));
 }
 
 function readableCollectionError(reason: unknown, fallback: string): string {
@@ -234,8 +259,7 @@ function useCompanyWantAction(
     setBusyNames((names) => new Set(names).add(key));
     setActionError(undefined);
     try {
-      const record = await resolveCompanyRecord(companyName, companyByName);
-      const updated = await persistCompanyWant(record);
+      const updated = await toggleCompanyWantByName(companyName, companyByName);
       setCompanyByName((records) => new Map(records).set(key, updated));
     } catch (reason) {
       setActionError(readableCollectionError(reason, 'Не удалось изменить список «Хочу».'));
@@ -270,107 +294,4 @@ export function useVacancyCollections(input: VacancyCollectionInput): VacancyCol
     removeSaved: saveAction.remove,
     toggleCompanyWant: companyAction.toggle,
   };
-}
-
-function savedVacancyHref(application: ApplicationView): string | undefined {
-  const value = application.vacancy?.url;
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function SavedVacancyRow({
-  application,
-  busy,
-  onRemove,
-}: {
-  readonly application: ApplicationView;
-  readonly busy: boolean;
-  readonly onRemove: (application: ApplicationView) => void;
-}) {
-  const vacancy = application.vacancy;
-  const href = savedVacancyHref(application);
-  return (
-    <li className="vac-list-item">
-      <article className="vac-saved-card">
-        <h3>{vacancy?.title ?? 'Название вакансии не сохранено'}</h3>
-        <p>{vacancy?.company || 'Компания не указана'}</p>
-        <div className="career-vacancy-actions">
-          {href ? <a className="career-vacancy-action" href={href} target="_blank" rel="noreferrer">На площадке</a> : <span>Ссылка на площадку не сохранена.</span>}
-          <button
-            type="button"
-            className="career-vacancy-action"
-            disabled={busy}
-            onClick={() => onRemove(application)}
-          >
-            {busy ? 'Убираем…' : 'Убрать из сохранённых'}
-          </button>
-        </div>
-      </article>
-    </li>
-  );
-}
-
-function SavedVacanciesSearch({
-  count,
-  query,
-  onChange,
-}: {
-  readonly count: number;
-  readonly query: string;
-  readonly onChange: (value: string) => void;
-}) {
-  return (
-    <label className="career-field">
-      <span>Компания или роль среди {count} сохранённых</span>
-      <input
-        type="search"
-        aria-label={`Компания или роль среди ${count} сохранённых`}
-        value={query}
-        onChange={(event) => onChange(event.currentTarget.value)}
-      />
-    </label>
-  );
-}
-
-export function SavedVacanciesPanel({ collections }: { readonly collections: VacancyCollectionsState }) {
-  const [query, setQuery] = useState('');
-  const saved = collections.savedApplications;
-  const normalizedQuery = query.trim().toLocaleLowerCase('ru-RU');
-  const visible = saved.filter((application) => {
-    const text = `${application.vacancy?.title ?? ''} ${application.vacancy?.company ?? ''}`;
-    return text.toLocaleLowerCase('ru-RU').includes(normalizedQuery);
-  });
-  return (
-    <section className="vacancies-saved-panel" aria-label="Сохранённые вакансии">
-      <header className="vacancies-saved-header">
-        <h2>Сохранённые вакансии · {saved.length}</h2>
-        <SavedVacanciesSearch count={saved.length} query={query} onChange={setQuery} />
-      </header>
-      {collections.actionError ? <p role="alert">{collections.actionError}</p> : null}
-      {collections.savedError ? (
-        <div role="alert">
-          <p>{collections.savedError}</p>
-          <button type="button" className="career-vacancy-action" onClick={collections.retry}>Повторить</button>
-        </div>
-      ) : null}
-      {collections.savedLoading ? <p aria-live="polite">Загружаем сохранённые вакансии…</p> : null}
-      {!collections.savedLoading && !saved.length ? <p>Сохранённых вакансий пока нет.</p> : null}
-      {!collections.savedLoading && saved.length > 0 && !visible.length ? <p>По этому запросу сохранённых вакансий нет.</p> : null}
-      <ul className="vac-list">
-        {visible.map((application) => (
-          <SavedVacancyRow
-            key={application.id}
-            application={application}
-            busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
-            onRemove={(value) => void collections.removeSaved(value)}
-          />
-        ))}
-      </ul>
-    </section>
-  );
 }
