@@ -159,49 +159,6 @@
   background: transparent;
 }
 
-.career-relocation-mobile .career-relocation-questionnaire > .career-relocation-header {
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
-
-.career-relocation-mobile .career-relocation-questionnaire > .career-relocation-header > p,
-.career-relocation-mobile .career-relocation-questionnaire .career-relocation-stepper,
-.career-relocation-mobile
-  .career-relocation-questionnaire
-  .career-relocation-title-row
-  .career-relocation-status {
-  display: none;
-}
-
-.career-relocation-mobile .career-relocation-questionnaire .career-relocation-back {
-  border: 0;
-  background: transparent;
-}
-
-.career-relocation-mobile .career-relocation-questionnaire-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.career-relocation-mobile .career-relocation-questionnaire-reason {
-  display: none;
-}
-
-.career-relocation-mobile .career-relocation-list-footer {
-  flex-direction: column;
-  align-items: stretch;
-}
-
-.career-relocation-document-screen {
-  display: grid;
-  gap: var(--career-space-4);
-}
-
-.career-relocation-document-screen h3 {
-  margin: 0;
-  font-size: var(--career-text-md);
-}
-
 .career-relocation-sheet {
   inset-block: auto 0;
   inline-size: 100%;
@@ -302,4 +259,171 @@
   flex: none;
   margin-block-start: 2px;
   color: var(--career-text-soft);
+}
+
+/* B468-r2: questionnaire, document and editors at 390 — rows of mockup 15 `mv=i1…i5`, `mv=doc`. */
+.career-relocation-row-value {
+  flex: none;
+  max-inline-size: 45%;
+  overflow: hidden;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-sm);
+  text-align: end;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.career-relocation-picker-row {
+  cursor: pointer;
+}
+
+.career-relocation-picker-row select {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.career-relocation-picker-row:has(select:focus-visible) {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: calc(var(--career-border-width) * -2);
+}
+
+.career-relocation-input-row label {
+  flex: 1 1 auto;
+  color: var(--career-text-soft);
+}
+
+.career-relocation-input-row input {
+  flex: 0 1 55%;
+  min-inline-size: 0;
+  min-block-size: var(--career-target-min);
+  border: 0;
+  padding: 0;
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  color-scheme: dark;
+}
+
+.career-relocation-input-row input::placeholder {
+  color: var(--career-text-dim);
+}
+
+.career-relocation-toggle-row {
+  cursor: pointer;
+}
+
+.career-relocation-toggle-row span {
+  color: var(--career-text);
+}
+
+.career-relocation-toggle-row input {
+  position: relative;
+  flex: none;
+  inline-size: calc(var(--career-space-8) + var(--career-space-5));
+  block-size: calc(var(--career-space-6) + var(--career-space-1));
+  margin: 0;
+  border-radius: 999px;
+  background: var(--career-surface-raised);
+  appearance: none;
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+
+.career-relocation-toggle-row input::after {
+  position: absolute;
+  inset-block-start: var(--career-space-1);
+  inset-inline-start: var(--career-space-1);
+  inline-size: var(--career-space-5);
+  block-size: var(--career-space-5);
+  border-radius: 50%;
+  background: var(--career-text);
+  content: '';
+  transition: transform 180ms ease;
+}
+
+.career-relocation-toggle-row input:checked {
+  background: var(--career-accent);
+}
+
+.career-relocation-toggle-row input:checked::after {
+  transform: translateX(calc(var(--career-space-8) - var(--career-space-3)));
+}
+
+.career-relocation-toggle-row input:focus-visible,
+.career-relocation-radio-row input:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.career-relocation-radio-row {
+  font-size: var(--career-text-md);
+}
+
+.career-relocation-radio-row input {
+  flex: none;
+  inline-size: var(--career-space-5);
+  block-size: var(--career-space-5);
+  margin: 0;
+  accent-color: var(--career-accent);
+}
+
+.career-relocation-mobile-actions {
+  display: grid;
+  justify-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-mobile-primary {
+  inline-size: 100%;
+  flex: none;
+}
+
+.career-relocation-skip {
+  color: var(--career-text-soft);
+}
+
+.career-relocation-remove {
+  justify-self: center;
+  color: var(--career-danger);
+}
+
+.career-relocation-mobile-search {
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding-inline: var(--career-space-4);
+  color: var(--career-text);
+  background: var(--career-surface);
+  font: inherit;
+  font-size: var(--career-text-md);
+}
+
+.career-relocation-option-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-relocation-option-list > li + li {
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.career-relocation-check-mark {
+  flex: none;
+  color: var(--career-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-relocation-toggle-row input,
+  .career-relocation-toggle-row input::after {
+    transition: none;
+  }
 }

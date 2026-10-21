@@ -7,7 +7,7 @@ import { RelocationMobileCountryList } from './RelocationMobileCountryList';
 import { RelocationMobileCountry } from './RelocationMobileCountry';
 import { RelocationEconomy } from './RelocationEconomy';
 import { RelocationProfile } from './RelocationProfile';
-import { RelocationQuestionnaire } from './RelocationQuestionnaire';
+import { RelocationMobileQuestionnaire } from './RelocationMobileQuestionnaire';
 import type { RelocationWorkspaceProps } from './RelocationScreen';
 import type { RelocationTab, RelocationWorkspaceState } from './useRelocationWorkspace';
 
@@ -112,16 +112,13 @@ function MobileModeScreen(props: MobileProps) {
   const profile = props.input.snapshot.profile;
   if (workspace.mode.kind === 'questionnaire') {
     return (
-      <div className="career-relocation career-relocation-mobile">
-        <RelocationQuestionnaire
-          mobile
-          profile={profile}
-          initialStep={workspace.mode.step}
-          onClose={() => workspace.showTab('profile')}
-          onShowCountries={() => workspace.showTab('countries')}
-          onProfileUpdated={props.onProfileUpdated}
-        />
-      </div>
+      <RelocationMobileQuestionnaire
+        profile={profile}
+        initialStep={workspace.mode.step}
+        onClose={() => workspace.showTab('profile')}
+        onShowCountries={() => workspace.showTab('countries')}
+        onProfileUpdated={props.onProfileUpdated}
+      />
     );
   }
   return (

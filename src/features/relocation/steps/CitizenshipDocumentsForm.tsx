@@ -15,15 +15,10 @@ type RelocationDocument = RelocationQuestionnaire['citizenshipDocuments']['docum
 type RelocationDraftProps = Pick<RelocationQuestionnaireStepFormProps, 'profile' | 'onProfileChange'>;
 
 export function CitizenshipDocumentsForm(props: RelocationQuestionnaireStepFormProps) {
-  const [documentOpen, setDocumentOpen] = useState(false);
-  // 390 (mockup 15 `mv=doc`): a new document is its own push screen, not an inline form.
-  if (props.mobile && documentOpen) {
-    return <NewDocumentForm {...props} screen onDone={() => setDocumentOpen(false)} />;
-  }
   return (
     <div className="career-relocation-step-content">
       <CitizenshipList {...props} />
-      <DocumentsSection {...props} onOpenDocument={props.mobile ? () => setDocumentOpen(true) : undefined} />
+      <DocumentsSection {...props} />
     </div>
   );
 }
@@ -58,9 +53,7 @@ function CitizenshipList({ profile, onProfileChange }: RelocationDraftProps) {
   );
 }
 
-function DocumentsSection({ profile, onProfileChange, onOpenDocument }: RelocationDraftProps & {
-  readonly onOpenDocument?: () => void;
-}) {
+function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-documents-title">
       <h3 id="relocation-documents-title">Вид на жительство, ПМЖ, визы</h3>
@@ -71,11 +64,7 @@ function DocumentsSection({ profile, onProfileChange, onOpenDocument }: Relocati
           ))}
         </div>
       ) : <p>Документы не указаны.</p>}
-      {onOpenDocument ? (
-        <button className="career-btn career-btn-secondary" type="button" onClick={onOpenDocument}>
-          <Plus aria-hidden="true" size={16} />Добавить документ
-        </button>
-      ) : <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />}
+      <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />
     </section>
   );
 }
@@ -137,10 +126,7 @@ function DocumentFields({
   );
 }
 
-function NewDocumentForm({ profile, onProfileChange, screen = false, onDone }: RelocationDraftProps & {
-  readonly screen?: boolean;
-  readonly onDone?: () => void;
-}) {
+function NewDocumentForm({ profile, onProfileChange }: RelocationDraftProps) {
   const [kind, setKind] = useState<RelocationDocument['kind']>('residence_permit');
   const [countryCode, setCountryCode] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
@@ -153,23 +139,21 @@ function NewDocumentForm({ profile, onProfileChange, screen = false, onDone }: R
     });
     setCountryCode('');
     setExpiresAt('');
-    onDone?.();
   };
   const kindId = 'relocation-new-document-kind';
   const countryId = 'relocation-new-document-country';
   const expiresId = 'relocation-new-document-expires';
   return (
-    <div className={screen ? 'career-relocation-document-screen' : 'career-relocation-add-form'}>
-      {screen ? <h3>Документ</h3> : <h4>Добавить документ</h4>}
+    <div className="career-relocation-add-form">
+      <h4>Добавить документ</h4>
       <div className="career-relocation-form-grid">
         <RelocationFormField id={kindId} label="Тип документа"><DocumentKindSelect id={kindId} value={kind} onChange={setKind} /></RelocationFormField>
         <RelocationFormField id={countryId} label="Страна"><CountrySelect id={countryId} value={countryCode} onChange={setCountryCode} /></RelocationFormField>
         <RelocationFormField id={expiresId} label="Действует до"><input id={expiresId} type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></RelocationFormField>
       </div>
-      <button className={`career-btn ${screen ? 'career-btn-primary' : 'career-btn-secondary'}`} type="button" disabled={!countryCode} onClick={add}>
-        {screen ? 'Сохранить' : <><Plus aria-hidden="true" size={16} />Добавить документ</>}
+      <button className="career-btn career-btn-secondary" type="button" disabled={!countryCode} onClick={add}>
+        <Plus aria-hidden="true" size={16} />Добавить документ
       </button>
-      {screen ? <button className="career-relocation-text-action" type="button" onClick={onDone}>Отмена</button> : null}
     </div>
   );
 }

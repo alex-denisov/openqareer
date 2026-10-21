@@ -28,7 +28,7 @@ const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
   languages: 'Языки',
 };
 
-const STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
+export const STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
   citizenship_documents: 'гражданство и действующие документы. Это определяет, какие страны вам доступны без визы.',
   education: 'диплом и опыт. Признание диплома и стаж открывают визы под оффер.',
   family: 'семья и сроки. От них зависят сценарии с семьёй и путь к ПМЖ.',
@@ -43,10 +43,9 @@ export interface RelocationQuestionnaireProps {
   readonly onClose: () => void;
   readonly onShowCountries: () => void;
   readonly onProfileUpdated: ProfileUpdate;
-  readonly mobile?: boolean;
 }
 
-interface QuestionnaireController {
+export interface QuestionnaireController {
   readonly savedProfile: RelocationQuestionnaire;
   readonly draft: RelocationQuestionnaire;
   readonly step: RelocationCurrentStep;
@@ -76,7 +75,7 @@ export function RelocationQuestionnaire(props: RelocationQuestionnaireProps) {
   return <QuestionnaireView {...props} controller={controller} />;
 }
 
-function useQuestionnaireController(props: RelocationQuestionnaireProps): QuestionnaireController {
+export function useQuestionnaireController(props: RelocationQuestionnaireProps): QuestionnaireController {
   const [savedProfile, setSavedProfile] = useState(props.profile);
   const [draft, setDraft] = useState(props.profile);
   const [step, setStep] = useState<RelocationCurrentStep>(props.initialStep);
@@ -108,7 +107,6 @@ function useQuestionnaireController(props: RelocationQuestionnaireProps): Questi
 function QuestionnaireView({
   onClose,
   onShowCountries,
-  mobile,
   controller,
 }: RelocationQuestionnaireProps & { readonly controller: QuestionnaireController }) {
   const { step, isDirty } = controller;
@@ -118,7 +116,7 @@ function QuestionnaireView({
         <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
       </QuestionnaireHeader>
       <QuestionnaireStatus notice={controller.notice} error={controller.error} />
-      <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} mobile={mobile} />
+      <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} />
       <QuestionnaireDialogs controller={controller} onClose={onClose} />
     </div>
   );
@@ -184,23 +182,20 @@ function QuestionnaireStatus({ notice, error }: { readonly notice?: string; read
 function QuestionnaireStepPanel({
   controller,
   onShowCountries,
-  mobile,
 }: {
   readonly controller: QuestionnaireController;
   readonly onShowCountries: () => void;
-  readonly mobile?: boolean;
 }) {
   const step = controller.step;
   if (step === 'summary') {
     return <RelocationSummary profile={controller.savedProfile} onShowCountries={onShowCountries} onEdit={() => controller.selectStep(RELOCATION_STEPS[0])} />;
   }
-  return <QuestionnaireStepEditor controller={controller} step={step} mobile={mobile} />;
+  return <QuestionnaireStepEditor controller={controller} step={step} />;
 }
 
-function QuestionnaireStepEditor({ controller, step, mobile }: {
+function QuestionnaireStepEditor({ controller, step }: {
   readonly controller: QuestionnaireController;
   readonly step: RelocationStepId;
-  readonly mobile?: boolean;
 }) {
   const { draft, busy, importBusy } = controller;
   return (
@@ -214,7 +209,6 @@ function QuestionnaireStepEditor({ controller, step, mobile }: {
           onImportLinkedIn={controller.importLinkedInLanguages}
           importBusy={importBusy}
           importError={controller.error}
-          mobile={mobile}
         />
         <QuestionnaireStepActions step={step} busy={busy || importBusy} onNext={controller.moveToNext} />
       </section>
@@ -511,7 +505,7 @@ function RelocationSummaryContent({
   );
 }
 
-function InlineConfirmation({
+export function InlineConfirmation({
   title,
   description,
   cancel,

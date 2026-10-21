@@ -11,8 +11,6 @@ export interface RelocationQuestionnaireStepFormProps {
   readonly onImportLinkedIn: () => void;
   readonly importBusy: boolean;
   readonly importError?: string;
-  /** 390 layout: sub-forms open as push screens. */
-  readonly mobile?: boolean;
 }
 
 export function RelocationQuestionnaireStepForm(props: RelocationQuestionnaireStepFormProps) {

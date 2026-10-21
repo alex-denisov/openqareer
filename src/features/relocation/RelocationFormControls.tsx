@@ -9,6 +9,27 @@ type RelocationDocument = RelocationQuestionnaire['citizenshipDocuments']['docum
 type RelocationEducation = RelocationQuestionnaire['education']['education'][number];
 type RelocationCertificate = RelocationQuestionnaire['education']['certificates'][number];
 
+type LanguageLevel = RelocationQuestionnaire['languages']['languages'][number]['level'];
+
+export const DOCUMENT_KIND_OPTIONS: readonly (readonly [RelocationDocument['kind'], string])[] = [
+  ['residence_permit', 'ВНЖ'], ['work_permit', 'Разрешение на работу'], ['work_visa', 'Рабочая виза'],
+  ['study_visa', 'Учебная виза'], ['visa', 'Виза'], ['other', 'Другой документ'],
+];
+
+export const EDUCATION_LEVEL_OPTIONS: readonly (readonly [RelocationEducation['level'], string])[] = [
+  ['secondary', 'Среднее'], ['vocational', 'Среднее профессиональное'], ['bachelor', 'Бакалавриат'],
+  ['master', 'Магистратура'], ['doctorate', 'Аспирантура'], ['other', 'Другое'],
+];
+
+export const RECOGNITION_OPTIONS: readonly (readonly [RelocationEducation['recognitionStatus'], string])[] = [
+  ['unknown', 'Не проверялось'], ['not_started', 'Не начинал'], ['in_progress', 'В процессе'],
+  ['recognized', 'Признано'], ['not_required', 'Не требуется'],
+];
+
+export const LANGUAGE_LEVEL_OPTIONS: readonly (readonly [LanguageLevel, string])[] = [
+  ['unknown', 'Не указан'], ['A1', 'A1'], ['A2', 'A2'], ['B1', 'B1'], ['B2', 'B2'], ['C1', 'C1'], ['C2', 'C2'],
+];
+
 export function RelocationFormField({
   id,
   label,
@@ -78,15 +99,7 @@ export function DocumentKindSelect({
   readonly value: RelocationDocument['kind'];
   readonly onChange: (value: RelocationDocument['kind']) => void;
 }) {
-  const options: readonly { readonly value: RelocationDocument['kind']; readonly label: string }[] = [
-    { value: 'residence_permit', label: 'ВНЖ' },
-    { value: 'work_permit', label: 'Разрешение на работу' },
-    { value: 'work_visa', label: 'Рабочая виза' },
-    { value: 'study_visa', label: 'Учебная виза' },
-    { value: 'visa', label: 'Виза' },
-    { value: 'other', label: 'Другой документ' },
-  ];
-  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationDocument['kind'])}>{options.map(({ value: code, label }) => <option key={code} value={code}>{label}</option>)}</select>;
+  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationDocument['kind'])}>{DOCUMENT_KIND_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>;
 }
 
 export function EducationLevelSelect({
@@ -98,11 +111,7 @@ export function EducationLevelSelect({
   readonly value: RelocationEducation['level'];
   readonly onChange: (value: RelocationEducation['level']) => void;
 }) {
-  const options: readonly [RelocationEducation['level'], string][] = [
-    ['secondary', 'Среднее'], ['vocational', 'Среднее профессиональное'], ['bachelor', 'Бакалавриат'],
-    ['master', 'Магистратура'], ['doctorate', 'Аспирантура'], ['other', 'Другое'],
-  ];
-  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationEducation['level'])}>{options.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>;
+  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationEducation['level'])}>{EDUCATION_LEVEL_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>;
 }
 
 export function RecognitionSelect({
@@ -114,11 +123,7 @@ export function RecognitionSelect({
   readonly value: RelocationEducation['recognitionStatus'] | RelocationCertificate['recognitionStatus'];
   readonly onChange: (value: RelocationEducation['recognitionStatus']) => void;
 }) {
-  const options: readonly [RelocationEducation['recognitionStatus'], string][] = [
-    ['unknown', 'Не проверялось'], ['not_started', 'Не начинал'], ['in_progress', 'В процессе'],
-    ['recognized', 'Признано'], ['not_required', 'Не требуется'],
-  ];
-  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationEducation['recognitionStatus'])}>{options.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>;
+  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationEducation['recognitionStatus'])}>{RECOGNITION_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>;
 }
 
 export function LanguageLevelSelect({
@@ -130,10 +135,7 @@ export function LanguageLevelSelect({
   readonly value: RelocationQuestionnaire['languages']['languages'][number]['level'];
   readonly onChange: (value: RelocationQuestionnaire['languages']['languages'][number]['level']) => void;
 }) {
-  const options: readonly RelocationQuestionnaire['languages']['languages'][number]['level'][] = [
-    'unknown', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2',
-  ];
-  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as RelocationQuestionnaire['languages']['languages'][number]['level'])}>{options.map((level) => <option key={level} value={level}>{level === 'unknown' ? 'Не указан' : level}</option>)}</select>;
+  return <select id={id} value={value} onChange={(event) => onChange(event.target.value as LanguageLevel)}>{LANGUAGE_LEVEL_OPTIONS.map(([level, label]) => <option key={level} value={level}>{label}</option>)}</select>;
 }
 
 export function relocationRowId(prefix: string): string {

@@ -34,6 +34,16 @@ async function openRelocation(page: Page, info: TestInfo): Promise<void> {
   await expect(page.getByRole('heading', { name: 'Страны и релокация' }).first()).toBeVisible();
 }
 
+/** Desktop names each step in a heading; 390 keeps one title and says «Шаг N из 4». */
+async function expectStep(page: Page, info: TestInfo, step: number): Promise<void> {
+  if (isMobile(info)) {
+    await expect(page.getByText(`Шаг ${step} из 4`)).toBeVisible();
+    return;
+  }
+  const titles = ['Гражданство и документы', ...STEP_TITLES];
+  await expect(page.getByRole('heading', { name: titles[step - 1] }).first()).toBeVisible();
+}
+
 async function capture(page: Page, info: TestInfo, name: string): Promise<void> {
   mkdirSync(EVIDENCE, { recursive: true });
   await page.screenshot({
@@ -79,13 +89,13 @@ test('consent, questionnaire to the summary, countries, comparison and economy',
   await openRelocation(page, info);
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Заполнить анкету' }).click();
-  await expect(page.getByRole('heading', { name: 'Гражданство и документы' })).toBeVisible();
+  await expectStep(page, info, 1);
 
   await pickCountry(page, 'relocation-citizenship-first', 'Рос', 'Россия');
   await capture(page, info, 'relocation-questionnaire-1');
   for (const step of [2, 3, 4]) {
     await page.getByRole('button', { name: 'Дальше' }).click();
-    await expect(page.getByRole('heading', { name: STEP_TITLES[step - 2] }).first()).toBeVisible();
+    await expectStep(page, info, step);
   }
   await page.getByRole('button', { name: 'Показать итог' }).click();
   await expect(page.getByRole('heading', { name: 'Анкета заполнена' })).toBeVisible();
@@ -154,7 +164,7 @@ test('«Мои данные»: delete a document, edit opens the questionnaire, 
   await capture(page, info, 'relocation-data');
 
   await page.getByRole('button', { name: 'Изменить: Гражданство: Россия' }).click();
-  await expect(page.getByRole('heading', { name: 'Гражданство и документы' })).toBeVisible();
+  await expectStep(page, info, 1);
   await page.getByRole('button', { name: 'Назад', exact: true }).first().click();
 
   await page.getByRole('tab', { name: /^(Мои данные|Данные)$/u }).click();
@@ -191,10 +201,23 @@ test('390: country push screen, scenario sheet and document screen', async ({ pa
 
   await page.getByRole('tab', { name: 'Данные' }).click();
   await page.getByRole('button', { name: 'Изменить: Гражданство: Россия' }).click();
+  await expect(page.getByRole('heading', { name: 'Условия для переезда' })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'Есть второе гражданство' })).toBeVisible();
+  await capture(page, info, 'relocation-questionnaire-push');
   await page.getByRole('button', { name: 'Добавить документ' }).click();
-  await expect(page.getByRole('heading', { name: 'Документ', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Документ' })).toBeVisible();
+  await expect(page.getByRole('tablist')).toHaveCount(0);
   await pickCountry(page, 'relocation-new-document-country', 'Серб', 'Сербия');
+  await page.getByLabel('Действует до').fill('2027-03-14');
   await capture(page, info, 'relocation-document-push');
   await page.getByRole('button', { name: 'Сохранить' }).click();
-  await expect(page.getByText('Вид на жительство, Сербия')).toBeVisible();
+  await expect(page.getByRole('button', { name: /ВНЖ, Сербия.*до 14\.03\.2027/u })).toBeVisible();
+  await page.getByRole('button', { name: 'Дальше' }).click();
+  await expectStep(page, info, 2);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await openRelocation(page, info);
+  await page.getByRole('tab', { name: 'Данные' }).click();
+  await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toBeVisible();
 });

@@ -12,6 +12,7 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { restartRelocationQuestionnaire, revokeRelocationConsent } from './relocationApi';
 import { listRelocationCountries } from './relocationCountryData';
 import { RelocationQuestionnaire } from './RelocationQuestionnaire';
+import { RelocationMobileQuestionnaire } from './RelocationMobileQuestionnaire';
 import {
   citizenshipRowId,
   relocationLanguageSourceLabel,
@@ -42,9 +43,9 @@ export interface RelocationProfileProps {
 export function RelocationProfile(props: RelocationProfileProps) {
   const actions = useRelocationProfileActions(props);
   if (actions.editingStep) {
+    const Questionnaire = props.mobile ? RelocationMobileQuestionnaire : RelocationQuestionnaire;
     return (
-      <RelocationQuestionnaire
-        mobile={props.mobile}
+      <Questionnaire
         profile={props.profile}
         initialStep={actions.editingStep}
         onClose={() => actions.setEditingStep(undefined)}
