@@ -212,3 +212,38 @@ describe('порядок ролей после заданий «Какие ро�
     expect(roles[roles.length - 1].title).toBe('Operations Manager');
   });
 });
+
+describe('вилка роли по вакансиям с зарплатой (B445)', () => {
+  function paid(from: number | undefined, to: number | undefined, currency = 'RUR'): RoleObservation {
+    return { ...vacancy('Director of Engineering'), salary: { from, to, currency } };
+  }
+
+  it('считает вилку только по рублёвым вакансиям с зарплатой и отдаёт их число', () => {
+    const pool = [
+      ...Array.from({ length: 10 }, (_, i) => paid(500_000 + i * 10_000, 700_000 + i * 10_000)),
+      paid(9_000, 12_000, 'USD'),
+      vacancy('Director of Engineering'),
+    ];
+    const [role] = proposeRoles({ named: [named('Director of Engineering')], pool, candidateSkills: [] });
+    expect(role.confirmation.state).toBe('observed');
+    if (role.confirmation.state !== 'observed') return;
+    expect(role.confirmation.sampleSize).toBe(12);
+    expect(role.confirmation.wage).toEqual({ sampleSize: 10, min: 520_000, max: 770_000 });
+  });
+
+  it('без вакансий с зарплатой вилки нет', () => {
+    const pool = Array.from({ length: 9 }, () => vacancy('Director of Engineering'));
+    const [role] = proposeRoles({ named: [named('Director of Engineering')], pool, candidateSkills: [] });
+    if (role.confirmation.state !== 'observed') throw new Error('expected observed');
+    expect(role.confirmation.wage).toEqual({ sampleSize: 0 });
+  });
+});
+
+describe('какие требования роли подтверждены навыками (B445)', () => {
+  it('называет совпавшие требования, а не только их число', () => {
+    const pool = Array.from({ length: 9 }, () => vacancy('CTO', ['Kafka', 'Go', 'SQL']));
+    const [role] = proposeRoles({ named: [named('CTO')], pool, candidateSkills: ['go'] });
+    if (role.confirmation.state !== 'observed') throw new Error('expected observed');
+    expect(role.confirmation.matchedRequirementNames).toEqual(['Go']);
+  });
+});

@@ -26,6 +26,7 @@ function observations(matched: readonly MatchedVacancyItem[]): RoleObservation[]
     firstObservedAt: item.cluster.firstObservedAt,
     skills: item.cluster.skills,
     sources: item.cluster.sources,
+    salary: item.cluster.salary,
   }));
 }
 

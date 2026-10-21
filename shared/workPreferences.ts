@@ -416,6 +416,8 @@ export interface CandidateDecisionLanguage {
 
 export interface CandidateDecisionProfile {
   readonly citizenship: readonly string[];
+  /** Где кандидат ищет работу (B445): города и «удалённо», не гражданство. */
+  readonly searchLocations?: readonly string[];
   readonly taxStatus?: string;
   readonly languages: readonly CandidateDecisionLanguage[];
   readonly workFormats: readonly DecisionWorkFormatId[];
