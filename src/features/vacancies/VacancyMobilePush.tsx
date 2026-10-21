@@ -288,6 +288,17 @@ function useEscapeBack(back: () => void) {
   }, [back]);
 }
 
+/** Each new push page starts at the top with focus on «Назад». */
+function usePageTop(page: PushPage) {
+  const backRef = useRef<HTMLButtonElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    scrollRef.current?.scrollTo?.({ top: 0 });
+    backRef.current?.focus();
+  }, [page]);
+  return { backRef, scrollRef };
+}
+
 /** 390 px (B549, mockup 4 `?mv=job|path|c1|c2|c3`): a list row opens the
  *  vacancy as a push screen with its own back stack instead of expanding. */
 export function VacancyMobilePush(props: VacancyMobilePushProps) {
@@ -297,8 +308,7 @@ export function VacancyMobilePush(props: VacancyMobilePushProps) {
     props.item.cluster.id,
     Boolean(props.item.cluster.canonicalCompany),
   );
-  const backRef = useRef<HTMLButtonElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { backRef, scrollRef } = usePageTop(page);
   const open = (next: PushPage) => setStack((current) => [...current, next]);
   const onClose = props.onClose;
   const depth = stack.length;
@@ -307,35 +317,34 @@ export function VacancyMobilePush(props: VacancyMobilePushProps) {
     [depth, onClose],
   );
   useEscapeBack(back);
-  useEffect(() => {
-    scrollRef.current?.scrollTo?.({ top: 0 });
-    backRef.current?.focus();
-  }, [page]);
   return (
-    <div
-      ref={scrollRef}
-      className="vacancy-push"
-      role="dialog"
-      aria-labelledby="vacancy-push-title"
-      data-push-page={page}
-    >
-      <header className="vacancy-push-bar">
-        <button
-          ref={backRef}
-          type="button"
-          className="vacancy-push-back"
-          aria-label="Назад"
-          onClick={back}
-        >
-          <CaretLeft size={20} aria-hidden="true" />
-        </button>
-        <h1 id="vacancy-push-title">{PAGE_TITLES[page]}</h1>
-      </header>
-      <div className="vacancy-push-body">
-        <PushBody page={page} props={props} circles={circles} open={open} />
+    <>
+      <div className="vacancy-push-backdrop" aria-hidden="true" />
+      <div
+        ref={scrollRef}
+        className="vacancy-push"
+        role="dialog"
+        aria-labelledby="vacancy-push-title"
+        data-push-page={page}
+      >
+        <header className="vacancy-push-bar">
+          <button
+            ref={backRef}
+            type="button"
+            className="vacancy-push-back"
+            aria-label="Назад"
+            onClick={back}
+          >
+            <CaretLeft size={20} aria-hidden="true" />
+          </button>
+          <h1 id="vacancy-push-title">{PAGE_TITLES[page]}</h1>
+        </header>
+        <div className="vacancy-push-body">
+          <PushBody page={page} props={props} circles={circles} open={open} />
+        </div>
+        <PushCta page={page} props={props} />
       </div>
-      <PushCta page={page} props={props} />
-    </div>
+    </>
   );
 }
 

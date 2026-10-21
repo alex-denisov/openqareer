@@ -1,4 +1,11 @@
 /* B549: 390 px push screens of a vacancy (mockup 4, ?mv=job|path|c1|c2|c3). */
+.vacancy-push-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  background: var(--career-bg);
+}
+
 .vacancy-push {
   position: fixed;
   /* Ends above the bottom menu so the menu never covers a row of the screen. */
