@@ -27,6 +27,7 @@ const ADMIN_DOCUMENT = 'admin.html';
 const ENTRY_DOCUMENT = 'index.html';
 /** B535: public help pages prerendered at build time. */
 const HELP_DOCUMENTS: Record<string, string> = { '/faq': 'faq.html', '/support': 'support.html' };
+const AUTH_DOCUMENTS: Record<string, string> = { '/login': 'login.html', '/signup': 'signup.html' };
 const NOT_FOUND_DOCUMENT = 'not-found.html';
 
 /** Paths the client router owns; anything else is a 404, not the landing (B535). */
@@ -82,6 +83,8 @@ function entryDocumentFor(url: string, staticRoot: string): string {
   if (path === '/admin' || path.startsWith('/admin/')) {
     if (existsSync(join(staticRoot, ADMIN_DOCUMENT))) return ADMIN_DOCUMENT;
   }
+  const authDocument = AUTH_DOCUMENTS[path.replace(/\/$/u, '')];
+  if (authDocument && existsSync(join(staticRoot, authDocument))) return authDocument;
   const helpDocument = HELP_DOCUMENTS[path.replace(/\/$/u, '')];
   if (helpDocument && existsSync(join(staticRoot, helpDocument))) return helpDocument;
   const legalSlug = legalSlugFromPath(path);

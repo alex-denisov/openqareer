@@ -54,6 +54,8 @@ async function createStaticApp(
   );
   writeFileSync(join(directory, 'faq.html'), '<!doctype html><title>faq document</title>');
   writeFileSync(join(directory, 'support.html'), '<!doctype html><title>support document</title>');
+  writeFileSync(join(directory, 'login.html'), '<!doctype html><title>login document</title>');
+  writeFileSync(join(directory, 'signup.html'), '<!doctype html><title>signup document</title>');
   writeFileSync(
     join(directory, 'not-found.html'),
     '<!doctype html><title>not found document</title>',
@@ -156,7 +158,7 @@ describe('static release delivery', () => {
     expect(landing.body).toContain(
       '<script defer src="/assets/oq-entry-loader-2.js" data-entry="/assets/index-abc.js">',
     );
-    for (const url of ['/app', '/app/profile', '/login']) {
+    for (const url of ['/app', '/app/profile', '/reset-password']) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.body, url).toContain(
         '<script type="module" crossorigin src="/assets/index-abc.js">',
@@ -185,6 +187,18 @@ describe('static release delivery', () => {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);
       expect(response.body, url).not.toContain('not found document');
+    }
+  });
+
+  it('answers /login and /signup with their own documents (B535)', async () => {
+    const app = await createStaticApp();
+    for (const [url, marker] of [
+      ['/login', 'login document'],
+      ['/signup', 'signup document'],
+    ] as const) {
+      const response = await app.inject({ method: 'GET', url });
+      expect(response.statusCode, url).toBe(200);
+      expect(response.body, url).toContain(marker);
     }
   });
 

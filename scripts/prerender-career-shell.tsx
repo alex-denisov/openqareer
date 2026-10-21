@@ -183,6 +183,39 @@ async function writeHelpPages(html: string, distDirectory: string): Promise<void
  * The administrator console `/admin` has its own prerendered first paint.
  */
 /** Unknown addresses: the server answers 404 with this document (B535). */
+/** B535: sign-in pages carry their own title and stay out of the index. */
+export const AUTH_PAGES = [
+  {
+    path: '/login',
+    file: 'login.html',
+    title: 'Вход в кабинет | openqareer',
+    description: 'Войдите в кабинет openqareer: профиль, подобранные вакансии, отклики и консультант.',
+  },
+  {
+    path: '/signup',
+    file: 'signup.html',
+    title: 'Регистрация в openqareer: старт бесплатно',
+    description:
+      'Создайте аккаунт openqareer бесплатно: загрузите резюме, проверьте его на ATS и получите вакансии с процентом совпадения.',
+  },
+] as const;
+
+/**
+ * The root stays empty: the auth form mounts from the bundle, and the landing
+ * prerender here only flashed the wrong page before the form appeared.
+ */
+async function writeAuthPages(html: string, distDirectory: string): Promise<void> {
+  for (const page of AUTH_PAGES) {
+    await writeFile(
+      `${distDirectory}/${page.file}`,
+      pageHead(html, page).replace(
+        /<link rel="canonical"[^>]*>/u,
+        `<link rel="canonical" href="${SITE_ORIGIN}${page.path}"><meta name="robots" content="noindex, follow">`,
+      ),
+    );
+  }
+}
+
 async function writeNotFoundPage(html: string, distDirectory: string): Promise<void> {
   await writeFile(
     `${distDirectory}/${NOT_FOUND_DOCUMENT}`,
@@ -247,6 +280,7 @@ export async function prerenderShells(
   }
   await writeHelpPages(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
+  await writeAuthPages(html, distDirectory);
 
   // Карту сайта отдаёт сервер из живого пула (B209, срез 2), поэтому файла в
   // сборке больше нет. Постоянные адреса всё равно проверяются здесь: сборка
