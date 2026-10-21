@@ -276,6 +276,7 @@
   align-items: start;
   gap: var(--career-space-3);
   overflow-wrap: anywhere;
+  align-items: center;
 }
 
 .career-relocation-profile-row strong {
@@ -660,10 +661,6 @@
   inline-size: var(--career-space-5);
   block-size: var(--career-space-5);
   accent-color: var(--career-accent);
-}
-
-.career-relocation-profile-row {
-  align-items: center;
 }
 
 .career-relocation-row-actions {

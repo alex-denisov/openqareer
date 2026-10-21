@@ -80,15 +80,7 @@ function Breakdown({ payroll }: { readonly payroll: Payroll }) {
   ];
   return (
     <>
-      <div className="career-relocation-economy-bar" aria-hidden="true">
-        {parts.map((part) => (
-          <span
-            key={part.key}
-            className={part.tone}
-            style={{ flexGrow: Math.max(part.amount, 0) }}
-          />
-        ))}
-      </div>
+      <EconomyBar parts={parts} />
       <MobileGroup
         caption="Раскладка"
         note={`Остаток ${money(payroll.netMonthlyIncome, payroll.currency)} в месяц. Аренда и страховка не учтены: для них нет проверенных источников.`}
@@ -223,5 +215,35 @@ export function RelocationMobileEconomy(props: RelocationMobileEconomyProps) {
       </MobileGroup>
       <Result countryCode={countryCode} income={props.grossAnnualIncome} />
     </div>
+  );
+}
+
+/** Shares as SVG rect widths: attributes, not inline styles, so the CSP stays strict. */
+function EconomyBar({
+  parts,
+}: {
+  readonly parts: readonly {
+    readonly key: string;
+    readonly amount: number;
+    readonly tone: string;
+  }[];
+}) {
+  const total = parts.reduce((sum, part) => sum + Math.max(part.amount, 0), 0);
+  if (total <= 0) return null;
+  let offset = 0;
+  return (
+    <svg
+      className="career-relocation-economy-bar"
+      viewBox="0 0 100 1"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      {parts.map((part) => {
+        const width = (Math.max(part.amount, 0) / total) * 100;
+        const x = offset;
+        offset += width;
+        return <rect key={part.key} className={part.tone} x={x} y={0} width={width} height={1} />;
+      })}
+    </svg>
   );
 }

@@ -46,6 +46,7 @@
   color: var(--career-text);
   background: var(--career-surface);
   cursor: pointer;
+  border-radius: var(--career-radius-pill);
 }
 
 .career-relocation-text-action {
@@ -102,6 +103,9 @@
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
   font-weight: 600;
+  gap: var(--career-space-1);
+  min-block-size: auto;
+  padding-block: var(--career-space-1);
 }
 
 .career-relocation-status.is-enabled {
@@ -257,6 +261,15 @@
   flex: 0 0 auto;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  border: var(--career-border-width) solid color-mix(in oklch, currentColor 45%, transparent);
+  border-radius: calc(var(--career-radius-sm) / 2);
+  padding: 2px var(--career-space-2);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .career-relocation-country-status.is-available {
@@ -516,16 +529,6 @@
   font-weight: 600;
 }
 
-.career-relocation-back {
-  border-radius: var(--career-radius-pill);
-}
-
-.career-relocation-status {
-  gap: var(--career-space-1);
-  min-block-size: auto;
-  padding-block: var(--career-space-1);
-}
-
 .career-relocation-tab-count {
   color: var(--career-text-dim);
   font-variant-numeric: tabular-nums;
@@ -639,18 +642,6 @@
 
 .career-relocation-country-card .career-relocation-country-actions {
   justify-content: flex-start;
-}
-
-.career-relocation-country-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--career-space-1);
-  border: var(--career-border-width) solid color-mix(in oklch, currentColor 45%, transparent);
-  border-radius: calc(var(--career-radius-sm) / 2);
-  padding: 2px var(--career-space-2);
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  white-space: nowrap;
 }
 
 .career-relocation-note {

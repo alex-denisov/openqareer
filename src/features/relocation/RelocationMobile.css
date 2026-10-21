@@ -453,20 +453,20 @@
 }
 
 .career-relocation-economy-bar {
-  display: flex;
-  gap: 2px;
+  display: block;
+  inline-size: 100%;
   block-size: var(--career-space-2);
   overflow: hidden;
   border-radius: 999px;
 }
 
-.career-relocation-economy-bar span,
-.career-relocation-economy-dot {
-  background: var(--career-text-dim);
+.career-relocation-economy-bar rect {
+  fill: var(--career-text-dim);
 }
 
 .career-relocation-economy-dot {
   display: inline-block;
+  background: var(--career-text-dim);
   inline-size: var(--career-space-3);
   block-size: var(--career-space-3);
   margin-inline-end: var(--career-space-2);
@@ -474,17 +474,26 @@
   vertical-align: -1px;
 }
 
-.career-relocation-economy-bar .is-tax,
+.career-relocation-economy-bar rect.is-tax {
+  fill: var(--career-danger);
+}
+
 .career-relocation-economy-dot.is-tax {
   background: var(--career-danger);
 }
 
-.career-relocation-economy-bar .is-contribution,
+.career-relocation-economy-bar rect.is-contribution {
+  fill: var(--career-warning);
+}
+
 .career-relocation-economy-dot.is-contribution {
   background: var(--career-warning);
 }
 
-.career-relocation-economy-bar .is-net,
+.career-relocation-economy-bar rect.is-net {
+  fill: var(--career-success);
+}
+
 .career-relocation-economy-dot.is-net {
   background: var(--career-success);
 }
