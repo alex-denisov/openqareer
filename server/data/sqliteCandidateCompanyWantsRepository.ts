@@ -61,6 +61,12 @@ export class SqliteCandidateCompanyWantsRepository {
       ) STRICT;
       CREATE INDEX IF NOT EXISTS idx_candidate_company_wants_candidate
         ON candidate_company_wants(candidate_id, company_name);
+      CREATE TABLE IF NOT EXISTS candidate_company_proposal_dismissals (
+        candidate_id TEXT NOT NULL ${candidateReference},
+        company_key TEXT NOT NULL,
+        dismissed_at TEXT NOT NULL,
+        PRIMARY KEY (candidate_id, company_key)
+      ) STRICT;
     `);
   }
 
@@ -138,6 +144,26 @@ export class SqliteCandidateCompanyWantsRepository {
       WHERE candidate_id = ? AND company_key = ?
     `).run(sealed, sealed ? dueAt : null, now, candidateId, companyKey);
     return Number(result.changes) === 1 ? this.get(candidateId, companyKey) : null;
+  }
+
+  /** B439: «Не сейчас» on the consultant's contact proposal survives reloads. */
+  dismissContactProposal(
+    candidateId: string,
+    companyKey: string,
+    now = new Date().toISOString(),
+  ): void {
+    this.database.prepare(`
+      INSERT INTO candidate_company_proposal_dismissals (candidate_id, company_key, dismissed_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(candidate_id, company_key) DO UPDATE SET dismissed_at = excluded.dismissed_at
+    `).run(candidateId, companyKey, now);
+  }
+
+  listDismissedContactProposals(candidateId: string): ReadonlySet<string> {
+    const rows = this.database.prepare(
+      'SELECT company_key FROM candidate_company_proposal_dismissals WHERE candidate_id = ?',
+    ).all(candidateId) as unknown as { company_key: string }[];
+    return new Set(rows.map((row) => row.company_key));
   }
 
   remove(candidateId: string, companyKey: string): boolean {

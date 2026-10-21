@@ -783,3 +783,31 @@ function isLinkedInProfileUrl(value: string): boolean {
     return false;
   }
 }
+
+/**
+ * B439: contacts in the candidate's network per company key. Null until a LinkedIn
+ * contact import exists, so the company list never shows an invented zero.
+ */
+export function readCandidateNetworkContactCounts(
+  repository: ConnectionRepository | undefined,
+  candidateId: string,
+  companyKeys: Iterable<string>,
+): ReadonlyMap<string, { readonly count: number; readonly importedAt: string }> | null {
+  if (!repository) return null;
+  const records = connectionRecords(repository, candidateId);
+  const receipt = readImportReceipt(records);
+  if (!receipt) return null;
+  const counts = new Map<string, number>();
+  for (const contact of records.flatMap((record) => toDomainConnection(record) ?? [])) {
+    const name = contact.companyName?.trim();
+    if (!name) continue;
+    const key = candidateCompanyKey(name);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return new Map(
+    [...companyKeys].map((key) => [
+      key,
+      { count: counts.get(key) ?? 0, importedAt: receipt.importedAt },
+    ]),
+  );
+}

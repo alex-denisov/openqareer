@@ -110,3 +110,12 @@ export async function addSelectionCompaniesToWant(): Promise<BulkCompanyWantResu
   });
   return readData<BulkCompanyWantResult>(response);
 }
+
+/** B439: «Не сейчас» on the consultant's contact proposal, stored on the server. */
+export async function dismissCandidateCompanyContactProposal(companyKey: string): Promise<void> {
+  const response = await apiFetch(
+    `/api/v1/candidate/companies/${encodeURIComponent(companyKey)}/contact-proposal-dismissal`,
+    { method: 'PUT' },
+  );
+  await readData(response);
+}

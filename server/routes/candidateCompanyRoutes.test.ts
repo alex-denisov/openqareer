@@ -556,4 +556,56 @@ describe('B448 candidate connection circles', () => {
       /linkedin_pool|pool_session|probability|вероятност|процент/iu,
     );
   });
+  it('counts network contacts per company only after a contact import (B439)', async () => {
+    const { app, authorization } = await setup([
+      matchedVacancy('cluster-v1', 'Вектор Банк'),
+      matchedVacancy('cluster-ar', 'Арка Холдинг'),
+    ]);
+    const before = (
+      await app.inject({ url: '/api/v1/candidate/companies', headers: { authorization } })
+    ).json().data;
+    expect(before.filterCounts.contacts).toBeNull();
+    expect(
+      (
+        await importConnectionContacts(app, authorization, [
+          { externalId: 'li-1', fullName: 'Мария Орлова', companyName: 'Вектор Банк' },
+          { externalId: 'li-2', fullName: 'Дмитрий Козлов', companyName: 'ВЕКТОР БАНК' },
+          { externalId: 'li-3', fullName: 'Игорь Н.', companyName: 'Другая компания' },
+        ])
+      ).statusCode,
+    ).toBe(200);
+    const after = (
+      await app.inject({ url: '/api/v1/candidate/companies', headers: { authorization } })
+    ).json().data;
+    const byName = (name: string) =>
+      after.items.find((item: { name: string }) => item.name === name);
+    expect(byName('Вектор Банк')).toMatchObject({ contactsCount: 2 });
+    expect(byName('Вектор Банк').contactsImportedAt).toEqual(expect.any(String));
+    expect(byName('Арка Холдинг')).toMatchObject({ contactsCount: 0 });
+    expect(after.filterCounts.contacts).toBe(1);
+    expect(after.linkedin.contactsImported).toBe(true);
+  });
+  it('remembers «Не сейчас» for the consultant contact proposal across reloads (B439)', async () => {
+    const { app, authorization, candidate, wants } = await setup([
+      matchedVacancy('cluster-v1', 'Вектор Банк'),
+    ]);
+    const key = candidateCompanyKey('Вектор Банк');
+    wants.setWanted(candidate.id, key, 'Вектор Банк');
+    const dismissed = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/candidate/companies/${key}/contact-proposal-dismissal`,
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+    expect(dismissed.statusCode).toBe(200);
+    const list = (
+      await app.inject({ url: '/api/v1/candidate/companies', headers: { authorization } })
+    ).json().data;
+    expect(list.items[0]).toMatchObject({ name: 'Вектор Банк', contactProposalDismissed: true });
+    const foreign = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/companies/not-a-key/contact-proposal-dismissal',
+      headers: { authorization, origin: 'http://localhost:3000' },
+    });
+    expect(foreign.statusCode).toBe(404);
+  });
 });

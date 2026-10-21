@@ -53,6 +53,8 @@ export interface CandidateCompanyOpportunity {
   readonly contactsCount: number | null;
   readonly contactsImportedAt: string | null;
   readonly want: boolean;
+  /** B439: the candidate answered «Не сейчас» to the consultant's contact proposal. */
+  readonly contactProposalDismissed?: boolean;
   readonly nextStep: CandidateCompanyNextStep | null;
   readonly hasRecruiter: boolean;
   readonly recruiterSearchStatus: CandidateCompanyRecruiterSearchStatus;

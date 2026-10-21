@@ -17,7 +17,10 @@ import {
   listCandidateConnectionViews,
   deriveImportedFactSources,
 } from '../connectors/nativeSourceConnection';
-import { registerCandidateConnectionRoutes } from './candidateConnectionRoutes';
+import {
+  readCandidateNetworkContactCounts,
+  registerCandidateConnectionRoutes,
+} from './candidateConnectionRoutes';
 import type { RouteDeps } from './deps';
 import {
   authenticateCandidate,
@@ -146,7 +149,12 @@ async function readCurrentMatched(deps: RouteDeps, candidateId: string) {
   return finishMatchedVacancies(snapshot, roles, campaign, deps.candidateStore, candidateId);
 }
 
-function linkedinStatus(deps: RouteDeps, candidateId: string): CandidateCompanyContext['linkedin'] {
+function linkedinStatus(
+  deps: RouteDeps,
+  candidateId: string,
+  contactsImportedAt: string | null,
+): CandidateCompanyContext['linkedin'] {
+  const contactsImported = contactsImportedAt !== null;
   const snapshot = deps.candidateStore.getSnapshot(candidateId);
   const imported = deriveImportedFactSources(snapshot?.messages ?? [], snapshot?.memory ?? []);
   const views = listCandidateConnectionViews(
@@ -155,12 +163,20 @@ function linkedinStatus(deps: RouteDeps, candidateId: string): CandidateCompanyC
   );
   const linkedin = views.find((connection) => connection.platform === 'linkedin');
   if (linkedin?.status === 'connected') {
-    return { status: 'connected', importedAt: linkedin.lastImportedAt, contactsImported: false };
+    return {
+      status: 'connected',
+      importedAt: contactsImportedAt ?? linkedin.lastImportedAt,
+      contactsImported,
+    };
   }
   if (linkedin?.status === 'imported') {
-    return { status: 'profile-imported', importedAt: linkedin.importedAt, contactsImported: false };
+    return {
+      status: 'profile-imported',
+      importedAt: contactsImportedAt ?? linkedin.importedAt,
+      contactsImported,
+    };
   }
-  return { status: 'disconnected', importedAt: null, contactsImported: false };
+  return { status: 'disconnected', importedAt: contactsImportedAt, contactsImported };
 }
 
 async function companyContext(
@@ -178,16 +194,25 @@ async function companyContext(
   const jobs = (deps.recruiterContactsRepo?.listJobsByCandidateId(candidateId) ?? [])
     .filter((job) => vacancyCompanyKeys.has(job.vacancyId))
     .map((job) => ({ vacancyId: job.vacancyId, status: job.status }));
+  const wants = deps.candidateCompanyWantsRepo?.list(candidateId) ?? [];
+  const networkContactCounts = readCandidateNetworkContactCounts(
+    deps.recruiterContactsRepo,
+    candidateId,
+    new Set([...vacancyCompanyKeys.values(), ...wants.map((want) => want.companyKey)]),
+  );
+  const dismissed = deps.candidateCompanyWantsRepo?.listDismissedContactProposals(candidateId);
   const rows = buildCandidateCompanyRows({
     vacancies,
-    wants: deps.candidateCompanyWantsRepo?.list(candidateId) ?? [],
+    wants,
     recruiters,
     jobs,
-  });
+    networkContactCounts: networkContactCounts ?? undefined,
+  }).map((row) => (dismissed?.has(row.key) ? { ...row, contactProposalDismissed: true } : row));
+  const contactsImportedAt = networkContactCounts?.values().next().value?.importedAt ?? null;
   return {
     rows,
     vacancies,
-    linkedin: linkedinStatus(deps, candidateId),
+    linkedin: linkedinStatus(deps, candidateId, contactsImportedAt),
     searchConsentGranted: deps.searchConsentRepo?.get(candidateId).granted ?? false,
   };
 }
@@ -522,6 +547,28 @@ async function handleSetNextStep(deps: RouteDeps, request: FastifyRequest, reply
   };
 }
 
+async function handleDismissContactProposal(
+  deps: RouteDeps,
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const repo = wantRepository(deps, request, reply);
+  if (!repo) return undefined;
+  const companyKey = (request.params as { companyKey: string }).companyKey;
+  if (!/^[a-f0-9]{24}$/u.test(companyKey)) return candidateNotFound(reply, request);
+  repo.dismissContactProposal(candidate.id, companyKey);
+  return { data: { dismissed: true }, meta: { requestId: request.id } };
+}
+
 function recruiterQueueStatus(
   statuses: readonly string[],
 ): 'queued' | 'running' | 'ready' | 'failed' {
@@ -651,6 +698,11 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
   );
   app.delete('/api/v1/candidate/companies/:companyKey/want', withDeps(deps, handleRemoveWant));
   app.put('/api/v1/candidate/companies/:companyKey/next-step', withDeps(deps, handleSetNextStep));
+  app.put(
+    '/api/v1/candidate/companies/:companyKey/contact-proposal-dismissal',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleDismissContactProposal),
+  );
   app.post(
     '/api/v1/candidate/companies/:companyKey/recruiter-search',
     { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
