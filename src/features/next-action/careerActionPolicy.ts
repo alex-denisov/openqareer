@@ -27,6 +27,8 @@ export interface ReasonedCareerAction {
   sourcesLabel?: string;
   /** B540: where «Подтвердить факт» lands in the profile. */
   profileFocus?: TodayProfileFocus;
+  /** Решение, которое ведёт к консультанту: с чего он начнёт беседу (владелец 21.10: размер команды собирает консультант). */
+  coachPrompt?: string;
 }
 
 export interface CareerActionReason {

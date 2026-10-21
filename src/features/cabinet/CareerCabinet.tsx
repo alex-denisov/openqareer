@@ -558,12 +558,12 @@ function CabinetSection({
         }}
         onOpenExpert={
           onOpenExpert
-            ? () =>
+            ? (action = consultantAction) =>
                 onOpenExpert(
                   'today',
                   undefined,
-                  consultantAction?.headline,
-                  consultantAction?.rationale,
+                  action?.headline,
+                  action?.coachPrompt ?? action?.rationale,
                 )
             : undefined
         }

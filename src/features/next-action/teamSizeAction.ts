@@ -59,6 +59,7 @@ export function buildTeamSizeAction(
       employer: decision.employer,
       ...(decision.title ? { title: decision.title } : {}),
     },
+    coachPrompt: `Размер команды в «${decision.employer}» в профиле «неизвестно». Уточни у меня, сколько людей было в моей вертикали, включая руководителей команд, и запиши факт в опыт.`,
     findingIds: [`team-size:${decision.experienceId}`],
     roleIds: [],
     marketIds: [],

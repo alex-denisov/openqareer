@@ -76,7 +76,7 @@ export interface TodayScreenProps {
   readonly onLoadQueueRemainder?: () => Promise<void>;
   readonly onOpenTariffs?: () => void;
   readonly onOpenAutomation?: () => void;
-  readonly onOpenExpert?: () => void;
+  readonly onOpenExpert?: (action?: ReasonedCareerAction) => void;
   readonly onOpenConnections?: () => void;
   /** Решение дня из карьерного дневника (макет 1 «Вы работаете»). */
   readonly diaryDecision?: TodayDiaryDecisionProp;
@@ -98,7 +98,7 @@ function useTodayConsultantAction({
   snapshot: TodaySnapshot | null;
   consultantAction?: ReasonedCareerAction;
   onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
-  onOpenExpert?: () => void;
+  onOpenExpert?: (action?: ReasonedCareerAction) => void;
   onNavigateProfileAction?: (action: ReasonedCareerAction) => void;
 }) {
   const [resolvedActionKey, setResolvedActionKey] = useState<string | null>(null);
@@ -155,13 +155,13 @@ function acceptConsultantAction(
   action: ReasonedCareerAction | undefined,
   actionKey: string | null,
   onNavigate: ((view: CareerCabinetView, options?: NavigationOptions) => void) | undefined,
-  onOpenExpert: (() => void) | undefined,
+  onOpenExpert: ((action?: ReasonedCareerAction) => void) | undefined,
   onNavigateProfileAction: ((action: ReasonedCareerAction) => void) | undefined,
   setResolvedActionKey: (key: string | null) => void,
 ): void {
   if (!action || !actionKey) return;
   if (action.destination === 'coach') {
-    onOpenExpert?.();
+    onOpenExpert?.(action);
     return;
   }
   resolveConsultantAction(candidateId, action, 'accepted');
@@ -250,7 +250,7 @@ interface TodayContentProps {
   readonly snapshot: TodaySnapshot;
   readonly profileDraft?: ResumeDraft;
   readonly funnelContext?: TodayFunnelContext;
-  readonly onOpenExpert?: () => void;
+  readonly onOpenExpert?: (action?: ReasonedCareerAction) => void;
   readonly onOpenConnections?: () => void;
   readonly onDiscussQueueItem?: (item: TodayQueueItem) => void;
   readonly activeAction?: ReasonedCareerAction;
@@ -394,7 +394,7 @@ function TodayMobileDecision({
   readonly onPostpone: () => void | Promise<void>;
   readonly postponeBusy: boolean;
   readonly postponeError?: string;
-  readonly onOpenExpert?: () => void;
+  readonly onOpenExpert?: (action?: ReasonedCareerAction) => void;
 }) {
   return (
     <section
@@ -424,7 +424,7 @@ function TodayMobileNothingToDecide({
   onOpenExpert,
 }: {
   readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
-  readonly onOpenExpert?: () => void;
+  readonly onOpenExpert?: (action?: ReasonedCareerAction) => void;
 }) {
   return (
     <>
@@ -440,7 +440,7 @@ function TodayMobileNothingToDecide({
         </button>
       ) : null}
       {onOpenExpert ? (
-        <button className="pm-text tm-later" type="button" onClick={onOpenExpert}>
+        <button className="pm-text tm-later" type="button" onClick={() => onOpenExpert()}>
           Обсудить цель
         </button>
       ) : null}
@@ -461,7 +461,7 @@ function TodayMobileDecisionBody({
   readonly onPostpone: () => void | Promise<void>;
   readonly postponeBusy: boolean;
   readonly postponeError?: string;
-  readonly onOpenExpert?: () => void;
+  readonly onOpenExpert?: (action?: ReasonedCareerAction) => void;
 }) {
   return (
     <>
@@ -478,7 +478,7 @@ function TodayMobileDecisionBody({
           postponeError={postponeError}
         />
       ) : onOpenExpert ? (
-        <button className="tm-why" type="button" onClick={onOpenExpert}>
+        <button className="tm-why" type="button" onClick={() => onOpenExpert()}>
           Обсудить <CaretRight aria-hidden="true" weight="regular" />
         </button>
       ) : (
