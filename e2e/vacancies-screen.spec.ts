@@ -1381,8 +1381,10 @@ test.describe('B250 vacancies screen', () => {
     const mapView = page.locator('.vacancy-map-view');
     await expect(mapView).toBeVisible();
     await expect(mapView.locator('.career-map-header')).toContainText('На карте 2 из 4');
-    await expect(mapView.locator('.career-map-header')).toContainText('без города: 1');
-    await expect(mapView.locator('.career-map-header')).toContainText('город не распознан: 1');
+    // B485: заметка макета 4 называет причину, почему у части выдачи нет точки.
+    await expect(mapView.locator('.career-map-header')).toContainText(
+      'без точки 1 без города, 1 с нераспознанным городом',
+    );
     await expect(mapView.locator('.career-map-country')).toHaveCount(177);
     const mapCanvas = mapView.locator('.career-map-canvas-container');
     await page.evaluate(() => {
