@@ -45,6 +45,7 @@ export interface VacanciesScreenFiltersProps {
   readonly focusRole?: boolean;
   readonly locations?: readonly FacetOption[];
   readonly salaryCurrencies?: readonly string[];
+  readonly marketEstimateCount?: number;
   readonly formatCounts?: Readonly<Record<string, number>>;
 }
 
@@ -380,28 +381,65 @@ function SalaryRangeFields({
   );
 }
 
-function MissingSalaryToggle({ props }: { readonly props: VacanciesScreenFiltersProps }) {
-  const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const includeMissingSalary = event.currentTarget.checked;
-    props.onChange((state) => ({ ...state, includeMissingSalary }));
-  };
+function SalaryToggle({
+  checked,
+  label,
+  onChange,
+}: {
+  readonly checked: boolean;
+  readonly label: string;
+  readonly onChange: (checked: boolean) => void;
+}) {
   return (
     <label className="vacancy-missing-salary-toggle">
       <input
         type="checkbox"
-        checked={Boolean(props.state.includeMissingSalary)}
-        onChange={onChange}
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
       />
-      <span>Включать вакансии без этой зарплатной информации</span>
+      <span>{label}</span>
     </label>
+  );
+}
+
+/** B546: both toggles change the list; the estimate one needs estimates to exist. */
+function SalaryToggles({ props }: { readonly props: VacanciesScreenFiltersProps }) {
+  const estimates = props.marketEstimateCount ?? 0;
+  const byEstimate = Boolean(props.state.useMarketEstimate) && estimates > 0;
+  return (
+    <>
+      <SalaryToggle
+        checked={Boolean(props.state.includeMissingSalary)}
+        label="Показывать вакансии без зарплаты"
+        onChange={(includeMissingSalary) =>
+          props.onChange((state) => ({ ...state, includeMissingSalary }))
+        }
+      />
+      {estimates > 0 ? (
+        <SalaryToggle
+          checked={Boolean(props.state.useMarketEstimate)}
+          label="Оценка рынка для вакансий без зарплаты"
+          onChange={(useMarketEstimate) =>
+            props.onChange((state) => ({ ...state, useMarketEstimate }))
+          }
+        />
+      ) : (
+        <p className="vacancy-salary-estimate-note">
+          Оценка рынка по зарплате появится от 20 вакансий.
+        </p>
+      )}
+      {byEstimate ? (
+        <p className="vacancy-salary-estimate-note">
+          Вакансии без зарплаты сравниваются по оценке рынка.
+        </p>
+      ) : null}
+    </>
   );
 }
 
 function SalaryFilterSection({ props }: { readonly props: VacanciesScreenFiltersProps }) {
   const currencies = props.salaryCurrencies ?? [];
   const currency = props.state.salaryCurrency ?? currencies[0] ?? '';
-  const salaryRangeSet =
-    props.state.salaryMinimum !== undefined || props.state.salaryMaximum !== undefined;
   return (
     <div className="field-group vacancy-salary-filter">
       <h4>Зарплата</h4>
@@ -409,7 +447,7 @@ function SalaryFilterSection({ props }: { readonly props: VacanciesScreenFilters
         <>
           <SalaryCurrencySelect props={props} currencies={currencies} currency={currency} />
           <SalaryRangeFields props={props} currency={currency} />
-          {salaryRangeSet ? <MissingSalaryToggle props={props} /> : null}
+          <SalaryToggles props={props} />
         </>
       ) : (
         <p>В загруженных вакансиях зарплатные данные не указаны.</p>

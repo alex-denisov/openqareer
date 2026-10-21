@@ -13,5 +13,7 @@ export interface VacanciesScreenState {
   readonly salaryMaximum?: number;
   readonly salaryCurrency?: string;
   readonly includeMissingSalary?: boolean;
+  /** B546: a vacancy without salary is compared by its market estimate. */
+  readonly useMarketEstimate?: boolean;
   readonly formats?: readonly string[];
 }

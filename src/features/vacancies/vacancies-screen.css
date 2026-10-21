@@ -432,6 +432,53 @@
   line-height: 1.35;
 }
 
+/* B546: market estimate — tag on its own line, then sample and cut date (mockup 4). */
+.vacancy-screen-money-source.is-estimate {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-1);
+}
+
+.vacancy-screen-money-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  padding: 2px var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.vacancy-screen-money-tag svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.vacancy-screen-money-narrow {
+  display: none;
+}
+
+.vacancy-screen-money-short {
+  margin-inline-start: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-style: italic;
+  font-weight: 400;
+}
+
+@media (max-width: 760px) {
+  .vacancy-screen-money-wide,
+  .vacancy-screen-money-source.is-estimate {
+    display: none;
+  }
+
+  .vacancy-screen-money-narrow {
+    display: inline;
+  }
+}
+
 .vacancies-screen-row-item > .vacancy-collection-actions {
   grid-column: 2;
   grid-row: 1;
@@ -938,4 +985,19 @@
 .vacancy-source-categories .career-btn,
 .vacancy-source-selection .career-btn {
   min-block-size: var(--career-target-min);
+}
+
+/* B546: salary popover toggles and the estimate note (mockup 4, pop «Зарплата»). */
+.vacancy-missing-salary-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  min-block-size: 44px;
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-salary-estimate-note {
+  margin: 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
 }

@@ -1,5 +1,5 @@
 import { VacancyFitSummary } from './VacancyFitSummary';
-import { formatCompensationCompact } from './vacancyCompensation';
+import { VacancyMoneyCell } from './VacancyMoneyCell';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
@@ -109,20 +109,6 @@ function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
   );
 }
 
-function VacancyScreenMoneyCell({ item }: { readonly item: MatchedVacancyItem }) {
-  const source = vacancySourceLabels(item.cluster.sources)[0] ?? 'источник неизвестен';
-  const date = observedDate(item);
-  return (
-    <span className="vacancies-screen-cell vacancies-screen-cell--salary" data-label="Деньги">
-      <span className="career-numeric">{formatCompensationCompact(item.cluster.salary)}</span>
-      <span className="vacancy-screen-money-source">
-        {item.cluster.salary ? 'указана в вакансии' : 'зарплата не указана'} · {source}
-        {date ? `, ${date}` : ''}
-      </span>
-    </span>
-  );
-}
-
 export function VacancyScreenRowCells({
   item,
   applicationArchived,
@@ -141,7 +127,7 @@ export function VacancyScreenRowCells({
       />
       <VacancyScreenLevelCell item={item} />
       <VacancyScreenGeoCell item={item} />
-      <VacancyScreenMoneyCell item={item} />
+      <VacancyMoneyCell item={item} observedDate={observedDate(item)} />
     </>
   );
 }
