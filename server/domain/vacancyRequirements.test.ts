@@ -147,4 +147,11 @@ describe('vacancy requirement extraction', () => {
       expect(instructions).toMatch(/no markdown/iu);
     });
   });
+
+  it('reads «Что мы ждём» and its variants as a requirements heading', () => {
+    for (const heading of ['Что мы ждём', 'Что мы ждем:', 'Что ждём от вас', 'Мы ждём', 'Что мы ожидаем']) {
+      const result = extractVacancyRequirements({ vacancyId: 'v', description: `${heading}\n- Опыт работы с Kafka` });
+      expect(result.requirements.map((item) => item.text), heading).toEqual(['Опыт работы с Kafka']);
+    }
+  });
 });

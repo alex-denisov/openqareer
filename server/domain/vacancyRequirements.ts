@@ -49,7 +49,7 @@ function plainText(description: string): string {
     .replace(/<[^>]+>/gu, '').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&')
     .replace(/&#39;/gu, "'").replace(/&quot;/gu, '"');
 }
-const SECTION = /^(?:requirements|(?:(?:basic|preferred|minimum) )?qualifications|what (?:you(?:(?:'|’)ll)? (?:need|bring)|we (?:expect|look for))|who you are|skills and experience|your (?:skills|profile)|требования|мы ожидаем|что (?:нужно|мы ожидаем)|нам важно|вы нам подходите)(?:\s*[:：].*)?$/iu;
+const SECTION = /^(?:requirements|(?:(?:basic|preferred|minimum) )?qualifications|what (?:you(?:(?:'|’)ll)? (?:need|bring)|we (?:expect|look for))|who you are|skills and experience|your (?:skills|profile)|требования|мы ожидаем|что (?:нужно|мы ожидаем)|(?:что )?(?:мы )?жд[её]м(?: от (?:вас|кандидата))?|нам важно|вы нам подходите)(?:\s*[:：].*)?$/iu;
 const STOP = /^(?:benefits|(?:key job )?responsibilities|what (?:we offer|you(?:(?:'|’)ll| will) do)|about (?:us|the (?:role|company|team))|why work with us|compensation|salary|additional information|equal opportunity|perks|мы предлагаем|условия|обязанности|задачи|что (?:предлагаем|вы будете делать)|о компании|почему мы)(?=\s|[:：]|$)/iu;
 const EXPLICIT = /\b(?:must|required|mandatory|essential|minimum|at least|need to|no visa sponsorship)\b|обязател|необходим|не менее|требуется/iu;
 const PREFERRED = /\b(?:preferred|desirable|nice to have|ideally)\b|желател|будет плюсом|преимуществ/iu;
