@@ -1,4 +1,4 @@
-import { VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitInline } from './VacancyFitSummary';
 import { VacancyMoneyCell } from './VacancyMoneyCell';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -62,7 +62,7 @@ function VacancyScreenRoleCell({
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
       </span>
-      <VacancyFitSummary compact vacancyId={item.cluster.id} view={item.explanation.fitView} />
+      <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} />
       {applicationStatus ? (
         <span className={`applied-note${applicationArchived ? ' is-archived' : ''}`}>
           {applicationStatus}

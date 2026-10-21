@@ -178,3 +178,10 @@
 .vacancies-table-header-actions .vacancy-fit-sort select:hover {
   border-color: var(--career-line);
 }
+
+.vacancy-fit-inline {
+  display: block;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+}
