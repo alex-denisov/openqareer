@@ -321,15 +321,21 @@
   gap: var(--career-space-2);
   min-block-size: var(--career-target-min);
   min-inline-size: 0;
-  padding: var(--career-space-2) var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-field-edge);
   border-radius: var(--career-radius-sm);
-  color: var(--career-text-soft);
-  background: var(--career-bg-elevated);
-  font-size: var(--career-text-xs);
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-sm);
   font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.vacancies-filter-group-button:hover {
+  border-color: var(--career-accent);
+  background: var(--career-surface);
 }
 
 .vacancies-filter-group-text {
@@ -341,18 +347,25 @@
 
 .vacancies-filter-group-label {
   color: var(--career-text-soft);
+  font-weight: 400;
 }
 
 .vacancies-filter-group-value {
   color: var(--career-text);
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.vacancies-filter-group-button.is-active,
+/* B446-g4: заданный фильтр — подсвеченная рамка, открытый — мягкая заливка, как .fbtn макета 4. */
+.vacancies-filter-group-button.is-active {
+  border-color: color-mix(in oklch, var(--career-accent) 45%, var(--career-line-strong));
+}
+
 .vacancies-filter-group-button[aria-expanded='true'] {
-  border-color: var(--career-accent);
-  color: var(--career-text);
   background: var(--career-accent-soft);
+}
+
+.vacancies-filter-group-button[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
 }
 
 .vacancies-mobile-filter-toggle {
