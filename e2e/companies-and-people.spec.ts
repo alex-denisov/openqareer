@@ -124,12 +124,16 @@ test('pages 400 companies and opens a source-backed company detail', async ({ pa
   await expect(page.getByRole('heading', { name: 'Вектор Банк' })).toBeVisible();
   await expect(page.getByText('Москва · Финансы · данные с hh.ru, 08.10.2026')).toBeVisible();
   await expect(page.getByText(/Рекрутёр Мария Орлова взят из объявления/u)).toBeVisible();
-  await expect(page.locator('.companies-people-vacancy')).toHaveCount(3);
+  const mobile = testInfo.project.name === 'mobile-390';
+  await expect(
+    page.locator(mobile ? '[data-company-vacancy]' : '.companies-people-vacancy'),
+  ).toHaveCount(3);
+  if (mobile) await expect(page.getByRole('heading', { name: 'Компания' })).toBeVisible();
   await expectCompanyScreenAccessible(page);
   await captureCompanyState(page, testInfo, 'company-detail');
 
-  if (testInfo.project.name === 'mobile-390') {
-    await page.getByRole('button', { name: 'Назад к компаниям' }).click();
+  if (mobile) {
+    await page.getByRole('button', { name: 'Назад', exact: true }).click();
   }
   await page.getByRole('button', { name: 'Показать ещё 20' }).click();
   await expect(rows).toHaveCount(40);
@@ -171,7 +175,7 @@ test('«Все N вакансий компании в подборке» opens t
 }) => {
   await openCompanyScreen(page);
   await openCompany(page, 'Вектор Банк');
-  await page.getByRole('button', { name: 'Все 12 вакансий компании в подборке' }).click();
+  await page.getByRole('button', { name: /^Все 12 вакансий компании/u }).click();
   await expect(page.getByRole('tab', { name: /Подборка/u })).toHaveAttribute(
     'aria-selected',
     'true',
@@ -295,7 +299,7 @@ test('the company screen has no page overflow at narrow phone widths', async ({
     await expectNoHorizontalOverflow(page);
     await expectCompanyTouchTargets(page);
   }
-  await page.getByRole('button', { name: 'Назад к компаниям' }).click();
+  await page.getByRole('button', { name: 'Назад', exact: true }).click();
   await page.getByRole('button', { name: 'Фильтры' }).click();
   for (const width of [280, 320, 390, 414]) {
     await page.setViewportSize({ width, height: 844 });
@@ -381,7 +385,10 @@ test('a recruiter hypothesis shows its public source, date and one cold action',
   await expect(people.getByText('Круг 3').first()).toBeVisible();
   await people.scrollIntoViewIfNeeded();
   await captureCompanyState(page, testInfo, 'company-recruiter-found');
-  await people.getByRole('button', { name: 'Холодный отклик' }).first().click();
+  await page
+    .getByRole('button', { name: /^Холодный отклик/u })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Круг 3' })).toHaveAttribute('aria-selected', 'true');
 });
@@ -449,14 +456,17 @@ test('people are cards per person and open the letter in their circle', async ({
   await openCompany(page, 'Вектор Банк');
 
   const people = page.getByRole('region', { name: 'Люди', exact: true });
-  await expect(people.getByRole('article')).toHaveCount(2);
+  const mobile = testInfo.project.name === 'mobile-390';
+  if (mobile) await expect(people.getByRole('button', { name: /Круг [12]/u })).toHaveCount(2);
+  else await expect(people.getByRole('article')).toHaveCount(2);
   await expect(people.getByText('Писала вам 28.09')).toBeVisible();
   await expect(people.getByText('Знаком с вашим контактом Дмитрий Козлов')).toBeVisible();
   await expect(people.getByRole('button', { name: 'Холодный отклик' })).toHaveCount(0);
   await expect(page.getByText(/написать Марии Орловой \(круг 1\)/u)).toBeVisible();
   await people.scrollIntoViewIfNeeded();
   await captureCompanyState(page, testInfo, 'company-connection-circles');
-  await people.getByRole('button', { name: 'Написать знакомому' }).click();
+  if (mobile) await page.getByRole('button', { name: 'Написать Марии Орловой' }).click();
+  else await people.getByRole('button', { name: 'Написать знакомому' }).click();
 
   await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Круг 1' })).toHaveAttribute('aria-selected', 'true');

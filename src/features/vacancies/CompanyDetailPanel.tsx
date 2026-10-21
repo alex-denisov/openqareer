@@ -7,13 +7,18 @@ import type {
   CandidateCompanyRecruiter,
 } from '../../../shared/candidateCompany';
 import { pluralRu } from '../../../shared/pluralRu';
-import { dativeNameRu } from '../today/dativeNameRu';
 import { CompanyPeopleSection } from './CompaniesAndPeoplePeople';
 import { useCompanyPeople, type CompanyPeopleState } from './CompanyConnectionCircles';
+import { CompanyMobilePush } from './CompanyMobilePush';
 import { RecruiterMessagePanel } from './RecruiterMessagePanel';
+import { useCompactViewport } from './useCompactViewport';
 import type { VacancyLetterTarget } from './VacancyLetterScreen';
 import type { ConnectionCircleNumber } from './vacancyLetterApi';
-import { companySourceSummary, formatObservedDate } from './companiesAndPeopleUtils';
+import {
+  companyNextStepText,
+  companySourceSummary,
+  formatObservedDate,
+} from './companiesAndPeopleUtils';
 
 const TOP_VACANCIES = 3;
 
@@ -112,24 +117,6 @@ function CompanyDetailHeader({
   );
 }
 
-/** Saved step first; otherwise one derived from a real path or vacancy; otherwise honest «не задан». */
-export function companyNextStepText(
-  company: CandidateCompanyOpportunity,
-  people: CompanyPeopleState,
-): string {
-  if (company.nextStep) {
-    const due = company.nextStep.dueAt ? `, до ${formatObservedDate(company.nextStep.dueAt)}` : '';
-    return `Следующий шаг: ${company.nextStep.text}${due}`;
-  }
-  const vacancy = company.vacancies[0];
-  const person = people.people[0];
-  if (vacancy && person) {
-    return `Следующий шаг: откликнуться на ${vacancy.title}, написать ${dativeNameRu(person.fullName)} (круг ${person.circle})`;
-  }
-  if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
-  return 'Следующий шаг не задан';
-}
-
 function CompanyNextStep({
   company,
   people,
@@ -210,9 +197,38 @@ function CompanyVacancySection(props: CompanyDetailPanelProps) {
   );
 }
 
+function CompanyDetailMobile({
+  props,
+  people,
+}: {
+  readonly props: CompanyDetailPanelProps;
+  readonly people: CompanyPeopleState;
+}) {
+  return (
+    <CompanyMobilePush
+      company={props.company}
+      detail={props.detail}
+      people={people}
+      linkedin={props.linkedin}
+      searchConsentGranted={props.searchConsentGranted && !props.consentRequired}
+      busyWant={props.busyWant}
+      busySearch={props.busySearch}
+      actionError={props.actionError ?? props.detailError}
+      onBack={props.onBack}
+      onToggleWant={props.onToggleWant}
+      onSearch={props.onSearch}
+      onAllowAndSearch={props.onAllowAndSearch}
+      onOpenLetter={props.onOpenLetter}
+      onOpenCompanyVacancies={props.onOpenCompanyVacancies}
+      onOpenConnections={props.onOpenConnections}
+    />
+  );
+}
+
 export function CompanyDetailPanel(props: CompanyDetailPanelProps) {
   const people = useCompanyPeople(props.company);
   const [messageTo, setMessageTo] = useState<CandidateCompanyRecruiter | null>(null);
+  if (useCompactViewport()) return <CompanyDetailMobile props={props} people={people} />;
   return (
     <article className="companies-people-detail" aria-label={`Компания ${props.company.name}`}>
       <CompanyDetailHeader

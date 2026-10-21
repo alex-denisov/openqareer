@@ -29,6 +29,12 @@ import {
 } from './CompaniesAndPeopleControls';
 import { isContactImportStale, readableError } from './companiesAndPeopleUtils';
 
+const COMPANY_ORDER_NOTE: Record<CandidateCompanySort, string> = {
+  default: 'Порядок: «Хочу», затем по числу вакансий, контактов в сети и алфавиту.',
+  contacts: 'Порядок: по числу контактов в сети, затем по алфавиту.',
+  alphabetical: 'Порядок: по алфавиту.',
+};
+
 interface CompaniesAndPeopleScreenProps {
   readonly onOpenConnections?: () => void;
   readonly onOpenCareer?: () => void;
@@ -465,6 +471,11 @@ function CompanyListColumn({
         onOpenCareer={onOpenCareer}
         onWantsChanged={page.reload}
       />
+      {page.page && page.items.length > 0 ? (
+        <p className="companies-people-list-footer">
+          Показано {page.items.length} из {page.page.total}. {COMPANY_ORDER_NOTE[filters.sort]}
+        </p>
+      ) : null}
       {page.items.length < (page.page?.total ?? 0) ? (
         <button
           type="button"

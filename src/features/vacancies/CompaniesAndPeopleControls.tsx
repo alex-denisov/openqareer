@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  CaretRight,
   CircleNotch,
   MagnifyingGlass,
   SlidersHorizontal,
@@ -270,7 +271,12 @@ function CompanyRowMetrics({ company }: { readonly company: CandidateCompanyOppo
       >
         <UsersThree aria-hidden="true" />
         {contacts === null ? (
-          <span className="career-sr-only">контакты неизвестны</span>
+          <>
+            <span className="career-sr-only">контакты неизвестны</span>
+            <span className="companies-people-mobile-only" aria-hidden="true">
+              неизвестно
+            </span>
+          </>
         ) : (
           <>
             {contacts}
@@ -313,6 +319,7 @@ function CompanyListRow({
           </span>
         </span>
         <CompanyRowMetrics company={company} />
+        <CaretRight className="companies-people-row-chev" aria-hidden="true" />
       </button>
     </div>
   );

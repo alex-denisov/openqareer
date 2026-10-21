@@ -4,6 +4,7 @@ import type {
 } from '../../../shared/candidateCompany';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
 import { pluralRu } from '../../../shared/pluralRu';
+import { dativeNameRu } from '../today/dativeNameRu';
 
 const CONTACT_IMPORT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
@@ -128,4 +129,22 @@ export function groupCompanyPeople(responses: readonly VacancyConnectionCircles[
   }
   const people = [...byPerson.values()].sort((a, b) => a.circle - b.circle);
   return { people, coldVacancyId };
+}
+
+/** Saved step first; otherwise one derived from a real path or vacancy; otherwise honest «не задан». */
+export function companyNextStepText(
+  company: CandidateCompanyOpportunity,
+  people: { readonly people: readonly CompanyPerson[] },
+): string {
+  if (company.nextStep) {
+    const due = company.nextStep.dueAt ? `, до ${formatObservedDate(company.nextStep.dueAt)}` : '';
+    return `Следующий шаг: ${company.nextStep.text}${due}`;
+  }
+  const vacancy = company.vacancies[0];
+  const person = people.people[0];
+  if (vacancy && person) {
+    return `Следующий шаг: откликнуться на ${vacancy.title}, написать ${dativeNameRu(person.fullName)} (круг ${person.circle})`;
+  }
+  if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
+  return 'Следующий шаг не задан';
 }
