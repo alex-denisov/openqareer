@@ -10,6 +10,7 @@ import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteRecruiterContactsRepository } from '../server/data/sqliteRecruiterContactsRepository';
 import { currentVacancyFitProfileValidator } from '../server/domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from '../server/domain/vacancyMechanicsRuntime';
+import type { RoleNamer } from '../server/providers/roleNamer';
 import { sendError } from '../server/routes/helpers';
 import { SqliteVacancyPoolStore } from '../server/vacancies/sqliteVacancyPoolStore';
 import { runBlockCFitWorker, runBlockCMaintenancePasses } from './fixtures/block-c-maintenance';
@@ -137,6 +138,18 @@ const authService: SessionAuth = {
   logout() {},
 };
 
+// Block B «Карьера»: roles are named by a model; the demo names the seeded target roles instead.
+const roleNamer: RoleNamer = {
+  nameRoles: async (facts) => ({
+    stage: 'block-demo-fixture',
+    roles: scenarios.activeProfile.seed.roles.map((title) => ({
+      title,
+      reason: 'Синтетическая роль демо-стенда: совпадает с целевой ролью профиля.',
+      evidenceRefs: facts.slice(0, 2).map((fact) => fact.ref),
+    })),
+  }),
+};
+
 const disabled = async () => {
   throw new Error('External sources and providers are disabled in the local demo.');
 };
@@ -145,6 +158,7 @@ const app = await buildApp({
   candidateStore: createCandidateStoreRouter(candidateStore, new Map()),
   multiSourceVacancyEngine: engine,
   recruiterContactsRepo,
+  roleNamer,
   authService,
   searchVacancies: disabled,
   searchRemotive: disabled,
