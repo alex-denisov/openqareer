@@ -271,7 +271,9 @@ function PushBody({
   if (page === 'job') {
     return <JobPage props={props} circles={circles} onOpenPath={() => open('path')} />;
   }
-  if (circles.status !== 'ready') return <PushCirclesStatus state={circles} />;
+  if (circles.status !== 'ready') return (
+      <PushCirclesStatus state={circles} onPrepareLetter={props.pathActions.onPrepareLetter} />
+    );
   if (page === 'path') {
     return <PushPathPage data={circles.data} actions={props.pathActions} onOpenCircle={open} />;
   }
