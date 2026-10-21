@@ -14,6 +14,8 @@ export function provenanceLabel(provenance: FactProvenance | undefined): string 
   const date = importDateLabel(provenance.at);
   if (provenance.kind === 'candidate') return 'со слов кандидата';
   if (provenance.kind === 'consultant') return date ? `консультант ${date}` : 'консультант';
+  if (provenance.kind === 'footprint')
+    return date ? `из цифрового следа, ${date}` : 'из цифрового следа';
   const origin =
     provenance.platform === 'file'
       ? 'из файла резюме'

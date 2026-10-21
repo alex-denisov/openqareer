@@ -17,7 +17,7 @@ export const IMPORT_SOURCE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS candidate_import_sources (
   candidate_id TEXT NOT NULL REFERENCES candidates(id) ON DELETE CASCADE,
   message_id TEXT NOT NULL,
-  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh', 'file')),
+  platform TEXT NOT NULL CHECK (platform IN ('linkedin', 'hh', 'file', 'footprint')),
   imported_at TEXT NOT NULL,
   fact_count INTEGER NOT NULL,
   PRIMARY KEY (candidate_id, message_id)

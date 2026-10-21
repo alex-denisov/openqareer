@@ -335,6 +335,22 @@ export class SqliteCandidateReputationRepository {
     return updated;
   }
 
+  /** B544: stores the candidate's checklist mark (and the created profile fact) on one finding. */
+  updateFootprintFindingChecklist(
+    candidateId: string,
+    findingId: string,
+    patch: Pick<CandidateFootprintFinding, 'checklistMark' | 'profileFactId'>,
+  ): CandidateFootprintAudit | null {
+    const audit = this.getLatestFootprintAudit(candidateId);
+    if (!audit || !audit.findings.some((finding) => finding.id === findingId)) return null;
+    const findings = audit.findings.map((finding) =>
+      finding.id === findingId ? { ...finding, ...patch } : finding,
+    );
+    const updated = { ...audit, findings };
+    this.saveFootprintAudit(updated);
+    return updated;
+  }
+
   deleteFootprintAuditsByCandidateId(candidateId: string): number {
     return Number(this.database.prepare(
       'DELETE FROM candidate_footprint_audits WHERE candidate_id = ?',

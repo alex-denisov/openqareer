@@ -8,13 +8,19 @@
  * then says «источник неизвестен» instead of guessing.
  */
 
-export type ImportPlatform = 'linkedin' | 'hh' | 'file';
-export type SourcePlatform = Exclude<ImportPlatform, 'file'>;
+/** 'footprint': a confirmed digital-footprint finding added to the profile (B544). */
+export type ImportPlatform = 'linkedin' | 'hh' | 'file' | 'footprint';
+export type SourcePlatform = Exclude<ImportPlatform, 'file' | 'footprint'>;
 
 export type FactProvenance =
-  | { readonly kind: 'import'; readonly platform: ImportPlatform; readonly at: string }
+  | {
+      readonly kind: 'import';
+      readonly platform: Exclude<ImportPlatform, 'footprint'>;
+      readonly at: string;
+    }
   | { readonly kind: 'candidate'; readonly at: string }
-  | { readonly kind: 'consultant'; readonly at: string };
+  | { readonly kind: 'consultant'; readonly at: string }
+  | { readonly kind: 'footprint'; readonly at: string };
 
 export type ImportWalkSectionStatus = 'read' | 'pending' | 'failed';
 
@@ -116,8 +122,11 @@ export function resolveFactProvenance(
   const origin = memory.sourceMessageIds
     .map((id) => index.get(id))
     .find((value): value is ImportOrigin => Boolean(value));
-  if (origin)
-    return { kind: 'import', platform: origin.platform, at: origin.at ?? memory.createdAt };
+  if (origin) {
+    const at = origin.at ?? memory.createdAt;
+    const { platform } = origin;
+    return platform === 'footprint' ? { kind: 'footprint', at } : { kind: 'import', platform, at };
+  }
   if (memory.confidence === 'coach-hypothesis') return undefined;
   if (memory.sourceMessageIds.length > 0) return { kind: 'candidate', at: memory.createdAt };
   return undefined;
@@ -194,7 +203,7 @@ function labelTotals(input: SummaryInput): Map<SourcePlatform, LabelTotal> {
   for (const entry of input.memory) {
     const messageId = entry.sourceMessageIds.find((id) => index.has(id));
     const origin = messageId ? index.get(messageId) : undefined;
-    if (!messageId || !origin || origin.platform === 'file') continue;
+    if (!messageId || !origin || origin.platform === 'file' || origin.platform === 'footprint') continue;
     const at = origin.at ?? entry.createdAt;
     const current = totals.get(origin.platform);
     totals.set(origin.platform, {

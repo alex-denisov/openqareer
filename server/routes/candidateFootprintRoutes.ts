@@ -18,6 +18,7 @@ import {
   extractUnidentifiedEmployers,
   toPublicFootprintQueryPlan,
 } from '../osint/candidateFootprintQueryPlan';
+import { registerCandidateFootprintChecklistRoutes } from './candidateFootprintChecklistRoutes';
 import type { RouteDeps } from './deps';
 import { recordNotificationFromSource } from './notificationRepositoryAccess';
 import {
@@ -335,4 +336,5 @@ export function registerCandidateFootprintRoutes(app: FastifyInstance, deps: Rou
     { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } },
     withDeps(deps, handleDeleteFootprintFindings),
   );
+  registerCandidateFootprintChecklistRoutes(app, deps);
 }

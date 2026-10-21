@@ -132,3 +132,30 @@ describe('summarizeImportedSourcesWithKept (B541)', () => {
     expect(source).toMatchObject({ platform: 'linkedin', factCount: 2, keptFactCount: 2 });
   });
 });
+
+describe('resolveFactProvenance — digital footprint (B544)', () => {
+  it('reads a fact added from the digital footprint with the date it was added', () => {
+    const index = buildImportIndex({
+      native: [],
+      recorded: [
+        { messageId: 'msg-fp', platform: 'footprint', importedAt: '2026-10-21T08:00:00.000Z', factCount: 1 },
+      ],
+      messages: [],
+    });
+    expect(resolveFactProvenance(memory('f', ['msg-fp']), index)).toEqual({
+      kind: 'footprint',
+      at: '2026-10-21T08:00:00.000Z',
+    });
+    expect(
+      summarizeImportedSourcesWithKept({
+        native: [],
+        recorded: [
+          { messageId: 'msg-fp', platform: 'footprint', importedAt: '2026-10-21T08:00:00.000Z', factCount: 1 },
+        ],
+        messages: [],
+        memory: [memory('f', ['msg-fp'])],
+        walks: [],
+      }),
+    ).toEqual([]);
+  });
+});
