@@ -203,10 +203,10 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).not.toContain('Отклик отмечен');
   });
 
-  it('says «Загружено N из M» while the pool is still incomplete (B338)', () => {
+  it('says «Показано N из M · загружаем остальные» while the pool is still incomplete (B338, B446-g4)', () => {
     const html = render({ total: 1, poolComplete: false });
-    expect(html).toContain('Загружено');
-    expect(html).not.toContain('Показано');
+    expect(html).toContain('загружаем остальные');
+    expect(html).not.toContain('Загружено');
   });
 
   it('uses the vacancies title without the campaign eyebrow and keeps the total hint', () => {
