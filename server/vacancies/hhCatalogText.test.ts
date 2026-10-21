@@ -5,7 +5,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { UnifiedVacancy, VacancyCluster } from '../domain/unifiedVacancy';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
-import { HhCatalogTextBackfill, type HhCatalogTextEngine } from './hhCatalogText';
+import {
+  HH_TEXT_RETRY_BASE_MS,
+  HhCatalogTextBackfill,
+  type HhCatalogTextEngine,
+} from './hhCatalogText';
 
 const HH = 'src-hh-search';
 const directories: string[] = [];
@@ -153,19 +157,85 @@ describe('HhCatalogTextBackfill', () => {
     expect(cursors).toEqual([undefined, 'c1']);
   });
 
-  it('stops the tick at the first failure and retries that record next tick', async () => {
-    const { engine, loaded, cursors } = engineWith(
+  function scriptedEngine(
+    pages: Array<{ ids: string[]; cursor?: string }>,
+    script: Record<string, Array<{ status: 'loaded' | 'failed'; blocked?: 'refused' | 'backoff' }>>,
+  ) {
+    const loaded: string[] = [];
+    const cursors: Array<string | undefined> = [];
+    const engine: HhCatalogTextEngine = {
+      hhTextReady: () => true,
+      loadHhTextCandidates: (cursor) => {
+        cursors.push(cursor);
+        return pages.shift() ?? { ids: [] };
+      },
+      loadVacancyDescription: async (id) => {
+        loaded.push(id);
+        const next = script[id]?.shift() ?? { status: 'loaded' as const };
+        return { unavailable: next.status === 'failed', ...next };
+      },
+    };
+    return { engine, loaded, cursors };
+  }
+
+  it('a record that keeps failing does not hold the queue (prod 21.10: 41 ticks on one card)', async () => {
+    const now = 0;
+    const { engine, loaded, cursors } = scriptedEngine(
+      [{ ids: ['stuck', 'b'], cursor: 'c1' }, { ids: ['c'], cursor: 'c2' }, { ids: ['stuck'] }],
+      { stuck: [{ status: 'failed' }, { status: 'failed' }] },
+    );
+    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5, now: () => now });
+    expect(await backfill.step()).toEqual({ requested: 2, loaded: 1, retired: 0, failed: 1 });
+    expect(await backfill.step()).toMatchObject({ requested: 1, loaded: 1 });
+    // Следующий проход: запись в отступе — её не запрашивают.
+    expect(await backfill.step()).toMatchObject({ requested: 0 });
+    expect(loaded).toEqual(['stuck', 'b', 'c']);
+    expect(cursors).toEqual([undefined, 'c1', 'c2']);
+    expect(backfill.attemptsOf('stuck')).toMatchObject({ count: 1, lastAt: 0 });
+  });
+
+  it('retries a failed record after its backoff, with a growing delay', async () => {
+    let now = 0;
+    const pages = Array.from({ length: 4 }, () => ({ ids: ['x'] }));
+    const { engine, loaded } = scriptedEngine(pages, {
+      x: [{ status: 'failed' }, { status: 'failed' }, { status: 'loaded' }],
+    });
+    const backfill = new HhCatalogTextBackfill({ engine, now: () => now });
+    await backfill.step();
+    now += HH_TEXT_RETRY_BASE_MS;
+    await backfill.step();
+    expect(backfill.attemptsOf('x')?.count).toBe(2);
+    now += HH_TEXT_RETRY_BASE_MS;
+    await backfill.step();
+    expect(loaded).toEqual(['x', 'x']);
+    now += HH_TEXT_RETRY_BASE_MS;
+    await backfill.step();
+    expect(loaded).toEqual(['x', 'x', 'x']);
+    expect(backfill.attemptsOf('x')).toBeUndefined();
+  });
+
+  it('stops the tick when hh refuses (403/429/451) and moves past the refused record', async () => {
+    const { engine, loaded, cursors } = scriptedEngine(
       [
         { ids: ['a', 'b'], cursor: 'c1' },
-        { ids: ['a', 'b'], cursor: 'c1' },
+        { ids: ['b'], cursor: 'c1' },
       ],
-      { a: 'failed' },
+      { a: [{ status: 'failed', blocked: 'refused' }] },
     );
-    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5 });
-    expect(await backfill.step()).toMatchObject({ requested: 1, failed: 1 });
+    const backfill = new HhCatalogTextBackfill({ engine, perTick: 5, now: () => 0 });
+    expect(await backfill.step()).toMatchObject({ requested: 1, failed: 1, blocked: true });
     await backfill.step();
-    expect(loaded).toEqual(['a', 'a', 'b']);
+    expect(loaded).toEqual(['a', 'b']);
     expect(cursors).toEqual([undefined, undefined]);
+  });
+
+  it('a loader backoff ends the tick without counting the record as failed', async () => {
+    const { engine } = scriptedEngine([{ ids: ['a'] }], {
+      a: [{ status: 'failed', blocked: 'backoff' }],
+    });
+    const backfill = new HhCatalogTextBackfill({ engine, now: () => 0 });
+    expect(await backfill.step()).toMatchObject({ requested: 0, failed: 0, blocked: true });
+    expect(backfill.attemptsOf('a')).toBeUndefined();
   });
 
   it('does nothing when hh is not live or has no loader', async () => {

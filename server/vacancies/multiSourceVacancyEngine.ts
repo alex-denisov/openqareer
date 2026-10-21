@@ -90,6 +90,8 @@ export interface VacancyDescriptionLoaded {
   readonly description?: string;
   readonly skills?: readonly string[];
   readonly archived?: boolean;
+  /** Площадка отказала нам (`refused`) или загрузчик выжидает после отказа (`backoff`). */
+  readonly blocked?: 'refused' | 'backoff';
 }
 
 /** Читает полный текст только когда кандидат дошёл до конкретной вакансии. */
@@ -103,6 +105,8 @@ export interface VacancyDescriptionLoadResult {
   /** Площадка отказала или не дала разметку: UI не должен выдавать сниппет за полный текст. */
   readonly unavailable: boolean;
   readonly status: 'loaded' | 'cached' | 'skipped' | 'failed';
+  /** Отказ — признак блокировки площадки, а не сбой одной карточки (B535). */
+  readonly blocked?: 'refused' | 'backoff';
 }
 
 export interface VacancyDescriptionPreloadSummary {
@@ -1071,6 +1075,9 @@ export class MultiSourceVacancyEngine {
       return { vacancy, unavailable: true, status: 'failed' };
     }
     if (!loaded) return { vacancy, unavailable: true, status: 'failed' };
+    if (typeof loaded === 'object' && loaded.blocked) {
+      return { vacancy, unavailable: true, status: 'failed', blocked: loaded.blocked };
+    }
     if (typeof loaded === 'object' && loaded.archived) return this.retireArchivedVacancy(vacancy);
 
     const fullDescription = typeof loaded === 'string' ? loaded : loaded.description;

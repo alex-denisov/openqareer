@@ -61,7 +61,8 @@ describe('HhVacancyDescriptionLoader', () => {
       failedCacheJitterMs: 0,
     });
 
-    await expect(loader.load(vacancyUrl)).resolves.toBeUndefined();
+    await expect(loader.load(vacancyUrl)).resolves.toMatchObject({ blocked: 'refused' });
+    // Тот же адрес до конца TTL — из кеша отказа этой карточки, без запроса.
     await expect(loader.load(vacancyUrl)).resolves.toBeUndefined();
     expect(transport).toHaveBeenCalledTimes(1);
 
@@ -86,8 +87,12 @@ describe('HhVacancyDescriptionLoader', () => {
       failedCacheJitterMs: 0,
     });
 
-    await expect(loader.load('https://hh.ru/vacancy/9001')).resolves.toBeUndefined();
-    await expect(loader.load('https://hh.ru/vacancy/9002')).resolves.toBeUndefined();
+    await expect(loader.load('https://hh.ru/vacancy/9001')).resolves.toMatchObject({
+      blocked: 'refused',
+    });
+    await expect(loader.load('https://hh.ru/vacancy/9002')).resolves.toMatchObject({
+      blocked: 'backoff',
+    });
     expect(transport).toHaveBeenCalledTimes(1);
 
     now += 5_001;
@@ -138,22 +143,24 @@ describe('HhVacancyDescriptionLoader', () => {
     });
 
     const first = loader.load('https://hh.ru/vacancy/9001');
-    expect(await loader.load('https://hh.ru/vacancy/9002')).toBeUndefined();
+    expect(await loader.load('https://hh.ru/vacancy/9002')).toMatchObject({ blocked: 'backoff' });
     expect(transport).toHaveBeenCalledTimes(1);
     release({ status: 200, body: page });
     await first;
   });
   // Словарь переводов со строкой «Вакансия в архиве» встроен в каждую страницу
   // hh; признак архива — только статус самой вакансии в данных страницы (B312).
-  const TRANSLATIONS =
-    '&#34;vacancy.view.archived.title&#34;:&#34;Вакансия в архиве&#34;';
+  const TRANSLATIONS = '&#34;vacancy.view.archived.title&#34;:&#34;Вакансия в архиве&#34;';
   const archivedStatus = (value: boolean) =>
     `&#34;status&#34;:{&#34;archived&#34;:${value},&#34;disabled&#34;:false}`;
   const livePage = `<html>${TRANSLATIONS}${archivedStatus(false)}<div data-qa="vacancy-description"><p>Руководить командой</p></div></html>`;
 
   it('распознаёт страницу вакансии в архиве по статусу вакансии', async () => {
     const loader = new HhVacancyDescriptionLoader({
-      transport: async () => ({ status: 200, body: `<html>${TRANSLATIONS}${archivedStatus(true)}</html>` }),
+      transport: async () => ({
+        status: 200,
+        body: `<html>${TRANSLATIONS}${archivedStatus(true)}</html>`,
+      }),
       sleep: async () => {},
     });
     await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toMatchObject({ archived: true });
@@ -167,5 +174,37 @@ describe('HhVacancyDescriptionLoader', () => {
     const loaded = await loader.load('https://hh.ru/vacancy/2');
     expect(loaded).not.toMatchObject({ archived: true });
     expect(loaded).toMatchObject({ description: expect.stringContaining('Руководить командой') });
+  });
+
+  it('a page that fails on its own (404, no description) does not pause other cards', async () => {
+    const transport = vi
+      .fn()
+      .mockResolvedValueOnce({ status: 404, body: '' })
+      .mockResolvedValueOnce({ status: 200, body: '<main>без описания</main>' })
+      .mockResolvedValueOnce({ status: 200, body: page });
+    const loader = new HhVacancyDescriptionLoader({
+      transport,
+      sleep: vi.fn().mockResolvedValue(undefined),
+      now: () => 1_000,
+      failedCacheJitterMs: 0,
+    });
+
+    await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toBeUndefined();
+    await expect(loader.load('https://hh.ru/vacancy/2')).resolves.toBeUndefined();
+    await expect(loader.load('https://hh.ru/vacancy/3')).resolves.toMatchObject({
+      description: 'Полное описание роли\n\n- TypeScript',
+    });
+    expect(transport).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([429, 451])('treats %i as a refusal of the platform', async (status) => {
+    const loader = new HhVacancyDescriptionLoader({
+      transport: vi.fn().mockResolvedValue({ status, body: '' }),
+      sleep: vi.fn().mockResolvedValue(undefined),
+      now: () => 1_000,
+    });
+    await expect(loader.load('https://hh.ru/vacancy/1')).resolves.toMatchObject({
+      blocked: 'refused',
+    });
   });
 });

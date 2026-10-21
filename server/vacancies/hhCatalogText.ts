@@ -8,11 +8,21 @@ import type { VacancyDescriptionLoadResult } from './multiSourceVacancyEngine';
  * тем же загрузчиком и транспортом (`HhVacancyDescriptionLoader`, не чаще
  * одного чтения в секунду): сначала карточки каталога, свежие первыми, потом
  * остальной пул. Снятая работодателем вакансия уходит в архив загрузчиком
- * движка. Первая неудача обрывает тик: hh, возможно, притормаживает нас, и
- * та же позиция повторяется следующим тиком.
+ * движка.
+ *
+ * Неудача одной записи не держит очередь (прод 21.10: одна скрытая вакансия,
+ * отвечавшая 403, остановила догон на 41 тик): попытка отмечается временем и
+ * счётчиком, запись повторяется позже с растущим отступом, обход идёт дальше.
+ * Тик обрывается только на признаке блокировки площадки — отказ 403/429/451
+ * или пауза загрузчика после такого отказа.
  */
 
 const DEFAULT_PER_TICK = 10;
+/** Первый повтор неудачной записи через час, дальше вдвое дольше, не реже суток. */
+export const HH_TEXT_RETRY_BASE_MS = 60 * 60 * 1_000;
+const HH_TEXT_RETRY_MAX_MS = 24 * 60 * 60 * 1_000;
+/** После стольких неудач запись не запрашивается до перезапуска воркера. */
+const HH_TEXT_MAX_ATTEMPTS = 5;
 
 export interface HhCatalogTextEngine {
   /** Площадка включена, право подтверждено и загрузчик подключён. */
@@ -23,7 +33,7 @@ export interface HhCatalogTextEngine {
   ): { ids: string[]; cursor?: string };
   loadVacancyDescription(
     id: string,
-  ): Promise<Pick<VacancyDescriptionLoadResult, 'status' | 'unavailable'>>;
+  ): Promise<Pick<VacancyDescriptionLoadResult, 'status' | 'unavailable' | 'blocked'>>;
 }
 
 export interface HhCatalogTextReport {
@@ -32,6 +42,14 @@ export interface HhCatalogTextReport {
   /** Работодатель снял вакансию — запись ушла в архив. */
   readonly retired: number;
   readonly failed: number;
+  /** Тик оборван признаком блокировки площадки. */
+  readonly blocked?: boolean;
+}
+
+export interface HhTextAttempts {
+  readonly count: number;
+  readonly lastAt: number;
+  readonly nextAt: number;
 }
 
 const EMPTY: HhCatalogTextReport = { requested: 0, loaded: 0, retired: 0, failed: 0 };
@@ -39,12 +57,20 @@ const EMPTY: HhCatalogTextReport = { requested: 0, loaded: 0, retired: 0, failed
 export class HhCatalogTextBackfill {
   private readonly engine: HhCatalogTextEngine;
   private readonly perTick: number;
+  private readonly now: () => number;
+  private readonly attempts = new Map<string, HhTextAttempts>();
   private cursor: string | undefined;
   private running = false;
 
-  constructor(options: { engine: HhCatalogTextEngine; perTick?: number }) {
+  constructor(options: { engine: HhCatalogTextEngine; perTick?: number; now?: () => number }) {
     this.engine = options.engine;
     this.perTick = options.perTick ?? DEFAULT_PER_TICK;
+    this.now = options.now ?? Date.now;
+  }
+
+  /** Отметка неудачных попыток записи: время, счётчик, когда повторить. */
+  attemptsOf(id: string): HhTextAttempts | undefined {
+    return this.attempts.get(id);
   }
 
   /** Один тик; если прошлый ещё идёт, новый не начинается. */
@@ -58,20 +84,41 @@ export class HhCatalogTextBackfill {
     }
   }
 
+  private waiting(id: string): boolean {
+    const attempts = this.attempts.get(id);
+    if (!attempts) return false;
+    return attempts.count >= HH_TEXT_MAX_ATTEMPTS || attempts.nextAt > this.now();
+  }
+
+  private markFailed(id: string): void {
+    const previous = this.attempts.get(id);
+    const count = (previous?.count ?? 0) + 1;
+    const delay = Math.min(HH_TEXT_RETRY_BASE_MS * 2 ** (count - 1), HH_TEXT_RETRY_MAX_MS);
+    const lastAt = this.now();
+    this.attempts.set(id, { count, lastAt, nextAt: lastAt + delay });
+  }
+
   private async loadPage(): Promise<HhCatalogTextReport> {
     const page = this.engine.loadHhTextCandidates(this.cursor, this.perTick);
-    let loaded = 0;
-    let retired = 0;
-    for (const [index, id] of page.ids.entries()) {
+    const tally = { requested: 0, loaded: 0, retired: 0, failed: 0 };
+    for (const id of page.ids) {
+      if (this.waiting(id)) continue;
       const result = await this.engine.loadVacancyDescription(id);
+      // Пауза загрузчика: запроса не было, запись не виновата — повторить её.
+      if (result.blocked === 'backoff') return { ...tally, blocked: true };
+      tally.requested += 1;
       if (result.status === 'failed') {
-        return { requested: index + 1, loaded, retired, failed: 1 };
+        tally.failed += 1;
+        this.markFailed(id);
+        if (result.blocked === 'refused') return { ...tally, blocked: true };
+        continue;
       }
-      if (result.status === 'loaded') loaded += 1;
-      else if (result.unavailable) retired += 1;
+      this.attempts.delete(id);
+      if (result.status === 'loaded') tally.loaded += 1;
+      else if (result.unavailable) tally.retired += 1;
     }
-    // Проход закончен — следующий тик начинает с самых свежих карточек каталога.
+    // Страница пройдена — дальше; конец прохода начинает с самых свежих карточек.
     this.cursor = page.cursor;
-    return { requested: page.ids.length, loaded, retired, failed: 0 };
+    return tally;
   }
 }

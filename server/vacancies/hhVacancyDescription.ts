@@ -12,7 +12,16 @@ export interface HhVacancyDetails {
   readonly skills: readonly string[];
   /** Работодатель снял вакансию: страница отвечает 200, но показывает «Вакансия в архиве». */
   readonly archived?: boolean;
+  /**
+   * Признак блокировки площадки (B535): `refused` — hh ответил 403/429/451,
+   * `backoff` — загрузчик выжидает после такого отказа и запроса не делал.
+   */
+  readonly blocked?: 'refused' | 'backoff';
 }
+
+/** Ответы, которыми hh отказывает нам, а не одной карточке. */
+const REFUSAL_STATUSES = new Set([403, 429, 451]);
+const BACKOFF: HhVacancyDetails = { blocked: 'backoff', skills: [] };
 
 // Статус самой вакансии в данных страницы. Текст «Вакансия в архиве» не годится:
 // он есть в словаре переводов каждой страницы hh и снимал живые вакансии (B312).
@@ -105,12 +114,12 @@ export class HhVacancyDescriptionLoader {
     if (this.isLoaded(url)) return Promise.resolve(this.cached.get(url)?.details);
     const pending = this.inFlight.get(url);
     if (pending) return pending;
-    if (this.retryAfter > (this.options.now ?? Date.now)()) return Promise.resolve(undefined);
+    if (this.retryAfter > (this.options.now ?? Date.now)()) return Promise.resolve(BACKOFF);
     const maxPendingRequests = Math.max(
       1,
       Math.floor(this.options.maxPendingRequests ?? DEFAULT_MAX_PENDING_REQUESTS),
     );
-    if (this.inFlight.size >= maxPendingRequests) return Promise.resolve(undefined);
+    if (this.inFlight.size >= maxPendingRequests) return Promise.resolve(BACKOFF);
 
     const request = this.requestQueue.then(() => this.loadFromTransport(url));
     this.requestQueue = request.then(
@@ -129,7 +138,7 @@ export class HhVacancyDescriptionLoader {
     if (this.isLoaded(url)) return this.cached.get(url)?.details;
 
     const now = this.options.now ?? Date.now;
-    if (this.retryAfter > now()) return undefined;
+    if (this.retryAfter > now()) return BACKOFF;
     const delay = Math.max(
       0,
       (this.options.minIntervalMs ?? DEFAULT_MIN_INTERVAL_MS) - (now() - this.lastRequestAt),
@@ -138,32 +147,33 @@ export class HhVacancyDescriptionLoader {
     this.lastRequestAt = now();
 
     let details: HhVacancyDetails | undefined;
+    let refused = false;
     try {
       const response = await this.options.transport(url);
+      refused = REFUSAL_STATUSES.has(response.status);
       if (response.status === 200) {
         const description = descriptionFromPage(response.body);
         const skills = skillsFromPage(response.body);
         if (ARCHIVED_MARKER.test(response.body)) details = { archived: true, skills: [] };
         else details = description || skills.length > 0 ? { description, skills } : undefined;
-      } else {
-        details = undefined;
       }
     } catch {
       details = undefined;
     }
     if (details) {
       this.cached.set(url, { details });
-    } else {
-      const failedCacheTtlMs = Math.max(0, this.options.failedCacheTtlMs ?? 60_000);
-      if (failedCacheTtlMs > 0) {
-        const jitterBound = Math.max(0, this.options.failedCacheJitterMs ?? 5_000);
-        const random = Math.max(0, Math.min(1, (this.options.random ?? Math.random)()));
-        const jitter = Math.floor(random * jitterBound);
-        const retryAt = now() + failedCacheTtlMs + jitter;
-        this.cached.set(url, { retryAt });
-        this.retryAfter = Math.max(this.retryAfter, retryAt);
-      }
+      return details;
     }
-    return details;
+    const failedCacheTtlMs = Math.max(0, this.options.failedCacheTtlMs ?? 60_000);
+    if (failedCacheTtlMs > 0) {
+      const jitterBound = Math.max(0, this.options.failedCacheJitterMs ?? 5_000);
+      const random = Math.max(0, Math.min(1, (this.options.random ?? Math.random)()));
+      const retryAt = now() + failedCacheTtlMs + Math.floor(random * jitterBound);
+      this.cached.set(url, { retryAt });
+      // Общая пауза — только когда hh отказывает нам; сбой одной карточки
+      // (404, страница без описания, сеть) остальных не держит (прод 21.10).
+      if (refused) this.retryAfter = Math.max(this.retryAfter, retryAt);
+    }
+    return refused ? { blocked: 'refused', skills: [] } : undefined;
   }
 }
