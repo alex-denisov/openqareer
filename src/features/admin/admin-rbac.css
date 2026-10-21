@@ -1,7 +1,7 @@
 .admin-role-picker {
   grid-column: 1 / -1;
   min-inline-size: 0;
-  margin: 0;
+  margin: var(--career-space-3) 0 0;
   padding: 0;
   border: 0;
 }

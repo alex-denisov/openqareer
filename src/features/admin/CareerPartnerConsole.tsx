@@ -319,7 +319,7 @@ function ResumePanel({ resume }: { resume: CareerPartnerCandidateProfile['resume
           <dd>{draft.targetRole ?? 'Не указана'}</dd>
         </div>
         <div>
-          <dt>Опыт</dt>
+          <dt>Мест работы</dt>
           <dd>{draft.experience.length}</dd>
         </div>
         <div>
@@ -327,6 +327,7 @@ function ResumePanel({ resume }: { resume: CareerPartnerCandidateProfile['resume
           <dd>{draft.skills?.map((skill) => skill.name).join(', ') || 'Не указаны'}</dd>
         </div>
       </dl>
+      {draft.experience.length > 0 && <p className="career-partner-subheading">Места работы</p>}
       {draft.experience.length > 0 && (
         <ul className="career-partner-experience">
           {draft.experience.map((experience) => (

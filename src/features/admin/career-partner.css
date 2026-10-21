@@ -141,3 +141,13 @@
   color: var(--primary-success);
   font-size: var(--career-text-xs);
 }
+
+.career-partner-heading {
+  padding-block-start: var(--career-space-4);
+}
+
+.career-partner-subheading {
+  margin: var(--career-space-2) 0 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
