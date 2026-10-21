@@ -11,6 +11,7 @@ import {
   readCatalogSitemaps,
   writeCatalogSitemaps,
 } from './catalogSitemapJob';
+import { createIndexNowNotifier } from './indexNow';
 import type { SitemapFile } from './sitemapXml';
 
 interface SitemapLog {
@@ -44,12 +45,20 @@ function errorName(error: unknown): string {
 
 /** Maintenance process only: the listings query groups the whole catalog. */
 export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLog): () => void {
-  const run = () => {
+  const notifyIndexNow = createIndexNowNotifier(process.env.INDEXNOW_KEY, log);
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
     const started = Date.now();
     try {
       const now = new Date();
       const files = computeCatalogSitemaps(database, now);
       writeCatalogSitemaps(database, files, now);
+      await notifyIndexNow(
+        database,
+        files.flatMap((file) => file.urls ?? []),
+      );
       log.info(
         {
           ms: Date.now() - started,
@@ -62,6 +71,8 @@ export function scheduleCatalogSitemapJob(database: DatabaseSync, log: SitemapLo
         { errorName: errorName(error), ms: Date.now() - started },
         'catalog-sitemaps-failed',
       );
+    } finally {
+      running = false;
     }
   };
   const first = setTimeout(run, JOB_FIRST_RUN_MS);

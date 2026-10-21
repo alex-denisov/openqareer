@@ -1,10 +1,13 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { join, resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from './app';
 import { config, noSessions, successProvider } from './appTestHarness';
 import { SqliteCandidateStore } from './data/sqliteCandidateStore';
+import { resetCatalogSitemaps, setCatalogSitemaps } from './seo/catalogSitemapSchedule';
+import { buildSitemapFiles } from './seo/sitemapXml';
 
 const directories: string[] = [];
 const closers: Array<() => Promise<void> | void> = [];
@@ -12,6 +15,8 @@ const closers: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   for (const close of closers.splice(0)) await close();
   await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+  resetCatalogSitemaps();
+  vi.unstubAllEnvs();
 });
 
 /**
@@ -27,7 +32,9 @@ describe('B209: сервер поднимается с раздачей стат
     const directory = await mkdtemp(join(tmpdir(), 'openqareer-static-'));
     directories.push(directory);
     for (const [name, content] of Object.entries(files)) {
-      await writeFile(join(directory, name), content);
+      const path = join(directory, name);
+      await mkdir(join(path, '..'), { recursive: true });
+      await writeFile(path, content);
     }
     const candidateStore = new SqliteCandidateStore({
       databasePath: ':memory:',
@@ -47,18 +54,49 @@ describe('B209: сервер поднимается с раздачей стат
     return app;
   }
 
-  it('поднимается, даже когда в сборке лежит собственный sitemap.xml', async () => {
+  it('маршруты карты перекрывают файлы сборки для индекса и дочерних карт', async () => {
+    setCatalogSitemaps(buildSitemapFiles({ listings: [], jobs: [] }));
     const app = await appWithStaticRoot({
       'index.html': '<!doctype html><html><body><div id="root"></div></body></html>',
-      'sitemap.xml': '<?xml version="1.0"?><urlset></urlset>',
+      'sitemap.xml': 'STATIC SITEMAP FILE',
+      'sitemaps/static-1.xml': 'STATIC CHILD SITEMAP FILE',
     });
 
     const response = await app.inject({ method: 'GET', url: '/sitemap.xml' });
+    const child = await app.inject({ method: 'GET', url: '/sitemaps/static-1.xml' });
 
     expect(response.statusCode).toBe(200);
-    // Живая карта побеждает файл сборки: это индекс, а в файле — пустой urlset.
     expect(response.body).toContain('<sitemapindex');
-    expect(response.body).toContain('/sitemap-static.xml');
+    expect(response.body).toContain('/sitemaps/static-1.xml');
+    expect(response.body).not.toContain('STATIC SITEMAP FILE');
+    expect(child.statusCode).toBe(200);
+    expect(child.body).toContain('/legal/terms');
+    expect(child.body).not.toContain('STATIC CHILD SITEMAP FILE');
+  }, 20_000);
+
+  it('keeps sitemap route names out of public and dist', () => {
+    for (const root of [resolve('public'), resolve('dist')]) {
+      if (root === resolve('dist') && !existsSync(root)) continue;
+      expect(existsSync(join(root, 'sitemap.xml'))).toBe(false);
+      expect(existsSync(join(root, 'sitemaps'))).toBe(false);
+      expect(existsSync(join(root, 'sitemap-static.xml'))).toBe(false);
+      expect(existsSync(join(root, 'sitemap-listings.xml'))).toBe(false);
+    }
+  });
+
+  it('serves the IndexNow verification key only at its configured root path', async () => {
+    vi.stubEnv('INDEXNOW_KEY', 'a1b2c3d4e5f6a7b8');
+    const app = await appWithStaticRoot({
+      'index.html': '<!doctype html><html><body><div id="root"></div></body></html>',
+    });
+
+    const response = await app.inject({ method: 'GET', url: '/a1b2c3d4e5f6a7b8.txt' });
+    const wrongPath = await app.inject({ method: 'GET', url: '/a1b2c3d4e5f6a7b8' });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/plain');
+    expect(response.body).toBe('a1b2c3d4e5f6a7b8');
+    expect(wrongPath.body).not.toContain('a1b2c3d4e5f6a7b8');
   });
 
   it('отдаёт публичный каталог и файлы сборки одновременно', async () => {

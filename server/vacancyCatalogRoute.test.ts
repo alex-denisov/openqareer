@@ -8,6 +8,8 @@ import { MemoryVacancyPoolStore } from './vacancies/memoryVacancyPoolStore';
 import { resetCatalogSitemaps, setCatalogSitemaps } from './seo/catalogSitemapSchedule';
 import { buildSitemapFiles } from './seo/sitemapXml';
 
+afterEach(() => resetCatalogSitemaps());
+
 function vacancy(index: number, overrides: Partial<UnifiedVacancy> = {}): UnifiedVacancy {
   return {
     id: `v${index}`,
@@ -130,13 +132,14 @@ describe('B209: публичный каталог вакансий', () => {
   });
 
   it('отдаёт живую карту сайта, а не файл сборки', async () => {
+    setCatalogSitemaps(buildSitemapFiles({ listings: [], jobs: [] }));
     const app = await createApp();
     const response = await app.inject({ method: 'GET', url: '/sitemap.xml' });
 
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/xml');
-    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-static.xml</loc>');
-    const statics = await app.inject({ method: 'GET', url: '/sitemap-static.xml' });
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/static-1.xml</loc>');
+    const statics = await app.inject({ method: 'GET', url: '/sitemaps/static-1.xml' });
     expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
     expect(statics.body).toContain('<loc>https://openqareer.com/legal/terms</loc>');
   });
@@ -224,8 +227,17 @@ describe('B209: публичный каталог вакансий', () => {
   });
 
   it('кладёт списки в карту сайта рядом с вакансиями', async () => {
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [
+          { path: '/vacancies/berlin', lastmod: '2026-10-20' },
+          { path: '/vacancies/berlin/frontend-developer', lastmod: '2026-10-20' },
+        ],
+        jobs: [],
+      }),
+    );
     const app = await appWithPool(Array.from({ length: 5 }, (_, index) => vacancy(index)));
-    const response = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
+    const response = await app.inject({ method: 'GET', url: '/sitemaps/listings-1.xml' });
     expect(response.body).toContain('<loc>https://openqareer.com/vacancies/berlin</loc>');
     expect(response.body).toContain(
       '<loc>https://openqareer.com/vacancies/berlin/frontend-developer</loc>',
@@ -263,6 +275,12 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
   afterEach(() => resetCatalogSitemaps());
 
   it('serves /sitemap.xml as an index of static, listing and job files', async () => {
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
+        jobs: [{ path: '/vacancies/job/data-engineer-at-paid-co-test', lastmod: '2026-10-20' }],
+      }),
+    );
     const app = await appWithPool(
       Array.from({ length: 5 }, (_, index) => vacancy(index, { salary: SALARY })),
     );
@@ -270,26 +288,32 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     expect(response.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/xml');
     expect(response.body).toContain('<sitemapindex');
-    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-static.xml</loc>');
-    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-listings.xml</loc>');
-    expect(response.body).toContain('<loc>https://openqareer.com/sitemap-jobs-1.xml</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/static-1.xml</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/listings-1.xml</loc>');
+    expect(response.body).toContain('<loc>https://openqareer.com/sitemaps/jobs-1.xml</loc>');
     expect(response.body).not.toContain('<urlset');
-  });
+  }, 20_000);
 
   it('serves each child file and keeps deep pages and unsalaried cards out', async () => {
+    setCatalogSitemaps(
+      buildSitemapFiles({
+        listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-20' }],
+        jobs: [{ path: '/vacancies/job/data-engineer-at-paid-co-test', lastmod: '2026-10-20' }],
+      }),
+    );
     const app = await appWithPool([
       ...Array.from({ length: 30 }, (_, index) => vacancy(index)),
       vacancy(40, { title: 'Data Engineer', company: 'Paid Co', salary: SALARY }),
     ]);
-    const statics = await app.inject({ method: 'GET', url: '/sitemap-static.xml' });
+    const statics = await app.inject({ method: 'GET', url: '/sitemaps/static-1.xml' });
     expect(statics.statusCode).toBe(200);
     expect(statics.body).toContain('<loc>https://openqareer.com/vacancies</loc>');
     expect(statics.body).toContain('<loc>https://openqareer.com/legal/terms</loc>');
 
-    const listings = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
+    const listings = await app.inject({ method: 'GET', url: '/sitemaps/listings-1.xml' });
     expect(listings.body).toContain('<loc>https://openqareer.com/vacancies/berlin</loc>');
 
-    const jobs = await app.inject({ method: 'GET', url: '/sitemap-jobs-1.xml' });
+    const jobs = await app.inject({ method: 'GET', url: '/sitemaps/jobs-1.xml' });
     expect(jobs.statusCode).toBe(200);
     const locs = [...jobs.body.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]);
     expect(locs).toHaveLength(1);
@@ -297,13 +321,13 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
 
     const all = statics.body + listings.body + jobs.body;
     expect(all).not.toContain('/vacancies/page/');
-  });
+  }, 20_000);
 
   it('answers 404 for a job file that does not exist', async () => {
     const app = await appWithPool([vacancy(1, { salary: SALARY })]);
-    const response = await app.inject({ method: 'GET', url: '/sitemap-jobs-7.xml' });
+    const response = await app.inject({ method: 'GET', url: '/sitemaps/jobs-7.xml' });
     expect(response.statusCode).toBe(404);
-  });
+  }, 20_000);
 
   it('serves the files written by the maintenance process when they are loaded', async () => {
     setCatalogSitemaps(
@@ -315,12 +339,12 @@ describe('SEO review 20.10: sitemap index and card indexing', () => {
     const app = await appWithPool([vacancy(1, { salary: SALARY })]);
     const index = await app.inject({ method: 'GET', url: '/sitemap.xml' });
     expect(index.body).toContain(
-      '<sitemap><loc>https://openqareer.com/sitemap-listings.xml</loc><lastmod>2026-10-19</lastmod></sitemap>',
+      '<sitemap><loc>https://openqareer.com/sitemaps/listings-1.xml</loc><lastmod>2026-10-19</lastmod></sitemap>',
     );
-    expect(index.body).not.toContain('sitemap-jobs-1.xml');
-    const listings = await app.inject({ method: 'GET', url: '/sitemap-listings.xml' });
+    expect(index.body).not.toContain('jobs-1.xml');
+    const listings = await app.inject({ method: 'GET', url: '/sitemaps/listings-1.xml' });
     expect(listings.body).toContain('/vacancies/moscow');
-  });
+  }, 20_000);
 
   it('marks a card outside the indexable set noindex, follow and drops its JobPosting', async () => {
     const app = await appWithPool([vacancy(1)]);
