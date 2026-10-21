@@ -139,9 +139,9 @@ describe('vacancy requirement extraction', () => {
     });
 
     it('asks for the three origin values and only the fields the parser uses, as compact JSON', async () => {
-      const model = { extract: vi.fn(async () => answer('explicit')) };
+      const model = { extract: vi.fn(async (_request: { description: string; instructions: string }) => answer('explicit')) };
       await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, model);
-      const { instructions } = model.extract.mock.calls[0][0] as { instructions: string };
+      const { instructions } = model.extract.mock.calls[0][0];
       expect(instructions).toMatch(/"explicit".*"structural".*"inferred"/su);
       expect(instructions).not.toMatch(/importance|kind/u);
       expect(instructions).toMatch(/no markdown/iu);
