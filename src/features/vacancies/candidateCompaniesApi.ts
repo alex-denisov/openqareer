@@ -83,3 +83,18 @@ export async function searchCandidateCompanyRecruiter(companyKey: string): Promi
   );
   return readData(response);
 }
+
+export interface BulkCompanyWantResult {
+  readonly added: number;
+  readonly alreadyWanted: number;
+}
+
+/** B422: все компании текущей подборки в «Хочу» одной операцией на сервере. */
+export async function addSelectionCompaniesToWant(): Promise<BulkCompanyWantResult> {
+  const response = await apiFetch('/api/v1/candidate/companies/want', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ scope: 'selection' }),
+  });
+  return readData<BulkCompanyWantResult>(response);
+}

@@ -96,6 +96,32 @@ export class SqliteCandidateCompanyWantsRepository {
     return this.get(candidateId, companyKey)!;
   }
 
+  /** Массовое «Хочу» (B422): одна транзакция; уже добавленные не трогаются. */
+  setManyWanted(
+    candidateId: string,
+    companies: readonly { readonly companyKey: string; readonly companyName: string }[],
+    now = new Date().toISOString(),
+  ): { added: number; alreadyWanted: number } {
+    const insert = this.database.prepare(`
+      INSERT INTO candidate_company_wants
+        (candidate_id, company_key, company_name, next_step_cipher, next_step_due_at, created_at, updated_at)
+      VALUES (?, ?, ?, NULL, NULL, ?, ?)
+      ON CONFLICT(candidate_id, company_key) DO NOTHING
+    `);
+    let added = 0;
+    this.database.exec('BEGIN IMMEDIATE');
+    try {
+      for (const { companyKey, companyName } of companies) {
+        added += Number(insert.run(candidateId, companyKey, companyName, now, now).changes);
+      }
+      this.database.exec('COMMIT');
+    } catch (error) {
+      this.database.exec('ROLLBACK');
+      throw error;
+    }
+    return { added, alreadyWanted: companies.length - added };
+  }
+
   setNextStep(
     candidateId: string,
     companyKey: string,

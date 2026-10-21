@@ -246,7 +246,8 @@ export interface ListContentProps {
   readonly companyContactsCountByClusterId?: ReadonlyMap<string, number | null>;
   readonly companiesCount?: number;
   readonly onOpenCompanyPath?: (companyName?: string) => void;
-  readonly onOpenCompanyCollection?: () => void;
+  /** B422: после массового «Хочу» — перечитать состояния компаний и счёт. */
+  readonly onCompanyWantsChanged?: () => void;
   readonly onToggleSaved?: (cluster: MatchedVacancyItem['cluster']) => Promise<void>;
   readonly onToggleCompanyWant?: (companyName?: string) => Promise<void>;
   readonly collectionActionError?: string;
@@ -448,7 +449,7 @@ function buildListProps(
     onToggleSaved: collections.toggleSaved,
     onToggleCompanyWant: collections.toggleCompanyWant,
     onOpenCompanyPath: screenState.openCompanyPath,
-    onOpenCompanyCollection: () => screenState.chooseTab('companies'),
+    onCompanyWantsChanged: collections.retry,
     collectionActionError: collections.actionError,
     hasMore: board.hasMore,
     onLoadMore: board.loadMore,

@@ -482,6 +482,7 @@ function CompanyListColumn({
         onSelect={model.setSelectedKey}
         onToggleWant={(company) => void wantAction.toggle(company)}
         onOpenCareer={onOpenCareer}
+        onWantsChanged={page.reload}
       />
       {page.items.length < (page.page?.total ?? 0) ? (
         <button

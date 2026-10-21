@@ -351,6 +351,63 @@ async function handleSetWant(deps: RouteDeps, request: FastifyRequest, reply: Fa
   };
 }
 
+const BULK_WANT_LIMIT = 500;
+const bulkWantSchema = z.union([
+  z.object({
+    companyKeys: z.array(z.string().min(1).max(200)).min(1).max(BULK_WANT_LIMIT),
+  }),
+  // Ключ компании — хэш на сервере, а клиент видит лишь страницу подборки.
+  z.object({ scope: z.literal('selection') }),
+]);
+
+function bulkWantLimitError(reply: FastifyReply, request: FastifyRequest): FastifyReply {
+  return sendError(
+    reply,
+    request,
+    400,
+    'invalid_company_keys',
+    `Нужен список от 1 до ${BULK_WANT_LIMIT} компаний.`,
+    false,
+  );
+}
+
+/** B422: «Все компании подборки в «Хочу»» — только ключи текущей подборки кандидата. */
+async function handleSetManyWants(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const repo = wantRepository(deps, request, reply);
+  if (!repo) return undefined;
+  const parsed = bulkWantSchema.safeParse(request.body);
+  if (!parsed.success) return bulkWantLimitError(reply, request);
+  const names = new Map(
+    (await companyContext(deps, candidate.id)).rows.map((row) => [row.key, row.name]),
+  );
+  const keys = 'scope' in parsed.data ? [...names.keys()] : [...new Set(parsed.data.companyKeys)];
+  if (keys.length === 0 || keys.length > BULK_WANT_LIMIT) return bulkWantLimitError(reply, request);
+  if (keys.some((key) => !names.has(key))) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'company_not_in_selection',
+      'В списке есть компания не из текущей подборки.',
+      false,
+    );
+  }
+  const result = repo.setManyWanted(
+    candidate.id,
+    keys.map((companyKey) => ({ companyKey, companyName: names.get(companyKey)! })),
+  );
+  return { data: result, meta: { requestId: request.id } };
+}
+
 async function handleRemoveWant(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(
@@ -533,6 +590,11 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
     '/api/v1/candidate/companies/:companyKey/want',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
     withDeps(deps, handleSetWant),
+  );
+  app.post(
+    '/api/v1/candidate/companies/want',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleSetManyWants),
   );
   app.delete('/api/v1/candidate/companies/:companyKey/want', withDeps(deps, handleRemoveWant));
   app.put('/api/v1/candidate/companies/:companyKey/next-step', withDeps(deps, handleSetNextStep));

@@ -512,3 +512,13 @@
     animation: none;
   }
 }
+
+/* B422: массовое «Хочу» — кнопка, подтверждение и итог в одну строку. */
+.bulk-company-want,
+.bulk-company-want-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-xs);
+}
