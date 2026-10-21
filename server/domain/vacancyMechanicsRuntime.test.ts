@@ -157,9 +157,20 @@ describe('background vacancy mechanics with real SQLite', () => {
     } };
     const complete = vi.fn().mockRejectedValue(new Error('provider_timeout'));
     const client = { complete } as unknown as BulkLlmClient;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-21T04:00:00.000Z'));
     runtime.enqueue(source);
-    for (let attempt = 0; attempt < 3; attempt += 1) await runtime.runNext(client);
+    await runtime.runNext(client);
+    expect(runtime.view(source).state).toBe('retrying');
+    expect(await runtime.runNext(client)).toBe(false);
+    expect(complete).toHaveBeenCalledTimes(1);
+    for (let attempt = 1; attempt < 3; attempt += 1) {
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+      await runtime.runNext(client);
+    }
     expect(complete).toHaveBeenCalledTimes(3);
+    expect(runtime.takeStats()).toMatchObject({ claimed: 3, retried: 2, failed: 1, completed: 0, lastError: 'assessment_model_unavailable' });
     expect(runtime.view(source).state).toBe('failed');
     expect(await runtime.runNext(client)).toBe(false);
     expect(complete).toHaveBeenCalledTimes(3);
@@ -171,5 +182,42 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(complete).toHaveBeenCalledTimes(4);
     expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coveragePercent: null, status: 'unknown' } });
     expect(await runtime.runNext(client)).toBe(false);
+  });
+
+  it('extracts requirements from a fenced model answer and counts the call for the journal (B522)', async () => {
+    const runtime = setup(); const source = { ...input(), description: 'We build payments. 10+ years of Java.' };
+    const quote = '10+ years of Java';
+    const complete = vi.fn(async (request: BulkLlmInput) => request.task === 'vacancy-requirements'
+      ? { content: '```json\n' + JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, origin: 'job listing' }] }) + '\n```', model: 'deepseek/deepseek-v4-flash', provider: 'StreamLake', usage: { cost: 0, promptTokens: 1, cachedTokens: 0, completionTokens: 1 } }
+      : Promise.reject(new Error('provider_offline')));
+    runtime.enqueue(source);
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    expect(runtime.requirements.getLatest(source.vacancyId)?.requirements[0]).toMatchObject({ text: quote, origin: 'structural' });
+    expect(runtime.takeStats()).toMatchObject({ requirementsDone: 1, requirementsInvalid: 0, llmCalls: 2, llmFailed: 1, lastModel: 'deepseek/deepseek-v4-flash', providers: ['StreamLake'] });
+  });
+
+  it('spends under one budget run per UTC day: the run changes at midnight and accumulates inside the day (B522)', async () => {
+    const runtime = setup();
+    const runIds: string[] = [];
+    const complete = vi.fn(async (request: BulkLlmInput) => { runIds.push(request.runId); throw new Error('provider_offline'); });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-21T23:59:00.000Z'));
+    runtime.enqueue({ ...input(), vacancyId: 'a', description: 'We make useful tools.' });
+    runtime.enqueue({ ...input(), vacancyId: 'b', description: 'We make other tools.' });
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    vi.setSystemTime(Date.parse('2026-10-22T00:30:00.000Z'));
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    expect(runIds).toEqual(['vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-22']);
+  });
+
+  it('requeues model failures once at worker start and not on the next start (B522)', async () => {
+    const runtime = setup();
+    expect(runtime.requeueAfterParserUpgrade()).toEqual({ requirements: 0, fit: 0 });
+    runtime.database.exec(`INSERT INTO vacancy_requirements_jobs(id,cache_key,input_json,status,attempts,last_error,created_at,updated_at)
+      VALUES('j','k','{"vacancyId":"v","description":"d"}','failed',3,'requirements_model_invalid',1,1)`);
+    expect(runtime.requeueAfterParserUpgrade().requirements).toBe(1);
+    expect(runtime.requeueAfterParserUpgrade().requirements).toBe(0);
   });
 });

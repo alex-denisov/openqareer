@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
+import { addLateColumns } from './sqliteLateColumn';
 import {
   vacancyRequirementsCacheKey,
   vacancyDescriptionHash,
@@ -18,6 +19,10 @@ export interface VacancyRequirementsJob {
 interface JobRow { id: string; input_json: string; lease_token: string; lease_until: number; attempts: number }
 
 /** Public vacancy data only. Constructed by the background worker's own DB connection. */
+/** Bumped when a parser change makes earlier model failures worth one more try (B522: 2). */
+export const MECHANICS_REQUEUE_REVISION = 2;
+const REQUEUE_PRIORITY = 0.5;
+
 export class SqliteVacancyRequirementsStore {
   constructor(private readonly db: DatabaseSync) { this.ensureSchema(); }
 
@@ -39,6 +44,7 @@ export class SqliteVacancyRequirementsStore {
       );
       CREATE INDEX IF NOT EXISTS vacancy_requirements_ready ON vacancy_requirements_jobs(status,available_at,priority DESC,fresh_at DESC);
     `);
+    addLateColumns(this.db, 'vacancy_requirements_jobs', [['requeue_revision', 'INTEGER']]);
   }
 
   get(input: VacancyRequirementsInput): VacancyRequirementsResult | null {
@@ -129,8 +135,21 @@ export class SqliteVacancyRequirementsStore {
     // Error classes only: provider bodies and vacancy text do not enter the job journal.
     const safeCode = /^[a-z0-9_:-]{1,80}$/iu.test(code) ? code : 'extraction_failed';
     this.db.prepare(`UPDATE vacancy_requirements_jobs SET status=?,available_at=?,lease_token=NULL,
-      lease_until=NULL,last_error=?,updated_at=? WHERE id=? AND lease_token=?`)
-      .run(job.attempts >= 3 ? 'failed' : 'queued', now + 1000 * 2 ** job.attempts, safeCode, now, job.id, job.leaseToken);
+      lease_until=NULL,last_error=?,requeue_revision=?,updated_at=? WHERE id=? AND lease_token=?`)
+      .run(job.attempts >= 3 ? 'failed' : 'queued', now + 1000 * 2 ** job.attempts, safeCode, MECHANICS_REQUEUE_REVISION, now, job.id, job.leaseToken);
+  }
+
+  /**
+   * One requeue of model failures after a parser upgrade: rows that failed under an older
+   * revision go back once, below the shown pages (priority 1). Later failures carry the current
+   * revision and are never requeued by this again.
+   */
+  requeueModelFailures(revision = MECHANICS_REQUEUE_REVISION, now = Date.now()): number {
+    const update = this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='queued',attempts=0,available_at=0,
+      lease_token=NULL,lease_until=NULL,priority=MIN(priority,?),requeue_revision=?,updated_at=?
+      WHERE status='failed' AND last_error IN ('requirements_model_invalid','requirements_model_unavailable')
+        AND COALESCE(requeue_revision,1)<?`).run(REQUEUE_PRIORITY, revision, now, revision);
+    return Number(update.changes);
   }
 
   private assertLease(job: VacancyRequirementsJob, now: number): void {
