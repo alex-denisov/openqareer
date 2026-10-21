@@ -12,6 +12,7 @@ import '@fontsource/onest/latin-600.css';
 import '@fontsource/onest/latin-700.css';
 import './features/site/publicSite.css';
 import './features/shell/session-gate.css';
+import './features/desktopNotify/desktopNotificationService';
 import { captureEmbeddedLandingStats } from './features/site/embeddedLandingStats';
 import { isTauriEnvironment } from './services/desktop/desktopBridge';
 import { installExternalLinkInterceptor } from './services/desktop/externalLinkInterceptor';

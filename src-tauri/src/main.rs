@@ -3,6 +3,7 @@
 
 mod automation_worker;
 mod connector_session;
+mod desktop_notify;
 mod linkedin_read_guard;
 mod network_probe;
 mod session_token_store;
@@ -24,7 +25,7 @@ use network_probe::{evaluate_network_environment, NetworkEnvironmentStatus};
 use serde::{Deserialize, Serialize};
 use sidecar_lifecycle::sweep_leftover_runtimes;
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, State, Url};
+use tauri::{AppHandle, Manager, State, Url, WindowEvent};
 use tauri_plugin_fs::FsExt;
 use tunnel_manager::{TunnelConfig, TunnelManager, TunnelStatusReport};
 
@@ -446,8 +447,21 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .setup(|app| {
+            desktop_notify::configure_tray(app)?;
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            if window.label() == "main" && matches!(event, WindowEvent::CloseRequested { .. }) {
+                if let WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
         // A reload of our own page destroys the interface that owned the
         // platform sign-in window, but not the window: it stayed on screen with
         // no control left that could close it (owner report, 2026-08-26).
@@ -481,6 +495,10 @@ fn main() {
             get_desktop_environment_info,
             read_session_token,
             write_session_token,
+            desktop_notify::get_desktop_notification_state,
+            desktop_notify::save_desktop_notification_state,
+            desktop_notify::update_desktop_notification_menu_state,
+            desktop_notify::focus_main_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building OpenQareer desktop application");
