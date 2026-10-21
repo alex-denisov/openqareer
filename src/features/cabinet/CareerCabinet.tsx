@@ -59,15 +59,9 @@ import type { NavigationOptions } from '../shell/pathIndicator';
 import type { CareerCabinetView } from './cabinetViews';
 import { CareerDiaryPage } from '../diary/CareerDiaryPage';
 import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
+import { profileFocusForAction } from './profileFocusForAction';
 
 export type { CareerCabinetView } from './cabinetViews';
-
-function profileFocusForAction(action: ReasonedCareerAction): ProfileFocusRequest | undefined {
-  if (action.profileFocus) return action.profileFocus;
-  const findingId = action.findingIds[0];
-  if (!findingId) return undefined;
-  return { section: findingId.startsWith('ats-layout-') ? 'ats' : 'review', findingId };
-}
 
 function stageForCabinetView(view: CareerCabinetView): CoachTurnStage {
   switch (view) {
@@ -665,7 +659,9 @@ function CabinetSection({
   if (view === 'diary') {
     return (
       <CareerDiaryPage
-        onOpenAdaptation={onOpenExpert ? ({ subject, title }) => onOpenExpert('diary', subject, title) : undefined}
+        onOpenAdaptation={
+          onOpenExpert ? ({ subject, title }) => onOpenExpert('diary', subject, title) : undefined
+        }
         onOpenConsultant={(goal) => {
           const latestMeasurement = goal.latestMeasurement
             ? `Последний замер от ${goal.latestMeasurement.measuredAt}: ${String(goal.latestMeasurement.value)} ${goal.unit} (источник: ${goal.latestMeasurement.source}).`

@@ -233,16 +233,34 @@ function FunnelResults({
         tableView={tableView}
       />
       <TablePagination workspace={workspace} applicationCount={applications.length} />
-      {workspace.selectedApplication ? (
-        <SelectedResponsePanel
-          application={workspace.selectedApplication}
-          onOpenExpert={props.onOpenExpert}
-          onMarkFollowUpSent={() => props.state.markFollowUpSent(workspace.selectedApplication!.id)}
-        />
-      ) : null}
+      <SelectedResponse props={props} workspace={workspace} />
       <ResponsesChannelPerformance applications={applications} query={workspace.query} />
-      <ResponsesPipelineAnalytics query={workspace.query} revision={props.state.applications} initiallyExpanded={props.initialTab === 'analytics'} onOpenVacancies={props.onOpenVacancies} onOpenExpert={props.onOpenExpert} />
+      <ResponsesPipelineAnalytics
+        query={workspace.query}
+        revision={props.state.applications}
+        initiallyExpanded={props.initialTab === 'analytics'}
+        onOpenVacancies={props.onOpenVacancies}
+        onOpenExpert={props.onOpenExpert}
+      />
     </>
+  );
+}
+
+function SelectedResponse({
+  props,
+  workspace,
+}: {
+  readonly props: ResponsesWorkspaceScreenProps;
+  readonly workspace: WorkspaceController;
+}) {
+  const application = workspace.selectedApplication;
+  if (!application) return null;
+  return (
+    <SelectedResponsePanel
+      application={application}
+      onOpenExpert={props.onOpenExpert}
+      onMarkFollowUpSent={() => props.state.markFollowUpSent(application.id)}
+    />
   );
 }
 

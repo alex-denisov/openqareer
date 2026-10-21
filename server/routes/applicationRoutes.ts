@@ -379,6 +379,20 @@ function pendingLinkedinPosts(deps: RouteDeps, candidateId: string) {
     .map((draft) => ({ id: draft.id, topic: draft.topic }));
 }
 
+/** Счётчики «с прошлого визита»: до первого визита считать нечего. */
+function sinceVisitCounts(
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  since: string | null,
+) {
+  return {
+    closedVacanciesSinceVisit:
+      since === null ? 0 : candidateStore.countSystemClosuresSince(candidateId, since),
+    companyEventsSinceVisit:
+      since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
+  };
+}
+
 async function readTodaySnapshot(
   deps: RouteDeps,
   request: FastifyRequest,
@@ -397,11 +411,8 @@ async function readTodaySnapshot(
     applications,
     newVacancies: freshNewVacancies,
     since,
-    closedVacanciesSinceVisit:
-      since === null ? 0 : candidateStore.countSystemClosuresSince(candidateId, since),
+    ...sinceVisitCounts(candidateStore, candidateId, since),
     campaignRole: targetRoles[0] ?? null,
-    companyEventsSinceVisit:
-      since === null ? 0 : candidateStore.countCompanyEventsSince(candidateId, since),
     shortlist: newVacancies,
     pendingLinkedinPosts: pendingLinkedinPosts(deps, candidateId),
     contacts: new Map(

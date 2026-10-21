@@ -40,19 +40,26 @@ interface EmployerReadRow {
   source: EmployerReadSource;
 }
 
+function readEmployerRead(
+  database: DatabaseSync,
+  candidateId: string,
+  applicationId: string,
+): EmployerRead | null {
+  const row = database
+    .prepare(
+      'SELECT read_at, source FROM application_employer_reads WHERE candidate_id = ? AND application_id = ?',
+    )
+    .get(candidateId, applicationId) as unknown as EmployerReadRow | undefined;
+  return row ? { readAt: row.read_at, source: row.source } : null;
+}
+
 export function createApplicationEmployerReadMethods(
   database: DatabaseSync,
   requireCandidate: (candidateId: string) => void,
 ): ApplicationEmployerReadMethods {
   ensureSchema(database);
-  const read = (candidateId: string, applicationId: string): EmployerRead | null => {
-    const row = database
-      .prepare(
-        'SELECT read_at, source FROM application_employer_reads WHERE candidate_id = ? AND application_id = ?',
-      )
-      .get(candidateId, applicationId) as unknown as EmployerReadRow | undefined;
-    return row ? { readAt: row.read_at, source: row.source } : null;
-  };
+  const read = (candidateId: string, applicationId: string) =>
+    readEmployerRead(database, candidateId, applicationId);
   const requireOwned = (candidateId: string, applicationId: string): void => {
     requireCandidate(candidateId);
     const owned = database

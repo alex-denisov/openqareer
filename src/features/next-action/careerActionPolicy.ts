@@ -1,12 +1,8 @@
 import type { RoleMarketMap } from '../career-map/roleMarketMap';
 import type { TodayProfileFocus } from '../today/todayApi';
-import type {
-  CareerDiagnostic,
-  DiagnosticDimension,
-} from '../diagnostic/careerDiagnostic';
+import type { CareerDiagnostic, DiagnosticDimension } from '../diagnostic/careerDiagnostic';
 
-const CAREER_ACTION_POLICY_REVISION =
-  'career-action-policy-v1-2026-08-07' as const;
+const CAREER_ACTION_POLICY_REVISION = 'career-action-policy-v1-2026-08-07' as const;
 
 export interface ReasonedCareerAction {
   revision: typeof CAREER_ACTION_POLICY_REVISION;
@@ -88,8 +84,7 @@ export function buildReasonedCareerAction(input: {
       headline: 'Определим, что вы ищете',
       label: 'Ответить на один вопрос',
       rationale: diagnostic.nextAction.reason,
-      expectedChange:
-        'Ответ задаст рабочее направление, не превращая его в окончательное решение.',
+      expectedChange: 'Ответ задаст рабочее направление, не превращая его в окончательное решение.',
       alternatives,
     });
   }
@@ -133,8 +128,7 @@ export function buildReasonedCareerAction(input: {
     label: 'Добавить вакансию',
     rationale:
       'Данных достаточно для небольшого проверяемого шага, но ещё не для массовой кампании.',
-    expectedChange:
-      'Реальная вакансия покажет совпадения, пробелы и лучший канал контакта.',
+    expectedChange: 'Реальная вакансия покажет совпадения, пробелы и лучший канал контакта.',
     roleIds: roleMarketMap?.roles.map((role) => role.id) ?? [],
     marketIds: roleMarketMap?.markets.map((market) => market.id) ?? [],
     alternatives,
@@ -146,17 +140,11 @@ export function buildReasonedCareerAction(input: {
 function action(
   value: Omit<
     ReasonedCareerAction,
-    | 'revision'
-    | 'approvalBoundary'
-    | 'findingIds'
-    | 'roleIds'
-    | 'marketIds'
+    'revision' | 'approvalBoundary' | 'findingIds' | 'roleIds' | 'marketIds'
   > &
-    Partial<
-      Pick<ReasonedCareerAction, 'findingIds' | 'roleIds' | 'marketIds'>
-    > & {
-    approvalBoundary?: string;
-  },
+    Partial<Pick<ReasonedCareerAction, 'findingIds' | 'roleIds' | 'marketIds'>> & {
+      approvalBoundary?: string;
+    },
 ): ReasonedCareerAction {
   return {
     revision: CAREER_ACTION_POLICY_REVISION,
@@ -169,19 +157,17 @@ function action(
   };
 }
 
-function destinationFor(
-  dimension: DiagnosticDimension,
-): ReasonedCareerAction['destination'] {
-  return ({
-    readability: 'profile',
-    ats: 'profile',
-    evidence: 'evidence',
-    freshness: 'profile',
-    contradictions: 'evidence',
-    market: 'career',
-  } satisfies Record<DiagnosticDimension, ReasonedCareerAction['destination']>)[
-    dimension
-  ];
+function destinationFor(dimension: DiagnosticDimension): ReasonedCareerAction['destination'] {
+  return (
+    {
+      readability: 'profile',
+      ats: 'profile',
+      evidence: 'evidence',
+      freshness: 'profile',
+      contradictions: 'evidence',
+      market: 'career',
+    } satisfies Record<DiagnosticDimension, ReasonedCareerAction['destination']>
+  )[dimension];
 }
 
 function headlineFor(dimension: DiagnosticDimension): string {
