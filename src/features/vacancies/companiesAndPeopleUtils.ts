@@ -85,7 +85,10 @@ function personSource(path: ConnectionCirclePath, importedAt: string | null): st
 
 function personRelation(path: ConnectionCirclePath): string {
   if (path.circle === 2) {
-    const via = path.path[1]?.fullName?.trim();
+    const via = path.path
+      .filter((node) => node.id !== path.recipient.id)
+      .at(-1)
+      ?.fullName?.trim();
     return via ? `Знаком с вашим контактом ${via}` : 'Знаком с вашим контактом';
   }
   return path.evidence[0]?.trim() || 'В вашей сети';

@@ -453,7 +453,7 @@ test('people are cards per person and open the letter in their circle', async ({
   await expect(people.getByText('Писала вам 28.09')).toBeVisible();
   await expect(people.getByText('Знаком с вашим контактом Дмитрий Козлов')).toBeVisible();
   await expect(people.getByRole('button', { name: 'Холодный отклик' })).toHaveCount(0);
-  await expect(page.getByText(/через Мария Орлова \(круг 1\)/u)).toBeVisible();
+  await expect(page.getByText(/написать Марии Орловой \(круг 1\)/u)).toBeVisible();
   await people.scrollIntoViewIfNeeded();
   await captureCompanyState(page, testInfo, 'company-connection-circles');
   await people.getByRole('button', { name: 'Написать знакомому' }).click();

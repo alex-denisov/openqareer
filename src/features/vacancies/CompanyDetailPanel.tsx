@@ -7,6 +7,7 @@ import type {
   CandidateCompanyRecruiter,
 } from '../../../shared/candidateCompany';
 import { pluralRu } from '../../../shared/pluralRu';
+import { dativeNameRu } from '../today/dativeNameRu';
 import { CompanyPeopleSection } from './CompaniesAndPeoplePeople';
 import { useCompanyPeople, type CompanyPeopleState } from './CompanyConnectionCircles';
 import { RecruiterMessagePanel } from './RecruiterMessagePanel';
@@ -123,7 +124,7 @@ export function companyNextStepText(
   const vacancy = company.vacancies[0];
   const person = people.people[0];
   if (vacancy && person) {
-    return `Следующий шаг: откликнуться на ${vacancy.title} через ${person.fullName} (круг ${person.circle})`;
+    return `Следующий шаг: откликнуться на ${vacancy.title}, написать ${dativeNameRu(person.fullName)} (круг ${person.circle})`;
   }
   if (vacancy) return `Следующий шаг: откликнуться на ${vacancy.title}`;
   return 'Следующий шаг не задан';
