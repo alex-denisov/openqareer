@@ -2325,8 +2325,9 @@ test.describe('B265 Profile screen', () => {
     await expect(vacancy).toContainText('Platform Engineer');
     const rowToggle = vacancy.locator('button[aria-expanded]').first();
     if ((await rowToggle.getAttribute('aria-expanded')) !== 'true') await rowToggle.click();
+    // B549 / макет 4: на 390 вакансия открыта push-экраном, а не панелью в строке.
     await page
-      .locator('.vacancies-detail-panel')
+      .locator(testInfo.project.name === 'mobile-390' ? '.vacancy-push' : '.vacancies-detail-panel')
       .getByRole('button', { name: /Добавить .* в профиль/u })
       .click();
 
