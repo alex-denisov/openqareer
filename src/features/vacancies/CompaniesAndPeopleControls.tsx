@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CircleNotch, MagnifyingGlass, SlidersHorizontal, Target } from '@phosphor-icons/react';
+import { BulkCompanyWantButton } from './BulkCompanyWantButton';
 import type {
   CandidateCompanyFilter,
   CandidateCompanyOpportunity,
@@ -170,6 +171,7 @@ export function CompanyList({
   onSelect,
   onToggleWant,
   onOpenCareer,
+  onWantsChanged,
 }: {
   readonly companies: readonly CandidateCompanyOpportunity[];
   readonly selectedKey: string | null;
@@ -180,6 +182,7 @@ export function CompanyList({
   readonly onSelect: (key: string) => void;
   readonly onToggleWant: (company: CandidateCompanyOpportunity) => void;
   readonly onOpenCareer?: () => void;
+  readonly onWantsChanged?: () => void;
 }) {
   if (companies.length === 0) {
     return (
@@ -188,6 +191,7 @@ export function CompanyList({
         allCount={allCount}
         search={search}
         onOpenCareer={onOpenCareer}
+        onWantsChanged={onWantsChanged}
       />
     );
   }
@@ -212,27 +216,23 @@ function CompanyListEmptyState({
   allCount,
   search,
   onOpenCareer,
+  onWantsChanged,
 }: {
   readonly filter: CandidateCompanyFilter;
   readonly allCount: number;
   readonly search: string;
   readonly onOpenCareer?: () => void;
+  readonly onWantsChanged?: () => void;
 }) {
   if (filter === 'want' && allCount > 0 && !search) {
     return (
       <div className="companies-people-empty companies-people-empty-state" role="status">
         <p>В «Хочу» пока нет компаний.</p>
-        <p id="companies-want-bulk-unavailable">
-          Массовое добавление всех компаний пока не подключено.
-        </p>
-        <button
-          type="button"
+        <BulkCompanyWantButton
+          count={allCount}
           className="companies-people-action"
-          aria-describedby="companies-want-bulk-unavailable"
-          disabled
-        >
-          Все компании подборки в «Хочу» ({allCount})
-        </button>
+          onDone={() => onWantsChanged?.()}
+        />
       </div>
     );
   }

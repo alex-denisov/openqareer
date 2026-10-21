@@ -55,6 +55,7 @@ import type { CatalogListingSummary } from './vacancyCatalogFacets';
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -748,6 +749,20 @@ export class MultiSourceVacancyEngine {
     }
     if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
     return this.pool.loadCatalogEntriesPage(query);
+  }
+
+  /** HTTP (B485): одна строка итогов по ключу; ошибка чтения — сводки нет. */
+  public getCatalogTotals(): CatalogTotals | undefined {
+    try {
+      return this.pool.readCatalogTotals?.();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Обслуживание (B485): пересчёт итогов после сведения пула. */
+  public refreshCatalogTotals(observedAt: string): CatalogTotals | undefined {
+    return this.pool.recomputeCatalogTotals?.(observedAt);
   }
 
   public getPublicCatalogListings(): CatalogListingSummary[] | undefined {

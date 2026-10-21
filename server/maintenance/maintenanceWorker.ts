@@ -1,3 +1,4 @@
+import { CATALOG_TOTALS_REFRESH_MS } from '../vacancies/matchedCatalogSummary';
 import type { VacancySourceConfig } from '../domain/unifiedVacancy';
 import { mapWithConcurrency } from '../vacancies/boundedConcurrency';
 import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
@@ -47,6 +48,8 @@ export interface MaintenanceEngine {
     passFinished: boolean;
   };
   readonly clusterKeysReady: boolean;
+  /** B485: итоги каталога для сводки подборки после сведения пула. */
+  refreshCatalogTotals?(observedAt: string): unknown;
   readonly poolSize: number;
 }
 
@@ -176,6 +179,7 @@ export class MaintenanceWorker {
   private readonly purgeRecruiters?: () => number;
   private readonly now: () => number;
   private orphanRestUntil = 0;
+  private catalogTotalsAt = Number.NEGATIVE_INFINITY;
   private titleModelRunning = false;
   private lastTitleModelLogAt = 0;
   private lastTitleParseProgressAt = Date.now();
@@ -274,8 +278,28 @@ export class MaintenanceWorker {
       );
     }
     if (memory.paused) return { synced: 0, failed: [], kept: 0, skipped: 'memory' };
-    const wave = this.engine.syncDue().then((outcomes) => this.reportWave(outcomes));
+    const wave = this.engine.syncDue().then((outcomes) => {
+      const report = this.reportWave(outcomes);
+      this.refreshCatalogTotals();
+      return report;
+    });
     return this.track(wave, 'multi-source-sync-failed', { synced: 0, failed: [], kept: 0 });
+  }
+
+  /** Итоги каталога после волны (B485): не чаще CATALOG_TOTALS_REFRESH_MS. */
+  private refreshCatalogTotals(): void {
+    if (typeof this.engine.refreshCatalogTotals !== 'function') return;
+    const now = this.now();
+    if (now - this.catalogTotalsAt < CATALOG_TOTALS_REFRESH_MS) return;
+    this.catalogTotalsAt = now;
+    try {
+      this.engine.refreshCatalogTotals(new Date(now).toISOString());
+    } catch (error: unknown) {
+      this.log.warn(
+        { reason: error instanceof Error ? error.message : 'unknown' },
+        'vacancy-catalog-totals-failed',
+      );
+    }
   }
 
   private reportWave(outcomes: SourceSyncOutcome[]): SyncWaveReport {

@@ -134,6 +134,9 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).toMatch(/1\s?620/u);
     expect(html).toContain('Показано');
     expect(html).toContain('vacancies-summary-reset');
+    // B485: дата каталога по Москве без запятой, как в макете, в сводке и в подвале 390.
+    expect(html).toContain('Каталог на 07.10 09:12');
+    expect(html).toContain('. Каталог на 07.10 09:12.');
     expect(html.indexOf('vacancies-search-summary')).toBeLessThan(
       html.indexOf('vacancies-filter-toolbar'),
     );

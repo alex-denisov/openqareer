@@ -9,14 +9,17 @@ export function OpportunityTabs({
   savedCount,
   companiesCount,
   onSelect,
+  selectionOnly = false,
 }: {
   readonly active: OpportunityTab;
   readonly totalVacancies: number;
   readonly savedCount: number;
   readonly companiesCount?: number;
   readonly onSelect: (tab: OpportunityTab) => void;
+  /** Режим карты (макет 4): под вкладками только «Подборка». */
+  readonly selectionOnly?: boolean;
 }) {
-  const tabs: Array<{ id: OpportunityTab; label: string }> = [
+  const allTabs: Array<{ id: OpportunityTab; label: string }> = [
     { id: 'selection', label: `Подборка ${totalVacancies}` },
     { id: 'saved', label: `Сохранённые ${savedCount}` },
     {
@@ -24,6 +27,7 @@ export function OpportunityTabs({
       label: companiesCount === undefined ? 'Компании и люди' : `Компании и люди ${companiesCount}`,
     },
   ];
+  const tabs = selectionOnly ? allTabs.filter((tab) => tab.id === 'selection') : allTabs;
   return (
     <div className="companies-people-tabs" role="tablist" aria-label="Разделы вакансий">
       {tabs.map((tab) => (

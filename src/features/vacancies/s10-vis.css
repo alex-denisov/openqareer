@@ -364,6 +364,10 @@
   margin-block-start: var(--career-space-2);
 }
 
+.vacancies-screen-catalog-date {
+  display: none;
+}
+
 .vacancies-screen-page-count {
   margin: 0;
   color: var(--career-text-soft);
@@ -485,6 +489,10 @@
     text-align: start;
   }
 
+  .vacancies-screen-catalog-date {
+    display: inline;
+  }
+
   .vacancies-screen-companies-action {
     display: none;
   }
@@ -503,4 +511,14 @@
   .vacancies-icon-action-spinner {
     animation: none;
   }
+}
+
+/* B422: массовое «Хочу» — кнопка, подтверждение и итог в одну строку. */
+.bulk-company-want,
+.bulk-company-want-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  font-size: var(--career-text-xs);
 }

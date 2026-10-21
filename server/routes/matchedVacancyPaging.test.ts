@@ -48,6 +48,7 @@ async function createPagingApp(
   items?: MatchedVacancyItem[],
   unconfirmed = false,
   includeSourceReader = true,
+  catalogTotals?: () => { clusters: number; updatedAt?: string },
 ) {
   const candidateStore = new SqliteCandidateStore({
     databasePath: ':memory:',
@@ -77,6 +78,7 @@ async function createPagingApp(
       return items ?? pool(`пул-${call}`, 40);
     },
     restore: () => ({ clusters: 0, sources: 0 }),
+    ...(catalogTotals ? { getCatalogTotals: catalogTotals } : {}),
   };
 
   const app = await buildApp({
@@ -187,6 +189,30 @@ describe('чтение подбора страницами', () => {
     for (const query of ['level=invalid', 'region=invalid', 'remote=yes', 'source=invalid', 'role=invalid']) {
       expect((await get(query)).statusCode).toBe(400);
     }
+  });
+
+  it('сводка каталога: размер и дата каталога, совпадения по роли до условий (B485)', async () => {
+    const items = pool('cat', 40).map((item, index) =>
+      index < 4 ? { ...item, explanation: { ...item.explanation, roleMatch: 'none' } } : item,
+    ) as MatchedVacancyItem[];
+    const { app, authorization } = await createPagingApp(undefined, items, false, true, () => ({
+      clusters: 1620,
+      updatedAt: '2026-10-07T06:12:00.000Z',
+    }));
+    const get = (query: string) => app.inject({ url: `/api/v1/candidate/matched-vacancies?${query}`,
+      headers: { authorization } });
+    const first = (await get('region=eu')).json();
+    expect(first.meta.facets.catalogSummary).toEqual({
+      roleLevelMatches: 36, catalogTotal: 1620, observedAt: '2026-10-07T06:12:00.000Z',
+    });
+    expect((await get('offset=20')).json().meta.facets).toBeUndefined();
+  });
+
+  it('без размера каталога сводки нет — клиент пишет «неизвестно» (B485)', async () => {
+    const { app, authorization } = await createPagingApp();
+    const response = await app.inject({ url: '/api/v1/candidate/matched-vacancies',
+      headers: { authorization } });
+    expect(response.json().meta.facets).not.toHaveProperty('catalogSummary');
   });
 
   it('все страницы одного чтения приходят из одного снимка', async () => {

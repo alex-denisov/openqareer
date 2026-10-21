@@ -246,13 +246,16 @@ export interface ListContentProps {
   readonly companyContactsCountByClusterId?: ReadonlyMap<string, number | null>;
   readonly companiesCount?: number;
   readonly onOpenCompanyPath?: (companyName?: string) => void;
-  readonly onOpenCompanyCollection?: () => void;
+  /** B422: после массового «Хочу» — перечитать состояния компаний и счёт. */
+  readonly onCompanyWantsChanged?: () => void;
   readonly onToggleSaved?: (cluster: MatchedVacancyItem['cluster']) => Promise<void>;
   readonly onToggleCompanyWant?: (companyName?: string) => Promise<void>;
   readonly collectionActionError?: string;
   readonly hasMore?: boolean;
   readonly onLoadMore?: () => void;
   readonly poolComplete?: boolean;
+  /** Дата каталога из сводки сервера; подвал 390 пишет её после счёта (B485). */
+  readonly catalogObservedAt?: string;
 }
 
 interface VacanciesFiltersSectionProps {
@@ -399,17 +402,21 @@ function companyRowStates(
   };
 }
 
+function savedClusterIdSet(
+  applications: ReturnType<typeof useVacanciesScreenState>['collections']['savedApplications'],
+): Set<string> {
+  return new Set(
+    applications.map((application) => application.clusterId).filter((id): id is string => Boolean(id)),
+  );
+}
+
 function buildListProps(
   input: VacanciesScreenProps,
   screenState: ReturnType<typeof useVacanciesScreenState>,
   onOpenLetter: (cluster: MatchedVacancyItem['cluster']) => void,
 ): ListContentProps {
   const { board, collections } = screenState;
-  const savedClusterIds = new Set(
-    collections.savedApplications
-      .map((application) => application.clusterId)
-      .filter((id): id is string => Boolean(id)),
-  );
+  const savedClusterIds = savedClusterIdSet(collections.savedApplications);
   return {
     items: board.visibleItems,
     total: screenFilteredCount(input, board.filtered.length, board.state),
@@ -442,11 +449,12 @@ function buildListProps(
     onToggleSaved: collections.toggleSaved,
     onToggleCompanyWant: collections.toggleCompanyWant,
     onOpenCompanyPath: screenState.openCompanyPath,
-    onOpenCompanyCollection: () => screenState.chooseTab('companies'),
+    onCompanyWantsChanged: collections.retry,
     collectionActionError: collections.actionError,
     hasMore: board.hasMore,
     onLoadMore: board.loadMore,
     poolComplete: input.poolComplete,
+    catalogObservedAt: input.facets?.catalogSummary?.observedAt,
   };
 }
 
@@ -565,7 +573,8 @@ function VacanciesScreenContent({
 }) {
   const { board, activeCampaign } = screenState;
   const filteredTotal = screenFilteredCount(input, board.filtered.length, board.state);
-  const shown = input.poolComplete === false ? board.visibleItems.length : filteredTotal;
+  // B485: число выдачи с условиями, а не число загруженных строк.
+  const shown = filteredTotal;
   return (
     <div className="vacancies-content">
       <VacancyHypothesisSection
@@ -709,6 +718,7 @@ function VacanciesScreenFrame({
           savedCount={screenState.collections.savedApplications.length}
           companiesCount={screenState.collections.companiesCount}
           onSelect={onSelectTab}
+          selectionOnly={activeTab === 'selection' && screenState.viewMode === 'map'}
         />
         {activeTab === 'selection' ? (
           <ViewSwitch viewMode={screenState.viewMode} onChange={screenState.setViewMode} />

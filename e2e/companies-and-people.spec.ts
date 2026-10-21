@@ -297,7 +297,9 @@ test('empty selection links back to Career', async ({ page }, testInfo) => {
   await expect(page.locator('.career-screen')).toBeVisible();
 });
 
-test('empty Wants state explains that bulk add is not connected', async ({ page }, testInfo) => {
+test('empty Wants state adds every selection company after confirmation (B422)', async ({
+  page,
+}, testInfo) => {
   await openCompanyScreen(page, { companyDirectory: { wantedCompanyCount: 0 } });
   if (testInfo.project.name === 'mobile-390') {
     await page.getByRole('button', { name: 'Фильтры' }).click();
@@ -308,13 +310,11 @@ test('empty Wants state explains that bulk add is not connected', async ({ page 
     await page.getByRole('button', { name: 'Хочу 0', exact: true }).click();
   }
   await expect(page.getByText('В «Хочу» пока нет компаний.')).toBeVisible();
-  await expect(
-    page.getByText('Массовое добавление всех компаний пока не подключено.'),
-  ).toBeVisible();
-  await expect(
-    page.getByRole('button', { name: /Все компании подборки в «Хочу»/u }),
-  ).toBeDisabled();
   await captureCompanyState(page, testInfo, 'company-empty-want');
+  await page.getByRole('button', { name: /Все компании подборки в «Хочу» \(\d+\)/u }).click();
+  await expect(page.getByText(/^Добавить \d+ компаний в «Хочу»\?$/u)).toBeVisible();
+  await page.getByRole('button', { name: 'Добавить', exact: true }).click();
+  await expect(page.getByText('В «Хочу» пока нет компаний.')).toBeHidden();
 });
 
 test('stale contact import is dated and opens connection settings', async ({ page }, testInfo) => {

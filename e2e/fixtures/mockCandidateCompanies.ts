@@ -363,6 +363,14 @@ export async function mockCandidateCompanies(
     if (path === '/api/v1/candidate/companies' && route.request().method() === 'GET') {
       return route.fulfill({ json: { data: pageFor(url) } });
     }
+    if (path === '/api/v1/candidate/companies/want' && route.request().method() === 'POST') {
+      // B422: массовое «Хочу» по всей подборке; ответ как у сервера.
+      const alreadyWanted = companies.filter((company) => company.want).length;
+      for (const company of companies) company.want = true;
+      return route.fulfill({
+        json: { data: { added: companies.length - alreadyWanted, alreadyWanted } },
+      });
+    }
     const detail = path.match(/^\/api\/v1\/candidate\/companies\/([^/]+)$/u);
     if (detail && route.request().method() === 'GET') {
       const company = sortedCompanies('default').find((item) => item.key === detail[1]);

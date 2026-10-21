@@ -60,7 +60,7 @@ function hasCoordinates(
   );
 }
 
-function vacancyCityName(item: MatchedVacancyItem): string | undefined {
+export function vacancyCityName(item: MatchedVacancyItem): string | undefined {
   const featureCity = normalizeCityLabel(item.cluster.companyFeatures?.city);
   if (featureCity && !isCountryName(featureCity)) return featureCity;
   const locationCity = extractCityFromLocation(item.cluster.canonicalLocation);

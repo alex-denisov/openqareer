@@ -27,6 +27,7 @@ import {
 import { countMatchedVacanciesByRole } from '../vacancies/vacancyRoleCounts';
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import { addStoredVacancyLevels } from '../vacancies/storedVacancyLevels';
+import { matchedCatalogSummary, type CatalogTotals } from '../vacancies/matchedCatalogSummary';
 import type { RouteDeps } from './deps';
 import { campaignMeta, readCampaign } from './campaignContext';
 import {
@@ -96,6 +97,15 @@ function matchedVacancyFacetAndFilter(
   };
 }
 
+/** Снимок подбора уже отобран по уровню; роль — тот же признак, что в списке (B485). */
+function roleLevelMatchCount(
+  snapshot: readonly MatchedVacancyItem[],
+  targetRoles: readonly string[],
+): number {
+  if (targetRoles.length === 0) return snapshot.length;
+  return snapshot.filter((item) => item.explanation.roleMatch !== 'none').length;
+}
+
 function buildMatchedResponse(
   snapshot: readonly MatchedVacancyItem[],
   targetRoles: string[],
@@ -107,6 +117,7 @@ function buildMatchedResponse(
   filters: MatchedVacancyFilters,
   sourceRegistry: readonly MatchedVacancySourceDefinition[],
   decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[] = (items) => [...items],
+  catalogTotals?: () => CatalogTotals | undefined,
 ) {
   const pageAndExplanationsStartedAt = performance.now();
   const matched = decorate(
@@ -127,6 +138,9 @@ function buildMatchedResponse(
     sourceRegistry,
   );
   const page = buildMatchedVacancyPage(filtered, filters.offset);
+  const catalogSummary = facets
+    ? matchedCatalogSummary(catalogTotals?.(), roleLevelMatchCount(hypothesisSnapshot, targetRoles))
+    : undefined;
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
@@ -135,7 +149,7 @@ function buildMatchedResponse(
   return {
     data,
     page,
-    facets,
+    facets: facets && catalogSummary ? { ...facets, catalogSummary } : facets,
     preloadIds: filtered.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
     campaignWithHypotheses,
     pageAndExplanationsMs,
@@ -231,6 +245,7 @@ async function readMatchedPage(
       filters,
       sourceRegistry,
       decorate,
+      typeof engine.getCatalogTotals === 'function' ? () => engine.getCatalogTotals() : undefined,
     ),
     semanticQueryAndSqlMs: elapsedMs(startedAt),
   };
