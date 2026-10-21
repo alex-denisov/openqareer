@@ -42,9 +42,8 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEMyQTIwQzE2NUU1NkFCMjIKUldRaXExWmVGZ3lpd3R3MW9jRTBtOVJjL2NtcXVrMk8yTTZtMjllSCtxZGlBME1uUXNVVHY1eTIK",
-      "endpoints": ["https://openqareer.com/desktop/latest.json"],
-      "requireSignedVersion": true
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg3NTQ3RTExNTQwQzUyNjkKUldScFVneFVFWDVVaDhaN0tBUjVIVVBqcEFrWnN3Y0RCT01jbEtpeGd1NzMxdE03Z3Nqa1ZUbEMK",
+      "endpoints": ["https://openqareer.com/desktop/latest.json"]
     }
   }
 }
