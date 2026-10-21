@@ -14,7 +14,8 @@ function countLabel(value: number): string {
   return new Intl.NumberFormat('ru-RU').format(value);
 }
 
-function snapshotLabel(value?: string): string | undefined {
+/** «07.10 09:12» по Москве, как в макете 4; неразборная дата — нет подписи. */
+export function catalogSnapshotLabel(value?: string): string | undefined {
   if (!value) return undefined;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return undefined;
@@ -24,7 +25,9 @@ function snapshotLabel(value?: string): string | undefined {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'Europe/Moscow',
-  }).format(parsed);
+  })
+    .format(parsed)
+    .replace(', ', ' ');
 }
 
 function summaryHeadline(
@@ -63,7 +66,7 @@ export function VacanciesScreenSummary({
 }: VacanciesScreenSummaryProps) {
   const catalogCount =
     catalogSummary?.catalogTotal !== undefined ? catalogSummary.roleLevelMatches : poolTotal;
-  const asOf = snapshotLabel(catalogSummary?.observedAt);
+  const asOf = catalogSnapshotLabel(catalogSummary?.observedAt);
   const shownLabel = poolComplete ? 'Показано' : 'Загружено';
 
   return (

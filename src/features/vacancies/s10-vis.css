@@ -364,6 +364,10 @@
   margin-block-start: var(--career-space-2);
 }
 
+.vacancies-screen-catalog-date {
+  display: none;
+}
+
 .vacancies-screen-page-count {
   margin: 0;
   color: var(--career-text-soft);
@@ -483,6 +487,10 @@
 
   .vacancies-screen-footer .vacancies-screen-page-count {
     text-align: start;
+  }
+
+  .vacancies-screen-catalog-date {
+    display: inline;
   }
 
   .vacancies-screen-companies-action {

@@ -1,10 +1,16 @@
 import React from "react";
 import { ArrowSquareOut, MapPin, Globe } from "@phosphor-icons/react";
 import type { MatchedVacancyItem } from "../coach/cabinetTypes";
-import { calculateVacancyFacets, hasMapCityCoordinates, type CityFacet } from "./vacancyFacets";
+import {
+  calculateVacancyFacets,
+  hasMapCityCoordinates,
+  vacancyCityName,
+  type CityFacet,
+} from "./vacancyFacets";
 import { employerLabel } from "../../../shared/employerLabel";
 import { VacancyConditionBadges } from "./vacancyConditions";
 import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
+import { vacancyMapNote, type VacancyMapNoteCounts } from "./vacancyMapNote";
 import {
   clusterCitiesByGrid,
   formatCityDisplay,
@@ -17,6 +23,8 @@ interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
   readonly selectedCity?: string;
   readonly onSelectCity: (city?: string) => void;
+  /** Вся выдача с условиями (сервер); без неё заметка считает загруженное. */
+  readonly total?: number;
 }
 
 function coordinateKey(point: { readonly lat: number; readonly lng: number }): string {
@@ -53,6 +61,7 @@ export function VacancyMapView({
   items,
   selectedCity,
   onSelectCity,
+  total,
 }: VacancyMapViewProps): React.JSX.Element {
   const [zoom, setZoom] = React.useState<number>(1);
   const [center, setCenter] = React.useState<{ x: number; y: number }>({ x: 450, y: 240 });
@@ -84,12 +93,7 @@ export function VacancyMapView({
         }}
       />
 
-      <MapHeader
-        onMapCount={facets.onMap.count}
-        total={facets.onMap.total}
-        missingCityCount={facets.onMap.missingCityCount}
-        unresolvedCityCount={facets.onMap.unresolvedCityCount}
-      />
+      <MapHeader items={items} total={total ?? items.length} />
 
       <CityChips cities={facets.cities} selectedCity={selectedCity} onSelectCity={onSelectCity} />
       <SelectedCityBar selectedCity={selectedCity} onClear={() => onSelectCity(undefined)} />
@@ -183,23 +187,26 @@ function SelectedCityBar({
   );
 }
 
-function MapHeader({
-  onMapCount,
-  total,
-  missingCityCount,
-  unresolvedCityCount,
-}: {
-  onMapCount: number;
-  total: number;
-  missingCityCount: number;
-  unresolvedCityCount: number;
-}) {
+function mapNoteCounts(items: readonly MatchedVacancyItem[], total: number): VacancyMapNoteCounts {
+  const offMap = items.filter((item) => !hasMapCityCoordinates(item));
+  const remoteOffMap = offMap.filter((item) => item.cluster.isRemote).length;
+  const office = offMap.filter((item) => !item.cluster.isRemote);
+  const missingCity = office.filter((item) => vacancyCityName(item) === undefined).length;
+  return {
+    onMap: items.length - offMap.length,
+    shown: items.length,
+    total,
+    remoteOffMap,
+    missingCity,
+    unresolvedCity: office.length - missingCity,
+  };
+}
+
+function MapHeader({ items, total }: { items: readonly MatchedVacancyItem[]; total: number }) {
   return (
     <div className="career-map-header">
-      <p className="career-vacancy-count" aria-live="polite">
-        На карте <strong>{onMapCount}</strong> из <strong>{total}</strong> · без города:{" "}
-        <strong>{missingCityCount}</strong> · город не распознан:{" "}
-        <strong>{unresolvedCityCount}</strong>
+      <p className="career-vacancy-count vacancy-map-note" aria-live="polite">
+        {vacancyMapNote(mapNoteCounts(items, total))}
       </p>
     </div>
   );

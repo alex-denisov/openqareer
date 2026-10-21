@@ -53,9 +53,8 @@ describe("B203: VacancyMapView Component", () => {
   it("renders map header with honest denominators and missing-place counts", () => {
     const html = renderToStaticMarkup(<VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />);
 
-    expect(html).toContain("На карте <strong>2</strong> из <strong>3</strong>");
-    expect(html).toContain("без города: <strong>1</strong>");
-    expect(html).toContain("город не распознан: <strong>0</strong>");
+    // B485: заметка макета 4 — числа из выдачи и причина, почему у части нет точки.
+    expect(html).toContain("На карте 2 из 3: без точки 1 без города.");
     expect(html.indexOf('career-map-canvas-container')).toBeLessThan(
       html.indexOf('career-map-header'),
     );
@@ -73,9 +72,9 @@ describe("B203: VacancyMapView Component", () => {
       />,
     );
 
-    expect(html).toContain('На карте <strong>1</strong> из <strong>3</strong>');
-    expect(html).toContain('без города: <strong>1</strong>');
-    expect(html).toContain('город не распознан: <strong>1</strong>');
+    expect(html).toContain(
+      'На карте 1 из 3: без точки 1 без города, 1 с нераспознанным городом.',
+    );
   });
 
   it('разделяет город и моноширинный счётчик в списке и на карте', () => {

@@ -3,6 +3,7 @@ import { VacancyRow } from './VacancyRow';
 import { VacancyMapView } from './VacancyMapView';
 import type { ListContentProps } from './VacanciesScreen';
 import { Target } from '@phosphor-icons/react';
+import { catalogSnapshotLabel } from './VacanciesScreenSummary';
 import {
   VacanciesEmptyFilterState,
   VacanciesEmptyPoolState,
@@ -82,6 +83,7 @@ function VacancyScreenRow({
 }
 
 function VacanciesListContent(props: ListContentProps) {
+  const catalogDate = catalogSnapshotLabel(props.catalogObservedAt);
   return (
     <div className="vacancies-list-container">
       <VacanciesTableHeader />
@@ -94,6 +96,9 @@ function VacanciesListContent(props: ListContentProps) {
         <p className="vacancies-screen-page-count" aria-live="polite">
           {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
           {props.total || props.items.length}
+          <span className="vacancies-screen-catalog-date">
+            {catalogDate ? `. Каталог на ${catalogDate}.` : '. Дата каталога неизвестна.'}
+          </span>
         </p>
         <button
           type="button"
@@ -135,6 +140,7 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
     return (
       <VacancyMapView
         items={props.filtered}
+        total={props.total}
         selectedCity={props.selectedCity}
         onSelectCity={props.onSelectCity}
       />
