@@ -1,3 +1,4 @@
+import { chooseStrategyRole } from '../../shared/careerStrategy';
 /**
  * B510: puts one synthetic candidate of the block C demo into the real stores.
  * Store writes use the same methods the product uses; wants and contacts go
@@ -77,6 +78,26 @@ export function seedBlockCCandidate(
       updatedAt: now.toISOString(),
     },
   });
+  seedBlockCStrategy(store, candidateId, now);
+}
+
+/** B446-g4: выбранная целевая роль, как в макете 4 — иначе квиз пишет «после выбора роли». */
+function seedBlockCStrategy(store: CandidateStore, candidateId: string, now: Date): void {
+  const chosen = chooseStrategyRole({
+    previous: null,
+    role: {
+      title: 'Head of Engineering',
+      origin: 'candidate',
+      reason: 'Синтетический выбор стенда блока C',
+      evidenceRefs: [],
+      confirmation: { state: 'observed', sampleSize: 312 },
+    },
+    constraints: { regions: ['ru'], note: null },
+    reason: null,
+    decidedAt: now.toISOString(),
+    provenance: { namedBy: 'candidate', language: 'ru', poolSize: 312 },
+  });
+  if (chosen.ok) store.saveCareerStrategy(candidateId, chosen.strategy);
 }
 
 /** Saved = applications at stage `saved`; the first is the Вектор Банк row of the mockup. */

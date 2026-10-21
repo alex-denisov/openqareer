@@ -737,11 +737,11 @@
     display: none;
   }
 
-  /* «Показать ещё 20» — широкая заливная капсула. */
+  /* «Показать ещё 20» — широкая нейтральная капсула светлее фона (mock-390-base). */
   .vacancies-screen-footer .companies-people-load-more {
-    border-color: var(--career-accent);
+    border-color: transparent;
     border-radius: var(--career-radius-pill);
-    color: var(--career-accent-ink);
-    background: var(--career-accent);
+    color: var(--career-text);
+    background: var(--career-surface);
   }
 }
