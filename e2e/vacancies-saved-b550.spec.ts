@@ -24,6 +24,13 @@ test('B550: saved tab searches, filters closed, sorts by money and keeps the cho
   await expect(page.locator('.saved-row').first()).toContainText('сохранено');
   await expect(page.getByText('закрыта на площадке 06.10')).toBeVisible();
 
+  if (testInfo.project.name === 'mobile-390') {
+    await expect(page.getByRole('combobox', { name: 'Состояние' })).toBeHidden();
+    mkdirSync('output/playwright/B550', { recursive: true });
+    await page.screenshot({ path: 'output/playwright/B550/saved-mobile-390.png', fullPage: true });
+    return;
+  }
+
   const search = page.getByRole('searchbox', { name: 'Компания или роль среди 6 сохранённых' });
   await search.fill('Saved company 3');
   expect(await roles(page)).toEqual(['Saved role 3']);

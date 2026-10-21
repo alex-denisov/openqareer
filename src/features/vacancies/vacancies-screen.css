@@ -124,12 +124,9 @@
 }
 
 @media (max-width: 760px) {
+  /* Макет 390 (mock-390m-saved): без поиска и выборов — пояснение, список, подвал. */
   .saved-controls {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .saved-controls > :first-child {
-    grid-column: 1 / -1;
+    display: none;
   }
 
   .saved-row {
