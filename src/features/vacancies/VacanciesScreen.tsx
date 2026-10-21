@@ -2,6 +2,7 @@ import { VacancyFitSortControl, sortVacancyFitItems } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
+import { vacancyConsultantPrompt } from './vacancyConsultantPrompt';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
@@ -84,6 +85,7 @@ export interface VacanciesScreenProps {
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
     subjectTitle?: string,
+    initialPrompt?: string,
   ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
@@ -399,6 +401,21 @@ function companyRowStates(
   };
 }
 
+/** «Обсудить»: the consultant opens with the vacancy question (B549). */
+function discussVacancy(input: VacanciesScreenProps) {
+  const { onOpenExpert } = input;
+  if (!onOpenExpert) return undefined;
+  return (cluster: MatchedVacancyItem['cluster']) =>
+    onOpenExpert(
+      'vacancies',
+      { kind: 'vacancy', id: cluster.id },
+      'О вакансии: ' +
+        cluster.canonicalTitle +
+        (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
+      vacancyConsultantPrompt(cluster),
+    );
+}
+
 function buildListProps(
   input: VacanciesScreenProps,
   screenState: ReturnType<typeof useVacanciesScreenState>,
@@ -425,16 +442,7 @@ function buildListProps(
     onOpenResponses: input.onOpenResponses,
     onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
-    onDiscussWithConsultant: input.onOpenExpert
-      ? (cluster) =>
-          input.onOpenExpert?.(
-            'vacancies',
-            { kind: 'vacancy', id: cluster.id },
-            'О вакансии: ' +
-              cluster.canonicalTitle +
-              (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
-          )
-      : undefined,
+    onDiscussWithConsultant: discussVacancy(input),
     savedClusterIds,
     savedBusyIds: collections.savedBusyIds,
     ...companyRowStates(board.filtered, collections),

@@ -83,3 +83,25 @@ test('B549 390: row → «Вакансия» → «Путь к компании�
   await push.getByRole('button', { name: 'Назад' }).click();
   await expect(push).toHaveCount(0);
 });
+
+test('B549 «Обсудить» opens the consultant with the vacancy question', async ({
+  page,
+}, testInfo) => {
+  await openVacancies(page);
+  const item = page.locator('.vac-list-item').first();
+  await item.locator('.vacancies-screen-row-trigger').click();
+  if (testInfo.project.name === 'mobile-390') {
+    await page
+      .locator('.vacancy-push')
+      .getByRole('button', { name: /Обсудить с консультантом/u })
+      .click();
+  } else {
+    await item
+      .locator('.vacancies-screen-detail-actions')
+      .getByRole('button', { name: 'Обсудить', exact: true })
+      .click();
+  }
+  await expect(page.locator('#career-expert-input')).toBeVisible();
+  await expect(page.locator('#career-expert-input')).toHaveValue(/^Почему «.+» подходит\?/u);
+  await shot(page, `app-discuss-${testInfo.project.name}`);
+});
