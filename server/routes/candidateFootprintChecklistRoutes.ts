@@ -44,7 +44,11 @@ function loadFinding(
     return undefined;
   }
   const candidate = authenticateCandidate(
-    request, reply, deps.candidateStore, deps.authService, deps.config,
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
   );
   if (!candidate) return undefined;
   const findingId = findingIdSchema.safeParse((request.params as { findingId?: string }).findingId);
@@ -68,13 +72,29 @@ async function handleMarkFinding(
   if (!context) return reply;
   const parsed = markSchema.safeParse(request.body);
   if (!parsed.success) {
-    return sendError(reply, request, 400, 'invalid_checklist_mark', 'Выберите отметку для пункта.', false);
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_checklist_mark',
+      'Выберите отметку для пункта.',
+      false,
+    );
   }
   if (!markFits(context.finding, parsed.data.mark)) {
-    return sendError(reply, request, 409, 'checklist_mark_not_applicable', 'Эта отметка не подходит к находке.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'checklist_mark_not_applicable',
+      'Эта отметка не подходит к находке.',
+      false,
+    );
   }
   const audit = deps.candidateReputationRepo!.updateFootprintFindingChecklist(
-    context.candidateId, context.finding.id, { checklistMark: parsed.data.mark },
+    context.candidateId,
+    context.finding.id,
+    { checklistMark: parsed.data.mark },
   );
   return { data: { audit }, meta: { requestId: request.id } };
 }
@@ -88,10 +108,24 @@ async function handleAddToProfile(
   if (!context) return reply;
   const { finding } = context;
   if (finding.review !== 'confirmed_self' || !ARTIFACT_FINDING_KINDS.has(finding.kind)) {
-    return sendError(reply, request, 409, 'finding_not_artifact', 'В профиль переносятся только ваши доклады, код и публикации.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'finding_not_artifact',
+      'В профиль переносятся только ваши доклады, код и публикации.',
+      false,
+    );
   }
   if (finding.checklistMark === 'added_to_profile') {
-    return sendError(reply, request, 409, 'finding_already_in_profile', 'Эта находка уже в профиле.', false);
+    return sendError(
+      reply,
+      request,
+      409,
+      'finding_already_in_profile',
+      'Эта находка уже в профиле.',
+      false,
+    );
   }
   const memoryId = randomUUID();
   deps.candidateStore.importResumeEvidence(context.candidateId, {
@@ -100,7 +134,9 @@ async function handleAddToProfile(
     entries: [{ memoryId, domain: 'role-evidence', statement: finding.title }],
   });
   const audit = deps.candidateReputationRepo!.updateFootprintFindingChecklist(
-    context.candidateId, finding.id, { checklistMark: 'added_to_profile', profileFactId: memoryId },
+    context.candidateId,
+    finding.id,
+    { checklistMark: 'added_to_profile', profileFactId: memoryId },
   );
   return { data: { audit }, meta: { requestId: request.id } };
 }

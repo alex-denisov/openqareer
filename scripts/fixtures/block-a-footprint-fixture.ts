@@ -6,38 +6,63 @@ import type {
   FootprintReview,
 } from '../../shared/candidateFootprint';
 
+// [kind, title, detail, adapter, readable source, old/duplicate account]
 const ROWS = [
-  ['profile', 'Профиль на GitHub: andrey-lebedev', 'Совпадение по имени и городу'],
-  ['mention', 'Доклад о платёжной архитектуре, 2023', 'Совпадение по имени и компании'],
-  ['profile', 'Старый аккаунт на форуме разработчиков', 'Возможны однофамильцы'],
+  [
+    'profile',
+    'Профиль на GitHub: andrey-lebedev',
+    'Совпадение по имени и городу',
+    'sherlock',
+    'GitHub',
+    false,
+  ],
+  [
+    'mention',
+    'Доклад о платёжной архитектуре, 2023',
+    'Совпадение по имени и компании',
+    'exa',
+    'Exa',
+    false,
+  ],
+  [
+    'profile',
+    'Старый аккаунт на форуме разработчиков',
+    'Возможны однофамильцы',
+    'maigret',
+    'Форум',
+    true,
+  ],
 ] as const;
 
 export function historicalAudit(candidateId: string): CandidateFootprintAudit {
-  const findings: CandidateFootprintFinding[] = ROWS.map(([kind, title, detail], index) => ({
-    id: String(index + 1).padStart(24, '0'),
-    adapter: 'synthetic_fixture',
-    kind,
-    title,
-    detail,
-    url: null,
-    match: 'unknown',
-    automatedMatch: 'unknown',
-    review: 'unreviewed',
-    observedAt: '2026-10-06T09:12:00.000Z',
-    sources: ['synthetic_fixture'],
-    receipt: {
-      method: 'local_fixture',
-      source: 'approved-mockup-synthetic-scenario',
-      query: 'synthetic candidate',
-    },
-    receipts: [
-      {
+  const findings: CandidateFootprintFinding[] = ROWS.map(
+    ([kind, title, detail, adapter, source, staleAccount], index) => ({
+      id: String(index + 1).padStart(24, '0'),
+      adapter,
+      ...(staleAccount ? { staleAccount } : {}),
+      kind,
+      title,
+      detail,
+      url: null,
+      match: 'unknown',
+      automatedMatch: 'unknown',
+      review: 'unreviewed',
+      observedAt: '2026-10-06T09:12:00.000Z',
+      sources: [source],
+      receipt: {
         method: 'local_fixture',
         source: 'approved-mockup-synthetic-scenario',
         query: 'synthetic candidate',
       },
-    ],
-  }));
+      receipts: [
+        {
+          method: 'local_fixture',
+          source: 'approved-mockup-synthetic-scenario',
+          query: 'synthetic candidate',
+        },
+      ],
+    }),
+  );
   return {
     id: 'synthetic-historical-audit',
     candidateId,

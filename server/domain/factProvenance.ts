@@ -203,7 +203,8 @@ function labelTotals(input: SummaryInput): Map<SourcePlatform, LabelTotal> {
   for (const entry of input.memory) {
     const messageId = entry.sourceMessageIds.find((id) => index.has(id));
     const origin = messageId ? index.get(messageId) : undefined;
-    if (!messageId || !origin || origin.platform === 'file' || origin.platform === 'footprint') continue;
+    if (!messageId || !origin || origin.platform === 'file' || origin.platform === 'footprint')
+      continue;
     const at = origin.at ?? entry.createdAt;
     const current = totals.get(origin.platform);
     totals.set(origin.platform, {

@@ -3,7 +3,10 @@ import { buildApp } from '../app';
 import { config, noSessions, successProvider } from '../appTestHarness';
 import { SqliteCandidateStore } from '../data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../data/sqliteCandidateReputationRepository';
-import type { CandidateFootprintAudit, CandidateFootprintFinding } from '../../shared/candidateFootprint';
+import type {
+  CandidateFootprintAudit,
+  CandidateFootprintFinding,
+} from '../../shared/candidateFootprint';
 
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => {

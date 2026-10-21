@@ -5,11 +5,7 @@
 import type { CandidateFootprintAudit, CandidateFootprintFinding } from './candidateFootprint';
 
 export type FootprintChecklistItemId =
-  | 'review'
-  | 'leaks'
-  | 'metadata'
-  | 'old_accounts'
-  | 'artifacts';
+  'review' | 'leaks' | 'metadata' | 'old_accounts' | 'artifacts';
 
 export interface FootprintChecklistItem {
   readonly id: FootprintChecklistItemId;
@@ -93,7 +89,9 @@ function confirmedItem(
   id: 'old_accounts' | 'artifacts',
 ): FootprintChecklistItem {
   const matches = (finding: CandidateFootprintFinding) =>
-    id === 'old_accounts' ? Boolean(finding.staleAccount) : ARTIFACT_FINDING_KINDS.has(finding.kind);
+    id === 'old_accounts'
+      ? Boolean(finding.staleAccount)
+      : ARTIFACT_FINDING_KINDS.has(finding.kind);
   const handled = (finding: CandidateFootprintFinding) =>
     id === 'old_accounts'
       ? finding.checklistMark === 'account_closed' || finding.checklistMark === 'account_kept'
@@ -108,9 +106,7 @@ function confirmedItem(
   return item(id, pending, relevant.length ? 'Сделано' : none);
 }
 
-export function buildFootprintChecklist(
-  audit: CandidateFootprintAudit | null,
-): FootprintChecklist {
+export function buildFootprintChecklist(audit: CandidateFootprintAudit | null): FootprintChecklist {
   if (!audit || audit.state !== 'completed') {
     const items = (Object.keys(TITLES) as FootprintChecklistItemId[]).map((id) =>
       notDone(id, 'После проверки'),

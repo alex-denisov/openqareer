@@ -155,9 +155,18 @@ function footprintStep(page: Page, index: number, label: string) {
     .getByRole('button', { name: new RegExp(`^${index} ${label}`, 'u') });
 }
 
+/** B544: revoking asks for confirmation first. */
+async function revokeConsent(page: Page) {
+  await page.getByRole('button', { name: 'Отозвать согласие' }).click();
+  await page
+    .getByRole('group', { name: 'Подтвердить отзыв' })
+    .getByRole('button', { name: 'Отозвать согласие' })
+    .click();
+}
+
 async function openPrivacyControls(page: Page): Promise<void> {
   await page.getByRole('button', { name: /^Находки видите только вы/u }).click();
-  await expect(page.getByRole('region', { name: 'Управление согласием и данными' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Видите только вы' })).toBeVisible();
 }
 
 async function captureFootprint(page: Page, filename: string): Promise<void> {
@@ -323,7 +332,7 @@ test('B367 reviews a mocked background run, records identity feedback, and delet
   await expect(page.getByText('Сохранённые находки удалены.')).toBeVisible();
   expect(deleted).toBe(1);
   await footprintStep(page, 1, 'Согласие').click();
-  await page.getByRole('button', { name: 'Отозвать согласие' }).click();
+  await revokeConsent(page);
   await expect(
     page.getByText('Согласие отозвано. Проверка остановлена, сохранённые находки удалены.'),
   ).toBeVisible();
@@ -364,7 +373,7 @@ test('B367 keeps consent and findings visible when revocation fails', async ({ p
 
   await expect(page.getByText('GitHub', { exact: true })).toBeVisible();
   await openPrivacyControls(page);
-  await page.getByRole('button', { name: 'Отозвать согласие' }).click();
+  await revokeConsent(page);
 
   await expect(page.getByRole('alert')).toBeVisible();
   await expect(
@@ -426,7 +435,7 @@ test('B367 ignores a late poll response after consent revocation deletes finding
 
   await pollStarted;
   await footprintStep(page, 1, 'Согласие').click();
-  await page.getByRole('button', { name: 'Отозвать согласие' }).click();
+  await revokeConsent(page);
   await expect(
     page.getByText('Согласие отозвано. Проверка остановлена, сохранённые находки удалены.'),
   ).toBeVisible();

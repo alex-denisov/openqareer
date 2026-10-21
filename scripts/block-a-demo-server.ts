@@ -10,6 +10,9 @@ import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteCandidateReputationRepository } from '../server/data/sqliteCandidateReputationRepository';
 import { historicalAudit } from './fixtures/block-a-footprint-fixture';
 import { seedBlockAToday, seedBlockATodayChanges } from './fixtures/block-a-today-seed';
+import { SqliteCapabilityConsentStore } from '../server/auth/capabilityConsentStore';
+import { CAPABILITY_CONSENT_CURRENT_VERSION } from '../src/features/legal/capabilityConsents';
+import { seedBlockAToday } from './fixtures/block-a-today-seed';
 import { mockupResumeDraft, seedMockupToday } from './fixtures/mockup-today-seed';
 import { seedLandingShots } from './fixtures/landing-shots-seed';
 import { SqliteCandidateDraftRepository } from '../server/candidate/sqliteCandidateDraftRepository';
@@ -139,6 +142,14 @@ const candidateReputationRepo = new SqliteCandidateReputationRepository({
   encryptionKey: config.dataEncryptionKey,
 });
 candidateReputationRepo.saveFootprintAudit(historicalAudit(candidate.id));
+// Mockup 2: «1 Согласие · дано 05.10» — the demo candidate granted the current consent.
+const capabilityConsentStore = new SqliteCapabilityConsentStore({ databasePath: ':memory:' });
+capabilityConsentStore.recordConsent({
+  userId: 'block-a-local',
+  capability: 'digital_footprint',
+  versionId: CAPABILITY_CONSENT_CURRENT_VERSION.digital_footprint,
+  grantedAt: '2026-10-05T09:00:00.000Z',
+});
 const principal = {
   id: 'block-a-local',
   // Consent reads key on the user id; without it «Цифровой след» answered 500 on the demo.
@@ -195,6 +206,7 @@ const app = await buildApp({
   candidateStore: routedCandidateStore,
   candidateDraftRepository,
   candidateReputationRepo,
+  capabilityConsentStore,
   authService,
   searchVacancies: async () => {
     throw new Error('External sources are disabled in the local demo.');

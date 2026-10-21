@@ -138,7 +138,12 @@ describe('resolveFactProvenance — digital footprint (B544)', () => {
     const index = buildImportIndex({
       native: [],
       recorded: [
-        { messageId: 'msg-fp', platform: 'footprint', importedAt: '2026-10-21T08:00:00.000Z', factCount: 1 },
+        {
+          messageId: 'msg-fp',
+          platform: 'footprint',
+          importedAt: '2026-10-21T08:00:00.000Z',
+          factCount: 1,
+        },
       ],
       messages: [],
     });
@@ -150,7 +155,12 @@ describe('resolveFactProvenance — digital footprint (B544)', () => {
       summarizeImportedSourcesWithKept({
         native: [],
         recorded: [
-          { messageId: 'msg-fp', platform: 'footprint', importedAt: '2026-10-21T08:00:00.000Z', factCount: 1 },
+          {
+            messageId: 'msg-fp',
+            platform: 'footprint',
+            importedAt: '2026-10-21T08:00:00.000Z',
+            factCount: 1,
+          },
         ],
         messages: [],
         memory: [memory('f', ['msg-fp'])],

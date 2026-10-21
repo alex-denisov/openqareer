@@ -375,7 +375,11 @@ function GrantedConsent({
         Согласие выдано. Отзыв остановит текущую проверку и удалит сохранённые находки.
       </p>
       {confirming ? (
-        <div className="career-footprint-delete-confirm" role="group" aria-label="Подтвердить отзыв">
+        <div
+          className="career-footprint-delete-confirm"
+          role="group"
+          aria-label="Подтвердить отзыв"
+        >
           <p>Отозвать согласие? Проверка остановится, сохранённые находки будут удалены.</p>
           <div>
             <button type="button" disabled={revokingConsent} onClick={() => setConfirming(false)}>
@@ -783,7 +787,8 @@ const PROFILE_FOOTPRINT_STEP_META: ReadonlyArray<
     id: 'checklist',
     label: 'Чек-лист',
     heading: 'Чек-лист санации',
-    description: 'Пять пунктов, чтобы публичный след работал на вас. Каждый считается по вашим данным.',
+    description:
+      'Пять пунктов, чтобы публичный след работал на вас. Каждый считается по вашим данным.',
   },
 ];
 

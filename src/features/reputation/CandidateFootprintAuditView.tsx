@@ -351,6 +351,14 @@ function useFootprintFindingActions(
   return { ...reviewAction, ...deleteAction };
 }
 
+function findingHandlers(actions: ReturnType<typeof useFootprintReviewAction>) {
+  return {
+    onReview: actions.review,
+    onMarkFinding: actions.mark,
+    onAddToProfile: actions.addToProfile,
+  };
+}
+
 function useFootprintAuditSurfaceProps(candidateId: string) {
   const data = useCandidateFootprintPlanState(candidateId);
   const manual = useManualEmployers(data.reload);
@@ -395,9 +403,7 @@ function useFootprintAuditSurfaceProps(candidateId: string) {
     onGrantConsent: () => void consentGrant.grantConsent(),
     onRevokeConsent: () => void consentRevocation.revokeConsent(),
     onStart: () => void start.start(),
-    onReview: findingActions.review,
-    onMarkFinding: findingActions.mark,
-    onAddToProfile: findingActions.addToProfile,
+    ...findingHandlers(findingActions),
     onRequestDelete: () => findingActions.setConfirmingDelete(true),
     onCancelDelete: () => findingActions.setConfirmingDelete(false),
     onConfirmDelete: () => void findingActions.confirmDelete(),

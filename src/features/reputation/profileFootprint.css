@@ -82,6 +82,10 @@
   min-inline-size: 0;
 }
 
+.profile-footprint-step-panel-header > .profile-footprint-privacy-trigger {
+  justify-self: start;
+}
+
 .profile-footprint-step-panel-header h3 {
   margin: 0;
   color: var(--career-text);

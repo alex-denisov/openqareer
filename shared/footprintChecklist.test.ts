@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { CandidateFootprintAudit, CandidateFootprintFinding } from './candidateFootprint';
 import { buildFootprintChecklist } from './footprintChecklist';
 
-function finding(id: string, patch: Partial<CandidateFootprintFinding> = {}): CandidateFootprintFinding {
+function finding(
+  id: string,
+  patch: Partial<CandidateFootprintFinding> = {},
+): CandidateFootprintFinding {
   return {
     id,
     adapter: 'sherlock',
@@ -65,9 +68,17 @@ describe('buildFootprintChecklist (B544)', () => {
     const list = buildFootprintChecklist(
       audit(
         [
-          finding('1', { kind: 'breach', review: 'confirmed_self', checklistMark: 'password_changed' }),
+          finding('1', {
+            kind: 'breach',
+            review: 'confirmed_self',
+            checklistMark: 'password_changed',
+          }),
           finding('2', { kind: 'breach', review: 'confirmed_self' }),
-          finding('3', { review: 'confirmed_self', staleAccount: true, checklistMark: 'account_kept' }),
+          finding('3', {
+            review: 'confirmed_self',
+            staleAccount: true,
+            checklistMark: 'account_kept',
+          }),
           finding('4', { kind: 'mention', review: 'confirmed_self' }),
           finding('5', { review: 'not_self' }),
         ],
