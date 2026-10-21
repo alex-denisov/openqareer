@@ -27,10 +27,19 @@ test('B546: rows without salary show the market estimate or «мало данн�
   const estimate = page.locator('.vacancies-screen-cell--salary', { hasText: '≈ 480–560 тыс. ₽' });
   await expect(estimate.first()).toBeVisible();
   mkdirSync('output/playwright/B546', { recursive: true });
-  await page.screenshot({
-    path: `output/playwright/B546/vacancies-${mobile ? 390 : 1440}.png`,
-    fullPage: true,
-  });
+  // The list scrolls inside the shell: grow the viewport to the scroller's height.
+  const scrollHeight = await page
+    .locator('.vac-list-item')
+    .first()
+    .evaluate((row) => {
+      let node: HTMLElement | null = row.parentElement;
+      while (node && node.scrollHeight <= node.clientHeight + 1) node = node.parentElement;
+      return node?.scrollHeight ?? document.documentElement.scrollHeight;
+    });
+  const width = mobile ? 390 : 1440;
+  await page.setViewportSize({ width, height: Math.min(scrollHeight + 200, 12_000) });
+  await page.screenshot({ path: `output/playwright/B546/vacancies-${width}.png`, fullPage: true });
+  await page.setViewportSize({ width, height: mobile ? 844 : 900 });
   if (mobile) {
     await expect(estimate.first().locator('.vacancy-screen-money-short')).toHaveText('оценка');
     await expect(
