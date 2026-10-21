@@ -30,6 +30,33 @@ async function loadHarness() {
   return harness;
 }
 
+function syntheticCoachProvider(message, onGenerate) {
+  return {
+    createTurn: async () => {
+      onGenerate();
+      return {
+        provider: 'openai',
+        model: 'synthetic',
+        responseId: 'synthetic-b198',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        result: {
+          message,
+          phase: 'evidence',
+          memoryCandidates: [],
+          nextQuestion: null,
+          completeness: {
+            known: Array(20).fill('Подтверждённый тестовый факт. '.repeat(9)),
+            unknown: [],
+          },
+          safety: { needsHuman: false, reason: null },
+          careerTrack: null,
+          actionProposals: [],
+        },
+      };
+    },
+  };
+}
+
 async function createFixture(page, message, onGenerate) {
   const { buildApp, SqliteCandidateStore } = await loadHarness();
   const store = new SqliteCandidateStore({
@@ -64,30 +91,7 @@ async function createFixture(page, message, onGenerate) {
       },
       login: async () => null,
     },
-    coachProvider: {
-      createTurn: async () => {
-        onGenerate();
-        return {
-          provider: 'openai',
-          model: 'synthetic',
-          responseId: 'synthetic-b198',
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
-          result: {
-            message,
-            phase: 'evidence',
-            memoryCandidates: [],
-            nextQuestion: null,
-            completeness: {
-              known: Array(20).fill('Подтверждённый тестовый факт. '.repeat(9)),
-              unknown: [],
-            },
-            safety: { needsHuman: false, reason: null },
-            careerTrack: null,
-            actionProposals: [],
-          },
-        };
-      },
-    },
+    coachProvider: syntheticCoachProvider(message, onGenerate),
   });
   return { app, store, candidate };
 }
