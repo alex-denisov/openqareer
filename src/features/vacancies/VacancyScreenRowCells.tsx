@@ -4,6 +4,8 @@ import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { CheckCircle, MapPin, Question, WarningCircle } from '@phosphor-icons/react';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
+import { vacancyFormat } from './vacancyScreenCriteria';
+import { workFormatLabel } from '../../../shared/vacancyWorkFormat';
 
 const VACANCY_LEVEL_LABEL = {
   ic: 'Специалист',
@@ -94,20 +96,41 @@ function VacancyScreenLevelCell({ item }: { readonly item: MatchedVacancyItem })
 }
 
 function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
-  const fitLabel = item.explanation.outsideGeography ? 'не совпадает' : 'совпадает';
+  const formatBlocked = formatGateBlocked(item);
+  const outside = Boolean(item.explanation.outsideGeography) || formatBlocked;
+  const fitLabel = item.explanation.outsideGeography
+    ? 'другой город'
+    : formatBlocked
+      ? 'формат не подходит'
+      : 'совпадает';
   return (
     <span className="vacancies-screen-cell vacancies-screen-cell--geo" data-label="Гео">
-      <span>
-        {item.cluster.canonicalLocation ?? (item.cluster.isRemote ? 'Удалённо' : 'Не указано')}
-      </span>
+      <span>{vacancyGeoLabel(item)}</span>
       <span className="vacancies-screen-fit-status">
         <span aria-hidden="true">
-          <GeoFitDot outsideGeo={item.explanation.outsideGeography} />
+          <GeoFitDot outsideGeo={outside} />
         </span>
         <span>{fitLabel}</span>
       </span>
     </span>
   );
+}
+
+/** «Москва, гибрид» — город и формат из одного разбора с фильтром «Формат» (B446-g4). */
+export function vacancyGeoLabel(item: MatchedVacancyItem): string {
+  const place =
+    item.cluster.canonicalLocation ?? (item.cluster.isRemote ? 'Удалённо' : 'Не указано');
+  const format = workFormatLabel(vacancyFormat(item));
+  if (!format || place.toLocaleLowerCase('ru-RU').includes(format)) return place;
+  return `${place}, ${format}`;
+}
+
+function formatGateBlocked(item: MatchedVacancyItem): boolean {
+  return item.explanation.fitView?.result?.gates?.workFormat?.status === 'blocked';
+}
+
+function capitalized(text: string): string {
+  return text.charAt(0).toLocaleUpperCase('ru-RU') + text.slice(1);
 }
 
 export interface VacancyRowStatus {
@@ -118,6 +141,13 @@ export interface VacancyRowStatus {
 /** Статус строки 390 — из тех же отметок совпадения, что колонки «Уровень» и «Гео» на 1440. */
 export function vacancyRowStatus(item: MatchedVacancyItem): VacancyRowStatus {
   if (item.explanation.outsideGeography) return { tone: 'warn', label: 'Другой город' };
+  if (formatGateBlocked(item)) {
+    const format = workFormatLabel(vacancyFormat(item));
+    return {
+      tone: 'warn',
+      label: format ? `${capitalized(format)}, не подходит` : 'Формат не подходит',
+    };
+  }
   const level = item.explanation.levelMatch;
   if (level === 'above' || level === 'below') return { tone: 'warn', label: 'Другой уровень' };
   if (level === 'unknown') return { tone: 'unknown', label: 'Уровень не указан' };

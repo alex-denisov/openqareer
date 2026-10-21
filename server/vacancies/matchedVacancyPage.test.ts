@@ -105,6 +105,20 @@ describe('buildMatchedVacancyPage', () => {
     expect(first.explanation.missingPoints.length).toBeLessThanOrEqual(3);
   });
 
+  it('считает формат работы до обрезки выжимки (B446-g4)', () => {
+    const item = {
+      ...pool[0]!,
+      cluster: {
+        ...pool[0]!.cluster,
+        descriptionSummary: 'Гибридный формат, Москва',
+        isRemote: false,
+      },
+    };
+    const [first] = buildMatchedVacancyPage([item], 0).items;
+    expect(first.cluster.descriptionSummary).toBe('');
+    expect(first.cluster.workFormat).toBe('hybrid');
+  });
+
   it('пустой пул — честно пустая страница, а не бесконечное продолжение', () => {
     const page = buildMatchedVacancyPage([], 0);
     expect(page.items).toEqual([]);
@@ -228,7 +242,8 @@ describe('локальное геокодирование набора из 190 
   ] as const;
   const fixture = Array.from({ length: 190 }, (_, index) => {
     const source = item(1_000 + index);
-    const city = index < 180 ? fixtureCityLocations[index % fixtureCityLocations.length] : undefined;
+    const city =
+      index < 180 ? fixtureCityLocations[index % fixtureCityLocations.length] : undefined;
     return {
       ...source,
       cluster: { ...source.cluster, canonicalLocation: city },

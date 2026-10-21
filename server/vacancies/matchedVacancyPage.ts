@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeCityLabel } from '../../shared/cityLabel';
+import { detectVacancyWorkFormat } from '../../shared/vacancyWorkFormat';
 import { isKnownCountry } from '../domain/geoCoordinates';
 import { getCompanyRegistry } from '../domain/companyRegistry';
 import { lookupLocationCoordinates } from '../domain/geoCoordinates';
@@ -120,6 +121,12 @@ function trim(item: MatchedVacancyItem): MatchedVacancyItem {
   return {
     cluster: {
       ...item.cluster,
+      // B446-g4: формат — из выжимки до её обрезки; фильтр, «Гео» и статус 390 читают его.
+      workFormat: detectVacancyWorkFormat({
+        location: item.cluster.canonicalLocation,
+        summary: item.cluster.descriptionSummary,
+        isRemote: item.cluster.isRemote,
+      }),
       descriptionSummary: '',
       skills: [],
       ...(companyFeatures ? { companyFeatures } : {}),

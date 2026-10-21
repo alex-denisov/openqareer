@@ -92,6 +92,8 @@ export interface VacancyCluster {
   canonicalLocation?: string;
   isRemote: boolean;
   salary?: VacancySalary;
+  /** Формат работы, посчитанный до обрезки выжимки страницей подборки (B446-g4). */
+  workFormat?: import('../../shared/vacancyWorkFormat').VacancyWorkFormat;
   descriptionSummary: string;
   skills: string[];
   primaryUrl: string;
