@@ -7,6 +7,7 @@ import {
 } from '../../../shared/workPreferences';
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
 import { matchesVacancyCity } from './vacancyFacets';
+import { matchesLocationSelection } from '../../../shared/locationTree';
 
 export interface VacancyScreenFilterOptions {
   readonly locations: readonly { readonly id: string; readonly label: string; readonly count: number }[];
@@ -45,8 +46,10 @@ function matchesScreenLocation(
   const search = state.locationSearch?.trim().toLocaleLowerCase('ru-RU');
   if (search && !normalized.includes(search)) return false;
   const selected = state.selectedLocations ?? [];
-  if (selected.length && !selected.some((value) => normalized.includes(value.toLocaleLowerCase('ru-RU')))) {
-    return false;
+  if (selected.length || state.locationRemote) {
+    const place = { location, country: item.cluster.companyFeatures?.country };
+    const inRemote = Boolean(state.locationRemote && item.cluster.isRemote);
+    if (!inRemote && !(selected.length && matchesLocationSelection(place, selected))) return false;
   }
   if (state.selectedCity && !matchesVacancyCity(item, state.selectedCity, allItems)) return false;
   if (state.regions.length && !state.remoteOnly) {

@@ -206,7 +206,7 @@ describe('VacanciesFilters toggle and role limit', () => {
         />,
       ),
     );
-    expect(container.textContent).toContain('MENA · 8');
+    expect(container.textContent).not.toContain('MENA · 8');
     expect(container.textContent).toContain('COO · 8');
     expect(container.textContent).not.toContain('Добавить:');
     expect(container.textContent).not.toContain('Backend Engineer');

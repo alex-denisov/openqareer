@@ -172,17 +172,19 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (button) => button.textContent === 'Локации',
     );
     await act(async () => locations?.click());
-    const region = Array.from(container.querySelectorAll('button')).find((button) =>
-      button.textContent?.includes('MENA · 2'),
+    // B547: «Локации» — дерево по выдаче, макрорегионов кампании в нём нет.
+    expect(container.textContent).not.toContain('MENA · 2');
+    const remote = container.querySelector<HTMLInputElement>(
+      '[data-testid="location-tree-filter"] input[type="checkbox"]',
     );
-    await act(async () => region?.click());
+    await act(async () => remote?.click());
     const apply = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Применить',
     );
     await act(async () => apply?.click());
     expect(changes.at(-1)).toEqual({
       roles: [],
-      regions: ['mena'],
+      regions: [],
       levels: [],
       sources: [],
       remoteOnly: false,

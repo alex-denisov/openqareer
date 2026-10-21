@@ -30,6 +30,7 @@ import { VacanciesScreenSummary } from './VacanciesScreenSummary';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
+import { buildLocationTree, type LocationTree } from '../../../shared/locationTree';
 export { filterByScreenState } from './vacancyScreenCriteria';
 import {
   SavedVacanciesPanel,
@@ -122,6 +123,27 @@ function filterBoardVacancies(
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
   const items=filterByScreenState(matched,filters,now);
   return onFiltersChange?items:sortVacancyFitItems(items,state.sort);
+}
+
+/** Счётчики «Локаций» по выдаче без самого фильтра локаций (B547). */
+function useLocationTreeForState(input: VacanciesScreenProps, state: VacanciesScreenState) {
+  return useMemo(() => {
+    const withoutLocation = {
+      ...state,
+      selectedLocations: [],
+      locationRemote: false,
+      locationSearch: '',
+      selectedCity: undefined,
+    };
+    const items = filterBoardVacancies(input.matched, withoutLocation, '', input.onFiltersChange);
+    return buildLocationTree(
+      items.map((item) => ({
+        location: item.cluster.canonicalLocation,
+        country: item.cluster.companyFeatures?.country,
+        isRemote: item.cluster.isRemote,
+      })),
+    );
+  }, [input.matched, input.onFiltersChange, state]);
 }
 
 function useVacanciesScreenBoard(
@@ -265,7 +287,9 @@ interface VacanciesFiltersSectionProps {
   readonly premisesLoading?: boolean;
   readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
   readonly focusRole?: boolean;
-  readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions>;
+  readonly filterOptions: ReturnType<typeof buildVacancyFilterOptions> & {
+    readonly locationTree: LocationTree;
+  };
 }
 
 function buildVacanciesFilterProps({
@@ -361,6 +385,7 @@ function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) 
     remoteOnly: false,
     selectedCity: undefined,
     selectedLocations: [],
+    locationRemote: false,
     locationSearch: '',
     salaryMinimum: undefined,
     salaryMaximum: undefined,
@@ -456,7 +481,9 @@ function screenFilteredCount(
   state: Parameters<typeof countActiveFilters>[0],
 ) {
   const hasClientFilters =
-    state.selectedCity !== undefined || (!input.onFiltersChange && countActiveFilters(state) > 0);
+    state.selectedCity !== undefined ||
+    Boolean(state.selectedLocations?.length || state.locationRemote) ||
+    (!input.onFiltersChange && countActiveFilters(state) > 0);
   if (hasClientFilters && input.poolComplete !== false) return localCount;
   return input.total ?? localCount;
 }
@@ -521,7 +548,9 @@ function VacanciesFilterContent({
   readonly screenState: ReturnType<typeof useVacanciesScreenState>;
 }) {
   const { board, actions, resetFilters } = screenState;
-  const filterOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
+  const baseOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
+  const locationTree = useLocationTreeForState(input, board.state);
+  const filterOptions = useMemo(() => ({ ...baseOptions, locationTree }), [baseOptions, locationTree]);
   return (
     <div className="vacancies-filter-section">
       <VacanciesScreenSummary

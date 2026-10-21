@@ -1,0 +1,194 @@
+/* B547: «Локации» — дерево страна › регион › город по макету 4 (pop=geo). */
+.vacancy-location-filter {
+  display: grid;
+  min-inline-size: 0;
+}
+
+.vacancy-location-head {
+  padding-block-end: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+
+.vacancy-location-search {
+  position: relative;
+  display: block;
+}
+
+.vacancy-location-search svg {
+  position: absolute;
+  inset-inline-start: var(--career-space-3);
+  inset-block-start: 50%;
+  translate: 0 -50%;
+  color: var(--career-text-dim);
+}
+
+.vacancy-location-search .career-input {
+  inline-size: 100%;
+  padding-inline-start: calc(var(--career-space-3) * 2 + 16px);
+}
+
+.vacancy-location-body {
+  display: grid;
+  gap: var(--career-space-2);
+  align-content: start;
+  max-block-size: 26rem;
+  overflow: auto;
+  padding-block: var(--career-space-2);
+}
+
+.vacancy-location-tree,
+.vacancy-location-kids {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vacancy-location-kids {
+  margin-inline-start: 18px;
+  padding-inline-start: var(--career-space-5);
+  border-inline-start: var(--career-border-width) solid var(--career-line);
+}
+
+.vacancy-location-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: var(--career-space-1);
+  min-block-size: var(--career-target-min);
+}
+
+.vacancy-location-row.is-hit {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.vacancy-location-spacer {
+  inline-size: var(--career-target-min);
+}
+
+.vacancy-location-caret {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border: 0;
+  background: transparent;
+  color: var(--career-text-soft);
+  cursor: pointer;
+}
+
+.vacancy-location-caret svg {
+  transform: rotate(-90deg);
+  transition: transform 180ms ease;
+}
+
+.vacancy-location-caret[aria-expanded='true'] svg {
+  transform: none;
+}
+
+.vacancy-location-check {
+  min-inline-size: 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.vacancy-location-name {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.vacancy-location-sub {
+  margin-inline-end: var(--career-space-2);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+}
+
+.vacancy-location-count,
+.vacancy-location-chosen {
+  padding-inline-end: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: end;
+  white-space: nowrap;
+}
+
+.vacancy-location-more {
+  padding-inline-start: var(--career-target-min);
+}
+
+.vacancy-location-note {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-block: var(--career-space-2);
+  padding: var(--career-space-2) var(--career-space-3);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-location-note span {
+  flex: 1;
+}
+
+.vacancy-location-hit {
+  display: grid;
+  padding-block-end: var(--career-space-2);
+  border-block-end: var(--career-border-width) solid var(--career-line);
+}
+
+.vacancy-location-path {
+  padding-inline-start: calc(var(--career-control-min) + var(--career-space-3));
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-location-found,
+.vacancy-location-hint {
+  margin: 0;
+  padding-block: var(--career-space-1);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-location-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--career-space-2);
+  padding-block-start: var(--career-space-3);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+}
+
+.vacancy-location-chosen {
+  margin-inline-end: auto;
+}
+
+.vacancy-location-check .career-checkbox:indeterminate {
+  border-color: var(--career-accent);
+  background-color: var(--career-accent);
+  background-image: linear-gradient(var(--career-accent-ink), var(--career-accent-ink));
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 10px 2px;
+}
+
+.vacancies-filters[data-active-group='locations'] > .filters-panel-head {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .vacancy-location-body {
+    max-block-size: none;
+  }
+
+  .vacancy-location-foot {
+    position: sticky;
+    inset-block-end: 0;
+    background: var(--career-bg-elevated, var(--career-surface));
+  }
+}
