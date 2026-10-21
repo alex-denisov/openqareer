@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { VacancyMapView } from './VacancyMapView';
+import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 function makeItem(
@@ -84,7 +84,7 @@ describe('B203: VacancyMapView Component', () => {
     expect(html).toContain('На карте 1 из 3: без точки 1 без города, 1 с нераспознанным городом.');
   });
 
-  it('разделяет город и моноширинный счётчик в списке и на карте', () => {
+  it('подписывает город на карте как «Almaty 4», без ряда чипов и сетки карточек (B446-g4)', () => {
     const html = renderToStaticMarkup(
       <VacancyMapView
         items={[
@@ -97,27 +97,10 @@ describe('B203: VacancyMapView Component', () => {
       />,
     );
 
-    expect(html).toContain('<span>Almaty</span>');
-    expect(html).toContain(
-      '<span class="career-map-city-count"><span aria-hidden="true">·</span><span class="career-map-city-count-value">4</span></span>',
-    );
-    expect(html).toContain('<tspan class="career-map-label-count"> · 4</tspan>');
-  });
-
-  it('при выборе города оставляет в списке все его координатные варианты', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView
-        items={[
-          makeItem('ru', 'Russian Company', 'Москва', { lat: 55.75204, lng: 37.61781 }),
-          makeItem('en', 'English Company', 'Moscow', { lat: 55.75204, lng: 37.61781 }),
-        ]}
-        selectedCity="Москва"
-        onSelectCity={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain('Frontend Engineer ru');
-    expect(html).toContain('Frontend Engineer en');
+    expect(html).toContain('<tspan class="career-map-label-count"> 4</tspan>');
+    expect(html).not.toContain('career-map-city-chips');
+    expect(html).not.toContain('career-map-cards-grid');
+    expect(html).not.toContain('Frontend Engineer v1');
   });
 
   it('renders city pins and list with names and counts', () => {
@@ -137,60 +120,17 @@ describe('B203: VacancyMapView Component', () => {
 
     expect(html).toContain('role="img" aria-label="Контуры стран и расположение городов"');
     expect(countryContours).toHaveLength(177);
-    expect(html).toContain('aria-label="Город Амстердам: 1 вакансий"');
-    expect(html).not.toContain('role="button" aria-label="Город Амстердам: 1 вакансий"');
+    // B446-g4: ряда чипов нет — близкие города доступны кнопкой-кластером на карте.
+    expect(html).toMatch(/role="button"[^>]*aria-label="Кластер/u);
   });
 
-  it('highlights selected city when passed', () => {
+  it('city filter bar names the chosen city and offers all cities back', () => {
     const html = renderToStaticMarkup(
-      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity="Амстердам" />,
+      <VacancyCityFilterBar selectedCity="Амстердам" onClear={vi.fn()} />,
     );
 
     expect(html).toContain('Показаны вакансии в городе: <strong>Амстердам</strong>');
-    expect(html).toContain('Все города на карте');
-  });
-
-  it('renders unmapped vacancies section honestly', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
-    );
-
-    expect(html).toContain('Не показаны на карте');
-    expect(html).toContain('UnknownLocationCo');
-  });
-});
-
-describe('кластеризация и подписи на карте (B375)', () => {
-  it('близкие хабы объединяются в кластер с числом вакансий и списком в подсказке', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView
-        items={[
-          makeItem('v-1', 'Alpha', 'Amsterdam', { lat: 52.37, lng: 4.9 }),
-          makeItem('v-2', 'Alpha', 'Amsterdam', { lat: 52.37, lng: 4.9 }),
-          makeItem('v-3', 'Beta', 'Haarlem', { lat: 52.38, lng: 4.63 }),
-        ]}
-        selectedCity={undefined}
-        onSelectCity={() => {}}
-      />,
-    );
-
-    expect(html).toContain('career-map-cluster-count');
-    expect(html).toContain('>3</text>');
-    expect(html).toContain('Кластер: 3 вакансий');
-    expect(html).toContain('Город Haarlem: 1 вакансий');
-  });
-
-  it('показывает Сидней без AU: и страну во всплывающей подсказке', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView
-        items={[makeItem('v-au', 'Atlassian', 'AU: Sydney', { lat: -33.8688, lng: 151.2093 })]}
-        selectedCity={undefined}
-        onSelectCity={() => {}}
-      />,
-    );
-
-    expect(html).toContain('Сидней');
-    expect(html).not.toContain('AU: Sydney');
-    expect(html).toContain('Австралия');
+    expect(html).toContain('Все города');
+    expect(renderToStaticMarkup(<VacancyCityFilterBar onClear={vi.fn()} />)).toBe('');
   });
 });

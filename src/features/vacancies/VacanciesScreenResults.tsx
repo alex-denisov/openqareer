@@ -1,6 +1,6 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyRow } from './VacancyRow';
-import { VacancyMapView } from './VacancyMapView';
+import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import { VacancyFitSortControl } from './VacancyFitSort';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
@@ -147,5 +147,13 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
       />
     );
   }
-  return <VacanciesListContent {...props.listProps} />;
+  return (
+    <>
+      <VacancyCityFilterBar
+        selectedCity={props.selectedCity}
+        onClear={() => props.onSelectCity(undefined)}
+      />
+      <VacanciesListContent {...props.listProps} />
+    </>
+  );
 }

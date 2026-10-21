@@ -1362,12 +1362,6 @@ test.describe('B250 vacancies screen', () => {
     }
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
 
-    // Город выбирается кнопкой в списке под картой.
-    const cityBtn = page.locator('.vacancy-map-cities button').first();
-    if (await cityBtn.isVisible()) {
-      await cityBtn.click();
-    }
-
     // Возврат в список использует управление текущей раскладки.
     if (mobile) {
       await page.getByRole('button', { name: 'Список', exact: true }).click();
@@ -1447,20 +1441,21 @@ test.describe('B250 vacancies screen', () => {
       '.career-vacancy-map-view',
     );
 
-    const moscowChip = mapView
-      .locator('.career-map-city-chips')
-      .getByRole('button', { name: 'Город Москва: 2 вакансий' });
-    await expect(moscowChip).toBeVisible();
-    const chipBox = await moscowChip.boundingBox();
-    expect(chipBox?.width).toBeGreaterThanOrEqual(44);
-    expect(chipBox?.height).toBeGreaterThanOrEqual(44);
-    await moscowChip.click();
-    await expect(
-      mapView.locator('.career-map-cards-grid').first().locator('.career-map-card'),
-    ).toHaveCount(2);
-    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Genetec');
-    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Peraton');
-    await mapView.getByRole('button', { name: 'Все города на карте' }).click();
+    // B446-g4: под картой нет ни чипов городов, ни сетки карточек; город на карте
+    // открывает список с фильтром этого города.
+    await expect(mapView.locator('.career-map-city-chips')).toHaveCount(0);
+    await expect(mapView.locator('.career-map-cards-grid')).toHaveCount(0);
+    const moscowPin = mapView.getByRole('button', { name: 'Город Москва: 2 вакансий' });
+    const pinBox = await moscowPin.boundingBox();
+    expect(pinBox?.width).toBeGreaterThanOrEqual(44);
+    expect(pinBox?.height).toBeGreaterThanOrEqual(44);
+    await moscowPin.click();
+    const list = page.locator('.vacancies-list-container');
+    await expect(list.locator('.vacancies-screen-row-shell')).toHaveCount(2);
+    await expect(list).toContainText('Genetec');
+    await expect(list).toContainText('Peraton');
+    await page.getByRole('button', { name: 'Все города', exact: true }).click();
+    await page.locator('.view-switch[role="tablist"]').getByRole('tab', { name: 'Карта' }).click();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => {
@@ -1535,11 +1530,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(mapView).toBeVisible();
 
     // Sydney normalized to Сидней with tooltip showing Australia
-    const sydneyChip = mapView
-      .locator('.career-map-city-chips')
-      .getByRole('button', { name: /Сидней/ });
-    await expect(sydneyChip).toBeVisible();
-    await expect(sydneyChip).toHaveAttribute('title', 'Австралия');
+    const sydneyPin = mapView.getByRole('button', { name: /Сидней/ });
+    await expect(sydneyPin).toBeVisible();
+    await expect(sydneyPin.locator('title')).toHaveText('Австралия');
 
     // Clusters should exist at zoom=1 (Berlin + Prague + Vienna clustered)
     const clusterPin = mapView.locator('.career-map-cluster-node').first();

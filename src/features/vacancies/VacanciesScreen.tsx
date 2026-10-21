@@ -514,8 +514,11 @@ function mainBodyProps(
     viewMode,
     onResetFilters: resetFilters,
     selectedCity: board.state.selectedCity,
-    onSelectCity: (city?: string) =>
-      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city })),
+    // B446-g4: город на карте открывает список, отфильтрованный по этому городу.
+    onSelectCity: (city?: string) => {
+      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }));
+      if (city) screenState.setViewMode('list');
+    },
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }

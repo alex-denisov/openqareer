@@ -211,7 +211,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
         <VacanciesScreen
           matched={[
             mapped('c-1', 'Амстердам', 52.3676, 4.9041),
-            mapped('c-2', 'Велдховен', 51.4172, 5.4055),
+            mapped('c-2', 'Москва', 55.7558, 37.6173),
           ]}
           total={8}
           facets={{ ...facets, total: 12 }}
@@ -225,14 +225,15 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (tab) => tab.textContent === 'Карта',
     );
     await act(async () => (mapTab as HTMLButtonElement).click());
-    const city = container.querySelector<HTMLButtonElement>('.vacancy-map-cities button');
-    expect(city?.textContent).toContain('Амстердам');
-    await act(async () => city?.click());
-    expect(city?.getAttribute('aria-pressed')).toBe('true');
+    // B446-g4: город на карте открывает список с фильтром этого города.
+    const city = container.querySelector('[aria-label^="Город Амстердам"]');
+    expect(city).not.toBeNull();
+    await act(async () => city?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(counter()).toBe('Показано 1 из 12');
-    expect(container.querySelectorAll('.career-map-cards-grid > *')).toHaveLength(1);
+    expect(container.querySelector('.vacancies-list-container')).not.toBeNull();
+    expect(container.querySelector('.career-map-active-bar')?.textContent).toContain('Амстердам');
     const clear = Array.from(container.querySelectorAll('button')).find(
-      (button) => button.textContent === 'Все города на карте',
+      (button) => button.textContent === 'Все города',
     );
     await act(async () => clear?.click());
     expect(counter()).toBe('Показано 8 из 12');
