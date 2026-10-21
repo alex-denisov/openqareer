@@ -607,13 +607,18 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   return (
     <div className="vac-detail vacancies-detail-col vacancies-detail-panel">
       <DetailTrustAlert trust={trust} />
-      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
-      {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
-      {!explanation.fitView?<DetailRequirementsSection
-        cluster={cluster}
-        explanation={explanation}
+      <VacancyFitEvidenceForItem
+        item={{ cluster, explanation }}
         onAddToProfile={rowProps.onAddToProfile}
-      />:null}
+      />
+      {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
+      {!explanation.fitView ? (
+        <DetailRequirementsSection
+          cluster={cluster}
+          explanation={explanation}
+          onAddToProfile={rowProps.onAddToProfile}
+        />
+      ) : null}
 
       <RecruiterSection cluster={cluster} />
       {rowProps.onOpenCompanyPath ? (
@@ -639,13 +644,12 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
       <DetailTrustAlert trust={rowState.trust} />
-      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
       <div className="vacancies-screen-detail-grid">
-        {!explanation.fitView?<VacancyScreenRequirementChips
+        <VacancyScreenRequirementChips
           cluster={cluster}
           explanation={explanation}
           onAddToProfile={rowProps.onAddToProfile}
-        />:null}
+        />
         <section
           className="vacancies-screen-description"
           aria-labelledby={`vacancy-description-${cluster.id}`}
@@ -661,6 +665,11 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
           <VacancyScreenFullDescriptionButton onOpen={() => rowState.setInfoOpen(true)} />
         </section>
       </div>
+      <VacancyFitEvidenceForItem
+        item={{ cluster, explanation }}
+        onAddToProfile={rowProps.onAddToProfile}
+        showTable={false}
+      />
       <VacancyScreenDetailActions cluster={cluster} rowProps={rowProps} rowState={rowState} />
       <DetailInterviewSection
         appliedError={rowState.appliedState.appliedError}

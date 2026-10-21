@@ -12,6 +12,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
+import { fitRequirementChips } from './vacancyRequirementChips';
+import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
@@ -195,11 +197,15 @@ export function VacancyScreenRequirementChips({
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
-  const { skillMatching, skillMissing } = extractVacancyRequirements(
+  const fitView = useLatestVacancyFitView(cluster.id, explanation.fitView);
+  const fromFit = fitRequirementChips(fitView);
+  const legacy = extractVacancyRequirements(
     explanation.matchingPoints,
     explanation.missingPoints,
     cluster.skills,
   );
+  const skillMatching = fromFit ? fromFit.confirmed : legacy.skillMatching;
+  const skillMissing = fromFit ? fromFit.unconfirmed : legacy.skillMissing;
   const hasRequirements = skillMatching.length + skillMissing.length > 0;
 
   return (
@@ -216,9 +222,7 @@ export function VacancyScreenRequirementChips({
           onAddToProfile={onAddToProfile}
         />
       ) : (
-        <p className="vacancies-screen-no-requirements">
-          В источниках не указаны требования к навыкам.
-        </p>
+        <p className="vacancies-screen-no-requirements">Требования ещё не разобраны.</p>
       )}
       <p className="vacancies-screen-requirements-note">
         Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
