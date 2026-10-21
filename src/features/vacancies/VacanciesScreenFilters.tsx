@@ -15,7 +15,7 @@ import {
   VacanciesFilterPopover,
   VacancyFilterActions,
   mobileFilterValues,
-  useMobileRoleFocus,
+  useRoleFocus,
 } from './VacanciesFilterPopover';
 import { VacancySourceCatalogFilter, useSourceCatalog } from './VacancySourceCatalogFilter';
 import { MobileFilterSheet } from './VacanciesMobileFilterSheet';
@@ -415,12 +415,9 @@ function emptyVacancyFilterState(): VacanciesScreenState {
 }
 
 function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
-  const [expanded, setExpanded] = useState(() => Boolean(props.focusRole));
+  const [expanded, setExpanded] = useState(false);
   const [draftState, setDraftState] = useState(props.state);
   useEffect(() => setDraftState(props.state), [props.state]);
-  useEffect(() => {
-    if (props.focusRole) setExpanded(true);
-  }, [props.focusRole]);
   const resetAll = () => {
     setDraftState(emptyVacancyFilterState());
     props.onReset();
@@ -597,7 +594,7 @@ function VacancyFilterPanel({
   readonly model: ReturnType<typeof useVacancyFilterDraft>;
 }) {
   const [activeGroup, setActiveGroup] = useState<VacancyFilterGroup | null>(null);
-  useMobileRoleFocus(props.focusRole, setActiveGroup, model.setExpanded);
+  useRoleFocus(props.focusRole, setActiveGroup, model.setExpanded);
   const closePanel = () => {
     model.discard();
     model.setExpanded(false);

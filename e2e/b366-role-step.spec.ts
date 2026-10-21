@@ -39,14 +39,12 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
     await expect(page.locator('.vacancies-screen')).toBeVisible();
     await expect(page.locator('.vacancies-content')).toBeVisible();
 
-    // Verify role filter input is focused
-    const roleInput = page.locator('.add-role-input');
-    await expect(roleInput).toBeVisible();
-    await expect(roleInput).toBeFocused();
-
-    // Verify premises are visible inside the expanded filters panel
-    await expect(page.locator('.vacancies-filters.is-expanded')).toBeVisible();
-    await expect(page.locator('.career-route-premises')).toBeVisible();
+    // B547: «Роли» по макету 4 — поповер с чекбоксами ролей кампании.
+    await expect(page.getByTestId('role-tree-filter')).toBeVisible();
+    await expect(page.locator('#vacancies-filter-popover')).toHaveAttribute(
+      'data-active-group',
+      'roles',
+    );
 
     // Capture after screenshot at 1440
     await page.screenshot({ path: 'output/playwright/B366/role-step-after-1440.png' });
@@ -70,14 +68,9 @@ test.describe('B366: Career rail entry opens the existing role filter', () => {
       .getByRole('button', { name: /^Фильтры/ })
       .first()
       .click();
-    await page.getByText('Добавить свою роль', { exact: true }).click();
-
-    await expect(page.locator('.vacancies-screen')).toBeVisible();
-    // 390 has no role-step link any more: the role field opens from the filter sheet and takes input.
-    const mobileRoleInput = page.locator('.add-role-input');
-    await expect(mobileRoleInput).toBeVisible();
-    await mobileRoleInput.focus();
-    await expect(mobileRoleInput).toBeFocused();
+    // 390: лист фильтров → push-экран «Роли» с теми же чекбоксами.
+    await page.locator('[data-filter-sheet-group="roles"]').click();
+    await expect(page.getByTestId('role-tree-filter')).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B366/role-step-after-390.png' });
   });
 

@@ -1,5 +1,10 @@
 /* B547 / возврат B446: лист фильтров 390 по макету 4 (`?frame&sheet=filters`). */
 @media (max-width: 760px) {
+  /* The wrapper is a stacking context (z 20) under the sticky topbar (z 25): lift it while the sheet is open. */
+  .vacancies-filter-wrap:has(.vacancies-filters.is-mobile-open) {
+    z-index: 70;
+  }
+
   .vacancies-mobile-sheet-scrim {
     position: fixed;
     inset: 0;

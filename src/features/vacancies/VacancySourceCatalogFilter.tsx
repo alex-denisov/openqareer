@@ -254,10 +254,12 @@ function SourceOptionList({
 
 function SourceFooter({
   view,
+  compact,
   onCancel,
   onApply,
 }: {
   readonly view: ReturnType<typeof useSourceFilterView>;
+  readonly compact: boolean;
   readonly onCancel?: () => void;
   readonly onApply?: () => void;
 }) {
@@ -278,13 +280,21 @@ function SourceFooter({
       >
         Снять все
       </button>
-      <button type="button" className="filters-reset" onClick={onCancel}>
-        Отмена
-      </button>
-      <button type="button" className="btn btn-secondary vacancies-filter-apply" onClick={onApply}>
-        <Check size={16} weight="bold" aria-hidden="true" />
-        Применить
-      </button>
+      {compact ? null : (
+        <>
+          <button type="button" className="filters-reset" onClick={onCancel}>
+            Отмена
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary vacancies-filter-apply"
+            onClick={onApply}
+          >
+            <Check size={16} weight="bold" aria-hidden="true" />
+            Применить
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -394,9 +404,12 @@ function SourceCatalogContent({
         }}
       />
       <SourceOptionList catalog={catalog} view={view} />
-      {props.withFooter ? (
-        <SourceFooter view={view} onCancel={props.onCancel} onApply={props.onApply} />
-      ) : null}
+      <SourceFooter
+        view={view}
+        compact={!props.withFooter}
+        onCancel={props.onCancel}
+        onApply={props.onApply}
+      />
     </div>
   );
 }

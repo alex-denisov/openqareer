@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { expect, test } from '@playwright/test';
 import type { MatchedVacancyFacets } from '../shared/matchedVacancyFacets';
+import { applyFilters, openFilterGroup } from './fixtures/vacancyFilters';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 function source(
@@ -128,10 +129,16 @@ async function exerciseSourceCatalogControls(
   const showMore = sourceFilter.getByRole('button', { name: 'Показать ещё 20', exact: true });
   await expect(showMore).toBeVisible();
   await showMore.click();
-  await expect(sourceFilter.getByRole('button', { name: /Источник 20/u })).toBeVisible();
-  await sourceFilter.getByRole('button', { name: 'Все 24', exact: true }).click();
+  await expect(sourceFilter.getByRole('checkbox', { name: /Источник 20/u })).toBeVisible();
+  await sourceFilter
+    .getByRole('group', { name: 'Выбор источников' })
+    .getByRole('button', { name: 'Все 24', exact: true })
+    .click();
   await expect(sourceFilter.getByText(/Выбрано 24/u)).toBeVisible();
-  await sourceFilter.getByRole('button', { name: 'Снять все', exact: true }).click();
+  await sourceFilter
+    .getByRole('group', { name: 'Выбор источников' })
+    .getByRole('button', { name: 'Снять все', exact: true })
+    .click();
   await expect(sourceFilter.getByText(/Выбрано 0/u)).toBeVisible();
 }
 
@@ -142,36 +149,27 @@ async function openVacancies(page: import('@playwright/test').Page): Promise<voi
   await expect(page.locator('.vac-list-item').first()).toBeVisible();
 }
 
-async function openSourceFilter(
-  page: import('@playwright/test').Page,
-  mobile: boolean,
-): Promise<void> {
-  if (mobile) {
-    await page.getByRole('button', { name: /^Фильтры/u }).click();
-  } else {
-    await page.locator('[data-filter-group="sources"]').click();
-  }
-  await expect(page.locator('.vacancies-filters')).toBeVisible();
+async function openSourceFilter(page: import('@playwright/test').Page): Promise<void> {
+  await openFilterGroup(page, 'sources');
   await expect(page.locator('.vacancy-source-filter')).toBeVisible();
 }
 
 test.describe('AUD-4 — экран вакансий', () => {
   test('B447: searches the full source catalog and applies or clears multiple sources', async ({
     page,
-  }, testInfo) => {
-    const mobile = testInfo.project.name === 'mobile-390';
+  }) => {
     await mockSignedInCabinet(page, { vacancyTotal: 5, vacancyFacets });
     await page.route('**/api/v1/candidate/vacancy-sources', (route) =>
       route.fulfill({ json: { data: sourceCatalog } }),
     );
     const sourceQueries = trackMatchedSourceQueries(page);
     await openVacancies(page);
-    await openSourceFilter(page, mobile);
+    await openSourceFilter(page);
 
     const sourceFilter = page.locator('.vacancy-source-filter');
     const categoryGroup = sourceFilter.getByRole('group', { name: 'Категории источников' });
     await expect(categoryGroup.getByRole('button')).toContainText([
-      /Все источники/u,
+      /^Все/u,
       /Площадки/u,
       /ATS компаний/u,
       /Агрегаторы/u,
@@ -181,24 +179,26 @@ test.describe('AUD-4 — экран вакансий', () => {
 
     const search = sourceFilter.getByRole('searchbox', { name: /Найти среди/u });
     await expect(search).toBeVisible();
-    await expect(search).toHaveAttribute('placeholder', 'Найти по названию, домену или стране');
+    await expect(search).toHaveAttribute(
+      'placeholder',
+      /Найти среди \d+: название, домен, страна/u,
+    );
     await categoryGroup.getByRole('button', { name: /ATS компаний/u }).click();
     await search.fill('boards.greenhouse.io');
-    const greenhouse = sourceFilter.getByRole('button', { name: /Greenhouse/u });
+    const greenhouse = sourceFilter.getByRole('checkbox', { name: /Greenhouse/u });
     await expect(greenhouse).toBeVisible();
-    await expect(sourceFilter.getByRole('button', { name: /hh\.ru/u })).toHaveCount(0);
+    await expect(sourceFilter.getByRole('checkbox', { name: /hh\.ru/u })).toHaveCount(0);
     await greenhouse.click();
     await captureEvidence(page, 'source-search');
 
     await categoryGroup.getByRole('button', { name: /Агрегаторы/u }).click();
     await search.fill('россия');
-    const hh = sourceFilter.getByRole('button', { name: /hh\.ru/u });
+    const hh = sourceFilter.getByRole('checkbox', { name: /hh\.ru/u });
     await expect(hh).toBeVisible();
     await hh.click();
     await expect(sourceFilter.getByText(/Выбрано 2/u)).toBeVisible();
 
-    const applyName = mobile ? 'Показать результаты' : 'Применить';
-    await page.getByRole('button', { name: applyName, exact: true }).click();
+    await applyFilters(page);
     await expect
       .poll(() =>
         sourceQueries.some((query) => query.includes('greenhouse') && query.includes('hh')),
@@ -206,10 +206,10 @@ test.describe('AUD-4 — экран вакансий', () => {
       .toBe(true);
 
     const beforeClear = sourceQueries.length;
-    await openSourceFilter(page, mobile);
+    await openSourceFilter(page);
     await sourceFilter.getByRole('button', { name: 'Снять все', exact: true }).click();
     await expect(sourceFilter.getByText(/Выбрано 0/u)).toBeVisible();
-    await page.getByRole('button', { name: applyName, exact: true }).click();
+    await applyFilters(page);
     await expect.poll(() => sourceQueries.length).toBeGreaterThan(beforeClear);
     expect(sourceQueries.at(-1)).toEqual([]);
   });

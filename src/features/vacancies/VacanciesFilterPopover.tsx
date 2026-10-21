@@ -61,15 +61,16 @@ export function isMobileFilterViewport(): boolean {
   );
 }
 
-export function useMobileRoleFocus(
+/** Вход из «Карьеры» с фокусом на ролях открывает группу «Роли» (поповер 1440, push-экран 390). */
+export function useRoleFocus(
   focusRole: boolean | undefined,
   setActiveGroup: Dispatch<SetStateAction<VacancyFilterGroup | null>>,
   setExpanded: Dispatch<SetStateAction<boolean>>,
 ) {
   useEffect(() => {
-    if (!focusRole || !isMobileFilterViewport()) return;
+    if (!focusRole) return;
     setActiveGroup('roles');
-    setExpanded(true);
+    setExpanded(isMobileFilterViewport());
   }, [focusRole, setActiveGroup, setExpanded]);
 }
 
