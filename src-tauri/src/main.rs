@@ -498,6 +498,9 @@ fn main() {
             desktop_notify::get_desktop_notification_state,
             desktop_notify::save_desktop_notification_state,
             desktop_notify::update_desktop_notification_menu_state,
+            desktop_notify::log_desktop_notification_failure,
+            desktop_notify::get_desktop_notification_permission_state,
+            desktop_notify::request_desktop_notification_permission,
             desktop_notify::focus_main_window,
         ])
         .build(tauri::generate_context!())

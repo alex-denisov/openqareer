@@ -1,5 +1,15 @@
+#[cfg(target_os = "macos")]
+use block2::RcBlock;
+#[cfg(target_os = "macos")]
+use objc2_foundation::NSError;
+#[cfg(target_os = "macos")]
+use objc2_user_notifications::{
+    UNAuthorizationOptions, UNAuthorizationStatus, UNNotificationSettings, UNUserNotificationCenter,
+};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
+#[cfg(target_os = "macos")]
+use std::{ptr::NonNull, sync::mpsc, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -12,7 +22,8 @@ const STATE_FILE: &str = "desktop-notifications.json";
 #[serde(rename_all = "snake_case")]
 pub enum PermissionStatus {
     Unknown,
-    Unverified,
+    #[serde(alias = "unverified")]
+    Granted,
     Denied,
     Unavailable,
 }
@@ -22,6 +33,8 @@ pub enum PermissionStatus {
 pub struct DesktopNotificationState {
     pub enabled: bool,
     pub permission_status: PermissionStatus,
+    #[serde(default)]
+    pub permission_reason: Option<String>,
     pub enabled_at: Option<String>,
     pub last_poll_at: Option<String>,
     pub seen_ids: Vec<String>,
@@ -32,6 +45,7 @@ impl Default for DesktopNotificationState {
         Self {
             enabled: false,
             permission_status: PermissionStatus::Unknown,
+            permission_reason: None,
             enabled_at: None,
             last_poll_at: None,
             seen_ids: Vec::new(),
@@ -62,18 +76,149 @@ pub fn update_desktop_notification_menu_state(
     toggle: State<'_, TrayNotificationToggle>,
     enabled: bool,
     permission_status: PermissionStatus,
+    reason: Option<String>,
 ) -> Result<(), String> {
-    let label = match permission_status {
-        PermissionStatus::Denied | PermissionStatus::Unavailable => "Уведомления: недоступны",
-        PermissionStatus::Unverified if enabled => "Уведомления: вкл · статус ОС не проверен",
-        PermissionStatus::Unverified => "Уведомления: выкл · статус ОС не проверен",
-        _ if enabled => "Уведомления: выключить",
-        _ => "Уведомления: включить",
-    };
     toggle
         .0
-        .set_text(label)
+        .set_text(format_notification_menu_label(
+            enabled,
+            permission_status,
+            reason.as_deref(),
+        ))
         .map_err(|_| "tray_menu_update_failed".to_string())
+}
+
+#[tauri::command]
+pub fn log_desktop_notification_failure(context: String, reason: String) {
+    eprintln!(
+        "[desktop-notify] {}: {}",
+        safe_log_value(&context),
+        safe_log_value(&reason)
+    );
+}
+
+#[tauri::command]
+pub async fn get_desktop_notification_permission_state() -> Result<PermissionStatus, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return tokio::task::spawn_blocking(read_macos_permission_status)
+            .await
+            .map_err(|_| "notification_permission_state_unavailable".to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(PermissionStatus::Granted)
+    }
+}
+
+#[tauri::command]
+pub async fn request_desktop_notification_permission() -> Result<PermissionStatus, String> {
+    #[cfg(target_os = "macos")]
+    {
+        return tokio::task::spawn_blocking(request_macos_notification_permission)
+            .await
+            .map_err(|_| "notification_permission_request_failed".to_string())?;
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(PermissionStatus::Granted)
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn read_macos_permission_status() -> Result<PermissionStatus, String> {
+    current_macos_authorization_status().map(map_macos_permission_status)
+}
+
+#[cfg(target_os = "macos")]
+fn request_macos_notification_permission() -> Result<PermissionStatus, String> {
+    let current = current_macos_authorization_status()?;
+    if current != UNAuthorizationStatus::NotDetermined {
+        return Ok(map_macos_permission_status(current));
+    }
+
+    let (sender, receiver) = mpsc::channel();
+    let callback = RcBlock::new(move |granted: objc2::runtime::Bool, error: *mut NSError| {
+        let result = if error.is_null() {
+            Ok(granted.as_bool())
+        } else {
+            let description = unsafe { (&*error).localizedDescription().to_string() };
+            Err(description)
+        };
+        let _ = sender.send(result);
+    });
+    UNUserNotificationCenter::currentNotificationCenter()
+        .requestAuthorizationWithOptions_completionHandler(
+            UNAuthorizationOptions::Alert | UNAuthorizationOptions::Sound,
+            &callback,
+        );
+    receiver
+        .recv()
+        .map_err(|_| "notification_permission_request_failed".to_string())?
+        .map(|granted| {
+            if granted {
+                PermissionStatus::Granted
+            } else {
+                PermissionStatus::Denied
+            }
+        })
+}
+
+#[cfg(target_os = "macos")]
+fn current_macos_authorization_status() -> Result<UNAuthorizationStatus, String> {
+    let (sender, receiver) = mpsc::channel();
+    let callback = RcBlock::new(move |settings: NonNull<UNNotificationSettings>| {
+        let status = unsafe { settings.as_ref().authorizationStatus() };
+        let _ = sender.send(status);
+    });
+    UNUserNotificationCenter::currentNotificationCenter()
+        .getNotificationSettingsWithCompletionHandler(&callback);
+    receiver
+        .recv_timeout(Duration::from_secs(2))
+        .map_err(|_| "notification_permission_state_timeout".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn map_macos_permission_status(status: UNAuthorizationStatus) -> PermissionStatus {
+    match status {
+        UNAuthorizationStatus::NotDetermined => PermissionStatus::Unknown,
+        UNAuthorizationStatus::Denied => PermissionStatus::Denied,
+        UNAuthorizationStatus::Authorized
+        | UNAuthorizationStatus::Provisional
+        | UNAuthorizationStatus::Ephemeral => PermissionStatus::Granted,
+        _ => PermissionStatus::Unavailable,
+    }
+}
+
+fn format_notification_menu_label(
+    enabled: bool,
+    permission_status: PermissionStatus,
+    reason: Option<&str>,
+) -> String {
+    match permission_status {
+        PermissionStatus::Denied => "Уведомления: запрещены в настройках macOS".to_string(),
+        PermissionStatus::Unavailable => format!(
+            "Уведомления: недоступны — {}",
+            reason
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .unwrap_or("сбой службы уведомлений")
+        ),
+        PermissionStatus::Granted | PermissionStatus::Unknown if enabled => {
+            "Уведомления: выключить".to_string()
+        }
+        PermissionStatus::Granted | PermissionStatus::Unknown => {
+            "Уведомления: включить".to_string()
+        }
+    }
+}
+
+fn safe_log_value(value: &str) -> String {
+    value
+        .chars()
+        .filter(|character| !character.is_control())
+        .take(180)
+        .collect()
 }
 
 #[tauri::command]
@@ -174,4 +319,54 @@ fn write_state(path: &PathBuf, state: &DesktopNotificationState) -> Result<(), S
         fs::remove_file(path).map_err(|_| "desktop_notification_state_unavailable".to_string())?;
     }
     fs::rename(temporary, path).map_err(|_| "desktop_notification_state_unavailable".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_os = "macos")]
+    use super::map_macos_permission_status;
+    use super::{format_notification_menu_label, PermissionStatus};
+
+    #[test]
+    fn formats_each_notification_menu_state() {
+        assert_eq!(
+            format_notification_menu_label(false, PermissionStatus::Unknown, None),
+            "Уведомления: включить"
+        );
+        assert_eq!(
+            format_notification_menu_label(true, PermissionStatus::Granted, None),
+            "Уведомления: выключить"
+        );
+        assert_eq!(
+            format_notification_menu_label(false, PermissionStatus::Denied, None),
+            "Уведомления: запрещены в настройках macOS"
+        );
+        assert_eq!(
+            format_notification_menu_label(
+                false,
+                PermissionStatus::Unavailable,
+                Some("ошибка IPC")
+            ),
+            "Уведомления: недоступны — ошибка IPC"
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn maps_native_macos_permission_status_without_trusting_the_plugin_default() {
+        use objc2_user_notifications::UNAuthorizationStatus;
+
+        assert_eq!(
+            map_macos_permission_status(UNAuthorizationStatus::NotDetermined),
+            PermissionStatus::Unknown
+        );
+        assert_eq!(
+            map_macos_permission_status(UNAuthorizationStatus::Denied),
+            PermissionStatus::Denied
+        );
+        assert_eq!(
+            map_macos_permission_status(UNAuthorizationStatus::Authorized),
+            PermissionStatus::Granted
+        );
+    }
 }

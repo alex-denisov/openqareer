@@ -14,10 +14,11 @@ const PAGE_SIZE = 50;
 const MAX_PAGES_PER_POLL = 20;
 const MAX_SEEN_IDS = 512;
 
-type PermissionStatus = 'unknown' | 'unverified' | 'denied' | 'unavailable';
+type PermissionStatus = 'unknown' | 'granted' | 'denied' | 'unavailable';
 
 interface StoredDesktopNotificationState extends DesktopNotificationCheckpoint {
   readonly permissionStatus: PermissionStatus;
+  readonly permissionReason: string | null;
 }
 
 interface NotificationActionPayload {
@@ -34,72 +35,162 @@ interface NotificationPageBatch {
 
 let state: StoredDesktopNotificationState | null = null;
 let started = false;
+let initialization: Promise<void> | null = null;
 let pollInProgress = false;
+let toggleInProgress = false;
+let pluginPermissionMismatchLogged = false;
 
 export function startDesktopNotificationService(): void {
   if (!isTauriEnvironment() || started) return;
   started = true;
-  void initializeDesktopNotificationService();
+  initialization = initializeDesktopNotificationService();
 }
 
 async function initializeDesktopNotificationService(): Promise<void> {
+  try {
+    await listen('desktop-notify-toggle-request', () => {
+      void runToggleSafely();
+    });
+  } catch (error) {
+    await setUnavailable('не удалось подключить пункт меню', error, 'register_menu_toggle');
+    return;
+  }
+
   try {
     await addPluginListener<NotificationActionPayload>(
       'notification',
       'actionPerformed',
       (payload) => {
-        void handleNotificationAction(payload);
+        void runNotificationActionSafely(payload);
       },
     );
-    await listen('desktop-notify-toggle-request', () => {
-      void toggleNotifications();
-    });
-    state = await invoke<StoredDesktopNotificationState>('get_desktop_notification_state');
-    await updateMenuState(state);
-    window.addEventListener('online', handleOnline);
-    window.setInterval(handleOnline, POLL_INTERVAL_MS);
-    if (state.enabled && state.permissionStatus === 'unverified') await pollForNotifications();
-  } catch {
-    await markUnavailable();
+  } catch (error) {
+    await reportFailure('register_notification_action_listener', error);
+  }
+
+  try {
+    const stored = await invoke<StoredDesktopNotificationState>(
+      'get_desktop_notification_state',
+    );
+    state = stateWithPermission(stored, await readPermission());
+    await persistState(state);
+  } catch (error) {
+    await setUnavailable('не удалось проверить разрешение', error, 'initialize');
+  }
+
+  window.addEventListener('online', handleOnline);
+  window.setInterval(handleOnline, POLL_INTERVAL_MS);
+  if (state?.enabled && state.permissionStatus === 'granted') void pollForNotifications();
+}
+
+async function runToggleSafely(): Promise<void> {
+  if (toggleInProgress) return;
+  toggleInProgress = true;
+  try {
+    await initialization;
+    await toggleNotifications();
+  } catch (error) {
+    await setUnavailable('не удалось изменить настройку', error, 'toggle_notifications');
+  } finally {
+    toggleInProgress = false;
   }
 }
 
 async function toggleNotifications(): Promise<void> {
-  if (!state) return;
+  if (!state) throw new Error('notification state is unavailable');
+  const permission = await readPermission();
+  if (permission === false) {
+    await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+    return;
+  }
   if (state.enabled) {
-    await persistState({ ...state, enabled: false });
+    const permissionStatus = permission ? 'granted' : 'unknown';
+    await persistState({ ...state, enabled: false, permissionStatus, permissionReason: null });
     return;
   }
-  if (state.permissionStatus === 'denied' || state.permissionStatus === 'unavailable') {
-    await updateMenuState(state);
-    return;
-  }
+  if (permission === null && !(await requestPermission())) return;
 
-  const permission =
-    state.permissionStatus === 'unverified' ? 'unverified' : await requestPermission();
-  if (permission !== 'unverified') {
-    await persistState({ ...state, enabled: false, permissionStatus: permission });
-    return;
-  }
   const now = new Date().toISOString();
   await persistState({
     ...state,
     enabled: true,
-    permissionStatus: permission,
+    permissionStatus: 'granted',
+    permissionReason: null,
     enabledAt: now,
     lastPollAt: now,
   });
-  await pollForNotifications();
+  if (await showEnableConfirmation()) await pollForNotifications();
 }
 
-async function requestPermission(): Promise<PermissionStatus> {
-  if (typeof window.Notification?.requestPermission !== 'function') return 'unavailable';
+async function readPermission(): Promise<boolean | null> {
+  const status = await invoke<PermissionStatus>('get_desktop_notification_permission_state');
+  const permission = permissionGrant(status);
   try {
-    const result = await window.Notification.requestPermission();
-    return result === 'granted' ? 'unverified' : result === 'denied' ? 'denied' : 'unavailable';
-  } catch {
-    return 'unavailable';
+    const pluginPermission = await invoke<boolean | null>(
+      'plugin:notification|is_permission_granted',
+    );
+    if (pluginPermission !== permission && !pluginPermissionMismatchLogged) {
+      pluginPermissionMismatchLogged = true;
+      await reportFailure(
+        'plugin_permission_state_mismatch',
+        new Error(`Tauri plugin reported ${pluginPermission}; macOS reported ${permission}`),
+      );
+    }
+  } catch (error) {
+    await reportFailure('plugin_permission_state_query', error);
   }
+  return permission;
+}
+
+async function requestPermission(): Promise<boolean> {
+  try {
+    await invoke<string>('plugin:notification|request_permission');
+  } catch (error) {
+    await reportFailure('plugin_request_permission', error);
+  }
+  const result = await invoke<PermissionStatus>('request_desktop_notification_permission');
+  const permission = permissionGrant(result);
+  if (permission === false) {
+    if (!state) throw new Error('notification state is unavailable');
+    await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+    return false;
+  }
+  if (permission !== true) throw new Error(`notification permission is unresolved: ${result}`);
+  return true;
+}
+
+function permissionGrant(status: PermissionStatus): boolean | null {
+  if (status === 'granted') return true;
+  if (status === 'denied') return false;
+  if (status === 'unknown') return null;
+  throw new Error(`notification permission is unavailable: ${status}`);
+}
+
+async function showEnableConfirmation(): Promise<boolean> {
+  try {
+    await invoke('plugin:notification|notify', {
+      options: { title: 'OpenQareer', body: 'Уведомления openqareer включены' },
+    });
+    return true;
+  } catch (error) {
+    if (isPermissionFailure(error)) {
+      await setPermissionDenied(error, 'send_enable_confirmation');
+    } else {
+      await setUnavailable('не удалось показать тестовое уведомление', error, 'send_enable_confirmation');
+    }
+    return false;
+  }
+}
+
+function stateWithPermission(
+  stored: StoredDesktopNotificationState,
+  permission: boolean | null,
+): StoredDesktopNotificationState {
+  if (permission === false) {
+    return { ...stored, enabled: false, permissionStatus: 'denied', permissionReason: null };
+  }
+  if (permission === true) return { ...stored, permissionStatus: 'granted', permissionReason: null };
+  return { ...stored, enabled: false, permissionStatus: 'unknown', permissionReason: null };
 }
 
 function handleOnline(): void {
@@ -109,7 +200,7 @@ function handleOnline(): void {
 async function pollForNotifications(): Promise<void> {
   if (
     !state?.enabled ||
-    state.permissionStatus !== 'unverified' ||
+    state.permissionStatus !== 'granted' ||
     pollInProgress ||
     !navigator.onLine
   )
@@ -124,8 +215,8 @@ async function pollForNotifications(): Promise<void> {
       await persistState({ ...state, seenIds: mergeSeenIds(state.seenIds, notice.ids) });
     }
     if (batch.complete) await persistState({ ...state, lastPollAt: now });
-  } catch {
-    // Keep the old checkpoint so the next online event or interval retries.
+  } catch (error) {
+    await reportFailure('poll_notifications', error);
   } finally {
     pollInProgress = false;
   }
@@ -161,9 +252,20 @@ async function showNotification(notice: DesktopNotificationNotice): Promise<bool
     });
     return true;
   } catch (error) {
-    const permissionStatus = isPermissionFailure(error) ? 'denied' : 'unavailable';
-    await markUnavailable(permissionStatus);
+    if (isPermissionFailure(error)) {
+      await setPermissionDenied(error, 'show_notification');
+    } else {
+      await setUnavailable('не удалось показать уведомление', error, 'show_notification');
+    }
     return false;
+  }
+}
+
+async function runNotificationActionSafely(payload: NotificationActionPayload): Promise<void> {
+  try {
+    await handleNotificationAction(payload);
+  } catch (error) {
+    await reportFailure('open_notification_action', error);
   }
 }
 
@@ -198,16 +300,68 @@ async function updateMenuState(next: StoredDesktopNotificationState): Promise<vo
   await invoke('update_desktop_notification_menu_state', {
     enabled: next.enabled,
     permissionStatus: next.permissionStatus,
+    reason: next.permissionReason,
   });
 }
 
-async function markUnavailable(permissionStatus: PermissionStatus = 'unavailable'): Promise<void> {
+async function setPermissionDenied(error: unknown, context: string): Promise<void> {
+  await reportFailure(context, error);
   if (!state) return;
+  await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+}
+
+async function setUnavailable(reason: string, error: unknown, context: string): Promise<void> {
+  await reportFailure(context, error);
+  const next = {
+    ...(state ?? emptyState()),
+    enabled: false,
+    permissionStatus: 'unavailable' as const,
+    permissionReason: reason,
+  };
+  state = next;
   try {
-    await persistState({ ...state, enabled: false, permissionStatus });
-  } catch {
-    state = { ...state, enabled: false, permissionStatus };
+    await invoke('save_desktop_notification_state', { state: next });
+  } catch (saveError) {
+    await reportFailure('save_unavailable_state', saveError);
   }
+  try {
+    await updateMenuState(next);
+  } catch (menuError) {
+    await reportFailure('update_unavailable_menu', menuError);
+  }
+}
+
+function emptyState(): StoredDesktopNotificationState {
+  return {
+    enabled: false,
+    enabledAt: null,
+    lastPollAt: null,
+    seenIds: [],
+    permissionStatus: 'unavailable',
+    permissionReason: 'сбой службы уведомлений',
+  };
+}
+
+async function reportFailure(context: string, error: unknown): Promise<void> {
+  const reason = errorMessage(error);
+  try {
+    await invoke('log_desktop_notification_failure', { context, reason });
+  } catch (logError) {
+    const message = `[desktop-notify] ${context}: ${reason}; журнал недоступен: ${errorMessage(logError)}`;
+    const reportError = (
+      globalThis as typeof globalThis & { reportError?: (error: Error) => void }
+    ).reportError;
+    if (reportError) {
+      reportError(new Error(message));
+    } else if (typeof window !== 'undefined') {
+      window.dispatchEvent(new ErrorEvent('error', { message, error: logError }));
+    }
+  }
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.replace(/[\r\n]+/g, ' ').slice(0, 180) || 'unknown error';
 }
 
 function isPermissionFailure(error: unknown): boolean {

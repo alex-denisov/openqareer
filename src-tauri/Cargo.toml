@@ -30,6 +30,9 @@ base64 = "0.22"
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSProcessInfo"] }
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSPrintInfo", "NSPrintOperation", "NSResponder", "NSView"] }
 objc2-web-kit = { version = "0.3.2", default-features = false, features = ["WKWebView", "objc2-app-kit"] }
+block2 = "0.6"
+objc2 = "0.6"
+objc2-user-notifications = { version = "0.3.2", default-features = false, features = ["std", "block2", "UNUserNotificationCenter", "UNNotificationSettings"] }
 
 [dev-dependencies]
 tokio-test = "0.4"
