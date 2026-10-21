@@ -3,6 +3,7 @@ import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestion
 import { listRelocationCountries } from './relocationCountryData';
 import {
   relocationTabCounts,
+  sortRelocationCountries,
   summarizeRelocationCountry,
   visibleRelocationCountries,
 } from './relocationCountrySummary';
@@ -39,6 +40,18 @@ describe('relocation country summary', () => {
     if (!germany) throw new Error('catalog lost Germany');
     const summary = summarizeRelocationCountry(germany, emptyRelocationQuestionnaire());
     expect(summary.statusLabel).toBe('Нужно уточнить');
+  });
+});
+
+describe('relocation country order', () => {
+  it('puts open countries first, then barriers, then unknown', () => {
+    const order = sortRelocationCountries(listRelocationCountries(), russianProfile()).map(
+      (country) => summarizeRelocationCountry(country, russianProfile()).status,
+    );
+    const rank = { available: 0, high_barriers: 1, legally_unavailable: 2, unknown: 3 } as const;
+    const ranks = order.map((status) => rank[status]);
+    expect(ranks).toEqual([...ranks].sort((left, right) => left - right));
+    expect(order[0]).toBe('available');
   });
 });
 

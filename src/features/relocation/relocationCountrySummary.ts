@@ -72,7 +72,11 @@ export function summarizeRelocationCountry(
     scenarioLabel: lead
       ? (RELOCATION_SCENARIO_LABELS[lead.id] ?? lead.label)
       : 'Сценарий не определён',
-    reason: lead?.reasons[0] ?? 'В правилах нет пояснения для вашего профиля.',
+    reason:
+      lead?.reasons[0] ??
+      (lead?.status === 'available'
+        ? 'Правило выполнено по фактам вашей анкеты.'
+        : 'В правилах нет пояснения для вашего профиля.'),
     source: source ? { title: source.title, retrievedAt: source.retrievedAt } : null,
     scenarios: fit.scenarios,
   };
@@ -104,4 +108,32 @@ export function visibleRelocationCountries(
       !preview.some((item) => item.countryCode === countryCode),
   );
   return [...preview, ...pinned];
+}
+
+const STATUS_ORDER: Readonly<Record<CountryFitStatus, number>> = {
+  available: 0,
+  high_barriers: 1,
+  legally_unavailable: 2,
+  unknown: 3,
+};
+
+/** Mockup 15 order: open countries first, then barriers, closed, and unknown last; by name inside. */
+export function sortRelocationCountries(
+  countries: readonly RelocationCountry[],
+  profile: RelocationQuestionnaire | null,
+): readonly RelocationCountry[] {
+  const rank = new Map(
+    countries.map((country) => [
+      country.countryCode,
+      // The home market (a citizenship country) leads, as in the mockup.
+      profile?.citizenshipDocuments.citizenshipCountryCodes.includes(country.countryCode)
+        ? -1
+        : STATUS_ORDER[countryFitForQuestionnaire(country.countryCode, profile).status],
+    ]),
+  );
+  return [...countries].sort(
+    (left, right) =>
+      (rank.get(left.countryCode) ?? 9) - (rank.get(right.countryCode) ?? 9) ||
+      left.name.localeCompare(right.name, 'ru'),
+  );
 }

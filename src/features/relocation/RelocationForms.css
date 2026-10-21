@@ -661,3 +661,17 @@
   block-size: var(--career-space-5);
   accent-color: var(--career-accent);
 }
+
+.career-relocation-profile-row {
+  align-items: center;
+}
+
+.career-relocation-row-actions {
+  display: inline-flex;
+  justify-self: end;
+  gap: var(--career-space-1);
+}
+
+.career-relocation-profile-row:has(.career-relocation-row-actions) {
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr) auto;
+}

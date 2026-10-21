@@ -122,7 +122,10 @@ function DesktopComparison({
 }) {
   return (
     <div className="career-relocation-card career-relocation-comparison-view">
-      <CountryComparisonPanel countries={workspace.comparisonCountries} />
+      <CountryComparisonPanel
+        countries={workspace.comparisonCountries}
+        title={comparisonTitle(workspace.comparisonCountries)}
+      />
       <div className="career-relocation-footer-actions">
         <button
           className="career-btn career-btn-primary"
@@ -210,4 +213,10 @@ function nextTabIndex(key: string, currentIndex: number): number {
   if (key === 'Home') return 0;
   if (key === 'End') return TABS.length - 1;
   return currentIndex;
+}
+
+function comparisonTitle(countries: RelocationWorkspaceState['comparisonCountries']): string {
+  return countries.length
+    ? `Сравнение: ${countries.map(({ countryName }) => countryName).join(', ')}`
+    : 'Сравнение стран';
 }

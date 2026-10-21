@@ -590,7 +590,7 @@
 
 .career-relocation-country-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--career-space-4);
   margin: 0;
   padding: 0;
@@ -778,5 +778,11 @@
   .career-relocation-filter-chip,
   .career-relocation-icon-button {
     transition: color var(--career-motion-quick), background var(--career-motion-quick);
+  }
+}
+
+@media (max-width: 900px) {
+  .career-relocation-country-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

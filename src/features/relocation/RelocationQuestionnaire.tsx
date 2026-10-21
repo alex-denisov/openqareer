@@ -16,9 +16,9 @@ import {
   putRelocationQuestionnaireProgress,
   putRelocationQuestionnaireStep,
   restartRelocationQuestionnaire,
-  type RelocationStepInput,
 } from './relocationApi';
 import { RelocationQuestionnaireStepForm } from './RelocationQuestionnaireSteps';
+import { relocationLanguageInput, saveRelocationStep } from './relocationProfileItems';
 import { listRelocationCountries, mobilityCandidateFromQuestionnaire } from './relocationCountryData';
 
 const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
@@ -286,7 +286,7 @@ async function advanceQuestionnaire(input: AdvanceInput) {
   input.setError(undefined);
   input.setNotice(undefined);
   try {
-    const stepResult = input.skip ? undefined : await saveStep(input.step, input.draft);
+    const stepResult = input.skip ? undefined : await saveRelocationStep(input.step, input.draft);
     const base = stepResult?.profile ?? input.savedProfile;
     const skippedSteps = input.skip
       ? [...new Set([...base.skippedSteps, input.step])]
@@ -373,7 +373,7 @@ async function importQuestionnaireLanguages(input: ImportLanguagesInput) {
   input.setError(undefined);
   try {
     const current = input.isDirty
-      ? (await putRelocationQuestionnaireStep('languages', languageInput(input.draft), input.savedProfile.revision)).profile
+      ? (await putRelocationQuestionnaireStep('languages', relocationLanguageInput(input.draft), input.savedProfile.revision)).profile
       : input.savedProfile;
     const result = await importRelocationLanguagesFromLinkedIn(current.revision);
     input.setSavedProfile(result.profile);
@@ -419,19 +419,6 @@ async function restartQuestionnaire(input: RestartInput) {
   }
 }
 
-function saveStep(step: RelocationStepId, profile: RelocationQuestionnaire) {
-  switch (step) {
-    case 'citizenship_documents':
-      return putRelocationQuestionnaireStep(step, profile.citizenshipDocuments, profile.revision);
-    case 'education':
-      return putRelocationQuestionnaireStep(step, profile.education, profile.revision);
-    case 'family':
-      return putRelocationQuestionnaireStep(step, profile.family, profile.revision);
-    case 'languages':
-      return putRelocationQuestionnaireStep(step, languageInput(profile), profile.revision);
-  }
-}
-
 function validateStep(step: RelocationStepId, profile: RelocationQuestionnaire): string | undefined {
   const result = relocationQuestionnaireStepSchemas[step].safeParse(profileStepData(step, profile));
   return result.success ? undefined : 'Проверьте обязательные поля и даты шага.';
@@ -442,12 +429,6 @@ function profileStepData(step: RelocationStepId, profile: RelocationQuestionnair
   if (step === 'education') return profile.education;
   if (step === 'family') return profile.family;
   return profile.languages;
-}
-
-function languageInput(profile: RelocationQuestionnaire): RelocationStepInput['languages'] {
-  return {
-    languages: profile.languages.languages.map(({ id, name, level, confirmation }) => ({ id, name, level, confirmation })),
-  };
 }
 
 function nextStepAfter(step: RelocationStepId): RelocationCurrentStep {

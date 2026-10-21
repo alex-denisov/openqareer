@@ -3,7 +3,7 @@ import type { RelocationQuestionnaire } from '../../../shared/relocationQuestion
 import type { MobilityScenarioId } from '../../../shared/countryFit/types';
 import { countryFitForQuestionnaire, listRelocationCountries } from './relocationCountryData';
 import { RelocationCountryWorkspaceView } from './RelocationCountryWorkspaceParts';
-import { visibleRelocationCountries } from './relocationCountrySummary';
+import { sortRelocationCountries, visibleRelocationCountries } from './relocationCountrySummary';
 
 type ScenarioFilter = 'all' | MobilityScenarioId;
 
@@ -45,7 +45,10 @@ function useCountryWorkspace(
   const [showAll, setShowAll] = useState(false);
   const [detailsCountry, setDetailsCountry] = useState<string>();
   const countries = useMemo(() => listRelocationCountries(), []);
-  const filteredCountries = filterCountries(countries, profile, scenario);
+  const filteredCountries = sortRelocationCountries(
+    filterCountries(countries, profile, scenario),
+    profile,
+  );
   const visibleCountries = showAll
     ? filteredCountries
     : visibleRelocationCountries(filteredCountries, COUNTRY_PREVIEW_COUNT, pinnedCountryCodes);

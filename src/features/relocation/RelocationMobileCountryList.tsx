@@ -6,7 +6,11 @@ import {
   listRelocationCountries,
   type RelocationCountry,
 } from './relocationCountryData';
-import { summarizeRelocationCountry, visibleRelocationCountries } from './relocationCountrySummary';
+import {
+  sortRelocationCountries,
+  summarizeRelocationCountry,
+  visibleRelocationCountries,
+} from './relocationCountrySummary';
 import { RelocationScenarioSheet, type RelocationScenarioFilter } from './RelocationScenarioSheet';
 import type { RelocationWorkspaceState } from './useRelocationWorkspace';
 
@@ -70,12 +74,15 @@ function useFilteredCountries(
   scenario: RelocationScenarioFilter,
 ) {
   const countries = useMemo(() => listRelocationCountries(), []);
-  return countries.filter(
-    (country) =>
-      scenario === 'all' ||
-      countryFitForQuestionnaire(country.countryCode, profile).scenarios.some(
-        ({ id, status }) => id === scenario && status !== 'unknown',
-      ),
+  return sortRelocationCountries(
+    countries.filter(
+      (country) =>
+        scenario === 'all' ||
+        countryFitForQuestionnaire(country.countryCode, profile).scenarios.some(
+          ({ id, status }) => id === scenario && status !== 'unknown',
+        ),
+    ),
+    profile,
   );
 }
 
