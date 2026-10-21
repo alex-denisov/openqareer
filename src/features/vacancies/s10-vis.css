@@ -6,6 +6,27 @@
   background: var(--career-bg-elevated);
 }
 
+.vacancies-screen-cell--status {
+  display: none;
+}
+
+.vacancies-screen-cell--status svg {
+  inline-size: 14px;
+  block-size: 14px;
+}
+
+.vacancies-screen-cell--status.is-ok {
+  color: var(--career-success);
+}
+
+.vacancies-screen-cell--status.is-warn {
+  color: var(--career-warning);
+}
+
+.vacancies-screen-cell--status.is-unknown {
+  color: var(--career-text-soft);
+}
+
 .vacancies-screen-card.is-expanded {
   border-color: var(--career-accent);
 }
@@ -356,6 +377,22 @@
   max-inline-size: 100%;
 }
 
+/* B446-g4: кнопки ряда как career-btn макета 4: 14 px, 600, поле 16 px. */
+.vacancies-screen-detail-actions .action-btn,
+.vacancies-screen-full-description {
+  padding-block: 0;
+  padding-inline: var(--career-space-4);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.vacancies-screen-detail-actions .action-btn.is-accent {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
 .vacancies-screen-footer {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -418,9 +455,28 @@
     padding: var(--career-space-3);
   }
 
+  /* B446-g4: 390 — плотные строки в одной сгруппированной карточке (mock-390-base). */
+  .vacancies-list-container .vac-list {
+    gap: 0;
+    overflow: hidden;
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-lg);
+    background: var(--career-bg-elevated);
+  }
+
+  .vacancies-list-container .vacancies-screen-card {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .vacancies-list-container .vac-list-item + .vac-list-item .vacancies-screen-card {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
   .vacancies-screen-row-trigger {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--career-space-2) var(--career-space-3);
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--career-space-1) var(--career-space-3);
     min-block-size: 0;
     padding: 0 var(--career-target-min) 0 0;
   }
@@ -430,19 +486,26 @@
     grid-row: 1;
   }
 
-  .vacancies-screen-cell--level {
+  .vacancies-screen-cell--level,
+  .vacancies-screen-cell--geo,
+  .vacancies-screen-cell--salary .vacancy-screen-money-source {
+    display: none;
+  }
+
+  .vacancies-screen-cell--salary {
     grid-column: 1;
     grid-row: 2;
   }
 
-  .vacancies-screen-cell--geo {
-    grid-column: 2;
-    grid-row: 2;
-  }
-
-  .vacancies-screen-cell--salary {
+  .vacancies-screen-cell--status {
+    display: inline-flex;
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 2;
+    align-items: center;
+    justify-self: end;
+    gap: var(--career-space-1);
+    font-size: var(--career-text-xs);
+    white-space: nowrap;
   }
 
   .vacancies-screen-cell--level::before,

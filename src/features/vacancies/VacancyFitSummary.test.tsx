@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitInline, VacancyFitSummary } from './VacancyFitSummary';
 import { readyVacancyFit } from '../../../e2e/fixtures/vacancyFit';
 import { sortVacancyFitItems } from './VacancyFitSort';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -97,4 +97,14 @@ it('names unconfirmed conditions next to the percent instead of passing them off
   );
   expect(html).toContain('50%');
   expect(html).toContain('Не подтверждено: регион, право на работу');
+});
+
+it('row inline fit shows only a computed percent and nothing for pending states (B446-g4)', () => {
+  expect(renderToStaticMarkup(<VacancyFitInline view={readyVacancyFit()} />)).toContain(
+    'Соответствие 50\u00a0%',
+  );
+  for (const state of ['not_requested', 'processing', 'retrying', 'failed'] as const) {
+    expect(renderToStaticMarkup(<VacancyFitInline view={{ state, requirements: [] }} />)).toBe('');
+  }
+  expect(renderToStaticMarkup(<VacancyFitInline />)).toBe('');
 });

@@ -19,6 +19,7 @@ import {
 } from './VacanciesFilterPopover';
 import { VacancySourceCatalogFilter, useSourceCatalog } from './VacancySourceCatalogFilter';
 import { MobileFilterSheet } from './VacanciesMobileFilterSheet';
+import { VacancyFitSortControl } from './VacancyFitSort';
 import { VacancyRoleFilter, type RoleOption } from './VacancyRoleFilter';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 import { buildLocationTree } from '../../../shared/locationTree';
@@ -514,6 +515,12 @@ function MobileFilterSheetContent({
       onBack={onBackToOverview}
       onReset={model.resetAll}
       onShow={onApply}
+      sortControl={
+        <VacancyFitSortControl
+          value={draft.sort}
+          onChange={(sort) => model.draftProps.onChange((previous) => ({ ...previous, sort }))}
+        />
+      }
     >
       <FacetGroups
         props={model.draftProps}

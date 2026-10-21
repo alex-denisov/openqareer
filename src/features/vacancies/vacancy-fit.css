@@ -161,3 +161,52 @@
     transition: none;
   }
 }
+
+/* B446-g4: компактный выбор порядка в правом конце строки заголовков колонок. */
+.vacancies-table-header-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.vacancies-table-header-actions .vacancy-fit-sort select {
+  border-color: transparent;
+  background: transparent;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  padding-inline: var(--career-space-2);
+}
+.vacancies-table-header-actions .vacancy-fit-sort select:hover {
+  border-color: var(--career-line);
+}
+
+.vacancy-fit-inline {
+  display: block;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* B446-g4: в карточке экрана соответствие — одна строка под требованиями. */
+.vacancies-screen-detail-main {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+.vacancy-fit-evidence.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding-block: 0;
+  border-block-start: 0;
+}
+.vacancy-fit-evidence.is-compact .vacancy-fit-summary {
+  margin-block-start: 0;
+}
+.vacancy-fit-evidence.is-compact .vacancy-fit-track {
+  display: none;
+}
+.vacancies-table-header:has(.vacancy-fit-sort) {
+  align-items: center;
+}

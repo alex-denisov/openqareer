@@ -1,4 +1,4 @@
-import { VacancyFitSortControl } from './VacancyFitSort';
+import type { VacancyFitSort } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
@@ -234,6 +234,8 @@ export interface ListContentProps {
   readonly poolComplete?: boolean;
   /** Дата каталога из сводки сервера; подвал 390 пишет её после счёта (B485). */
   readonly catalogObservedAt?: string;
+  readonly sort?: VacancyFitSort;
+  readonly onSortChange?: (sort: VacancyFitSort) => void;
 }
 
 interface VacanciesFiltersSectionProps {
@@ -445,6 +447,8 @@ function buildListProps(
     onLoadMore: board.loadMore,
     poolComplete: input.poolComplete,
     catalogObservedAt: input.facets?.catalogSummary?.observedAt,
+    sort: board.state.sort,
+    onSortChange: (sort) => board.setState((previous) => ({ ...previous, sort })),
   };
 }
 
@@ -510,8 +514,11 @@ function mainBodyProps(
     viewMode,
     onResetFilters: resetFilters,
     selectedCity: board.state.selectedCity,
-    onSelectCity: (city?: string) =>
-      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city })),
+    // B446-g4: город на карте открывает список, отфильтрованный по этому городу.
+    onSelectCity: (city?: string) => {
+      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }));
+      if (city) screenState.setViewMode('list');
+    },
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }
@@ -545,10 +552,6 @@ function VacanciesFilterContent({
         activeFilters={countActiveFilters(board.state)}
         catalogSummary={input.facets?.catalogSummary}
         onReset={resetFilters}
-      />
-      <VacancyFitSortControl
-        value={board.state.sort}
-        onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))}
       />
       <VacanciesFiltersSection
         facets={input.facets}

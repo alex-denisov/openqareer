@@ -1,7 +1,8 @@
-import { VacancyFitSummary } from './VacancyFitSummary';
+import { VacancyFitInline } from './VacancyFitSummary';
 import { VacancyMoneyCell } from './VacancyMoneyCell';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import { CheckCircle, MapPin, Question, WarningCircle } from '@phosphor-icons/react';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
 
 const VACANCY_LEVEL_LABEL = {
@@ -62,7 +63,7 @@ function VacancyScreenRoleCell({
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
       </span>
-      <VacancyFitSummary compact vacancyId={item.cluster.id} view={item.explanation.fitView} />
+      <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} />
       {applicationStatus ? (
         <span className={`applied-note${applicationArchived ? ' is-archived' : ''}`}>
           {applicationStatus}
@@ -109,6 +110,38 @@ function VacancyScreenGeoCell({ item }: { readonly item: MatchedVacancyItem }) {
   );
 }
 
+export interface VacancyRowStatus {
+  readonly tone: 'ok' | 'warn' | 'unknown';
+  readonly label: string;
+}
+
+/** Статус строки 390 — из тех же отметок совпадения, что колонки «Уровень» и «Гео» на 1440. */
+export function vacancyRowStatus(item: MatchedVacancyItem): VacancyRowStatus {
+  if (item.explanation.outsideGeography) return { tone: 'warn', label: 'Другой город' };
+  const level = item.explanation.levelMatch;
+  if (level === 'above' || level === 'below') return { tone: 'warn', label: 'Другой уровень' };
+  if (level === 'unknown') return { tone: 'unknown', label: 'Уровень не указан' };
+  return { tone: 'ok', label: 'Подходит' };
+}
+
+function VacancyScreenStatusCell({ item }: { readonly item: MatchedVacancyItem }) {
+  const status = vacancyRowStatus(item);
+  const Icon =
+    status.tone === 'ok'
+      ? CheckCircle
+      : status.tone === 'unknown'
+        ? Question
+        : status.label === 'Другой город'
+          ? MapPin
+          : WarningCircle;
+  return (
+    <span className={`vacancies-screen-cell vacancies-screen-cell--status is-${status.tone}`}>
+      <Icon aria-hidden="true" />
+      {status.label}
+    </span>
+  );
+}
+
 export function VacancyScreenRowCells({
   item,
   applicationArchived,
@@ -128,6 +161,7 @@ export function VacancyScreenRowCells({
       <VacancyScreenLevelCell item={item} />
       <VacancyScreenGeoCell item={item} />
       <VacancyMoneyCell item={item} observedDate={observedDate(item)} />
+      <VacancyScreenStatusCell item={item} />
     </>
   );
 }

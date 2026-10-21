@@ -627,6 +627,26 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   );
 }
 
+function VacancyScreenDetailGrid({ cluster, explanation, rowProps, rowState }: DetailProps) {
+  return (
+    <div className="vacancies-screen-detail-grid">
+      <div className="vacancies-screen-detail-main">
+        <VacancyScreenRequirementChips
+          cluster={cluster}
+          explanation={explanation}
+          onAddToProfile={rowProps.onAddToProfile}
+        />
+        <VacancyFitEvidenceForItem
+          item={{ cluster, explanation }}
+          onAddToProfile={rowProps.onAddToProfile}
+          showTable={false}
+        />
+      </div>
+      <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />
+    </div>
+  );
+}
+
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const [pathOpen, setPathOpen] = useState(false);
   if (useOpenedCompact())
@@ -638,18 +658,11 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
       <DetailTrustAlert trust={rowState.trust} />
-      <div className="vacancies-screen-detail-grid">
-        <VacancyScreenRequirementChips
-          cluster={cluster}
-          explanation={explanation}
-          onAddToProfile={rowProps.onAddToProfile}
-        />
-        <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />
-      </div>
-      <VacancyFitEvidenceForItem
-        item={{ cluster, explanation }}
-        onAddToProfile={rowProps.onAddToProfile}
-        showTable={false}
+      <VacancyScreenDetailGrid
+        cluster={cluster}
+        explanation={explanation}
+        rowProps={rowProps}
+        rowState={rowState}
       />
       <VacancyScreenDetailActions
         cluster={cluster}

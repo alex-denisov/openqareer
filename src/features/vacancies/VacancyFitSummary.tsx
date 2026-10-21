@@ -81,6 +81,24 @@ export function VacancyFitSummary({
   );
 }
 
+/** B446-g4: строка списка показывает процент только посчитанным; статусы — в раскрытой карточке. */
+export function VacancyFitInline({
+  view: initialView,
+  vacancyId,
+}: {
+  readonly view?: VacancyFitView;
+  readonly vacancyId?: string;
+}) {
+  const view = useLatestVacancyFitView(vacancyId, initialView);
+  if (!fitHasNumber(view)) return null;
+  return (
+    <span className="vacancy-fit-inline">
+      Соответствие {view!.result!.coveragePercent}
+      {'\u00a0%'}
+    </span>
+  );
+}
+
 const GATE_NAMES: Record<string, string> = {
   role: 'роль',
   level: 'уровень',

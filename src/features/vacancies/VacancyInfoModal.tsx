@@ -50,7 +50,7 @@ function VacancyInfoFooter({
       {primaryUrl ? (
         <button
           type="button"
-          className="vacancies-btn vacancies-btn-secondary"
+          className="career-btn career-btn-secondary"
           onClick={() => {
             void openExternalLink(primaryUrl);
           }}
@@ -59,7 +59,7 @@ function VacancyInfoFooter({
           Открыть на площадке
         </button>
       ) : null}
-      <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onClose}>
+      <button type="button" className="career-btn career-btn-secondary" onClick={onClose}>
         Закрыть
       </button>
     </div>

@@ -51,6 +51,22 @@
   outline-offset: 2px;
 }
 
+/* B446-g4: одна рамка фокуса у поиска; поиск и выборы — поля макета 4. */
+.saved-controls .companies-people-search input:focus,
+.saved-controls .companies-people-search input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.saved-controls .companies-people-search,
+.saved-controls .companies-people-select {
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  font-size: var(--career-text-sm);
+}
+
 .saved-controls .companies-people-select-wrap,
 .saved-controls .companies-people-select {
   display: block;
@@ -128,11 +144,36 @@
   min-block-size: var(--career-target-min);
   border: var(--career-border-width) solid var(--career-accent);
   border-radius: var(--career-radius-md);
-  background: transparent;
+  background: var(--career-accent-soft);
   color: var(--career-warning);
   cursor: pointer;
 }
 
+.saved-row-money-missing {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+}
+
+.saved-row-want {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid transparent;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  color: var(--career-text-soft);
+  cursor: pointer;
+}
+
+.saved-row-want[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.saved-row-want:focus-visible,
 .saved-row-star:focus-visible {
   outline: 2px solid var(--career-accent);
   outline-offset: 2px;
@@ -236,7 +277,7 @@
 }
 
 .vacancies-summary-copy {
-  display: grid;
+  display: block;
   font-size: var(--career-text-xs);
   gap: var(--career-space-1);
   min-inline-size: 0;
@@ -321,15 +362,21 @@
   gap: var(--career-space-2);
   min-block-size: var(--career-target-min);
   min-inline-size: 0;
-  padding: var(--career-space-2) var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-field-edge);
   border-radius: var(--career-radius-sm);
-  color: var(--career-text-soft);
-  background: var(--career-bg-elevated);
-  font-size: var(--career-text-xs);
+  color: var(--career-text);
+  background: transparent;
+  font-size: var(--career-text-sm);
   font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.vacancies-filter-group-button:hover {
+  border-color: var(--career-accent);
+  background: var(--career-surface);
 }
 
 .vacancies-filter-group-text {
@@ -341,18 +388,25 @@
 
 .vacancies-filter-group-label {
   color: var(--career-text-soft);
+  font-weight: 400;
 }
 
 .vacancies-filter-group-value {
   color: var(--career-text);
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.vacancies-filter-group-button.is-active,
+/* B446-g4: заданный фильтр — подсвеченная рамка, открытый — мягкая заливка, как .fbtn макета 4. */
+.vacancies-filter-group-button.is-active {
+  border-color: color-mix(in oklch, var(--career-accent) 45%, var(--career-line-strong));
+}
+
 .vacancies-filter-group-button[aria-expanded='true'] {
-  border-color: var(--career-accent);
-  color: var(--career-text);
   background: var(--career-accent-soft);
+}
+
+.vacancies-filter-group-button[aria-expanded='true'] > svg {
+  transform: rotate(180deg);
 }
 
 .vacancies-mobile-filter-toggle {
@@ -609,6 +663,7 @@
 }
 
 .vacancy-screen-money-alt {
+  color: var(--career-text-dim);
   font-weight: 600;
 }
 

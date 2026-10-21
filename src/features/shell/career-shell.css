@@ -7090,7 +7090,7 @@
 }
 
 .vacancies-info-description {
-  font-size: var(--career-text-sm);
+  font-size: var(--career-text-xs);
   line-height: 1.5;
   margin: 0;
 }
@@ -7102,6 +7102,18 @@
 .vacancies-info-description ul {
   margin: 0 0 var(--career-space-3);
   padding-inline-start: var(--career-space-5);
+}
+
+/* B446-g4: разделы полного описания — заголовок 14 px, как в макете 4. */
+.vacancies-info-description h4 {
+  margin: var(--career-space-4) 0 var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.vacancies-info-footer {
+  gap: var(--career-space-2);
 }
 
 .vacancies-info-description li + li {
@@ -9952,6 +9964,18 @@
   cursor: pointer;
 }
 
+/* B446-g4: невидимая зона касания города на карте — не меньше 44 px. */
+.career-map-hit {
+  fill: transparent;
+}
+
+/* На 390 карта сжата примерно в 2,5 раза — зона касания растёт в координатах SVG. */
+@media (max-width: 760px) {
+  .career-map-hit {
+    r: 56px;
+  }
+}
+
 .career-map-cluster-group {
   cursor: pointer;
 }
@@ -9980,11 +10004,15 @@
   pointer-events: none;
 }
 
+/* B446-g4: ± поверх карты справа сверху, как в макете 4. */
 .career-map-zoom-controls {
+  position: absolute;
+  inset-block-start: var(--career-space-3);
+  inset-inline-end: var(--career-space-3);
   display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
-  margin-top: var(--career-space-2);
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--career-space-1);
 }
 
 .career-map-zoom-btn {

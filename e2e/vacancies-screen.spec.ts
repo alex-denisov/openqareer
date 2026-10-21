@@ -724,7 +724,7 @@ test.describe('B250 vacancies screen', () => {
 
     if (!isMobile) {
       const summary = page.getByRole('region', { name: 'Сводка подбора' });
-      await expect(summary).toContainText('148 вакансий в подборке по роли и уровню');
+      await expect(summary).toContainText('148 вакансий подходят по роли и уровню');
       await expect(summary).toContainText(/Показано \d+ из \d+ с вашими условиями/u);
     } else {
       // B546/B547: the count follows local filters (salary, locations), not the pool total.
@@ -1362,12 +1362,6 @@ test.describe('B250 vacancies screen', () => {
     }
     await expect(page.locator('.vacancy-map-view')).toBeVisible();
 
-    // Город выбирается кнопкой в списке под картой.
-    const cityBtn = page.locator('.vacancy-map-cities button').first();
-    if (await cityBtn.isVisible()) {
-      await cityBtn.click();
-    }
-
     // Возврат в список использует управление текущей раскладки.
     if (mobile) {
       await page.getByRole('button', { name: 'Список', exact: true }).click();
@@ -1447,20 +1441,21 @@ test.describe('B250 vacancies screen', () => {
       '.career-vacancy-map-view',
     );
 
-    const moscowChip = mapView
-      .locator('.career-map-city-chips')
-      .getByRole('button', { name: 'Город Москва: 2 вакансий' });
-    await expect(moscowChip).toBeVisible();
-    const chipBox = await moscowChip.boundingBox();
-    expect(chipBox?.width).toBeGreaterThanOrEqual(44);
-    expect(chipBox?.height).toBeGreaterThanOrEqual(44);
-    await moscowChip.click();
-    await expect(
-      mapView.locator('.career-map-cards-grid').first().locator('.career-map-card'),
-    ).toHaveCount(2);
-    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Genetec');
-    await expect(mapView.locator('.career-map-cards-grid').first()).toContainText('Peraton');
-    await mapView.getByRole('button', { name: 'Все города на карте' }).click();
+    // B446-g4: под картой нет ни чипов городов, ни сетки карточек; город на карте
+    // открывает список с фильтром этого города.
+    await expect(mapView.locator('.career-map-city-chips')).toHaveCount(0);
+    await expect(mapView.locator('.career-map-cards-grid')).toHaveCount(0);
+    const moscowPin = mapView.getByRole('button', { name: 'Город Москва: 2 вакансий' });
+    const pinBox = await moscowPin.boundingBox();
+    expect(pinBox?.width).toBeGreaterThanOrEqual(44);
+    expect(pinBox?.height).toBeGreaterThanOrEqual(44);
+    await moscowPin.click();
+    const list = page.locator('.vacancies-list-container');
+    await expect(list.locator('.vacancies-screen-row-shell')).toHaveCount(2);
+    await expect(list).toContainText('Genetec');
+    await expect(list).toContainText('Peraton');
+    await page.getByRole('button', { name: 'Все города', exact: true }).click();
+    await page.locator('.view-switch[role="tablist"]').getByRole('tab', { name: 'Карта' }).click();
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => {
@@ -1479,8 +1474,9 @@ test.describe('B250 vacancies screen', () => {
       if (getComputedStyle(main).overflowY === 'auto') main.scrollTop += delta;
       else window.scrollBy(0, delta);
     });
-    await expect(moscowChip).toBeVisible();
-    const mobileChipBox = await moscowChip.boundingBox();
+    const mobilePin = mapView.getByRole('button', { name: 'Город Москва: 2 вакансий' });
+    await expect(mobilePin).toBeVisible();
+    const mobileChipBox = await mobilePin.boundingBox();
     expect(mobileChipBox?.width).toBeGreaterThanOrEqual(44);
     expect(mobileChipBox?.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
@@ -1535,11 +1531,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(mapView).toBeVisible();
 
     // Sydney normalized to Сидней with tooltip showing Australia
-    const sydneyChip = mapView
-      .locator('.career-map-city-chips')
-      .getByRole('button', { name: /Сидней/ });
-    await expect(sydneyChip).toBeVisible();
-    await expect(sydneyChip).toHaveAttribute('title', 'Австралия');
+    const sydneyPin = mapView.getByRole('button', { name: /Сидней/ });
+    await expect(sydneyPin).toBeVisible();
+    await expect(sydneyPin.locator('title')).toHaveText('Австралия');
 
     // Clusters should exist at zoom=1 (Berlin + Prague + Vienna clustered)
     const clusterPin = mapView.locator('.career-map-cluster-node').first();
@@ -1591,9 +1585,10 @@ test.describe('B250 vacancies screen', () => {
 
     const salary = vacancyRow.locator('.vacancies-screen-cell--salary .career-numeric');
     const title = vacancyRow.locator('.vacancies-screen-cell--role .vac-title');
-    await expect(salary).toHaveText('не указана');
-    await expect(vacancyRow.locator('.vacancy-screen-money-source')).toContainText(
-      'зарплата не указана',
+    // B446-g4: макет 4 — «без зарплаты» серым, под ним только источник и дата.
+    await expect(salary).toHaveText('без зарплаты');
+    await expect(vacancyRow.locator('.vacancy-screen-money-source')).not.toContainText(
+      'указана в вакансии',
     );
     await expect(title).toContainText('Frontend Engineer');
     await setRowExpanded(page, 0, true);
@@ -1841,7 +1836,9 @@ test.describe('B250 vacancies screen', () => {
     });
   });
 
-  test('B371: fit status is visible beside the level value', async ({ page }) => {
+  test('B371: fit status is visible beside the level value', async ({ page }, testInfo) => {
+    // B446-g4: на 390 колонки уровня нет — статус строки «Подходит / Другой город» справа.
+    test.skip(testInfo.project.name === 'mobile-390', '390 shows the row status instead');
     await stubSession(page, { facets: null });
     await seedWorkspace(page);
     await page.goto('/app', { waitUntil: 'domcontentloaded' });

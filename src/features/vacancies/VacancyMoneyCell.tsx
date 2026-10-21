@@ -19,18 +19,22 @@ function StatedOrMissing({
   readonly item: MatchedVacancyItem;
   readonly sourceLine: string;
 }) {
-  const stated = Boolean(item.cluster.salary);
+  if (!item.cluster.salary) {
+    return (
+      <>
+        <span className="career-numeric vacancy-screen-money-value vacancy-screen-money-alt">
+          без зарплаты
+        </span>
+        <span className="vacancy-screen-money-source">{sourceLine}</span>
+      </>
+    );
+  }
   return (
     <>
-      <span
-        className={`career-numeric vacancy-screen-money-value${stated ? '' : ' vacancy-screen-money-wide'}`}
-      >
-        {stated ? formatCompensationCompact(item.cluster.salary) : 'не указана'}
+      <span className="career-numeric vacancy-screen-money-value">
+        {formatCompensationCompact(item.cluster.salary)}
       </span>
-      {stated ? null : <NarrowMissing />}
-      <span className="vacancy-screen-money-source">
-        {stated ? 'указана в вакансии' : 'зарплата не указана'} · {sourceLine}
-      </span>
+      <span className="vacancy-screen-money-source">указана в вакансии · {sourceLine}</span>
     </>
   );
 }
