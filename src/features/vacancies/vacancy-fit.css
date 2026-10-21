@@ -207,3 +207,6 @@
 .vacancy-fit-evidence.is-compact .vacancy-fit-track {
   display: none;
 }
+.vacancies-table-header:has(.vacancy-fit-sort) {
+  align-items: center;
+}
