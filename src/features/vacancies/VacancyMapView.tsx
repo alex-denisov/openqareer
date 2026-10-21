@@ -227,10 +227,10 @@ function MapCapsule({
     <g transform={`translate(${x} ${y}) scale(${1 / zoom})`}>
       <g className="career-map-capsule-scale">
         <rect
-          x={-Math.max(width, 44) / 2}
-          y={-22}
-          width={Math.max(width, 44)}
-          height={44}
+          x={-Math.max(width, 52) / 2}
+          y={-26}
+          width={Math.max(width, 52)}
+          height={52}
           className="career-map-hit"
         />
         <rect
@@ -255,7 +255,7 @@ function MapDot({ x, y, zoom }: { x: number; y: number; zoom: number }) {
   return (
     <g transform={`translate(${x} ${y}) scale(${1 / zoom})`}>
       <g className="career-map-capsule-scale">
-        <rect x={-22} y={-22} width={44} height={44} className="career-map-hit" />
+        <rect x={-26} y={-26} width={52} height={52} className="career-map-hit" />
         <circle r={5} className="career-map-dot" />
       </g>
     </g>
