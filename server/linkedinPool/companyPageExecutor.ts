@@ -23,6 +23,7 @@ import {
   getLinkedinExecutorDailyUsage,
   pauseLinkedinPoolAccountForManualReview,
   recordLinkedinExecutorCompanyAttempt,
+  recordLinkedinExecutorHeartbeat,
   recordLinkedinExecutorNote,
   recordLinkedinExecutorPageAttempt,
   type LinkedinPoolExecutorPageKind,
@@ -334,21 +335,29 @@ export class LinkedinPoolCompanyPageExecutor {
     const search = await this.readPage(page, searchUrl, 'company_search', hash);
     if (search.status !== 'ready') return this.handlePageFailure(search, 1);
     const companyUrl = parseLinkedinCompanySearchPageHtml(search.html ?? '', companyName);
-    if (!companyUrl) return report('processed', 1, 0);
+    if (!companyUrl) {
+      return { ...report('processed', 1, 0), reason: 'company_search_no_exact_match' };
+    }
 
     const step = { page, hash, plan, timezone, pagesBefore };
     // Страница компании нужна только ради ID фильтра «текущая компания».
     const profile = await this.readFollowingPage(step, `${companyUrl}/`, 'company_page', 1);
     if ('report' in profile) return profile.report;
     const companyId = parseLinkedinCompanyIdFromPageHtml(profile.read.html ?? '');
-    if (!companyId) return report('processed', 2, 0);
+    if (!companyId) {
+      return { ...report('processed', 2, 0), reason: 'company_profile_id_missing' };
+    }
 
     const search3 = await this.readFollowingPage(step, linkedinPeopleSearchUrl(companyId), 'company_people', 2);
     if ('report' in search3) return search3.report;
     const cards = parseLinkedinPeopleSearchPageHtml(search3.read.html ?? '');
     const visible = this.saveVisibleRecruiters(companyName, cards);
     const fromExa = await this.enrichFromExa(accountId, companyName, cards);
-    return report('processed', 3, visible + fromExa);
+    const recruiterCount = visible + fromExa;
+    return {
+      ...report('processed', 3, recruiterCount),
+      ...(recruiterCount === 0 ? { reason: 'no_visible_recruiters' } : {}),
+    };
   }
 
   /** Люди 2-го круга видны сразу: имя и ссылка /in/ сохраняются как есть. */
@@ -452,13 +461,17 @@ export class LinkedinPoolCompanyPageExecutor {
       }
       this.pauseController = new AbortController();
       try {
-        return await readLinkedinPage(page, {
+        const read = await readLinkedinPage(page, {
           statusCode: response?.status(),
           kind: detectCadencePageKind(url),
           signal: this.pauseController.signal,
           random: this.random,
           wait: this.wait,
         });
+        if (read.status === 'ready' && accountId) {
+          recordLinkedinExecutorHeartbeat(this.database, accountId, this.now());
+        }
+        return read;
       } finally {
         this.pauseController = undefined;
       }
