@@ -16,6 +16,9 @@ import type {
   CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
 import type { TaxDataSource } from '../../../shared/taxData/types';
+import { localIsoDate } from './relocationDates';
+import { relocationStatusLabel } from './relocationStatus';
+import { leadingScenario } from './relocationLeadingScenario';
 
 const RELOCATION_COUNTRY_CODES = [
   'AE',
@@ -73,11 +76,21 @@ export function mobilityCandidateFromQuestionnaire(
 
   const candidate: {
     citizenshipCountryCodes: readonly string[];
+    residenceDocuments: MobilityCandidateProfile['residenceDocuments'];
+    asOf: string;
     recognizedDegreeCountryCodes?: readonly string[];
     completedFormalQualification?: boolean;
     family?: { readonly hasPartner: boolean; readonly children: number };
   } = {
     citizenshipCountryCodes: profile.citizenshipDocuments.citizenshipCountryCodes,
+    residenceDocuments: profile.citizenshipDocuments.documents.map(
+      ({ kind, countryCode, expiresAt }) => ({
+        kind,
+        countryCode,
+        ...(expiresAt ? { expiresAt } : {}),
+      }),
+    ),
+    asOf: localIsoDate(),
   };
   const education = profile.education.education;
   const recognizedDegreeCountryCodes = education
@@ -232,7 +245,7 @@ function accessFact(
 > {
   if (status === 'unknown') {
     const reason =
-      scenarios.flatMap(({ reasons }) => reasons)[0] ??
+      leadingScenario(scenarios)?.reasons[0] ??
       'В анкете недостаточно подтверждённых сведений для проверки доступа.';
     return { status: 'unknown', reason };
   }
@@ -276,7 +289,8 @@ function profileEvidence(profile: RelocationQuestionnaire | null): ComparisonEvi
     {
       kind: 'candidate_profile',
       title: 'Анкета кандидата',
-      capturedAt: profile.updatedAt.slice(0, 10),
+      // The candidate's local calendar day, not the UTC one.
+      capturedAt: localIsoDate(new Date(profile.updatedAt)),
     },
   ];
 }
@@ -313,9 +327,7 @@ function noData<T = never>(reason: string): CountryComparisonFact<T> {
 }
 
 function accessLabel(status: ReturnType<typeof evaluateCountryFit>['status']): string {
-  if (status === 'available') return 'Доступно по подтверждённым данным';
-  if (status === 'high_barriers') return 'Есть условия';
-  return 'Юридически недоступно';
+  return relocationStatusLabel(status);
 }
 
 function formatMoney(amount: number, currency: string): string {

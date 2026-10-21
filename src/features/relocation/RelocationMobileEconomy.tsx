@@ -3,6 +3,8 @@ import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxDat
 import { calculateRelocationEconomy, listRelocationCountries } from './relocationCountryData';
 import { MobileGroup, MobileInputRow, MobilePickerRow } from './mobile/MobileRows';
 import { mobileDate } from './mobile/MobileSteps';
+import type { RelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
+import { RelocationMobileEconomySave } from './RelocationMobileEconomySave';
 
 export interface RelocationMobileEconomyProps {
   readonly selectedCountryCodes: readonly string[];
@@ -10,6 +12,7 @@ export interface RelocationMobileEconomyProps {
   readonly grossAnnualIncome: number | undefined;
   readonly onCountryCodeChange: (countryCode: string) => void;
   readonly onGrossAnnualIncomeChange: (amount: number | undefined) => void;
+  readonly profile?: RelocationQuestionnaire | null;
 }
 
 const SLIDER_MAX = 300_000;
@@ -214,6 +217,11 @@ export function RelocationMobileEconomy(props: RelocationMobileEconomyProps) {
         />
       </MobileGroup>
       <Result countryCode={countryCode} income={props.grossAnnualIncome} />
+      <RelocationMobileEconomySave
+        countryCode={countryCode}
+        grossAnnualIncome={props.grossAnnualIncome}
+        profile={props.profile ?? null}
+      />
     </div>
   );
 }

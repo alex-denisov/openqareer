@@ -3,8 +3,9 @@ import type {
   CountryFitStatus,
   MobilityScenarioEvaluation,
   MobilityScenarioId,
-  ScenarioAvailability,
 } from '../../../shared/countryFit/types';
+import { relocationStatusLabel } from './relocationStatus';
+import { leadingScenario } from './relocationLeadingScenario';
 import { countryFitForQuestionnaire, type RelocationCountry } from './relocationCountryData';
 
 export interface RelocationCountrySummary {
@@ -18,13 +19,6 @@ export interface RelocationCountrySummary {
   readonly scenarios: readonly MobilityScenarioEvaluation[];
 }
 
-const SCENARIO_RANK: Readonly<Record<ScenarioAvailability, number>> = {
-  available: 0,
-  barriers: 1,
-  unknown: 2,
-  unavailable: 3,
-};
-
 /** Scenario names of mockup 15; the catalog's own label is the fallback. */
 export const RELOCATION_SCENARIO_LABELS: Readonly<Partial<Record<MobilityScenarioId, string>>> = {
   domestic_market: 'Домашний рынок',
@@ -34,35 +28,7 @@ export const RELOCATION_SCENARIO_LABELS: Readonly<Partial<Record<MobilityScenari
   simple_mobility: 'Без визы, ЕАЭС',
 };
 
-/** Status words of mockup 15; a status never appears without the catalog rule behind it. */
-export function relocationStatusLabel(status: CountryFitStatus | ScenarioAvailability): string {
-  if (status === 'available') return 'Доступно без ограничений';
-  if (status === 'barriers') return 'Есть условия';
-  if (status === 'high_barriers') return 'Высокие барьеры';
-  if (status === 'unavailable' || status === 'legally_unavailable') return 'Юридически недоступно';
-  return 'Нужно уточнить';
-}
-
-/** Routes that exist only by citizenship or residence: when not open, they are not a way in. */
-const BIRTHRIGHT_SCENARIOS: ReadonlySet<MobilityScenarioId> = new Set([
-  'domestic_market',
-  'simple_mobility',
-]);
-
-/**
- * The scenario that leads a country card: the most open route the candidate
- * can take, and among equal routes the one backed by an official source. A
- * citizenship-only route that is not open (Spain is not EAEU for a Russian)
- * never leads while another route exists.
- */
-function leadingScenario(scenarios: readonly MobilityScenarioEvaluation[]) {
-  const rank = (scenario: MobilityScenarioEvaluation) => {
-    const closed = scenario.status !== 'available' && BIRTHRIGHT_SCENARIOS.has(scenario.id);
-    const base = closed ? SCENARIO_RANK.unavailable : SCENARIO_RANK[scenario.status];
-    return base * 2 + (scenario.sources.length ? 0 : 1);
-  };
-  return [...scenarios].sort((left, right) => rank(left) - rank(right))[0];
-}
+export { relocationStatusLabel } from './relocationStatus';
 
 export function summarizeRelocationCountry(
   country: RelocationCountry,
@@ -135,13 +101,24 @@ export function sortRelocationCountries(
       country.countryCode,
       // The home market (a citizenship country) leads, as in the mockup.
       profile?.citizenshipDocuments.citizenshipCountryCodes.includes(country.countryCode)
-        ? -1
-        : STATUS_ORDER[countryFitForQuestionnaire(country.countryCode, profile).status],
+        ? -2
+        : documentOpens(country.countryCode, profile)
+          ? -1
+          : STATUS_ORDER[countryFitForQuestionnaire(country.countryCode, profile).status],
     ]),
   );
   return [...countries].sort(
     (left, right) =>
       (rank.get(left.countryCode) ?? 9) - (rank.get(right.countryCode) ?? 9) ||
       left.name.localeCompare(right.name, 'ru'),
+  );
+}
+
+/** A country opened by the candidate's own permit follows the home market (B468-r3). */
+function documentOpens(countryCode: string, profile: RelocationQuestionnaire | null): boolean {
+  return Boolean(
+    profile?.citizenshipDocuments.documents.some(
+      (document) => document.countryCode === countryCode,
+    ) && countryFitForQuestionnaire(countryCode, profile).status === 'available',
   );
 }

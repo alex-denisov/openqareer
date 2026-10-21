@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, Trash } from '@phosphor-icons/react';
+import { Check, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireStepFormProps } from '../RelocationQuestionnaireSteps';
 import {
@@ -10,6 +10,7 @@ import {
   relocationDocumentKindLabel,
   relocationRowId,
 } from '../RelocationFormControls';
+import { localIsoDate, relocationDay } from '../relocationDates';
 
 type RelocationDocument = RelocationQuestionnaire['citizenshipDocuments']['documents'][number];
 type RelocationDraftProps = Pick<RelocationQuestionnaireStepFormProps, 'profile' | 'onProfileChange'>;
@@ -53,16 +54,63 @@ function CitizenshipList({ profile, onProfileChange }: RelocationDraftProps) {
   );
 }
 
+const SHORT_KIND: Readonly<Record<RelocationDocument['kind'], string>> = {
+  residence_permit: 'ВНЖ', work_permit: 'Разрешение на работу', work_visa: 'Рабочая виза',
+  study_visa: 'Учебная виза', visa: 'Виза', other: 'Документ',
+};
+
+function documentTitle(document: RelocationDocument): string {
+  return `${SHORT_KIND[document.kind]}, ${relocationCountryName(document.countryCode)}`;
+}
+
+function documentTerm(document: RelocationDocument): string {
+  if (!document.expiresAt) return 'Срок не указан';
+  const today = localIsoDate();
+  if (document.expiresAt < today) return `Истёк ${relocationDay(document.expiresAt)}`;
+  const soon = new Date(`${today}T00:00:00`);
+  soon.setMonth(soon.getMonth() + 6);
+  const ending = document.expiresAt < localIsoDate(soon) ? ': срок скоро закончится' : '';
+  return `До ${relocationDay(document.expiresAt)}${ending}`;
+}
+
+/** Mockup 15 `i1`: a saved document is a compact row; «Изменить» opens its fields in place. */
 function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const remove = (id: string) => onProfileChange({
+    ...profile,
+    citizenshipDocuments: {
+      ...profile.citizenshipDocuments,
+      documents: profile.citizenshipDocuments.documents.filter((item) => item.id !== id),
+    },
+  });
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-documents-title">
       <h3 id="relocation-documents-title">Вид на жительство, ПМЖ, визы</h3>
       {profile.citizenshipDocuments.documents.length ? (
-        <div className="career-relocation-edit-list">
+        <ul className="career-relocation-doc-list">
           {profile.citizenshipDocuments.documents.map((document) => (
-            <DocumentEditor key={document.id} document={document} profile={profile} onProfileChange={onProfileChange} />
+            <li key={document.id}>
+              {editingId === document.id ? (
+                <DocumentEditor document={document} profile={profile} onProfileChange={onProfileChange} onDone={() => setEditingId(null)} />
+              ) : (
+                <>
+                  <div>
+                    <strong>{documentTitle(document)}</strong>
+                    <p>{documentTerm(document)}</p>
+                  </div>
+                  <span className="career-relocation-doc-actions">
+                    <button className="career-relocation-icon-action" type="button" aria-label={`Изменить: ${documentTitle(document)}`} onClick={() => setEditingId(document.id)}>
+                      <PencilSimple aria-hidden="true" size={18} />
+                    </button>
+                    <button className="career-relocation-icon-action" type="button" aria-label={`Удалить: ${documentTitle(document)}`} onClick={() => remove(document.id)}>
+                      <Trash aria-hidden="true" size={18} />
+                    </button>
+                  </span>
+                </>
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
       ) : <p>Документы не указаны.</p>}
       <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />
     </section>
@@ -73,10 +121,12 @@ function DocumentEditor({
   document,
   profile,
   onProfileChange,
+  onDone,
 }: {
   readonly document: RelocationDocument;
   readonly profile: RelocationQuestionnaireStepFormProps['profile'];
   readonly onProfileChange: RelocationQuestionnaireStepFormProps['onProfileChange'];
+  readonly onDone: () => void;
 }) {
   const update = (change: Partial<RelocationDocument>) => onProfileChange({
     ...profile,
@@ -85,19 +135,12 @@ function DocumentEditor({
       documents: profile.citizenshipDocuments.documents.map((item) => item.id === document.id ? { ...item, ...change } : item),
     },
   });
-  const remove = () => onProfileChange({
-    ...profile,
-    citizenshipDocuments: {
-      ...profile.citizenshipDocuments,
-      documents: profile.citizenshipDocuments.documents.filter((item) => item.id !== document.id),
-    },
-  });
   return (
     <fieldset className="career-relocation-record">
       <legend>{relocationDocumentKindLabel(document.kind)}, {relocationCountryName(document.countryCode)}</legend>
       <DocumentFields document={document} onChange={update} prefix={document.id} />
-      <button className="career-btn career-btn-destructive" type="button" onClick={remove}>
-        <Trash aria-hidden="true" size={16} />Удалить документ
+      <button className="career-btn career-btn-secondary" type="button" onClick={onDone}>
+        <Check aria-hidden="true" size={16} />Готово
       </button>
     </fieldset>
   );

@@ -4,6 +4,7 @@ import type { RelocationQuestionnaire } from '../../../shared/relocationQuestion
 import type { SourcedThreshold } from '../../../shared/countryFit/types';
 import { getCountryTaxData, supportedCountryCodes } from '../../../shared/taxData';
 import { calculateRelocationEconomy, countryFitForQuestionnaire, listRelocationCountries } from './relocationCountryData';
+import { relocationDay } from './relocationDates';
 
 export interface RelocationEconomyProps {
   readonly profile: RelocationQuestionnaire;
@@ -167,7 +168,7 @@ function SalaryThresholdWarnings({ warnings }: { readonly warnings: readonly Sal
         {warnings.map(({ pathLabel, threshold }) => (
           <li key={`${pathLabel}-${threshold.amount}`}>
             <strong>{pathLabel}:</strong> {formatCurrency(threshold.amount, threshold.currency ?? 'EUR')} в год.
-            {' '}Шкала {threshold.source.dataYear}, получено {threshold.source.retrievedAt}.
+            {' '}Шкала {threshold.source.dataYear}, получено {relocationDay(threshold.source.retrievedAt)}.
           </li>
         ))}
       </ul>
@@ -219,7 +220,7 @@ function PayrollResult({
           .map((source) => (
             <li key={source.url}>
               <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>
-              <span> · шкала {source.dataYear}, получено {source.retrievedAt}</span>
+              <span> · шкала {source.dataYear}, получено {relocationDay(source.retrievedAt)}</span>
             </li>
           ))}
       </ul>

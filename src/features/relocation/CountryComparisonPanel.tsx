@@ -5,6 +5,7 @@ import {
   type CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
 import './CountryComparisonPanel.css';
+import { relocationDay } from './relocationDates';
 
 type FactKey = keyof CountryComparisonCountry['facts'];
 type PanelState = 'ready' | 'loading' | 'empty' | 'error';
@@ -196,7 +197,7 @@ function FactContent({
               <span>{source.title}</span>
             )}
             {source.dataYear && <span> · год шкалы: {source.dataYear}</span>}
-            <span> · получено: {source.capturedAt}</span>
+            <span> · получено: {relocationDay(source.capturedAt)}</span>
             {metric === 'relocationVacancies' && source.sampleSize && (
               <span> · выборка: {source.sampleSize}</span>
             )}

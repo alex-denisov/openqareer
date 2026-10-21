@@ -506,3 +506,12 @@
   color: var(--career-text);
   text-decoration: none;
 }
+
+.career-relocation-mobile-save {
+  display: grid;
+  padding-inline: var(--career-space-4);
+}
+
+.career-relocation-mobile-save > .career-btn {
+  min-block-size: var(--career-target-min);
+}

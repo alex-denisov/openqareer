@@ -84,6 +84,7 @@ function MobileTabContent(
         grossAnnualIncome={workspace.grossAnnualIncome}
         onCountryCodeChange={workspace.setEconomyCountryCode}
         onGrossAnnualIncomeChange={workspace.setGrossAnnualIncome}
+        profile={snapshot.profile}
       />
     );
   }

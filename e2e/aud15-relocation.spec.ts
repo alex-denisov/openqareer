@@ -102,7 +102,10 @@ test('consent, questionnaire to the summary, countries, comparison and economy',
     await expectStep(page, info, step);
   }
   await page.getByRole('button', { name: 'Показать итог' }).click();
-  await expect(page.getByRole('heading', { name: 'Анкета заполнена' })).toBeVisible();
+  // B468-r3: 1440 по кадру i5 — «Что получилось», 390 по кадру mv=i5 — «Анкета заполнена».
+  await expect(
+    page.getByRole('heading', { name: isMobile(info) ? 'Анкета заполнена' : 'Что получилось' }),
+  ).toBeVisible();
   await capture(page, info, 'relocation-questionnaire-summary');
   await page.getByRole('button', { name: 'Показать страны' }).click();
   if (isMobile(info)) return;

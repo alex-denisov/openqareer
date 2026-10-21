@@ -27,6 +27,7 @@ import {
   MobileRadioRows,
   MobileToggleRow,
 } from './MobileRows';
+import { relocationDay } from '../relocationDates';
 
 type Profile = RelocationQuestionnaire;
 
@@ -77,8 +78,7 @@ const SOURCE_LABELS: Readonly<Record<Profile['languages']['languages'][number]['
 
 /** «2027-03-14» → «14.03.2027». */
 export function mobileDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/u.exec(value);
-  return match ? `${match[3]}.${match[2]}.${match[1]}` : value;
+  return relocationDay(value);
 }
 
 function label<T extends string>(options: readonly (readonly [T, string])[], value: T): string {

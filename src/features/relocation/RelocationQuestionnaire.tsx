@@ -1,5 +1,5 @@
 import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
-import { ArrowRight, CaretLeft, LockKey } from '@phosphor-icons/react';
+import { ArrowRight, CaretLeft, Check, CheckCircle, FloppyDisk, Info, LockKey, PencilSimple, WarningCircle, XCircle } from '@phosphor-icons/react';
 import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
@@ -9,7 +9,6 @@ import {
   type RelocationQuestionnaire,
   type RelocationStepId,
 } from '../../../shared/relocationQuestionnaire';
-import { evaluateCountryFit } from '../../../shared/countryFit';
 import { apiErrorMessage } from '../coach/apiClient';
 import {
   importRelocationLanguagesFromLinkedIn,
@@ -19,7 +18,13 @@ import {
 } from './relocationApi';
 import { RelocationQuestionnaireStepForm } from './RelocationQuestionnaireSteps';
 import { relocationLanguageInput, saveRelocationStep } from './relocationProfileItems';
-import { listRelocationCountries, mobilityCandidateFromQuestionnaire } from './relocationCountryData';
+import type { RelocationCountrySummary } from './relocationCountrySummary';
+import {
+  buildRelocationSummaryOverview,
+  relocationCountsSentence,
+  relocationMissingNote,
+  type RelocationSummaryOverview,
+} from './relocationSummaryOverview';
 
 const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
   citizenship_documents: 'Гражданство и документы',
@@ -64,11 +69,6 @@ export interface QuestionnaireController {
   readonly importLinkedInLanguages: () => void;
   readonly restart: () => void;
 }
-
-type RelocationSummaryResult = {
-  readonly country: (ReturnType<typeof listRelocationCountries>)[number];
-  readonly fit: ReturnType<typeof evaluateCountryFit>;
-};
 
 export function RelocationQuestionnaire(props: RelocationQuestionnaireProps) {
   const controller = useQuestionnaireController(props);
@@ -143,8 +143,9 @@ function QuestionnaireHeader({
         </button>
         <h2 id="career-relocation-questionnaire-title">Условия для переезда</h2>
         <span className="career-relocation-status"><LockKey aria-hidden="true" size={14} />Видите только вы</span>
+        <span className="career-relocation-save-note"><FloppyDisk aria-hidden="true" size={14} />Прогресс сохраняется</span>
       </div>
-      <p>{step === 'summary' ? 'Анкета сохранена в разделе «Страны и релокация».' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_DESCRIPTIONS[step]}`}</p>
+      <p>{step === 'summary' ? 'Анкета заполнена. Ничего не отправлено, всё сохранено в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_DESCRIPTIONS[step]}`}</p>
       {children}
     </header>
   );
@@ -166,7 +167,7 @@ function QuestionnaireStepper({
       {RELOCATION_STEPS.map((item, index) => (
         <li key={item} aria-current={step === item ? 'step' : undefined}>
           <button type="button" disabled={busy || (dirty && step !== item)} aria-current={step === item ? 'step' : undefined} onClick={() => onSelect(item)}>
-            <span>{index + 1}</span>{STEP_TITLES[item]}
+            {step === 'summary' ? <Check className="career-relocation-stepper-done" aria-hidden="true" size={14} /> : <span>{index + 1}</span>}{STEP_TITLES[item]}
           </button>
         </li>
       ))}
@@ -467,42 +468,67 @@ function RelocationSummary({
   readonly onShowCountries: () => void;
   readonly onEdit: () => void;
 }) {
-  const candidate = mobilityCandidateFromQuestionnaire(profile);
-  const results = listRelocationCountries().map((country) => ({ country, fit: evaluateCountryFit(country.countryCode, candidate) }));
-  return <RelocationSummaryContent results={results} profile={profile} onShowCountries={onShowCountries} onEdit={onEdit} />;
+  const overview = useMemo(() => buildRelocationSummaryOverview(profile), [profile]);
+  return (
+    <div className="career-relocation-questionnaire-layout">
+      <section className="career-relocation-summary" aria-labelledby="relocation-summary-title">
+        <div className="career-relocation-summary-head">
+          <h2 id="relocation-summary-title">Что получилось</h2>
+          <span className="career-relocation-status is-enabled"><CheckCircle aria-hidden="true" size={14} />Релокация включена</span>
+        </div>
+        <SummaryNote overview={overview} />
+        <ul className="career-relocation-summary-list">
+          {overview.key.map((summary) => (
+            <li key={summary.countryCode} data-status={summary.status}>
+              <StatusIcon status={summary.status} />
+              <div>
+                <div className="career-relocation-summary-row-head">
+                  <strong>{summary.name}</strong>
+                  <span className="career-relocation-summary-badge">{summary.statusLabel}</span>
+                </div>
+                <p>{summary.reason}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="career-relocation-country-actions">
+          <button className="career-btn career-btn-primary" type="button" onClick={onShowCountries}><ArrowRight aria-hidden="true" size={17} />Показать страны</button>
+          <button className="career-btn career-btn-secondary" type="button" onClick={onEdit}><PencilSimple aria-hidden="true" size={17} />Дополнить данные</button>
+        </div>
+      </section>
+      <aside className="career-relocation-questionnaire-reason" aria-labelledby="relocation-reason-title">
+        <h2 id="relocation-reason-title">Зачем это нужно</h2>
+        <p>Подборка теперь учитывает отмеченные страны. Данные можно править на вкладке «Мои данные» и в блоке «Условия и география».</p>
+        <p className="career-relocation-privacy-note">Данные хранятся в разделе «Страны и релокация», вкладка «Мои данные», в профиле только сводка. Третьим лицам не передаются, удалить можно в любой момент.</p>
+        <p>Любое поле можно пропустить: страны, зависящие от него, получат статус «нужно уточнить», а не угаданный.</p>
+      </aside>
+    </div>
+  );
 }
 
-function RelocationSummaryContent({
-  results,
-  profile,
-  onShowCountries,
-  onEdit,
-}: {
-  readonly results: readonly RelocationSummaryResult[];
-  readonly profile: RelocationQuestionnaire;
-  readonly onShowCountries: () => void;
-  readonly onEdit: () => void;
-}) {
-  const skipped = profile.skippedSteps.length > 0;
+function SummaryNote({ overview }: { readonly overview: RelocationSummaryOverview }) {
+  const clarify = overview.unknown.slice(0, 2);
   return (
-    <section className="career-relocation-summary" aria-labelledby="relocation-summary-title">
-      <h2 id="relocation-summary-title">Анкета заполнена</h2>
-      <p>{skipped ? 'Пропущенные шаги можно заполнить позже.' : 'Данные сохранены в профиле и не отправлены третьим лицам.'}</p>
-      <div className="career-relocation-summary-list">
-        {results.map(({ country, fit }) => (
-          <article key={country.countryCode}>
-            <strong>{country.name}</strong>
-            <span>{countryStatus(fit.status)}</span>
-            <p>{fit.scenarios.flatMap(({ reasons }) => reasons)[0] ?? 'По введённым данным нет дополнительных ограничений.'}</p>
-          </article>
+    <p className="career-relocation-summary-note">
+      <Info aria-hidden="true" size={16} />
+      <span>
+        {relocationCountsSentence(overview.counts)}
+        {clarify.length ? ' Нужно уточнить: ' : ''}
+        {clarify.map((summary, index) => (
+          <span key={summary.countryCode}>
+            {index ? ' и ' : ''}<b>{summary.name}</b> ({relocationMissingNote(summary)})
+          </span>
         ))}
-      </div>
-      <div className="career-relocation-country-actions">
-        <button className="career-btn career-btn-primary" type="button" onClick={onShowCountries}><ArrowRight aria-hidden="true" size={17} />Показать страны</button>
-        <button className="career-btn career-btn-secondary" type="button" onClick={onEdit}>Дополнить данные</button>
-      </div>
-    </section>
+        {clarify.length ? '.' : ''}
+      </span>
+    </p>
   );
+}
+
+function StatusIcon({ status }: { readonly status: RelocationCountrySummary['status'] }) {
+  if (status === 'available') return <CheckCircle className="career-relocation-summary-icon" aria-hidden="true" size={20} />;
+  if (status === 'legally_unavailable') return <XCircle className="career-relocation-summary-icon" aria-hidden="true" size={20} />;
+  return <WarningCircle className="career-relocation-summary-icon" aria-hidden="true" size={20} />;
 }
 
 export function InlineConfirmation({
@@ -534,9 +560,3 @@ export function InlineConfirmation({
   );
 }
 
-function countryStatus(status: string): string {
-  if (status === 'available') return 'Без ограничений по известным условиям';
-  if (status === 'barriers' || status === 'high_barriers') return 'Есть условия';
-  if (status === 'unavailable' || status === 'legally_unavailable') return 'Право не подтверждено';
-  return 'Нужно уточнить';
-}
