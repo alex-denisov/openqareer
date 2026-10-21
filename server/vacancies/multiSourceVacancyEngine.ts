@@ -53,6 +53,8 @@ import type {
 import type { CatalogListingSummary } from './vacancyCatalogFacets';
 
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
+import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
+import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -362,6 +364,7 @@ export class MultiSourceVacancyEngine {
   private readonly descriptionLoads = new Map<string, Promise<VacancyDescriptionLoadResult>>();
   private readonly workdayDetailFetch?: WorkdayDetailFetch;
   private workdayDescriptions?: WorkdayDescriptionBackfill;
+  private hhCatalogText?: HhCatalogTextBackfill;
   /** Successful fetches become cached only after the pool write also succeeds. */
   private readonly persistedDescriptionIds = new Set<string>();
 
@@ -891,6 +894,30 @@ export class MultiSourceVacancyEngine {
         passFinished: true,
       }
     );
+  }
+
+  /**
+   * Один такт фонового дочитывания текста hh для каталога (B535): тем же
+   * загрузчиком, что карточка кабинета, без обхода в HTTP-процессе.
+   */
+  public runHhCatalogTextStep(): Promise<HhCatalogTextReport> {
+    const pool = this.pool;
+    this.hhCatalogText ??= new HhCatalogTextBackfill({
+      engine: {
+        hhTextReady: () => {
+          const source = this.sources.get(HH_SEARCH_SOURCE_ID);
+          return (
+            Boolean(this.descriptionLoader) &&
+            typeof pool.loadHhTextCandidates === 'function' &&
+            Boolean(source?.enabled) &&
+            this.rights.get(HH_SEARCH_SOURCE_ID) === 'live'
+          );
+        },
+        loadHhTextCandidates: (cursor, limit) => pool.loadHhTextCandidates!(cursor, limit),
+        loadVacancyDescription: (id) => this.loadVacancyDescription(id),
+      },
+    });
+    return this.hhCatalogText.step();
   }
 
   /**

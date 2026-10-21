@@ -1581,6 +1581,85 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   /**
+   * Следующие hh-записи без дочитанного текста (B535): сначала карточки
+   * публичного каталога, свежие первыми, потом остальной пул. Курсор — позиция
+   * в обходе; `undefined` — проход закончен. За вызов просматривается не больше
+   * `HH_TEXT_SCAN_LIMIT` строк, чтобы тик не стал полным чтением пула.
+   */
+  loadHhTextCandidates(cursor: string | undefined, limit: number): HhTextCandidates {
+    const position = parseHhTextCursor(cursor);
+    const want = Math.max(1, Math.min(Math.trunc(limit), 100));
+    const ids: string[] = [];
+    let scanned = 0;
+    let at: HhTextPosition | undefined = position;
+    while (at && ids.length < want && scanned < HH_TEXT_SCAN_LIMIT) {
+      const rows = this.hhTextPage(at, HH_TEXT_PAGE);
+      if (rows.length === 0) {
+        at =
+          at.phase === 'catalog'
+            ? { phase: 'pool', ms: Number.MAX_SAFE_INTEGER, key: '' }
+            : undefined;
+        continue;
+      }
+      for (const row of rows) {
+        scanned += 1;
+        at = { phase: at.phase, ms: row.ms, key: row.key };
+        if (row.need === 1) ids.push(row.id);
+        if (ids.length >= want) break;
+      }
+    }
+    return { ids, ...(at ? { cursor: formatHhTextCursor(at) } : {}) };
+  }
+
+  private hhTextPage(
+    at: HhTextPosition,
+    size: number,
+  ): Array<{ id: string; ms: number; key: string; need: number }> {
+    const needsText = `p.expired_at IS NULL AND
+      length(trim(coalesce(json_extract(p.payload, '$.fullDescription'), ''))) = 0`;
+    if (at.phase === 'catalog') {
+      return this.database
+        .prepare(
+          `SELECT substr(c.cluster_id, 9) AS id, c.published_ms AS ms, c.entry_key AS key,
+                  CASE WHEN p.id IS NOT NULL AND ${needsText} THEN 1 ELSE 0 END AS need
+             FROM catalog_entries c
+             LEFT JOIN vacancy_pool p
+               ON p.id = substr(c.cluster_id, 9) AND p.source_id = '${HH_SEARCH_SOURCE_ID}'
+            WHERE c.status = 'active'
+              AND c.cluster_id >= 'cluster-${HH_SEARCH_SOURCE_ID}:'
+              AND c.cluster_id < 'cluster-${HH_SEARCH_SOURCE_ID};'
+              AND (c.published_ms < ? OR (c.published_ms = ? AND c.entry_key > ?))
+            ORDER BY c.published_ms DESC, c.entry_key ASC
+            LIMIT ?`,
+        )
+        .all(at.ms, at.ms, at.key, size) as Array<{
+        id: string;
+        ms: number;
+        key: string;
+        need: number;
+      }>;
+    }
+    return this.database
+      .prepare(
+        `SELECT i.id AS id, i.published_ms AS ms, i.id AS key,
+                CASE WHEN c.cluster_id IS NULL AND ${needsText} THEN 1 ELSE 0 END AS need
+           FROM vacancy_pool_index i
+           JOIN vacancy_pool p ON p.id = i.id
+           LEFT JOIN catalog_entries c ON c.cluster_id = 'cluster-' || i.id
+          WHERE i.source_id = '${HH_SEARCH_SOURCE_ID}' AND i.expired = 0
+            AND (i.published_ms < ? OR (i.published_ms = ? AND i.id > ?))
+          ORDER BY i.published_ms DESC, i.id ASC
+          LIMIT ?`,
+      )
+      .all(at.ms, at.ms, at.key, size) as Array<{
+      id: string;
+      ms: number;
+      key: string;
+      need: number;
+    }>;
+  }
+
+  /**
    * Живые записи площадки без дочитанного текста, новые первыми (B535).
    * Точечный запрос по индексу `source_id`: на проде это до ~1 300 строк.
    */
@@ -2267,6 +2346,33 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 interface WriteTally {
   transactions: number;
   maxTransactionMs: number;
+}
+
+export interface HhTextCandidates {
+  readonly ids: string[];
+  readonly cursor?: string;
+}
+
+interface HhTextPosition {
+  readonly phase: 'catalog' | 'pool';
+  readonly ms: number;
+  readonly key: string;
+}
+
+const HH_TEXT_PAGE = 200;
+const HH_TEXT_SCAN_LIMIT = 2_000;
+
+function parseHhTextCursor(cursor: string | undefined): HhTextPosition {
+  const start: HhTextPosition = { phase: 'catalog', ms: Number.MAX_SAFE_INTEGER, key: '' };
+  if (!cursor) return start;
+  const [phase, ms, ...key] = cursor.split('|');
+  const parsedMs = Number(ms);
+  if ((phase !== 'catalog' && phase !== 'pool') || !Number.isFinite(parsedMs)) return start;
+  return { phase, ms: parsedMs, key: key.join('|') };
+}
+
+function formatHhTextCursor(at: HhTextPosition): string {
+  return `${at.phase}|${at.ms}|${at.key}`;
 }
 
 /** Повторная запись площадки не стирает дочитанный текст (hh — B304, Workday и др. — B535). */

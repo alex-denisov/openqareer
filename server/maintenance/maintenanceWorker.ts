@@ -4,6 +4,7 @@ import type { LinkCheckCensus } from '../vacancies/linkLivenessProbe';
 import { MemoryGuard, readProcessHeap, type HeapReading } from '../vacancies/memoryGuard';
 import type { LinkedinPoolExecutorReport } from '../linkedinPool/companyPageExecutor';
 import type { WorkdayDescriptionReport } from '../vacancies/workdayDescriptions';
+import type { HhCatalogTextReport } from '../vacancies/hhCatalogText';
 import {
   SYNC_BATCH_LIMIT,
   type RequestedSourceSync,
@@ -39,6 +40,7 @@ export interface MaintenanceEngine {
     passFinished: boolean;
   };
   runWorkdayDescriptionStep?(): Promise<WorkdayDescriptionReport>;
+  runHhCatalogTextStep?(): Promise<HhCatalogTextReport>;
   readonly clusterKeysReady: boolean;
   readonly poolSize: number;
 }
@@ -60,6 +62,7 @@ export interface MaintenanceIntervals {
   readonly titleModelMs: number;
   readonly descriptionSkillsMs?: number;
   readonly workdayDescriptionMs?: number;
+  readonly hhCatalogTextMs?: number;
   readonly linkedinPoolExecutorMs: number;
   readonly recruiterPurgeMs: number;
 }
@@ -114,6 +117,8 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   // Такт дочитывания текста (B535): Workday и др. — до двух запросов на хост
   // раз в 20 с, LinkedIn — один раз в 10–20 с случайно; темп держит сам шаг.
   workdayDescriptionMs: 10 * 1_000,
+  // До 10 карточек hh за тик при 1 чтении в секунду у загрузчика (B535).
+  hhCatalogTextMs: 12 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
 };
@@ -327,6 +332,19 @@ export class MaintenanceWorker {
     }
   }
 
+  /** Один такт фонового дочитывания текста hh для каталога (B535). */
+  async runHhCatalogTextStep(): Promise<HhCatalogTextReport | undefined> {
+    if (this.stopped || !this.engine.runHhCatalogTextStep) return undefined;
+    try {
+      const report = await this.engine.runHhCatalogTextStep();
+      if (report.requested > 0) this.log.info({ ...report }, 'vacancy-hh-catalog-text-tick');
+      return report;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'vacancy-hh-catalog-text-failed');
+      return undefined;
+    }
+  }
+
   /**
    * Один шаг разметки пула правилами (B267 S2). Отдельный heartbeat раз в
    * пять минут показывает объём просмотренных индексных строк, включая уже
@@ -515,6 +533,9 @@ export class MaintenanceWorker {
     }
     if (this.intervals.workdayDescriptionMs) {
       every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
+    }
+    if (this.intervals.hhCatalogTextMs) {
+      every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());
     }
     every(this.intervals.reportMs, () => this.reportMemory());
     if (this.purgeRecruiters) {

@@ -182,6 +182,11 @@ export interface VacancyPoolStore {
   backfillCatalogEntriesStep?(chunk?: number): number;
   /** Number of cluster rows still absent from the projection marker. */
   pendingCatalogEntries?(): number;
+  /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
+  loadHhTextCandidates?(
+    cursor: string | undefined,
+    limit: number,
+  ): { ids: string[]; cursor?: string };
   /** Живые записи площадки без дочитанного текста, новые первыми (Workday, B535). */
   loadVacanciesWithoutFullText?(
     sourceId: string,

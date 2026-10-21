@@ -433,6 +433,27 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return 0;
   }
 
+  /** Как в базе, без каталога: живые hh-записи без текста, свежие первыми (B535). */
+  loadHhTextCandidates(
+    cursor: string | undefined,
+    limit: number,
+  ): { ids: string[]; cursor?: string } {
+    const ordered = [...this.rows.values()]
+      .filter(
+        (row) =>
+          row.sourceId === HH_SEARCH_SOURCE_ID &&
+          row.expiredAt === undefined &&
+          !row.vacancy.fullDescription?.trim(),
+      )
+      .sort((a, b) => Date.parse(b.vacancy.publishedAt) - Date.parse(a.vacancy.publishedAt));
+    const offset = Number(cursor ?? 0) || 0;
+    const ids = ordered
+      .slice(offset, offset + Math.max(1, Math.trunc(limit)))
+      .map((row) => row.vacancy.id);
+    const next = offset + ids.length;
+    return { ids, ...(next < ordered.length ? { cursor: String(next) } : {}) };
+  }
+
   /** Как в базе: живые записи площадки без дочитанного текста, новые первыми (B535). */
   loadVacanciesWithoutFullText(
     sourceId: string,

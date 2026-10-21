@@ -721,3 +721,23 @@ describe('MaintenanceWorker Workday description step (B535)', () => {
     ]);
   });
 });
+
+describe('MaintenanceWorker hh catalog text step (B535)', () => {
+  it('logs a tick with requests and survives a failing step', async () => {
+    const log = silentLog();
+    const report = { requested: 3, loaded: 2, retired: 1, failed: 0 };
+    const engine = {
+      runHhCatalogTextStep: vi
+        .fn()
+        .mockResolvedValueOnce(report)
+        .mockRejectedValueOnce(new Error('db')),
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log });
+    expect(await worker.runHhCatalogTextStep()).toEqual(report);
+    expect(await worker.runHhCatalogTextStep()).toBeUndefined();
+    expect(log.entries).toEqual([
+      { level: 'info', msg: 'vacancy-hh-catalog-text-tick' },
+      { level: 'error', msg: 'vacancy-hh-catalog-text-failed' },
+    ]);
+  });
+});
