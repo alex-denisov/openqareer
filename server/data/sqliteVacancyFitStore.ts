@@ -3,6 +3,8 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { VacancyFitResult } from '../../shared/vacancyFit';
 import { evaluateVacancyFit, vacancyFitFingerprint, type VacancyFitInput } from '../domain/vacancyFit';
 import { SealedText } from './sealedText';
+import { addLateColumns } from './sqliteLateColumn';
+import { MECHANICS_REQUEUE_REVISION } from './sqliteVacancyRequirementsStore';
 
 export interface VacancyFitJob {
   readonly key: string;
@@ -22,19 +24,8 @@ const LATE_COLUMNS = [
   ['requested_at', 'TEXT'],
   ['defers', 'INTEGER NOT NULL DEFAULT 0'],
   ['last_error', 'TEXT'],
+  ['requeue_revision', 'INTEGER'],
 ] as const;
-
-/**
- * The HTTP server and the mechanics worker open the store at the same moment on deploy:
- * the other process may add the column between our check and ALTER. Only that error is benign.
- */
-function addColumnOnce(database: DatabaseSync, name: string, type: string): void {
-  try {
-    database.exec(`ALTER TABLE vacancy_fit_queue ADD COLUMN ${name} ${type}`);
-  } catch (error) {
-    if (!(error instanceof Error && /duplicate column name/iu.test(error.message))) throw error;
-  }
-}
 
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
 
@@ -54,9 +45,7 @@ export class SqliteVacancyFitStore {
     );
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_claim ON vacancy_fit_queue(status,lease_until,created_at);
     CREATE INDEX IF NOT EXISTS vacancy_fit_queue_candidate ON vacancy_fit_queue(candidate_key);`);
-    const columns = new Set((database.prepare('PRAGMA table_info(vacancy_fit_queue)').all() as { name: string }[]).map((column) => column.name));
-    // The queue holds a few thousand rows: ADD COLUMN is a metadata change, not a table rewrite.
-    for (const [name, type] of LATE_COLUMNS) if (!columns.has(name)) addColumnOnce(database, name, type);
+    addLateColumns(database, 'vacancy_fit_queue', LATE_COLUMNS);
   }
 
   private candidateKey(candidateId: string): string {
@@ -179,9 +168,9 @@ export class SqliteVacancyFitStore {
     const update = this.database.prepare(`UPDATE vacancy_fit_queue
       SET status=CASE WHEN defers+1>=? THEN 'failed' ELSE 'pending' END,
         last_error=CASE WHEN defers+1>=? THEN 'requirements_wait_timeout' ELSE last_error END,
-        lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),defers=defers+1,updated_at=?
+        requeue_revision=?,lease_token=NULL,lease_until=?,attempts=MAX(0,attempts-1),defers=defers+1,updated_at=?
       WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>? RETURNING status`)
-      .get(VACANCY_FIT_MAX_DEFERS, VACANCY_FIT_MAX_DEFERS, available, now, job.key, job.leaseToken, now) as { status: string } | undefined;
+      .get(VACANCY_FIT_MAX_DEFERS, VACANCY_FIT_MAX_DEFERS, MECHANICS_REQUEUE_REVISION, available, now, job.key, job.leaseToken, now) as { status: string } | undefined;
     if (!update) return 'lost';
     return update.status === 'failed' ? 'failed' : 'deferred';
   }
@@ -191,9 +180,20 @@ export class SqliteVacancyFitStore {
     const now = options.now ?? new Date().toISOString();
     const reason = options.reason && /^[a-z0-9_:-]{1,80}$/iu.test(options.reason) ? options.reason : 'assessment_failed';
     const available = options.retry ? new Date(Date.parse(now) + RETRY_BASE_MS * 2 ** Math.max(0, job.attempts - 1)).toISOString() : null;
-    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status=?,lease_token=NULL,lease_until=?,last_error=?,updated_at=?
-      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(options.retry ? 'pending' : 'failed', available, reason, now, job.key, job.leaseToken, now);
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status=?,lease_token=NULL,lease_until=?,last_error=?,requeue_revision=?,updated_at=?
+      WHERE cache_key=? AND status='leased' AND lease_token=? AND lease_until>?`).run(options.retry ? 'pending' : 'failed', available, reason, MECHANICS_REQUEUE_REVISION, now, job.key, job.leaseToken, now);
     return Number(update.changes) === 1;
+  }
+
+  /**
+   * One requeue of failed jobs after a parser upgrade. The request time goes back to creation,
+   * so pages the candidate opens now stay ahead; a failure under the current revision stays failed.
+   */
+  requeueFailedOnce(revision = MECHANICS_REQUEUE_REVISION, now = new Date().toISOString()): number {
+    const update = this.database.prepare(`UPDATE vacancy_fit_queue SET status='pending',attempts=0,defers=0,last_error=NULL,
+      lease_token=NULL,lease_until=NULL,requested_at=created_at,requeue_revision=?,updated_at=?
+      WHERE status='failed' AND input_cipher<>'' AND COALESCE(requeue_revision,1)<?`).run(revision, now, revision);
+    return Number(update.changes);
   }
 
   deleteCandidate(candidateId: string): void {

@@ -47,6 +47,10 @@ export class VacancyMechanicsRuntime {
     this.fit.retryFailed(input);
     return this.fit.enqueue(input);
   }
+  /** Worker start: one requeue of model failures recorded under an older parser revision (B522). */
+  requeueAfterParserUpgrade(): { requirements: number; fit: number } {
+    return { requirements: this.requirements.requeueModelFailures(), fit: this.fit.requeueFailedOnce() };
+  }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {
     const taken = this.stats;

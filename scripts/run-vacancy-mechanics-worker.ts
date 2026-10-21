@@ -32,6 +32,10 @@ try {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   if (process.argv.includes('--once')) await runtime.runNext(bulk.client);
   else if (!process.argv.includes('--migrate-only')) {
+    const requeued = runtime.requeueAfterParserUpgrade();
+    console.info(
+      `vacancy-mechanics start: requeued requirements=${requeued.requirements} fit=${requeued.fit}`,
+    );
     let batchStartedAt = Date.now();
     while (!stopping) {
       await runVacancyMechanicsStep(() => runtime.runNext(bulk.client), sleep);

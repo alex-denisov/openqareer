@@ -211,4 +211,13 @@ describe('background vacancy mechanics with real SQLite', () => {
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
     expect(runIds).toEqual(['vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-22']);
   });
+
+  it('requeues model failures once at worker start and not on the next start (B522)', async () => {
+    const runtime = setup();
+    expect(runtime.requeueAfterParserUpgrade()).toEqual({ requirements: 0, fit: 0 });
+    runtime.database.exec(`INSERT INTO vacancy_requirements_jobs(id,cache_key,input_json,status,attempts,last_error,created_at,updated_at)
+      VALUES('j','k','{"vacancyId":"v","description":"d"}','failed',3,'requirements_model_invalid',1,1)`);
+    expect(runtime.requeueAfterParserUpgrade().requirements).toBe(1);
+    expect(runtime.requeueAfterParserUpgrade().requirements).toBe(0);
+  });
 });
