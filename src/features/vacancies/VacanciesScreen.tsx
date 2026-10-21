@@ -721,8 +721,11 @@ function VacanciesScreenFrame({
   return (
     <div className="vacancies-screen">
       <VacanciesScreenHeader input={input} />
-      {activeTab === 'selection' ? (
-        <VacanciesFilterContent input={input} screenState={screenState} />
+      {/* B446-g4: на «Сохранённых» карточка сводки с фильтрами остаётся (макет 4, кадр sv). */}
+      {activeTab !== 'companies' ? (
+        <div className={`vacancies-filter-host${activeTab === 'saved' ? ' is-saved-tab' : ''}`}>
+          <VacanciesFilterContent input={input} screenState={screenState} />
+        </div>
       ) : null}
       <div className="vacancies-tabs-row">
         <OpportunityTabs

@@ -1051,3 +1051,14 @@
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
+
+/* B446-g4: обёртка сводки не участвует в раскладке; на 390 «Сохранённые» без сводки (mock-390m-saved). */
+.vacancies-filter-host {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .vacancies-filter-host.is-saved-tab {
+    display: none;
+  }
+}
