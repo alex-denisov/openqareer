@@ -1,15 +1,10 @@
 import { useId, useMemo, useState } from 'react';
 import {
-  Bell,
-  BookmarkSimple,
   Briefcase,
   ArrowsClockwise,
   CaretDown,
   CaretRight,
   CheckCircle,
-  ChatsCircle,
-  LinkedinLogo,
-  PaperPlaneTilt,
   UserCircle,
   WarningCircle,
 } from '@phosphor-icons/react';
@@ -25,7 +20,6 @@ import {
 } from './consultantActionStorage';
 import {
   deferTodayAction,
-  type TodayFollowUp,
   type TodayProfileFocus,
   type TodayQueueItem,
   type TodaySnapshot,
@@ -44,20 +38,11 @@ import {
   type TodayFunnelContext,
   type TodayFunnelStage,
 } from './todayFunnelData';
-import {
-  TodayOpenAutomationProvider,
-  useCanOpenQueueItem,
-  useOpenQueueItem,
-} from './todayQueueOpen';
+import { TodayOpenAutomationProvider } from './todayQueueOpen';
 
+import { TodayMobileQueue, type TodayQueueRemainderProps } from './TodayMobileQueue';
 export type { TodayFunnelContext } from './todayFunnelData';
-import {
-  consultantTargetView,
-  queueMobileSubtitle,
-  formatQueueTitle,
-  queueMobileTitle,
-  queueKey,
-} from './todayFormat';
+import { consultantTargetView } from './todayFormat';
 export { consultantTargetView, queueItemTarget } from './todayFormat';
 import { profileCompleteness } from '../resume/profileCompleteness';
 import type { ResumeDraft } from '../resume/resumeTypes';
@@ -283,7 +268,14 @@ interface TodayContentProps {
 function TodayContent(props: TodayContentProps) {
   return (
     <div className="career-today">
-      <TodayMobileContent {...props} />
+      <TodayMobileContent
+        {...props}
+        queueRemainder={{
+          loading: props.queueRemainderLoading,
+          failed: props.queueRemainderFailed,
+          onLoad: props.onLoadQueueRemainder,
+        }}
+      />
       <TodayDesktopContent
         snapshot={props.snapshot}
         profileDraft={props.profileDraft}
@@ -326,7 +318,8 @@ function TodayMobileContent({
   profileDraft,
   funnelContext,
   onOpenConnections,
-}: Pick<
+  queueRemainder,
+}: { readonly queueRemainder: TodayQueueRemainderProps } & Pick<
   TodayContentProps,
   | 'onOpenConnections'
   | 'snapshot'
@@ -352,11 +345,7 @@ function TodayMobileContent({
         postponeError={postponeError}
         onOpenExpert={onOpenExpert}
       />
-      <TodayMobileQueue
-        queue={snapshot.queue}
-        followUps={snapshot.followUps}
-        onNavigate={onNavigate}
-      />
+      <TodayMobileQueue snapshot={snapshot} onNavigate={onNavigate} remainder={queueRemainder} />
       <TodayLinkedinNote {...linkedinNoteProps(snapshot, onOpenConnections)} />
       <TodayMobileFunnel snapshot={snapshot} context={funnelContext} />
       <TodayMobileProfileRow profileDraft={profileDraft} onNavigate={onNavigate} />
@@ -545,94 +534,6 @@ function TodayMobileDecisionActions({
       <TodayMobileReasons action={action} open={reasonsOpen} id={reasonsId} />
     </>
   );
-}
-
-function TodayMobileQueue({
-  queue,
-  followUps,
-  onNavigate,
-}: {
-  readonly queue: readonly TodayQueueItem[];
-  readonly followUps: readonly TodayFollowUp[];
-  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
-}) {
-  const visibleQueue = queue.slice(0, 4);
-  return (
-    <section className="pm-group" aria-label="Очередь дня">
-      <h3 className="pm-cap">Очередь дня</h3>
-      {visibleQueue.length ? (
-        <ul className="pm-list">
-          {visibleQueue.map((item) => (
-            <TodayMobileQueueRow
-              key={queueKey(item)}
-              item={item}
-              followUps={followUps}
-              onNavigate={onNavigate}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className="pm-empty">Очередь дня пуста. Новые задачи появятся здесь.</p>
-      )}
-      <p className="pm-foot">Только то, у чего есть срок или что ждёт вашего ответа.</p>
-    </section>
-  );
-}
-
-function TodayMobileQueueRow({
-  item,
-  followUps,
-  onNavigate,
-}: {
-  readonly item: TodayQueueItem;
-  readonly followUps: readonly TodayFollowUp[];
-  readonly onNavigate?: (view: CareerCabinetView, options?: NavigationOptions) => void;
-}) {
-  const isWarn = isOverdueMobileQueueItem(item, followUps);
-  const openItem = useOpenQueueItem(onNavigate);
-  const canOpen = useCanOpenQueueItem(item, onNavigate);
-  return (
-    <li>
-      <button
-        className={`pm-row${isWarn ? ' is-warn' : ''}`}
-        type="button"
-        aria-label={`Открыть: ${formatQueueTitle(item.company, item.title)}`}
-        data-testid="today-mobile-queue-row"
-        disabled={!canOpen}
-        onClick={() => openItem?.(item)}
-      >
-        <span className="pm-ico">
-          <TodayMobileQueueIcon item={item} />
-        </span>
-        <span className="pm-main">
-          <b>{queueMobileTitle(item)}</b>
-          <small>{queueMobileSubtitle(item, isWarn)}</small>
-        </span>
-        <CaretRight className="pm-chev" aria-hidden="true" weight="regular" />
-      </button>
-    </li>
-  );
-}
-
-function isOverdueMobileQueueItem(
-  item: TodayQueueItem,
-  followUps: readonly TodayFollowUp[],
-): boolean {
-  const followUp = followUps.find((entry) => entry.applicationId === item.applicationId);
-  if (followUp) return followUp.status === 'overdue';
-  const dueAt = item.dueAt ? Date.parse(item.dueAt) : Number.NaN;
-  return Number.isFinite(dueAt) && dueAt < Date.now();
-}
-
-function TodayMobileQueueIcon({ item }: { readonly item: TodayQueueItem }) {
-  if (item.kind === 'linkedin_post') {
-    return <LinkedinLogo aria-hidden="true" weight="regular" />;
-  }
-  if (item.kind === 'follow_up') return <Bell aria-hidden="true" weight="regular" />;
-  if (item.kind === 'interview') return <ChatsCircle aria-hidden="true" weight="regular" />;
-  if (item.kind === 'candidate_turn') return <PaperPlaneTilt aria-hidden="true" weight="regular" />;
-  if (item.kind === 'shortlist') return <BookmarkSimple aria-hidden="true" weight="regular" />;
-  return <Briefcase aria-hidden="true" weight="regular" />;
 }
 
 const MOBILE_FUNNEL_LABELS: Partial<Record<TodayFunnelStage['key'], string>> = {

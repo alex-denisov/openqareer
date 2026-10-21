@@ -518,3 +518,9 @@
   justify-content: center;
   gap: var(--career-space-2);
 }
+
+/* Макет 1 «Много: очередь больше пяти» на 390: кнопка под списком, во всю ширину карточки. */
+.career-today-mobile .pm-queue-more {
+  width: 100%;
+  margin-top: var(--career-space-2);
+}

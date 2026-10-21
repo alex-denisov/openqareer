@@ -85,8 +85,8 @@ export const syntheticResumeMemory: readonly CandidateMemory[] = ([
   ['block-a-memory-russian', 'other', 'Русский язык — родной.'],
   ['block-a-memory-english', 'other', 'Английский язык — уровень C1.'],
   ['block-a-memory-project', 'responsibility', 'Руководитель проекта «Антифрод-платформа» в «Финтех Лаб».'],
-  [TEAM_SIZE_ID, 'responsibility', 'Размер команды «Финтех Лаб» — 38 человек. Предложение ждёт подтверждения кандидата.', 'proposed'],
-  [MARKETING_DATE_ID, 'role-evidence', 'Дата окончания работы в «Маркет Софт» — 01.2021. Предложение ждёт подтверждения кандидата.', 'proposed'],
+  [TEAM_SIZE_ID, 'responsibility', 'Размер команды «Финтех Лаб» — 38 человек.', 'proposed'],
+  [MARKETING_DATE_ID, 'role-evidence', 'Дата окончания работы в «Маркет Софт» — 01.2021.', 'proposed'],
   ['block-a-memory-kafka-proposal', 'skill', 'Навык Kafka ожидает подтверждения кандидата.', 'proposed'],
   ['block-a-memory-kubernetes-proposal', 'skill', 'Навык Kubernetes ожидает подтверждения кандидата.', 'proposed'],
 ] as const).map(makeMemory);

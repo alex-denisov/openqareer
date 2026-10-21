@@ -385,3 +385,17 @@ describe('queueItemTarget (B331: «Открыть» was a button without a handl
     expect(queueItemTarget({ ...followUp, kind: 'candidate_turn' })).toBe('responses');
   });
 });
+
+// Макет 1, карточка «Много: очередь больше пяти» на 390: «Показать остальные N» по queueTotal.
+describe('mobile queue remainder (mockup 1, 390)', () => {
+  it('shows «Показать остальные 10» when the snapshot holds 12 rows and two are loaded', () => {
+    const html = renderTodayScreen({ snapshot: { ...snapshot, queueTotal: 12 } });
+    expect(html).toContain('data-testid="today-mobile-queue-more"');
+    expect(html).toContain('Показать остальные 10');
+  });
+
+  it('hides the control when every row is already on screen', () => {
+    const html = renderTodayScreen({ snapshot: { ...snapshot, queueTotal: 2 } });
+    expect(html).not.toContain('today-mobile-queue-more');
+  });
+});
