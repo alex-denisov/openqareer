@@ -15,7 +15,6 @@ import './today-desktop.css';
 import type { CareerCabinetView } from '../cabinet/cabinetViews';
 import type { CareerActionReason, ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { NavigationOptions } from '../shell/pathIndicator';
-import type { ReasonedCareerAction } from '../next-action/careerActionPolicy';
 import type { ResumeDraft } from '../resume/resumeTypes';
 import { CareerTooltip } from '../shell/CareerTooltip';
 import { TodayProfileProgress as TodayProfileProgressView } from './TodayProfileProgress';

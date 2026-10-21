@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
-import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
 import { useFactProvenance } from './ProfileProvenanceChip';
 import { provenanceSourceValue } from './profileProvenance';
-import { Briefcase, PencilSimple, Plus } from '@phosphor-icons/react';
+import { Briefcase, PencilSimple, Plus, Question } from '@phosphor-icons/react';
 import { ProfileMobilePositionEditor } from './ProfileMobilePositionEditor';
 import {
   ExperienceSuggestionsList,
