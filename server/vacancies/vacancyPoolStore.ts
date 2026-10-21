@@ -149,6 +149,8 @@ export interface VacancyPoolStore {
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;
+  /** Сведённых кластеров и время последней записи, без чтения JSON (B485). */
+  catalogTotals?(): { clusters: number; updatedAt?: string };
   /**
    * Сведение по ключам (B230): соседи партии из `vacancy_cluster_keys`,
    * резюмируемое заполнение ключей по старым кластерам и его готовность.

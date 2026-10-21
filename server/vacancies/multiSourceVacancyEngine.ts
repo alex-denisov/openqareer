@@ -55,6 +55,7 @@ import type { CatalogListingSummary } from './vacancyCatalogFacets';
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
+import { CatalogTotalsCache, type CatalogTotals } from './matchedCatalogSummary';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -344,6 +345,12 @@ export class MultiSourceVacancyEngine {
   /** Принесла ли волна что-то новое в пул с последней пересборки кластеров. */
   private poolChangedSinceRecluster = false;
   private reclusterCount = 0;
+  /** Размер каталога для сводки подборки (B485): индексный счёт, не чтение пула. */
+  private readonly catalogTotalsCache = new CatalogTotalsCache(() =>
+    typeof this.pool.catalogTotals === 'function'
+      ? this.pool.catalogTotals()
+      : { clusters: this.pool.countClusters() },
+  );
   private readonly reclusterMode: ReclusterMode;
   /** Идущая фоновая сборка; вторая параллельно не запускается. */
   private reclusterInFlight?: Promise<void>;
@@ -748,6 +755,10 @@ export class MultiSourceVacancyEngine {
     }
     if (typeof this.pool.loadClustersPage !== 'function') this.ensureClusters();
     return this.pool.loadCatalogEntriesPage(query);
+  }
+
+  public getCatalogTotals(): CatalogTotals | undefined {
+    return this.catalogTotalsCache.read();
   }
 
   public getPublicCatalogListings(): CatalogListingSummary[] | undefined {

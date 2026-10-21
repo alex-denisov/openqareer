@@ -2245,6 +2245,17 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row.n;
   }
 
+  /** count по первичному ключу и max по индексу свежести; JSON не читается. */
+  catalogTotals(): { clusters: number; updatedAt?: string } {
+    const row = this.database
+      .prepare('SELECT count(*) AS n, max(updated_at) AS at FROM vacancy_clusters')
+      .get() as { n: number; at: number | null };
+    return {
+      clusters: row.n,
+      ...(row.at !== null ? { updatedAt: new Date(row.at).toISOString() } : {}),
+    };
+  }
+
   private catalogEntryFromRow(row: CatalogEntrySqlRow): CatalogEntryRow {
     let skills: string[] = [];
     try {

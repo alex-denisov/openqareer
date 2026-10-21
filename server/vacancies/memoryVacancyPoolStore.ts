@@ -387,6 +387,17 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return this.clusters.size;
   }
 
+  catalogTotals(): { clusters: number; updatedAt?: string } {
+    const active = Array.from(this.clusters.values()).filter(
+      (cluster) => cluster.status === 'active',
+    );
+    const updatedAt = active
+      .map((cluster) => cluster.lastSeenAt)
+      .sort()
+      .at(-1);
+    return { clusters: active.length, ...(updatedAt ? { updatedAt } : {}) };
+  }
+
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
     const rows = Array.from(this.clusters.values())
       .filter((cluster) => cluster.status === 'active')
