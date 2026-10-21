@@ -38,6 +38,25 @@
   gap: var(--career-space-2);
 }
 
+.saved-controls .companies-people-search input {
+  min-block-size: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.saved-controls .companies-people-search:focus-within {
+  outline: 2px solid var(--career-accent);
+  outline-offset: 2px;
+}
+
+.saved-controls .companies-people-select-wrap,
+.saved-controls .companies-people-select {
+  display: block;
+  inline-size: 100%;
+}
+
 .saved-list {
   display: grid;
   gap: var(--career-space-3);

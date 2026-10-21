@@ -159,7 +159,7 @@ function SavedSelect<T extends string>(props: {
 }) {
   return (
     <label className="companies-people-select-wrap">
-      <span className="visually-hidden">{props.label}</span>
+      <span className="career-sr-only">{props.label}</span>
       <select
         className="companies-people-select"
         aria-label={props.label}
