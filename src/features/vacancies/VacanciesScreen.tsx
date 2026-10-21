@@ -121,8 +121,8 @@ function filterBoardVacancies(
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
 ) {
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
-  const items=filterByScreenState(matched,filters,now);
-  return onFiltersChange?items:sortVacancyFitItems(items,state.sort);
+  const items = filterByScreenState(matched, filters, now);
+  return onFiltersChange ? items : sortVacancyFitItems(items, state.sort);
 }
 
 /** Счётчики «Локаций» по выдаче без самого фильтра локаций (B547). */
@@ -178,7 +178,7 @@ function useVacanciesScreenBoard(
   useEffect(() => setVisibleCount(20), [state]);
 
   const filtered = useMemo(
-    () => filterBoardVacancies(matched,state,now,onFiltersChange),
+    () => filterBoardVacancies(matched, state, now, onFiltersChange),
     [matched, state, now, onFiltersChange],
   );
   return {
@@ -550,7 +550,10 @@ function VacanciesFilterContent({
   const { board, actions, resetFilters } = screenState;
   const baseOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
   const locationTree = useLocationTreeForState(input, board.state);
-  const filterOptions = useMemo(() => ({ ...baseOptions, locationTree }), [baseOptions, locationTree]);
+  const filterOptions = useMemo(
+    () => ({ ...baseOptions, locationTree }),
+    [baseOptions, locationTree],
+  );
   return (
     <div className="vacancies-filter-section">
       <VacanciesScreenSummary
@@ -562,7 +565,10 @@ function VacanciesFilterContent({
         catalogSummary={input.facets?.catalogSummary}
         onReset={resetFilters}
       />
-      <VacancyFitSortControl value={board.state.sort} onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))} />
+      <VacancyFitSortControl
+        value={board.state.sort}
+        onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))}
+      />
       <VacanciesFiltersSection
         facets={input.facets}
         board={board}
