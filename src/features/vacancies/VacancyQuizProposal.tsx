@@ -24,17 +24,10 @@ type Availability =
   | { readonly kind: 'available' }
   | { readonly kind: 'unavailable'; readonly reason: string };
 
-const sameSkill = (left: string, right: string) => {
-  const a = left.toLocaleLowerCase('ru');
-  const b = right.toLocaleLowerCase('ru');
-  return a.includes(b) || b.includes(a);
-};
-
 /** An honest reason instead of «Начать» when the skill check cannot cover these skills. */
-export function skillCheckAvailability(
-  current: RoleSkillAssessmentCurrent,
-  skills: readonly string[],
-): Availability {
+export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Availability {
+  // A role check that is ready or running can take the vacancy's skills; whether each skill
+  // has enough data is answered honestly on start (B552).
   switch (current.state) {
     case 'role_not_selected':
       return {
@@ -56,13 +49,6 @@ export function skillCheckAvailability(
         kind: 'unavailable',
         reason: `В вакансиях роли «${current.roleTitle}» мало требований, проверку навыков пока не собрать.`,
       };
-    case 'ready':
-      return current.skills.some((item) => skills.some((skill) => sameSkill(item.name, skill)))
-        ? { kind: 'available' }
-        : {
-            kind: 'unavailable',
-            reason: `В проверке навыков роли «${current.roleTitle}» нет кейсов по ${skills.join(' и ')}.`,
-          };
     default:
       return { kind: 'available' };
   }
@@ -76,7 +62,7 @@ function useSkillCheckAvailability(skills: readonly string[]): Availability {
     setAvailability({ kind: 'loading' });
     void getCurrentRoleSkillAssessment()
       .then((current) => {
-        if (active) setAvailability(skillCheckAvailability(current, key.split('\n')));
+        if (active) setAvailability(skillCheckAvailability(current));
       })
       .catch(() => {
         if (active)

@@ -6,9 +6,15 @@
 }
 
 .career-role-assessment-focus {
+  display: grid;
+  gap: var(--career-space-1);
   margin: 0;
   font-size: var(--career-text-xs);
   color: var(--career-text-muted);
+}
+
+.career-role-assessment-focus p {
+  margin: 0;
 }
 
 .career-role-assessment-header {

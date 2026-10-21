@@ -310,7 +310,7 @@ function StartNotice() {
   );
 }
 
-function StartAction({
+export function StartAction({
   consent,
   busy,
   onStart,

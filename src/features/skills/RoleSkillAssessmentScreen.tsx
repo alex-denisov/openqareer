@@ -32,6 +32,12 @@ import {
 } from './RoleSkillAssessmentStartViews';
 import { RoleSkillAssessmentActions, loadInitialAssessment } from './RoleSkillAssessmentActions';
 import {
+  FocusInsufficientState,
+  FocusStartCard,
+  runMatchesFocus,
+  SkillCheckFocusNote,
+} from './RoleSkillAssessmentFocusViews';
+import {
   getActiveAssessmentCase,
   getAssessmentRun,
   initialRoleSkillAssessmentState,
@@ -60,9 +66,8 @@ export function RoleSkillAssessmentScreen({
   const busyRef = useRef(false);
   const draftTimer = useRef<number>();
   const answerRef = useRef<HTMLTextAreaElement>(null);
-  const actions = new RoleSkillAssessmentActions(state, dispatch, requestRef, busyRef);
-  const actionsRef = useRef(actions);
-  actionsRef.current = actions;
+  const actions = new RoleSkillAssessmentActions(state, dispatch, requestRef, busyRef, focus);
+  const actionsRef = useLatestRef(actions);
   const run = getAssessmentRun(state.current);
   const activeCase = getActiveAssessmentCase(state.current, state.focusedCaseId);
   const screenKey = getAssessmentScreenKey(state, run);
@@ -83,7 +88,7 @@ export function RoleSkillAssessmentScreen({
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
       <AssessmentHeader state={state} run={run} actions={actions} onClose={onClose} />
-      {focus ? <SkillCheckFocusNote focus={focus} /> : null}
+      {focus ? <SkillCheckFocusNote focus={focus} run={run} /> : null}
       {run ? (
         <ProgressTrack step={getProgressStep(run)} />
       ) : state.current?.state === 'ready' ? (
@@ -97,18 +102,16 @@ export function RoleSkillAssessmentScreen({
         answerRef={answerRef}
         onClose={onClose}
         onOpenOpportunities={onOpenOpportunities}
+        focus={focus}
       />
     </section>
   );
 }
 
-function SkillCheckFocusNote({ focus }: { focus: SkillCheckFocus }) {
-  return (
-    <p className="career-role-assessment-focus">
-      Из вакансии «{focus.roleTitle}»: подтвердить {focus.skills.join(' и ')}. Результат попадёт в
-      профиль, соответствие вакансии пересчитается.
-    </p>
-  );
+function useLatestRef<T>(value: T): MutableRefObject<T> {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
 }
 
 function getAssessmentScreenKey(
@@ -318,10 +321,36 @@ interface AssessmentContentProps {
   answerRef: RefObject<HTMLTextAreaElement>;
   onClose: () => void;
   onOpenOpportunities: () => void;
+  focus?: SkillCheckFocus;
+}
+
+/** B552: the offer's skills take over a screen that holds another check. */
+function renderFocusStart(props: AssessmentContentProps) {
+  const { state, actions, run, focus, onClose } = props;
+  if (!focus) return null;
+  if (state.current?.state === 'focus_insufficient')
+    return <FocusInsufficientState current={state.current} onClose={onClose} />;
+  const otherCheck =
+    state.current?.state === 'run' ||
+    state.current?.state === 'result' ||
+    state.current?.state === 'role_changed';
+  if (!otherCheck || runMatchesFocus(run, focus)) return null;
+  return (
+    <FocusStartCard
+      focus={focus}
+      consent={state.consent}
+      busy={state.busy}
+      onConsent={(consent) => actions.patch({ consent })}
+      onStart={() => void actions.start()}
+      onLater={onClose}
+    />
+  );
 }
 
 function LoadedAssessmentContent(props: AssessmentContentProps) {
   const { state, actions, run, onOpenOpportunities, onClose } = props;
+  const focusStart = renderFocusStart(props);
+  if (focusStart) return focusStart;
   const emptyState = renderEmptyContext(state, onOpenOpportunities, actions);
   if (emptyState) return emptyState;
   if (state.current?.state === 'ready') {
@@ -376,6 +405,13 @@ function renderEmptyContext(
   if (current.state === 'insufficient_requirements')
     return (
       <InsufficientRequirementsState current={current} onOpenOpportunities={onOpenOpportunities} />
+    );
+  if (current.state === 'focus_insufficient')
+    return (
+      <ErrorState
+        message="Проверка по навыкам вакансии недоступна."
+        onRetry={() => void actions.loadCurrent()}
+      />
     );
   return (
     <RoleChangedState roleTitle={current.run.roleTitle} onOpenOpportunities={onOpenOpportunities} />
