@@ -1,5 +1,6 @@
 import type { Page, Route } from '@playwright/test';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
+import type { VacancyFitView } from '../../shared/vacancyFit';
 import {
   RELOCATION_CONSENT_VERSION,
   relocationAlerts as buildRelocationAlerts,
@@ -396,6 +397,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly careerDiary?: MockCareerDiaryFixture;
   readonly vacancyTotal?: number;
   readonly vacancyFacets?: MatchedVacancyFacets;
+  /** B552: fit analysis of the first matched vacancy, also served by its /fit route. */
+  readonly firstVacancyFitView?: VacancyFitView;
   readonly vacancyInitialFilters?: VacanciesScreenState;
   readonly savedVacanciesCount?: number;
   readonly companyCount?: number;
@@ -437,6 +440,19 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
       readonly issuedAt?: string;
       readonly expiresAt?: string;
     }[];
+  };
+}
+
+function withFirstFitView(
+  page: ReturnType<typeof matchedVacancyPage>,
+  offset: number,
+  fitView: VacancyFitView | undefined,
+): ReturnType<typeof matchedVacancyPage> {
+  if (!fitView || offset !== 0 || page.data.length === 0) return page;
+  const [first, ...rest] = page.data;
+  return {
+    ...page,
+    data: [{ ...first!, explanation: { ...first!.explanation, fitView } }, ...rest],
   };
 }
 
@@ -2483,9 +2499,16 @@ export async function mockSignedInCabinet(
         },
       });
     }
+    if (options.firstVacancyFitView && /\/candidate\/vacancies\/[^/]+\/fit$/u.test(path)) {
+      return route.fulfill({ json: { data: options.firstVacancyFitView } });
+    }
     if (path.endsWith('/candidate/matched-vacancies')) {
       const offset = Number(url.searchParams.get('offset') ?? 0);
-      const page = matchedVacancyPage(offset, options.vacancyTotal);
+      const page = withFirstFitView(
+        matchedVacancyPage(offset, options.vacancyTotal),
+        offset,
+        options.firstVacancyFitView,
+      );
       return route.fulfill({
         json: {
           ...page,

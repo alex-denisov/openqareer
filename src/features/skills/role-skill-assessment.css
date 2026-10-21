@@ -5,6 +5,12 @@
   padding-bottom: var(--career-space-8);
 }
 
+.career-role-assessment-focus {
+  margin: 0;
+  font-size: var(--career-text-xs);
+  color: var(--career-text-muted);
+}
+
 .career-role-assessment-header {
   display: flex;
   align-items: center;
