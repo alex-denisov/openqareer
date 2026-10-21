@@ -1,17 +1,11 @@
 import {
   useEffect,
-  useState,
   type Dispatch,
   type ReactNode,
-  type Ref,
   type SetStateAction,
 } from 'react';
 
-import { VacancyAddRoleRow } from './VacancyAddRoleRow';
-import { CareerRoutePremises } from '../cabinet/CareerRoutePremises';
-import { CareerRoutePremisesEditor } from '../cabinet/CareerRoutePremisesEditor';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
-import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import {
   VACANCY_FILTER_GROUPS,
@@ -149,69 +143,5 @@ export function VacancyFilterActions({
         Применить
       </button>
     </div>
-  );
-}
-
-export function RoleFilterSection({
-  props,
-  roleInputRef,
-}: {
-  readonly props: VacanciesScreenFiltersProps;
-  readonly roleInputRef?: Ref<HTMLInputElement>;
-}) {
-  if (!props.onAddCustomRole) return null;
-  return (
-    <div className="field-group" data-testid="role-filter">
-      <VacancyAddRoleRow
-        roleCount={props.campaignRoles?.length ?? 0}
-        onAddCustomRole={props.onAddCustomRole}
-        inputRef={roleInputRef}
-      />
-    </div>
-  );
-}
-
-export function PremisesFilterSection({
-  premises,
-  premisesLoading,
-  onSavePremises,
-}: {
-  readonly premises?: RoutePremisesDraft;
-  readonly premisesLoading?: boolean;
-  readonly onSavePremises?: (draft: RoutePremisesDraft) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string>();
-
-  if (!premises) return null;
-  if (editing) {
-    return (
-      <CareerRoutePremisesEditor
-        initial={premises}
-        saving={saving}
-        error={error}
-        onCancel={() => setEditing(false)}
-        onSave={(draft) => {
-          setSaving(true);
-          setError(undefined);
-          void onSavePremises?.(draft)
-            .then(() => setEditing(false))
-            .catch((reason: unknown) =>
-              setError(reason instanceof Error ? reason.message : 'Не удалось сохранить.'),
-            )
-            .finally(() => setSaving(false));
-        }}
-      />
-    );
-  }
-  return (
-    <CareerRoutePremises
-      targetRole={premises.targetRole}
-      regions={premises.regions}
-      workMode={premises.workMode ?? undefined}
-      editDisabled={premisesLoading}
-      onEdit={() => setEditing(true)}
-    />
   );
 }

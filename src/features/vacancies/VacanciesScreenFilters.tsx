@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check } from '@phosphor-icons/react';
 
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
@@ -12,16 +12,14 @@ import type { VacanciesScreenState } from './vacanciesScreenState';
 export type { VacanciesScreenState } from './vacanciesScreenState';
 import {
   isMobileFilterViewport,
-  PremisesFilterSection,
-  RoleFilterSection,
   VacanciesFilterPopover,
   VacancyFilterActions,
   mobileFilterValues,
   useMobileRoleFocus,
 } from './VacanciesFilterPopover';
-import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
 import { VacancySourceCatalogFilter, useSourceCatalog } from './VacancySourceCatalogFilter';
 import { MobileFilterSheet } from './VacanciesMobileFilterSheet';
+import { VacancyRoleFilter, type RoleOption } from './VacancyRoleFilter';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 import { buildLocationTree } from '../../../shared/locationTree';
 import type { LocationTreeBuilder } from './useLocationTreeForState';
@@ -72,10 +70,6 @@ export function countActiveFilters(state: VacanciesScreenState): number {
   return groupIsActive.filter(Boolean).length;
 }
 
-const LEVEL_LABELS: Readonly<Record<string, string>> = {
-  ...LEVEL_HUMAN_NAMES,
-  unknown: 'Неизвестно',
-};
 
 type SelectionField = 'roles' | 'regions' | 'levels' | 'sources' | 'formats';
 
@@ -116,79 +110,6 @@ function FacetChip({
         {option.label} · <span className="vacancy-facet-count">{option.count}</span>
       </span>
     </button>
-  );
-}
-
-function FacetGroup({
-  title,
-  field,
-  options,
-  props,
-}: {
-  readonly title: string;
-  readonly field: SelectionField;
-  readonly options: readonly FacetOption[];
-  readonly props: VacanciesScreenFiltersProps;
-}) {
-  if (!options.length) return null;
-  return (
-    <div className="field-group" data-filter-facet={field}>
-      <h4>{title}</h4>
-      <div className="chip-row">
-        {options.map((option) => (
-          <FacetChip
-            key={option.id}
-            option={option}
-            selected={(props.state[field] ?? []).includes(option.id)}
-            onClick={() => props.onChange((state) => toggleValue(state, field, option.id))}
-          />
-        ))}
-      </div>
-      {field === 'levels' ? <ProfileLevelNote /> : null}
-    </div>
-  );
-}
-
-function ProfileLevelNote() {
-  return <p className="level-note">Уровень берётся из опыта в профиле</p>;
-}
-
-// География, удалённость, уровень и роль — из выдачи, с числами
-function PrimaryFacetGroups({
-  props,
-  facets,
-  activeGroup,
-}: {
-  readonly props: VacanciesScreenFiltersProps;
-  readonly facets: NonNullable<VacanciesScreenFiltersProps['facets']>;
-  readonly activeGroup?: VacancyFilterGroup;
-}) {
-  return (
-    <>
-      {filterGroupMatches(activeGroup, 'roles') ? (
-        <>
-          <details className="vacancies-level-filter">
-            <summary>Фильтр по уровню</summary>
-            <FacetGroup
-              title="Уровень"
-              field="levels"
-              props={props}
-              options={facets.levels.map(({ level, count }) => ({
-                id: level,
-                label: LEVEL_LABELS[level],
-                count,
-              }))}
-            />
-          </details>
-          <FacetGroup
-            title="Роль"
-            field="roles"
-            props={props}
-            options={facets.roles.map(({ role, count }) => ({ id: role, label: role, count }))}
-          />
-        </>
-      ) : null}
-    </>
   );
 }
 
@@ -363,10 +284,12 @@ function SourceFacetGroups({ props }: { readonly props: VacanciesScreenFiltersPr
   );
 }
 
-interface LocationActions {
+interface GroupActions {
   readonly onCancel: () => void;
   readonly onApply: () => void;
 }
+
+const GROUPS_WITH_OWN_FOOTER = new Set<VacancyFilterGroup>(['roles', 'locations']);
 
 const EMPTY_LOCATION_TREE = buildLocationTree([]);
 
@@ -378,7 +301,7 @@ function LocationTreeSection({
 }: {
   readonly props: VacanciesScreenFiltersProps;
   readonly withFooter: boolean;
-  readonly locationActions: LocationActions;
+  readonly locationActions: GroupActions;
 }) {
   const { selectedLocations, locationRemote, locationSearch, ...rest } = props.state;
   const otherFilters = JSON.stringify(rest);
@@ -399,35 +322,54 @@ function LocationTreeSection({
   );
 }
 
+function roleOptions(props: VacanciesScreenFiltersProps): RoleOption[] {
+  const counts = new Map(props.facets?.roles.map(({ role, count }) => [role, count]));
+  const hypothesisCounts = new Map(
+    props.roleHypotheses?.map(({ role, vacancyCount }) => [role, vacancyCount]),
+  );
+  const roles = props.campaignRoles?.length
+    ? props.campaignRoles
+    : (props.facets?.roles.map(({ role }) => role) ?? []);
+  return roles.map((role) => ({ role, count: counts.get(role) ?? hypothesisCounts.get(role) }));
+}
+
+function pendingHypotheses(props: VacanciesScreenFiltersProps): string[] {
+  const roles = new Set(props.campaignRoles ?? []);
+  return (props.roleHypotheses ?? [])
+    .filter(({ role, isHypothesis }) => isHypothesis && !roles.has(role))
+    .map(({ role }) => role);
+}
+
 function FacetGroups({
   props,
-  roleInputRef,
   activeGroup,
-  locationActions,
+  groupActions,
   mobile = false,
 }: {
   readonly props: VacanciesScreenFiltersProps;
-  readonly roleInputRef?: React.Ref<HTMLInputElement>;
   readonly activeGroup?: VacancyFilterGroup;
-  readonly locationActions: LocationActions;
+  readonly groupActions: GroupActions;
   readonly mobile?: boolean;
 }) {
+  const withFooter = (group: VacancyFilterGroup) => activeGroup === group && !mobile;
   return (
     <>
-      {props.facets ? (
-        <PrimaryFacetGroups props={props} facets={props.facets} activeGroup={activeGroup} />
-      ) : null}
       {filterGroupMatches(activeGroup, 'roles') ? (
-        <details className="vacancies-custom-role-filter" open={Boolean(props.focusRole)}>
-          <summary>Добавить свою роль</summary>
-          <RoleFilterSection props={props} roleInputRef={roleInputRef} />
-        </details>
+        <VacancyRoleFilter
+          state={props.state}
+          roles={roleOptions(props)}
+          pendingHypotheses={pendingHypotheses(props)}
+          onChange={props.onChange}
+          withFooter={withFooter('roles')}
+          onCancel={groupActions.onCancel}
+          onApply={groupActions.onApply}
+        />
       ) : null}
       {filterGroupMatches(activeGroup, 'locations') ? (
         <LocationTreeSection
           props={props}
-          withFooter={activeGroup === 'locations' && !mobile}
-          locationActions={locationActions}
+          withFooter={withFooter('locations')}
+          locationActions={groupActions}
         />
       ) : null}
       {filterGroupMatches(activeGroup, 'salary') ? <SalaryFilterSection props={props} /> : null}
@@ -459,13 +401,9 @@ function emptyVacancyFilterState(): VacanciesScreenState {
 function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
   const [expanded, setExpanded] = useState(() => Boolean(props.focusRole));
   const [draftState, setDraftState] = useState(props.state);
-  const roleInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => setDraftState(props.state), [props.state]);
   useEffect(() => {
-    if (!props.focusRole) return;
-    setExpanded(true);
-    const timer = setTimeout(() => roleInputRef.current?.focus(), 50);
-    return () => clearTimeout(timer);
+    if (props.focusRole) setExpanded(true);
   }, [props.focusRole]);
   const resetAll = () => {
     setDraftState(emptyVacancyFilterState());
@@ -476,52 +414,11 @@ function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
     expanded,
     setExpanded,
     draftProps,
-    roleInputRef,
     resetAll,
     changed: JSON.stringify(draftState) !== JSON.stringify(props.state),
     discard: () => setDraftState(props.state),
-    cancelLocations: () =>
-      setDraftState((draft) => ({
-        ...draft,
-        selectedLocations: props.state.selectedLocations,
-        locationRemote: props.state.locationRemote,
-      })),
     apply: () => props.onChange(() => draftState),
   };
-}
-
-function VacancyFilterGroupContent({
-  props,
-  draftProps,
-  activeGroup,
-  roleInputRef,
-  showPremises,
-  locationActions,
-}: {
-  readonly props: VacanciesScreenFiltersProps;
-  readonly locationActions: LocationActions;
-  readonly draftProps: VacanciesScreenFiltersProps;
-  readonly activeGroup: VacancyFilterGroup | null;
-  readonly roleInputRef: ReturnType<typeof useVacancyFilterDraft>['roleInputRef'];
-  readonly showPremises: boolean;
-}) {
-  return (
-    <>
-      {showPremises ? (
-        <PremisesFilterSection
-          premises={props.premises}
-          premisesLoading={props.premisesLoading}
-          onSavePremises={props.onSavePremises}
-        />
-      ) : null}
-      <FacetGroups
-        props={draftProps}
-        roleInputRef={roleInputRef}
-        activeGroup={activeGroup ?? undefined}
-        locationActions={locationActions}
-      />
-    </>
-  );
 }
 
 function sheetSubtitle(
@@ -569,10 +466,9 @@ function MobileFilterSheetContent({
     >
       <FacetGroups
         props={model.draftProps}
-        roleInputRef={model.roleInputRef}
         activeGroup={activeGroup ?? undefined}
         mobile
-        locationActions={{ onApply, onCancel: onBackToOverview }}
+        groupActions={{ onApply, onCancel: onBackToOverview }}
       />
     </MobileFilterSheet>
   );
@@ -608,21 +504,18 @@ function VacancyFilterPopoverContent({
     );
   return (
     <>
-      <VacancyFilterGroupContent
-        props={props}
-        draftProps={model.draftProps}
-        activeGroup={activeGroup}
-        roleInputRef={model.roleInputRef}
-        showPremises={activeGroup === null || activeGroup === 'roles'}
-        locationActions={{
+      <FacetGroups
+        props={model.draftProps}
+        activeGroup={activeGroup ?? undefined}
+        groupActions={{
           onApply,
           onCancel: () => {
-            model.cancelLocations();
+            model.discard();
             onClose();
           },
         }}
       />
-      {activeGroup === 'locations' ? null : (
+      {activeGroup && GROUPS_WITH_OWN_FOOTER.has(activeGroup) ? null : (
         <VacancyFilterActions changed={model.changed} onReset={model.resetAll} onApply={onApply} />
       )}
     </>

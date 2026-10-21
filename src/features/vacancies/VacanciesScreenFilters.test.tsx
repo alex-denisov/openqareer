@@ -31,7 +31,6 @@ describe('countActiveFilters', () => {
   });
 });
 
-
 describe('summarizeVacancyFilterGroup', () => {
   it('shows the active location search in the location trigger', () => {
     const state: VacanciesScreenState = {
@@ -188,7 +187,7 @@ describe('VacanciesFilters toggle and role limit', () => {
     container.remove();
   });
 
-  it('renders only result facets with tabular counts and hides empty groups', () => {
+  it('roles popover lists campaign roles with counts, no level or chips (B547)', () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     act(() =>
@@ -200,20 +199,19 @@ describe('VacanciesFilters toggle and role limit', () => {
             regions: [{ id: 'mena', count: 8 }],
             remote: 0,
             levels: [],
-            roles: [{ role: 'COO', count: 8 }],
+            roles: [{ role: 'Backend Engineer', count: 8 }],
             sources: [],
           }}
         />,
       ),
     );
+    const roles = container.querySelector('[data-testid="role-tree-filter"]');
+    expect(roles?.textContent).toContain('Backend Engineer');
+    expect(roles?.querySelector('.vacancy-location-count')?.textContent).toBe('8');
     expect(container.textContent).not.toContain('MENA · 8');
-    expect(container.textContent).toContain('COO · 8');
-    expect(container.textContent).not.toContain('Добавить:');
-    expect(container.textContent).not.toContain('Backend Engineer');
-    expect(container.textContent).not.toContain('Формат работы');
     expect(container.textContent).not.toContain('Уровень');
+    expect(container.textContent).not.toContain('Добавить свою роль');
     expect(container.querySelector('.vacancy-source-filter')).toBeNull();
-    expect(container.querySelector('.vacancy-facet-count')?.textContent).toBe('8');
     act(() => root.unmount());
   });
 });
