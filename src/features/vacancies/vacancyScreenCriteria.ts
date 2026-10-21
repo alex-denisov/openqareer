@@ -99,6 +99,9 @@ function matchesScreenLocation(
     if (!inRemote && !(selected.length && matchesLocationSelection(place, selected))) return false;
   }
   if (state.selectedCity && !matchesVacancyCity(item, state.selectedCity, allItems)) return false;
+  const cities = state.selectedCities ?? [];
+  if (cities.length && !cities.some((city) => matchesVacancyCity(item, city, allItems)))
+    return false;
   if (state.regions.length && !state.remoteOnly) {
     const inRegion = state.regions.some((region) => {
       const label =

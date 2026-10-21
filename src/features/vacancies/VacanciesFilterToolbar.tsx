@@ -39,6 +39,7 @@ export function filterGroupIsActive(
     return Boolean(
       state.regions.length ||
       state.selectedCity ||
+      state.selectedCities?.length ||
       state.selectedLocations?.length ||
       state.locationRemote ||
       state.locationSearch?.trim(),
@@ -89,6 +90,8 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
     const first = selected[0]!.split(LOCATION_PATH_SEPARATOR).at(-1)!;
     return selected.length > 1 ? `${first} +${selected.length - 1}` : first;
   }
+  const cities = state.selectedCities ?? [];
+  if (cities.length) return cities.length > 1 ? `${cities[0]} +${cities.length - 1}` : cities[0];
   if (state.selectedCity) return state.selectedCity;
   if (state.regions.length)
     return state.regions

@@ -17,6 +17,8 @@ export interface VacancyMapCanvasProps {
   readonly cities: readonly CityFacet[];
   readonly selectedCity?: string;
   readonly onSelectCity: (city?: string) => void;
+  /** 390: «Показать список» — список по всем городам капсулы. */
+  readonly onShowCities: (cities: readonly string[]) => void;
   readonly onUnavailable: () => void;
   /** 390: капсула выбирает город в карточке внизу, а не сразу открывает список. */
   readonly compact?: boolean;
@@ -27,6 +29,10 @@ const FIT_MAX_ZOOM = 6;
 
 function nodeCount(node: MapNode): number {
   return node.isCluster ? node.totalCount : node.count;
+}
+
+function nodeCityNames(node: MapNode): readonly string[] {
+  return node.isCluster ? node.cities.map((city) => city.city) : [node.city.city];
 }
 
 function nodeHasCity(node: MapNode, city: string | undefined): boolean {
@@ -84,6 +90,7 @@ export default function VacancyMapCanvas({
   cities,
   selectedCity,
   onSelectCity,
+  onShowCities,
   onUnavailable,
   compact = false,
 }: VacancyMapCanvasProps): React.JSX.Element {
@@ -96,7 +103,7 @@ export default function VacancyMapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [map, frame, cities, selectedCity],
   );
-  const { animate, zoomTo, choose } = useMapActions(map, {
+  const { animate, choose } = useMapActions(map, {
     compact,
     selectedCity,
     onSelectCity,
@@ -119,11 +126,7 @@ export default function VacancyMapCanvas({
         onZoomOut={() => map?.zoomOut({ animate })}
       />
       {compact && cardNode ? (
-        <MapCityCard
-          node={cardNode}
-          onShowList={(city) => onSelectCity(city)}
-          onZoom={() => zoomTo(cardNode)}
-        />
+        <MapCityCard node={cardNode} onShowList={() => onShowCities(nodeCityNames(cardNode))} />
       ) : null}
     </>
   );
@@ -157,16 +160,14 @@ function MapMarkers({
 
 /**
  * B553: на 390 внизу карты — город из капсулы с тем же числом (макет 390m).
- * У кластера список одного города дал бы другое число, поэтому он предлагает приблизить.
+ * У кластера список открывается по всем его городам — в нём ровно это число строк.
  */
 function MapCityCard({
   node,
   onShowList,
-  onZoom,
 }: {
   readonly node: MapNode;
-  readonly onShowList: (city: string) => void;
-  readonly onZoom: () => void;
+  readonly onShowList: () => void;
 }) {
   const name = node.isCluster
     ? `${markerLabel(node)} и рядом`
@@ -177,12 +178,8 @@ function MapCityCard({
         <strong>{name}</strong>
         <small>{pluralRu(nodeCount(node), ['вакансия', 'вакансии', 'вакансий'])} на карте</small>
       </div>
-      <button
-        type="button"
-        className="career-map-city-card-cta"
-        onClick={() => (node.isCluster ? onZoom() : onShowList(node.city.city))}
-      >
-        {node.isCluster ? 'Приблизить' : 'Показать список'}
+      <button type="button" className="career-map-city-card-cta" onClick={onShowList}>
+        Показать список
       </button>
     </div>
   );

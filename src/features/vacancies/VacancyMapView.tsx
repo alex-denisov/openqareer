@@ -16,6 +16,8 @@ interface VacancyMapViewProps {
   readonly total?: number;
   /** Назад к списку: «Показать список» в ошибке и «Назад» push-экрана 390. */
   readonly onShowList?: () => void;
+  /** 390: «Показать список» карточки — все города капсулы (у кластера их несколько). */
+  readonly onShowCities?: (cities: readonly string[]) => void;
   /** 390: консультант справа в шапке push-экрана «Карта». */
   readonly onOpenExpert?: () => void;
 }
@@ -38,6 +40,7 @@ function VacancyMapStage({
   selectedCity,
   onSelectCity,
   onShowList,
+  onShowCities,
   compact,
 }: VacancyMapViewProps & { readonly compact: boolean }) {
   const facets = calculateVacancyFacets(items);
@@ -54,6 +57,7 @@ function VacancyMapStage({
               cities={facets.cities}
               selectedCity={selectedCity}
               onSelectCity={onSelectCity}
+              onShowCities={onShowCities ?? ((cities) => onSelectCity(cities[0]))}
               onUnavailable={markUnavailable}
               compact={compact}
             />
@@ -163,23 +167,47 @@ class MapChunkBoundary extends React.Component<
   }
 }
 
-/** B446-g4: город с карты фильтрует список; полоса над списком снимает фильтр. */
+/**
+ * B446-g4: город с карты фильтрует список; полоса над списком снимает фильтр.
+ * B553: у кластера — чипы всех его городов и «К карте».
+ */
 export function VacancyCityFilterBar({
   selectedCity,
+  selectedCities = [],
   onClear,
+  onBackToMap,
 }: {
   readonly selectedCity?: string;
+  readonly selectedCities?: readonly string[];
   readonly onClear: () => void;
+  readonly onBackToMap?: () => void;
 }) {
-  if (!selectedCity) return null;
+  const cities = selectedCities.length ? selectedCities : selectedCity ? [selectedCity] : [];
+  if (!cities.length) return null;
   return (
     <div className="career-map-active-bar">
-      <span>
-        Показаны вакансии в городе: <strong>{selectedCity}</strong>
-      </span>
-      <button type="button" className="career-inline-link" onClick={onClear}>
-        Все города
-      </button>
+      {cities.length === 1 ? (
+        <span>
+          Показаны вакансии в городе: <strong>{cities[0]}</strong>
+        </span>
+      ) : (
+        <ul className="career-map-city-chips" aria-label="Города с карты">
+          {cities.map((city) => (
+            <li key={city} className="career-chip">
+              {city}
+            </li>
+          ))}
+        </ul>
+      )}
+      {onBackToMap ? (
+        <button type="button" className="career-inline-link" onClick={onBackToMap}>
+          К карте
+        </button>
+      ) : (
+        <button type="button" className="career-inline-link" onClick={onClear}>
+          Все города
+        </button>
+      )}
     </div>
   );
 }

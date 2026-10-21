@@ -26,6 +26,9 @@ interface VacanciesMainBodyProps {
   readonly onResetFilters: () => void;
   readonly listProps: ListContentProps;
   readonly selectedCity?: string;
+  readonly selectedCities?: readonly string[];
+  readonly onShowCities?: (cities: readonly string[]) => void;
+  readonly onBackToMap?: () => void;
   readonly onSelectCity: (city?: string) => void;
   /** B553: карта недоступна — переход к списку. */
   readonly onShowList?: () => void;
@@ -151,6 +154,7 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
         selectedCity={props.selectedCity}
         onSelectCity={props.onSelectCity}
         onShowList={props.onShowList}
+        onShowCities={props.onShowCities}
         onOpenExpert={props.onOpenExpert}
       />
     );
@@ -159,7 +163,9 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
     <>
       <VacancyCityFilterBar
         selectedCity={props.selectedCity}
+        selectedCities={props.selectedCities}
         onClear={() => props.onSelectCity(undefined)}
+        onBackToMap={props.selectedCities?.length ? props.onBackToMap : undefined}
       />
       <VacanciesListContent {...props.listProps} />
     </>
