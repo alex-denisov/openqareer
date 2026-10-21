@@ -21,6 +21,16 @@ describe('isContactImportStale', () => {
 });
 
 describe('companySourceSummary', () => {
+  it('ставит склоняемые названия площадок в родительный падеж (B445-r1)', () => {
+    expect(
+      companySourceSummary([
+        { name: 'Telegram-каналы', observedAt: '2026-10-02T10:00:00.000Z' },
+        { name: 'SuperJob', observedAt: '2026-10-02T10:00:00.000Z' },
+        { name: 'Greenhouse', observedAt: '2026-10-06T10:00:00.000Z' },
+      ]),
+    ).toBe('данные с Telegram-каналов, SuperJob и Greenhouse, 06.10.2026');
+  });
+
   it('names every platform once and dates the summary by the latest observation', () => {
     expect(
       companySourceSummary([
