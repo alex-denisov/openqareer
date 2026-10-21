@@ -499,7 +499,7 @@
 
   .vacancies-screen-cell--status {
     display: inline-flex;
-    grid-column: 2;
+    grid-column: 1 / -1;
     grid-row: 2;
     align-items: center;
     justify-self: end;
