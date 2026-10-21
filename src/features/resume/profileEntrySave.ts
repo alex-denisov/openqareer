@@ -20,7 +20,7 @@ export function useProfileEntrySave<Patch>(
     setError('');
     try {
       if ((await onSave(patch)) === false) {
-        setError('Изменения не сохранены. Повторите сохранение после устранения ошибки.');
+        setError('Не сохранилось: нет связи с сервером. Текст остался в поле.');
         return false;
       }
       return true;

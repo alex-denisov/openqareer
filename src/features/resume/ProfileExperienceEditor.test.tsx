@@ -453,7 +453,7 @@ describe('experience description contract', () => {
     await submitForm(container);
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Изменения не сохранены',
+      'Не сохранилось',
     );
     expect(getTextarea(container, 'Описание').value).toBe(replacement);
     expect(onSave).toHaveBeenCalledOnce();
@@ -475,7 +475,7 @@ describe('experience description contract', () => {
     await submitForm(container);
 
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      'Изменения не сохранены',
+      'Не сохранилось',
     );
     expect(getTextarea(container, 'Описание').value).toBe(replacement.statement);
     expect(onSave).toHaveBeenCalledTimes(2);

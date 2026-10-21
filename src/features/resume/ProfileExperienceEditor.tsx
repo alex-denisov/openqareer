@@ -343,13 +343,13 @@ export function usePositionSubmit(props: PositionEditorProps, form: PositionForm
         return;
       }
       if ((await props.onSave(form.patch)) === false) {
-        setError('Изменения не сохранены. Повторите сохранение после устранения ошибки.');
+        setError('Не сохранилось: нет связи с сервером. Текст остался в поле.');
         return;
       }
       const update = await createPositionFactUpdate(props, form, factKeys.current);
       if (update) {
         if ((await props.onSave({ ...form.patch, ...update.patch })) === false) {
-          setError('Изменения не сохранены. Повторите сохранение после устранения ошибки.');
+          setError('Не сохранилось: нет связи с сервером. Текст остался в поле.');
           return;
         }
         if (update.createdManualFact) await props.onManualExperienceFactAdded?.();
