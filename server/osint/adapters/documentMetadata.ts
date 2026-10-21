@@ -35,6 +35,13 @@ interface RawMetadata {
   };
 }
 
+const DOCX_METADATA_PARTS: ReadonlySet<string> = new Set([
+  'docProps/core.xml',
+  'docProps/app.xml',
+  'word/comments.xml',
+]);
+const DOCX_PART_MAX_BYTES = 1_000_000;
+
 const EMPTY_METADATA: RawMetadata = {
   authors: [],
   companies: [],
@@ -198,7 +205,10 @@ function parseXmpPdf(
 
 function parseDocxMetadata(buf: Buffer): RawMetadata {
   try {
-    const unzipped = unzipSync(new Uint8Array(buf));
+    // Inflate only the three metadata parts, each capped: a crafted archive cannot exhaust memory.
+    const unzipped = unzipSync(new Uint8Array(buf), {
+      filter: (file) => DOCX_METADATA_PARTS.has(file.name) && file.originalSize <= DOCX_PART_MAX_BYTES,
+    });
     const decoder = new TextDecoder('utf-8');
 
     const coreXml = unzipped['docProps/core.xml']
