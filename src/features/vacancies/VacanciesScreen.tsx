@@ -30,7 +30,8 @@ import { VacanciesScreenSummary } from './VacanciesScreenSummary';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
-import { buildLocationTree, type LocationTree } from '../../../shared/locationTree';
+import type { LocationTree } from '../../../shared/locationTree';
+import { useLocationTreeForState } from './useLocationTreeForState';
 export { filterByScreenState } from './vacancyScreenCriteria';
 import {
   SavedVacanciesPanel,
@@ -123,27 +124,6 @@ function filterBoardVacancies(
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
   const items = filterByScreenState(matched, filters, now);
   return onFiltersChange ? items : sortVacancyFitItems(items, state.sort);
-}
-
-/** Счётчики «Локаций» по выдаче без самого фильтра локаций (B547). */
-function useLocationTreeForState(input: VacanciesScreenProps, state: VacanciesScreenState) {
-  return useMemo(() => {
-    const withoutLocation = {
-      ...state,
-      selectedLocations: [],
-      locationRemote: false,
-      locationSearch: '',
-      selectedCity: undefined,
-    };
-    const items = filterBoardVacancies(input.matched, withoutLocation, '', input.onFiltersChange);
-    return buildLocationTree(
-      items.map((item) => ({
-        location: item.cluster.canonicalLocation,
-        country: item.cluster.companyFeatures?.country,
-        isRemote: item.cluster.isRemote,
-      })),
-    );
-  }, [input.matched, input.onFiltersChange, state]);
 }
 
 function useVacanciesScreenBoard(
@@ -549,7 +529,11 @@ function VacanciesFilterContent({
 }) {
   const { board, actions, resetFilters } = screenState;
   const baseOptions = useMemo(() => buildVacancyFilterOptions(input.matched), [input.matched]);
-  const locationTree = useLocationTreeForState(input, board.state);
+  const locationTree = useLocationTreeForState(
+    input.matched,
+    board.state,
+    Boolean(input.onFiltersChange),
+  );
   const filterOptions = useMemo(
     () => ({ ...baseOptions, locationTree }),
     [baseOptions, locationTree],
