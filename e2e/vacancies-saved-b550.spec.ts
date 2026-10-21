@@ -22,6 +22,8 @@ test('B550: saved tab searches, filters closed, sorts by money and keeps the cho
   await expect(page.getByText(/ваша короткая подборка для разбора/u)).toBeVisible();
   await expect(page.getByText('Показано 6 из 6')).toBeVisible();
   await expect(page.locator('.saved-row').first()).toContainText('сохранено');
+  // B446-g4: в строке звезда и «Хочу», ссылки «На площадке» нет (макет 4).
+  await expect(page.locator('.saved-row').first().getByText('На площадке')).toHaveCount(0);
   await expect(page.getByText('закрыта на площадке 06.10')).toBeVisible();
 
   if (testInfo.project.name === 'mobile-390') {

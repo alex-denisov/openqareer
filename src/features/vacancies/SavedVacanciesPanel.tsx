@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Info, MagnifyingGlass, Star } from '@phosphor-icons/react';
+import { Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/react';
 import type { ApplicationView } from '../applications/applicationsApi';
-import type { VacancyCollectionsState } from './vacancyScreenCollections';
+import { companyLookupKey, type VacancyCollectionsState } from './vacancyScreenCollections';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
 import { getSavedVacancyStates } from './savedVacancyStatesApi';
@@ -57,6 +57,21 @@ function savedRefs(applications: readonly ApplicationView[]) {
   );
 }
 
+function savedWant(
+  collections: VacancyCollectionsState,
+  company: string | undefined,
+): SavedWant | undefined {
+  if (!company) return undefined;
+  const key = companyLookupKey(company);
+  const known = collections.companyByName.get(key);
+  return {
+    known: Boolean(known),
+    wanted: Boolean(known?.want),
+    busy: collections.companyBusyNames.has(key),
+    onToggle: (name) => void collections.toggleCompanyWant(name),
+  };
+}
+
 function useSavedStates(applications: readonly ApplicationView[]) {
   const key = JSON.stringify(savedRefs(applications));
   const [states, setStates] = useState<Readonly<Record<string, SavedVacancyState>>>({});
@@ -91,24 +106,17 @@ function toEntry(
   };
 }
 
-function savedHref(application: ApplicationView | undefined): string | undefined {
-  const value = application?.vacancy?.url;
-  if (!value) return undefined;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? url.toString() : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
   const closed = savedClosedLabel(entry.state);
   const salary = entry.state?.salary;
   const known = salary && (salary.from !== undefined || salary.to !== undefined);
   return (
     <div className="saved-row-money">
-      <strong>{known ? formatCompensationCompact(salary) : 'Зарплата не указана'}</strong>
+      {known ? (
+        <strong>{formatCompensationCompact(salary)}</strong>
+      ) : (
+        <span className="saved-row-money-missing">Зарплата не указана</span>
+      )}
       {closed ? <span className="saved-row-closed">{closed}</span> : null}
     </div>
   );
@@ -170,18 +178,50 @@ function SavedGeo({ state }: { readonly state: SavedVacancyState | undefined }) 
   );
 }
 
+interface SavedWant {
+  readonly known: boolean;
+  readonly wanted: boolean;
+  readonly busy: boolean;
+  readonly onToggle: (company: string) => void;
+}
+
+/** B446-g4: в строке сохранённой — «Хочу в эту компанию», как в макете 4. */
+function SavedWantButton({
+  company,
+  want,
+}: {
+  readonly company?: string;
+  readonly want?: SavedWant;
+}) {
+  if (!company || !want) return null;
+  return (
+    <button
+      type="button"
+      className="saved-row-want"
+      aria-label={`${want.wanted ? 'Убрать из «Хочу»' : 'Хочу в компанию'}: ${company}`}
+      aria-pressed={want.known ? want.wanted : undefined}
+      aria-busy={want.busy}
+      disabled={want.busy}
+      onClick={() => want.onToggle(company)}
+    >
+      <Target weight={want.wanted ? 'fill' : 'regular'} aria-hidden="true" />
+    </button>
+  );
+}
+
 function SavedRow({
   entry,
   application,
   busy,
   onRemove,
+  want,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
   readonly busy: boolean;
   readonly onRemove: (application: ApplicationView) => void;
+  readonly want?: SavedWant;
 }) {
-  const href = savedHref(application);
   const savedDate = formatShortDate(entry.savedAt);
   return (
     <li className={entry.state?.closed ? 'saved-row is-closed' : 'saved-row'}>
@@ -196,11 +236,7 @@ function SavedRow({
       <SavedGeo state={entry.state} />
       <SavedMoney entry={entry} />
       <div className="saved-row-actions">
-        {href ? (
-          <a className="career-vacancy-action" href={href} target="_blank" rel="noreferrer">
-            На площадке
-          </a>
-        ) : null}
+        <SavedWantButton company={application.vacancy?.company} want={want} />
         <button
           type="button"
           className="saved-row-star"
@@ -369,6 +405,7 @@ function SavedList({
             application={application}
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
+            want={savedWant(collections, application.vacancy?.company)}
           />
         ) : null;
       })}

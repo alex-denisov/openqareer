@@ -51,6 +51,22 @@
   outline-offset: 2px;
 }
 
+/* B446-g4: одна рамка фокуса у поиска; поиск и выборы — поля макета 4. */
+.saved-controls .companies-people-search input:focus,
+.saved-controls .companies-people-search input:focus-visible {
+  outline: 0;
+  box-shadow: none;
+}
+
+.saved-controls .companies-people-search,
+.saved-controls .companies-people-select {
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-sm);
+  background: transparent;
+  font-size: var(--career-text-sm);
+}
+
 .saved-controls .companies-people-select-wrap,
 .saved-controls .companies-people-select {
   display: block;
@@ -128,11 +144,36 @@
   min-block-size: var(--career-target-min);
   border: var(--career-border-width) solid var(--career-accent);
   border-radius: var(--career-radius-md);
-  background: transparent;
+  background: var(--career-accent-soft);
   color: var(--career-warning);
   cursor: pointer;
 }
 
+.saved-row-money-missing {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  font-weight: 400;
+}
+
+.saved-row-want {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid transparent;
+  border-radius: var(--career-radius-md);
+  background: transparent;
+  color: var(--career-text-soft);
+  cursor: pointer;
+}
+
+.saved-row-want[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.saved-row-want:focus-visible,
 .saved-row-star:focus-visible {
   outline: 2px solid var(--career-accent);
   outline-offset: 2px;
