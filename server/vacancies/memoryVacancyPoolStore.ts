@@ -339,6 +339,32 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return Array.from(this.clusters.values());
   }
 
+  private orphanCursor = 0;
+
+  /** Как в базе: кластер без единой записи пула уходит вместе с карточкой (B535). */
+  removeOrphanClustersStep(chunk = 500): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  } {
+    const page = [...this.clusters.values()].slice(this.orphanCursor, this.orphanCursor + chunk);
+    if (page.length === 0) {
+      this.orphanCursor = 0;
+      return { inspected: 0, removed: 0, passFinished: true };
+    }
+    const orphans = page.filter((cluster) => {
+      const ids = new Set([cluster.id.replace(/^cluster-/u, '')]);
+      for (const source of cluster.sources) {
+        if (source.externalId) ids.add(`${source.sourceId}:${source.externalId}`);
+        if (source.sourceUrl) ids.add(`${source.sourceId}:${source.sourceUrl}`);
+      }
+      return ![...ids].some((id) => this.rows.has(id));
+    });
+    for (const cluster of orphans) this.clusters.delete(cluster.id);
+    this.orphanCursor += page.length - orphans.length;
+    return { inspected: page.length, removed: orphans.length, passFinished: false };
+  }
+
   pruneClustersBefore(oldestPublishedAt: string): number {
     let removed = 0;
     for (const [id, cluster] of this.clusters) {

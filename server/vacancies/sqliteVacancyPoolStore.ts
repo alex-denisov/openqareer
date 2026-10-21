@@ -276,6 +276,11 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   private semanticTableSeenReady = false;
   /** Докуда дошло обогащение управленческими навыками по описаниям (B307). */
   private descriptionSkillsCursor = 0;
+  /** Позиция прохода очистки сирот (B535): сначала кластеры, потом карточки. */
+  private orphanCursor: { phase: 'clusters' | 'entries'; rowid: number } = {
+    phase: 'clusters',
+    rowid: 0,
+  };
 
   constructor(options: SqliteVacancyPoolStoreOptions) {
     this.matchReader = options.matchReader;
@@ -2097,6 +2102,89 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return clusters;
   }
 
+  /**
+   * Один шаг очистки сирот (B535). Пул чистится по возрасту и заменой среза,
+   * а кластер и его карточка каталога оставались: карточка показывала вакансию,
+   * которой у нас уже нет, и попадала в sitemap. Кластер удаляется, когда ни
+   * одного его члена (`sourceId:externalId`, `sourceId:sourceUrl` или id
+   * основателя) нет в индексе пула; похороненная запись — ещё запись. Потом
+   * тот же проход снимает карточки, у которых кластера нет вовсе.
+   */
+  removeOrphanClustersStep(chunk = 500): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  } {
+    const size = Math.max(1, Math.min(Math.trunc(chunk), 2_000));
+    if (this.orphanCursor.phase === 'clusters') {
+      const step = this.removeOrphanClustersPage(size);
+      if (step) return step;
+      this.orphanCursor = { phase: 'entries', rowid: 0 };
+    }
+    return this.removeOrphanEntriesPage(size);
+  }
+
+  private removeOrphanClustersPage(
+    size: number,
+  ): { inspected: number; removed: number; passFinished: boolean } | undefined {
+    const rows = this.database
+      .prepare(
+        'SELECT rowid, id, cluster_json FROM vacancy_clusters WHERE rowid > ? ORDER BY rowid LIMIT ?',
+      )
+      .all(this.orphanCursor.rowid, size) as Array<{
+      rowid: number;
+      id: string;
+      cluster_json: string;
+    }>;
+    if (rows.length === 0) return undefined;
+    this.orphanCursor = { phase: 'clusters', rowid: rows[rows.length - 1]!.rowid };
+    const present = this.database.prepare('SELECT 1 FROM vacancy_pool_index WHERE id = ?');
+    const orphans = rows
+      .filter((row) => {
+        const ids = clusterMemberIds(row.id, row.cluster_json);
+        return ids !== null && !ids.some((id) => present.get(id));
+      })
+      .map((row) => row.id);
+    this.deleteClustersRows(orphans);
+    return { inspected: rows.length, removed: orphans.length, passFinished: false };
+  }
+
+  private removeOrphanEntriesPage(size: number): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  } {
+    const entries = this.database
+      .prepare(
+        `SELECT e.rowid AS rowid, e.cluster_id AS id, c.id IS NULL AS orphan
+           FROM catalog_entries e LEFT JOIN vacancy_clusters c ON c.id = e.cluster_id
+          WHERE e.rowid > ? ORDER BY e.rowid LIMIT ?`,
+      )
+      .all(this.orphanCursor.rowid, size) as Array<{ rowid: number; id: string; orphan: number }>;
+    if (entries.length === 0) {
+      this.orphanCursor = { phase: 'clusters', rowid: 0 };
+      return { inspected: 0, removed: 0, passFinished: true };
+    }
+    this.orphanCursor = { phase: 'entries', rowid: entries[entries.length - 1]!.rowid };
+    const orphans = entries.filter((entry) => entry.orphan === 1).map((entry) => entry.id);
+    this.deleteClustersRows(orphans);
+    return { inspected: entries.length, removed: orphans.length, passFinished: false };
+  }
+
+  private deleteClustersRows(clusterIds: readonly string[]): void {
+    if (clusterIds.length === 0) return;
+    this.inTransaction(() => {
+      for (const id of clusterIds) this.deleteClusterRows(id);
+    });
+  }
+
+  private deleteClusterRows(clusterId: string): void {
+    this.deleteClusterKeys(clusterId);
+    this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
+    this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(clusterId);
+    this.database.prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?').run(clusterId);
+  }
+
   pruneClustersBefore(oldestPublishedAt: string): number {
     const cutoffMs = Date.parse(oldestPublishedAt);
     if (!Number.isFinite(cutoffMs)) return 0;
@@ -2147,12 +2235,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
   }
 
   deleteCluster(clusterId: string): void {
-    this.inTransaction(() => {
-      this.deleteClusterKeys(clusterId);
-      this.database.prepare('DELETE FROM vacancy_clusters WHERE id = ?').run(clusterId);
-      this.database.prepare('DELETE FROM catalog_entries WHERE cluster_id = ?').run(clusterId);
-      this.database.prepare('DELETE FROM catalog_entries_seen WHERE cluster_id = ?').run(clusterId);
-    });
+    this.inTransaction(() => this.deleteClusterRows(clusterId));
   }
 
   countClusters(): number {
@@ -2346,6 +2429,23 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
 interface WriteTally {
   transactions: number;
   maxTransactionMs: number;
+}
+
+/** Id записей пула, которые держат кластер живым: основатель и все источники. */
+function clusterMemberIds(clusterId: string, clusterJson: string): string[] | null {
+  const ids = new Set<string>();
+  if (clusterId.startsWith('cluster-')) ids.add(clusterId.slice('cluster-'.length));
+  try {
+    const cluster = JSON.parse(clusterJson) as { sources?: VacancyCluster['sources'] };
+    for (const source of cluster.sources ?? []) {
+      if (source.externalId) ids.add(`${source.sourceId}:${source.externalId}`);
+      if (source.sourceUrl) ids.add(`${source.sourceId}:${source.sourceUrl}`);
+    }
+  } catch {
+    // Нечитаемый кластер не доказывает, что членов нет: оставить его как есть.
+    return null;
+  }
+  return [...ids];
 }
 
 export interface HhTextCandidates {

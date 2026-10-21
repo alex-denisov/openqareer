@@ -182,6 +182,12 @@ export interface VacancyPoolStore {
   backfillCatalogEntriesStep?(chunk?: number): number;
   /** Number of cluster rows still absent from the projection marker. */
   pendingCatalogEntries?(): number;
+  /** Шаг очистки кластеров и карточек без единой записи пула (B535). */
+  removeOrphanClustersStep?(chunk?: number): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  };
   /** hh-записи без текста: каталог, потом пул, свежие первыми; курсор обхода (B535). */
   loadHhTextCandidates?(
     cursor: string | undefined,

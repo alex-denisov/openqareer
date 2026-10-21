@@ -41,6 +41,11 @@ export interface MaintenanceEngine {
   };
   runWorkdayDescriptionStep?(): Promise<WorkdayDescriptionReport>;
   runHhCatalogTextStep?(): Promise<HhCatalogTextReport>;
+  runOrphanClusterStep?(chunk?: number): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  };
   readonly clusterKeysReady: boolean;
   readonly poolSize: number;
 }
@@ -63,6 +68,7 @@ export interface MaintenanceIntervals {
   readonly descriptionSkillsMs?: number;
   readonly workdayDescriptionMs?: number;
   readonly hhCatalogTextMs?: number;
+  readonly orphanClustersMs?: number;
   readonly linkedinPoolExecutorMs: number;
   readonly recruiterPurgeMs: number;
 }
@@ -119,6 +125,8 @@ export const DEFAULT_MAINTENANCE_INTERVALS: MaintenanceIntervals = {
   workdayDescriptionMs: 10 * 1_000,
   // До 10 карточек hh за тик при 1 чтении в секунду у загрузчика (B535).
   hhCatalogTextMs: 12 * 1_000,
+  // 500 кластеров за 2 с: проход прода (~710 тыс.) ≈ 47 мин, потом час покоя (B535).
+  orphanClustersMs: 2 * 1_000,
   linkedinPoolExecutorMs: 30 * 1_000,
   recruiterPurgeMs: 24 * 60 * 60 * 1_000,
 };
@@ -137,6 +145,10 @@ export const CLUSTER_KEYS_STEP_CHUNK = 500;
 
 /** Строк описаний за один шаг извлечения навыков: короткая транзакция (B307). */
 export const DESCRIPTION_SKILLS_STEP_CHUNK = 500;
+
+/** Кластеров за шаг очистки сирот: ~50 мс на VM прода по замеру 21.10 (B535). */
+export const ORPHAN_CLUSTERS_STEP_CHUNK = 500;
+const ORPHAN_CLUSTERS_REST_MS = 60 * 60 * 1_000;
 
 /**
  * Цикл обслуживания пула вакансий (B230, срез 1). Живёт в своём процессе с
@@ -162,6 +174,8 @@ export class MaintenanceWorker {
   private readonly titleModel?: TitleModelStep;
   private readonly linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
   private readonly purgeRecruiters?: () => number;
+  private readonly now: () => number;
+  private orphanRestUntil = 0;
   private titleModelRunning = false;
   private lastTitleModelLogAt = 0;
   private lastTitleParseProgressAt = Date.now();
@@ -185,7 +199,9 @@ export class MaintenanceWorker {
     titleModel?: TitleModelStep;
     linkedinPoolExecutor?: MaintenanceLinkedinPoolExecutor;
     purgeRecruiters?: () => number;
+    now?: () => number;
   }) {
+    this.now = options.now ?? Date.now;
     this.engine = options.engine;
     this.titleParse = options.titleParse;
     this.titleModel = options.titleModel;
@@ -329,6 +345,22 @@ export class MaintenanceWorker {
     } catch (error: unknown) {
       this.log.error({ errorName: errorName(error) }, 'vacancy-workday-description-failed');
       return undefined;
+    }
+  }
+
+  /**
+   * Один шаг очистки кластеров и карточек без записей пула (B535): короткая
+   * транзакция; после законченного прохода — час покоя.
+   */
+  runOrphanClusterStep(): void {
+    if (this.stopped || !this.engine.runOrphanClusterStep) return;
+    if (this.now() < this.orphanRestUntil) return;
+    try {
+      const result = this.engine.runOrphanClusterStep(ORPHAN_CLUSTERS_STEP_CHUNK);
+      if (result.removed > 0) this.log.info({ ...result }, 'vacancy-orphan-clusters-tick');
+      if (result.passFinished) this.orphanRestUntil = this.now() + ORPHAN_CLUSTERS_REST_MS;
+    } catch (error: unknown) {
+      this.log.error({ errorName: errorName(error) }, 'vacancy-orphan-clusters-failed');
     }
   }
 
@@ -533,6 +565,9 @@ export class MaintenanceWorker {
     }
     if (this.intervals.workdayDescriptionMs) {
       every(this.intervals.workdayDescriptionMs, () => this.runWorkdayDescriptionStep());
+    }
+    if (this.intervals.orphanClustersMs) {
+      every(this.intervals.orphanClustersMs, () => this.runOrphanClusterStep());
     }
     if (this.intervals.hhCatalogTextMs) {
       every(this.intervals.hhCatalogTextMs, () => this.runHhCatalogTextStep());

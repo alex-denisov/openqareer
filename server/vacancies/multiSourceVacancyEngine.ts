@@ -896,6 +896,21 @@ export class MultiSourceVacancyEngine {
     );
   }
 
+  /** Один шаг очистки кластеров и карточек каталога без записей пула (B535). */
+  public runOrphanClusterStep(chunk?: number): {
+    inspected: number;
+    removed: number;
+    passFinished: boolean;
+  } {
+    return (
+      this.pool.removeOrphanClustersStep?.(chunk) ?? {
+        inspected: 0,
+        removed: 0,
+        passFinished: true,
+      }
+    );
+  }
+
   /**
    * Один такт фонового дочитывания текста hh для каталога (B535): тем же
    * загрузчиком, что карточка кабинета, без обхода в HTTP-процессе.
