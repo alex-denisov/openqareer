@@ -211,13 +211,26 @@ function handleAssessmentRoute(
   failFirstEvaluation: boolean,
   initialState: MockSignedInCabinetOptions['assessmentInitialState'],
 ): AssessmentStubResponse | null {
+  // The role pressed on «Карьера» arrives as `?role=` / `role` (B445).
+  const requestedRole = typeof body.role === 'string' ? body.role : undefined;
+  if (path.endsWith('/candidate/role-skill-assessments/checked-roles') && method === 'GET') {
+    const done = currentRun?.status === 'complete' && currentRun.completedAt;
+    return {
+      data: done ? [{ roleTitle: currentRun.roleTitle, completedAt: currentRun.completedAt }] : [],
+    };
+  }
   if (path.endsWith('/candidate/role-skill-assessments/current') && method === 'GET') {
-    return currentRun
-      ? responseForRun(currentRun, currentRun.status === 'complete')
-      : initialAssessmentResponse(initialState);
+    if (currentRun && (!requestedRole || currentRun.roleTitle === requestedRole)) {
+      return responseForRun(currentRun, currentRun.status === 'complete');
+    }
+    const initial = initialAssessmentResponse(initialState);
+    return requestedRole && initialState === 'ready'
+      ? { data: { ...(initial.data as object), roleTitle: requestedRole } }
+      : initial;
   }
   if (path.endsWith('/candidate/role-skill-assessments/start') && method === 'POST') {
-    return responseForRun(createAssessmentRun());
+    const run = createAssessmentRun();
+    return responseForRun(requestedRole ? { ...run, roleTitle: requestedRole } : run);
   }
   const match = path.match(/\/role-skill-assessments\/([^/]+)(\/.*)$/u);
   if (!match) return null;

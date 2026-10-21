@@ -13,7 +13,7 @@ describe('CareerScreen (B445)', () => {
     expect(html).toContain(
       '420–560 тыс. ₽ · 312 вакансий · вилка по 94 вакансиям с зарплатой, 05.10',
     );
-    expect(html).toContain('вилка не считается · 4 вакансий');
+    expect(html).toContain('вилка не считается · 4 вакансии');
     expect(html).toContain('Навыки проверены');
     expect(html).toContain('Открыта для поиска');
     expect(html).toContain('Гипотеза');

@@ -1,4 +1,9 @@
-import { apiFetch, readDataObject } from '../coach/apiClient';
+import {
+  apiFetch,
+  malformedResponseError,
+  readDataObject,
+  throwApiError,
+} from '../coach/apiClient';
 import type { RoleSkillAssessmentRun } from '../../../server/domain/roleSkillAssessment';
 
 export type RoleSkillAssessmentCurrent =
@@ -40,13 +45,38 @@ export interface RoleSkillAssessmentMutationResult {
   run: RoleSkillAssessmentRun;
 }
 
-export async function getCurrentRoleSkillAssessment(): Promise<RoleSkillAssessmentCurrent> {
-  const response = await apiFetch('/api/v1/candidate/role-skill-assessments/current');
+/** Без роли — проверка роли «Стратегии»; с ролью — роли, нажатой на «Карьере» (B445). */
+export async function getCurrentRoleSkillAssessment(
+  roleTitle?: string,
+): Promise<RoleSkillAssessmentCurrent> {
+  const query = roleTitle ? `?role=${encodeURIComponent(roleTitle)}` : '';
+  const response = await apiFetch(`/api/v1/candidate/role-skill-assessments/current${query}`);
   return readDataObject<RoleSkillAssessmentCurrent>(response);
 }
 
-export async function startRoleSkillAssessment(): Promise<RoleSkillAssessmentCurrent> {
-  return post('/api/v1/candidate/role-skill-assessments/start', { consent: true });
+export async function startRoleSkillAssessment(
+  roleTitle?: string,
+): Promise<RoleSkillAssessmentCurrent> {
+  return post('/api/v1/candidate/role-skill-assessments/start', {
+    consent: true,
+    ...(roleTitle ? { role: roleTitle } : {}),
+  });
+}
+
+export interface CheckedRole {
+  readonly roleTitle: string;
+  readonly completedAt: string;
+}
+
+/** Роли с завершённой проверкой навыков (B445). */
+export async function getCheckedRoles(signal?: AbortSignal): Promise<readonly CheckedRole[]> {
+  const response = await apiFetch('/api/v1/candidate/role-skill-assessments/checked-roles', {
+    signal,
+  });
+  if (!response.ok) await throwApiError(response);
+  const envelope = (await response.json()) as { data?: unknown };
+  if (!Array.isArray(envelope.data)) throw malformedResponseError();
+  return envelope.data as CheckedRole[];
 }
 
 export async function answerRoleAssessmentDialogue(input: {

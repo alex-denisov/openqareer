@@ -29,6 +29,7 @@ export class RoleSkillAssessmentActions {
     private readonly dispatch: Dispatch,
     private readonly requestRef: RequestRef,
     private readonly busyRef: { current: boolean },
+    private readonly roleTitle?: string,
   ) {}
 
   get run() {
@@ -54,7 +55,10 @@ export class RoleSkillAssessmentActions {
   loadCurrent = async (): Promise<void> => {
     this.patch({ loading: true, error: undefined });
     try {
-      this.dispatch({ type: 'current', current: await getCurrentRoleSkillAssessment() });
+      this.dispatch({
+        type: 'current',
+        current: await getCurrentRoleSkillAssessment(this.roleTitle),
+      });
     } catch (reason) {
       this.patch({ error: apiErrorMessage(reason, 'Не удалось загрузить проверку навыков.') });
     } finally {
@@ -67,7 +71,7 @@ export class RoleSkillAssessmentActions {
     this.setBusy(true);
     this.patch({ error: undefined });
     try {
-      this.dispatch({ type: 'current', current: await startRoleSkillAssessment() });
+      this.dispatch({ type: 'current', current: await startRoleSkillAssessment(this.roleTitle) });
       this.patch({ consent: false });
     } catch (reason) {
       this.patch({ error: apiErrorMessage(reason, 'Не удалось начать проверку.') });
@@ -264,10 +268,10 @@ export class RoleSkillAssessmentActions {
   }
 }
 
-export async function loadInitialAssessment(dispatch: Dispatch): Promise<void> {
+export async function loadInitialAssessment(dispatch: Dispatch, roleTitle?: string): Promise<void> {
   dispatch({ type: 'patch', values: { loading: true, error: undefined } });
   try {
-    dispatch({ type: 'current', current: await getCurrentRoleSkillAssessment() });
+    dispatch({ type: 'current', current: await getCurrentRoleSkillAssessment(roleTitle) });
   } catch (reason) {
     dispatch({
       type: 'patch',

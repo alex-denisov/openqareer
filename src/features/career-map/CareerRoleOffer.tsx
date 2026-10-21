@@ -20,6 +20,7 @@ function useOfferedRole() {
       mapProposedRolesToCareerRoles(store.roles, {
         acceptedTitle: store.acceptedTitle,
         offersDismissed: store.offersDismissed,
+        checkedTitles: store.checkedTitles,
       }).find(
         (item) =>
           item.status === 'skills_checked' &&
@@ -27,7 +28,7 @@ function useOfferedRole() {
           !store.rejected.includes(item.id) &&
           item.vacancyCount > 0,
       ),
-    [store.roles, store.acceptedTitle, store.offersDismissed, store.rejected],
+    [store.roles, store.acceptedTitle, store.offersDismissed, store.checkedTitles, store.rejected],
   );
   return { store, role };
 }

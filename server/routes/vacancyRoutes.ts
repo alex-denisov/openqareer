@@ -1,3 +1,4 @@
+import { summarizeRoleSample } from './roleSampleSummary';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { vacancySubscriptionInputSchema } from '../domain/vacancy';
@@ -119,6 +120,7 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
       // не читается ниоткуда (B180).
       roleNaming: { stage: context.namedBy, language: context.language },
       roleDecisions: readRoleDecisions(deps, candidate.id),
+      sample: summarizeRoleSample(context.matched),
     },
   };
 };

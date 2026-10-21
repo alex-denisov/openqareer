@@ -85,6 +85,19 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
     expect(role.nextAction.action).toBe('open_vacancies');
   });
 
+  it('завершённая проверка навыков роли переводит её в «Навыки проверены»', () => {
+    const unchecked = observed({ matchedRequirements: 0, matchedRequirementNames: [] });
+    expect(
+      mapProposedRoleToCareerRole(unchecked, { acceptedTitle: null, offersDismissed: [] }).status,
+    ).toBe('hypothesis');
+    const checked = mapProposedRoleToCareerRole(unchecked, {
+      acceptedTitle: null,
+      offersDismissed: [],
+      checkedTitles: ['director of engineering'],
+    });
+    expect(checked.status).toBe('skills_checked');
+  });
+
   it('роль без вакансий — гипотеза без чисел и без даты', () => {
     const role = mapProposedRoleToCareerRole(
       { ...observed(), confirmation: { state: 'not-found' } },
@@ -100,6 +113,19 @@ describe('mapProposedRoleToCareerRole (B445)', () => {
 });
 
 describe('summarizeRolesMarket (B445)', () => {
+  it('без наблюдаемых ролей берёт дату и площадки из выборки сервера', () => {
+    const tooFew = mapProposedRoleToCareerRole(
+      { ...observed(), confirmation: { state: 'too-few', sampleSize: 2 } },
+      { acceptedTitle: null, offersDismissed: [] },
+    );
+    expect(
+      summarizeRolesMarket([tooFew], {
+        observedAt: '2026-10-21T09:00:00.000Z',
+        sources: ['hh_search', 'linkedin'],
+      }),
+    ).toEqual({ vacancyTotal: 2, asOf: '21.10', sources: ['hh.ru', 'LinkedIn'] });
+  });
+
   it('складывает вакансии ролей, берёт последнюю дату и площадки', () => {
     const a = mapProposedRoleToCareerRole(observed(), { acceptedTitle: null, offersDismissed: [] });
     const b = mapProposedRoleToCareerRole(

@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import type { ProposedRole } from '../../../shared/roleProposals';
+import type { RolesSample } from './roleHypothesisAdapter';
 import {
   acceptCareerRole,
   dismissCareerRoleOffer,
@@ -18,6 +19,8 @@ export interface CareerRolesState {
   readonly rejected: readonly string[];
   readonly offersDismissed: readonly string[];
   readonly acceptedTitle: string | null;
+  readonly checkedTitles: readonly string[];
+  readonly sample: RolesSample | null;
   readonly actionError: string | null;
 }
 
@@ -27,6 +30,8 @@ const INITIAL: CareerRolesState = {
   rejected: [],
   offersDismissed: [],
   acceptedTitle: null,
+  checkedTitles: [],
+  sample: null,
   actionError: null,
 };
 
@@ -56,6 +61,8 @@ export function loadCareerRoles(force = false): Promise<void> {
         rejected: read.decisions.rejected,
         offersDismissed: read.decisions.offersDismissed,
         acceptedTitle: read.acceptedTitle,
+        checkedTitles: read.checkedTitles,
+        sample: read.sample,
       }),
     )
     .catch(() => setState({ status: 'failed' }))

@@ -68,12 +68,12 @@ afterEach(async () => {
   for (const app of apps.splice(0).reverse()) await app.close();
 });
 
-function matchedVacancies(count: number): MatchedVacancyItem[] {
+function matchedVacancies(count: number, title = ROLE_TITLE): MatchedVacancyItem[] {
   return Array.from({ length: count }, (_, index) => {
     const clusterId = `fixture-vacancy-${index}`;
     const cluster: MatchedVacancyItem['cluster'] = {
       id: clusterId,
-      canonicalTitle: ROLE_TITLE,
+      canonicalTitle: title,
       canonicalCompany: `Fixture employer ${index}`,
       canonicalLocation: 'Москва',
       isRemote: true,
@@ -201,7 +201,9 @@ async function createRig(initialVacancyCount = 8, failFirstProviderCall = false)
   const candidate = createCandidate(store);
   const otherCandidate = createCandidate(store);
   store.saveCareerStrategy(candidate.id, TEST_STRATEGY);
-  const getMatchedVacanciesAsync = vi.fn(async () => matchedVacancies(initialVacancyCount));
+  const getMatchedVacanciesAsync = vi.fn(async (query: { targetRoles?: readonly string[] }) =>
+    matchedVacancies(initialVacancyCount, query?.targetRoles?.[0] ?? ROLE_TITLE),
+  );
   const provider = createFakeProvider({ failFirstCall: failFirstProviderCall });
   const cookieToken = `test-cookie-session-${candidate.id}`;
   const cookieSessions = new Map([[cookieToken, candidate]]);
@@ -631,5 +633,66 @@ describe('B461 role skill assessment routes', () => {
     expect(recovered.suggestions).toHaveLength(12);
     expect(rig.provider.createTurn).toHaveBeenCalledTimes(2);
     expect(rig.store.getSnapshot(rig.candidate.id).memory).toHaveLength(0);
+  });
+});
+
+describe('B445 skill check for the role pressed on «Карьера»', () => {
+  const OTHER_ROLE = 'Director of Engineering';
+
+  it('starts and reads the run for the requested role without touching the strategy', async () => {
+    const rig = await createRig(8);
+    const started = await rig.app.inject({
+      method: 'POST',
+      url: START_PATH,
+      headers: mutationHeaders(rig),
+      payload: { consent: true, role: OTHER_ROLE },
+    });
+    expect(started.statusCode).toBe(200);
+    expect(runFrom(started).roleTitle).toBe(OTHER_ROLE);
+    expect(rig.store.getCareerStrategy(rig.candidate.id)?.current.role.title).toBe(ROLE_TITLE);
+
+    const current = await rig.app.inject({
+      method: 'GET',
+      url: `${CURRENT_PATH}?role=${encodeURIComponent(OTHER_ROLE)}`,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(current)).toMatchObject({ state: 'run', run: { roleTitle: OTHER_ROLE } });
+
+    const strategyCurrent = await rig.app.inject({
+      method: 'GET',
+      url: CURRENT_PATH,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(strategyCurrent)).toMatchObject({ state: 'ready', roleTitle: ROLE_TITLE });
+  });
+
+  it('lists roles whose check is complete so «Карьера» can mark them checked', async () => {
+    const rig = await createRig(8);
+    const started = await rig.app.inject({
+      method: 'POST',
+      url: START_PATH,
+      headers: mutationHeaders(rig),
+      payload: { consent: true, role: OTHER_ROLE },
+    });
+    const run = runFrom(started);
+    const before = await rig.app.inject({
+      method: 'GET',
+      url: `${BASE_PATH}/checked-roles`,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(before)).toEqual([]);
+
+    rig.store.roleSkillAssessments.create(rig.candidate.id, {
+      ...run,
+      id: randomUUID(),
+      status: 'complete',
+      completedAt: OBSERVED_AT,
+    });
+    const after = await rig.app.inject({
+      method: 'GET',
+      url: `${BASE_PATH}/checked-roles`,
+      headers: headersFor(rig.candidate),
+    });
+    expect(responseData(after)).toEqual([{ roleTitle: OTHER_ROLE, completedAt: OBSERVED_AT }]);
   });
 });
