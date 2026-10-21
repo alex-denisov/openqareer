@@ -23,3 +23,24 @@ describe('vacancy mechanics batch journal line', () => {
     );
   });
 });
+
+describe('model part of the batch journal line (B522)', () => {
+  it('names model, providers, average latency and the failed extraction share', () => {
+    const line = formatVacancyMechanicsStats(
+      {
+        ...emptyVacancyMechanicsStats(),
+        requirementsDone: 9,
+        requirementsInvalid: 1,
+        llmCalls: 10,
+        llmFailed: 0,
+        llmMs: 101_000,
+        lastModel: 'deepseek/deepseek-v4-flash',
+        providers: ['StreamLake', 'DeepInfra'],
+      },
+      60_000,
+    );
+    expect(line).toContain(
+      '| model=deepseek/deepseek-v4-flash providers=StreamLake,DeepInfra llm_calls=10 llm_failed=0 llm_avg_ms=10100 extract_unavailable=0 extract_invalid=1 extract_failed_share=10%',
+    );
+  });
+});

@@ -9,6 +9,7 @@ import { extractVacancyRequirementsWithFallback, vacancyDescriptionHash } from '
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
 import type { BulkLlmClient } from '../providers/bulkLlmClient';
+import { measuredBulkClient } from './measuredBulkClient';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
 
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
@@ -55,12 +56,18 @@ export class VacancyMechanicsRuntime {
   deleteCandidate(candidateId: string) { this.fit.deleteCandidate(candidateId); }
   close() { this.database.close(); }
 
-  async runNext(client: BulkLlmClient | null, workerId = 'vacancy-mechanics'): Promise<boolean> {
-    const extracted = await this.requirements.runNext(workerId, (input) => extractVacancyRequirementsWithFallback(input,
-      client ? { extract: async ({ description, instructions }) => (await client.complete({
-        runId: workerId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
-        input: minimizeModelText(description), maxTokens: 2048,
-      })).content } : undefined));
+  async runNext(rawClient: BulkLlmClient | null, workerId = 'vacancy-mechanics'): Promise<boolean> {
+    const client = rawClient ? measuredBulkClient(rawClient, () => this.stats) : null;
+    const extracted = await this.requirements.runNext(workerId, async (input) => {
+      const result = await extractVacancyRequirementsWithFallback(input,
+        client ? { extract: async ({ description, instructions }) => (await client.complete({
+          runId: workerId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
+          input: minimizeModelText(description), maxTokens: 2048,
+        })).content } : undefined);
+      if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
+      else if (result.fallbackStatus === 'invalid') this.stats.requirementsInvalid += 1;
+      return result;
+    });
     if (extracted) this.stats.requirementsDone += 1;
     const job = this.fit.claim({ leaseMs: 300000 });
     if (!job) return Boolean(extracted);

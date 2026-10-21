@@ -183,4 +183,16 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { coveragePercent: null, status: 'unknown' } });
     expect(await runtime.runNext(client)).toBe(false);
   });
+
+  it('extracts requirements from a fenced model answer and counts the call for the journal (B522)', async () => {
+    const runtime = setup(); const source = { ...input(), description: 'We build payments. 10+ years of Java.' };
+    const quote = '10+ years of Java';
+    const complete = vi.fn(async (request: BulkLlmInput) => request.task === 'vacancy-requirements'
+      ? { content: '```json\n' + JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, origin: 'job listing' }] }) + '\n```', model: 'deepseek/deepseek-v4-flash', provider: 'StreamLake', usage: { cost: 0, promptTokens: 1, cachedTokens: 0, completionTokens: 1 } }
+      : Promise.reject(new Error('provider_offline')));
+    runtime.enqueue(source);
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    expect(runtime.requirements.getLatest(source.vacancyId)?.requirements[0]).toMatchObject({ text: quote, origin: 'structural' });
+    expect(runtime.takeStats()).toMatchObject({ requirementsDone: 1, requirementsInvalid: 0, llmCalls: 2, llmFailed: 1, lastModel: 'deepseek/deepseek-v4-flash', providers: ['StreamLake'] });
+  });
 });
