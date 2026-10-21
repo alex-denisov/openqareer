@@ -20,6 +20,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { vacancyLevelLabel } from './VacancyScreenRowCells';
 import { VacancyScreenRequirementChips } from './VacancyScreenDetails';
+import { useVacancySummary } from './vacancyDetailApi';
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
 import { useVacancyPathCircles, type VacancyPathCirclesState } from './useVacancyPathCircles';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
@@ -175,6 +176,7 @@ function JobPage({
 }) {
   const { cluster, explanation } = props.item;
   const contacts = contactsLine(circles);
+  const summary = useVacancySummary(cluster.id, cluster.descriptionSummary);
   return (
     <>
       <PushHero
@@ -194,7 +196,8 @@ function JobPage({
         <h3 className="vacancy-push-cap">Описание</h3>
         <div className="vacancy-push-list">
           <p className="vacancy-push-quote">
-            {cluster.descriptionSummary.trim() || 'Краткое описание пока недоступно.'}
+            {summary.text ??
+              (summary.loading ? 'Загружаем описание…' : 'Краткое описание пока недоступно.')}
           </p>
           <PushRow
             icon={<FileText aria-hidden="true" />}
@@ -271,7 +274,8 @@ function PushBody({
   if (page === 'job') {
     return <JobPage props={props} circles={circles} onOpenPath={() => open('path')} />;
   }
-  if (circles.status !== 'ready') return (
+  if (circles.status !== 'ready')
+    return (
       <PushCirclesStatus state={circles} onPrepareLetter={props.pathActions.onPrepareLetter} />
     );
   if (page === 'path') {

@@ -36,7 +36,9 @@ describe('POST /api/v1/candidate/vacancies/:id/letter-approvals (B449)', () => {
     const documentId = response.json().data.documentId as string;
     const document = candidates.getDocument(candidateId, documentId);
     expect(document?.extractedText).toContain(body.body);
-    expect(JSON.parse(Buffer.from(document!.contentBase64, 'base64').toString('utf8'))).toMatchObject({
+    expect(
+      JSON.parse(Buffer.from(document!.contentBase64, 'base64').toString('utf8')),
+    ).toMatchObject({
       version: 1,
       circle: 1,
       recipient: body.recipient,
@@ -507,7 +509,11 @@ describe('POST /api/v1/candidate/vacancies/:id/pitch', () => {
     candidates.importResumeEvidence(candidateId, {
       sourceLabel: 'test-import',
       entries: [
-        { memoryId: 'mem-401', domain: 'outcome', statement: 'Увеличил пропускную способность API на 50%' },
+        {
+          memoryId: 'mem-401',
+          domain: 'outcome',
+          statement: 'Увеличил пропускную способность API на 50%',
+        },
       ],
     });
     candidates.reviewMemories(candidateId, ['mem-401'], 'confirm');
@@ -693,6 +699,18 @@ describe('GET /api/v1/candidate/vacancies/:id/detail (B266)', () => {
       description: 'Short summary only',
       truncated: true,
     });
+  });
+
+  it('returns the cluster summary the matched page trims, for the expanded card (B446-g4)', async () => {
+    const { app } = await createApp([cluster]);
+    const { cookie } = await login(app);
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/candidate/vacancies/cluster-77/detail',
+      headers: { cookie },
+    });
+
+    expect(response.json().data.summary).toBe('Short summary only');
   });
 
   it('дочитывает полное описание hh только по запросу «Подробнее» и сохраняет его', async () => {

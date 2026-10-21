@@ -16,6 +16,7 @@ import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
 import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
 import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
+import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 
 interface VacancyScreenDetailRowProps {
@@ -378,14 +379,19 @@ export function VacancyScreenDescription({
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onOpenFull: () => void;
 }) {
+  const summary = useVacancySummary(cluster.id, cluster.descriptionSummary);
   return (
     <section
       className="vacancies-screen-description"
       aria-labelledby={`vacancy-description-${cluster.id}`}
     >
       <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
-      {cluster.descriptionSummary.trim() ? (
-        <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
+      {summary.text ? (
+        <p className="vacancies-screen-description-copy">{summary.text}</p>
+      ) : summary.loading ? (
+        <p className="vacancies-screen-description-empty" role="status">
+          Загружаем описание…
+        </p>
       ) : (
         <p className="vacancies-screen-description-empty">
           Краткое описание пока недоступно. Полный текст можно проверить на площадке.
