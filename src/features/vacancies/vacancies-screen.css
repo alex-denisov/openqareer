@@ -622,6 +622,7 @@
 }
 
 .vacancy-screen-money-alt {
+  color: var(--career-text-dim);
   font-weight: 600;
 }
 

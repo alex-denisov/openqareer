@@ -1591,9 +1591,10 @@ test.describe('B250 vacancies screen', () => {
 
     const salary = vacancyRow.locator('.vacancies-screen-cell--salary .career-numeric');
     const title = vacancyRow.locator('.vacancies-screen-cell--role .vac-title');
-    await expect(salary).toHaveText('не указана');
-    await expect(vacancyRow.locator('.vacancy-screen-money-source')).toContainText(
-      'зарплата не указана',
+    // B446-g4: макет 4 — «без зарплаты» серым, под ним только источник и дата.
+    await expect(salary).toHaveText('без зарплаты');
+    await expect(vacancyRow.locator('.vacancy-screen-money-source')).not.toContainText(
+      'указана в вакансии',
     );
     await expect(title).toContainText('Frontend Engineer');
     await setRowExpanded(page, 0, true);

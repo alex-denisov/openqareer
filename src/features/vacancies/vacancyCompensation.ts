@@ -10,36 +10,40 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   gbp: '£',
 };
 
-function currencySymbol(currency?: string): string {
-  if (!currency) return '';
-  const key = currency.trim().toLowerCase();
-  return CURRENCY_SYMBOLS[key] ?? currency;
+function currencyCode(currency?: string): string {
+  return (currency ?? '').trim().toLowerCase();
 }
 
-/** `190000` → `190k`; sums under 1000 are shown as-is. */
-function compactAmount(amount: number): string {
-  if (Math.abs(amount) < 1000) return String(amount);
-  const thousands = amount / 1000;
-  const rounded = Number.isInteger(thousands) ? thousands : Math.round(thousands * 10) / 10;
-  return `${rounded}k`;
+/** `450000` → `450` (тысячи). */
+function thousandsAmount(amount: number): string {
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(amount / 1000);
+}
+
+/** «450–600 тыс. ₽», «$190–240 тыс.», «5 000 тыс. JPY» — как деньги в макете 4. */
+function withCurrency(amounts: string, currency?: string): string {
+  const code = currencyCode(currency);
+  if (code === 'rub' || code === 'rur') return `${amounts} тыс. ₽`;
+  const sign = CURRENCY_SYMBOLS[code];
+  if (sign) return `${sign}${amounts} тыс.`;
+  return code ? `${amounts} тыс. ${code.toUpperCase()}` : `${amounts} тыс.`;
 }
 
 /**
- * Компактная строка вилки для строки списка вакансий (приёмка B250):
- * `$190k–$240k`, одна граница — с префиксом «от»/«до», без данных — «не
- * указана». Число целиком в отдельной строке было бы вернее, но не влезает
- * в компактную колонку списка.
+ * Компактная строка вилки для строки списка вакансий: «450–600 тыс. ₽»,
+ * одна граница — с префиксом «от»/«до», без данных — «не указана».
  */
 export function formatCompensationCompact(salary: Salary): string {
   if (!salary || (salary.from === undefined && salary.to === undefined)) {
     return 'не указана';
   }
-  const symbol = currencySymbol(salary.currency);
   if (salary.from !== undefined && salary.to !== undefined) {
-    return `${symbol}${compactAmount(salary.from)}–${symbol}${compactAmount(salary.to)}`;
+    return withCurrency(
+      `${thousandsAmount(salary.from)}–${thousandsAmount(salary.to)}`,
+      salary.currency,
+    );
   }
   if (salary.from !== undefined) {
-    return `от ${symbol}${compactAmount(salary.from)}`;
+    return `от ${withCurrency(thousandsAmount(salary.from), salary.currency)}`;
   }
-  return `до ${symbol}${compactAmount(salary.to as number)}`;
+  return `до ${withCurrency(thousandsAmount(salary.to as number), salary.currency)}`;
 }

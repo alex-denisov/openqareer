@@ -62,7 +62,7 @@ describe('VacancyDetailPanel (B250)', () => {
     const html = render();
     expect(html).toContain('Business Information Architect');
     expect(html).toContain('Genetec · Canada · удалённо');
-    expect(html).toContain('$190k');
+    expect(html).toContain('$190–240 тыс.');
   });
 
   it('lists matched facts and unconfirmed points from the explanation', () => {
