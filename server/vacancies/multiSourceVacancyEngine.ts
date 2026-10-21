@@ -55,7 +55,7 @@ import type { CatalogListingSummary } from './vacancyCatalogFacets';
 import { PoliteScheduler, type SourceScheduleInfo } from './politeScheduler';
 import { HhCatalogTextBackfill, type HhCatalogTextReport } from './hhCatalogText';
 import { HH_SEARCH_SOURCE_ID } from './hhSearchState';
-import { CatalogTotalsCache, type CatalogTotals } from './matchedCatalogSummary';
+import type { CatalogTotals } from './matchedCatalogSummary';
 import {
   WorkdayDescriptionBackfill,
   type WorkdayDescriptionReport,
@@ -345,12 +345,6 @@ export class MultiSourceVacancyEngine {
   /** Принесла ли волна что-то новое в пул с последней пересборки кластеров. */
   private poolChangedSinceRecluster = false;
   private reclusterCount = 0;
-  /** Размер каталога для сводки подборки (B485): индексный счёт, не чтение пула. */
-  private readonly catalogTotalsCache = new CatalogTotalsCache(() =>
-    typeof this.pool.catalogTotals === 'function'
-      ? this.pool.catalogTotals()
-      : { clusters: this.pool.countClusters() },
-  );
   private readonly reclusterMode: ReclusterMode;
   /** Идущая фоновая сборка; вторая параллельно не запускается. */
   private reclusterInFlight?: Promise<void>;
@@ -757,8 +751,18 @@ export class MultiSourceVacancyEngine {
     return this.pool.loadCatalogEntriesPage(query);
   }
 
+  /** HTTP (B485): одна строка итогов по ключу; ошибка чтения — сводки нет. */
   public getCatalogTotals(): CatalogTotals | undefined {
-    return this.catalogTotalsCache.read();
+    try {
+      return this.pool.readCatalogTotals?.();
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Обслуживание (B485): пересчёт итогов после сведения пула. */
+  public refreshCatalogTotals(observedAt: string): CatalogTotals | undefined {
+    return this.pool.recomputeCatalogTotals?.(observedAt);
   }
 
   public getPublicCatalogListings(): CatalogListingSummary[] | undefined {

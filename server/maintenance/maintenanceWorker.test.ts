@@ -741,3 +741,39 @@ describe('MaintenanceWorker hh catalog text step (B535)', () => {
     ]);
   });
 });
+
+describe('MaintenanceWorker catalog totals (B485)', () => {
+  it('после волны пересчитывает итоги каталога не чаще раза в 15 минут', async () => {
+    let now = Date.parse('2026-10-07T06:12:00.000Z');
+    const refresh = vi.fn().mockReturnValue({ clusters: 10 });
+    const engine = {
+      clusterKeysReady: true,
+      poolSize: 0,
+      syncDue: vi.fn().mockResolvedValue([]),
+      refreshCatalogTotals: refresh,
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log: silentLog(), now: () => now });
+    await worker.runSyncWave();
+    now += 60_000;
+    await worker.runSyncWave();
+    now += 15 * 60_000;
+    await worker.runSyncWave();
+    expect(refresh).toHaveBeenCalledTimes(2);
+    expect(refresh).toHaveBeenNthCalledWith(1, '2026-10-07T06:12:00.000Z');
+  });
+
+  it('сбой пересчёта итогов пишется в журнал и не роняет волну', async () => {
+    const log = silentLog();
+    const engine = {
+      clusterKeysReady: true,
+      poolSize: 0,
+      syncDue: vi.fn().mockResolvedValue([]),
+      refreshCatalogTotals: () => {
+        throw new Error('locked');
+      },
+    } as unknown as ConstructorParameters<typeof MaintenanceWorker>[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log });
+    await expect(worker.runSyncWave()).resolves.toMatchObject({ synced: 0 });
+    expect(log.entries).toContainEqual({ level: 'warn', msg: 'vacancy-catalog-totals-failed' });
+  });
+});

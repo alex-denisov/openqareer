@@ -20,6 +20,13 @@ import type {
 export type { ClusterProjection, MatchCandidateQueryOptions };
 export type { CatalogCursor, CatalogEntriesPage, CatalogEntriesQuery, CatalogEntryRow };
 
+/** Итоги каталога (B485): активные кластеры, конец сведения, время пересчёта. */
+export interface CatalogTotalsRow {
+  readonly clusters: number;
+  readonly updatedAt: string;
+  readonly computedAt: string;
+}
+
 /** What a source's last reading recorded, kept apart from the source's config. */
 export interface StoredSourceState {
   readonly sourceId: string;
@@ -149,8 +156,10 @@ export interface VacancyPoolStore {
   upsertCluster(cluster: VacancyCluster): void;
   deleteCluster(clusterId: string): void;
   countClusters(): number;
-  /** Сведённых кластеров и время последней записи, без чтения JSON (B485). */
-  catalogTotals?(): { clusters: number; updatedAt?: string };
+  /** B485: пересчёт итогов каталога — только процесс обслуживания. */
+  recomputeCatalogTotals?(observedAt: string, computedAt?: string): CatalogTotalsRow;
+  /** B485: одна строка итогов по ключу; HTTP-путь, без vacancy_clusters. */
+  readCatalogTotals?(): CatalogTotalsRow | undefined;
   /**
    * Сведение по ключам (B230): соседи партии из `vacancy_cluster_keys`,
    * резюмируемое заполнение ключей по старым кластерам и его готовность.

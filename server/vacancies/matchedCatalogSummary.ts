@@ -1,38 +1,13 @@
 import type { MatchedVacancyCatalogSummary } from '../../shared/matchedVacancyFacets';
 
-/** Размер сведённого каталога и время его последней записи (B485). */
+/** Размер каталога (активные кластеры) и конец последнего сведения (B485). */
 export interface CatalogTotals {
   readonly clusters: number;
   readonly updatedAt?: string;
 }
 
-/** Чаще раза в десять минут каталог на HTTP-пути не считается. */
-export const CATALOG_TOTALS_TTL_MS = 10 * 60_000;
-
-/**
- * Один индексный запрос раз в TTL на процесс, а не на каждый запрос подборки:
- * полное чтение пула на HTTP запрещено, а счёт строк — нет, но и его не
- * повторяем. Ошибка чтения — сводки нет, клиент пишет «неизвестно».
- */
-export class CatalogTotalsCache {
-  private cached?: { readonly at: number; readonly totals: CatalogTotals };
-
-  constructor(
-    private readonly readTotals: () => CatalogTotals,
-    private readonly now: () => number = Date.now,
-  ) {}
-
-  read(): CatalogTotals | undefined {
-    const at = this.now();
-    if (this.cached && at - this.cached.at < CATALOG_TOTALS_TTL_MS) return this.cached.totals;
-    try {
-      this.cached = { at, totals: this.readTotals() };
-      return this.cached.totals;
-    } catch {
-      return undefined;
-    }
-  }
-}
+/** Итоги пересчитывает обслуживание после волны, не чаще раза в 15 минут. */
+export const CATALOG_TOTALS_REFRESH_MS = 15 * 60_000;
 
 export function matchedCatalogSummary(
   totals: CatalogTotals | undefined,

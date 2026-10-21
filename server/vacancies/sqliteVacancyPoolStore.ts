@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- pool persistence and its bounded public projection
    share one SQLite transaction boundary. */
+import { CATALOG_TOTALS_TABLE } from './catalogTotalsTable';
 import { normalizeSalaryLabel } from './catalogCopy';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -46,6 +47,7 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type {
+  CatalogTotalsRow,
   MergeSliceResult,
   StoredSourceState,
   VacancyLink,
@@ -318,6 +320,7 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     this.database.exec(VACANCY_CLUSTER_INPUT_TABLE);
     this.database.exec(VACANCY_CLUSTERS_TABLE);
     this.database.exec(VACANCY_CATALOG_ENTRIES_TABLE);
+    this.database.exec(CATALOG_TOTALS_TABLE);
     this.database.exec(VACANCY_CLUSTER_KEYS_TABLE);
     // `vacancy_semantic` (B267 S2/S3): тот же файл наполняет обслуживатель,
     // но собственное соединение пула должно видеть таблицу и вне прод-файла
@@ -2245,15 +2248,38 @@ export class SqliteVacancyPoolStore implements VacancyPoolStore {
     return row.n;
   }
 
-  /** count по первичному ключу и max по индексу свежести; JSON не читается. */
-  catalogTotals(): { clusters: number; updatedAt?: string } {
+  /**
+   * B485: только процесс обслуживания. Активность кластера хранится лишь в его
+   * JSON, поэтому полный проход — здесь, вне HTTP, не чаще раза в 15 минут.
+   */
+  recomputeCatalogTotals(
+    observedAt: string,
+    computedAt = new Date().toISOString(),
+  ): CatalogTotalsRow {
     const row = this.database
-      .prepare('SELECT count(*) AS n, max(updated_at) AS at FROM vacancy_clusters')
-      .get() as { n: number; at: number | null };
-    return {
-      clusters: row.n,
-      ...(row.at !== null ? { updatedAt: new Date(row.at).toISOString() } : {}),
-    };
+      .prepare(
+        `SELECT count(*) AS n FROM vacancy_clusters
+          WHERE json_extract(cluster_json, '$.status') = 'active'`,
+      )
+      .get() as { n: number };
+    this.database
+      .prepare(
+        `INSERT INTO catalog_totals (id, catalog_total, observed_at, computed_at)
+         VALUES (1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET catalog_total = excluded.catalog_total,
+           observed_at = excluded.observed_at, computed_at = excluded.computed_at`,
+      )
+      .run(row.n, observedAt, computedAt);
+    return { clusters: row.n, updatedAt: observedAt, computedAt };
+  }
+
+  readCatalogTotals(): CatalogTotalsRow | undefined {
+    const row = this.database
+      .prepare('SELECT catalog_total, observed_at, computed_at FROM catalog_totals WHERE id = 1')
+      .get() as { catalog_total: number; observed_at: string; computed_at: string } | undefined;
+    return row
+      ? { clusters: row.catalog_total, updatedAt: row.observed_at, computedAt: row.computed_at }
+      : undefined;
   }
 
   private catalogEntryFromRow(row: CatalogEntrySqlRow): CatalogEntryRow {

@@ -1,10 +1,11 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, describe, expect, it } from 'vitest';
 import { SqliteVacancyPoolStore } from './sqliteVacancyPoolStore';
 import { MemoryVacancyPoolStore } from './memoryVacancyPoolStore';
-import { CatalogTotalsCache, matchedCatalogSummary } from './matchedCatalogSummary';
+import { matchedCatalogSummary } from './matchedCatalogSummary';
 import type { VacancyCluster } from '../domain/unifiedVacancy';
 
 const directories: string[] = [];
@@ -31,25 +32,56 @@ function cluster(id: string, overrides: Partial<VacancyCluster> = {}): VacancyCl
 }
 
 describe('сводка каталога (B485)', () => {
-  it('SQLite: считает сведённые кластеры, а не записи источников', () => {
+  function openSqlite() {
     const directory = mkdtempSync(join(tmpdir(), 'catalog-totals-'));
     directories.push(directory);
-    const store = new SqliteVacancyPoolStore({ databasePath: join(directory, 'pool.db') });
+    return new SqliteVacancyPoolStore({ databasePath: join(directory, 'pool.db') });
+  }
+
+  it('SQLite: нет строки итогов — нет сводки, до первого пересчёта', () => {
+    const store = openSqlite();
     store.upsertCluster(cluster('c1'));
-    store.upsertCluster(cluster('c2'));
-    const totals = store.catalogTotals();
+    expect(store.readCatalogTotals()).toBeUndefined();
     store.close();
-    expect(totals.clusters).toBe(2);
-    expect(totals.updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
   });
 
-  it('память: только активные кластеры, дата — последний просмотр', () => {
+  it('SQLite: обслуживание считает только активные кластеры и пишет одну строку', () => {
+    const store = openSqlite();
+    store.upsertCluster(cluster('c1'));
+    store.upsertCluster(cluster('c2'));
+    store.upsertCluster(cluster('c3', { status: 'archived' }));
+    store.recomputeCatalogTotals('2026-10-07T06:12:00.000Z', '2026-10-07T06:13:00.000Z');
+    store.recomputeCatalogTotals('2026-10-07T06:12:00.000Z', '2026-10-07T06:14:00.000Z');
+    expect(store.readCatalogTotals()).toEqual({
+      clusters: 2,
+      updatedAt: '2026-10-07T06:12:00.000Z',
+      computedAt: '2026-10-07T06:14:00.000Z',
+    });
+    store.close();
+  });
+
+  it('SQLite: чтение итогов не обращается к vacancy_clusters', () => {
+    const store = openSqlite();
+    store.upsertCluster(cluster('c1'));
+    store.recomputeCatalogTotals('2026-10-07T06:12:00.000Z');
+    const database = (store as unknown as { database: DatabaseSync }).database;
+    database.exec('ALTER TABLE vacancy_clusters RENAME TO vacancy_clusters_hidden');
+    expect(store.readCatalogTotals()?.clusters).toBe(1);
+    database.exec('ALTER TABLE vacancy_clusters_hidden RENAME TO vacancy_clusters');
+    store.close();
+  });
+
+  it('память: только активные кластеры', () => {
     const store = new MemoryVacancyPoolStore();
     store.upsertCluster(cluster('c1'));
-    store.upsertCluster(
-      cluster('c2', { status: 'archived', lastSeenAt: '2026-10-09T00:00:00.000Z' }),
-    );
-    expect(store.catalogTotals()).toEqual({ clusters: 1, updatedAt: '2026-10-07T09:12:00.000Z' });
+    store.upsertCluster(cluster('c2', { status: 'archived' }));
+    expect(store.readCatalogTotals()).toBeUndefined();
+    store.recomputeCatalogTotals('2026-10-07T09:12:00.000Z', '2026-10-07T09:13:00.000Z');
+    expect(store.readCatalogTotals()).toEqual({
+      clusters: 1,
+      updatedAt: '2026-10-07T09:12:00.000Z',
+      computedAt: '2026-10-07T09:13:00.000Z',
+    });
   });
 
   it('пустой каталог — нет сводки, а не ноль', () => {
@@ -65,30 +97,5 @@ describe('сводка каталога (B485)', () => {
       catalogTotal: 1620,
       observedAt: '2026-10-07T06:12:00.000Z',
     });
-  });
-
-  it('кэш не перечитывает базу чаще срока жизни', () => {
-    let reads = 0;
-    let now = 0;
-    const cache = new CatalogTotalsCache(
-      () => {
-        reads += 1;
-        return { clusters: reads };
-      },
-      () => now,
-    );
-    expect(cache.read()?.clusters).toBe(1);
-    now = 60_000;
-    expect(cache.read()?.clusters).toBe(1);
-    now = 11 * 60_000;
-    expect(cache.read()?.clusters).toBe(2);
-    expect(reads).toBe(2);
-  });
-
-  it('ошибка чтения — нет сводки, честное «неизвестно» на клиенте', () => {
-    const cache = new CatalogTotalsCache(() => {
-      throw new Error('locked');
-    });
-    expect(cache.read()).toBeUndefined();
   });
 });

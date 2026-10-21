@@ -15,6 +15,7 @@ import {
   type VacancyPoolQuery,
 } from './vacancyPoolQuery';
 import type {
+  CatalogTotalsRow,
   MergeSliceResult,
   StoredSourceState,
   VacancyLink,
@@ -387,15 +388,21 @@ export class MemoryVacancyPoolStore implements VacancyPoolStore {
     return this.clusters.size;
   }
 
-  catalogTotals(): { clusters: number; updatedAt?: string } {
-    const active = Array.from(this.clusters.values()).filter(
+  private catalogTotalsRow?: CatalogTotalsRow;
+
+  recomputeCatalogTotals(
+    observedAt: string,
+    computedAt = new Date().toISOString(),
+  ): CatalogTotalsRow {
+    const clusters = Array.from(this.clusters.values()).filter(
       (cluster) => cluster.status === 'active',
-    );
-    const updatedAt = active
-      .map((cluster) => cluster.lastSeenAt)
-      .sort()
-      .at(-1);
-    return { clusters: active.length, ...(updatedAt ? { updatedAt } : {}) };
+    ).length;
+    this.catalogTotalsRow = { clusters, updatedAt: observedAt, computedAt };
+    return this.catalogTotalsRow;
+  }
+
+  readCatalogTotals(): CatalogTotalsRow | undefined {
+    return this.catalogTotalsRow;
   }
 
   loadCatalogEntriesPage(query: CatalogEntriesQuery): CatalogEntriesPage {
