@@ -58,10 +58,12 @@ export class VacancyMechanicsRuntime {
 
   async runNext(rawClient: BulkLlmClient | null, workerId = 'vacancy-mechanics'): Promise<boolean> {
     const client = rawClient ? measuredBulkClient(rawClient, () => this.stats) : null;
+    // B522 run budget is per run: a worker that never restarts is one run per UTC day, not one forever.
+    const runId = `${workerId}:${new Date().toISOString().slice(0, 10)}`;
     const extracted = await this.requirements.runNext(workerId, async (input) => {
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
-          runId: workerId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
+          runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
           input: minimizeModelText(description), maxTokens: 2048,
         })).content } : undefined);
       if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
@@ -84,7 +86,7 @@ export class VacancyMechanicsRuntime {
       const resolved = { ...job.input, requirements: requirements.requirements };
       let staleProfile = false;
       let assessmentReturned = false;
-      const base = client ? createVacancyFitAssessor(client, workerId) : undefined;
+      const base = client ? createVacancyFitAssessor(client, runId) : undefined;
       const assessor = base ? { assess: async (input: Parameters<typeof base.assess>[0]) => {
         if (!this.validateCurrentProfile?.(resolved)) { staleProfile = true; throw new Error('profile_changed'); }
         const assessments = await base.assess(input);

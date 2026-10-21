@@ -195,4 +195,20 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(runtime.requirements.getLatest(source.vacancyId)?.requirements[0]).toMatchObject({ text: quote, origin: 'structural' });
     expect(runtime.takeStats()).toMatchObject({ requirementsDone: 1, requirementsInvalid: 0, llmCalls: 2, llmFailed: 1, lastModel: 'deepseek/deepseek-v4-flash', providers: ['StreamLake'] });
   });
+
+  it('spends under one budget run per UTC day: the run changes at midnight and accumulates inside the day (B522)', async () => {
+    const runtime = setup();
+    const runIds: string[] = [];
+    const complete = vi.fn(async (request: BulkLlmInput) => { runIds.push(request.runId); throw new Error('provider_offline'); });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    cleanup.push(() => vi.useRealTimers());
+    vi.setSystemTime(Date.parse('2026-10-21T23:59:00.000Z'));
+    runtime.enqueue({ ...input(), vacancyId: 'a', description: 'We make useful tools.' });
+    runtime.enqueue({ ...input(), vacancyId: 'b', description: 'We make other tools.' });
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    vi.setSystemTime(Date.parse('2026-10-22T00:30:00.000Z'));
+    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    expect(runIds).toEqual(['vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-22']);
+  });
 });
