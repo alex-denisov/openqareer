@@ -26,3 +26,18 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   }
   return { confirmed, unconfirmed };
 }
+
+const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';
+
+/** Legacy matcher points → chip names (B446-g4): «Подтверждённый навык: X» → X;
+ *  role points («Целевая роль: …») are not skill requirements and stay out. */
+export function legacySkillChips(
+  matchingPoints: readonly string[],
+  missingPoints: readonly string[],
+): RequirementChips {
+  const confirmed = matchingPoints
+    .filter((point) => point.startsWith(CONFIRMED_SKILL_PREFIX))
+    .map((point) => point.slice(CONFIRMED_SKILL_PREFIX.length).trim())
+    .filter(Boolean);
+  return { confirmed, unconfirmed: [...missingPoints] };
+}

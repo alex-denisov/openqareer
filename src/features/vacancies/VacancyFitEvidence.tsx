@@ -154,10 +154,20 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
   }, [vacancyId, needsDetail]);
   return { view, busy, error, load };
 }
-function FitRequestControls({ state }: { readonly state: ReturnType<typeof useFitRequest> }) {
+/** B446-g4: в карточке экрана пересчёт готового результата скрыт; кнопка — для
+ *  первого расчёта, сбоя и чтения результата из очереди. */
+function FitRequestControls({
+  state,
+  compact,
+}: {
+  readonly state: ReturnType<typeof useFitRequest>;
+  readonly compact: boolean;
+}) {
   const { view, busy, error, load } = state;
   const queued = view.state === 'processing';
-  const canRequest = ['not_requested', 'failed', 'ready'].includes(view.state);
+  const requestable = compact ? ['not_requested', 'failed'] : ['not_requested', 'failed', 'ready'];
+  const canRequest = requestable.includes(view.state);
+  const canRefresh = queued || Boolean(error) || (!compact && view.state === 'ready');
   return (
     <>
       <div className="vacancy-fit-actions">
@@ -175,7 +185,7 @@ function FitRequestControls({ state }: { readonly state: ReturnType<typeof useFi
                 : 'Рассчитать соответствие'}
           </button>
         ) : null}
-        {queued || view.state === 'ready' || error ? (
+        {canRefresh ? (
           <button
             type="button"
             className="career-vacancy-action vacancies-btn vacancies-btn-secondary"
@@ -202,21 +212,26 @@ export function VacancyFitEvidence({
   readonly showTable?: boolean;
 }) {
   const state = useFitRequest(vacancyId, initialView);
+  const compact = !showTable;
   return (
     <section
-      className="vacancy-fit-evidence"
+      className={`vacancy-fit-evidence${compact ? ' is-compact' : ''}`}
       aria-label="Соответствие вашему профилю"
       aria-busy={state.busy}
     >
       <div role="status" aria-live="polite">
-        <VacancyFitSummary view={state.view} />
+        <VacancyFitSummary view={state.view} compact={compact} />
       </div>
-      <p className="vacancy-fit-note">
-        Доля требований, подтверждённых фактами профиля. Вероятность найма не оценивается.
-      </p>
-      <FitGates result={state.view.result} />
-      {showTable ? <FitEvidenceTable view={state.view} onAddToProfile={onAddToProfile} /> : null}
-      <FitRequestControls state={state} />
+      {compact ? null : (
+        <>
+          <p className="vacancy-fit-note">
+            Доля требований, подтверждённых фактами профиля. Вероятность найма не оценивается.
+          </p>
+          <FitGates result={state.view.result} />
+          <FitEvidenceTable view={state.view} onAddToProfile={onAddToProfile} />
+        </>
+      )}
+      <FitRequestControls state={state} compact={compact} />
     </section>
   );
 }

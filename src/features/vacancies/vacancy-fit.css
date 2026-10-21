@@ -185,3 +185,25 @@
   font-size: var(--career-text-xs);
   font-variant-numeric: tabular-nums;
 }
+
+/* B446-g4: в карточке экрана соответствие — одна строка под требованиями. */
+.vacancies-screen-detail-main {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-3);
+  min-inline-size: 0;
+}
+.vacancy-fit-evidence.is-compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding-block: 0;
+  border-block-start: 0;
+}
+.vacancy-fit-evidence.is-compact .vacancy-fit-summary {
+  margin-block-start: 0;
+}
+.vacancy-fit-evidence.is-compact .vacancy-fit-track {
+  display: none;
+}

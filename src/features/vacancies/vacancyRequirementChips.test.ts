@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VacancyFitView } from '../../../shared/vacancyFit';
-import { fitRequirementChips } from './vacancyRequirementChips';
+import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
 
 function requirement(id: string, text: string) {
   return {
@@ -42,5 +42,22 @@ describe('fitRequirementChips', () => {
       requirements: [requirement('a', 'Kafka'), requirement('b', 'kafka')],
     };
     expect(fitRequirementChips(view)).toEqual({ confirmed: [], unconfirmed: ['Kafka'] });
+  });
+});
+
+it('keeps only skill names on legacy chips, without matcher prefixes or role points (B446-g4)', () => {
+  expect(
+    legacySkillChips(
+      [
+        'Целевая роль: Head of Engineering',
+        'Подтверждённый навык: Engineering management',
+        'Частичное совпадение по роли: CTO',
+        'Подтверждённый навык: Платёжные системы',
+      ],
+      ['Kafka', 'Kubernetes'],
+    ),
+  ).toEqual({
+    confirmed: ['Engineering management', 'Платёжные системы'],
+    unconfirmed: ['Kafka', 'Kubernetes'],
   });
 });
