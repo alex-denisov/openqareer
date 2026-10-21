@@ -28,7 +28,7 @@ export function ProfileImportFailureNote({
     <div className={`profile-import-failure is-${variant}`}>
       <p role="alert">
         <WarningCircle size={16} aria-hidden="true" />
-        <span>LinkedIn: раздел «{failure.label}» не прочитан, сайт не ответил.</span>
+        <span>LinkedIn: раздел «{failure.label}» не прочитан, сайт не ответил. Остальные разделы сохранены.</span>
       </p>
       {onReimport ? (
         <button type="button" className="career-quiet-button" onClick={onReimport}>

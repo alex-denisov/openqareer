@@ -39,7 +39,7 @@ describe('ProfileImportFailureNote (макет 2 «Ошибка импорта»
       applyLinkedInImportProgress({ type: 'end' });
     });
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'LinkedIn: раздел «курсы» не прочитан, сайт не ответил.',
+      'LinkedIn: раздел «курсы» не прочитан, сайт не ответил. Остальные разделы сохранены.',
     );
     act(() => container.querySelector('button')?.click());
     expect(onReimport).toHaveBeenCalledOnce();
@@ -66,7 +66,7 @@ describe('ProfileImportFailureNote (макет 2 «Ошибка импорта»
       ),
     );
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      'LinkedIn: раздел «языки» не прочитан, сайт не ответил.',
+      'LinkedIn: раздел «языки» не прочитан, сайт не ответил. Остальные разделы сохранены.',
     );
     act(() => root.unmount());
     container.remove();
