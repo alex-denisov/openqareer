@@ -1,17 +1,34 @@
 import { useState, type ReactElement } from 'react';
 import {
   Buildings,
+  CaretDown,
   Check,
-  Coins,
+  Circle,
+  Clock,
+  FunnelSimple,
   Globe,
-  HouseLine,
-  MapPin,
+  Info,
+  PencilSimple,
   Plus,
-  Prohibit,
   WarningCircle,
   X,
 } from '@phosphor-icons/react';
-import type { SearchConditionsDraft } from './careerScreenTypes';
+import type { RolesMarketSummary, SearchConditionsDraft } from './careerScreenTypes';
+import {
+  formatCompaniesCount,
+  formatConditionsFormat,
+  formatSalaryFloor,
+} from './careerConditionsStorage';
+
+function EditorError({ message }: { message?: string | null }): ReactElement | null {
+  if (!message) return null;
+  return (
+    <div className="career-note career-note-error" role="alert">
+      <WarningCircle size={16} aria-hidden />
+      <span>{message}</span>
+    </div>
+  );
+}
 
 export type EditableConditionField = 'geo' | 'sal' | 'fmt' | 'stop' | null;
 
@@ -51,18 +68,18 @@ export function CareerInlineSalaryEditor({
   onCancel,
   errorMessage,
 }: {
-  initialSalary: number;
+  initialSalary: number | null;
   initialShowWithoutSalary: boolean;
-  onSave: (salary: number, showWithoutSalary: boolean) => void;
+  onSave: (salary: number | null, showWithoutSalary: boolean) => void;
   onCancel: () => void;
   errorMessage?: string | null;
 }): ReactElement {
-  const [val, setVal] = useState(initialSalary.toString());
+  const [val, setVal] = useState(initialSalary === null ? '' : initialSalary.toString());
   const [showNoWage, setShowNoWage] = useState(initialShowWithoutSalary);
 
   const handleSave = () => {
-    const num = parseInt(val.replace(/\s+/g, ''), 10) || initialSalary;
-    onSave(num, showNoWage);
+    const digits = val.replace(/\D+/g, '');
+    onSave(digits ? Number(digits) : null, showNoWage);
   };
 
   return (
@@ -74,6 +91,8 @@ export function CareerInlineSalaryEditor({
         <input
           id="salary-input"
           className="career-inline-input"
+          inputMode="numeric"
+          placeholder="Не указано"
           value={val}
           onChange={(e) => setVal(e.target.value)}
         />
@@ -87,12 +106,7 @@ export function CareerInlineSalaryEditor({
         />
         <span className="career-checkbox-text">Показывать вакансии без зарплаты</span>
       </label>
-      {errorMessage ? (
-        <div className="career-note career-note-error" role="alert">
-          <WarningCircle size={16} />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
+      <EditorError message={errorMessage} />
     </div>
   );
 }
@@ -197,12 +211,7 @@ export function CareerInlineFormatEditor({
       <div className="career-inline-row">
         <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
       </div>
-      {errorMessage ? (
-        <div className="career-note career-note-error" role="alert">
-          <WarningCircle size={16} />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
+      <EditorError message={errorMessage} />
     </div>
   );
 }
@@ -225,7 +234,7 @@ export function CareerInlineGeoEditor({
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean);
-    onSave(list.length ? list : initialSelected);
+    onSave(list);
   };
 
   return (
@@ -243,130 +252,189 @@ export function CareerInlineGeoEditor({
         />
         <SalaryActionButtons onSave={handleSave} onCancel={onCancel} />
       </div>
-      {errorMessage ? (
-        <div className="career-note career-note-error" role="alert">
-          <WarningCircle size={16} />
-          <span>{errorMessage}</span>
-        </div>
-      ) : null}
+      <EditorError message={errorMessage} />
     </div>
   );
+}
+
+/** «Пояснение» ⓘ у шапки секции: короткий текст раскрывается под шапкой. */
+export function SectionInfoToggle({ id, text }: { id: string; text: string }): ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        className="career-btn career-btn-icon career-btn-ghost"
+        aria-label="Пояснение"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Info size={18} aria-hidden />
+      </button>
+      {open ? (
+        <p id={id} className="career-section-explain">
+          {text}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+export interface ConditionRow {
+  readonly field: Exclude<EditableConditionField, null>;
+  readonly label: string;
+  readonly value: string | null;
+}
+
+export function conditionRows(conditions: SearchConditionsDraft): readonly ConditionRow[] {
+  const geo = conditions.geography.selected;
+  return [
+    { field: 'geo', label: 'География', value: geo.length > 0 ? geo.join(', ') : null },
+    {
+      field: 'sal',
+      label: 'Зарплата от',
+      value: formatSalaryFloor(conditions.salaryFrom.amountRubles),
+    },
+    { field: 'fmt', label: 'Формат', value: formatConditionsFormat(conditions.format) },
+    {
+      field: 'stop',
+      label: 'Стоп-лист',
+      value:
+        conditions.stopList.length > 0 ? formatCompaniesCount(conditions.stopList.length) : null,
+    },
+  ];
 }
 
 function ConditionsChipList({
   conditions,
-  formatStr,
   onEditField,
 }: {
   conditions: SearchConditionsDraft;
-  formatStr: string;
   onEditField: (field: EditableConditionField) => void;
 }): ReactElement {
-  const salaryStr = conditions.salaryFrom.amountRubles
-    .toLocaleString('ru-RU')
-    .replace(/\u00A0/g, ' ');
-
   return (
     <div className="career-conditions-chips">
-      <button type="button" className="career-cond-chip" onClick={() => onEditField('geo')}>
-        <MapPin size={16} />
-        <span className="career-cond-label">География:</span>
-        <span className="career-cond-val">{conditions.geography.selected.join(', ')}</span>
-      </button>
-      <button type="button" className="career-cond-chip" onClick={() => onEditField('sal')}>
-        <Coins size={16} />
-        <span className="career-cond-label">Зарплата от:</span>
-        <span className="career-cond-val">{salaryStr} ₽</span>
-      </button>
-      <button type="button" className="career-cond-chip" onClick={() => onEditField('fmt')}>
-        <HouseLine size={16} />
-        <span className="career-cond-label">Формат:</span>
-        <span className="career-cond-val">{formatStr}</span>
-      </button>
-      <button type="button" className="career-cond-chip" onClick={() => onEditField('stop')}>
-        <Prohibit size={16} />
-        <span className="career-cond-label">Стоп-лист:</span>
-        <span className="career-cond-val">{conditions.stopList.length} компании</span>
-      </button>
+      {conditionRows(conditions).map((row) => (
+        <button
+          key={row.field}
+          type="button"
+          className="career-cond-chip"
+          aria-label={`Изменить: ${row.label}`}
+          onClick={() => onEditField(row.field)}
+        >
+          <span className="career-cond-label">{row.label}</span>
+          <span className={row.value ? 'career-cond-val' : 'career-cond-val career-cond-empty'}>
+            {row.value ?? 'не указано · Указать'}
+          </span>
+          <PencilSimple size={14} aria-hidden />
+        </button>
+      ))}
     </div>
   );
 }
 
-function RelocationBox({
+/** Сводка вакансий по ролям: число и дата из данных ролей, «N из M» — только когда посчитано. */
+export function ConditionsMarketLine({ summary }: { summary: RolesMarketSummary }): ReactElement {
+  return (
+    <p className="career-role-meta career-meta-icon">
+      <FunnelSimple size={16} aria-hidden />
+      <span>
+        {summary.vacancyTotal > 0
+          ? `Вакансий по ролям: ${summary.vacancyTotal}${summary.asOf ? `, срез ${summary.asOf}` : ''}. Сколько из них проходит эти условия, ещё не посчитано.`
+          : 'Число вакансий с этими условиями ещё не посчитано.'}
+      </span>
+    </p>
+  );
+}
+
+export function RelocationRow({
   isRelocationEnabled,
-  onEnableRelocation,
   onOpenRelocation,
 }: {
   isRelocationEnabled: boolean;
-  onEnableRelocation?: () => void;
-  onOpenRelocation?: () => void;
+  onOpenRelocation: () => void;
 }): ReactElement {
   return (
-    <div className="career-relocation-box">
-      <div className="career-relocation-head">
-        <div className="career-relocation-title-group">
-          <Globe size={18} />
+    <details className="career-relocation-box">
+      <summary className="career-relocation-head">
+        <span className="career-relocation-title-group">
+          <Globe size={18} aria-hidden />
           <span className="career-relocation-title">Страны и релокация</span>
-          <span className="career-badge">{isRelocationEnabled ? 'Включено' : 'Не включено'}</span>
-        </div>
-        {isRelocationEnabled ? (
-          <button
-            type="button"
-            className="career-btn career-btn-secondary career-btn-sm"
-            onClick={onOpenRelocation}
-          >
-            Открыть страны и релокацию
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="career-btn career-btn-secondary career-btn-sm"
-            onClick={onEnableRelocation}
-          >
-            Включить релокацию
-          </button>
-        )}
+        </span>
+        <span className="career-badge career-badge-muted">
+          <Circle size={12} aria-hidden />
+          {isRelocationEnabled ? 'Включено' : 'Не включено'}
+        </span>
+        <CaretDown size={18} className="career-role-caret" aria-hidden />
+      </summary>
+      <div className="career-relocation-body">
+        <p className="career-role-meta">
+          {isRelocationEnabled
+            ? 'Подборка учитывает страны из раздела «Страны и релокация».'
+            : 'Сейчас подборка идёт только по России. Включение — через анкету и согласие на экране «Страны и релокация».'}
+        </p>
+        <button
+          type="button"
+          className="career-btn career-btn-secondary"
+          onClick={onOpenRelocation}
+        >
+          Открыть «Страны и релокация»
+        </button>
       </div>
-    </div>
+    </details>
   );
 }
 
 export function CareerConditionsCard({
   conditions,
+  summary,
   onEditField,
-  onEnableRelocation,
   onOpenRelocation,
+  editor,
 }: {
   conditions: SearchConditionsDraft;
+  summary: RolesMarketSummary;
   onEditField: (field: EditableConditionField) => void;
-  onEnableRelocation?: () => void;
-  onOpenRelocation?: () => void;
+  onOpenRelocation: () => void;
+  editor?: ReactElement | null;
 }): ReactElement {
-  const formatStr = [
-    conditions.format.office ? 'Офис' : null,
-    conditions.format.hybrid ? 'Гибрид' : null,
-    conditions.format.remote ? 'удалённо' : null,
-  ]
-    .filter(Boolean)
-    .join(', ');
-
   return (
     <section className="career-card" aria-labelledby="cond-h">
       <div className="career-card-head">
-        <div className="career-card-title-group">
-          <h2 id="cond-h">Условия поиска</h2>
-        </div>
+        <h2 id="cond-h">Условия и география</h2>
+        <SectionInfoToggle
+          id="cond-explain"
+          text="Условия фильтруют подборку по всем ролям. Пустое условие поиск не ограничивает. Каждое значение правится отдельно."
+        />
       </div>
-      <ConditionsChipList conditions={conditions} formatStr={formatStr} onEditField={onEditField} />
-      <p className="career-role-meta">
-        С этими условиями: {conditions.matchingStats.matched} вакансий из{' '}
-        {conditions.matchingStats.total} по ролям, {conditions.matchingStats.asOf}.
-      </p>
-      <RelocationBox
+      <ConditionsChipList conditions={conditions} onEditField={onEditField} />
+      {editor}
+      <ConditionsMarketLine summary={summary} />
+      <RelocationRow
         isRelocationEnabled={conditions.geography.isRelocationEnabled}
-        onEnableRelocation={onEnableRelocation}
         onOpenRelocation={onOpenRelocation}
       />
     </section>
+  );
+}
+
+export function MarketSourceStamp({
+  summary,
+}: {
+  summary: RolesMarketSummary;
+}): ReactElement | null {
+  if (summary.vacancyTotal === 0) return null;
+  const sources = ['каталог openqareer', ...summary.sources];
+  const named =
+    sources.length > 1 ? `${sources.slice(0, -1).join(', ')} и ${sources.at(-1)}` : sources[0];
+  return (
+    <p className="career-source-stamp career-meta-icon">
+      <Clock size={14} aria-hidden />
+      <span>
+        Источник: {named} · {summary.vacancyTotal} вакансий
+        {summary.asOf ? ` · ${summary.asOf}` : ''}
+      </span>
+    </p>
   );
 }

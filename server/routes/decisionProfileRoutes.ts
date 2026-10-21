@@ -11,6 +11,7 @@ const formatIds = DECISION_WORK_FORMATS.map((format) => format.id) as [string, .
 export const putDecisionProfileSchema = z
   .object({
     citizenship: z.array(z.string().max(80)).max(10).default([]),
+    searchLocations: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
     taxStatus: z.string().max(120).optional(),
     languages: z
       .array(

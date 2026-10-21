@@ -1,110 +1,152 @@
 import { useState, type ReactElement } from 'react';
 import {
+  ArrowRight,
   Briefcase,
   CaretDown,
   ChatCircleText,
   CheckCircle,
+  Circle,
   Lightbulb,
   ListChecks,
+  Question,
   Warning,
   X,
 } from '@phosphor-icons/react';
 import type { CareerRoleModel, RoleStatus } from './careerScreenTypes';
 
+export interface RoleHandlers {
+  readonly onConsultant: (role: CareerRoleModel) => void;
+  readonly onOpenVacancies: (role: CareerRoleModel) => void;
+  readonly onCheckSkills: (role: CareerRoleModel) => void;
+  readonly onRejectRole: (roleId: string) => Promise<void> | void;
+  readonly onNavigateSection: (section: string) => void;
+}
+
+const STATUS_LABELS: Readonly<Record<RoleStatus, string>> = {
+  hypothesis: 'Гипотеза',
+  skills_checked: 'Навыки проверены',
+  open_for_search: 'Открыта для поиска',
+};
+
 export function RoleStatusBadge({ status }: { status: RoleStatus }): ReactElement {
-  if (status === 'open_for_search') {
-    return (
-      <span className="career-badge career-badge-ok">
-        <CheckCircle size={14} />
-        Открыта для поиска
-      </span>
-    );
-  }
-  if (status === 'skills_checked') {
-    return (
-      <span className="career-badge career-badge-ok">
-        <CheckCircle size={14} />
-        Навыки проверены
-      </span>
-    );
-  }
+  const ok = status !== 'hypothesis';
   return (
-    <span className="career-badge career-badge-hyp">
-      <Lightbulb size={14} />
-      Гипотеза
+    <span className={`career-badge ${ok ? 'career-badge-ok' : 'career-badge-hyp'}`}>
+      {ok ? <CheckCircle size={14} aria-hidden /> : <Lightbulb size={14} aria-hidden />}
+      {STATUS_LABELS[status]}
     </span>
   );
 }
 
-export function RoleStageStepper({ status }: { status: RoleStatus }): ReactElement {
-  const isHypDone = true;
-  const isSkillsDone = status === 'skills_checked' || status === 'open_for_search';
-  const isSearchDone = status === 'open_for_search';
+/** «вилка · N вакансий · дата» — числа только с выборкой и датой. */
+export function roleMetaLine(role: CareerRoleModel): string {
+  const parts = [role.wageDisplay, `${role.vacancyCount} вакансий`];
+  if (role.wageSampleNote) {
+    parts.push(
+      role.observedDate ? `${role.wageSampleNote}, ${role.observedDate}` : role.wageSampleNote,
+    );
+  } else if (role.observedDate) {
+    parts.push(role.observedDate);
+  }
+  return parts.join(' · ');
+}
 
+type StepState = 'done' | 'current' | 'future';
+
+/** Шкала статуса по кадрам макета: текущий шаг выделен, пройденные отмечены. */
+const STEP_ROWS: Readonly<Record<RoleStatus, readonly (readonly [string, StepState])[]>> = {
+  hypothesis: [
+    ['Гипотеза', 'done'],
+    ['Проверка навыков', 'current'],
+    ['Открыть для поиска', 'future'],
+  ],
+  skills_checked: [
+    ['Гипотеза', 'done'],
+    ['Навыки проверены', 'current'],
+    ['Открыта для поиска', 'future'],
+  ],
+  open_for_search: [
+    ['Гипотеза', 'done'],
+    ['Навыки проверены', 'done'],
+    ['Открыта для поиска', 'current'],
+  ],
+};
+
+export function RoleStageStepper({ status }: { status: RoleStatus }): ReactElement {
   return (
     <ol className="career-stepper" aria-label="Статус роли">
-      <li className={`career-step ${isHypDone ? 'career-step-done' : ''}`}>
-        <CheckCircle size={16} />
-        <span>Гипотеза</span>
-      </li>
-      <li
-        className={`career-step ${
-          isSkillsDone ? 'career-step-done' : status === 'hypothesis' ? 'career-step-current' : ''
-        }`}
-      >
-        {isSkillsDone ? <CheckCircle size={16} /> : <ListChecks size={16} />}
-        <span>Навыки проверены</span>
-      </li>
-      <li className={`career-step ${isSearchDone ? 'career-step-done' : ''}`}>
-        {isSearchDone ? <CheckCircle size={16} /> : <Briefcase size={16} />}
-        <span>Открыть для поиска</span>
-      </li>
+      {STEP_ROWS[status].map(([label, state]) => (
+        <li
+          key={label}
+          className={`career-step career-step-${state}`}
+          aria-current={state === 'current' ? 'step' : undefined}
+        >
+          {state === 'done' ? (
+            <CheckCircle size={16} aria-hidden />
+          ) : state === 'current' ? (
+            <ArrowRight size={16} aria-hidden />
+          ) : (
+            <Circle size={16} aria-hidden />
+          )}
+          <span>{label}</span>
+        </li>
+      ))}
     </ol>
   );
 }
 
-export function RoleConfirmedSection({ items }: { items: readonly string[] }): ReactElement | null {
-  if (items.length === 0) return null;
+function RoleConfirmedSection({ items }: { items: readonly string[] }): ReactElement {
   return (
     <div className="career-role-section">
       <h4 className="career-section-subhead">Подтверждено</h4>
-      <ul className="career-check-list">
-        {items.map((item, index) => (
-          <li key={index} className="career-check-item">
-            <CheckCircle size={16} color="var(--career-text-success, #059669)" />
-            <span>{item}</span>
-          </li>
-        ))}
-      </ul>
+      {items.length === 0 ? (
+        <p className="career-role-meta">
+          Пока ничего: совпадений с требованиями вакансий роли нет.
+        </p>
+      ) : (
+        <ul className="career-check-list">
+          {items.map((item) => (
+            <li key={item} className="career-check-item career-check-ok">
+              <CheckCircle size={16} aria-hidden />
+              <span>{item}: есть в навыках профиля</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
 
-export function RoleMissingSection({
+function RoleMissingSection({
   role,
   onNavigateSection,
 }: {
   role: CareerRoleModel;
-  onNavigateSection?: (section: string) => void;
+  onNavigateSection: (section: string) => void;
 }): ReactElement | null {
   if (role.missingItems.length === 0) return null;
+  const isHypothesis = role.status === 'hypothesis';
   return (
     <div className="career-role-section">
-      <h4 className="career-section-subhead">Чего не хватает для этой роли</h4>
+      <h4 className="career-section-subhead">
+        {isHypothesis ? 'Пока неизвестно' : 'Чего не хватает для этой роли'}
+      </h4>
       <ul className="career-check-list">
-        {role.missingItems.map((missing, index) => (
-          <li key={index} className="career-check-item">
-            {missing.isWarning ? (
-              <Warning size={16} color="var(--career-text-warning, #d97706)" />
+        {role.missingItems.map((missing) => (
+          <li key={missing.text} className="career-check-item career-check-row">
+            {isHypothesis ? (
+              <Question size={16} aria-hidden />
+            ) : missing.isWarning ? (
+              <Warning size={16} className="career-icon-warning" aria-hidden />
             ) : (
-              <Lightbulb size={16} />
+              <Circle size={16} aria-hidden />
             )}
-            <span>{missing.text}</span>
+            <span>{missing.text}: в профиле не указано</span>
             {missing.linkSection ? (
               <button
                 type="button"
                 className="career-link-btn"
-                onClick={() => onNavigateSection?.(missing.linkSection!)}
+                onClick={() => onNavigateSection(missing.linkSection!)}
               >
                 {missing.linkSection}
               </button>
@@ -112,7 +154,6 @@ export function RoleMissingSection({
           </li>
         ))}
       </ul>
-      <p className="career-source-stamp">Сверка с требованиями {role.sampleNote}.</p>
     </div>
   );
 }
@@ -122,103 +163,143 @@ function RoleRejectAction({
   onRejectRole,
 }: {
   role: CareerRoleModel;
-  onRejectRole: (roleId: string) => void;
+  onRejectRole: RoleHandlers['onRejectRole'];
 }): ReactElement {
-  const [confirmReject, setConfirmReject] = useState(false);
-
-  if (confirmReject) {
+  const [confirming, setConfirming] = useState(false);
+  if (confirming) {
     return (
-      <div className="career-role-reject-confirm">
+      <span className="career-role-reject-confirm">
         <button
           type="button"
           className="career-btn career-btn-secondary"
           onClick={() => {
-            onRejectRole(role.id);
-            setConfirmReject(false);
+            setConfirming(false);
+            void onRejectRole(role.id);
           }}
         >
-          Подтвердить снятие
+          Да, отклонить
         </button>
         <button
           type="button"
-          className="career-btn career-btn-ghost"
-          onClick={() => setConfirmReject(false)}
+          className="career-btn career-btn-text"
+          onClick={() => setConfirming(false)}
         >
           Отмена
         </button>
-      </div>
+      </span>
     );
   }
-
   return (
     <button
       type="button"
-      className="career-btn career-btn-ghost"
-      onClick={() => setConfirmReject(true)}
+      className="career-btn career-btn-text"
+      onClick={() => setConfirming(true)}
     >
-      <X size={16} />
-      {role.status === 'open_for_search' ? 'Снять роль' : 'Отклонить роль'}
+      <X size={16} aria-hidden />
+      Отклонить роль
     </button>
   );
 }
 
-export function RoleActionsRow({
-  role,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
+function RoleButton({
+  primary,
+  icon,
+  label,
+  onClick,
 }: {
-  role: CareerRoleModel;
-  onConsultant: (roleId: string) => void;
-  onOpenVacancies: (roleTitle: string) => void;
-  onCheckSkills: (roleId: string) => void;
-  onRejectRole: (roleId: string) => void;
+  primary: boolean;
+  icon: ReactElement;
+  label: string;
+  onClick: () => void;
 }): ReactElement {
   return (
+    <button
+      type="button"
+      className={`career-btn ${primary ? 'career-btn-primary' : 'career-btn-secondary'}`}
+      onClick={onClick}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+/** Кнопки по статусу роли — состав из макета 3; акцент один. */
+export function RoleActionsRow({
+  role,
+  handlers,
+}: {
+  role: CareerRoleModel;
+  handlers: RoleHandlers;
+}): ReactElement {
+  const consultant = (primary: boolean) => (
+    <RoleButton
+      primary={primary}
+      icon={<ChatCircleText size={18} aria-hidden />}
+      label={
+        role.status === 'hypothesis' ? 'Обсудить с консультантом' : 'Дозаполнить с консультантом'
+      }
+      onClick={() => handlers.onConsultant(role)}
+    />
+  );
+  const vacancies = (primary: boolean) => (
+    <RoleButton
+      primary={primary}
+      icon={<Briefcase size={18} aria-hidden />}
+      label="Открыть вакансии роли"
+      onClick={() => handlers.onOpenVacancies(role)}
+    />
+  );
+  const checkSkills = (
+    <RoleButton
+      primary
+      icon={<ListChecks size={18} aria-hidden />}
+      label="Проверить навыки"
+      onClick={() => handlers.onCheckSkills(role)}
+    />
+  );
+  return (
     <div className="career-role-actions">
-      {role.nextAction.action === 'fill_with_consultant' ? (
-        <button
-          type="button"
-          className="career-btn career-btn-primary"
-          onClick={() => onConsultant(role.id)}
-        >
-          <ChatCircleText size={18} />
-          Дозаполнить с консультантом
-        </button>
-      ) : null}
-      {role.nextAction.action === 'check_skills' ? (
-        <button
-          type="button"
-          className="career-btn career-btn-primary"
-          onClick={() => onCheckSkills(role.id)}
-        >
-          <ListChecks size={18} />
-          Проверить навыки
-        </button>
-      ) : null}
-      <button
-        type="button"
-        className="career-btn career-btn-secondary"
-        onClick={() => onOpenVacancies(role.title)}
-      >
-        <Briefcase size={18} />
-        Открыть вакансии роли
-      </button>
-      <RoleRejectAction role={role} onRejectRole={onRejectRole} />
+      {role.status === 'hypothesis' ? [checkSkills, consultant(false)] : null}
+      {role.status === 'skills_checked' ? [consultant(true), vacancies(false)] : null}
+      {role.status === 'open_for_search' ? vacancies(true) : null}
+      <RoleRejectAction role={role} onRejectRole={handlers.onRejectRole} />
     </div>
   );
 }
 
-function RoleBenefitSection({ benefit }: { benefit?: string }): ReactElement | null {
-  if (!benefit) return null;
+export function CareerRoleBody({
+  role,
+  handlers,
+}: {
+  role: CareerRoleModel;
+  handlers: RoleHandlers;
+}): ReactElement {
   return (
-    <div className="career-role-section">
-      <h4 className="career-section-subhead">Что даст проверка навыков</h4>
-      <p className="career-check-item">
-        <ListChecks size={16} />
-        <span>{benefit}</span>
-      </p>
+    <div className="career-role-body">
+      <RoleStageStepper status={role.status} />
+      {role.status === 'hypothesis' && role.hypothesisReason ? (
+        <p className="career-note">
+          <Lightbulb size={16} aria-hidden />
+          <span>
+            Гипотеза консультанта: {role.hypothesisReason}. Это вывод из профиля, пока не
+            проверенный.
+          </span>
+        </p>
+      ) : null}
+      <RoleConfirmedSection items={role.confirmedItems} />
+      <RoleMissingSection role={role} onNavigateSection={handlers.onNavigateSection} />
+      {role.skillCheckBenefit ? (
+        <div className="career-role-section">
+          <h4 className="career-section-subhead">Что даст проверка навыков</h4>
+          <p className="career-check-item">
+            <ListChecks size={16} aria-hidden />
+            <span>{role.skillCheckBenefit}</span>
+          </p>
+        </div>
+      ) : null}
+      <p className="career-source-stamp">{role.requirementsNote}</p>
+      <RoleActionsRow role={role} handlers={handlers} />
     </div>
   );
 }
@@ -226,48 +307,25 @@ function RoleBenefitSection({ benefit }: { benefit?: string }): ReactElement | n
 export function CareerRoleCard({
   role,
   isOpenDefault,
-  onConsultant,
-  onOpenVacancies,
-  onCheckSkills,
-  onRejectRole,
-  onNavigateSection,
+  handlers,
 }: {
   role: CareerRoleModel;
   isOpenDefault?: boolean;
-  onConsultant: (roleId: string) => void;
-  onOpenVacancies: (roleTitle: string) => void;
-  onCheckSkills: (roleId: string) => void;
-  onRejectRole: (roleId: string) => void;
-  onNavigateSection?: (section: string) => void;
+  handlers: RoleHandlers;
 }): ReactElement {
   return (
-    <details className="career-role-item" open={isOpenDefault}>
+    <details className="career-role-item" open={isOpenDefault} data-role-id={role.id}>
       <summary className="career-role-summary">
-        <div className="career-role-summary-left">
-          <div className="career-role-title-row">
+        <span className="career-role-summary-left">
+          <span className="career-role-title-row">
             <h3 className="career-role-title">{role.title}</h3>
             <RoleStatusBadge status={role.status} />
-          </div>
-          <p className="career-role-meta">
-            {role.wageDisplay} · {role.vacancyCount} вакансий · {role.observedDate}
-          </p>
-        </div>
-        <CaretDown size={20} className="career-role-caret" />
+          </span>
+          <span className="career-role-meta">{roleMetaLine(role)}</span>
+        </span>
+        <CaretDown size={20} className="career-role-caret" aria-hidden />
       </summary>
-      <div className="career-role-body">
-        <RoleStageStepper status={role.status} />
-        {role.hypothesisReason ? <p className="career-note">{role.hypothesisReason}</p> : null}
-        <RoleConfirmedSection items={role.confirmedItems} />
-        <RoleMissingSection role={role} onNavigateSection={onNavigateSection} />
-        <RoleBenefitSection benefit={role.skillCheckBenefit} />
-        <RoleActionsRow
-          role={role}
-          onConsultant={onConsultant}
-          onOpenVacancies={onOpenVacancies}
-          onCheckSkills={onCheckSkills}
-          onRejectRole={onRejectRole}
-        />
-      </div>
+      <CareerRoleBody role={role} handlers={handlers} />
     </details>
   );
 }

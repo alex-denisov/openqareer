@@ -118,9 +118,33 @@ const handleRoleHypotheses: Handler = async (deps, request, reply) => {
       // сдвигается молча, и без этого разница между 12 и 66 секундами на проде
       // не читается ниоткуда (B180).
       roleNaming: { stage: context.namedBy, language: context.language },
+      roleDecisions: readRoleDecisions(deps, candidate.id),
     },
   };
 };
+
+const ROLE_REJECTED_PREFIX = 'career-role:';
+const ROLE_OFFER_DISMISSED_PREFIX = 'career-role-offer:';
+
+/**
+ * Решения кандидата по ролям «Карьеры» (B445): «Отклонить роль» и «Не сейчас»
+ * на предложении консультанта пишутся тем же хранилищем отклонённых
+ * предложений, что и карточки блока A, — второй механики нет.
+ */
+function readRoleDecisions(
+  deps: Parameters<Handler>[0],
+  candidateId: string,
+): { rejected: string[]; offersDismissed: string[] } {
+  const keys = deps.candidateStore
+    .getConsultantRejections(candidateId)
+    .map((rejection) => rejection.proposalKey);
+  const withPrefix = (prefix: string) =>
+    keys.filter((key) => key.startsWith(prefix)).map((key) => key.slice(prefix.length));
+  return {
+    rejected: withPrefix(ROLE_REJECTED_PREFIX),
+    offersDismissed: withPrefix(ROLE_OFFER_DISMISSED_PREFIX),
+  };
+}
 
 /**
  * Ручной отклик (B165, срез 1, узлы 5, 6, 8, 9).

@@ -37,7 +37,7 @@ function runBatchRender(dir: string) {
     { file: 'mobile-390.html', props: { ...baseProps, isMobile: true, initialPushView: 'home' } },
     {
       file: 'mobile-390-dir.html',
-      props: { ...baseProps, isMobile: true, initialPushView: 'dir' },
+      props: { ...baseProps, isMobile: true, initialPushView: 'role:role-director-engineering' },
     },
     {
       file: 'mobile-390-sal.html',

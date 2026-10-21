@@ -34,6 +34,18 @@ export interface RoleObservation {
   readonly firstObservedAt: string;
   readonly skills: readonly string[];
   readonly sources: ReadonlyArray<{ readonly sourceType: string }>;
+  readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
+}
+
+/**
+ * Вилка роли по вакансиям с рублёвой зарплатой (B445): нижний квартиль нижних
+ * границ и верхний квартиль верхних. `sampleSize` — сколько вакансий с
+ * зарплатой легло в расчёт; порог показа решает экран, а не сервер.
+ */
+export interface RoleWageSample {
+  readonly sampleSize: number;
+  readonly min?: number;
+  readonly max?: number;
 }
 
 export interface PoolRoleHypothesis {
@@ -48,6 +60,9 @@ export interface PoolRoleHypothesis {
   readonly repeatedRequirements: readonly string[];
   /** Сколько требований группы уже подтверждено навыками кандидата. */
   readonly matchedRequirements: number;
+  readonly wage?: RoleWageSample;
+  /** Какие именно требования совпали с навыками кандидата (B445). */
+  readonly matchedRequirementNames?: readonly string[];
 }
 
 /** Слова уровня и формата не меняют роль: они меняют грейд и условия. */
@@ -121,6 +136,7 @@ export function describeGroup(
 ): PoolRoleHypothesis {
   const observed = group.items.map((item) => item.firstObservedAt).sort();
   const requirements = repeatedRequirements(group.items);
+  const matchedNames = requirements.filter((requirement) => skills.has(requirement.toLowerCase()));
   const titleOverlap = [...normalizeWords(canonicalTitle(group))].filter((word) =>
     roleWords.has(word),
   ).length;
@@ -132,10 +148,10 @@ export function describeGroup(
     observedFrom: observed[0] ?? '',
     observedTo: observed.at(-1) ?? '',
     sources: countSources(group.items),
+    wage: wageSample(group.items),
     repeatedRequirements: requirements,
-    matchedRequirements:
-      requirements.filter((requirement) => skills.has(requirement.toLowerCase())).length +
-      titleOverlap,
+    matchedRequirements: matchedNames.length + titleOverlap,
+    matchedRequirementNames: matchedNames,
   };
 }
 
@@ -173,4 +189,25 @@ function countSources(
   return [...counts.entries()]
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .map(([source, count]) => ({ source, count }));
+}
+
+const RUBLE_CODES = new Set(['RUR', 'RUB']);
+
+function wageSample(items: readonly RoleObservation[]): RoleWageSample {
+  const paid = items.flatMap((item) => {
+    const salary = item.salary;
+    if (!salary || !RUBLE_CODES.has((salary.currency ?? 'RUR').toUpperCase())) return [];
+    const low = salary.from ?? salary.to;
+    const high = salary.to ?? salary.from;
+    return low && high ? [{ low, high }] : [];
+  });
+  if (paid.length === 0) return { sampleSize: 0 };
+  const lows = paid.map((entry) => entry.low).sort((a, b) => a - b);
+  const highs = paid.map((entry) => entry.high).sort((a, b) => a - b);
+  const last = paid.length - 1;
+  return {
+    sampleSize: paid.length,
+    min: lows[Math.floor(last * 0.25)],
+    max: highs[Math.ceil(last * 0.75)],
+  };
 }

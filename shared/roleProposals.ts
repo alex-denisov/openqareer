@@ -194,6 +194,10 @@ function withoutIdentity(
     observedTo: hypothesis.observedTo,
     sources: hypothesis.sources,
     repeatedRequirements: hypothesis.repeatedRequirements,
+    ...(hypothesis.wage ? { wage: hypothesis.wage } : {}),
+    ...(hypothesis.matchedRequirementNames
+      ? { matchedRequirementNames: hypothesis.matchedRequirementNames }
+      : {}),
     matchedRequirements: hypothesis.matchedRequirements,
   };
 }

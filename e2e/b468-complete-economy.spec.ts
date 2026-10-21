@@ -20,9 +20,13 @@ async function openEconomy(page: Page, mobile: boolean) {
       .getByRole('navigation', { name: 'Разделы кабинета' })
       .getByRole('button', { name: 'Карьера' })
       .click();
+  // B445: на 1440 — строка-раскрытие и кнопка внутри, на 390 — строка-переход.
+  const openButton = page.getByRole('button', { name: 'Открыть «Страны и релокация»' });
   await page
-    .getByRole('button', { name: /^(Включить релокацию|Открыть страны и релокацию)$/u })
+    .locator('summary.career-relocation-head, button.career-m-row:has-text("Страны и релокация")')
+    .first()
     .click();
+  if (await openButton.isVisible()) await openButton.click();
   await page.getByRole('tab', { name: 'Экономика' }).click();
   await page.getByRole('combobox', { name: 'Страна', exact: true }).selectOption('AE');
   await page.getByLabel('Годовая зарплата до налогов').fill('120000');

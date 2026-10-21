@@ -1,254 +1,110 @@
-import { execFileSync } from 'node:child_process';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { CAREER_FIXTURE_PROPOSED_ROLES } from '../src/features/career-map/careerMockData';
 
-const EVIDENCE_DIR = path.resolve(process.cwd(), 'test-results/evidence/AUD-3');
-const CLI_PATH = path.resolve(process.cwd(), 'src/features/career-map/renderCareerCli.ts');
-const BATCH_HTML_DIR = path.join(os.tmpdir(), 'oq-b445-html');
-
-function readHtml(filename: string): string {
-  return fs.readFileSync(path.join(BATCH_HTML_DIR, filename), 'utf8');
+async function openCareer(page: Page): Promise<void> {
+  await mockSignedInCabinet(page, {
+    careerRoles: { roles: CAREER_FIXTURE_PROPOSED_ROLES, acceptedTitle: 'Head of Engineering' },
+  });
+  await page.addInitScript(() => {
+    window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
+  });
+  await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
+  await expect(page.getByTestId('career-screen')).toBeVisible({ timeout: 15_000 });
 }
 
-test.describe('B445: Career Screen Mockup 3 (1440 and 390)', () => {
-  test.beforeAll(() => {
-    fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
-    fs.mkdirSync(BATCH_HTML_DIR, { recursive: true });
-    execFileSync('npx', ['tsx', CLI_PATH, '--batch-dir', BATCH_HTML_DIR], {
-      encoding: 'utf8',
-      stdio: 'inherit',
-    });
-  });
+function role(page: Page, title: string) {
+  return page.locator('details.career-role-item').filter({ hasText: title });
+}
 
-  test('desktop 1440 renders roles, wage rules, search conditions, and captures evidence', async ({
+test.describe('B445: «Карьера» по макету 3', () => {
+  test('1440: роль с проверенными навыками и гипотеза — блоки и кнопки по статусу', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await openCareer(page);
 
-    const html = readHtml('desktop-1440.html');
-    await page.setContent(html, { waitUntil: 'load' });
-
-    // 1. No horizontal overflow
-    const hasOverflow = await page.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth,
-    );
-    expect(hasOverflow).toBe(false);
-
-    // 2. Roles list & wage fork rules (Criterion 1 & 4)
-    await expect(page.getByRole('heading', { level: 1, name: 'Карьера' })).toBeVisible();
-    await expect(page.locator('text=Director of Engineering').first()).toBeVisible();
-    await expect(page.locator('text=600–780 тыс. ₽ · 88 вакансий · 05.10')).toBeVisible();
-
-    // VP Engineering with 4 vacancies suppresses wage
-    await expect(page.locator('text=VP Engineering')).toBeVisible();
-    await expect(page.locator('text=вилка не считается · 4 вакансий · 05.10')).toBeVisible();
-
-    // 3. Search conditions block
-    await expect(page.getByRole('heading', { level: 2, name: 'Условия поиска' })).toBeVisible();
-    await expect(page.locator('text=Москва, Удалённо из РФ')).toBeVisible();
-    await expect(page.locator('text=450 000 ₽')).toBeVisible();
-    await expect(page.locator('text=Гибрид, удалённо')).toBeVisible();
-    await expect(page.locator('text=2 компании')).toBeVisible();
-    await expect(page.locator('text=148 вакансий из 214 по ролям')).toBeVisible();
-
-    // 4. Relocation block
-    await expect(page.locator('text=Страны и релокация')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Включить релокацию' })).toBeVisible();
-
-    // 5. Source stamp
     await expect(
-      page.locator('text=Источник: каталог openqareer, hh.ru и LinkedIn · 312 вакансий · 05.10'),
+      page.getByRole('heading', { level: 2, name: 'Условия и география' }),
+    ).toBeVisible();
+    await expect(page.getByText('600–780 тыс. ₽ · 88 вакансий · 05.10')).toBeVisible();
+    await expect(
+      page.getByText('вилка по 94 вакансиям с зарплатой, 05.10', { exact: false }),
     ).toBeVisible();
 
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-desktop-1440.png'),
-      fullPage: true,
-    });
-  });
-
-  test('mobile 390 renders home and push views without overflow, and captures evidence', async ({
-    page,
-  }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-390', 'Mobile 390 only');
-    await page.setViewportSize({ width: 390, height: 844 });
-
-    // Home view
-    const homeHtml = readHtml('mobile-390.html');
-    await page.setContent(homeHtml, { waitUntil: 'load' });
-
-    const overflowMobile = await page.evaluate(
-      () => document.documentElement.scrollWidth > window.innerWidth,
-    );
-    expect(overflowMobile).toBe(false);
-
-    await expect(page.locator('text=Director of Engineering').first()).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-mobile-390.png'),
-      fullPage: true,
-    });
-
-    // Push view: Role detail (dir)
-    const dirHtml = readHtml('mobile-390-dir.html');
-    await page.setContent(dirHtml, { waitUntil: 'load' });
-    await expect(page.locator('h3:has-text("Director of Engineering")')).toBeVisible();
-    await expect(page.locator('text=Навыки проверены')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Дозаполнить с консультантом' })).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-mobile-390-dir.png'),
-      fullPage: true,
-    });
-
-    // Push view: Salary edit (sal)
-    const salHtml = readHtml('mobile-390-sal.html');
-    await page.setContent(salHtml, { waitUntil: 'load' });
-    await expect(page.getByRole('heading', { name: 'Зарплата от' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Сохранить' })).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-mobile-390-sal.png'),
-      fullPage: true,
-    });
-  });
-
-  test('captures evidence for all special states (empty, error, stale, loading)', async ({
-    page,
-  }, testInfo) => {
-    test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
-    await page.setViewportSize({ width: 1440, height: 900 });
-
-    // Empty profile
-    await page.setContent(readHtml('desktop-1440-empty.html'), { waitUntil: 'load' });
-    await expect(page.locator('text=Гипотез нет: профиль пуст')).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-desktop-1440-empty.png'),
-      fullPage: true,
-    });
-
-    // Market error
-    await page.setContent(readHtml('desktop-1440-error.html'), { waitUntil: 'load' });
-    await expect(page.locator('text=Позиция на рынке не загрузилась')).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-desktop-1440-error.png'),
-      fullPage: true,
-    });
-
-    // Stale market
-    await page.setContent(readHtml('desktop-1440-stale.html'), { waitUntil: 'load' });
-    await expect(page.locator('text=прошло больше 14 дней')).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-desktop-1440-stale.png'),
-      fullPage: true,
-    });
-
-    // Loading skeleton
-    await page.setContent(readHtml('desktop-1440-loading.html'), { waitUntil: 'load' });
+    const director = role(page, 'Director of Engineering');
     await expect(
-      page.locator('text=Позиция, гипотезы и условия грузятся независимо.'),
+      director.getByRole('heading', { name: 'Чего не хватает для этой роли' }),
     ).toBeVisible();
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-desktop-1440-loading.png'),
-      fullPage: true,
-    });
+    await expect(
+      director.getByRole('button', { name: 'Дозаполнить с консультантом' }),
+    ).toBeVisible();
+    await expect(director.getByRole('button', { name: 'Открыть вакансии роли' })).toBeVisible();
+
+    const cto = role(page, 'CTO в финтехе');
+    await cto.locator('summary').click();
+    await expect(cto.getByRole('heading', { name: 'Пока неизвестно' })).toBeVisible();
+    await expect(cto.getByRole('heading', { name: 'Что даст проверка навыков' })).toBeVisible();
+    await expect(cto.getByRole('button', { name: 'Проверить навыки' })).toBeVisible();
+    await expect(cto.getByRole('button', { name: 'Обсудить с консультантом' })).toBeVisible();
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    );
+    expect(overflow).toBe(false);
   });
 
-  test('live app desktop 1440: renders candidate roles and updates conditions via decision-profile', async ({
+  test('1440: «Отклонить роль» сохраняется и переживает перезагрузку', async ({
     page,
   }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
-    await page.setViewportSize({ width: 1440, height: 900 });
+    await openCareer(page);
+    const cto = role(page, 'CTO в финтехе');
+    await cto.locator('summary').click();
+    await cto.getByRole('button', { name: 'Отклонить роль' }).click();
+    await cto.getByRole('button', { name: 'Да, отклонить' }).click();
+    await expect(role(page, 'CTO в финтехе')).toHaveCount(0);
 
-    const puts: string[] = [];
-    page.on('request', (request) => {
-      if (
-        request.url().includes('/api/v1/candidate/decision-profile') &&
-        request.method() === 'PUT'
-      ) {
-        puts.push(request.postData() ?? '');
-      }
-    });
-
-    await mockSignedInCabinet(page);
-    await page.addInitScript(() => {
-      window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
-    });
-
-    await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
-
-    // Verify Career Screen renders with candidate roles and honest wage rules
-    await expect(
-      page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
-    await expect(page.getByText('вилка не считается').first()).toBeVisible();
-
-    // Verify search conditions block
-    await expect(page.getByRole('heading', { level: 2, name: 'Условия поиска' })).toBeVisible();
-
-    // Edit salary condition inline
-    const salaryChip = page.getByRole('button', { name: /Зарплата от:/ });
-    await expect(salaryChip).toBeVisible();
-    await salaryChip.click();
-
-    const input = page.locator('#salary-input');
-    await expect(input).toBeVisible();
-    await input.fill('500000');
-
-    await page.getByRole('button', { name: 'Сохранить' }).click();
-
-    // Verify updated salary is rendered in chip
-    await expect(page.getByText('500 000 ₽')).toBeVisible();
-
-    // Verify PUT request was sent to update decision profile
-    expect(puts.length).toBeGreaterThanOrEqual(1);
-    expect(puts[puts.length - 1]).toContain('500000');
-
-    // Reject role
-    const rejectBtn = page.getByRole('button', { name: /Снять роль|Отклонить роль/ }).first();
-    await expect(rejectBtn).toBeVisible();
-    await rejectBtn.click();
-
-    const confirmBtn = page.getByRole('button', { name: 'Подтвердить снятие' });
-    await expect(confirmBtn).toBeVisible();
-    await confirmBtn.click();
-
-    // Role is removed from active list
-    await expect(page.getByText('Head of Product, Payments')).toHaveCount(0);
-
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-live-desktop-1440.png'),
-      fullPage: true,
-    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('career-screen')).toBeVisible({ timeout: 15_000 });
+    await expect(role(page, 'Director of Engineering')).toBeVisible();
+    await expect(role(page, 'CTO в финтехе')).toHaveCount(0);
   });
 
-  test('live app mobile 390: opens career view and renders without overflow', async ({
+  test('1440: предложение консультанта «Принять» открывает роль для поиска', async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== 'mobile-390', 'Mobile 390 only');
-    await page.setViewportSize({ width: 390, height: 844 });
-
-    await mockSignedInCabinet(page);
-    await page.addInitScript(() => {
-      window.localStorage.setItem('openqareer_session_token', 'synthetic-b445-session');
-    });
-
-    await page.goto('/app?view=career', { waitUntil: 'domcontentloaded' });
-
+    test.skip(testInfo.project.name !== 'desktop-1440', 'Desktop 1440 only');
+    await openCareer(page);
+    await role(page, 'Director of Engineering')
+      .getByRole('button', { name: 'Дозаполнить с консультантом' })
+      .click();
+    const offer = page.getByTestId('career-role-offer');
+    await expect(offer).toContainText('Принять роль Director of Engineering');
+    await expect(offer).toContainText('88 вакансий');
+    await offer.getByRole('button', { name: 'Принять' }).click();
+    // «Стратегия» хранит одну выбранную роль: предложение переходит к следующей.
+    await expect(offer).not.toContainText('Director of Engineering');
     await expect(
-      page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
-    ).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Head of Product, Payments').first()).toBeVisible();
+      role(page, 'Director of Engineering').locator('summary').getByText('Открыта для поиска'),
+    ).toBeVisible();
+  });
 
-    const hasOverflow = await page.evaluate(
+  test('390: список ролей со строкой-действием → push-экран роли', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-390', 'Mobile 390 only');
+    await openCareer(page);
+    await expect(page.getByRole('heading', { name: 'Мои роли на рынке · 4' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Условия поиска' })).toBeVisible();
+    await page.getByRole('button', { name: /CTO в финтехе/ }).click();
+    const push = page.locator('[data-mv="role:role-cto-финтехе"]');
+    await expect(push.getByRole('heading', { name: 'Пока неизвестно' })).toBeVisible();
+    await expect(push.getByRole('button', { name: 'Проверить навыки' })).toBeVisible();
+    await push.getByRole('button', { name: 'Назад' }).click();
+    await expect(page.getByRole('heading', { name: 'Условия поиска' })).toBeVisible();
+
+    const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,
     );
-    expect(hasOverflow).toBe(false);
-
-    await page.screenshot({
-      path: path.join(EVIDENCE_DIR, 'career-live-mobile-390.png'),
-      fullPage: true,
-    });
+    expect(overflow).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import {
   type MockSignedInCabinetOptions as MockRoleSkillAssessmentOptions,
 } from './mockRoleSkillAssessment';
 import { mockInterviewSimulatorRoutes } from './mockInterviewSimulator';
+import { mockCareerRoles, type MockCareerRolesOptions } from './mockCareerRoles';
 import { createMockStarStoriesFixture } from './mockStarStories';
 import { mockCandidateCompanies, type MockCandidateCompanyOptions } from './mockCandidateCompanies';
 import {
@@ -395,6 +396,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly freezeNow?: boolean;
   readonly candidateId?: string;
   readonly careerDiary?: MockCareerDiaryFixture;
+  /** B445: роли «Карьеры» с решениями кандидата и принятой ролью. */
+  readonly careerRoles?: MockCareerRolesOptions;
   readonly vacancyTotal?: number;
   readonly vacancyFacets?: MatchedVacancyFacets;
   /** B552: fit analysis of the first matched vacancy, also served by its /fit route. */
@@ -2573,6 +2576,7 @@ export async function mockSignedInCabinet(
     companyCount: options.companyCount,
   });
   await mockInterviewSimulatorRoutes(page);
+  if (options.careerRoles) await mockCareerRoles(page, options.careerRoles);
   return unmatched;
 }
 

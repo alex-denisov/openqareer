@@ -25,9 +25,13 @@ async function openCareer(page: Page, projectName: string): Promise<void> {
 }
 
 async function openRelocationWorkspace(page: Page): Promise<void> {
+  // B445: на 1440 — строка-раскрытие и кнопка внутри, на 390 — строка-переход.
+  const openButton = page.getByRole('button', { name: 'Открыть «Страны и релокация»' });
   await page
-    .getByRole('button', { name: /^(Включить релокацию|Открыть страны и релокацию)$/u })
+    .locator('summary.career-relocation-head, button.career-m-row:has-text("Страны и релокация")')
+    .first()
     .click();
+  if (await openButton.isVisible()) await openButton.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Страны и релокация' })).toBeVisible();
 }
 
@@ -43,11 +47,10 @@ test('opens the relocation screen from the Career page at 1440 and 390', async (
   await mockSignedInCabinet(page);
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openCareer(page, info.project.name);
-  const entry = page.getByRole('button', { name: 'Включить релокацию' });
-  await expect(entry).toBeVisible();
+  await expect(page.getByText('Страны и релокация').first()).toBeVisible();
   await capture(page, info, 'career-relocation-entry');
 
-  await entry.click();
+  await openRelocationWorkspace(page);
   await expect(page.getByRole('heading', { level: 1, name: 'Страны и релокация' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Что появится после включения' })).toBeVisible();
   await expect(
@@ -59,10 +62,7 @@ test('opens the relocation screen from the Career page at 1440 and 390', async (
   await expect(
     page.getByTestId('career-screen').getByRole('heading', { level: 1, name: 'Карьера' }),
   ).toBeVisible();
-  const reopen = page.getByRole('button', { name: 'Открыть страны и релокацию' });
-  await expect(reopen).toBeVisible();
-  await reopen.click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Страны и релокация' })).toBeVisible();
+  await openRelocationWorkspace(page);
 });
 
 test('compares countries, calculates income, and persists profile changes', async ({

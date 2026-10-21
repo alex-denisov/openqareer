@@ -1,6 +1,7 @@
 import { AdaptationAdviceContext } from '../diary/AdaptationAdviceContext';
 import { AdaptationTaskProposal } from '../diary/AdaptationTaskProposal';
 import { ProfileFactsProposal } from '../resume/ProfileFactsProposal';
+import { CareerRoleOffer } from '../career-map/CareerRoleOffer';
 import { TodayDecisionProposal } from '../today/TodayDecisionProposal';
 import { VacancyQuizProposal, type SkillCheckFocus } from '../vacancies/VacancyQuizProposal';
 import { CompaniesContactProposal } from '../vacancies/CompaniesAndPeopleProposal';
@@ -659,6 +660,7 @@ export function CareerExpertPanel({
             <VacancyQuizProposal onStart={onStartSkillCheck} />
           ) : null}
           {stage === 'vacancies' && user && !loadingSnapshot ? <CompaniesContactProposal /> : null}
+          {stage === 'career' && user && !loadingSnapshot ? <CareerRoleOffer /> : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />
           ) : null}

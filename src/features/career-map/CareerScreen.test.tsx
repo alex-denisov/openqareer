@@ -2,135 +2,105 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import { CareerScreen } from './CareerScreen';
 import { DEFAULT_MOCK_ROLES, DEFAULT_SEARCH_CONDITIONS } from './careerMockData';
+import { EMPTY_SEARCH_CONDITIONS } from './careerConditionsStorage';
 
-describe('CareerScreen Component (B445 Criterion 1, 4)', () => {
-  it('renders roles with honest wage calculation and status badges', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
-    expect(html).toContain('Карьера');
-    expect(html).toContain('Director of Engineering');
+const full = { initialRoles: DEFAULT_MOCK_ROLES, initialConditions: DEFAULT_SEARCH_CONDITIONS };
+
+describe('CareerScreen (B445)', () => {
+  it('строки ролей: статус, вилка, число вакансий и дата из данных', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
     expect(html).toContain('600–780 тыс. ₽ · 88 вакансий · 05.10');
-
-    // VP Engineering has 4 vacancies -> wage not calculated
-    expect(html).toContain('VP Engineering');
-    expect(html).toContain('вилка не считается · 4 вакансий · 05.10');
-
-    // Status badges
+    expect(html).toContain(
+      '420–560 тыс. ₽ · 312 вакансий · вилка по 94 вакансиям с зарплатой, 05.10',
+    );
+    expect(html).toContain('вилка не считается · 4 вакансий');
     expect(html).toContain('Навыки проверены');
     expect(html).toContain('Открыта для поиска');
     expect(html).toContain('Гипотеза');
   });
 
-  it('renders role action buttons to open vacancies and consultant', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
+  it('секции карточками: «Условия и география», «Мои роли на рынке», пояснения и плашка', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
+    expect(html).toContain('Условия и география');
+    expect(html).toContain('Мои роли на рынке');
+    expect(html).toContain('aria-label="Пояснение"');
+    expect(html).toContain('Поиск по ролям открывается после проверки навыков');
+    expect(html).toContain('aria-label="Изменить: География"');
+    expect(html).toContain('Москва, удалённо из РФ');
+    expect(html).toContain('2 компании');
+    expect(html).toContain('Источник: каталог openqareer, hh.ru и LinkedIn · 445 вакансий · 05.10');
+  });
+
+  it('раскрытая роль с проверенными навыками — блоки и кнопки по статусу', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
+    expect(html).toContain('Подтверждено');
+    expect(html).toContain('Чего не хватает для этой роли');
+    expect(html).toContain('Профиль, Навыки');
+    expect(html).toContain('Сверка с требованиями 88 вакансий, 05.10.');
     expect(html).toContain('Дозаполнить с консультантом');
     expect(html).toContain('Открыть вакансии роли');
     expect(html).toContain('Отклонить роль');
   });
 
-  it('renders search conditions with geography, salary, format, stop-list', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
-    expect(html).toContain('Условия поиска');
-    expect(html).toContain('Москва, Удалённо из РФ');
-    expect(html).toContain('450 000 ₽');
-    expect(html).toContain('Гибрид, удалённо');
-    expect(html).toContain('2 компании');
-    expect(html).toContain('148 вакансий из 214 по ролям');
-  });
-
-  it('renders relocation block with unincluded status and enable action', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
+  it('релокация — строка-раскрытие без включения одним нажатием', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} />);
     expect(html).toContain('Страны и релокация');
     expect(html).toContain('Не включено');
-    expect(html).toContain('Включить релокацию');
+    expect(html).not.toContain('Включить релокацию');
   });
 
-  it('renders loading skeleton when isLoading is true', () => {
-    const html = renderToStaticMarkup(<CareerScreen isLoading={true} />);
-    expect(html).toContain('aria-busy="true"');
-    expect(html).toContain('Загрузка экрана карьеры');
-  });
-
-  it('renders empty profile state when hasProfile is false', () => {
+  it('без данных не выводит ни одного числа макета', () => {
     const html = renderToStaticMarkup(
-      <CareerScreen
-        hasProfile={false}
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
-    expect(html).toContain('Гипотез нет: профиль пуст');
-    expect(html).toContain('Открыть профиль');
-    expect(html).toContain('Обсудить цель');
+      <CareerScreen initialRoles={[]} initialConditions={EMPTY_SEARCH_CONDITIONS} />,
+    ).replace(/<svg[\s\S]*?<\/svg>/g, '');
+    for (const fake of [
+      '148',
+      '214',
+      '07.10 09:12',
+      '312 вакансий',
+      '450–650',
+      '450 000',
+      '05.10',
+      'Москва',
+    ]) {
+      expect(html).not.toContain(fake);
+    }
+    expect(html).toContain('не указано');
+    expect(html).toContain('Число вакансий с этими условиями ещё не посчитано.');
   });
 
-  it('renders market error banner when marketError is provided', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        marketError="Catalog failed"
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
+  it('загрузка, пустой профиль, ошибка', () => {
+    expect(renderToStaticMarkup(<CareerScreen isLoading />)).toContain('aria-busy="true"');
+    expect(renderToStaticMarkup(<CareerScreen {...full} hasProfile={false} />)).toContain(
+      'Открыть профиль',
     );
-    expect(html).toContain('Позиция на рынке не загрузилась');
-    expect(html).toContain('Повторить');
+    expect(renderToStaticMarkup(<CareerScreen {...full} marketError="x" />)).toContain('Повторить');
   });
 
-  it('renders stale market note when isMarketStale is true', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        isMarketStale={true}
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
-    expect(html).toContain('прошло больше 14 дней');
+  it('390: сначала роли списком со строкой-действием, затем условия поиска', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} isMobile />);
+    expect(html.indexOf('Мои роли на рынке · 4')).toBeLessThan(html.indexOf('Условия поиска'));
+    for (const action of ['Дозаполнить', 'Открыть вакансии', 'Проверить навыки', 'Мало данных']) {
+      expect(html).toContain(action);
+    }
+    expect(html).toContain('сейчас подборка идёт только по России');
   });
 
-  it('renders mobile 390 push view for role detail', () => {
+  it('390: push-экран гипотезы с проверкой навыков', () => {
     const html = renderToStaticMarkup(
-      <CareerScreen
-        isMobile={true}
-        initialPushView="dir"
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
+      <CareerScreen {...full} isMobile initialPushView="role:role-cto-финтехе" />,
     );
-    expect(html).toContain('data-mv="dir"');
-    expect(html).toContain('Director of Engineering');
+    expect(html).toContain('data-mv="role:role-cto-финтехе"');
+    expect(html).toContain('Пока неизвестно');
+    expect(html).toContain('Что даст проверка навыков');
+    expect(html).toContain('Проверить навыки');
+    expect(html).toContain('Обсудить с консультантом');
     expect(html).toContain('Назад');
   });
 
-  it('renders mobile 390 push view for salary edit', () => {
-    const html = renderToStaticMarkup(
-      <CareerScreen
-        isMobile={true}
-        initialPushView="sal"
-        initialRoles={DEFAULT_MOCK_ROLES}
-        initialConditions={DEFAULT_SEARCH_CONDITIONS}
-      />,
-    );
+  it('390: push-экран зарплаты', () => {
+    const html = renderToStaticMarkup(<CareerScreen {...full} isMobile initialPushView="sal" />);
     expect(html).toContain('data-mv="sal"');
     expect(html).toContain('Зарплата от');
-    expect(html).toContain('Сохранить');
   });
 });
