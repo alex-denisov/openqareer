@@ -55,28 +55,30 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
   await expect(page.locator('.vacancies-screen')).toBeVisible();
-  const card = page.locator('.vacancies-screen-card').filter({
-    has: page.getByRole('heading', { name: base.data[0]!.cluster.canonicalTitle, exact: true }),
-  });
-  if (!(await card.locator('.vacancy-fit-evidence').isVisible()))
-    await card.locator('.vacancies-screen-row-trigger').click();
-  const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
-  await evidence.getByRole('button', { name: 'Рассчитать соответствие', exact: true }).click();
-  await expect(evidence.getByRole('status')).toContainText('Расчёт в очереди');
-  await expect(evidence.locator('.vacancy-fit-percent')).toHaveCount(0);
-  completed = true;
-  await evidence.getByRole('button', { name: 'Обновить результат' }).click();
-  await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
-  // B446-g4: строка списка — «Соответствие 50 %» мелким под «компания · источник».
-  await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-inline')).toHaveText(
-    'Соответствие 50\u00a0%',
-  );
-  await expect(evidence.getByRole('table')).toContainText('Требуется опыт управления продуктом.');
-  await expect(evidence.getByRole('table')).toContainText(
-    'Управляла продуктом в тестовой компании.',
-  );
-  await expect(evidence.getByRole('table')).not.toContainText('fixture-fact-01');
-  expect(methods).toEqual(['POST', 'GET', 'GET']);
+  // B446-g4: на 390 карточка — push-экран без блока соответствия (mock-390m-job); там проверяем
+  // только процент в строке списка и порядок в листе фильтров.
+  if (testInfo.project.name !== 'mobile-390') {
+    const card = page.locator('.vacancies-screen-card').filter({
+      has: page.getByRole('heading', { name: base.data[0]!.cluster.canonicalTitle, exact: true }),
+    });
+    if (!(await card.locator('.vacancy-fit-evidence').isVisible()))
+      await card.locator('.vacancies-screen-row-trigger').click();
+    const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
+    await evidence.getByRole('button', { name: 'Рассчитать соответствие', exact: true }).click();
+    await expect(evidence.getByRole('status')).toContainText('Расчёт в очереди');
+    await expect(evidence.locator('.vacancy-fit-percent')).toHaveCount(0);
+    completed = true;
+    await evidence.getByRole('button', { name: 'Обновить результат' }).click();
+    await expect(evidence.locator('.vacancy-fit-percent')).toHaveText('50%');
+    // B446-g4: строка списка — «Соответствие 50 %» мелким под «компания · источник».
+    await expect(card.locator('.vacancies-screen-row-trigger .vacancy-fit-inline')).toHaveText(
+      'Соответствие 50\u00a0%',
+    );
+    // B446-g4: в карточке 1440 соответствие одной строкой (макет 4), таблицы разбора нет.
+    await expect(evidence).toContainText('1 из 2 требований');
+    await expect(evidence).not.toContainText('fixture-fact-01');
+    expect(methods).toEqual(['POST', 'GET', 'GET']);
+  }
   const directory = join('docs/v1-release/tasks/evidence/B525', testInfo.project.name);
   await mkdir(directory, { recursive: true });
   await page.screenshot({ path: join(directory, 'fit-evidence.png'), fullPage: true });

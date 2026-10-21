@@ -604,13 +604,17 @@ test.describe('B232 readability gate', () => {
     const firstVacancy = page.locator('.vac-list-item').first();
     const rowTrigger = firstVacancy.locator('.vacancies-screen-row-trigger');
     if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
-    await firstVacancy
-      .locator('.vac-detail')
-      .getByRole('button', { name: 'Полное описание' })
+    // B446-g4: макет 4 — вход в письмо из круга 3 «Пути к компании», а не из окна описания.
+    await page
+      .getByRole('button', { name: /^Путь к компании/u })
+      .first()
       .click();
+    const circleThree = page.getByRole('button', { name: /^Круг 3/u });
     const pitchAction = page
-      .locator('.career-modal-card.is-detail')
-      .getByRole('button', { name: 'Сопроводительное письмо', exact: true });
+      .getByRole('button', { name: 'Подготовить письмо', exact: true })
+      .first();
+    await expect(circleThree.or(pitchAction).first()).toBeVisible();
+    if (await circleThree.isVisible()) await circleThree.click();
     await pitchAction.focus();
     await expect(pitchAction).toBeFocused();
     await page.keyboard.press('Enter');
