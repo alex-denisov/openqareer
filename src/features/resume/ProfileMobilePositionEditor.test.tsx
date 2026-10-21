@@ -119,20 +119,4 @@ describe('mobile position form', () => {
     act(() => container.querySelector('form')!.requestSubmit());
     expect(save).not.toHaveBeenCalled();
   });
-
-  it('saves the team size in people with the place (B540)', async () => {
-    const { container, save } = render();
-    const field = input(container, '[name="teamSize"]', '38');
-    expect(field.closest('label')?.textContent).toContain('Размер команды');
-    expect(field.closest('label')?.textContent).toContain('человек');
-    expect(container.textContent).toContain(
-      'Размер команды: все люди в вашей вертикали, включая руководителей команд.',
-    );
-    await act(async () =>
-      container
-        .querySelector('form')!
-        .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-    );
-    expect(save).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ teamSize: 38 }));
-  });
 });

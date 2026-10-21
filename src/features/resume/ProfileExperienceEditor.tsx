@@ -418,28 +418,6 @@ function PositionWorkplaceFields({ form }: { readonly form: PositionFormState })
   );
 }
 
-function PositionTeamSizeField({ form }: { readonly form: PositionFormState }) {
-  return (
-    <label className="career-profile-screen-field profile-position-editor__team-size">
-      <span>Размер команды</span>
-      <span className="profile-position-editor__unit-input">
-        <input
-          type="text"
-          name="teamSize"
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="неизвестно"
-          value={form.teamSize}
-          aria-invalid={form.teamSizeInvalid || undefined}
-          onChange={(event) => form.setTeamSize(event.target.value)}
-        />
-        <span className="profile-position-editor__unit">человек</span>
-      </span>
-      <small className="profile-position-editor__hint">{TEAM_SIZE_HINT}</small>
-    </label>
-  );
-}
-
 function PositionDateAndFormatFields({ form }: { readonly form: PositionFormState }) {
   return (
     <div className="career-profile-screen-field-grid profile-position-editor__field-pair">
@@ -697,7 +675,6 @@ export function PositionEditForm(props: PositionEditorProps) {
       <PositionIdentityFields form={form} />
       <PositionScheduleFields form={form} />
       <PositionWorkplaceFields form={form} />
-      <PositionTeamSizeField form={form} />
       <label className="career-profile-screen-field profile-position-editor__description">
         <span>Описание</span>
         <textarea

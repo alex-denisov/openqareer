@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Plus, X } from '@phosphor-icons/react';
 import {
-  TEAM_SIZE_HINT,
   usePositionFormState,
   usePositionSubmit,
   type PositionEditorProps,
@@ -89,27 +88,6 @@ function MobileIdentityFields({ form }: { readonly form: PositionFormState }) {
         onChange={form.setLocation}
         placeholder="Город"
       />
-    </ProfileMobileGroup>
-  );
-}
-
-// Размер команды — отдельной группой после описания: геометрия полей макета 2 на 390 не сдвигается.
-function MobileTeamSizeFields({ form }: { readonly form: PositionFormState }) {
-  return (
-    <ProfileMobileGroup title="Команда" foot={`Размер команды: ${TEAM_SIZE_HINT.toLowerCase()}`}>
-      <label className="pm-field profile-mobile-team-size">
-        <span>Размер команды</span>
-        <input
-          name="teamSize"
-          inputMode="numeric"
-          autoComplete="off"
-          placeholder="неизвестно"
-          value={form.teamSize}
-          aria-invalid={form.teamSizeInvalid || undefined}
-          onChange={(event) => form.setTeamSize(event.target.value)}
-        />
-        <span className="profile-mobile-team-size__unit">человек</span>
-      </label>
     </ProfileMobileGroup>
   );
 }
@@ -372,7 +350,6 @@ export function ProfileMobilePositionEditor(props: PositionEditorProps) {
           onChange={(event) => form.setDescription(event.target.value)}
         />
       </ProfileMobileGroup>
-      <MobileTeamSizeFields form={form} />
       <MobileAchievements form={form} />
       <MobilePositionSkills form={form} />
       {submit.error ? (

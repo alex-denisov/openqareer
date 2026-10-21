@@ -17,7 +17,7 @@ describe('buildTeamSizeAction (B540, mockup 1)', () => {
     const action = buildTeamSizeAction(decision, 'Europe/Moscow');
     expect(action.headline).toBe('Подтвердите размер команды в «Финтех Лаб»');
     expect(action.label).toBe('Подтвердить факт');
-    expect(action.destination).toBe('profile');
+    expect(action.destination).toBe('coach');
     expect(action.reasons).toEqual([
       {
         text: 'В профиле размер команды «неизвестно». От него зависит оценка уровня.',
@@ -37,7 +37,6 @@ describe('buildTeamSizeAction (B540, mockup 1)', () => {
       experienceId: 'exp-fintech',
       employer: 'Финтех Лаб',
       title: 'Head of Engineering',
-      field: 'teamSize',
     });
     expect(action.findingIds).toEqual(['team-size:exp-fintech']);
   });

@@ -881,11 +881,6 @@
   .career-profile-mobile .profile-mobile-position-editor .pm-field {
     text-transform: none;
   }
-  .career-profile-mobile .pm-field > .profile-mobile-team-size__unit {
-    min-inline-size: 0;
-    color: var(--career-text-soft);
-    font-size: var(--career-text-md);
-  }
   .career-profile-mobile .pm-field input:not(.profile-mobile-switch-input) {
     min-block-size: 0;
     padding: 0;

@@ -39,7 +39,7 @@ export function buildTeamSizeAction(
   return {
     revision: TEAM_SIZE_ACTION_REVISION,
     type: 'review',
-    destination: 'profile',
+    destination: 'coach',
     headline: `Подтвердите размер команды в «${decision.employer}»`,
     label: 'Подтвердить факт',
     rationale: firstReason,
@@ -58,7 +58,6 @@ export function buildTeamSizeAction(
       experienceId: decision.experienceId,
       employer: decision.employer,
       ...(decision.title ? { title: decision.title } : {}),
-      field: 'teamSize',
     },
     findingIds: [`team-size:${decision.experienceId}`],
     roleIds: [],
