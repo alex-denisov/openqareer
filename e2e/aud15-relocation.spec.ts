@@ -153,14 +153,27 @@ test('«Мои данные»: delete a document, edit opens the questionnaire, 
   await page.goto('/app', { waitUntil: 'domcontentloaded' });
   await openRelocation(page, info);
   await page.getByRole('tab', { name: /^(Мои данные|Данные)$/u }).click();
-  await page.getByRole('button', { name: 'Удалить: Вид на жительство' }).click();
-  await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toHaveCount(0);
+  if (isMobile(info)) {
+    // 390: delete lives on the document's own screen, saved with the step.
+    await page.getByRole('button', { name: /ВНЖ, Сербия/u }).click();
+    await expectStep(page, info, 1);
+    await page.getByRole('button', { name: /ВНЖ, Сербия/u }).click();
+    await page.getByRole('button', { name: 'Удалить документ' }).click();
+    await page.getByRole('button', { name: 'Дальше' }).click();
+    await expectStep(page, info, 2);
+  } else {
+    await page.getByRole('button', { name: 'Удалить: Вид на жительство' }).click();
+    await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toHaveCount(0);
+  }
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openRelocation(page, info);
   await page.getByRole('tab', { name: /^(Мои данные|Данные)$/u }).click();
-  await expect(page.getByRole('button', { name: 'Удалить: Гражданство: Россия' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toHaveCount(0);
+  const citizenship = isMobile(info)
+    ? 'Изменить: Гражданство: Россия'
+    : 'Удалить: Гражданство: Россия';
+  await expect(page.getByRole('button', { name: citizenship })).toBeVisible();
+  await expect(page.getByText(/Вид на жительство|ВНЖ, Сербия/u)).toHaveCount(0);
   await capture(page, info, 'relocation-data');
 
   await page.getByRole('button', { name: 'Изменить: Гражданство: Россия' }).click();
@@ -219,5 +232,5 @@ test('390: country push screen, scenario sheet and document screen', async ({ pa
   await page.reload({ waitUntil: 'domcontentloaded' });
   await openRelocation(page, info);
   await page.getByRole('tab', { name: 'Данные' }).click();
-  await expect(page.getByRole('button', { name: 'Удалить: Вид на жительство' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /ВНЖ, Сербия.*до 14\.03\.2027/u })).toBeVisible();
 });

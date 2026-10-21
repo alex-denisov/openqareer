@@ -5,8 +5,8 @@ import { CountryComparisonPanel } from './CountryComparisonPanel';
 import { RelocationAddCountry } from './RelocationAddCountry';
 import { RelocationMobileCountryList } from './RelocationMobileCountryList';
 import { RelocationMobileCountry } from './RelocationMobileCountry';
-import { RelocationEconomy } from './RelocationEconomy';
-import { RelocationProfile } from './RelocationProfile';
+import { RelocationMobileEconomy } from './RelocationMobileEconomy';
+import { RelocationMobileData } from './RelocationMobileData';
 import { RelocationMobileQuestionnaire } from './RelocationMobileQuestionnaire';
 import type { RelocationWorkspaceProps } from './RelocationScreen';
 import type { RelocationTab, RelocationWorkspaceState } from './useRelocationWorkspace';
@@ -78,27 +78,22 @@ function MobileTabContent(
   if (workspace.tab === 'comparison') return <MobileComparison {...props} />;
   if (workspace.tab === 'economy') {
     return (
-      <RelocationEconomy
-        profile={snapshot.profile}
+      <RelocationMobileEconomy
         selectedCountryCodes={workspace.selectedCountryCodes}
         selectedCountryCode={workspace.economyCountryCode}
         grossAnnualIncome={workspace.grossAnnualIncome}
         onCountryCodeChange={workspace.setEconomyCountryCode}
         onGrossAnnualIncomeChange={workspace.setGrossAnnualIncome}
-        onShowComparison={() => workspace.showTab('comparison')}
       />
     );
   }
   return (
-    <RelocationProfile
-      mobile
+    <RelocationMobileData
       profile={snapshot.profile}
       consent={snapshot.consent}
       alerts={snapshot.alerts}
-      onProfileUpdated={props.onProfileUpdated}
-      onConsentRevoked={props.onConsentRevoked}
-      onShowCountries={() => workspace.showTab('countries')}
       onEditStep={workspace.openQuestionnaire}
+      onConsentRevoked={props.onConsentRevoked}
     />
   );
 }

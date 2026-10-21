@@ -431,3 +431,69 @@
     transition: none;
   }
 }
+
+/* B468-r2: «Данные» and «Экономика» at 390 (mockup 15 `vt=d`, `vt=net`). */
+.career-relocation-mobile-consent {
+  display: flex;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding-inline: var(--career-space-4);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-mobile-consent svg {
+  flex: none;
+  margin-block-start: 2px;
+}
+
+.career-relocation-slider-row input {
+  inline-size: 100%;
+  accent-color: var(--career-accent);
+}
+
+.career-relocation-economy-bar {
+  display: flex;
+  gap: 2px;
+  block-size: var(--career-space-2);
+  overflow: hidden;
+  border-radius: 999px;
+}
+
+.career-relocation-economy-bar span,
+.career-relocation-economy-dot {
+  background: var(--career-text-dim);
+}
+
+.career-relocation-economy-dot {
+  display: inline-block;
+  inline-size: var(--career-space-3);
+  block-size: var(--career-space-3);
+  margin-inline-end: var(--career-space-2);
+  border-radius: 3px;
+  vertical-align: -1px;
+}
+
+.career-relocation-economy-bar .is-tax,
+.career-relocation-economy-dot.is-tax {
+  background: var(--career-danger);
+}
+
+.career-relocation-economy-bar .is-contribution,
+.career-relocation-economy-dot.is-contribution {
+  background: var(--career-warning);
+}
+
+.career-relocation-economy-bar .is-net,
+.career-relocation-economy-dot.is-net {
+  background: var(--career-success);
+}
+
+.career-relocation-mobile-section .vacancy-push-cap {
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-mobile-section a.vacancy-push-row {
+  color: var(--career-text);
+  text-decoration: none;
+}
