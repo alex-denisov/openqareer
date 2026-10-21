@@ -460,6 +460,10 @@
   display: none;
 }
 
+.vacancy-screen-money-alt {
+  font-weight: 600;
+}
+
 .vacancy-screen-money-short {
   margin-inline-start: var(--career-space-1);
   color: var(--career-text-dim);

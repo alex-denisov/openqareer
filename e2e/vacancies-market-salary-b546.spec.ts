@@ -10,8 +10,12 @@ async function openVacancies(page: Page): Promise<void> {
   await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
 }
 
-const shownCount = (page: Page) =>
-  page.locator('.vacancy-facet-count').first().innerText().then(Number);
+/** «Показано 20 из 34 с вашими условиями»: the filtered total of the desktop summary. */
+async function shownCount(page: Page): Promise<number> {
+  const copy = await page.locator('.vacancies-summary-copy').innerText();
+  const match = /из\s+([\d\s\u00a0]+)\s+с вашими условиями/u.exec(copy);
+  return Number((match?.[1] ?? '').replace(/\D/gu, ''));
+}
 
 test('B546: rows without salary show the market estimate or «мало данных»', async ({
   page,

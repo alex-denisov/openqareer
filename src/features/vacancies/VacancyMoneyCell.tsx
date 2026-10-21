@@ -7,6 +7,11 @@ import { formatCompensationCompact } from './vacancyCompensation';
 
 type MarketSalary = NonNullable<MatchedVacancyItem['explanation']['marketSalary']>;
 
+/** 390 says «без зарплаты» in place of the wide value (mockup 390 list). */
+function NarrowMissing() {
+  return <span className="vacancy-screen-money-narrow vacancy-screen-money-alt">без зарплаты</span>;
+}
+
 function StatedOrMissing({
   item,
   sourceLine,
@@ -17,16 +22,12 @@ function StatedOrMissing({
   const stated = Boolean(item.cluster.salary);
   return (
     <>
-      <span className="career-numeric vacancy-screen-money-value">
-        {stated ? (
-          formatCompensationCompact(item.cluster.salary)
-        ) : (
-          <>
-            <span className="vacancy-screen-money-wide">не указана</span>
-            <span className="vacancy-screen-money-narrow">без зарплаты</span>
-          </>
-        )}
+      <span
+        className={`career-numeric vacancy-screen-money-value${stated ? '' : ' vacancy-screen-money-wide'}`}
+      >
+        {stated ? formatCompensationCompact(item.cluster.salary) : 'не указана'}
       </span>
+      {stated ? null : <NarrowMissing />}
       <span className="vacancy-screen-money-source">
         {stated ? 'указана в вакансии' : 'зарплата не указана'} · {sourceLine}
       </span>
@@ -37,10 +38,10 @@ function StatedOrMissing({
 function ThinSample({ estimate }: { readonly estimate: MarketSalary }) {
   return (
     <>
-      <span className="career-numeric vacancy-screen-money-value">
-        <span className="vacancy-screen-money-wide">мало данных</span>
-        <span className="vacancy-screen-money-narrow">без зарплаты</span>
+      <span className="career-numeric vacancy-screen-money-value vacancy-screen-money-wide">
+        мало данных
       </span>
+      <NarrowMissing />
       <span className="vacancy-screen-money-source is-estimate">
         нет зарплаты, оценка {marketSalaryBasis(estimate.sampleSize, estimate.computedAt)}
       </span>
