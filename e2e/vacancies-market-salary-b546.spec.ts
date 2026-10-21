@@ -1,3 +1,4 @@
+import { mkdirSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
@@ -21,6 +22,11 @@ test('B546: rows without salary show the market estimate or «мало данн�
 
   const estimate = page.locator('.vacancies-screen-cell--salary', { hasText: '≈ 480–560 тыс. ₽' });
   await expect(estimate.first()).toBeVisible();
+  mkdirSync('output/playwright/B546', { recursive: true });
+  await page.screenshot({
+    path: `output/playwright/B546/vacancies-${mobile ? 390 : 1440}.png`,
+    fullPage: true,
+  });
   if (mobile) {
     await expect(estimate.first().locator('.vacancy-screen-money-short')).toHaveText('оценка');
     await expect(
