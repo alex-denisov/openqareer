@@ -55,6 +55,19 @@ const LEVEL_SUMMARY_LABELS: Readonly<Record<string, string>> = {
   'c-level': 'C-level',
 };
 
+const CURRENCY_MARKS: Readonly<Record<string, string>> = {
+  RUR: '₽',
+  RUB: '₽',
+  USD: '$',
+  EUR: '€',
+  GBP: '£',
+};
+
+/** «от 450 тыс. ₽»: the chip shows the sign, not the hh.ru code. */
+function currencyMark(currency: string): string {
+  return CURRENCY_MARKS[currency.toUpperCase()] ?? currency;
+}
+
 function compactSalary(amount: number): string {
   if (amount >= 1_000) {
     const thousands = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(
@@ -93,7 +106,7 @@ export function summarizeVacancyFilterGroup(
   }
   if (group === 'locations') return summarizeLocations(state);
   if (group === 'salary') {
-    const currency = state.salaryCurrency ? ` ${state.salaryCurrency}` : '';
+    const currency = state.salaryCurrency ? ` ${currencyMark(state.salaryCurrency)}` : '';
     if (state.salaryMinimum !== undefined && state.salaryMaximum !== undefined)
       return `${compactSalary(state.salaryMinimum)}–${compactSalary(state.salaryMaximum)}${currency}`;
     if (state.salaryMinimum !== undefined)

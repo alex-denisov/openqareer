@@ -455,8 +455,12 @@ function screenFilteredCount(
   localCount: number,
   state: Parameters<typeof countActiveFilters>[0],
 ) {
+  // Salary is filtered only here, never by the server (B546): its count is local.
+  const salaryFilter = state.salaryMinimum !== undefined || state.salaryMaximum !== undefined;
   const hasClientFilters =
-    state.selectedCity !== undefined || (!input.onFiltersChange && countActiveFilters(state) > 0);
+    state.selectedCity !== undefined ||
+    salaryFilter ||
+    (!input.onFiltersChange && countActiveFilters(state) > 0);
   if (hasClientFilters && input.poolComplete !== false) return localCount;
   return input.total ?? localCount;
 }

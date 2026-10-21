@@ -22,6 +22,7 @@ import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
+import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
 
 /**
  * Вход процесса обслуживания пула (B230). Без HTTP: тот же движок, что у
@@ -156,6 +157,8 @@ try {
   scheduleLandingStatsJob(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log);
+  // B546: market salary estimates stream every salaried vacancy, so only here.
+  scheduleMarketSalaryEstimateJob(semanticDatabase, log);
   log.info({ sources: composed.engine.getSources().length }, 'maintenance-started');
 } catch (error: unknown) {
   log.error(

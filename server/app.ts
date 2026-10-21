@@ -1,3 +1,4 @@
+import { SqliteMarketSalaryEstimateStore } from './vacancies/marketSalary/sqliteMarketSalaryEstimateStore';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import Fastify, {
@@ -115,6 +116,8 @@ interface BuildAppOptions {
   linkedinPool?: import('./linkedinPool/sqliteLinkedinPoolRepository').SqliteLinkedinPoolRepository;
   linkedinRemoteLogin?: RouteDeps['linkedinRemoteLogin'];
   matchedPoolPrecompute?: RouteDeps['matchedPoolPrecompute'];
+  /** B546: tests inject estimates; runtime reads the table maintenance writes. */
+  marketSalaryEstimates?: RouteDeps['marketSalaryEstimates'];
 
   /**
    * Куда пишет логгер. Прод пишет в stdout, а тест читает то же самое, что
@@ -493,6 +496,18 @@ function createCandidateDraftDeps(
   };
 }
 
+/** B546: the web server only reads estimates the maintenance process wrote. */
+function attachMarketSalaryStore(
+  deps: { marketSalaryEstimates?: RouteDeps['marketSalaryEstimates'] },
+  options: BuildAppOptions,
+): SqliteMarketSalaryEstimateStore | undefined {
+  const owned = options.marketSalaryEstimates
+    ? undefined
+    : new SqliteMarketSalaryEstimateStore({ databasePath: options.config.databasePath });
+  deps.marketSalaryEstimates = options.marketSalaryEstimates ?? owned;
+  return owned;
+}
+
 export async function buildApp(options: BuildAppOptions): Promise<FastifyInstance> {
   const {
     config,
@@ -521,6 +536,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   deps.vacancyMechanics = new VacancyMechanicsRuntime(config.databasePath, config.dataEncryptionKey, currentVacancyFitProfileValidator(candidateStore));
   deps.bulkLlmRuntime =
     options.bulkLlmRuntime ?? createBulkLlmRuntime({ databasePath: config.databasePath });
+  const ownedMarketSalaryEstimates = attachMarketSalaryStore(deps, options);
   const app = await createFastifyBase(config, logDestination);
   const stopBillingScheduler = registerBillingRenewalScheduler(app, config, deps);
   app.addHook('onClose', () => {
@@ -528,6 +544,7 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
     deps.vacancyMechanics?.close();
     if (!options.bulkLlmRuntime) deps.bulkLlmRuntime?.close();
     services.titleParseStore.close();
+    ownedMarketSalaryEstimates?.close();
     deps.capabilityConsentStore?.close();
     if (!options.candidateCompanyWantsRepo) deps.candidateCompanyWantsRepo?.close();
     if (!options.candidateDraftRepository) deps.candidateDraftRepository.close();

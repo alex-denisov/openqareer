@@ -129,9 +129,31 @@ export const matchedVacancies = Array.from({ length: 96 }, (_, index) => {
       missingCount: 1,
       summary: 'Роль совпадает с целевой, покрытие требований выше среднего по подбору.',
       calculatedAt: observedAt,
+      ...marketSalaryFixture(index),
     },
   };
 });
+
+/** B546: rows without salary carry a market estimate or an honest thin sample. */
+function marketSalaryFixture(index: number) {
+  const computedAt = '2026-10-05T03:00:00.000Z';
+  if (index % 3 === 1) {
+    return {
+      marketSalary: {
+        low: 480_000,
+        high: 560_000,
+        currency: 'RUR',
+        sampleSize: 41,
+        basis: 'city',
+        computedAt,
+      },
+    };
+  }
+  if (index % 6 === 2) {
+    return { marketSalary: { currency: 'RUR', sampleSize: 3, basis: 'region', computedAt } };
+  }
+  return {};
+}
 
 /** Подбор едет страницами по 50 (INC-029, B211). */
 export function matchedVacancyPage(offset: number, total = matchedVacancies.length) {

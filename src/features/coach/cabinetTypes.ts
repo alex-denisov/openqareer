@@ -204,6 +204,8 @@ interface VacancyMatchExplanation {
    */
   /** Вакансия вне рынков кампании кандидата (PRB-040): подписана, но не скрыта. */
   outsideGeography?: boolean;
+  /** B546: market estimate for a vacancy without salary, computed by maintenance. */
+  marketSalary?: import('../../../shared/marketSalaryEstimate').MarketSalaryEstimateView;
   matchingCount?: number;
   missingCount?: number;
   /** Решение кандидата «Сохранить»/«Пропустить», уже применённое к странице (B248). */

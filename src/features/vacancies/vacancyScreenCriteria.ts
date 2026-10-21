@@ -11,6 +11,8 @@ import { matchesVacancyCity } from './vacancyFacets';
 export interface VacancyScreenFilterOptions {
   readonly locations: readonly { readonly id: string; readonly label: string; readonly count: number }[];
   readonly salaryCurrencies: readonly string[];
+  /** Loaded vacancies without salary that carry a market estimate number (B546). */
+  readonly marketEstimateCount: number;
   readonly formatCounts: Readonly<Record<string, number>>;
 }
 
@@ -22,16 +24,49 @@ export function vacancyFormat(item: MatchedVacancyItem): string {
   return item.cluster.isRemote ? 'remote' : 'unknown';
 }
 
+const CURRENCY_ALIASES: Readonly<Record<string, string>> = {
+  '₽': 'RUR',
+  RUB: 'RUR',
+  $: 'USD',
+  '€': 'EUR',
+  '£': 'GBP',
+};
+
+/** hh.ru says RUR, fixtures and boards say ₽ or RUB: one currency for the filter. */
+export function normalizeSalaryCurrency(currency: string): string {
+  const code = currency.trim().toUpperCase();
+  return CURRENCY_ALIASES[code] ?? code;
+}
+
+function sameCurrency(currency: string | undefined, wanted: string | undefined): boolean {
+  if (!wanted) return true;
+  return currency !== undefined && normalizeSalaryCurrency(currency) === normalizeSalaryCurrency(wanted);
+}
+
+/** Stated salary, or the market estimate when the candidate asked to compare by it (B546). */
+function comparableSalary(
+  item: MatchedVacancyItem,
+  state: VacanciesScreenState,
+): { readonly lower?: number; readonly upper?: number } | undefined {
+  const salary = item.cluster.salary;
+  if (salary) {
+    if (!sameCurrency(salary.currency, state.salaryCurrency)) return undefined;
+    return { lower: salary.from ?? salary.to, upper: salary.to ?? salary.from };
+  }
+  const estimate = item.explanation.marketSalary;
+  if (!state.useMarketEstimate || estimate?.low === undefined || estimate.high === undefined) {
+    return undefined;
+  }
+  if (!sameCurrency(estimate.currency, state.salaryCurrency)) return undefined;
+  return { lower: estimate.low, upper: estimate.high };
+}
+
 function matchesSalaryRange(item: MatchedVacancyItem, state: VacanciesScreenState): boolean {
   if (state.salaryMinimum === undefined && state.salaryMaximum === undefined) return true;
-  const salary = item.cluster.salary;
-  const currencyMatches = !state.salaryCurrency ||
-    salary?.currency?.toLocaleUpperCase('ru-RU') === state.salaryCurrency.toLocaleUpperCase('ru-RU');
-  if (!salary || !currencyMatches) return Boolean(state.includeMissingSalary);
-  const lower = salary.from ?? salary.to;
-  const upper = salary.to ?? salary.from;
-  if (state.salaryMinimum !== undefined && (upper ?? -Infinity) < state.salaryMinimum) return false;
-  if (state.salaryMaximum !== undefined && (lower ?? Infinity) > state.salaryMaximum) return false;
+  const range = comparableSalary(item, state);
+  if (!range) return Boolean(state.includeMissingSalary);
+  if (state.salaryMinimum !== undefined && (range.upper ?? -Infinity) < state.salaryMinimum) return false;
+  if (state.salaryMaximum !== undefined && (range.lower ?? Infinity) > state.salaryMaximum) return false;
   return true;
 }
 
@@ -90,10 +125,16 @@ export function buildVacancyFilterOptions(
   const locations = new Map<string, number>();
   const currencies = new Set<string>();
   const formatCounts: Record<string, number> = { remote: 0, hybrid: 0, office: 0, unknown: 0 };
+  let marketEstimateCount = 0;
   for (const item of items) {
     const location = item.cluster.canonicalLocation?.trim();
     if (location) locations.set(location, (locations.get(location) ?? 0) + 1);
-    if (item.cluster.salary?.currency) currencies.add(item.cluster.salary.currency);
+    if (item.cluster.salary?.currency) currencies.add(normalizeSalaryCurrency(item.cluster.salary.currency));
+    const estimate = item.explanation.marketSalary;
+    if (!item.cluster.salary && estimate?.low !== undefined) {
+      currencies.add(normalizeSalaryCurrency(estimate.currency));
+      marketEstimateCount += 1;
+    }
     const format = vacancyFormat(item);
     formatCounts[format] = (formatCounts[format] ?? 0) + 1;
   }
@@ -101,6 +142,7 @@ export function buildVacancyFilterOptions(
     locations: [...locations].map(([id, count]) => ({ id, label: id, count }))
       .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label, 'ru-RU')),
     salaryCurrencies: [...currencies].sort(),
+    marketEstimateCount,
     formatCounts,
   };
 }

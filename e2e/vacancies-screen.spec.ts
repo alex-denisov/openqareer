@@ -692,7 +692,10 @@ test.describe('B250 vacancies screen', () => {
       await expect(summary).toContainText('148 вакансий в подборке по роли и уровню');
       await expect(summary).toContainText(/Показано \d+ из \d+ с вашими условиями/u);
     } else {
-      await expect(page.locator('.vacancies-mobile-results-summary')).toContainText('148');
+      // B546: the salary filter is local, so the count follows it, not the pool total.
+      await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
+        /\d+ вакансий по вашим условиям/u,
+      );
     }
 
     if (isMobile) {

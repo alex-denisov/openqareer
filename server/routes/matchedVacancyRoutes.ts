@@ -1,3 +1,4 @@
+import { attachMarketSalaryEstimates } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
 import { performance } from 'node:perf_hooks';
@@ -255,6 +256,16 @@ function matchedVacancyResponse(
   };
 }
 
+/** B546: the page carries the estimate the maintenance process computed. */
+function withMarketSalary(deps: RouteDeps, items: MatchedVacancyItem[]): MatchedVacancyItem[] {
+  const store = deps.marketSalaryEstimates;
+  if (!store) return items;
+  return attachMarketSalaryEstimates(items, {
+    store,
+    readTitle: (key) => deps.titleParseStore.getByKey(key) ?? undefined,
+  });
+}
+
 const handleMatchedVacancies: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config, multiSourceEngine, titleParseStore } = deps;
   const requestStartedAt = performance.now();
@@ -291,7 +302,8 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     sourceRegistry,
     withVacancyFitOrder(deps, candidate.id, filters.sort ?? 'fit'),
   );
-  const response = { ...orderedPage, data: withShownPageFitViews(deps, candidate.id, orderedPage.data) };
+  const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
+  const response = { ...orderedPage, data: withMarketSalary(deps, shown) };
 
   // Чтение последовательное, охватывает первые 20 совпадений и не задерживает
   // ответ списка; размер транспортного ответа страницей остаётся прежним.
