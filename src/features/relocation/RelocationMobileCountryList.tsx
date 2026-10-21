@@ -15,6 +15,12 @@ import { RelocationScenarioSheet, type RelocationScenarioFilter } from './Reloca
 import type { RelocationWorkspaceState } from './useRelocationWorkspace';
 
 const PREVIEW_COUNT = 7;
+const MOBILE_STATUS: Readonly<Record<string, string>> = {
+  available: 'Без ограничений',
+  high_barriers: 'Высокие барьеры',
+  legally_unavailable: 'Недоступно юридически',
+  unknown: 'Нужно уточнить',
+};
 
 export interface RelocationMobileCountryListProps {
   readonly profile: RelocationQuestionnaire;
@@ -113,7 +119,7 @@ function CountryRows({
                 <span>{summary.scenarioLabel}</span>
               </span>
               <span className={`career-relocation-mobile-status is-${summary.status}`}>
-                {summary.statusLabel}
+                {MOBILE_STATUS[summary.status]}
               </span>
               <CaretRight aria-hidden="true" size={16} />
             </button>

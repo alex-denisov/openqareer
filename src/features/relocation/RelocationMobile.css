@@ -218,3 +218,29 @@
 .career-relocation-off .career-relocation-group-list svg:first-child {
   flex: 0 0 auto;
 }
+
+.career-relocation-group-list > li > button > span:first-child:has(> svg) {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-mobile .career-relocation-profile-row:has(.career-relocation-row-actions) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--career-space-1) var(--career-space-2);
+}
+
+.career-relocation-mobile .career-relocation-profile-row > strong,
+.career-relocation-mobile .career-relocation-profile-row > span:not(.career-relocation-row-actions) {
+  grid-column: 1;
+}
+
+.career-relocation-mobile .career-relocation-row-actions {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.career-relocation-mobile .career-relocation-profile-section header {
+  flex-wrap: nowrap;
+}

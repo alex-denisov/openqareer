@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
   ArrowRight,
-  CaretRight,
   Circle,
   Fingerprint,
   GraduationCap,
@@ -12,6 +11,7 @@ import {
 import { apiErrorMessage } from '../coach/apiClient';
 import { grantRelocationConsent, type RelocationQuestionnaireResponse } from './relocationApi';
 import { RelocationHeaderCard } from './RelocationHeaderCard';
+import { MobilePush } from './RelocationMobilePush';
 
 type Consent = RelocationQuestionnaireResponse['consent'];
 
@@ -67,10 +67,24 @@ export interface RelocationConsentGateProps {
 
 /** Mockup 15 `view=off`: what the section gives, what it asks, consent, «Позже». */
 export function RelocationConsentGate(props: RelocationConsentGateProps) {
-  const revoked = props.consentStatus === 'revoked';
+  if (props.mobile) {
+    return (
+      <MobilePush
+        title="Страны и релокация"
+        backLabel="Назад к ролям"
+        onBack={props.onNavigateBack}
+      >
+        <p className="career-relocation-muted">
+          Не включено. Сейчас подборка идёт только по России.
+        </p>
+        <ConsentBody {...props} />
+      </MobilePush>
+    );
+  }
   return (
-    <main
+    <div
       className="career-relocation career-relocation-off"
+      role="region"
       aria-labelledby="career-relocation-title"
     >
       <RelocationHeaderCard
@@ -80,33 +94,40 @@ export function RelocationConsentGate(props: RelocationConsentGateProps) {
         backLabel="Назад к ролям"
         onBack={props.onNavigateBack}
       />
-      <section
-        className="career-relocation-card career-relocation-consent"
-        aria-labelledby="career-relocation-consent-title"
-      >
-        {revoked ? <p role="status">Согласие отозвано. Данные анкеты удалены.</p> : null}
-        <h3 id="career-relocation-consent-title">Что появится после включения</h3>
-        <PromiseList mobile={props.mobile} />
-        <h3>Что мы спросим</h3>
-        <p className="career-relocation-muted">
-          В профиле этих данных пока нет, поэтому сначала короткая анкета, около 5 минут, 4 шага.
-          Любое поле можно пропустить.
-        </p>
-        <QuestionList mobile={props.mobile} />
-        <p className="career-relocation-note">
-          <LockKey aria-hidden="true" size={17} />
-          <span>
-            Это чувствительные данные: видите только вы, они хранятся в разделе «Страны и
-            релокация», третьим лицам не передаются. Отзыв согласия удаляет данные анкеты.
-          </span>
-        </p>
-        {props.consentTextStatus === 'approved' ? (
-          <ConsentGrantControl onGranted={props.onConsentGranted} onLater={props.onNavigateBack} />
-        ) : (
-          <ConsentPendingControl onLater={props.onNavigateBack} />
-        )}
-      </section>
-    </main>
+      <ConsentBody {...props} />
+    </div>
+  );
+}
+
+function ConsentBody(props: RelocationConsentGateProps) {
+  const revoked = props.consentStatus === 'revoked';
+  return (
+    <section
+      className="career-relocation-card career-relocation-consent"
+      aria-labelledby="career-relocation-consent-title"
+    >
+      {revoked ? <p role="status">Согласие отозвано. Данные анкеты удалены.</p> : null}
+      <h3 id="career-relocation-consent-title">Что появится после включения</h3>
+      <PromiseList mobile={props.mobile} />
+      <h3>Что мы спросим</h3>
+      <p className="career-relocation-muted">
+        В профиле этих данных пока нет, поэтому сначала короткая анкета, около 5 минут, 4 шага.
+        Любое поле можно пропустить.
+      </p>
+      <QuestionList mobile={props.mobile} />
+      <p className="career-relocation-note">
+        <LockKey aria-hidden="true" size={17} />
+        <span>
+          Это чувствительные данные: видите только вы, они хранятся в разделе «Страны и релокация»,
+          третьим лицам не передаются. Отзыв согласия удаляет данные анкеты.
+        </span>
+      </p>
+      {props.consentTextStatus === 'approved' ? (
+        <ConsentGrantControl onGranted={props.onConsentGranted} onLater={props.onNavigateBack} />
+      ) : (
+        <ConsentPendingControl onLater={props.onNavigateBack} />
+      )}
+    </section>
   );
 }
 
@@ -138,7 +159,6 @@ function QuestionList({ mobile }: { readonly mobile: boolean }) {
           <span>
             <strong>{item.title}</strong> {item.text}
           </span>
-          {mobile ? <CaretRight aria-hidden="true" size={16} /> : null}
         </li>
       ))}
     </ul>
