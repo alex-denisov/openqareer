@@ -15,55 +15,55 @@ type RelocationDocument = RelocationQuestionnaire['citizenshipDocuments']['docum
 type RelocationDraftProps = Pick<RelocationQuestionnaireStepFormProps, 'profile' | 'onProfileChange'>;
 
 export function CitizenshipDocumentsForm(props: RelocationQuestionnaireStepFormProps) {
+  const [documentOpen, setDocumentOpen] = useState(false);
+  // 390 (mockup 15 `mv=doc`): a new document is its own push screen, not an inline form.
+  if (props.mobile && documentOpen) {
+    return <NewDocumentForm {...props} screen onDone={() => setDocumentOpen(false)} />;
+  }
   return (
     <div className="career-relocation-step-content">
       <CitizenshipList {...props} />
-      <DocumentsSection {...props} />
+      <DocumentsSection {...props} onOpenDocument={props.mobile ? () => setDocumentOpen(true) : undefined} />
     </div>
   );
 }
 
+/** Mockup 15 `i1`: one citizenship picker and «Есть второе гражданство» for a second one. */
 function CitizenshipList({ profile, onProfileChange }: RelocationDraftProps) {
-  const [countryToAdd, setCountryToAdd] = useState('');
   const countries = profile.citizenshipDocuments.citizenshipCountryCodes;
-  const add = () => {
-    if (!countryToAdd || countries.includes(countryToAdd)) return;
-    onProfileChange({ ...profile, citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: [...countries, countryToAdd] } });
-    setCountryToAdd('');
-  };
-  const remove = (countryCode: string) => onProfileChange({
+  const [second, setSecond] = useState(countries.length > 1);
+  const write = (codes: readonly string[]) => onProfileChange({
     ...profile,
-    citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: countries.filter((code) => code !== countryCode) },
+    citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: [...new Set(codes.filter(Boolean))] },
   });
+  const toggleSecond = (checked: boolean) => {
+    setSecond(checked);
+    if (!checked) write(countries.slice(0, 1));
+  };
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-citizenship-title">
-      <h3 id="relocation-citizenship-title">Гражданство</h3>
-      <div className="career-relocation-chip-list">
-        {countries.map((countryCode) => (
-          <span className="career-relocation-chip" key={countryCode}>
-            {relocationCountryName(countryCode)}
-            <button type="button" aria-label={`Убрать гражданство: ${relocationCountryName(countryCode)}`} onClick={() => remove(countryCode)}>
-              <Trash aria-hidden="true" size={15} />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="career-relocation-inline-form">
-        <RelocationFormField id="relocation-citizenship-add" label="Добавить гражданство">
-          <CountrySelect id="relocation-citizenship-add" value={countryToAdd} onChange={setCountryToAdd} />
+      <RelocationFormField id="relocation-citizenship-first" label="Гражданство">
+        <CountrySelect id="relocation-citizenship-first" value={countries[0] ?? ''} onChange={(code) => write([code, ...countries.slice(1)])} />
+      </RelocationFormField>
+      <label className="career-relocation-check">
+        <input type="checkbox" checked={second} onChange={(event) => toggleSecond(event.target.checked)} />
+        <span id="relocation-citizenship-title">Есть второе гражданство</span>
+      </label>
+      {second ? (
+        <RelocationFormField id="relocation-citizenship-second" label="Второе гражданство">
+          <CountrySelect id="relocation-citizenship-second" value={countries[1] ?? ''} onChange={(code) => write([countries[0] ?? '', code])} />
         </RelocationFormField>
-        <button className="career-btn career-btn-secondary" type="button" disabled={!countryToAdd} onClick={add}>
-          <Plus aria-hidden="true" size={16} />Добавить
-        </button>
-      </div>
+      ) : null}
     </section>
   );
 }
 
-function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
+function DocumentsSection({ profile, onProfileChange, onOpenDocument }: RelocationDraftProps & {
+  readonly onOpenDocument?: () => void;
+}) {
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-documents-title">
-      <h3 id="relocation-documents-title">Вид на жительство, разрешения и визы</h3>
+      <h3 id="relocation-documents-title">Вид на жительство, ПМЖ, визы</h3>
       {profile.citizenshipDocuments.documents.length ? (
         <div className="career-relocation-edit-list">
           {profile.citizenshipDocuments.documents.map((document) => (
@@ -71,7 +71,11 @@ function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
           ))}
         </div>
       ) : <p>Документы не указаны.</p>}
-      <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />
+      {onOpenDocument ? (
+        <button className="career-btn career-btn-secondary" type="button" onClick={onOpenDocument}>
+          <Plus aria-hidden="true" size={16} />Добавить документ
+        </button>
+      ) : <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />}
     </section>
   );
 }
@@ -133,7 +137,10 @@ function DocumentFields({
   );
 }
 
-function NewDocumentForm({ profile, onProfileChange }: RelocationDraftProps) {
+function NewDocumentForm({ profile, onProfileChange, screen = false, onDone }: RelocationDraftProps & {
+  readonly screen?: boolean;
+  readonly onDone?: () => void;
+}) {
   const [kind, setKind] = useState<RelocationDocument['kind']>('residence_permit');
   const [countryCode, setCountryCode] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
@@ -146,21 +153,23 @@ function NewDocumentForm({ profile, onProfileChange }: RelocationDraftProps) {
     });
     setCountryCode('');
     setExpiresAt('');
+    onDone?.();
   };
   const kindId = 'relocation-new-document-kind';
   const countryId = 'relocation-new-document-country';
   const expiresId = 'relocation-new-document-expires';
   return (
-    <div className="career-relocation-add-form">
-      <h4>Добавить документ</h4>
+    <div className={screen ? 'career-relocation-document-screen' : 'career-relocation-add-form'}>
+      {screen ? <h3>Документ</h3> : <h4>Добавить документ</h4>}
       <div className="career-relocation-form-grid">
         <RelocationFormField id={kindId} label="Тип документа"><DocumentKindSelect id={kindId} value={kind} onChange={setKind} /></RelocationFormField>
         <RelocationFormField id={countryId} label="Страна"><CountrySelect id={countryId} value={countryCode} onChange={setCountryCode} /></RelocationFormField>
         <RelocationFormField id={expiresId} label="Действует до"><input id={expiresId} type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></RelocationFormField>
       </div>
-      <button className="career-btn career-btn-secondary" type="button" disabled={!countryCode} onClick={add}>
-        <Plus aria-hidden="true" size={16} />Добавить документ
+      <button className={`career-btn ${screen ? 'career-btn-primary' : 'career-btn-secondary'}`} type="button" disabled={!countryCode} onClick={add}>
+        {screen ? 'Сохранить' : <><Plus aria-hidden="true" size={16} />Добавить документ</>}
       </button>
+      {screen ? <button className="career-relocation-text-action" type="button" onClick={onDone}>Отмена</button> : null}
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { ArrowRight, CaretLeft } from '@phosphor-icons/react';
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { ArrowRight, CaretLeft, LockKey } from '@phosphor-icons/react';
 import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
@@ -28,6 +28,13 @@ const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
   languages: 'Языки',
 };
 
+const STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
+  citizenship_documents: 'гражданство и действующие документы. Это определяет, какие страны вам доступны без визы.',
+  education: 'диплом и опыт. Признание диплома и стаж открывают визы под оффер.',
+  family: 'семья и сроки. От них зависят сценарии с семьёй и путь к ПМЖ.',
+  languages: 'языки. Местный язык расширяет список вакансий.',
+};
+
 type ProfileUpdate = (profile: RelocationQuestionnaire, alerts?: readonly RelocationAlert[]) => void;
 
 export interface RelocationQuestionnaireProps {
@@ -36,6 +43,7 @@ export interface RelocationQuestionnaireProps {
   readonly onClose: () => void;
   readonly onShowCountries: () => void;
   readonly onProfileUpdated: ProfileUpdate;
+  readonly mobile?: boolean;
 }
 
 interface QuestionnaireController {
@@ -100,18 +108,19 @@ function useQuestionnaireController(props: RelocationQuestionnaireProps): Questi
 function QuestionnaireView({
   onClose,
   onShowCountries,
+  mobile,
   controller,
 }: RelocationQuestionnaireProps & { readonly controller: QuestionnaireController }) {
   const { step, isDirty } = controller;
   return (
-    <main className="career-relocation career-relocation-questionnaire" aria-labelledby="career-relocation-questionnaire-title">
-      <QuestionnaireHeader step={step} isDirty={isDirty} onClose={onClose} onConfirmLeave={() => controller.setConfirmLeave(true)} />
-      <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
+    <div className="career-relocation career-relocation-questionnaire">
+      <QuestionnaireHeader step={step} isDirty={isDirty} onClose={onClose} onConfirmLeave={() => controller.setConfirmLeave(true)}>
+        <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
+      </QuestionnaireHeader>
       <QuestionnaireStatus notice={controller.notice} error={controller.error} />
-      <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} />
-      <QuestionnaireFooter busy={controller.busy} onRestart={() => controller.setConfirmRestart(true)} />
+      <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} mobile={mobile} />
       <QuestionnaireDialogs controller={controller} onClose={onClose} />
-    </main>
+    </div>
   );
 }
 
@@ -120,19 +129,25 @@ function QuestionnaireHeader({
   isDirty,
   onClose,
   onConfirmLeave,
+  children,
 }: {
   readonly step: RelocationCurrentStep;
   readonly isDirty: boolean;
   readonly onClose: () => void;
   readonly onConfirmLeave: () => void;
+  readonly children: ReactNode;
 }) {
   return (
-    <header className="career-relocation-header">
-      <button className="career-relocation-back" type="button" aria-label="Назад к данным" onClick={() => isDirty ? onConfirmLeave() : onClose()}>
-        <CaretLeft aria-hidden="true" size={20} />
-      </button>
-      <h1 id="career-relocation-questionnaire-title">Условия для переезда</h1>
-      <p>{step === 'summary' ? 'Анкета сохранена в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_TITLES[step]}.`}</p>
+    <header className="career-relocation-card career-relocation-header">
+      <div className="career-relocation-title-row">
+        <button className="career-relocation-back" type="button" aria-label="Назад" onClick={() => isDirty ? onConfirmLeave() : onClose()}>
+          <CaretLeft aria-hidden="true" size={20} />
+        </button>
+        <h2 id="career-relocation-questionnaire-title">Условия для переезда</h2>
+        <span className="career-relocation-status"><LockKey aria-hidden="true" size={14} />Видите только вы</span>
+      </div>
+      <p>{step === 'summary' ? 'Анкета сохранена в разделе «Страны и релокация».' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_DESCRIPTIONS[step]}`}</p>
+      {children}
     </header>
   );
 }
@@ -169,18 +184,24 @@ function QuestionnaireStatus({ notice, error }: { readonly notice?: string; read
 function QuestionnaireStepPanel({
   controller,
   onShowCountries,
+  mobile,
 }: {
   readonly controller: QuestionnaireController;
   readonly onShowCountries: () => void;
+  readonly mobile?: boolean;
 }) {
   const step = controller.step;
   if (step === 'summary') {
     return <RelocationSummary profile={controller.savedProfile} onShowCountries={onShowCountries} onEdit={() => controller.selectStep(RELOCATION_STEPS[0])} />;
   }
-  return <QuestionnaireStepEditor controller={controller} step={step} />;
+  return <QuestionnaireStepEditor controller={controller} step={step} mobile={mobile} />;
 }
 
-function QuestionnaireStepEditor({ controller, step }: { readonly controller: QuestionnaireController; readonly step: RelocationStepId }) {
+function QuestionnaireStepEditor({ controller, step, mobile }: {
+  readonly controller: QuestionnaireController;
+  readonly step: RelocationStepId;
+  readonly mobile?: boolean;
+}) {
   const { draft, busy, importBusy } = controller;
   return (
     <div className="career-relocation-questionnaire-layout">
@@ -193,6 +214,7 @@ function QuestionnaireStepEditor({ controller, step }: { readonly controller: Qu
           onImportLinkedIn={controller.importLinkedInLanguages}
           importBusy={importBusy}
           importError={controller.error}
+          mobile={mobile}
         />
         <QuestionnaireStepActions step={step} busy={busy || importBusy} onNext={controller.moveToNext} />
       </section>
@@ -213,16 +235,13 @@ function QuestionnaireStepActions({
   return (
     <div className="career-relocation-list-footer">
       <button className="career-btn career-btn-primary" type="button" disabled={busy} onClick={() => onNext(false)}>
-        {busy ? 'Сохраняем…' : step === 'languages' ? 'Показать итог' : 'Дальше'}<ArrowRight aria-hidden="true" size={17} />
+        <ArrowRight aria-hidden="true" size={17} />{busy ? 'Сохраняем…' : step === 'languages' ? 'Показать итог' : 'Дальше'}
       </button>
-      <button className="career-btn career-btn-secondary" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
+      <button className="career-relocation-text-action" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
     </div>
   );
 }
 
-function QuestionnaireFooter({ busy, onRestart }: { readonly busy: boolean; readonly onRestart: () => void }) {
-  return <footer className="career-relocation-questionnaire-footer"><button className="career-btn career-btn-secondary" type="button" disabled={busy} onClick={onRestart}>Начать заново</button></footer>;
-}
 
 function QuestionnaireDialogs({
   controller,

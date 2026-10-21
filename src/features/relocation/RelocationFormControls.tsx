@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { CaretDown } from '@phosphor-icons/react';
 import type {
   RelocationQuestionnaire,
 } from '../../../shared/relocationQuestionnaire';
@@ -25,6 +26,10 @@ export function RelocationFormField({
   );
 }
 
+/**
+ * Country picker of mockup 15 (`i1-dc`, `i2-e4`): a button with the chosen
+ * country that opens a search over the rules catalog.
+ */
 export function CountrySelect({
   id,
   value,
@@ -34,13 +39,33 @@ export function CountrySelect({
   readonly value: string;
   readonly onChange: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (open) searchRef.current?.focus(); }, [open]);
+  const needle = query.trim().toLocaleLowerCase('ru');
+  const countries = listRelocationCountries().filter(({ name }) => !needle || name.toLocaleLowerCase('ru').includes(needle));
+  const pick = (code: string) => { onChange(code); setOpen(false); setQuery(''); };
   return (
-    <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
-      <option value="">Выберите страну</option>
-      {listRelocationCountries().map(({ countryCode, name }) => (
-        <option key={countryCode} value={countryCode}>{name}</option>
-      ))}
-    </select>
+    <div className="career-relocation-country-picker">
+      <button id={id} type="button" className="career-relocation-picker-button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
+        <span>{value ? relocationCountryName(value) : 'Выберите страну'}</span>
+        <CaretDown aria-hidden="true" size={16} />
+      </button>
+      {open ? (
+        <div className="career-relocation-picker-panel">
+          <input type="search" aria-label="Поиск: Страна" placeholder="Поиск: Страна" value={query} ref={searchRef} onChange={(event) => setQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Escape') setOpen(false); }} />
+          <ul role="listbox" aria-label="Страны">
+            {countries.map(({ countryCode, name }) => (
+              <li key={countryCode} role="option" aria-selected={countryCode === value}>
+                <button type="button" onClick={() => pick(countryCode)}>{name}</button>
+              </li>
+            ))}
+            {countries.length ? null : <li role="presentation">Такой страны нет в каталоге правил.</li>}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
