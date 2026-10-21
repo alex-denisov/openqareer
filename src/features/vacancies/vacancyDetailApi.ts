@@ -16,7 +16,10 @@ export async function fetchVacancyDetail(clusterId: string): Promise<VacancyDeta
   const response = await apiFetch(
     `/api/v1/candidate/vacancies/${encodeURIComponent(clusterId)}/detail`,
   );
-  return readData<VacancyDetailText>(response);
+  const detail = await readData<VacancyDetailText | null>(response);
+  // Пустой ответ — это «не загрузилось», а не карточка без полей (B510).
+  if (!detail) throw new Error('Vacancy detail is empty');
+  return detail;
 }
 
 export type VacancyDetailState =
