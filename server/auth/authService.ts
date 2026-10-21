@@ -453,7 +453,7 @@ export class AuthService extends AuthServiceCore {
       candidateId: row.candidate_id,
       email: row.email,
       displayName: row.display_name,
-      role: row.role,
+      role: row.role === 'candidate' ? 'candidate' : 'admin',
       isTest: row.is_test === 1,
       createdAt: row.user_created_at,
     };

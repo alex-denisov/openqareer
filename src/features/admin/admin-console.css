@@ -1,3 +1,6 @@
+@import './admin-rbac.css';
+@import './career-partner.css';
+
 /* B089 — the administrator surface. It reuses the global brand tokens from
    `App.css` rather than the candidate shell grid: this is an operator screen,
    not a candidate workspace, and it must never inherit workspace chrome. */
@@ -2424,3 +2427,17 @@
 
 .admin-bulk-spend { overflow-wrap:anywhere; }
 .admin-bulk-spend dd { margin:0; font-variant-numeric:tabular-nums; }
+
+@media screen and (max-width: 320px) {
+  .admin-frame-header {
+    flex-wrap: wrap;
+    gap: var(--career-space-2);
+    padding-block: var(--career-space-2);
+  }
+
+  .admin-frame-actions {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    margin-inline-start: 0;
+  }
+}

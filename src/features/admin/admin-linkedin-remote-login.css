@@ -1,6 +1,7 @@
 /* Админка живёт на токенах App.css, а --career-* объявлены только внутри
    .career-shell: панель сводит их к токенам админки. */
-.admin-remote-login__backdrop {
+.admin-remote-login__backdrop,
+.admin-console {
   --career-accent: var(--primary-accent);
   --career-accent-ink: var(--brand-ink);
   --career-bg: var(--bg-dark);
@@ -28,6 +29,9 @@
   --career-text-xs: 13px;
   --career-text-sm: 14px;
   --career-text-md: 16px;
+}
+
+.admin-remote-login__backdrop {
   position: fixed;
   inset: 0;
   z-index: 60;

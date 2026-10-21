@@ -1,6 +1,32 @@
 import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
+import type {
+  AdminPermission,
+  AdminPermissionOverrides,
+  AdminPermissions,
+  ProductRole,
+} from '../../shared/roleMatrix';
 
-export type UserRole = 'candidate' | 'admin';
+export type UserRole = ProductRole;
+
+export interface AdminPermissionSnapshot {
+  role: UserRole;
+  overrides: AdminPermissionOverrides;
+  permissions: AdminPermissions;
+}
+
+export interface CareerPartnerCandidate {
+  userId: string;
+  candidateId: string;
+  displayName: string | null;
+  headline: string | null;
+  location: string | null;
+}
+
+export interface CareerPartnerCandidatePage {
+  total: number;
+  items: CareerPartnerCandidate[];
+  nextOffset: number | null;
+}
 
 export interface AuthPrincipal {
   userId: string;
@@ -63,7 +89,7 @@ export interface PasswordResetDelivery {
 export interface SeedAccount {
   username: string;
   password: string;
-  role: UserRole;
+  role: Exclude<UserRole, 'CareerPartner'>;
 }
 
 export type SubscriptionTier = 'free' | 'pro' | 'executive' | 'enterprise';
@@ -99,7 +125,7 @@ export interface AdminUserPage {
 export interface AdminUserQuery {
   query?: string;
   searchField?: 'all' | 'username' | 'email' | 'displayName';
-  role?: 'candidate' | 'admin';
+  role?: UserRole;
   tier?: SubscriptionTier;
   blocked?: boolean;
   sortBy?: 'name' | 'role' | 'tier' | 'created' | 'sessions';
@@ -202,6 +228,32 @@ export interface SessionAuth {
   }): void;
   listUsers?(input: AdminUserQuery): AdminUserPage;
   getUser?(userId: string): AdminUserRecord | null;
+  getAdminPermissionSnapshot?(userId: string): AdminPermissionSnapshot | null;
+  setAdminPermission?(
+    targetUserId: string,
+    permission: AdminPermission,
+    enabled: boolean,
+    actorPrincipal: AuthPrincipal,
+  ): AdminPermissionSnapshot;
+  listCareerPartnerCandidates?(
+    partnerUserId: string,
+    limit: number,
+    offset: number,
+  ): CareerPartnerCandidatePage;
+  getAssignedCareerPartnerCandidate?(
+    partnerUserId: string,
+    candidateUserId: string,
+  ): CareerPartnerCandidate | null;
+  assignCandidateToPartner?(
+    partnerUserId: string,
+    candidateUserId: string,
+    actorPrincipal: AuthPrincipal,
+  ): boolean;
+  removeCandidateFromPartner?(
+    partnerUserId: string,
+    candidateUserId: string,
+    actorPrincipal: AuthPrincipal,
+  ): boolean;
   setUserRole?(
     targetUserId: string,
     newRole: UserRole,

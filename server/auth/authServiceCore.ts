@@ -1,14 +1,7 @@
-import {
-  createHash,
-  randomBytes,
-  randomUUID,
-  scrypt as scryptCallback,
-  timingSafeEqual,
-} from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 import { withEffectiveProTrial } from '../billing/proTrial';
-import type { CandidateIdentity, CandidateStore } from '../data/candidateStore';
+import type { CandidateStore } from '../data/candidateStore';
 import {
   MIGRATION_2,
   MIGRATION_17,
@@ -30,7 +23,6 @@ import type {
   RegistrationProfile,
   AccountSnapshot,
   AccountProfileUpdate,
-  PasswordResetDelivery,
   SeedAccount,
   AdminUserRecord,
   AdminUserPage,
@@ -46,13 +38,9 @@ import {
   AuthInvalidPasswordError,
   AuthInvalidResetTokenError,
   AuthUserBlockedError,
-  AuthDisposableEmailError,
   AuthEmailDomainUnreachableError,
 } from './authErrors';
-import {
-  canonicalizeEmail,
-  validateEmailAddress,
-} from './emailNormalization';
+import { canonicalizeEmail } from './emailNormalization';
 import { isReservedUsername } from '../../shared/reservedUsernames';
 import {
   listUsers as adminListUsers,
@@ -67,23 +55,27 @@ import {
 } from './adminUserManager';
 import { isValidTimezone } from '../../shared/timezoneUtils';
 import { ensureSessionDeviceHashSchema, storeAuthSession } from './sessionRepository';
+import { ensureAdminAccessSchema } from '../data/adminAccessSchema';
+import { createAdminAccessMethods } from './adminAccessMethods';
+import { collapseLegacySessions, USER_SELECT, type SessionRow } from './authServiceCoreQueries';
 import {
-  createEmailDomainChecker,
-  DEFAULT_MX_CHECK_BYPASS_DOMAINS,
-  type EmailDomainDnsFailure,
-  type EmailDomainResolver,
-} from './emailDomainCheck';
-
-const scrypt = promisify(scryptCallback);
-/**
- * Сессия скользящая: каждый аутентифицированный запрос продлевает её на этот
- * срок, и истекает она только по бездействию (PRB-038, решение владельца
- * 2026-09-20). Привязки к IP нет: смена сети у ноутбука и туннель LinkedIn
- * меняют адрес, не кандидата.
- */
-export const SESSION_IDLE_DAYS = 30;
-const SESSION_IDLE_MS = SESSION_IDLE_DAYS * 24 * 60 * 60 * 1_000;
-const PASSWORD_RESET_HOURS = 1;
+  canonicalEmailOrThrow,
+  derivePassword,
+  hashToken,
+  normalizeEmail,
+  normalizeUsername,
+  principalFromRow,
+  type PasswordResetRow,
+  type UserRow,
+} from './authCoreUtils';
+import { createEmailDomainChecker, DEFAULT_MX_CHECK_BYPASS_DOMAINS } from './emailDomainCheck';
+import {
+  PASSWORD_RESET_HOURS,
+  SESSION_IDLE_MS,
+  type AuthServiceOptions,
+} from './authCoreTypes';
+export { SESSION_IDLE_DAYS } from './authCoreTypes';
+export type { AuthServiceOptions } from './authCoreTypes';
 
 export type {
   UserRole,
@@ -101,6 +93,8 @@ export type {
   AdminUserUpdateInput,
   SessionAuth,
 } from './authTypes';
+export type { UserRow } from './authCoreUtils';
+export { canonicalEmailOrThrow, derivePassword, normalizeUsername } from './authCoreUtils';
 
 export {
   AuthUsernameTakenError,
@@ -112,50 +106,21 @@ export {
 } from './authErrors';
 import { SQLITE_HTTP_BUSY_TIMEOUT_MS, applySqliteBusyTimeout } from '../data/sqliteBusyTimeout';
 
-export interface AuthServiceOptions {
-  databasePath: string;
-  onPasswordReset?: (input: PasswordResetDelivery) => Promise<void>;
-  candidateStore?: CandidateStore;
-  emailDomainResolver?: EmailDomainResolver;
-  emailMxCheckBypassDomains?: readonly string[];
-  onEmailDomainDnsFailure?: (failure: EmailDomainDnsFailure) => void;
-}
-
-export interface UserRow {
-  id: string;
-  username: string;
-  role: UserRole;
-  password_salt: string;
-  password_hash: string;
-  is_test: number;
-  candidate_id: string | null;
-  data_class: CandidateIdentity['dataClass'] | null;
-  locale: CandidateIdentity['locale'] | null;
-  candidate_created_at: string | null;
-  user_created_at: string;
-  email: string | null;
-  display_name: string | null;
-  headline: string | null;
-  location: string | null;
-  work_mode: AccountSnapshot['profile']['workMode'];
-  timezone: string | null;
-  blocked_at: string | null;
-  profile_updated_at: string | null;
-}
-
-interface SessionRow {
-  token_hash: string;
-  expires_at: string;
-  created_at: string;
-  last_seen_at: string;
-  device_id_hash: string | null;
-}
-
-interface PasswordResetRow extends UserRow {
-  reset_expires_at: string;
-}
-
 export class AuthServiceCore implements SessionAuth {
+  declare readonly getAdminPermissionSnapshot: NonNullable<
+    SessionAuth['getAdminPermissionSnapshot']
+  >;
+  declare readonly setAdminPermission: NonNullable<SessionAuth['setAdminPermission']>;
+  declare readonly listCareerPartnerCandidates: NonNullable<
+    SessionAuth['listCareerPartnerCandidates']
+  >;
+  declare readonly getAssignedCareerPartnerCandidate: NonNullable<
+    SessionAuth['getAssignedCareerPartnerCandidate']
+  >;
+  declare readonly assignCandidateToPartner: NonNullable<SessionAuth['assignCandidateToPartner']>;
+  declare readonly removeCandidateFromPartner: NonNullable<
+    SessionAuth['removeCandidateFromPartner']
+  >;
   protected readonly database: DatabaseSync;
   private readonly onPasswordReset?: AuthServiceOptions['onPasswordReset'];
   protected readonly checkEmailDomain: ReturnType<typeof createEmailDomainChecker>;
@@ -174,6 +139,7 @@ export class AuthServiceCore implements SessionAuth {
       enableForeignKeyConstraints: true,
       defensive: true,
     });
+    Object.assign(this, createAdminAccessMethods(this.database));
     this.database.exec('PRAGMA journal_mode = WAL;');
     applySqliteBusyTimeout(this.database, SQLITE_HTTP_BUSY_TIMEOUT_MS);
     this.migrate();
@@ -204,7 +170,14 @@ export class AuthServiceCore implements SessionAuth {
     const now = new Date().toISOString();
     try {
       this.insertRegisteredUser(
-        username, email, displayName, salt, passwordHash, candidate.id, now, profile.timezone,
+        username,
+        email,
+        displayName,
+        salt,
+        passwordHash,
+        candidate.id,
+        now,
+        profile.timezone,
       );
     } catch (error) {
       candidateStore.deleteCandidate(candidate.id);
@@ -229,17 +202,29 @@ export class AuthServiceCore implements SessionAuth {
     now: string,
     timezone?: string | null,
   ): void {
-    const validTimezone = timezone?.trim() && isValidTimezone(timezone.trim()) ? timezone.trim() : null;
-    this.database.prepare(
-      `INSERT INTO users
+    const validTimezone =
+      timezone?.trim() && isValidTimezone(timezone.trim()) ? timezone.trim() : null;
+    this.database
+      .prepare(
+        `INSERT INTO users
         (id, username, email, display_name, role, password_salt,
          password_hash, candidate_id, is_test, created_at, updated_at,
          profile_updated_at, timezone)
        VALUES (?, ?, ?, ?, 'candidate', ?, ?, ?, 0, ?, ?, ?, ?)`,
-    ).run(
-      randomUUID(), username, email, displayName, salt.toString('base64'),
-      passwordHash.toString('base64'), candidateId, now, now, now, validTimezone,
-    );
+      )
+      .run(
+        randomUUID(),
+        username,
+        email,
+        displayName,
+        salt.toString('base64'),
+        passwordHash.toString('base64'),
+        candidateId,
+        now,
+        now,
+        now,
+        validTimezone,
+      );
   }
 
   async seedAccounts(accounts: SeedAccount[], candidateStore: CandidateStore): Promise<void> {
@@ -772,6 +757,7 @@ export class AuthServiceCore implements SessionAuth {
       // timezone column already exists
     }
     ensureSessionDeviceHashSchema(this.database);
+    ensureAdminAccessSchema(this.database);
     // Administrators are provisioned only from configured seed accounts
     // (OPENQAREER_ADMIN_USERNAME/PASSWORD), and `seedAccounts` refuses to
     // change an existing user's role. A previous hardcoded handle list granted
@@ -808,75 +794,4 @@ export class AuthServiceCore implements SessionAuth {
     const match = legacy.find((user) => canonicalizeEmail(user.email) === canonical);
     return match ? this.findUserById(match.id) : null;
   }
-}
-
-const USER_SELECT = `
-  SELECT users.id, users.username, users.role, users.password_salt,
-         users.password_hash, users.is_test, users.candidate_id,
-         users.email, users.display_name, users.headline, users.location,
-         users.work_mode, users.timezone, users.blocked_at, users.profile_updated_at,
-         users.created_at AS user_created_at,
-         candidates.data_class, candidates.locale,
-         candidates.created_at AS candidate_created_at
-  FROM users
-  LEFT JOIN candidates ON candidates.id = users.candidate_id
-`;
-
-export async function derivePassword(password: string, salt: Buffer): Promise<Buffer> {
-  return (await scrypt(password, salt, 64)) as Buffer;
-}
-
-function hashToken(token: string): string {
-  return createHash('sha256').update(token).digest('hex');
-}
-
-export function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase();
-}
-
-function normalizeEmail(email: string): string {
-  return canonicalizeEmail(email);
-}
-
-export function canonicalEmailOrThrow(email: string): string {
-  const result = validateEmailAddress(email);
-  if (result.valid) return result.canonicalEmail;
-  if (result.reason === 'disposable') throw new AuthDisposableEmailError(result.message);
-  throw new Error(result.message);
-}
-
-function principalFromRow(row: UserRow): AuthPrincipal {
-  return {
-    userId: row.id,
-    username: row.username,
-    email: row.email,
-    displayName: row.display_name,
-    role: row.role,
-    isTest: row.is_test === 1,
-    candidate:
-      row.candidate_id && row.data_class && row.locale && row.candidate_created_at
-        ? {
-            id: row.candidate_id,
-            dataClass: row.data_class,
-            locale: row.locale,
-            createdAt: row.candidate_created_at,
-          }
-        : null,
-  };
-}
-
-/**
- * Сессии без идентификатора устройства появились до учёта по устройству и не
- * различимы между собой: показываем их одной записью (текущая, иначе самая
- * свежая), чтобы счётчик «Устройства» не раздувался старыми токенами.
- */
-function collapseLegacySessions(
-  sessions: readonly SessionRow[],
-  currentTokenHash: string,
-): SessionRow[] {
-  const known = sessions.filter((session) => session.device_id_hash);
-  const legacy = sessions.filter((session) => !session.device_id_hash);
-  if (legacy.length <= 1) return [...sessions];
-  const kept = legacy.find((session) => session.token_hash === currentTokenHash) ?? legacy[0]!;
-  return [...known, kept].sort((a, b) => (a.last_seen_at < b.last_seen_at ? 1 : -1));
 }

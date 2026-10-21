@@ -1,12 +1,7 @@
 import React, { useState } from 'react';
 import { useEscapeLayer } from '../shell/escapeLayers';
-import {
-  CreditCard,
-  ShieldCheck,
-  SignIn,
-  UserCircle,
-  type Icon,
-} from '@phosphor-icons/react';
+import { AdminRoleAccessFields } from './AdminRoleAccessFields';
+import { CreditCard, ShieldCheck, SignIn, UserCircle, type Icon } from '@phosphor-icons/react';
 import {
   updateAdminUser,
   blockAdminUser,
@@ -19,8 +14,14 @@ import {
 } from './adminApi';
 
 type WorkMode = 'office' | 'hybrid' | 'remote' | 'flexible';
-type UserRole = 'candidate' | 'admin';
+type UserRole = AdminUser['role'];
 type TabId = 'profile' | 'subscription' | 'security';
+
+const USER_ROLE_OPTIONS: ReadonlyArray<{ value: UserRole; label: string }> = [
+  { value: 'candidate', label: 'Кандидат' },
+  { value: 'CareerPartner', label: 'Карьерный консультант' },
+  { value: 'admin', label: 'Суперадминистратор' },
+];
 
 interface ModalProps {
   user: AdminUser;
@@ -54,10 +55,14 @@ function ModalOverlay({ onClose, children }: { onClose: () => void; children: Re
   useEscapeLayer(onClose);
   return (
     <div className="admin-modal-overlay" role="dialog" aria-modal="true">
-      <button type="button" className="admin-modal-backdrop" aria-label="Закрыть" onClick={onClose} tabIndex={-1} />
-      <div className="admin-modal admin-modal--large">
-        {children}
-      </div>
+      <button
+        type="button"
+        className="admin-modal-backdrop"
+        aria-label="Закрыть"
+        onClick={onClose}
+        tabIndex={-1}
+      />
+      <div className="admin-modal admin-modal--large">{children}</div>
     </div>
   );
 }
@@ -84,7 +89,13 @@ function ModalTabs({ tab, onChange }: { tab: TabId; onChange: (t: TabId) => void
   );
 }
 
-function FeedbackAlerts({ error, successMsg }: { error: string | null; successMsg: string | null }) {
+function FeedbackAlerts({
+  error,
+  successMsg,
+}: {
+  error: string | null;
+  successMsg: string | null;
+}) {
   return (
     <>
       {error && <div className="admin-alert admin-alert--error">{error}</div>}
@@ -95,31 +106,43 @@ function FeedbackAlerts({ error, successMsg }: { error: string | null; successMs
 
 // ---------- Profile tab ----------
 
-function ProfileTabForm({
-  user, feedback,
-}: { user: AdminUser; feedback: FormFeedback }) {
-  const [displayName, setDisplayName] = useState(user.displayName || '');
-  const [email, setEmail] = useState(user.email || '');
-  const [headline, setHeadline] = useState(user.headline || '');
-  const [location, setLocation] = useState(user.location || '');
-  const [workMode, setWorkMode] = useState<WorkMode>((user.workMode as WorkMode) || 'remote');
-  const [role, setRole] = useState<UserRole>(user.role);
+interface ProfileValues {
+  displayName: string;
+  email: string;
+  headline: string;
+  location: string;
+  workMode: WorkMode;
+}
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+function ProfileTabForm({
+  user,
+  feedback,
+  onRoleSaved,
+}: {
+  user: AdminUser;
+  feedback: FormFeedback;
+  onRoleSaved: (role: UserRole) => void;
+}) {
+  const [values, setValues] = useState<ProfileValues>({
+    displayName: user.displayName || '',
+    email: user.email || '',
+    headline: user.headline || '',
+    location: user.location || '',
+    workMode: (user.workMode as WorkMode) || 'remote',
+  });
+  const [role, setRole] = useState<UserRole>(user.role);
+  const [savedRole, setSavedRole] = useState<UserRole>(user.role);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
     feedback.setLoading(true);
     feedback.setError(null);
     feedback.setSuccessMsg(null);
     try {
-      await updateAdminUser(user.id, {
-        displayName: displayName || null,
-        email: email || null,
-        headline: headline || null,
-        location: location || null,
-        workMode: workMode || null,
-        role,
-      });
-      feedback.setSuccessMsg('Профиль успешно обновлен');
+      const updated = await updateAdminUser(user.id, profileUpdate(values, role));
+      setSavedRole(updated.role);
+      onRoleSaved(updated.role);
+      feedback.setSuccessMsg('Профиль сохранён.');
     } catch (err) {
       feedback.setError(extractError(err));
     } finally {
@@ -128,45 +151,224 @@ function ProfileTabForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="admin-form">
-      <div className="admin-form-grid">
-        <ProfileTextInput id="adm-name" label="Отображаемое имя" value={displayName} onChange={setDisplayName} placeholder="Например, Мария Иванова" />
-        <ProfileTextInput id="adm-email" label="Email" value={email} onChange={setEmail} placeholder="alex@example.com" type="email" />
-        <ProfileSelectInput id="adm-role" label="Роль в системе" value={role} onChange={(v) => setRole(v as UserRole)} options={[['candidate', 'Кандидат (candidate)'], ['admin', 'Администратор (admin)']]} />
-        <ProfileSelectInput id="adm-work" label="Формат работы" value={workMode} onChange={(v) => setWorkMode(v as WorkMode)} options={[['remote', 'Удаленно (remote)'], ['hybrid', 'Гибрид (hybrid)'], ['office', 'Офис (office)'], ['flexible', 'Гибкий график (flexible)']]} />
-        <ProfileTextInput id="adm-headline" label="Позиция / Headline" value={headline} onChange={setHeadline} placeholder="Senior Product Lead / VP Tech" full />
-        <ProfileTextInput id="adm-location" label="Локация" value={location} onChange={setLocation} placeholder="Москва / Белград / Remote" full />
-      </div>
+    <ProfileEditor
+      userId={user.id}
+      values={values}
+      onValues={setValues}
+      role={role}
+      savedRole={savedRole}
+      onRole={setRole}
+      saving={feedback.loading}
+      onSubmit={submit}
+    />
+  );
+}
+
+function profileUpdate(values: ProfileValues, role: UserRole) {
+  return {
+    displayName: values.displayName || null,
+    email: values.email || null,
+    headline: values.headline || null,
+    location: values.location || null,
+    workMode: values.workMode || null,
+    role,
+  };
+}
+
+function ProfileEditor({
+  userId,
+  values,
+  onValues,
+  role,
+  savedRole,
+  onRole,
+  saving,
+  onSubmit,
+}: {
+  userId: string;
+  values: ProfileValues;
+  onValues: (values: ProfileValues) => void;
+  role: UserRole;
+  savedRole: UserRole;
+  onRole: (role: UserRole) => void;
+  saving: boolean;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  return (
+    <form onSubmit={onSubmit} className="admin-form">
+      <ProfileDetailsFields values={values} onValues={onValues} />
+      <AdminRoleAccessFields
+        userId={userId}
+        role={role}
+        savedRole={savedRole}
+        onRoleChange={onRole}
+        saving={saving}
+      />
       <div className="admin-form-actions">
-        <button type="submit" className="admin-btn admin-btn--primary" disabled={feedback.loading}>
-          {feedback.loading ? 'Сохранение...' : 'Сохранить изменения'}
+        <button type="submit" className="admin-btn admin-btn--primary" disabled={saving}>
+          {saving ? 'Сохранение…' : 'Сохранить изменения'}
         </button>
       </div>
     </form>
   );
 }
 
-function ProfileTextInput({ id, label, value, onChange, placeholder, type = 'text', full }: {
-  id: string; label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; type?: string; full?: boolean;
+function ProfileDetailsFields({
+  values,
+  onValues,
+}: {
+  values: ProfileValues;
+  onValues: (values: ProfileValues) => void;
 }) {
   return (
-    <div className={`admin-form-group${full ? ' admin-form-group--full' : ''}`}>
-      <label className="admin-label" htmlFor={id}>{label}</label>
-      <input id={id} type={type} className="admin-input" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+    <div className="admin-form-grid">
+      <ProfileIdentityFields values={values} onValues={onValues} />
+      <ProfileTargetFields values={values} onValues={onValues} />
     </div>
   );
 }
 
-function ProfileSelectInput({ id, label, value, onChange, options }: {
-  id: string; label: string; value: string; onChange: (v: string) => void;
+function updateProfileValue(
+  values: ProfileValues,
+  onValues: (values: ProfileValues) => void,
+  field: keyof ProfileValues,
+  value: string,
+): void {
+  onValues({ ...values, [field]: value } as ProfileValues);
+}
+
+function ProfileIdentityFields({
+  values,
+  onValues,
+}: {
+  values: ProfileValues;
+  onValues: (values: ProfileValues) => void;
+}) {
+  return (
+    <>
+      <ProfileTextInput
+        id="adm-name"
+        label="Отображаемое имя"
+        value={values.displayName}
+        onChange={(value) => updateProfileValue(values, onValues, 'displayName', value)}
+        placeholder="Например, Мария Иванова"
+      />
+      <ProfileTextInput
+        id="adm-email"
+        label="Email"
+        value={values.email}
+        onChange={(value) => updateProfileValue(values, onValues, 'email', value)}
+        placeholder="alex@example.com"
+        type="email"
+      />
+    </>
+  );
+}
+
+function ProfileTargetFields({
+  values,
+  onValues,
+}: {
+  values: ProfileValues;
+  onValues: (values: ProfileValues) => void;
+}) {
+  return (
+    <>
+      <ProfileSelectInput
+        id="adm-work"
+        label="Формат работы"
+        value={values.workMode}
+        onChange={(value) => updateProfileValue(values, onValues, 'workMode', value)}
+        options={[
+          ['remote', 'Удалённо'],
+          ['hybrid', 'Гибрид'],
+          ['office', 'Офис'],
+          ['flexible', 'Гибкий график'],
+        ]}
+      />
+      <ProfileTextInput
+        id="adm-headline"
+        label="Позиция"
+        value={values.headline}
+        onChange={(value) => updateProfileValue(values, onValues, 'headline', value)}
+        placeholder="Роль или специализация"
+        full
+      />
+      <ProfileTextInput
+        id="adm-location"
+        label="Локация"
+        value={values.location}
+        onChange={(value) => updateProfileValue(values, onValues, 'location', value)}
+        placeholder="Город или регион"
+        full
+      />
+    </>
+  );
+}
+
+function ProfileTextInput({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  full,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  full?: boolean;
+}) {
+  return (
+    <div className={`admin-form-group${full ? ' admin-form-group--full' : ''}`}>
+      <label className="admin-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        className="admin-input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+}
+
+function ProfileSelectInput({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
   options: Array<[string, string]>;
 }) {
   return (
     <div className="admin-form-group">
-      <label className="admin-label" htmlFor={id}>{label}</label>
-      <select id={id} className="admin-select" value={value} onChange={(e) => onChange(e.target.value)}>
-        {options.map(([val, text]) => <option key={val} value={val}>{text}</option>)}
+      <label className="admin-label" htmlFor={id}>
+        {label}
+      </label>
+      <select
+        id={id}
+        className="admin-select"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map(([val, text]) => (
+          <option key={val} value={val}>
+            {text}
+          </option>
+        ))}
       </select>
     </div>
   );
@@ -174,12 +376,12 @@ function ProfileSelectInput({ id, label, value, onChange, options }: {
 
 // ---------- Subscription tab ----------
 
-function SubscriptionTabForm({
-  user, feedback,
-}: { user: AdminUser; feedback: FormFeedback }) {
+function SubscriptionTabForm({ user, feedback }: { user: AdminUser; feedback: FormFeedback }) {
   const [tier, setTier] = useState<SubscriptionTier>(user.subscriptionTier || 'free');
   const [status, setStatus] = useState<SubscriptionStatus>(user.subscriptionStatus || 'active');
-  const [expires, setExpires] = useState(user.subscriptionExpiresAt ? user.subscriptionExpiresAt.slice(0, 10) : '');
+  const [expires, setExpires] = useState(
+    user.subscriptionExpiresAt ? user.subscriptionExpiresAt.slice(0, 10) : '',
+  );
   const [notes, setNotes] = useState(user.subscriptionNotes || '');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -205,16 +407,13 @@ function SubscriptionTabForm({
   return (
     <form onSubmit={handleSubmit} className="admin-form">
       <div className="admin-form-grid">
-        <ProfileSelectInput id="adm-tier" label="Тарифный план (Tier)" value={tier} onChange={(v) => setTier(v as SubscriptionTier)} options={[['free', 'Free (Базовый)'], ['pro', 'Pro (Профессиональный)'], ['executive', 'Executive (Руководящий)'], ['enterprise', 'Enterprise (Корпоративный)']]} />
-        <ProfileSelectInput id="adm-sub-status" label="Статус подписки" value={status} onChange={(v) => setStatus(v as SubscriptionStatus)} options={[['active', 'Active (Активна)'], ['trialing', 'Trialing (Пробный период)'], ['past_due', 'Past Due (Требует оплаты)'], ['canceled', 'Canceled (Отменена)']]} />
-        <div className="admin-form-group">
-          <label className="admin-label" htmlFor="adm-expires">Действует до (Expires At)</label>
-          <input id="adm-expires" type="date" className="admin-input" value={expires} onChange={(e) => setExpires(e.target.value)} />
-        </div>
-        <div className="admin-form-group admin-form-group--full">
-          <label className="admin-label" htmlFor="adm-sub-notes">Служебные примечания / Гранты</label>
-          <textarea id="adm-sub-notes" className="admin-textarea" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Например: Выдан годовой Pro-доступ в рамках партнерства" />
-        </div>
+        <SubscriptionPlanFields tier={tier} status={status} onTier={setTier} onStatus={setStatus} />
+        <SubscriptionDatesFields
+          expires={expires}
+          notes={notes}
+          onExpires={setExpires}
+          onNotes={setNotes}
+        />
       </div>
       <div className="admin-form-actions">
         <button type="submit" className="admin-btn admin-btn--primary" disabled={feedback.loading}>
@@ -222,6 +421,89 @@ function SubscriptionTabForm({
         </button>
       </div>
     </form>
+  );
+}
+
+function SubscriptionPlanFields({
+  tier,
+  status,
+  onTier,
+  onStatus,
+}: {
+  tier: SubscriptionTier;
+  status: SubscriptionStatus;
+  onTier: (value: SubscriptionTier) => void;
+  onStatus: (value: SubscriptionStatus) => void;
+}) {
+  return (
+    <>
+      <ProfileSelectInput
+        id="adm-tier"
+        label="Тарифный план (Tier)"
+        value={tier}
+        onChange={(value) => onTier(value as SubscriptionTier)}
+        options={[
+          ['free', 'Free (Базовый)'],
+          ['pro', 'Pro (Профессиональный)'],
+          ['executive', 'Executive (Руководящий)'],
+          ['enterprise', 'Enterprise (Корпоративный)'],
+        ]}
+      />
+      <ProfileSelectInput
+        id="adm-sub-status"
+        label="Статус подписки"
+        value={status}
+        onChange={(value) => onStatus(value as SubscriptionStatus)}
+        options={[
+          ['active', 'Active (Активна)'],
+          ['trialing', 'Trialing (Пробный период)'],
+          ['past_due', 'Past Due (Требует оплаты)'],
+          ['canceled', 'Canceled (Отменена)'],
+        ]}
+      />
+    </>
+  );
+}
+
+function SubscriptionDatesFields({
+  expires,
+  notes,
+  onExpires,
+  onNotes,
+}: {
+  expires: string;
+  notes: string;
+  onExpires: (value: string) => void;
+  onNotes: (value: string) => void;
+}) {
+  return (
+    <>
+      <div className="admin-form-group">
+        <label className="admin-label" htmlFor="adm-expires">
+          Действует до (Expires At)
+        </label>
+        <input
+          id="adm-expires"
+          type="date"
+          className="admin-input"
+          value={expires}
+          onChange={(event) => onExpires(event.target.value)}
+        />
+      </div>
+      <div className="admin-form-group admin-form-group--full">
+        <label className="admin-label" htmlFor="adm-sub-notes">
+          Служебные примечания / Гранты
+        </label>
+        <textarea
+          id="adm-sub-notes"
+          className="admin-textarea"
+          rows={3}
+          value={notes}
+          onChange={(event) => onNotes(event.target.value)}
+          placeholder="Например: Выдан годовой Pro-доступ в рамках партнерства"
+        />
+      </div>
+    </>
   );
 }
 
@@ -254,11 +536,22 @@ function PasswordResetForm({ userId, feedback }: { userId: string; feedback: For
     <form onSubmit={handleSubmit} className="admin-form">
       <h4 className="admin-form-subtitle">Сброс пароля</h4>
       <p className="admin-form-desc">
-        Администратор может принудительно установить новый пароль для пользователя. Все активные сессии будут завершены.
+        Администратор может принудительно установить новый пароль для пользователя. Все активные
+        сессии будут завершены.
       </p>
       <div className="admin-form-inline">
-        <input type="password" className="admin-input" placeholder="Новый пароль (от 8 символов)" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-        <button type="submit" className="admin-btn admin-btn--secondary" disabled={feedback.loading || newPassword.length < 8}>
+        <input
+          type="password"
+          className="admin-input"
+          placeholder="Новый пароль (от 8 символов)"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+        />
+        <button
+          type="submit"
+          className="admin-btn admin-btn--secondary"
+          disabled={feedback.loading || newPassword.length < 8}
+        >
           Задать пароль
         </button>
       </div>
@@ -266,43 +559,47 @@ function PasswordResetForm({ userId, feedback }: { userId: string; feedback: For
   );
 }
 
-function DangerZone({ user, feedback, onClose }: { user: AdminUser; feedback: FormFeedback; onClose: () => void }) {
-  const handleToggleBlock = async () => {
-    const willBlock = !user.blockedAt;
-    const label = willBlock ? 'Заблокировать' : 'Разблокировать';
-    if (!window.confirm(`${label} пользователя ${user.username}?`)) return;
-    feedback.setLoading(true);
-    feedback.setError(null);
-    try {
-      await blockAdminUser(user.id, willBlock);
-      onClose();
-    } catch (err) {
-      feedback.setError(extractError(err));
-      feedback.setLoading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Удалить аккаунт пользователя ${user.username}? Это действие необратимо.`)) return;
-    feedback.setLoading(true);
-    feedback.setError(null);
-    try {
-      await deleteAdminUser(user.id);
-      onClose();
-    } catch (err) {
-      feedback.setError(extractError(err));
-      feedback.setLoading(false);
-    }
-  };
+function DangerZone({
+  user,
+  feedback,
+  onClose,
+}: {
+  user: AdminUser;
+  feedback: FormFeedback;
+  onClose: () => void;
+}) {
+  const willBlock = !user.blockedAt;
+  const blockLabel = willBlock ? 'Заблокировать' : 'Разблокировать';
+  const handleToggleBlock = () =>
+    runAdminDangerAction(`${blockLabel} пользователя ${user.username}?`, feedback, onClose, () =>
+      blockAdminUser(user.id, willBlock),
+    );
+  const handleDelete = () =>
+    runAdminDangerAction(
+      `Удалить аккаунт пользователя ${user.username}? Это действие необратимо.`,
+      feedback,
+      onClose,
+      () => deleteAdminUser(user.id),
+    );
 
   return (
     <div className="admin-danger-zone">
       <h4 className="admin-form-subtitle">Блокировка и удаление</h4>
       <div className="admin-danger-actions">
-        <button type="button" className={`admin-btn ${user.blockedAt ? 'admin-btn--secondary' : 'admin-btn--danger'}`} onClick={handleToggleBlock} disabled={feedback.loading}>
+        <button
+          type="button"
+          className={`admin-btn ${user.blockedAt ? 'admin-btn--secondary' : 'admin-btn--danger'}`}
+          onClick={handleToggleBlock}
+          disabled={feedback.loading}
+        >
           {user.blockedAt ? 'Разблокировать аккаунт' : 'Заблокировать аккаунт'}
         </button>
-        <button type="button" className="admin-btn admin-btn--danger-outline" onClick={handleDelete} disabled={feedback.loading}>
+        <button
+          type="button"
+          className="admin-btn admin-btn--danger-outline"
+          onClick={handleDelete}
+          disabled={feedback.loading}
+        >
           Удалить пользователя
         </button>
       </div>
@@ -310,7 +607,33 @@ function DangerZone({ user, feedback, onClose }: { user: AdminUser; feedback: Fo
   );
 }
 
-function SecurityTabSection({ user, feedback, onClose }: { user: AdminUser; feedback: FormFeedback; onClose: () => void }) {
+async function runAdminDangerAction(
+  confirmation: string,
+  feedback: FormFeedback,
+  onClose: () => void,
+  action: () => Promise<unknown>,
+): Promise<void> {
+  if (!window.confirm(confirmation)) return;
+  feedback.setLoading(true);
+  feedback.setError(null);
+  try {
+    await action();
+    onClose();
+  } catch (reason: unknown) {
+    feedback.setError(extractError(reason));
+    feedback.setLoading(false);
+  }
+}
+
+function SecurityTabSection({
+  user,
+  feedback,
+  onClose,
+}: {
+  user: AdminUser;
+  feedback: FormFeedback;
+  onClose: () => void;
+}) {
   return (
     <div className="admin-security-section">
       <PasswordResetForm userId={user.id} feedback={feedback} />
@@ -322,7 +645,15 @@ function SecurityTabSection({ user, feedback, onClose }: { user: AdminUser; feed
 
 // ---------- Footer ----------
 
-function ModalFooter({ user, feedback, onClose }: { user: AdminUser; feedback: FormFeedback; onClose: () => void }) {
+function ModalFooter({
+  user,
+  feedback,
+  onClose,
+}: {
+  user: AdminUser;
+  feedback: FormFeedback;
+  onClose: () => void;
+}) {
   const handleImpersonate = async () => {
     if (!window.confirm(`Войти в личный кабинет под именем @${user.username}?`)) return;
     feedback.setLoading(true);
@@ -338,7 +669,13 @@ function ModalFooter({ user, feedback, onClose }: { user: AdminUser; feedback: F
 
   return (
     <div className="admin-modal__footer">
-      <button type="button" className="admin-btn admin-btn--impersonate" onClick={handleImpersonate} disabled={feedback.loading} title="Войти в кабинет кандидата от его имени">
+      <button
+        type="button"
+        className="admin-btn admin-btn--impersonate"
+        onClick={handleImpersonate}
+        disabled={feedback.loading}
+        title="Войти в кабинет кандидата от его имени"
+      >
         <SignIn size={16} aria-hidden="true" /> Войти как @{user.username} (Имперсонация)
       </button>
       <button type="button" className="admin-btn admin-btn--secondary" onClick={onClose}>
@@ -350,15 +687,27 @@ function ModalFooter({ user, feedback, onClose }: { user: AdminUser; feedback: F
 
 // ---------- Modal header ----------
 
-function ModalHeader({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+function ModalHeader({
+  user,
+  role,
+  onClose,
+}: {
+  user: AdminUser;
+  role: UserRole;
+  onClose: () => void;
+}) {
   return (
     <div className="admin-modal__header">
       <div className="admin-modal__title-group">
         <h3 className="admin-modal__title">Управление пользователем @{user.username}</h3>
-        <span className={`admin-badge admin-badge--${user.role}`}>{user.role}</span>
+        <span className={`admin-badge admin-badge--${user.role}`}>
+          {USER_ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role}
+        </span>
         {user.blockedAt && <span className="admin-badge admin-badge--blocked">Заблокирован</span>}
       </div>
-      <button type="button" className="admin-modal__close" onClick={onClose}>✕</button>
+      <button type="button" className="admin-modal__close" onClick={onClose}>
+        ✕
+      </button>
     </div>
   );
 }
@@ -367,6 +716,7 @@ function ModalHeader({ user, onClose }: { user: AdminUser; onClose: () => void }
 
 export function AdminUserProfileModal({ user, onClose, onUpdated }: ModalProps) {
   const [tab, setTab] = useState<TabId>('profile');
+  const [role, setRole] = useState<UserRole>(user.role);
   const feedback = useFormFeedback();
 
   const handleTabChange = (t: TabId) => {
@@ -382,13 +732,17 @@ export function AdminUserProfileModal({ user, onClose, onUpdated }: ModalProps) 
 
   return (
     <ModalOverlay onClose={onClose}>
-      <ModalHeader user={user} onClose={onClose} />
+      <ModalHeader user={user} role={role} onClose={onClose} />
       <ModalTabs tab={tab} onChange={handleTabChange} />
       <div className="admin-modal__body">
         <FeedbackAlerts error={feedback.error} successMsg={feedback.successMsg} />
-        {tab === 'profile' && <ProfileTabForm user={user} feedback={feedback} />}
+        {tab === 'profile' && (
+          <ProfileTabForm user={user} feedback={feedback} onRoleSaved={setRole} />
+        )}
         {tab === 'subscription' && <SubscriptionTabForm user={user} feedback={feedback} />}
-        {tab === 'security' && <SecurityTabSection user={user} feedback={feedback} onClose={handleCloseWithRefresh} />}
+        {tab === 'security' && (
+          <SecurityTabSection user={user} feedback={feedback} onClose={handleCloseWithRefresh} />
+        )}
       </div>
       <ModalFooter user={user} feedback={feedback} onClose={onClose} />
     </ModalOverlay>

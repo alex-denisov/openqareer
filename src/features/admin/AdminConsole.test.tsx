@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { AdminConsole } from './AdminConsole';
+import { AdminConsole, type AdminConsoleSession } from './AdminConsole';
 import type { AuthUser } from '../coach/coachApi';
 
 const candidate: AuthUser = {
@@ -18,6 +18,11 @@ const administrator: AuthUser = {
   displayName: 'Администратор',
   role: 'admin',
   candidateId: null,
+};
+
+const careerPartner: AdminConsoleSession = {
+  ...administrator,
+  role: 'CareerPartner',
 };
 
 describe('AdminConsole', () => {
@@ -60,6 +65,15 @@ describe('AdminConsole', () => {
     expect(html).toContain('Аккаунты LinkedIn');
     // The scope note describes the operator section's capabilities.
     expect(html).toContain('управление ролями, тарифами, блокировками');
+  });
+
+  it('shows a CareerPartner only the assigned-candidate surface', () => {
+    const html = renderToStaticMarkup(<AdminConsole session={careerPartner} />);
+
+    expect(html).toContain('Закреплённые кандидаты');
+    expect(html).toContain('Профили, резюме и воронка откликов');
+    expect(html).not.toContain('Учётные записи');
+    expect(html).not.toContain('Аккаунты LinkedIn');
   });
 
   it('never renders candidate workspace chrome on the administrator surface', () => {

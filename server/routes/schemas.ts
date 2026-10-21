@@ -176,7 +176,7 @@ export const documentRetentionSchema = z.object({
 export const adminUserQuerySchema = z.object({
   query: z.string().trim().max(80).optional(),
   searchField: z.enum(['all', 'username', 'email', 'displayName']).default('all'),
-  role: z.enum(['candidate', 'admin']).optional(),
+  role: z.enum(['candidate', 'admin', 'CareerPartner']).optional(),
   tier: z.enum(['free', 'pro', 'executive', 'enterprise']).optional(),
   blocked: z
     .enum(['true', 'false'])
@@ -197,7 +197,7 @@ export const adminAuditQuerySchema = z.object({
 });
 
 export const adminUserPatchSchema = z.object({
-  role: z.enum(['candidate', 'admin']).optional(),
+  role: z.enum(['candidate', 'admin', 'CareerPartner']).optional(),
   email: z.string().email().nullable().optional(),
   displayName: z.string().max(255).nullable().optional(),
   headline: z.string().max(255).nullable().optional(),
@@ -207,6 +207,30 @@ export const adminUserPatchSchema = z.object({
   subscriptionStatus: z.enum(['active', 'trialing', 'past_due', 'canceled']).optional(),
   subscriptionExpiresAt: z.string().nullable().optional(),
   subscriptionNotes: z.string().max(1000).nullable().optional(),
+});
+
+export const adminPermissionPatchSchema = z.object({
+  permission: z.enum([
+    'can_view_candidates',
+    'can_edit_campaigns',
+    'can_manage_pool',
+    'can_view_audit',
+  ]),
+  enabled: z.boolean(),
+});
+
+export const adminPartnerAssignmentSchema = z.object({
+  candidateUserId: z.string().trim().min(1).max(120),
+});
+
+export const adminPartnerCandidateQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(20).default(20),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
+});
+
+export const adminPartnerAssignmentQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+  offset: z.coerce.number().int().min(0).max(100_000).default(0),
 });
 
 export const adminUserBlockSchema = z.object({

@@ -8,6 +8,8 @@ import {
   withDeps,
 } from './helpers';
 import { requireAdmin } from './adminAuth';
+import { registerAdminPermissionRoutes } from './adminPermissions';
+import { registerAdminPartnerRoutes } from './adminPartnerRoutes';
 import { toAdminSourceSchedule } from '../vacancies/adminSourceSchedule';
 import { buildAdminSourcePage } from '../vacancies/adminSourcePage';
 import { buildAdminVacancyPage } from '../vacancies/adminVacancyPage';
@@ -78,6 +80,9 @@ async function handlePatchUser(deps: RouteDeps, request: FastifyRequest, reply: 
     return { data: updated, meta: { requestId: request.id } };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Не удалось обновить пользователя.';
+    if (message.startsWith('Последний суперадминистратор')) {
+      return sendError(reply, request, 409, 'last_superadmin', message, false);
+    }
     return sendError(reply, request, 400, 'bad_request', message, false);
   }
 }
@@ -299,10 +304,10 @@ function providerStatusData(deps: RouteDeps) {
 }
 
 async function handleProviderStatus(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
-  if (
-    !hasPreviewAccess(request, deps.config.previewToken) &&
-    authenticateSession(request, deps.authService, deps.config)?.role !== 'admin'
-  ) {
+  const principal = authenticateSession(request, deps.authService, deps.config);
+  if (principal?.role === 'admin' || principal?.role === 'CareerPartner') {
+    if (!requireAdmin(deps, request, reply)) return;
+  } else if (!hasPreviewAccess(request, deps.config.previewToken)) {
     return sendError(reply, request, 401, 'unauthorized', 'Нужна сессия администратора.', false);
   }
   return { data: providerStatusData(deps), meta: { requestId: request.id } };
@@ -422,6 +427,8 @@ function registerRuntimeMemory(app: FastifyInstance, deps: RouteDeps): void {
 }
 
 export async function registerAdminRoutes(app: FastifyInstance, deps: RouteDeps): Promise<void> {
+  registerAdminPermissionRoutes(app, deps);
+  registerAdminPartnerRoutes(app, deps);
   registerCrawlFilter(app, deps);
   registerRuntimeMemory(app, deps);
   registerLinkedinPoolRoutes(app, deps);
