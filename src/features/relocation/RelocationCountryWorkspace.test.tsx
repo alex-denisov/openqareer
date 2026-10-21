@@ -47,6 +47,7 @@ describe('RelocationCountryWorkspace', () => {
         selectedCountryCodes={[]}
         onSelectedCountryCodesChange={() => undefined}
         onCompare={() => undefined}
+        onAddCountry={() => undefined}
         onCalculateEconomy={onCalculateEconomy}
         onOpenProfile={() => undefined}
       />,

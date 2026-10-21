@@ -433,6 +433,8 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   readonly linkedinDraftCadence?: Partial<LinkedinDraftFixtureState['cadence']>;
   readonly relocation?: {
     readonly consentGranted?: boolean;
+    /** B468: the consent text is approved (as on prod), so «Заполнить анкету» grants it. */
+    readonly consentTextApproved?: boolean;
     readonly currentStep?: RelocationCurrentStep;
     readonly citizenshipCountryCodes?: readonly string[];
     readonly documents?: readonly {
@@ -443,6 +445,9 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
       readonly issuedAt?: string;
       readonly expiresAt?: string;
     }[];
+    /** B468-r2: steps 2 and 4 with data, for the 390 questionnaire frames. */
+    readonly education?: Readonly<Record<string, unknown>>;
+    readonly languages?: readonly Readonly<Record<string, unknown>>[];
   };
 }
 
@@ -1618,6 +1623,10 @@ export async function mockSignedInCabinet(
           citizenshipCountryCodes: [...(options.relocation.citizenshipCountryCodes ?? [])],
           documents: [...(options.relocation.documents ?? [])],
         },
+        ...(options.relocation.education ? { education: options.relocation.education } : {}),
+        ...(options.relocation.languages
+          ? { languages: { languages: options.relocation.languages } }
+          : {}),
       }
     : null;
   let todayDecisionSelection:
@@ -2100,6 +2109,14 @@ export async function mockSignedInCabinet(
       return route.fulfill({ json: { data: decisionProfile } });
     }
     if (path.endsWith('/candidate/relocation-questionnaire/consent')) {
+      if (route.request().method() === 'PUT' && options.relocation?.consentTextApproved) {
+        relocationConsent.status = 'granted';
+        relocationConsent.granted = true;
+        relocationConsent.versionId = RELOCATION_CONSENT_VERSION;
+        relocationConsent.grantedAt = '2026-10-10T12:00:00.000Z';
+        relocationProfile = relocationProfile ?? emptyRelocationProfile();
+        return route.fulfill({ json: { data: { consent: relocationConsent } } });
+      }
       if (route.request().method() === 'PUT') {
         return route.fulfill({
           status: 409,
@@ -2232,7 +2249,9 @@ export async function mockSignedInCabinet(
               ? (relocationProfile ?? emptyRelocationProfile())
               : null,
             consent: relocationConsent,
-            consentTextStatus: 'pending_dpo_review',
+            consentTextStatus: options.relocation?.consentTextApproved
+              ? 'approved'
+              : 'pending_dpo_review',
             alerts: buildFixtureRelocationAlerts(relocationProfile, relocationConsent.granted),
           },
         },

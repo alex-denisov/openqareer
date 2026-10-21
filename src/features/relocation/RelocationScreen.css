@@ -263,9 +263,13 @@
   color: var(--career-success);
 }
 
-.career-relocation-country-status.is-barriers,
-.career-relocation-country-status.is-high_barriers {
-  color: var(--career-warning);
+.career-relocation-country-status.is-barriers {
+  color: var(--career-accent);
+}
+
+.career-relocation-country-status.is-high_barriers,
+.career-relocation-country-status.is-unknown {
+  color: var(--career-text-soft);
 }
 
 .career-relocation-country-status.is-unavailable,
@@ -355,29 +359,6 @@
 
 .career-relocation-consent h2 {
   font-size: var(--career-text-lg);
-}
-
-.career-relocation-consent ul {
-  display: grid;
-  gap: var(--career-space-4);
-  margin: 0;
-  padding-inline-start: var(--career-space-6);
-}
-
-.career-relocation-consent li {
-  padding-inline-start: var(--career-space-2);
-}
-
-.career-relocation-consent li strong,
-.career-relocation-consent li span {
-  display: block;
-}
-
-.career-relocation-consent li span {
-  margin-block-start: var(--career-space-1);
-  color: var(--career-text-soft);
-  font-size: var(--career-text-sm);
-  line-height: 1.5;
 }
 
 .career-relocation-privacy-note {
@@ -500,4 +481,328 @@
     scroll-behavior: auto;
     transition: none;
   }
+}
+
+/* B468 — mockup 15: framed cards, chips, country grid, numbered promises. */
+.career-relocation-card {
+  display: grid;
+  min-width: 0;
+  gap: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-6);
+  background: var(--career-surface);
+}
+
+.career-relocation-header.career-relocation-card {
+  gap: var(--career-space-3);
+  padding-block-end: 0;
+}
+
+.career-relocation-header.career-relocation-card > p {
+  margin: 0;
+  max-inline-size: none;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-header:not(:has(.career-relocation-tabs, .career-relocation-stepper)) {
+  padding-block-end: var(--career-space-6);
+}
+
+.career-relocation-header h2 {
+  margin: 0;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+}
+
+.career-relocation-back {
+  border-radius: var(--career-radius-pill);
+}
+
+.career-relocation-status {
+  gap: var(--career-space-1);
+  min-block-size: auto;
+  padding-block: var(--career-space-1);
+}
+
+.career-relocation-tab-count {
+  color: var(--career-text-dim);
+  font-variant-numeric: tabular-nums;
+  font-weight: 400;
+}
+
+.career-relocation-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-section-title h3,
+.career-relocation-card h3 {
+  margin: 0;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+}
+
+.career-relocation-icon-button {
+  display: inline-grid;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  place-items: center;
+  border: 0;
+  border-radius: var(--career-radius-pill);
+  padding: 0;
+  color: var(--career-text-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+.career-relocation-icon-button:hover {
+  color: var(--career-accent);
+}
+
+.career-relocation-icon-button:focus-visible,
+.career-relocation-filter-chip:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-relocation-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-filter-chip {
+  min-block-size: var(--career-target-min);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding-inline: var(--career-space-3);
+  color: var(--career-text-soft);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-xs);
+  cursor: pointer;
+}
+
+.career-relocation-filter-chip[aria-pressed='true'] {
+  border-color: var(--career-accent);
+  color: var(--career-text);
+  background: var(--career-accent-soft);
+}
+
+.career-relocation-country-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-relocation-country-card {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-4);
+  background: var(--career-bg-elevated);
+}
+
+.career-relocation-country-card p {
+  margin: 0;
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-relocation-country-scenario,
+.career-relocation-country-meta {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-country-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+}
+
+.career-relocation-country-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+.career-relocation-country-card .career-relocation-country-actions {
+  justify-content: flex-start;
+}
+
+.career-relocation-country-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  border: var(--career-border-width) solid color-mix(in oklch, currentColor 45%, transparent);
+  border-radius: calc(var(--career-radius-sm) / 2);
+  padding: 2px var(--career-space-2);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.career-relocation-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  margin: 0;
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3) var(--career-space-4);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-relocation-note svg {
+  flex: 0 0 auto;
+  margin-block-start: var(--career-space-1);
+}
+
+.career-relocation-muted {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-relocation-countries .career-relocation-list-footer {
+  display: grid;
+  justify-content: stretch;
+  gap: var(--career-space-3);
+}
+
+.career-relocation-count {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-4);
+}
+
+.career-relocation-promises,
+.career-relocation-questions {
+  display: grid;
+  gap: var(--career-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-promises li,
+.career-relocation-questions li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+}
+
+.career-relocation-promises li > span:last-child {
+  display: grid;
+  gap: var(--career-space-1);
+}
+
+.career-relocation-promises li > span:last-child > span {
+  color: var(--career-text-soft);
+}
+
+.career-relocation-step-number {
+  display: inline-grid;
+  flex: 0 0 auto;
+  inline-size: var(--career-space-7);
+  block-size: var(--career-space-7);
+  place-items: center;
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-pill);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-relocation-consent .career-relocation-consent-control {
+  display: grid;
+  gap: var(--career-space-4);
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.career-relocation-add {
+  align-content: start;
+}
+
+.career-relocation-add-list {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-relocation-add-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3) var(--career-space-4);
+}
+
+.career-relocation-add-list li > span {
+  display: grid;
+  gap: var(--career-space-1);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-add-list li > span > span {
+  color: var(--career-text-soft);
+}
+
+.career-relocation-comparison-view .career-relocation-footer-actions {
+  justify-content: flex-start;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .career-relocation-filter-chip,
+  .career-relocation-icon-button {
+    transition:
+      color var(--career-motion-quick),
+      background var(--career-motion-quick);
+  }
+}
+
+@media (max-width: 900px) {
+  .career-relocation-country-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* B468-r1: «Выбор сохраняется» on the right of the title row (mockup 15). */
+.career-relocation-save-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  margin-inline-start: auto;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-save-note.is-error {
+  color: var(--career-warning);
 }

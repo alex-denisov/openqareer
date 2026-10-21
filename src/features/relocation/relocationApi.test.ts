@@ -43,10 +43,10 @@ describe('relocation questionnaire API client', () => {
   it('saves a validated step with the profile revision in If-Match', async () => {
     const profile = emptyRelocationQuestionnaire();
     vi.spyOn(apiClient, 'apiFetch').mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ data: { profile: { ...profile, revision: 1 }, alerts: [] } }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      ),
+      new Response(JSON.stringify({ data: { profile: { ...profile, revision: 1 }, alerts: [] } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
     );
     const step = { citizenshipCountryCodes: ['RU'], documents: [] };
 
@@ -67,9 +67,8 @@ describe('relocation questionnaire API client', () => {
 
     await expect(restartRelocationQuestionnaire()).resolves.toBeUndefined();
 
-    expect(apiClient.apiFetch).toHaveBeenCalledWith(
-      '/api/v1/candidate/relocation-questionnaire',
-      { method: 'DELETE' },
-    );
+    expect(apiClient.apiFetch).toHaveBeenCalledWith('/api/v1/candidate/relocation-questionnaire', {
+      method: 'DELETE',
+    });
   });
 });

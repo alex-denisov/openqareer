@@ -23,39 +23,32 @@ export function CitizenshipDocumentsForm(props: RelocationQuestionnaireStepFormP
   );
 }
 
+/** Mockup 15 `i1`: one citizenship picker and «Есть второе гражданство» for a second one. */
 function CitizenshipList({ profile, onProfileChange }: RelocationDraftProps) {
-  const [countryToAdd, setCountryToAdd] = useState('');
   const countries = profile.citizenshipDocuments.citizenshipCountryCodes;
-  const add = () => {
-    if (!countryToAdd || countries.includes(countryToAdd)) return;
-    onProfileChange({ ...profile, citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: [...countries, countryToAdd] } });
-    setCountryToAdd('');
-  };
-  const remove = (countryCode: string) => onProfileChange({
+  const [second, setSecond] = useState(countries.length > 1);
+  const write = (codes: readonly string[]) => onProfileChange({
     ...profile,
-    citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: countries.filter((code) => code !== countryCode) },
+    citizenshipDocuments: { ...profile.citizenshipDocuments, citizenshipCountryCodes: [...new Set(codes.filter(Boolean))] },
   });
+  const toggleSecond = (checked: boolean) => {
+    setSecond(checked);
+    if (!checked) write(countries.slice(0, 1));
+  };
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-citizenship-title">
-      <h3 id="relocation-citizenship-title">Гражданство</h3>
-      <div className="career-relocation-chip-list">
-        {countries.map((countryCode) => (
-          <span className="career-relocation-chip" key={countryCode}>
-            {relocationCountryName(countryCode)}
-            <button type="button" aria-label={`Убрать гражданство: ${relocationCountryName(countryCode)}`} onClick={() => remove(countryCode)}>
-              <Trash aria-hidden="true" size={15} />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="career-relocation-inline-form">
-        <RelocationFormField id="relocation-citizenship-add" label="Добавить гражданство">
-          <CountrySelect id="relocation-citizenship-add" value={countryToAdd} onChange={setCountryToAdd} />
+      <RelocationFormField id="relocation-citizenship-first" label="Гражданство">
+        <CountrySelect id="relocation-citizenship-first" value={countries[0] ?? ''} onChange={(code) => write([code, ...countries.slice(1)])} />
+      </RelocationFormField>
+      <label className="career-relocation-check">
+        <input type="checkbox" checked={second} onChange={(event) => toggleSecond(event.target.checked)} />
+        <span id="relocation-citizenship-title">Есть второе гражданство</span>
+      </label>
+      {second ? (
+        <RelocationFormField id="relocation-citizenship-second" label="Второе гражданство">
+          <CountrySelect id="relocation-citizenship-second" value={countries[1] ?? ''} onChange={(code) => write([countries[0] ?? '', code])} />
         </RelocationFormField>
-        <button className="career-btn career-btn-secondary" type="button" disabled={!countryToAdd} onClick={add}>
-          <Plus aria-hidden="true" size={16} />Добавить
-        </button>
-      </div>
+      ) : null}
     </section>
   );
 }
@@ -63,7 +56,7 @@ function CitizenshipList({ profile, onProfileChange }: RelocationDraftProps) {
 function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
   return (
     <section className="career-relocation-step-card" aria-labelledby="relocation-documents-title">
-      <h3 id="relocation-documents-title">Вид на жительство, разрешения и визы</h3>
+      <h3 id="relocation-documents-title">Вид на жительство, ПМЖ, визы</h3>
       {profile.citizenshipDocuments.documents.length ? (
         <div className="career-relocation-edit-list">
           {profile.citizenshipDocuments.documents.map((document) => (

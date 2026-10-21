@@ -492,3 +492,186 @@
     inline-size: 100%;
   }
 }
+
+/* B468 — country picker with search (mockup 15 `i1-dc`). */
+.career-relocation-country-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.career-relocation-picker-button {
+  display: flex;
+  inline-size: 100%;
+  min-block-size: var(--career-target-min);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-field-edge);
+  border-radius: var(--career-radius-md);
+  padding-inline: var(--career-space-3);
+  color: var(--career-text);
+  background: var(--career-bg);
+  font: inherit;
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+
+.career-relocation-picker-button:focus-visible,
+.career-relocation-picker-panel button:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
+.career-relocation-picker-panel {
+  position: absolute;
+  z-index: 2;
+  inset-inline: 0;
+  display: grid;
+  gap: var(--career-space-2);
+  margin-block-start: var(--career-space-1);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-2);
+  background: var(--career-bg-elevated);
+}
+
+.career-relocation-picker-panel ul {
+  display: grid;
+  max-block-size: 16rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.career-relocation-picker-panel li button {
+  inline-size: 100%;
+  min-block-size: var(--career-target-min);
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  padding-inline: var(--career-space-3);
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-sm);
+  text-align: start;
+  cursor: pointer;
+}
+
+.career-relocation-picker-panel li[aria-selected='true'] button,
+.career-relocation-picker-panel li button:hover {
+  background: var(--career-accent-soft);
+}
+
+/* B468 — questionnaire as in mockup 15 `i1…i5`: one framed form, radio-like stepper. */
+.career-relocation-questionnaire .career-relocation-stepper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-1) var(--career-space-4);
+  padding-block-end: var(--career-space-4);
+}
+
+.career-relocation-questionnaire .career-relocation-stepper button,
+.career-relocation-questionnaire .career-relocation-stepper-current {
+  inline-size: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.career-relocation-questionnaire .career-relocation-stepper button > span {
+  flex: 0 0 auto;
+  inline-size: var(--career-space-4);
+  min-block-size: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-pill);
+  color: transparent;
+  font-size: var(--career-text-xs);
+  overflow: hidden;
+}
+
+.career-relocation-questionnaire .career-relocation-stepper li[aria-current='step'] button {
+  color: var(--career-accent);
+  font-weight: 600;
+}
+
+.career-relocation-questionnaire .career-relocation-stepper li[aria-current='step'] button > span {
+  border-color: var(--career-accent);
+  box-shadow: inset 0 0 0 calc(var(--career-border-width) * 3) var(--career-bg-elevated);
+  background: var(--career-accent);
+}
+
+.career-relocation-questionnaire-form {
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-6);
+  background: var(--career-surface);
+}
+
+.career-relocation-questionnaire-form > h2 {
+  font-size: var(--career-text-md);
+}
+
+.career-relocation-questionnaire-form .career-relocation-step-card {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.career-relocation-questionnaire-form .career-relocation-step-card h3 {
+  font-size: var(--career-text-sm);
+}
+
+.career-relocation-questionnaire-form .career-relocation-add-form {
+  border-style: dashed;
+  background: transparent;
+}
+
+.career-relocation-questionnaire-reason {
+  border-radius: var(--career-radius-lg);
+  padding: var(--career-space-6);
+}
+
+.career-relocation-questionnaire-reason > h2 {
+  font-size: var(--career-text-md);
+}
+
+.career-relocation-questionnaire-form .career-relocation-list-footer {
+  justify-content: flex-start;
+}
+
+.career-relocation-questions li {
+  align-items: center;
+}
+
+.career-relocation-check,
+.career-relocation-consent-control label {
+  display: flex;
+  min-block-size: var(--career-target-min);
+  align-items: center;
+  gap: var(--career-space-3);
+  font-size: var(--career-text-sm);
+  cursor: pointer;
+}
+
+.career-relocation-check input,
+.career-relocation-consent-control input[type='checkbox'] {
+  flex: 0 0 auto;
+  inline-size: var(--career-space-5);
+  block-size: var(--career-space-5);
+  accent-color: var(--career-accent);
+}
+
+.career-relocation-profile-row {
+  align-items: center;
+}
+
+.career-relocation-row-actions {
+  display: inline-flex;
+  justify-self: end;
+  gap: var(--career-space-1);
+}
+
+.career-relocation-profile-row:has(.career-relocation-row-actions) {
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr) auto;
+}

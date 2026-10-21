@@ -1,4 +1,5 @@
 import { useAdaptationPanelContext } from '../diary/adaptationDiscussion';
+import { usePageTitleOverrideValue } from './pageTitleOverride';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
@@ -457,11 +458,12 @@ export function CareerWorkspaceShell({
     media.addEventListener('change', onChange);
     return () => media.removeEventListener('change', onChange);
   }, []);
+  const pageTitleOverride = usePageTitleOverrideValue();
   const desktopPageTitle = intakeVisible
     ? 'Старт'
     : roleSkillAssessmentOpen
       ? 'Проверка навыков'
-      : pageNames[activeView];
+      : (pageTitleOverride ?? pageNames[activeView]);
 
   useEffect(() => {
     if (!matchesMedia(DOCKED_CONSULTANT_QUERY)) return;

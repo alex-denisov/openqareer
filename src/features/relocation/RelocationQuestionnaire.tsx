@@ -1,5 +1,5 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react';
-import { ArrowRight, CaretLeft } from '@phosphor-icons/react';
+import { useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { ArrowRight, CaretLeft, LockKey } from '@phosphor-icons/react';
 import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
@@ -16,9 +16,9 @@ import {
   putRelocationQuestionnaireProgress,
   putRelocationQuestionnaireStep,
   restartRelocationQuestionnaire,
-  type RelocationStepInput,
 } from './relocationApi';
 import { RelocationQuestionnaireStepForm } from './RelocationQuestionnaireSteps';
+import { relocationLanguageInput, saveRelocationStep } from './relocationProfileItems';
 import { listRelocationCountries, mobilityCandidateFromQuestionnaire } from './relocationCountryData';
 
 const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
@@ -26,6 +26,13 @@ const STEP_TITLES: Readonly<Record<RelocationStepId, string>> = {
   education: 'Диплом и опыт',
   family: 'Семья и сроки',
   languages: 'Языки',
+};
+
+export const STEP_DESCRIPTIONS: Readonly<Record<RelocationStepId, string>> = {
+  citizenship_documents: 'гражданство и действующие документы. Это определяет, какие страны вам доступны без визы.',
+  education: 'диплом и опыт. Признание диплома и стаж открывают визы под оффер.',
+  family: 'семья и сроки. От них зависят сценарии с семьёй и путь к ПМЖ.',
+  languages: 'языки. Местный язык расширяет список вакансий.',
 };
 
 type ProfileUpdate = (profile: RelocationQuestionnaire, alerts?: readonly RelocationAlert[]) => void;
@@ -38,7 +45,7 @@ export interface RelocationQuestionnaireProps {
   readonly onProfileUpdated: ProfileUpdate;
 }
 
-interface QuestionnaireController {
+export interface QuestionnaireController {
   readonly savedProfile: RelocationQuestionnaire;
   readonly draft: RelocationQuestionnaire;
   readonly step: RelocationCurrentStep;
@@ -68,7 +75,7 @@ export function RelocationQuestionnaire(props: RelocationQuestionnaireProps) {
   return <QuestionnaireView {...props} controller={controller} />;
 }
 
-function useQuestionnaireController(props: RelocationQuestionnaireProps): QuestionnaireController {
+export function useQuestionnaireController(props: RelocationQuestionnaireProps): QuestionnaireController {
   const [savedProfile, setSavedProfile] = useState(props.profile);
   const [draft, setDraft] = useState(props.profile);
   const [step, setStep] = useState<RelocationCurrentStep>(props.initialStep);
@@ -104,14 +111,14 @@ function QuestionnaireView({
 }: RelocationQuestionnaireProps & { readonly controller: QuestionnaireController }) {
   const { step, isDirty } = controller;
   return (
-    <main className="career-relocation career-relocation-questionnaire" aria-labelledby="career-relocation-questionnaire-title">
-      <QuestionnaireHeader step={step} isDirty={isDirty} onClose={onClose} onConfirmLeave={() => controller.setConfirmLeave(true)} />
-      <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
+    <div className="career-relocation career-relocation-questionnaire">
+      <QuestionnaireHeader step={step} isDirty={isDirty} onClose={onClose} onConfirmLeave={() => controller.setConfirmLeave(true)}>
+        <QuestionnaireStepper step={step} dirty={isDirty} busy={controller.busy} onSelect={controller.selectStep} />
+      </QuestionnaireHeader>
       <QuestionnaireStatus notice={controller.notice} error={controller.error} />
       <QuestionnaireStepPanel controller={controller} onShowCountries={onShowCountries} />
-      <QuestionnaireFooter busy={controller.busy} onRestart={() => controller.setConfirmRestart(true)} />
       <QuestionnaireDialogs controller={controller} onClose={onClose} />
-    </main>
+    </div>
   );
 }
 
@@ -120,19 +127,25 @@ function QuestionnaireHeader({
   isDirty,
   onClose,
   onConfirmLeave,
+  children,
 }: {
   readonly step: RelocationCurrentStep;
   readonly isDirty: boolean;
   readonly onClose: () => void;
   readonly onConfirmLeave: () => void;
+  readonly children: ReactNode;
 }) {
   return (
-    <header className="career-relocation-header">
-      <button className="career-relocation-back" type="button" aria-label="Назад к данным" onClick={() => isDirty ? onConfirmLeave() : onClose()}>
-        <CaretLeft aria-hidden="true" size={20} />
-      </button>
-      <h1 id="career-relocation-questionnaire-title">Условия для переезда</h1>
-      <p>{step === 'summary' ? 'Анкета сохранена в вашем профиле.' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_TITLES[step]}.`}</p>
+    <header className="career-relocation-card career-relocation-header">
+      <div className="career-relocation-title-row">
+        <button className="career-relocation-back" type="button" aria-label="Назад" onClick={() => isDirty ? onConfirmLeave() : onClose()}>
+          <CaretLeft aria-hidden="true" size={20} />
+        </button>
+        <h2 id="career-relocation-questionnaire-title">Условия для переезда</h2>
+        <span className="career-relocation-status"><LockKey aria-hidden="true" size={14} />Видите только вы</span>
+      </div>
+      <p>{step === 'summary' ? 'Анкета сохранена в разделе «Страны и релокация».' : `Шаг ${RELOCATION_STEPS.indexOf(step) + 1} из 4: ${STEP_DESCRIPTIONS[step]}`}</p>
+      {children}
     </header>
   );
 }
@@ -180,7 +193,10 @@ function QuestionnaireStepPanel({
   return <QuestionnaireStepEditor controller={controller} step={step} />;
 }
 
-function QuestionnaireStepEditor({ controller, step }: { readonly controller: QuestionnaireController; readonly step: RelocationStepId }) {
+function QuestionnaireStepEditor({ controller, step }: {
+  readonly controller: QuestionnaireController;
+  readonly step: RelocationStepId;
+}) {
   const { draft, busy, importBusy } = controller;
   return (
     <div className="career-relocation-questionnaire-layout">
@@ -213,16 +229,13 @@ function QuestionnaireStepActions({
   return (
     <div className="career-relocation-list-footer">
       <button className="career-btn career-btn-primary" type="button" disabled={busy} onClick={() => onNext(false)}>
-        {busy ? 'Сохраняем…' : step === 'languages' ? 'Показать итог' : 'Дальше'}<ArrowRight aria-hidden="true" size={17} />
+        <ArrowRight aria-hidden="true" size={17} />{busy ? 'Сохраняем…' : step === 'languages' ? 'Показать итог' : 'Дальше'}
       </button>
-      <button className="career-btn career-btn-secondary" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
+      <button className="career-relocation-text-action" type="button" disabled={busy} onClick={() => onNext(true)}>Пропустить шаг</button>
     </div>
   );
 }
 
-function QuestionnaireFooter({ busy, onRestart }: { readonly busy: boolean; readonly onRestart: () => void }) {
-  return <footer className="career-relocation-questionnaire-footer"><button className="career-btn career-btn-secondary" type="button" disabled={busy} onClick={onRestart}>Начать заново</button></footer>;
-}
 
 function QuestionnaireDialogs({
   controller,
@@ -267,7 +280,7 @@ async function advanceQuestionnaire(input: AdvanceInput) {
   input.setError(undefined);
   input.setNotice(undefined);
   try {
-    const stepResult = input.skip ? undefined : await saveStep(input.step, input.draft);
+    const stepResult = input.skip ? undefined : await saveRelocationStep(input.step, input.draft);
     const base = stepResult?.profile ?? input.savedProfile;
     const skippedSteps = input.skip
       ? [...new Set([...base.skippedSteps, input.step])]
@@ -354,7 +367,7 @@ async function importQuestionnaireLanguages(input: ImportLanguagesInput) {
   input.setError(undefined);
   try {
     const current = input.isDirty
-      ? (await putRelocationQuestionnaireStep('languages', languageInput(input.draft), input.savedProfile.revision)).profile
+      ? (await putRelocationQuestionnaireStep('languages', relocationLanguageInput(input.draft), input.savedProfile.revision)).profile
       : input.savedProfile;
     const result = await importRelocationLanguagesFromLinkedIn(current.revision);
     input.setSavedProfile(result.profile);
@@ -400,19 +413,6 @@ async function restartQuestionnaire(input: RestartInput) {
   }
 }
 
-function saveStep(step: RelocationStepId, profile: RelocationQuestionnaire) {
-  switch (step) {
-    case 'citizenship_documents':
-      return putRelocationQuestionnaireStep(step, profile.citizenshipDocuments, profile.revision);
-    case 'education':
-      return putRelocationQuestionnaireStep(step, profile.education, profile.revision);
-    case 'family':
-      return putRelocationQuestionnaireStep(step, profile.family, profile.revision);
-    case 'languages':
-      return putRelocationQuestionnaireStep(step, languageInput(profile), profile.revision);
-  }
-}
-
 function validateStep(step: RelocationStepId, profile: RelocationQuestionnaire): string | undefined {
   const result = relocationQuestionnaireStepSchemas[step].safeParse(profileStepData(step, profile));
   return result.success ? undefined : 'Проверьте обязательные поля и даты шага.';
@@ -423,12 +423,6 @@ function profileStepData(step: RelocationStepId, profile: RelocationQuestionnair
   if (step === 'education') return profile.education;
   if (step === 'family') return profile.family;
   return profile.languages;
-}
-
-function languageInput(profile: RelocationQuestionnaire): RelocationStepInput['languages'] {
-  return {
-    languages: profile.languages.languages.map(({ id, name, level, confirmation }) => ({ id, name, level, confirmation })),
-  };
 }
 
 function nextStepAfter(step: RelocationStepId): RelocationCurrentStep {
@@ -511,7 +505,7 @@ function RelocationSummaryContent({
   );
 }
 
-function InlineConfirmation({
+export function InlineConfirmation({
   title,
   description,
   cancel,

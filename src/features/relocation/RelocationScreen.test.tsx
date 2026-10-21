@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyRelocationQuestionnaire } from '../../../shared/relocationQuestionnaire';
@@ -46,7 +46,7 @@ describe('RelocationScreen', () => {
     expect(grantConsent).not.toHaveBeenCalled();
   });
 
-  it('grants the approved consent only after the candidate ticks it, then opens the workspace', async () => {
+  it('grants the approved consent only after the candidate ticks it, then opens the questionnaire', async () => {
     vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
       profile: null,
       consent: notGranted,
@@ -78,7 +78,45 @@ describe('RelocationScreen', () => {
     await act(async () => startButton()?.click());
 
     expect(grantConsent).toHaveBeenCalledTimes(1);
-    expect(host?.querySelectorAll('[role="tab"]').length).toBe(4);
+    expect(host?.textContent).toContain('Условия для переезда');
+    expect(host?.textContent).toContain('Шаг 1 из 4');
+  });
+
+  it('«Позже» goes back to roles and writes nothing', async () => {
+    vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockResolvedValueOnce({
+      profile: null,
+      consent: notGranted,
+      consentTextStatus: 'approved',
+      alerts: [],
+    });
+    const grantConsent = vi.spyOn(relocationApi, 'grantRelocationConsent');
+    const onBack = vi.fn();
+    render(onBack);
+    await flushLoad();
+
+    expect(host?.textContent).toContain('Что мы спросим');
+    expect(host?.querySelector('[aria-label="Назад к ролям"]')).not.toBeNull();
+    await clickButton('Позже');
+    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(grantConsent).not.toHaveBeenCalled();
+  });
+
+  it('does not show an error when an aborted first load is superseded', async () => {
+    const granted = { ...notGranted, status: 'granted' as const, granted: true, versionId: 'v1', grantedAt: '2026-10-10T12:00:00.000Z' };
+    vi.spyOn(relocationApi, 'getRelocationQuestionnaire').mockImplementation(async (signal) => {
+      if (signal?.aborted) throw new TypeError('Failed to fetch');
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (signal?.aborted) throw new TypeError('Failed to fetch');
+      return { profile: emptyRelocationQuestionnaire(), consent: granted, consentTextStatus: 'approved', alerts: [] };
+    });
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+    act(() => root?.render(<StrictMode><RelocationScreen onNavigateBack={vi.fn()} /></StrictMode>));
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
+
+    expect(host.textContent).not.toContain('Не удалось');
+    expect(host.querySelectorAll('[role="tab"]').length).toBe(4);
   });
 
   it('exposes the four workspace tabs when consent is active', async () => {
@@ -113,12 +151,9 @@ describe('RelocationScreen', () => {
     render();
 
     await flushLoad();
-    await clickButton('Указать в профиле');
+    await clickButton('Указать в анкете');
 
-    expect(host?.textContent).toContain('Мои данные');
-    expect(
-      host?.querySelector('#career-relocation-tab-profile')?.getAttribute('aria-selected'),
-    ).toBe('true');
+    expect(host?.textContent).toContain('Шаг 1 из 4');
   });
 
   it('shows citizenship and document-expiration alerts from the profile response', async () => {
@@ -181,7 +216,7 @@ describe('RelocationScreen', () => {
     await clickButton('Мои данные');
     await clickButton('Продолжить с шага 2');
 
-    expect(host?.textContent).toContain('Шаг 2 из 4: Диплом и опыт');
+    expect(host?.textContent).toContain('Шаг 2 из 4: диплом и опыт');
   });
 
   it('opens economy for the country selected from its details', async () => {
@@ -196,11 +231,11 @@ describe('RelocationScreen', () => {
     expect(host?.querySelector('select')?.value).toBe('DE');
   });
 
-  function render() {
+  function render(onNavigateBack: () => void = vi.fn()) {
     host = document.createElement('div');
     document.body.append(host);
     root = createRoot(host);
-    act(() => root?.render(<RelocationScreen onNavigateBack={vi.fn()} />));
+    act(() => root?.render(<RelocationScreen onNavigateBack={onNavigateBack} />));
   }
 
   function mockGrantedQuestionnaire() {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LockKey, PencilSimple, Trash } from '@phosphor-icons/react';
+import { ArrowRight, LockKey, PencilSimple, Trash } from '@phosphor-icons/react';
 import {
   RELOCATION_STEPS,
   emptyRelocationQuestionnaire,
@@ -12,6 +12,12 @@ import { apiErrorMessage } from '../coach/apiClient';
 import { restartRelocationQuestionnaire, revokeRelocationConsent } from './relocationApi';
 import { listRelocationCountries } from './relocationCountryData';
 import { RelocationQuestionnaire } from './RelocationQuestionnaire';
+import {
+  citizenshipRowId,
+  relocationLanguageSourceLabel,
+  removeRelocationItem,
+  saveRelocationStep,
+} from './relocationProfileItems';
 
 const STEP_SECTIONS: readonly {
   readonly step: RelocationStepId;
@@ -30,6 +36,9 @@ export interface RelocationProfileProps {
   readonly onProfileUpdated: (profile: RelocationQuestionnaireData, alerts?: readonly RelocationAlert[]) => void;
   readonly onConsentRevoked: (consent: RelocationConsentState) => void;
   readonly onShowCountries: () => void;
+  readonly mobile?: boolean;
+  /** 390: the questionnaire is the workspace's own push screen, not nested here. */
+  readonly onEditStep?: (step: RelocationStepId) => void;
 }
 
 export function RelocationProfile(props: RelocationProfileProps) {
@@ -45,7 +54,7 @@ export function RelocationProfile(props: RelocationProfileProps) {
       />
     );
   }
-  return <RelocationProfileView profile={props.profile} consent={props.consent} alerts={props.alerts} actions={actions} onEdit={actions.edit} />;
+  return <RelocationProfileView profile={props.profile} consent={props.consent} alerts={props.alerts} actions={actions} onEdit={actions.edit} onShowCountries={props.onShowCountries} />;
 }
 
 async function runProfileAction(
@@ -82,12 +91,36 @@ async function runProfileAction(
   }
 }
 
+async function removeProfileItem(
+  input: {
+    readonly profile: RelocationQuestionnaireData;
+    readonly step: RelocationStepId;
+    readonly itemId: string;
+    readonly onProfileUpdated: RelocationProfileProps['onProfileUpdated'];
+  },
+  setters: { setBusy: (value: boolean) => void; setError: (value: string | undefined) => void; setNotice: (value: string | undefined) => void },
+) {
+  setters.setBusy(true);
+  setters.setError(undefined);
+  try {
+    const result = await saveRelocationStep(input.step, removeRelocationItem(input.profile, input.step, input.itemId));
+    input.onProfileUpdated(result.profile, result.alerts);
+    setters.setNotice('Запись удалена. Статусы стран пересчитаны.');
+  } catch (reason) {
+    setters.setError(apiErrorMessage(reason, 'Не удалось удалить запись. Повторите.'));
+  } finally {
+    setters.setBusy(false);
+  }
+}
+
 function useRelocationProfileActions({
   profile,
   onProfileUpdated,
   onConsentRevoked,
+  onEditStep,
 }: RelocationProfileProps) {
   const [editingStep, setEditingStep] = useState<RelocationStepId>();
+  const openStep = onEditStep ?? setEditingStep;
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [confirmRestart, setConfirmRestart] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -110,11 +143,15 @@ function useRelocationProfileActions({
     continueQuestionnaire: () => {
       if (profile.currentStep === 'summary') return;
       setNotice(undefined);
-      setEditingStep(profile.currentStep);
+      openStep(profile.currentStep);
     },
     revoke: () => run('revoke'),
+    removeItem: (step: RelocationStepId, itemId: string) => void removeProfileItem(
+      { profile, step, itemId, onProfileUpdated },
+      setters,
+    ),
     restart: () => run('restart'),
-    edit: (step: RelocationStepId) => { setNotice(undefined); setEditingStep(step); },
+    edit: (step: RelocationStepId) => { setNotice(undefined); openStep(step); },
   };
 }
 
@@ -124,28 +161,32 @@ function RelocationProfileView({
   alerts,
   actions,
   onEdit,
+  onShowCountries,
 }: {
   readonly profile: RelocationQuestionnaireData;
   readonly consent: RelocationConsentState;
   readonly alerts: readonly RelocationAlert[];
   readonly actions: ReturnType<typeof useRelocationProfileActions>;
   readonly onEdit: (step: RelocationStepId) => void;
+  readonly onShowCountries: () => void;
 }) {
   return (
     <section className="career-relocation-profile" aria-labelledby="career-relocation-profile-title">
-      <ProfileHeader consent={consent} />
-      <p className="career-relocation-privacy-note" role="note">
-        Гражданство, документы, образование, семья и языки хранятся в зашифрованном профиле. Отзыв согласия удалит эти данные.
+      <p className="career-relocation-note" role="note">
+        <LockKey aria-hidden="true" size={17} />
+        <span id="career-relocation-profile-title">
+          Согласие на обработку данных о мобильности: дано {formatDate(consent.grantedAt)}. Отзыв согласия удаляет данные анкеты, релокация выключится.
+        </span>
       </p>
       <RelocationProfileAlerts profile={profile} alerts={alerts} />
       {actions.notice ? <p className="career-relocation-success" role="status">{actions.notice}</p> : null}
       {actions.error ? <p className="career-relocation-error" role="alert">{actions.error}</p> : null}
       <div className="career-relocation-profile-sections">
         {STEP_SECTIONS.map(({ step, title }) => (
-          <ProfileSection key={step} step={step} title={title} profile={profile} onEdit={() => onEdit(step)} />
+          <ProfileSection key={step} step={step} title={title} profile={profile} busy={actions.busy} onEdit={() => onEdit(step)} onDelete={(itemId) => actions.removeItem(step, itemId)} />
         ))}
       </div>
-      <ProfileActions actions={actions} consent={consent} profile={profile} />
+      <ProfileActions actions={actions} consent={consent} profile={profile} onShowCountries={onShowCountries} />
     </section>
   );
 }
@@ -179,21 +220,6 @@ function relocationAlertMessage(alert: RelocationAlert, profile: RelocationQuest
   return `Срок действия документа «${documentKind(document?.kind ?? '')}» ${state} ${formatDate(alert.expiresAt)}.`;
 }
 
-function ProfileHeader({ consent }: { readonly consent: RelocationConsentState }) {
-  return (
-    <header className="career-relocation-section-heading">
-      <div>
-        <h2 id="career-relocation-profile-title">Мои данные</h2>
-        <p>Данные доступны только вам. Изменения пересчитывают статусы стран.</p>
-      </div>
-      <span className="career-relocation-privacy-tag">
-        <LockKey aria-hidden="true" size={16} />
-        Согласие дано {formatDate(consent.grantedAt)}
-      </span>
-    </header>
-  );
-}
-
 function profileContinueLabel(profile: RelocationQuestionnaireData): string {
   if (profile.currentStep === 'summary') return '';
   if (profile.currentStep === 'citizenship_documents') return 'Заполнить анкету';
@@ -204,17 +230,23 @@ function ProfileActions({
   actions,
   consent,
   profile,
+  onShowCountries,
 }: {
   readonly actions: ReturnType<typeof useRelocationProfileActions>;
   readonly consent: RelocationConsentState;
   readonly profile: RelocationQuestionnaireData;
+  readonly onShowCountries: () => void;
 }) {
   return (
     <>
       <div className="career-relocation-profile-actions">
+        <button className="career-btn career-btn-primary" type="button" onClick={onShowCountries}>
+          <ArrowRight aria-hidden="true" size={17} />
+          Показать страны
+        </button>
         {profile.currentStep !== 'summary' ? (
           <button
-            className="career-btn career-btn-primary"
+            className="career-btn career-btn-secondary"
             type="button"
             disabled={actions.busy}
             onClick={actions.continueQuestionnaire}
@@ -271,11 +303,15 @@ function ProfileSection({
   title,
   profile,
   onEdit,
+  onDelete,
+  busy,
 }: {
   readonly step: RelocationStepId;
   readonly title: string;
   readonly profile: RelocationQuestionnaireData;
   readonly onEdit: () => void;
+  readonly onDelete: (itemId: string) => void;
+  readonly busy: boolean;
 }) {
   return (
     <section className="career-relocation-profile-section" aria-labelledby={`career-relocation-data-${step}`}>
@@ -286,37 +322,45 @@ function ProfileSection({
           Изменить
         </button>
       </header>
-      <ProfileSectionContent step={step} profile={profile} />
+      <ProfileSectionContent step={step} profile={profile} actions={{ onEdit, onDelete, busy }} />
     </section>
   );
 }
 
+type RowActions = { readonly onEdit: () => void; readonly onDelete: (itemId: string) => void; readonly busy: boolean };
+
 function ProfileSectionContent({
   step,
   profile,
+  actions,
 }: {
   readonly step: RelocationStepId;
   readonly profile: RelocationQuestionnaireData;
+  readonly actions: RowActions;
 }) {
-  if (step === 'citizenship_documents') return <CitizenshipProfileRows profile={profile} />;
-  if (step === 'education') return <EducationProfileRows profile={profile} />;
+  if (step === 'citizenship_documents') return <CitizenshipProfileRows profile={profile} actions={actions} />;
+  if (step === 'education') return <EducationProfileRows profile={profile} actions={actions} />;
   if (step === 'family') return <FamilyProfileRow profile={profile} />;
-  return <LanguageProfileRows profile={profile} />;
+  return <LanguageProfileRows profile={profile} actions={actions} />;
 }
 
-function CitizenshipProfileRows({ profile }: { readonly profile: RelocationQuestionnaireData }) {
-  const citizenship = profile.citizenshipDocuments.citizenshipCountryCodes.map(countryName).join(', ');
+function CitizenshipProfileRows({ profile, actions }: { readonly profile: RelocationQuestionnaireData; readonly actions: RowActions }) {
+  const citizenship = profile.citizenshipDocuments.citizenshipCountryCodes.map((code) => ({
+    id: citizenshipRowId(code),
+    label: `Гражданство: ${countryName(code)}`,
+    value: 'со слов кандидата',
+  }));
   const documents = profile.citizenshipDocuments.documents;
-  if (!citizenship && !documents.length) return <EmptyProfileSection />;
+  if (!citizenship.length && !documents.length) return <EmptyProfileSection />;
   const rows = documents.map((document) => ({
     id: document.id,
     label: documentKind(document.kind),
     value: `${countryName(document.countryCode)}${document.expiresAt ? ` · до ${formatDate(document.expiresAt)}` : ''}`,
   }));
-  return <ProfileRows rows={citizenship ? [{ id: 'citizenship', label: 'Гражданство', value: citizenship }, ...rows] : rows} />;
+  return <ProfileRows rows={[...citizenship, ...rows]} actions={actions} />;
 }
 
-function EducationProfileRows({ profile }: { readonly profile: RelocationQuestionnaireData }) {
+function EducationProfileRows({ profile, actions }: { readonly profile: RelocationQuestionnaireData; readonly actions: RowActions }) {
   const educationRows = profile.education.education.map(({ id, title, countryCode, recognitionStatus, completedAt }) => ({
     id,
     label: title,
@@ -328,7 +372,7 @@ function EducationProfileRows({ profile }: { readonly profile: RelocationQuestio
     value: `${issuer ?? 'Выдавшая организация не указана'} · ${recognitionLabel(recognitionStatus)}`,
   }));
   const rows = [...educationRows, ...certificateRows];
-  return rows.length ? <ProfileRows rows={rows} /> : <EmptyProfileSection />;
+  return rows.length ? <ProfileRows rows={rows} actions={actions} /> : <EmptyProfileSection />;
 }
 
 function FamilyProfileRow({ profile }: { readonly profile: RelocationQuestionnaireData }) {
@@ -340,17 +384,37 @@ function FamilyProfileRow({ profile }: { readonly profile: RelocationQuestionnai
   return <ProfileRow label={partner} value={`${children} · ${timeframeLabel(family.relocationTimeframe)}`} />;
 }
 
-function LanguageProfileRows({ profile }: { readonly profile: RelocationQuestionnaireData }) {
+function LanguageProfileRows({ profile, actions }: { readonly profile: RelocationQuestionnaireData; readonly actions: RowActions }) {
   const rows = profile.languages.languages.map((language) => ({
     id: language.id,
-    label: `${language.name}: ${language.level}`,
-    value: language.sourceLabel ?? language.source,
+    label: `${language.name}: ${language.level === 'unknown' ? 'уровень не указан' : language.level}`,
+    value: language.sourceLabel ?? relocationLanguageSourceLabel(language.source),
   }));
-  return rows.length ? <ProfileRows rows={rows} /> : <EmptyProfileSection />;
+  return rows.length ? <ProfileRows rows={rows} actions={actions} /> : <EmptyProfileSection />;
 }
 
-function ProfileRows({ rows }: { readonly rows: readonly { readonly id: string; readonly label: string; readonly value: string }[] }) {
-  return <div className="career-relocation-profile-list">{rows.map((row) => <ProfileRow key={row.id} {...row} />)}</div>;
+function ProfileRows({ rows, actions }: {
+  readonly rows: readonly { readonly id: string; readonly label: string; readonly value: string }[];
+  readonly actions: RowActions;
+}) {
+  return (
+    <div className="career-relocation-profile-list">
+      {rows.map((row) => (
+        <div key={row.id} className="career-relocation-profile-row">
+          <strong>{row.label}</strong>
+          <span>{row.value}</span>
+          <span className="career-relocation-row-actions">
+            <button className="career-relocation-icon-button" type="button" aria-label={`Изменить: ${row.label}`} onClick={actions.onEdit}>
+              <PencilSimple aria-hidden="true" size={17} />
+            </button>
+            <button className="career-relocation-icon-button" type="button" aria-label={`Удалить: ${row.label}`} disabled={actions.busy} onClick={() => actions.onDelete(row.id)}>
+              <Trash aria-hidden="true" size={17} />
+            </button>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function ProfileRow({ label, value }: { readonly label: string; readonly value: string }) {
