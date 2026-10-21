@@ -10,6 +10,8 @@ import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { VacancyInfoModal } from './VacancyInfoModal';
 import { VacancyCompanyPathPanel, companyPathActions } from './VacancyCompanyPathPanel';
+import { VacancyRowPush } from './VacancyMobilePush';
+import { useCompactViewport } from './useCompactViewport';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { VacancyScreenRowCells } from './VacancyScreenRowCells';
@@ -640,6 +642,9 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const [pathOpen, setPathOpen] = useState(false);
+  const compact = useCompactViewport();
+  if (compact)
+    return <VacancyRowPush item={rowProps.item} rowProps={rowProps} rowState={rowState} />;
   const pathPanelId = `vacancy-path-${cluster.id}`;
   return (
     <div

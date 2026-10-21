@@ -249,7 +249,10 @@ describe('VacancyRow screen detail requirements (B549)', () => {
               stopFactor: false,
             },
           ],
-          result: { gates: {}, assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }] },
+          result: {
+            gates: {},
+            assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }],
+          },
         } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
       },
     };

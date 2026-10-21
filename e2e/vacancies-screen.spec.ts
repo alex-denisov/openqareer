@@ -453,6 +453,48 @@ async function openVacancies(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 15_000 });
 }
 
+async function expectExpandedVacancyDetail(page: Page, firstItem: Locator, row: Locator) {
+  const detail = firstItem.locator('.vac-detail');
+  await expect(detail).toBeVisible();
+  await expect(detail.getByRole('button', { name: 'Хочу в эту компанию' })).toBeVisible();
+  await expect(detail.getByRole('heading', { name: 'Требования к навыкам' })).toBeVisible();
+  await expect(detail).toContainText('Из описания вакансии и тегов источника');
+  await expect(detail.getByRole('heading', { name: 'Описание', exact: true })).toBeVisible();
+  const detailActions = detail.locator('.vacancies-detail-actions');
+  for (const label of [
+    'Откликнуться',
+    'На площадке',
+    'Путь к компании',
+    'Хочу в эту компанию',
+    'Обсудить',
+  ]) {
+    await expect(detailActions.getByRole('button', { name: label, exact: true })).toBeVisible();
+  }
+  await captureS10Vacancies(page, 'vacancies-expanded-1440');
+  const fullDescription = detail.getByRole('button', { name: 'Полное описание', exact: true });
+  await expect(fullDescription).toBeVisible();
+  await fullDescription.click();
+  const descriptionDialog = page.getByRole('dialog');
+  await expect(descriptionDialog).toBeVisible();
+  await expect(descriptionDialog).toContainText(await row.getByRole('heading').innerText());
+  await page.keyboard.press('Escape');
+  await expect(descriptionDialog).toHaveCount(0);
+}
+
+/** B549: at 390 a row opens the «Вакансия» push screen instead of expanding. */
+async function expectMobileVacancyPush(page: Page) {
+  const push = page.locator('.vacancy-push');
+  await expect(push.getByRole('heading', { name: 'Вакансия', exact: true })).toBeVisible();
+  await expect(push).toContainText('Совпадение с вашими условиями');
+  await expect(push.getByRole('heading', { name: 'Требования к навыкам' })).toBeVisible();
+  await push.getByRole('button', { name: /Полное описание/u }).click();
+  await expect(page.locator('.vacancies-info-footer')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.vacancies-info-footer')).toHaveCount(0);
+  await push.getByRole('button', { name: 'Назад' }).click();
+  await expect(push).toHaveCount(0);
+}
+
 async function setRowExpanded(page: Page, index: number, expanded: boolean): Promise<Locator> {
   const item = page.locator('.vac-list-item').nth(index);
   const trigger = item.locator('.vacancies-screen-row-trigger');
@@ -754,31 +796,8 @@ test.describe('B250 vacancies screen', () => {
     await captureS10Vacancies(page, `vacancies-${width}`);
 
     if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
-    const detail = firstItem.locator('.vac-detail');
-    await expect(detail).toBeVisible();
-    await expect(detail.getByRole('button', { name: 'Хочу в эту компанию' })).toBeVisible();
-    await expect(detail.getByRole('heading', { name: 'Требования к навыкам' })).toBeVisible();
-    await expect(detail).toContainText('Из описания вакансии и тегов источника');
-    await expect(detail.getByRole('heading', { name: 'Описание', exact: true })).toBeVisible();
-    const detailActions = detail.locator('.vacancies-detail-actions');
-    for (const label of [
-      'Откликнуться',
-      'На площадке',
-      'Путь к компании',
-      'Хочу в эту компанию',
-      'Обсудить',
-    ]) {
-      await expect(detailActions.getByRole('button', { name: label, exact: true })).toBeVisible();
-    }
-    if (!isMobile) await captureS10Vacancies(page, 'vacancies-expanded-1440');
-    const fullDescription = detail.getByRole('button', { name: 'Полное описание', exact: true });
-    await expect(fullDescription).toBeVisible();
-    await fullDescription.click();
-    const descriptionDialog = page.getByRole('dialog');
-    await expect(descriptionDialog).toBeVisible();
-    await expect(descriptionDialog).toContainText(await row.getByRole('heading').innerText());
-    await page.keyboard.press('Escape');
-    await expect(descriptionDialog).toHaveCount(0);
+    if (isMobile) await expectMobileVacancyPush(page);
+    else await expectExpandedVacancyDetail(page, firstItem, row);
 
     if (!isMobile) {
       const footer = page.locator('.vacancies-screen-footer');
