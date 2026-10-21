@@ -1,10 +1,29 @@
 // @vitest-environment jsdom
 import { act } from 'react-dom/test-utils';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import { VacanciesScreen } from './VacanciesScreen';
+
+// B553: в jsdom нет WebGL — холст MapLibre заменён кнопками городов с теми же подписями.
+vi.mock('./VacancyMapCanvas', () => ({
+  default: ({
+    cities,
+    onSelectCity,
+  }: {
+    cities: readonly { city: string; count: number }[];
+    onSelectCity: (city?: string) => void;
+  }) =>
+    cities.map((city) => (
+      <button
+        key={city.city}
+        type="button"
+        aria-label={`Город ${city.city}: ${city.count} вакансий`}
+        onClick={() => onSelectCity(city.city)}
+      />
+    )),
+}));
 
 function matchedItem(id: string, title: string): MatchedVacancyItem {
   return {
@@ -226,6 +245,7 @@ describe('VacanciesScreen — фильтр ролей (C56)', () => {
       (tab) => tab.textContent === 'Карта',
     );
     await act(async () => (mapTab as HTMLButtonElement).click());
+    await act(async () => import('./VacancyMapCanvas'));
     // B446-g4: город на карте открывает список с фильтром этого города.
     const city = container.querySelector('[aria-label^="Город Амстердам"]');
     expect(city).not.toBeNull();

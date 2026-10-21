@@ -8,6 +8,7 @@ import {
   type VacancyFilterGroupId,
 } from './fixtures/vacancyFilters';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
+import { mockMapTiles } from './fixtures/mapTiles';
 import { mockCandidateCompanies } from './fixtures/mockCandidateCompanies';
 
 /**
@@ -192,6 +193,7 @@ const MATCHED_ITEMS = [
 ];
 
 interface VacancyStubScenario {
+  readonly mapTiles?: 'empty' | 'fail';
   readonly matchedItems?: typeof MATCHED_ITEMS;
   readonly total?: number;
   readonly facets?: typeof FACETS | null;
@@ -206,6 +208,7 @@ interface VacancyStubScenario {
 async function stubSession(page: Page, scenario: VacancyStubScenario = {}): Promise<void> {
   let currentCampaign = scenario.campaign ?? CAMPAIGN;
   let matchedReads = 0;
+  await mockMapTiles(page, scenario.mapTiles);
   await page.route('**/api/v1/**', async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
@@ -1414,7 +1417,9 @@ test.describe('B250 vacancies screen', () => {
     await expect(mapView.locator('.career-map-header')).toContainText(
       'без точки 1 без города, 1 с нераспознанным городом',
     );
-    await expect(mapView.locator('.career-map-country')).toHaveCount(177);
+    // B553: подложка — MapLibre GL на тайлах OpenFreeMap (в тестах — пустые тайлы).
+    await expect(mapView.locator('.career-map-gl canvas')).toBeVisible();
+    await expect(mapView.locator('.maplibregl-ctrl-attrib')).toContainText('OpenStreetMap');
     const mapCanvas = mapView.locator('.career-map-canvas-container');
     await page.evaluate(() => {
       const main = document.querySelector<HTMLElement>('.career-main');
@@ -1463,7 +1468,7 @@ test.describe('B250 vacancies screen', () => {
       window.scrollTo(0, 0);
     });
     await expect(mapView.locator('.career-map-header')).toContainText('На карте 2 из 4');
-    await expect(mapView.locator('.career-map-svg')).toBeVisible();
+    await expect(mapView.locator('.career-map-gl canvas')).toBeVisible();
     await page.evaluate(() => {
       const main = document.querySelector<HTMLElement>('.career-main');
       const canvas = document.querySelector<HTMLElement>('.career-map-canvas-container');
@@ -1491,6 +1496,28 @@ test.describe('B250 vacancies screen', () => {
       () => document.documentElement.scrollWidth > window.innerWidth,
     );
     expect(overflows).toBe(false);
+  });
+
+  test('B553: подложка карты недоступна — честное состояние и переход к списку', async ({
+    page,
+  }) => {
+    await stubSession(page, { mapTiles: 'fail' });
+    await seedWorkspace(page);
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await openVacancies(page);
+    const mobile = (page.viewportSize()?.width ?? 1440) < 761;
+    if (mobile) await page.getByRole('button', { name: 'Карта', exact: true }).click();
+    else
+      await page
+        .locator('.view-switch[role="tablist"]')
+        .getByRole('tab', { name: 'Карта' })
+        .click();
+
+    const status = page.locator('.vacancy-map-view [role="status"]');
+    await expect(status).toContainText('Карта недоступна');
+    await status.getByRole('button', { name: 'Показать список' }).click();
+    await expect(page.locator('.vacancy-map-view')).toHaveCount(0);
+    await expect(page.locator('.vacancies-list-container')).toBeVisible();
   });
 
   test('B375: кластеризация карты вакансий, зум, раскрытие кластера и нормализация AU: Sydney', async ({
@@ -1533,15 +1560,16 @@ test.describe('B250 vacancies screen', () => {
     // Sydney normalized to Сидней with tooltip showing Australia
     const sydneyPin = mapView.getByRole('button', { name: /Сидней/ });
     await expect(sydneyPin).toBeVisible();
-    await expect(sydneyPin.locator('title')).toHaveText('Австралия');
+    await expect(sydneyPin).toHaveAttribute('title', 'Австралия');
 
     // Clusters should exist at zoom=1 (Berlin + Prague + Vienna clustered)
     const clusterPin = mapView.locator('.career-map-cluster-node').first();
     await expect(clusterPin).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B375/map-before-1440.png' });
 
-    // Expand cluster on click
+    // Expand cluster on click: MapLibre приближается к границам кластера, города расходятся.
     await clusterPin.click();
+    await expect(mapView.getByRole('button', { name: /^Город Berlin/u })).toBeVisible();
     await page.screenshot({ path: 'output/playwright/B375/map-after-1440.png' });
     await page.screenshot({ path: 'output/playwright/B375/map-1440.png' });
 

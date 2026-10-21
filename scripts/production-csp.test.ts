@@ -19,4 +19,17 @@ describe('production Content-Security-Policy', () => {
   it('never opens eval() to buy that', () => {
     expect(policy).not.toContain("'unsafe-eval'");
   });
+
+  // B553: the vacancy map loads OpenFreeMap vector tiles, glyphs and sprites
+  // with fetch() and runs MapLibre's module worker from our own origin.
+  it('lets the vacancy map reach its tile host', () => {
+    const directive = (name: string) =>
+      policy
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${name} `)) ?? '';
+    expect(directive('connect-src')).toContain('https://tiles.openfreemap.org');
+    expect(directive('img-src')).toContain('https://tiles.openfreemap.org');
+    expect(directive('worker-src')).toContain("'self'");
+  });
 });

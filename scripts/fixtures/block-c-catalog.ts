@@ -226,9 +226,11 @@ export function blockCDescription(
   title: string,
   company: string,
   skills: readonly string[],
+  workFormat: string,
 ): string {
   return [
-    `${company} ищет: ${title}.`,
+    // B553: формат в первой строке — сервер читает его из первых 300 знаков (выжимки).
+    `${company} ищет: ${title}. Формат работы: ${workFormat}.`,
     'Чем предстоит заниматься:',
     '- руководить командами разработки и наймом руководителей;',
     '- отвечать за архитектуру, надёжность и сроки поставки;',
@@ -238,7 +240,7 @@ export function blockCDescription(
     ...skills.map((skill) => `- ${skill}`),
     '- опыт управления командой от 30 человек.',
     'Условия:',
-    '- оформление по ТК, ДМС, гибридный график;',
+    '- оформление по ТК, ДМС;',
     '- годовой бонус по результатам.',
   ].join('\n');
 }
@@ -255,9 +257,16 @@ interface RowInput {
   readonly publishedAt: string;
 }
 
+/** Удалённые строки — «удалённо»; офисные делятся на гибрид и офис детерминированно по id. */
+function blockCWorkFormat(row: RowInput): string {
+  if (row.isRemote) return 'удалённо';
+  const sum = [...row.id].reduce((total, char) => total + char.charCodeAt(0), 0);
+  return sum % 3 === 1 ? 'офис' : 'гибрид';
+}
+
 export function blockCVacancy(row: RowInput): UnifiedVacancy {
   const url = `https://${row.source.host}/vacancy/${row.id}`;
-  const description = blockCDescription(row.title, row.company, row.skills);
+  const description = blockCDescription(row.title, row.company, row.skills, blockCWorkFormat(row));
   return {
     id: row.id,
     fingerprint: `block-c:${row.id}`,
