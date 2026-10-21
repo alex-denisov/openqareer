@@ -101,6 +101,8 @@ async function openFilters(page: Page) {
 test('B446: filter a vacancy, save it, set company want, and keep it after reload', async ({
   page,
 }, testInfo) => {
+  // B547: место выбирается в дереве «Локаций» (поиск, релокация, отметка) — сценарий длиннее 30 с.
+  test.setTimeout(60_000);
   await mockSignedInCabinet(page, {
     vacancyTotal: 148,
     vacancyFacets: {
