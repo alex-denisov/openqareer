@@ -155,12 +155,12 @@ async function handleMetadataCheck(
     deps.config,
   );
   if (!candidate) return undefined;
-  const documents = deps.candidateStore
-    .getSnapshot(candidate.id)
-    .documents.filter((document) => document.kind === 'resume')
-    .map((document) => deps.candidateStore.getDocument(candidate.id, document.id))
-    .filter((document) => document !== null);
-  const check = await checkResumeFileMetadata(documents);
+  const documents = deps.candidateStore.getSnapshot(candidate.id).documents;
+  const check = await checkResumeFileMetadata(
+    documents,
+    (documentId) =>
+      deps.candidateStore.getDocument(candidate.id, documentId)?.contentBase64 ?? null,
+  );
   return { data: { check }, meta: { requestId: request.id } };
 }
 
