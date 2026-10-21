@@ -26,13 +26,13 @@ import { VacanciesMainBody } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
 import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
 import { VacanciesScreenSummary } from './VacanciesScreenSummary';
+import { SavedVacanciesPanel } from './SavedVacanciesPanel';
 
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
 export { filterByScreenState } from './vacancyScreenCriteria';
 import {
-  SavedVacanciesPanel,
   companyLookupKey,
   useVacancyCollections,
 } from './vacancyScreenCollections';
@@ -634,7 +634,12 @@ function OpportunityContent({
     );
   }
   if (activeTab === 'saved') {
-    return <SavedVacanciesPanel collections={screenState.collections} />;
+    return (
+      <SavedVacanciesPanel
+        collections={screenState.collections}
+        onOpenSelection={() => screenState.chooseTab('selection')}
+      />
+    );
   }
   return (
     <CompaniesAndPeopleScreen
