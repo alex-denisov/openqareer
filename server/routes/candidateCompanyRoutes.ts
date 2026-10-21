@@ -351,6 +351,54 @@ async function handleSetWant(deps: RouteDeps, request: FastifyRequest, reply: Fa
   };
 }
 
+const wantByNameSchema = z.object({ companyName: z.string().trim().min(1).max(200) });
+
+/**
+ * B422: «Хочу в эту компанию» из строки вакансии. Компании ещё может не быть в
+ * списке кандидата (список собирается из его подборки), поэтому ключ считает
+ * сервер по названию — клиенту не нужно сначала найти её поиском.
+ */
+async function handleSetWantByName(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
+  if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
+  const candidate = authenticateCandidate(
+    request,
+    reply,
+    deps.candidateStore,
+    deps.authService,
+    deps.config,
+  );
+  if (!candidate) return undefined;
+  const repo = wantRepository(deps, request, reply);
+  if (!repo) return undefined;
+  const parsed = wantByNameSchema.safeParse(request.body ?? {});
+  if (!parsed.success) {
+    return sendError(
+      reply,
+      request,
+      400,
+      'invalid_company',
+      'Название компании не указано.',
+      false,
+    );
+  }
+  const companyName = parsed.data.companyName;
+  const key = candidateCompanyKey(companyName);
+  const want = repo.setWanted(
+    candidate.id,
+    key,
+    repo.get(candidate.id, key)?.companyName ?? companyName,
+  );
+  return {
+    data: {
+      key,
+      name: want.companyName,
+      want: true,
+      nextStep: want.nextStep ? { text: want.nextStep, dueAt: want.nextStepDueAt } : null,
+    },
+    meta: { requestId: request.id },
+  };
+}
+
 async function handleRemoveWant(deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) {
   if (!hasSafeMutationOrigin(request, deps.config)) return csrfError(request, reply);
   const candidate = authenticateCandidate(
@@ -533,6 +581,11 @@ export function registerCandidateCompanyRoutes(app: FastifyInstance, deps: Route
     '/api/v1/candidate/companies/:companyKey/want',
     { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
     withDeps(deps, handleSetWant),
+  );
+  app.put(
+    '/api/v1/candidate/company-wants',
+    { config: { rateLimit: { max: 60, timeWindow: '1 hour' } } },
+    withDeps(deps, handleSetWantByName),
   );
   app.delete('/api/v1/candidate/companies/:companyKey/want', withDeps(deps, handleRemoveWant));
   app.put('/api/v1/candidate/companies/:companyKey/next-step', withDeps(deps, handleSetNextStep));

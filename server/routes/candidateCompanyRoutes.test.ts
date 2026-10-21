@@ -288,6 +288,35 @@ describe('candidate company routes (B439)', () => {
     expect((await app.inject({ method: 'DELETE', url, headers })).statusCode).toBe(200);
   });
 
+  it('wants a company by name when it is not in the candidate list yet (B422)', async () => {
+    const { app, authorization, candidate, wants } = await setup([]);
+    const headers = { authorization, origin: 'http://localhost:3000' };
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/company-wants',
+      headers,
+      payload: { companyName: 'NewStore' },
+    });
+    expect(response.statusCode).toBe(200);
+    const key = candidateCompanyKey('NewStore');
+    expect(response.json().data).toMatchObject({ key, name: 'NewStore', want: true });
+    expect(wants.get(candidate.id, key)).toMatchObject({ companyName: 'NewStore' });
+    const blank = await app.inject({
+      method: 'PUT',
+      url: '/api/v1/candidate/company-wants',
+      headers,
+      payload: { companyName: '  ' },
+    });
+    expect(blank.statusCode).toBe(400);
+    const removed = await app.inject({
+      method: 'DELETE',
+      url: `/api/v1/candidate/companies/${key}/want`,
+      headers,
+    });
+    expect(removed.statusCode).toBe(200);
+    expect(wants.get(candidate.id, key)).toBeFalsy();
+  });
+
   it('requires search consent and returns only candidate-safe recruiter provenance', async () => {
     const items = [matchedVacancy('cluster-v1', 'Вектор Банк')];
     const { app, authorization, candidate, contacts, consent } = await setup(items);

@@ -1,0 +1,38 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const api = vi.hoisted(() => ({
+  getCandidateCompanyPage: vi.fn(),
+  setCandidateCompanyWant: vi.fn(),
+  setCandidateCompanyWantByName: vi.fn(),
+  removeCandidateCompanyWant: vi.fn(),
+}));
+vi.mock('./candidateCompaniesApi', () => api);
+
+import { toggleCompanyWantByName } from './vacancyScreenCollections';
+
+describe('toggleCompanyWantByName (B422)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('wants a company that is not in the candidate list yet by its name', async () => {
+    api.getCandidateCompanyPage.mockResolvedValue({ items: [], total: 0 });
+    api.setCandidateCompanyWantByName.mockResolvedValue({ key: 'a'.repeat(24), name: 'NewStore' });
+    const record = await toggleCompanyWantByName('NewStore', new Map());
+    expect(api.setCandidateCompanyWantByName).toHaveBeenCalledWith('NewStore');
+    expect(record).toMatchObject({ key: 'a'.repeat(24), name: 'NewStore', want: true });
+  });
+
+  it('removes a known wanted company by key', async () => {
+    const known = { key: 'b'.repeat(24), name: 'Гринкод', want: true } as never;
+    const record = await toggleCompanyWantByName('Гринкод', new Map([['гринкод', known]]));
+    expect(api.removeCandidateCompanyWant).toHaveBeenCalledWith('b'.repeat(24));
+    expect(record).toMatchObject({ want: false });
+  });
+
+  it('surfaces a failure instead of staying silent', async () => {
+    api.getCandidateCompanyPage.mockResolvedValue({ items: [], total: 0 });
+    api.setCandidateCompanyWantByName.mockRejectedValue(new Error('Сервис недоступен'));
+    await expect(toggleCompanyWantByName('NewStore', new Map())).rejects.toThrow(
+      'Сервис недоступен',
+    );
+  });
+});
