@@ -6,7 +6,7 @@ import type {
 } from '../../../shared/relocationQuestionnaire';
 import type { RelocationQuestionnaireResponse } from './relocationApi';
 import { buildCountryComparisonCountry, listRelocationCountries } from './relocationCountryData';
-import { relocationTabCounts } from './relocationCountrySummary';
+import { relocationTabCounts, summarizeRelocationCountry } from './relocationCountrySummary';
 import type { RelocationProfileData } from './useRelocationSnapshot';
 import { useSavedCountrySelection } from './useSavedCountrySelection';
 
@@ -19,8 +19,10 @@ export type RelocationMode =
   | { readonly kind: 'add' };
 
 export const RELOCATION_TAB_DESCRIPTIONS: Readonly<Record<RelocationTab, string>> = {
-  countries: 'Какие страны реально доступны вам по жизненным сценариям, без юридических тупиков.',
-  comparison: 'Выбранные страны рядом по одним и тем же показателям, с источником и датой.',
+  countries:
+    'Какие страны реально доступны вам по жизненным сценариям, без юридических тупиков. Подборка вакансий учитывает только отмеченные страны.',
+  comparison:
+    'Три страны рядом по объективным параметрам. Баллов и общего места нет: вес параметров вы определяете сами.',
   economy: 'Остаток после налогов по проверенной шкале страны. Нет шкалы — нет расчёта.',
   profile:
     'Все ваши данные для релокации в одном месте. Видите только вы. Изменение пересчитывает статусы стран.',
@@ -54,6 +56,11 @@ export function useRelocationWorkspace({
     economyCountryCode,
     grossAnnualIncome,
   );
+  const comparisonMeanings = useComparisonMeanings(
+    countries,
+    selectedCountryCodes,
+    snapshot.profile,
+  );
   const showTab = (next: RelocationTab) => {
     setMode({ kind: 'tabs' });
     setTab(next);
@@ -67,6 +74,7 @@ export function useRelocationWorkspace({
     economyCountryCode,
     grossAnnualIncome,
     comparisonCountries,
+    comparisonMeanings,
     showTab,
     setSelectedCountryCodes: selection.change,
     selectionSave: selection.save,
@@ -121,4 +129,25 @@ function useComparisonCountries(
 
 function pin(current: readonly string[], countryCode: string): readonly string[] {
   return current.includes(countryCode) ? current : [...current, countryCode];
+}
+
+function useComparisonMeanings(
+  countries: ReturnType<typeof listRelocationCountries>,
+  selectedCountryCodes: readonly string[],
+  profile: RelocationProfileData,
+) {
+  return useMemo(
+    () =>
+      selectedCountryCodes
+        .flatMap((code) => countries.filter(({ countryCode }) => countryCode === code))
+        .map((country) => {
+          const summary = summarizeRelocationCountry(country, profile);
+          return {
+            countryCode: country.countryCode,
+            name: summary.name,
+            text: `${summary.statusLabel}: ${summary.reason.charAt(0).toLowerCase()}${summary.reason.slice(1)}`,
+          };
+        }),
+    [countries, selectedCountryCodes, profile],
+  );
 }

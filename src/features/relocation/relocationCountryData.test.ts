@@ -12,7 +12,7 @@ describe('relocation country data', () => {
   it('keeps mobility requirements unknown when the questionnaire has no candidate facts', () => {
     const profile = emptyRelocationQuestionnaire();
 
-    expect(mobilityCandidateFromQuestionnaire(profile)).toEqual({
+    expect(withoutDocumentClock(mobilityCandidateFromQuestionnaire(profile))).toEqual({
       citizenshipCountryCodes: [],
     });
     expect(countryFitForQuestionnaire('DE', profile).status).toBe('unknown');
@@ -40,7 +40,7 @@ describe('relocation country data', () => {
       },
     };
 
-    expect(mobilityCandidateFromQuestionnaire(profile)).toEqual({
+    expect(withoutDocumentClock(mobilityCandidateFromQuestionnaire(profile))).toEqual({
       citizenshipCountryCodes: ['RU'],
       recognizedDegreeCountryCodes: ['RU'],
       completedFormalQualification: true,
@@ -98,3 +98,10 @@ describe('relocation country data', () => {
     expect(country.facts.netIncome.pareto).toBeUndefined();
   });
 });
+
+function withoutDocumentClock<
+  T extends { readonly asOf?: string; readonly residenceDocuments?: unknown },
+>(candidate: T): Omit<T, 'asOf' | 'residenceDocuments'> {
+  const { asOf: _asOf, residenceDocuments: _documents, ...rest } = candidate;
+  return rest;
+}

@@ -22,6 +22,7 @@ import {
   summarizeRelocationCountry,
   type RelocationCountrySummary,
 } from './relocationCountrySummary';
+import { relocationDay, relocationShortDay } from './relocationDates';
 
 type ScenarioFilter = 'all' | MobilityScenarioId;
 
@@ -267,7 +268,7 @@ function CountryCardMeta({ summary }: { readonly summary: RelocationCountrySumma
       <span title={summary.source?.title}>
         <Clock aria-hidden="true" size={14} />
         {summary.source
-          ? `каталог правил, ${shortDay(summary.source.retrievedAt)}`
+          ? `каталог правил, ${relocationShortDay(summary.source.retrievedAt)}`
           : 'источник правила не указан'}
       </span>
     </div>
@@ -311,11 +312,6 @@ function CountryCardActions({
 }
 
 /** «2026-10-10» → «10.10», as the mockup dates sources; anything else stays as is. */
-function shortDay(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/u.exec(value);
-  return match ? `${match[3]}.${match[2]}` : value;
-}
-
 export function RelocationStatusBadge({
   status,
   label,
@@ -407,7 +403,7 @@ function CountryDetailsHeader({
     <header>
       <div>
         <h3 id={`${detailsId}-title`}>{country.name}</h3>
-        <p>Данные получены {retrievedAt ?? 'неизвестно'}.</p>
+        <p>Данные получены {relocationDay(retrievedAt)}.</p>
       </div>
       <div className="career-relocation-country-actions">
         <button
@@ -456,7 +452,7 @@ function ScenarioDetail({ scenario }: { readonly scenario: MobilityScenarioEvalu
       </div>
       {scenario.sources.map((source) => (
         <a key={source.url} href={source.url} target="_blank" rel="noopener noreferrer">
-          {source.title}, {source.dataYear}, получено {source.retrievedAt}
+          {source.title}, {source.dataYear}, получено {relocationDay(source.retrievedAt)}
         </a>
       ))}
     </li>
@@ -482,7 +478,7 @@ function ThresholdLine({
     <p>
       {threshold.label}: {new Intl.NumberFormat('ru-RU').format(threshold.amount)}
       {threshold.currency ? ` ${threshold.currency}` : ''}. Шкала {threshold.source.dataYear},
-      данные получены {threshold.source.retrievedAt}.
+      данные получены {relocationDay(threshold.source.retrievedAt)}.
     </p>
   );
 }

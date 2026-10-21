@@ -199,3 +199,157 @@
     margin: 0;
   }
 }
+
+/* B468-r3 return: head with «Изменить страны» and «Что это значит» (mockup 15 `cmp`). */
+.career-country-comparison-head {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--career-space-2) var(--career-space-4);
+}
+
+.career-country-comparison-meanings {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-country-comparison-meanings h3 {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+
+.career-country-comparison-meanings ul {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.career-country-comparison-meanings li {
+  display: grid;
+  gap: var(--career-space-1);
+  border-block-start: var(--career-border-width) solid var(--career-line);
+  padding-block: var(--career-space-4);
+}
+
+.career-country-comparison-meanings li p,
+.career-country-comparison-disclaimer {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
+}
+
+.career-country-comparison-disclaimer {
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-md);
+  padding: var(--career-space-3) var(--career-space-4);
+}
+
+.career-country-comparison-meanings {
+  margin-block-start: var(--career-space-4);
+}
+
+.career-country-comparison-meaning-icon {
+  display: none;
+}
+
+/* B468-r3 return: 390 group-list rows, as mockup 15 `vt=cmp`. */
+@media (max-width: 767px) {
+  .career-country-comparison-mobile-criterion {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .career-country-comparison .career-country-comparison-mobile-criterion h3 {
+    margin: 0 0 var(--career-space-2) var(--career-space-3);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 600;
+  }
+
+  .career-country-comparison-mobile-criterion dl {
+    gap: 0;
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-country-comparison-mobile-entry {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    align-items: center;
+    min-block-size: var(--career-target-min);
+    padding: var(--career-space-2) var(--career-space-4);
+  }
+
+  .career-country-comparison-mobile-entry + .career-country-comparison-mobile-entry {
+    border-block-start: var(--career-border-width) solid var(--career-line);
+  }
+
+  .career-country-comparison-mobile-entry dt {
+    color: var(--career-text-soft);
+    font-weight: 400;
+  }
+
+  .career-country-comparison-mobile-entry dd {
+    font-size: var(--career-text-sm);
+    font-weight: 600;
+    text-align: end;
+  }
+
+  .career-country-comparison-mobile-foot {
+    margin: 0;
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    line-height: 1.5;
+  }
+
+  .career-country-comparison .career-country-comparison-meanings h3 {
+    margin-inline-start: var(--career-space-3);
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
+
+  .career-country-comparison-meanings ul {
+    border-radius: var(--career-radius-md);
+    background: var(--career-surface);
+  }
+
+  .career-country-comparison-meanings li {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding: var(--career-space-3) var(--career-space-4);
+  }
+
+  .career-country-comparison-meanings li:first-child {
+    border-block-start: 0;
+  }
+
+  .career-country-comparison-meaning-icon {
+    display: block;
+    grid-row: span 2;
+    color: var(--career-text-soft);
+  }
+
+  .career-country-comparison-disclaimer {
+    display: none;
+  }
+}
+
+.career-country-comparison-mobile-foot {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .career-country-comparison-mobile-foot {
+    display: block;
+  }
+}
+
+@media (max-width: 767px) {
+  .career-country-comparison-title {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+    font-weight: 400;
+  }
+}

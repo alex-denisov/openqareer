@@ -487,10 +487,11 @@ function recognitionLabel(status: string): string {
 
 function timeframeLabel(value: string): string {
   const labels: Readonly<Record<string, string>> = {
+    under_two_weeks: 'не больше двух недель',
     under_three_months: 'до трёх месяцев',
     three_to_six_months: 'от трёх до шести месяцев',
     six_to_twelve_months: 'от шести до двенадцати месяцев',
-    over_twelve_months: 'больше года',
+    over_twelve_months: 'дольше, если надёжно',
     unknown: 'срок не указан',
   };
   return labels[value] ?? 'срок не указан';

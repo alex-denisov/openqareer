@@ -84,6 +84,7 @@ function MobileTabContent(
         grossAnnualIncome={workspace.grossAnnualIncome}
         onCountryCodeChange={workspace.setEconomyCountryCode}
         onGrossAnnualIncomeChange={workspace.setGrossAnnualIncome}
+        profile={snapshot.profile}
       />
     );
   }
@@ -167,7 +168,12 @@ function MobileComparison({ workspace, onOpenExpert }: MobileProps) {
   const props = { onOpenExpert };
   return (
     <div className="career-relocation-mobile-section">
-      <CountryComparisonPanel countries={workspace.comparisonCountries} />
+      <CountryComparisonPanel
+        countries={workspace.comparisonCountries}
+        title={workspace.comparisonCountries.map(({ countryName }) => countryName).join(' · ')}
+        showParetoSummary={false}
+        meanings={workspace.comparisonMeanings}
+      />
       {props.onOpenExpert ? (
         <button
           className="career-btn career-btn-secondary"

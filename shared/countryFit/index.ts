@@ -1,4 +1,5 @@
 import { getCountryMobilityData, getVisibleThresholdSource, isNumberRequirement } from './mobilityData';
+import { residenceRightIn } from './residenceDocuments';
 import { calculateGermanOpportunityCardPoints, germanOpportunityCardLanguageGate } from './germanyOpportunityCard';
 import type {
   CountryFitEvaluation,
@@ -143,6 +144,8 @@ function evaluateRequirement(
       if (candidate.citizenshipCountryCodes?.some((code) => code.toUpperCase() === requirement.countryCode)) {
         return passes();
       }
+      const residence = residenceRightIn(requirement.countryCode, candidate.residenceDocuments, candidate.asOf);
+      if (residence) return { status: residence.valid ? 'satisfied' : 'barrier', reason: residence.reason };
       const hasCitizenship = Boolean(candidate.citizenshipCountryCodes?.length);
       if (!candidate.currentCountryCode || !hasCitizenship) {
         return missing('Укажите гражданство или текущую страну проживания.');

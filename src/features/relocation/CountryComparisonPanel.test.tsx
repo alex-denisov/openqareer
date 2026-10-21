@@ -69,7 +69,7 @@ describe('CountryComparisonPanel', () => {
     expect(html).toContain('24%');
     expect(html).toContain('Налоговый орган — ставка 2026');
     expect(html).toContain('год шкалы: 2026');
-    expect(html).toContain('получено: 2026-10-10');
+    expect(html).toContain('получено: 10.10.2026');
     expect(html).toContain('Граница Парето');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');

@@ -84,8 +84,18 @@ export interface CountryMobilityData {
   readonly scenarios: readonly MobilityScenarioDefinition[];
 }
 
+export interface MobilityResidenceDocument {
+  readonly kind: 'residence_permit' | 'work_permit' | 'work_visa' | 'study_visa' | 'visa' | 'other';
+  readonly countryCode: string;
+  readonly expiresAt?: string;
+}
+
 export interface MobilityCandidateProfile {
   readonly citizenshipCountryCodes?: readonly string[];
+  /** Documents from the questionnaire; a valid permit is a residence right in its country. */
+  readonly residenceDocuments?: readonly MobilityResidenceDocument[];
+  /** The candidate's local date (YYYY-MM-DD) that document expiry is checked against. */
+  readonly asOf?: string;
   readonly currentCountryCode?: string;
   readonly hasJobOffer?: boolean;
   readonly approvedEmployerSponsor?: boolean;

@@ -7,6 +7,7 @@ import {
   type RelocationCountrySummary,
 } from './relocationCountrySummary';
 import { MobilePush } from './RelocationMobilePush';
+import { relocationShortDay } from './relocationDates';
 
 export interface RelocationMobileCountryProps {
   readonly countryCode: string;
@@ -21,11 +22,6 @@ export interface RelocationMobileCountryProps {
 }
 
 /** «2026-10-10» → «10.10», as the mockup dates sources. */
-function shortDay(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})/u.exec(value);
-  return match ? `${match[3]}.${match[2]}` : value;
-}
-
 function StatusLine({ summary }: { readonly summary: RelocationCountrySummary }) {
   const Icon =
     summary.status === 'available'
@@ -74,8 +70,10 @@ function WhySection({ summary }: { readonly summary: RelocationCountrySummary })
       </p>
       <p className="vacancy-push-foot">
         Правила въезда и работы по открытым источникам
-        {summary.source ? `, каталог правил, ${shortDay(summary.source.retrievedAt)}` : ''}. Не
-        юридическая консультация.
+        {summary.source
+          ? `, каталог правил, ${relocationShortDay(summary.source.retrievedAt)}`
+          : ''}
+        . Не юридическая консультация.
       </p>
     </section>
   );
