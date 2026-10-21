@@ -7090,7 +7090,7 @@
 }
 
 .vacancies-info-description {
-  font-size: var(--career-text-sm);
+  font-size: var(--career-text-xs);
   line-height: 1.5;
   margin: 0;
 }
@@ -7102,6 +7102,18 @@
 .vacancies-info-description ul {
   margin: 0 0 var(--career-space-3);
   padding-inline-start: var(--career-space-5);
+}
+
+/* B446-g4: разделы полного описания — заголовок 14 px, как в макете 4. */
+.vacancies-info-description h4 {
+  margin: var(--career-space-4) 0 var(--career-space-2);
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.vacancies-info-footer {
+  gap: var(--career-space-2);
 }
 
 .vacancies-info-description li + li {
