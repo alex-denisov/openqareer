@@ -94,22 +94,6 @@ describe('B203: VacancyMapView Component', () => {
     expect(html).not.toContain('Frontend Engineer v1');
   });
 
-  it('B553: на 390 карточка внизу называет крупнейший город и ведёт к списку', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView
-        items={[
-          makeItem('v1', 'Miro', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-          makeItem('v2', 'ASML', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-          makeItem('v3', '10up', 'Bishkek', { lat: 42.87, lng: 74.59 }),
-        ]}
-        onSelectCity={vi.fn()}
-      />,
-    );
-
-    expect(html).toContain('<strong>Almaty</strong><small>2 вакансии на карте</small>');
-    expect(html).toContain('Показать список');
-  });
-
   it('B553: карта недоступна — честный текст и переход к списку', () => {
     const onShowList = vi.fn();
     const html = renderToStaticMarkup(<VacancyMapUnavailable onShowList={onShowList} />);

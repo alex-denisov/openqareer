@@ -178,7 +178,7 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
   await capture(page, 'map', width, viewportHeight);
 
   if (mobile) {
-    await page.getByRole('button', { name: 'Список', exact: true }).click();
+    await page.locator('.career-map-push').getByRole('button', { name: 'Назад' }).click();
   } else {
     await page.getByRole('tab', { name: 'Список', exact: true }).click();
   }

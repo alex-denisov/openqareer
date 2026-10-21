@@ -1,0 +1,25 @@
+import { describe, expect, it, vi } from 'vitest';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { VacancyMapView } from './VacancyMapView';
+
+vi.mock('./useCompactViewport', () => ({ useCompactViewport: () => true }));
+
+describe('B553: «Карта» на 390 — push-экран (макет 4 ?mv=map)', () => {
+  it('шапка с «Назад», заголовком и консультантом; заметка под картой, без фильтров', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView
+        items={[]}
+        onSelectCity={vi.fn()}
+        onShowList={vi.fn()}
+        onOpenExpert={vi.fn()}
+      />,
+    );
+
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-label="Назад"');
+    expect(html).toContain('<h1 id="vacancy-map-push-title">Карта</h1>');
+    expect(html).toContain('aria-label="Спросить консультанта"');
+    expect(html).toContain('class="career-map-push-note vacancy-map-note"');
+    expect(html).not.toContain('career-map-header');
+  });
+});

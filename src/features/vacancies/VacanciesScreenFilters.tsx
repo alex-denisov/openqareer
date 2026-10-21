@@ -62,6 +62,7 @@ export function countActiveFilters(state: VacanciesScreenState): number {
     Boolean(
       state.regions.length ||
       state.selectedCity ||
+      state.selectedCities?.length ||
       state.selectedLocations?.length ||
       state.locationRemote ||
       state.locationSearch?.trim(),
@@ -451,6 +452,7 @@ function emptyVacancyFilterState(): VacanciesScreenState {
     salaryCurrency: undefined,
     includeMissingSalary: false,
     selectedCity: undefined,
+    selectedCities: [],
   };
 }
 

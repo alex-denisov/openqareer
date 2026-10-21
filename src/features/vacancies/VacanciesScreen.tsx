@@ -23,6 +23,7 @@ import {
   VacanciesFilters,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
+import { mapViewActions } from './vacancyMapScreenActions';
 import { VacanciesMainBody, savedCardRenderer } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
 import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
@@ -346,6 +347,7 @@ function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) 
     sources: [],
     remoteOnly: false,
     selectedCity: undefined,
+    selectedCities: [],
     selectedLocations: [],
     locationRemote: false,
     locationSearch: '',
@@ -461,6 +463,7 @@ function screenFilteredCount(
   const salaryFilter = state.salaryMinimum !== undefined || state.salaryMaximum !== undefined;
   const hasClientFilters =
     state.selectedCity !== undefined ||
+    Boolean(state.selectedCities?.length) ||
     salaryFilter ||
     Boolean(state.selectedLocations?.length || state.locationRemote) ||
     (!input.onFiltersChange && countActiveFilters(state) > 0);
@@ -514,12 +517,10 @@ function mainBodyProps(
     viewMode,
     onResetFilters: resetFilters,
     selectedCity: board.state.selectedCity,
-    // B446-g4: город на карте открывает список, отфильтрованный по этому городу.
-    onSelectCity: (city?: string) => {
-      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }));
-      if (city) screenState.setViewMode('list');
-    },
+    selectedCities: board.state.selectedCities,
+    ...mapViewActions(board.setState, screenState.setViewMode),
     onShowList: () => screenState.setViewMode('list'),
+    onOpenExpert: input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined,
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }

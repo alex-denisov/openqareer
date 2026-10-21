@@ -3,7 +3,9 @@ import {
   buildMapMarkers,
   capsuleWidth,
   cityBounds,
+  clampMarker,
   focusBounds,
+  markerLabel,
   formatCityDisplay,
   type ScreenProjector,
 } from './vacancyMapCluster';
@@ -77,23 +79,40 @@ describe('B375: vacancy map clustering and normalization', () => {
     ]);
   });
 
-  it('карта открывается на основной массе выдачи: одиночные дальние города не отдаляют её', () => {
-    const newYork: CityFacet = {
-      city: 'New York',
-      coordinates: { lat: 40.71, lng: -74 },
-      count: 1,
+  it('карта открывается на ядре выдачи: 5 крупнейших близких городов, выбросы не тянут рамку', () => {
+    const city = (name: string, lat: number, lng: number, count: number): CityFacet => ({
+      city: name,
+      coordinates: { lat, lng },
+      count,
       companyCount: 1,
-    };
-    expect(focusBounds([moscow, amsterdam, newYork])).toEqual([
-      [4.9, 52.37],
-      [37.62, 55.75],
+    });
+    const spb = city('Санкт-Петербург', 59.94, 30.31, 18);
+    const kazan = city('Казань', 55.79, 49.12, 6);
+    const ekb = city('Екатеринбург', 56.84, 60.6, 9);
+    const nsk = city('Новосибирск', 55.03, 82.92, 5);
+    const london = city('London', 51.5, -0.12, 2);
+    const vladivostok = city('Владивосток', 43.12, 131.9, 8);
+    expect(focusBounds([moscow, spb, kazan, ekb, nsk, london, vladivostok])).toEqual([
+      [30.31, 55.03],
+      [82.92, 59.94],
     ]);
-    expect(focusBounds([newYork])).toEqual(cityBounds([newYork]));
-    // На узком экране (390) — меньшая доля: в кадре только крупнейший город.
-    expect(focusBounds([moscow, amsterdam, newYork], 0.5)).toEqual([
-      [37.62, 55.75],
-      [37.62, 55.75],
-    ]);
+    expect(focusBounds([london])).toEqual(cityBounds([london]));
+  });
+
+  it('кластер называет крупнейший город и общее число, без «+N»', () => {
+    const [cluster] = buildMapMarkers([amsterdam, veldhoven], flat(4));
+    expect(cluster?.isCluster).toBe(true);
+    expect(cluster && markerLabel(cluster)).toBe('Amsterdam');
+  });
+
+  it('капсулу у края сдвигает внутрь, точку за краем не показывает', () => {
+    const view = { width: 400, height: 300 };
+    expect(clampMarker({ x: 5, y: 150 }, 'Москва 74', view)).toEqual({
+      x: capsuleWidth('Москва 74') / 2,
+      y: 150,
+    });
+    expect(clampMarker({ x: 200, y: 299 }, 'Казань 6', view)).toEqual({ x: 200, y: 278 });
+    expect(clampMarker({ x: -40, y: 150 }, 'Москва 74', view)).toBeUndefined();
   });
 
   it('ширина капсулы растёт с подписью и не меньше зоны касания 44 px', () => {

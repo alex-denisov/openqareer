@@ -9912,53 +9912,65 @@
 }
 
 .career-vacancy-map-view {
-  --career-map-max-block-size: calc(var(--career-space-8) * 14);
+  /* B553: карточка карты 1440 по макету 4 — 440 px, заметка лежит на карте внизу. */
+  --career-map-max-block-size: calc(var(--career-space-8) * 14 - var(--career-space-2));
   --career-map-card-min-inline-size: calc(var(--career-space-8) * 9);
   display: flex;
   flex-direction: column;
   gap: var(--career-space-4);
 }
 
-.career-map-canvas-container .career-map-header {
-  border: 0;
-  border-block-start: var(--career-border-width) solid var(--career-line);
-  border-radius: 0;
-}
-
 .vacancy-map-note {
   display: flex;
   align-items: center;
-  gap: var(--career-space-2);
+  gap: var(--career-space-3);
 }
 
+/* Заметка — плашка внутри карточки карты: 12 px от краёв, рамка, радиус 10 (макет 4). */
 .career-map-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--career-space-2);
-  padding: var(--career-space-2) var(--career-space-3);
-  background: var(--career-bg-elevated);
+  position: absolute;
+  inset-inline: var(--career-space-3);
+  inset-block-end: var(--career-space-3);
+  z-index: 2;
+  padding: var(--career-space-3) var(--career-space-4);
   border: var(--career-border-width) solid var(--career-line);
-  border-radius: var(--career-radius-md);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-map-header .vacancy-map-note {
+  margin: 0;
+}
+
+.career-map-header svg {
+  flex: none;
+  color: var(--career-text-dim);
 }
 
 .career-map-canvas-container {
   position: relative;
   width: 100%;
-  border: var(--career-border-width) solid var(--career-line);
+  border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-md);
   overflow: hidden;
   background: var(--career-bg-elevated);
 }
 
-/* B553: подложка MapLibre GL; капсулы городов — HTML-кнопки поверх неё. */
+/* B553: сцена карты — подложка MapLibre, капсулы, ±, карточка города 390. */
+.career-map-stage {
+  position: relative;
+}
+
 .career-map-gl {
   block-size: var(--career-map-max-block-size);
   background: var(--career-surface);
 }
 
+/* Атрибуция — компактная кнопка «i» (раскрывается по нажатию), без крупного текста. */
 .career-map-stage .career-map-gl .maplibregl-ctrl.maplibregl-ctrl-attrib {
+  margin: var(--career-space-2);
   background: var(--career-bg-elevated);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
@@ -9969,6 +9981,10 @@
   text-decoration: none;
 }
 
+.career-vacancy-map-view:not(.career-map-push) .career-map-gl .maplibregl-ctrl-bottom-right {
+  inset-block-end: calc(var(--career-space-8) * 2 + var(--career-space-3));
+}
+
 .career-map-markers {
   position: absolute;
   inset: 0;
@@ -9976,7 +9992,7 @@
   pointer-events: none;
 }
 
-/* Зона касания капсулы — не меньше 44 px; центр кнопки совпадает с точкой города. */
+/* Капсула — сама кнопка: 44 px, центр совпадает с точкой города. */
 .career-map-marker {
   position: absolute;
   inset-block-start: 0;
@@ -10005,15 +10021,16 @@
   outline-offset: calc(var(--career-border-width) * 2);
 }
 
-/* B446-g4: капсула города «Москва 74» (макет 4). */
+/* Макет 4: высота 44, по 12 px по бокам, название 13/600, число 14/600 акцентом через 8 px. */
 .career-map-capsule {
   display: inline-flex;
   align-items: center;
   gap: var(--career-space-2);
-  padding: var(--career-space-1) var(--career-space-3);
-  border: var(--career-border-width) solid var(--career-line-strong);
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-accent);
   border-radius: var(--career-radius-pill);
-  background: var(--career-surface);
+  background: var(--career-bg);
   font-size: var(--career-text-xs);
   font-weight: 600;
   white-space: nowrap;
@@ -10021,13 +10038,13 @@
 
 .career-map-marker:hover .career-map-capsule,
 .career-map-marker.is-active .career-map-capsule {
-  border-color: var(--career-accent);
   background: var(--career-accent-soft);
 }
 
 .career-map-label-count {
   color: var(--career-accent);
   font-family: var(--font-main);
+  font-size: var(--career-text-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -10049,18 +10066,14 @@
   margin: 0;
 }
 
-.career-map-mobile-card {
-  display: none;
-}
-
 .career-map-zoom-controls {
   position: absolute;
   inset-block-start: var(--career-space-3);
   inset-inline-end: var(--career-space-3);
+  z-index: 2;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: var(--career-space-1);
+  gap: var(--career-space-2);
 }
 
 .career-map-zoom-btn {
@@ -10086,46 +10099,110 @@
   outline-offset: calc(var(--career-border-width) * 2);
 }
 
-/* B553: сцена карты — подложка, капсулы, ± и карточка 390; заметка идёт под ней. */
-.career-map-stage {
-  position: relative;
+/* B553: push-экран «Карта» на 390 (макет 4 `?mv=map`). */
+.career-map-push .vacancy-push-bar {
+  grid-template-columns: var(--career-target-min) minmax(0, 1fr) var(--career-target-min);
 }
 
-@media (max-width: 760px) {
-  /* B553: на 390 карта на весь экран под шапкой, «Показать список» внизу (макет 390m). */
-  .career-map-gl,
-  .career-map-status {
-    block-size: calc(100dvh - var(--career-space-8) * 12);
-  }
+.career-map-push-expert {
+  grid-column: 3;
+  display: grid;
+  place-items: center;
+  inline-size: var(--career-target-min);
+  block-size: var(--career-target-min);
+  border: 0;
+  background: transparent;
+  color: var(--career-accent);
+  cursor: pointer;
+}
 
-  .career-map-mobile-card {
-    position: absolute;
-    inset-inline: var(--career-space-3);
-    inset-block-end: calc(var(--career-space-8) * 2);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--career-space-3);
-    padding: var(--career-space-3) var(--career-space-4);
-    border: var(--career-border-width) solid var(--career-line);
-    border-radius: var(--career-radius-md);
-    background: var(--career-bg-elevated);
-  }
+.career-map-push-body {
+  padding: var(--career-space-4);
+}
 
-  .career-map-mobile-card div {
-    display: flex;
-    flex-direction: column;
-    gap: var(--career-space-1);
-  }
+.career-map-push .career-map-canvas-container {
+  border: 0;
+  border-radius: calc(var(--career-radius-md) + var(--career-space-1));
+}
 
-  .career-map-mobile-card small {
-    color: var(--career-text-soft);
-    font-size: var(--career-text-xs);
-  }
+.career-map-push .career-map-gl,
+.career-map-push .career-map-status {
+  block-size: calc(100dvh - var(--career-space-8) * 10 - var(--career-space-1));
+}
 
-  .career-map-mobile-card .career-btn {
-    min-block-size: var(--career-target-min);
-  }
+.career-map-push-note {
+  margin: var(--career-space-5) 0 0;
+  padding-inline: var(--career-space-4);
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
+}
+
+/* Макет 390: капсула 25 px (6/10, радиус 16), без рамки; зона касания остаётся 44 px. */
+.career-map-push .career-map-capsule {
+  min-block-size: 0;
+  padding: var(--career-space-1) calc(var(--career-space-2) + var(--career-space-1) / 2);
+  border: 0;
+  border-radius: var(--career-space-4);
+  background: color-mix(in oklch, var(--career-bg) 82%, transparent);
+}
+
+.career-map-push .career-map-label-count {
+  font-size: var(--career-text-xs);
+}
+
+/* Карточка города внизу карты: 12 px от краёв, 12/16, радиус 22, основная кнопка акцентом. */
+.career-map-city-card {
+  position: absolute;
+  inset-inline: var(--career-space-3);
+  inset-block-end: var(--career-space-3);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3) var(--career-space-4);
+  border-radius: calc(var(--career-radius-lg) - var(--career-space-1) / 2);
+  background: color-mix(in oklch, var(--career-bg-elevated) 70%, transparent);
+  backdrop-filter: blur(var(--career-space-2));
+}
+
+.career-map-city-card div {
+  display: flex;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.career-map-city-card strong {
+  font-size: var(--career-text-sm);
+  font-weight: 700;
+}
+
+.career-map-city-card small {
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-map-city-card-cta {
+  flex: none;
+  min-block-size: var(--career-target-min);
+  padding: 0 var(--career-space-6);
+  border: 0;
+  border-radius: var(--career-radius-pill);
+  background: var(--career-accent);
+  color: var(--career-bg);
+  font: inherit;
+  font-size: var(--career-text-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.career-map-city-card-cta:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-text);
+  outline-offset: calc(var(--career-border-width) * 2);
+}
+
+.career-map-push .maplibregl-ctrl-bottom-right {
+  inset-block-end: calc(var(--career-space-8) * 3);
 }
 
 .career-map-city-chips {
