@@ -248,6 +248,7 @@
 }
 
 .career-today-desktop {
+  container-type: inline-size;
   font-size: var(--career-text-sm);
   line-height: 1.5;
 }
@@ -301,4 +302,15 @@
   margin: var(--career-space-3) 0 0;
   color: var(--career-text-muted);
   font-size: var(--career-text-xs);
+}
+
+/* Окно приложения 1280 с докованной панелью: колонка «Сегодня» уже 900 px — полоса профиля
+   складывается (заголовок над кнопками), как в узком окне, вместо переноса кнопок в два ряда. */
+@container (max-width: 900px) {
+  .career-today-desktop .career-today-profile-progress {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .career-today-profile-actions {
+    justify-content: flex-start;
+  }
 }

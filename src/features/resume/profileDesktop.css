@@ -646,3 +646,17 @@
     font-size: var(--career-text-xs);
   }
 }
+
+/* Окно приложения 900–1280 (панель докована): подвкладки «Профиля» переносятся на вторую строку,
+   а не срезаются у правого края. */
+@media (min-width: 761px) {
+  .career-profile-screen-view {
+    container-type: inline-size;
+  }
+  @container (max-width: 900px) {
+    .career-profile-screen-view .career-profile-screen-anchor-nav {
+      flex-wrap: wrap;
+      overflow-x: visible;
+    }
+  }
+}
