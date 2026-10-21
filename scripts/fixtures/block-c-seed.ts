@@ -23,6 +23,13 @@ export const BLOCK_C_FEW_DATA_ROLES = [
 export const BLOCK_C_EMPTY_ROLES = ['Chief Astronomy Officer'] as const;
 
 export const BLOCK_C_VECTOR_CLUSTER = 'cluster-bc-vector-head-payments';
+/** Top rows of the mockup that get a ready fit breakdown in `default`. */
+export const BLOCK_C_FIT_CLUSTERS = [
+  BLOCK_C_VECTOR_CLUSTER,
+  'cluster-bc-greencode-director',
+  'cluster-bc-arka-platform',
+  'cluster-bc-oblako-head',
+] as const;
 const SAVED_COUNT = 18;
 const CLOSED_COUNT = 2;
 const WANTED_COMPANIES = ['Гринкод', 'Сфера Пэй', 'Квант Дата'];
@@ -64,7 +71,8 @@ export function seedBlockCCandidate(
     urgency: 'active',
     campaign: {
       roles: [...seed.roles],
-      regions: [],
+      // «Москва +46» in the mockup: Russia is the chosen market, abroad rows are marked outside it.
+      regions: ['ru'],
       revision: 1,
       updatedAt: now.toISOString(),
     },

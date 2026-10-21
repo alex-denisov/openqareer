@@ -45,8 +45,8 @@ describe('block C catalog scale (B510)', () => {
   const catalog = buildBlockCCatalog(new Date('2026-10-21T09:00:00.000Z'));
   const rows = [...catalog.values()].flat();
 
-  it('holds about 1 620 rows from eight sources with unique ids', () => {
-    expect(rows.length).toBe(1_620);
+  it('holds 1 752 rows (about 1 620 clusters) from eight sources with unique ids', () => {
+    expect(rows.length).toBe(1_752);
     expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
     expect(catalog.size).toBe(BLOCK_C_SOURCES.length);
     expect(BLOCK_C_SOURCES.length).toBeGreaterThanOrEqual(8);

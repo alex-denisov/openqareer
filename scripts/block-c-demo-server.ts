@@ -8,9 +8,11 @@ import type { SessionAuth } from '../server/auth/authService';
 import type { ServerConfig } from '../server/config';
 import { SqliteCandidateStore } from '../server/data/sqliteCandidateStore';
 import { SqliteRecruiterContactsRepository } from '../server/data/sqliteRecruiterContactsRepository';
+import { currentVacancyFitProfileValidator } from '../server/domain/vacancyFitProfileStamp';
 import { VacancyMechanicsRuntime } from '../server/domain/vacancyMechanicsRuntime';
 import { sendError } from '../server/routes/helpers';
-import { MemoryVacancyPoolStore } from '../server/vacancies/memoryVacancyPoolStore';
+import { SqliteVacancyPoolStore } from '../server/vacancies/sqliteVacancyPoolStore';
+import { runBlockCFitWorker, runBlockCMaintenancePasses } from './fixtures/block-c-maintenance';
 import { MultiSourceVacancyEngine } from '../server/vacancies/multiSourceVacancyEngine';
 import { DEFAULT_VACANCY_SOURCES } from '../server/vacancies/defaultVacancySources';
 import { createCandidateStoreRouter } from './fixtures/block-a-demo-scenarios';
@@ -23,6 +25,7 @@ import {
 } from './fixtures/block-c-demo-scenarios';
 import {
   BLOCK_C_EMPTY_ROLES,
+  BLOCK_C_FIT_CLUSTERS,
   BLOCK_C_FEW_DATA_ROLES,
   BLOCK_C_MAIN_ROLES,
   closedBlockCVacancies,
@@ -54,7 +57,8 @@ const config: ServerConfig = {
 };
 const now = new Date();
 
-const pool = new MemoryVacancyPoolStore();
+// The SQLite pool, as on production: the maintenance passes below read its tables.
+const pool = new SqliteVacancyPoolStore({ databasePath });
 const catalog = buildBlockCCatalog(now);
 for (const [sourceId, rows] of catalog) pool.replaceSourceSlice(sourceId, rows);
 const rows = [...catalog.values()].flat();
@@ -181,20 +185,28 @@ for (const { candidate, seed } of Object.values(profiles)) {
   });
 }
 
-// Requirements for the shown rows come from the real deterministic extractor; no model client
-// is configured, so a fit assessment stays honestly unavailable instead of being invented.
-const mechanics = new VacancyMechanicsRuntime(databasePath, config.dataEncryptionKey);
-const mechanicsTimer = setInterval(() => {
-  void mechanics.runNext(null, 'block-c-demo').catch(() => undefined);
-}, 500);
+const passes = runBlockCMaintenancePasses(databasePath, engine, pool, now);
+// Mechanics worker for the mockup's top rows; requirements by rules, fit by the literal client.
+const mechanics = new VacancyMechanicsRuntime(
+  databasePath,
+  config.dataEncryptionKey,
+  currentVacancyFitProfileValidator(candidateStore),
+);
+await runBlockCFitWorker(
+  app,
+  mechanics,
+  profiles.main.candidate.accessToken,
+  origin,
+  BLOCK_C_FIT_CLUSTERS,
+);
 
 await app.listen({ host: config.host, port: config.port });
 console.log(
-  `Block C local demo: ${origin}/app/vacancies; synthetic catalog of ${rows.length} rows.`,
+  `Block C local demo: ${origin}/app; ${rows.length} synthetic rows; ` +
+    `${passes.semanticKeys} title keys, ${passes.salaryKeys} salary estimates.`,
 );
 for (const signal of ['SIGINT', 'SIGTERM'] as const)
   process.once(signal, async () => {
-    clearInterval(mechanicsTimer);
     await app.close();
     mechanics.close();
     candidateStore.close();
