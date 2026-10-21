@@ -9,6 +9,7 @@ import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { VacancyInfoModal } from './VacancyInfoModal';
+import { VacancyCompanyPathPanel, companyPathActions } from './VacancyCompanyPathPanel';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { VacancyScreenRowCells } from './VacancyScreenRowCells';
@@ -31,8 +32,8 @@ import {
   vacancySnapshot,
 } from './VacancyRowElements';
 import {
+  VacancyScreenDescription,
   VacancyScreenDetailActions,
-  VacancyScreenFullDescriptionButton,
   VacancyScreenRequirementChips,
 } from './VacancyScreenDetails';
 
@@ -638,6 +639,8 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 }
 
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
+  const [pathOpen, setPathOpen] = useState(false);
+  const pathPanelId = `vacancy-path-${cluster.id}`;
   return (
     <div
       id={`vacancy-details-${cluster.id}`}
@@ -650,27 +653,26 @@ function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: Detai
           explanation={explanation}
           onAddToProfile={rowProps.onAddToProfile}
         />
-        <section
-          className="vacancies-screen-description"
-          aria-labelledby={`vacancy-description-${cluster.id}`}
-        >
-          <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
-          {cluster.descriptionSummary.trim() ? (
-            <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
-          ) : (
-            <p className="vacancies-screen-description-empty">
-              Краткое описание пока недоступно. Полный текст можно проверить на площадке.
-            </p>
-          )}
-          <VacancyScreenFullDescriptionButton onOpen={() => rowState.setInfoOpen(true)} />
-        </section>
+        <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />
       </div>
       <VacancyFitEvidenceForItem
         item={{ cluster, explanation }}
         onAddToProfile={rowProps.onAddToProfile}
         showTable={false}
       />
-      <VacancyScreenDetailActions cluster={cluster} rowProps={rowProps} rowState={rowState} />
+      <VacancyScreenDetailActions
+        cluster={cluster}
+        rowProps={rowProps}
+        rowState={rowState}
+        path={{ open: pathOpen, panelId: pathPanelId, onToggle: () => setPathOpen((v) => !v) }}
+      />
+      {pathOpen ? (
+        <VacancyCompanyPathPanel
+          id={pathPanelId}
+          vacancyId={cluster.id}
+          actions={companyPathActions(cluster, rowProps, () => rowState.setPitchOpen(true))}
+        />
+      ) : null}
       <DetailInterviewSection
         appliedError={rowState.appliedState.appliedError}
         interviewState={rowState.interviewState}
@@ -730,14 +732,6 @@ function VacancyScreenRow(
   );
 }
 
-function afterInfoClose(closeInfo: () => void, openLetter?: () => void) {
-  if (!openLetter) return undefined;
-  return () => {
-    closeInfo();
-    openLetter();
-  };
-}
-
 function VacancyRowModals({
   cluster,
   rowState,
@@ -751,7 +745,6 @@ function VacancyRowModals({
         isOpen={rowState.infoOpen}
         onClose={() => rowState.setInfoOpen(false)}
         cluster={cluster}
-        onOpenLetter={afterInfoClose(() => rowState.setInfoOpen(false), rowState.handleOpenLetter)}
       />
       {rowState.pitchOpen ? (
         <VacancyPitchModal

@@ -1042,6 +1042,12 @@ test.describe('B250 vacancies screen', () => {
       .getByRole('button', { name: 'Путь к компании', exact: true });
     await expect(companyPath).toBeVisible();
     await companyPath.click();
+    // B549: «Путь к компании» opens the three circles inside the row first.
+    const pathPanel = firstItem.locator('.vacancy-path-panel');
+    await expect(
+      pathPanel.getByRole('heading', { name: 'Как откликнуться: три круга связей' }),
+    ).toBeVisible();
+    await pathPanel.getByRole('button', { name: 'Добавить контакты' }).first().click();
 
     const companiesTab = page
       .getByRole('tablist', { name: 'Разделы вакансий' })

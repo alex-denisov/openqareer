@@ -269,6 +269,15 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   const companyPathButton = vacancy.getByRole('button', { name: /Путь к компании/u });
   await focusWithKeyboard(page, companyPathButton);
   await page.keyboard.press('Enter');
+  // B549: the circles open inside the row; the people tab is one step further.
+  await focusWithKeyboard(
+    page,
+    vacancy
+      .locator('.vacancy-path-panel')
+      .getByRole('button', { name: 'Добавить контакты' })
+      .first(),
+  );
+  await page.keyboard.press('Enter');
   await expect(page.getByRole('tab', { name: /Компании и люди/u })).toHaveAttribute(
     'aria-selected',
     'true',

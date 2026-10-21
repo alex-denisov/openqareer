@@ -236,6 +236,12 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
     .locator('.vacancies-screen-detail-actions')
     .getByRole('button', { name: /Путь к компании/u })
     .click();
+  // B549: the path opens inside the row; the people screen is one step further.
+  await companyRow
+    .locator('.vacancy-path-panel')
+    .getByRole('button', { name: 'Добавить контакты' })
+    .first()
+    .click();
   await expect(page.getByRole('heading', { name: 'Revolut' })).toBeVisible();
   await capture(page, 'company-path', width, viewportHeight);
 });

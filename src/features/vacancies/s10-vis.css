@@ -504,3 +504,111 @@
     animation: none;
   }
 }
+
+/* B549: «Путь к компании» opens inside the expanded row (mockup 4, ?path=open). */
+.vacancy-path-panel {
+  display: grid;
+  gap: var(--career-space-3);
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-sm);
+  background: var(--career-surface);
+  min-inline-size: 0;
+}
+
+.vacancy-path-head {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-2);
+}
+
+.vacancy-path-head h3 {
+  margin: 0;
+  color: var(--career-text);
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}
+
+.vacancy-path-info {
+  display: inline-grid;
+  place-items: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  border: 0;
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: transparent;
+  cursor: pointer;
+}
+
+.vacancy-path-info:hover {
+  color: var(--career-text);
+}
+
+.vacancy-path-circles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+  gap: var(--career-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.vacancy-path-circle {
+  display: grid;
+  align-content: start;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  padding: var(--career-space-3) var(--career-space-4);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  font-size: var(--career-text-sm);
+  overflow-wrap: anywhere;
+}
+
+.vacancy-path-circle b {
+  font-weight: 600;
+}
+
+.vacancy-path-circle p {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-path-circle-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--career-space-1);
+  padding: var(--career-space-1) var(--career-space-2);
+  border: var(--career-border-width) solid
+    color-mix(in oklch, var(--career-accent) 45%, transparent);
+  border-radius: var(--career-space-1);
+  color: var(--career-accent);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.vacancy-path-circle-tag.is-dim {
+  border-color: var(--career-line-strong);
+  color: var(--career-text-dim);
+}
+
+.vacancy-path-circle .action-btn {
+  justify-self: start;
+  max-inline-size: 100%;
+}
+
+.vacancy-path-status {
+  display: grid;
+  justify-items: start;
+  gap: var(--career-space-2);
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.vacancy-path-status p {
+  margin: 0;
+}
