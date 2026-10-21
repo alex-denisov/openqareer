@@ -37,7 +37,7 @@ export function VacancySourceCatalogFilter(props: VacancySourceCatalogFilterProp
   return <SourceCatalogContent facets={props.facets} catalog={catalog} view={view} />;
 }
 
-function useSourceCatalog() {
+export function useSourceCatalog() {
   const [sources, setSources] = useState<VacancySourceRegistryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);

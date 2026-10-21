@@ -1,5 +1,5 @@
 import type { VacanciesScreenState } from './VacanciesScreenFilters';
-import { CaretDown, Funnel } from '@phosphor-icons/react';
+import { CaretDown, SlidersHorizontal } from '@phosphor-icons/react';
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 import { LOCATION_PATH_SEPARATOR } from '../../../shared/locationTree';
 
@@ -146,8 +146,8 @@ export function VacanciesFilterToolbar({
         aria-label="Фильтры"
         onClick={onToggle}
       >
-        <Funnel weight="bold" aria-hidden="true" />
-        <span>Фильтры {activeCount}</span>
+        <SlidersHorizontal size={18} aria-hidden="true" />
+        <span>Фильтры</span> <span className="vacancies-mobile-filter-badge">{activeCount}</span>
       </button>
     </div>
   );

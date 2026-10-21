@@ -252,7 +252,7 @@ describe('VacanciesScreen (B250)', () => {
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
     expect(html).not.toContain('Все роли кампании');
-    expect(html).toContain('Фильтры 0');
+    expect(html).toContain('vacancies-mobile-filter-badge">0<');
   });
 
   it('does not render without a campaign or a level', () => {

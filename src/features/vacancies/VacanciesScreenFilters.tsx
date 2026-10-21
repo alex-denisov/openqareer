@@ -16,10 +16,12 @@ import {
   RoleFilterSection,
   VacanciesFilterPopover,
   VacancyFilterActions,
+  mobileFilterValues,
   useMobileRoleFocus,
 } from './VacanciesFilterPopover';
 import { LEVEL_HUMAN_NAMES } from './vacancyLevel';
-import { VacancySourceCatalogFilter } from './VacancySourceCatalogFilter';
+import { VacancySourceCatalogFilter, useSourceCatalog } from './VacancySourceCatalogFilter';
+import { MobileFilterSheet } from './VacanciesMobileFilterSheet';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 import { buildLocationTree } from '../../../shared/locationTree';
 import type { LocationTreeBuilder } from './useLocationTreeForState';
@@ -47,6 +49,8 @@ export interface VacanciesScreenFiltersProps {
   readonly focusRole?: boolean;
   readonly locations?: readonly FacetOption[];
   readonly locationTreeFor?: LocationTreeBuilder;
+  /** Число выдачи для черновика; `undefined` — меняются серверные фильтры, число неизвестно. */
+  readonly resultCountFor?: (state: VacanciesScreenState) => number | undefined;
   readonly salaryCurrencies?: readonly string[];
   readonly formatCounts?: Readonly<Record<string, number>>;
 }
@@ -400,11 +404,13 @@ function FacetGroups({
   roleInputRef,
   activeGroup,
   locationActions,
+  mobile = false,
 }: {
   readonly props: VacanciesScreenFiltersProps;
   readonly roleInputRef?: React.Ref<HTMLInputElement>;
   readonly activeGroup?: VacancyFilterGroup;
   readonly locationActions: LocationActions;
+  readonly mobile?: boolean;
 }) {
   return (
     <>
@@ -420,7 +426,7 @@ function FacetGroups({
       {filterGroupMatches(activeGroup, 'locations') ? (
         <LocationTreeSection
           props={props}
-          withFooter={activeGroup === 'locations'}
+          withFooter={activeGroup === 'locations' && !mobile}
           locationActions={locationActions}
         />
       ) : null}
@@ -473,6 +479,7 @@ function useVacancyFilterDraft(props: VacanciesScreenFiltersProps) {
     roleInputRef,
     resetAll,
     changed: JSON.stringify(draftState) !== JSON.stringify(props.state),
+    discard: () => setDraftState(props.state),
     cancelLocations: () =>
       setDraftState((draft) => ({
         ...draft,
@@ -488,9 +495,7 @@ function VacancyFilterGroupContent({
   draftProps,
   activeGroup,
   roleInputRef,
-  mobile,
   showPremises,
-  onBackToOverview,
   locationActions,
 }: {
   readonly props: VacanciesScreenFiltersProps;
@@ -498,9 +503,7 @@ function VacancyFilterGroupContent({
   readonly draftProps: VacanciesScreenFiltersProps;
   readonly activeGroup: VacancyFilterGroup | null;
   readonly roleInputRef: ReturnType<typeof useVacancyFilterDraft>['roleInputRef'];
-  readonly mobile: boolean;
   readonly showPremises: boolean;
-  readonly onBackToOverview: () => void;
 }) {
   return (
     <>
@@ -510,15 +513,6 @@ function VacancyFilterGroupContent({
           premisesLoading={props.premisesLoading}
           onSavePremises={props.onSavePremises}
         />
-      ) : null}
-      {mobile && activeGroup !== null ? (
-        <button
-          type="button"
-          className="filters-reset vacancies-filter-back"
-          onClick={onBackToOverview}
-        >
-          Все фильтры
-        </button>
       ) : null}
       <FacetGroups
         props={draftProps}
@@ -530,10 +524,65 @@ function VacancyFilterGroupContent({
   );
 }
 
+function sheetSubtitle(
+  facets: VacanciesScreenFiltersProps['facets'],
+  resultCount: number | undefined,
+): string | undefined {
+  if (!facets) return undefined;
+  const format = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
+  const summary = facets.catalogSummary;
+  const pool =
+    summary?.catalogTotal !== undefined
+      ? `${format(summary.roleLevelMatches)} из ${format(summary.catalogTotal)} вакансий каталога подходят по роли и уровню.`
+      : `${format(facets.total)} вакансий в подборке по роли и уровню.`;
+  return resultCount === undefined ? pool : `${pool} С вашими условиями — ${format(resultCount)}.`;
+}
+
+function MobileFilterSheetContent({
+  props,
+  model,
+  activeGroup,
+  onSelectGroup,
+  onApply,
+  onBackToOverview,
+}: {
+  readonly props: VacanciesScreenFiltersProps;
+  readonly model: ReturnType<typeof useVacancyFilterDraft>;
+  readonly activeGroup: VacancyFilterGroup | null;
+  readonly onSelectGroup: (group: VacancyFilterGroup) => void;
+  readonly onApply: () => void;
+  readonly onBackToOverview: () => void;
+}) {
+  const catalog = useSourceCatalog();
+  const draft = model.draftProps.state;
+  const resultCount = props.resultCountFor?.(draft);
+  return (
+    <MobileFilterSheet
+      activeGroup={activeGroup}
+      values={mobileFilterValues(draft, catalog.sources.length)}
+      subtitle={sheetSubtitle(props.facets, resultCount)}
+      resultCount={resultCount}
+      onSelectGroup={onSelectGroup}
+      onBack={onBackToOverview}
+      onReset={model.resetAll}
+      onShow={onApply}
+    >
+      <FacetGroups
+        props={model.draftProps}
+        roleInputRef={model.roleInputRef}
+        activeGroup={activeGroup ?? undefined}
+        mobile
+        locationActions={{ onApply, onCancel: onBackToOverview }}
+      />
+    </MobileFilterSheet>
+  );
+}
+
 function VacancyFilterPopoverContent({
   props,
   model,
   activeGroup,
+  onSelectGroup,
   onApply,
   onBackToOverview,
   onClose,
@@ -541,13 +590,22 @@ function VacancyFilterPopoverContent({
   readonly props: VacanciesScreenFiltersProps;
   readonly model: ReturnType<typeof useVacancyFilterDraft>;
   readonly activeGroup: VacancyFilterGroup | null;
+  readonly onSelectGroup: (group: VacancyFilterGroup) => void;
   readonly onApply: () => void;
   readonly onBackToOverview: () => void;
   readonly onClose: () => void;
 }) {
-  const mobile = isMobileFilterViewport();
-  const mobileOverview = mobile && activeGroup === null;
-  const showPremises = !mobile && (activeGroup === null || activeGroup === 'roles');
+  if (isMobileFilterViewport())
+    return (
+      <MobileFilterSheetContent
+        props={props}
+        model={model}
+        activeGroup={activeGroup}
+        onSelectGroup={onSelectGroup}
+        onApply={onApply}
+        onBackToOverview={onBackToOverview}
+      />
+    );
   return (
     <>
       <VacancyFilterGroupContent
@@ -555,26 +613,17 @@ function VacancyFilterPopoverContent({
         draftProps={model.draftProps}
         activeGroup={activeGroup}
         roleInputRef={model.roleInputRef}
-        mobile={mobile}
-        showPremises={showPremises}
-        onBackToOverview={onBackToOverview}
+        showPremises={activeGroup === null || activeGroup === 'roles'}
         locationActions={{
           onApply,
           onCancel: () => {
             model.cancelLocations();
-            if (mobile) onBackToOverview();
-            else onClose();
+            onClose();
           },
         }}
       />
       {activeGroup === 'locations' ? null : (
-        <VacancyFilterActions
-          mobile={mobile}
-          mobileOverview={mobileOverview}
-          changed={model.changed}
-          onReset={model.resetAll}
-          onApply={onApply}
-        />
+        <VacancyFilterActions changed={model.changed} onReset={model.resetAll} onApply={onApply} />
       )}
     </>
   );
@@ -621,6 +670,7 @@ function VacancyFilterPanelBody({
           props={props}
           model={model}
           activeGroup={activeGroup}
+          onSelectGroup={onSelectGroup}
           onApply={onApply}
           onBackToOverview={onBackToOverview}
           onClose={onClose}
@@ -640,6 +690,7 @@ function VacancyFilterPanel({
   const [activeGroup, setActiveGroup] = useState<VacancyFilterGroup | null>(null);
   useMobileRoleFocus(props.focusRole, setActiveGroup, model.setExpanded);
   const closePanel = () => {
+    model.discard();
     model.setExpanded(false);
     setActiveGroup(null);
   };

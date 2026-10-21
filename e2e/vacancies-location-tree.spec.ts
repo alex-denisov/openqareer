@@ -42,8 +42,9 @@ async function openLocations(page: Page, mobile: boolean): Promise<void> {
   await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
   await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
   if (mobile) {
-    // 390: the shared filter sheet shows every group; the tree sits inside it.
+    // 390: лист фильтров — строки групп; «Локации» открывает push-экран с деревом.
     await page.getByRole('button', { name: 'Фильтры' }).click();
+    await page.locator('[data-filter-sheet-group="locations"]').click();
   } else {
     await page.locator('[data-filter-group="locations"]').click();
   }
@@ -73,7 +74,7 @@ test('B547: federal district changes the list, Cancel keeps it', async ({ page }
   }
   await tree(page).getByRole('checkbox', { name: 'Центральный ФО' }).check();
   await expect(tree(page).getByRole('checkbox', { name: 'Москва' })).toBeChecked();
-  if (mobile) await page.getByRole('button', { name: 'Показать результаты' }).click();
+  if (mobile) await page.locator('.vacancies-mobile-sheet-cta').click();
   else await tree(page).getByRole('button', { name: 'Применить' }).click();
   await expect(page.locator('.vac-list-item')).toHaveCount(5);
   await expect(page.locator('.vac-list')).not.toContainText('Head of Engineering 6');
