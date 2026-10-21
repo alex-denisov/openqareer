@@ -392,8 +392,12 @@
 }
 
 .vacancies-filter-group-value {
+  max-inline-size: 24ch;
+  overflow: hidden;
   color: var(--career-text);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* B446-g4: заданный фильтр — подсвеченная рамка, открытый — мягкая заливка, как .fbtn макета 4. */
@@ -1064,9 +1068,3 @@
 }
 
 /* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */
-.vacancies-filter-group-value {
-  max-inline-size: 24ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
