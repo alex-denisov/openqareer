@@ -104,9 +104,7 @@ export function formatCityDisplay(rawCity: string, rawCountry?: string): CityDis
  */
 export function formatLocationDisplay(location?: string): string | undefined {
   if (!location) return undefined;
-  return location
-    .replace(/\b([A-Za-z]{2,3}):\s*/gu, '')
-    .replace(/\bSydney\b/gu, 'Сидней');
+  return location.replace(/\b([A-Za-z]{2,3}):\s*/gu, '').replace(/\bSydney\b/gu, 'Сидней');
 }
 
 export function projectCoords(lat: number, lng: number): { x: number; y: number } {
@@ -195,8 +193,7 @@ function resolveLabels(
   for (const node of sortedCities) {
     const collides = occupiedSpots.some(
       (spot) =>
-        Math.abs(spot.x - node.x) < LABEL_HALF_WIDTH &&
-        Math.abs(spot.y - node.y) < LABEL_HEIGHT,
+        Math.abs(spot.x - node.x) < LABEL_HALF_WIDTH && Math.abs(spot.y - node.y) < LABEL_HEIGHT,
     );
     const showLabel = node.city.city === selectedCity || !collides;
     cityVisibility.set(node.id, showLabel);
@@ -227,4 +224,29 @@ export function clusterCitiesByGrid(
   const buckets = groupIntoBuckets(validCities, gridSize);
   const { nodes, occupiedSpots } = createNodesFromBuckets(buckets, zoom);
   return resolveLabels(nodes, occupiedSpots, selectedCity);
+}
+
+const MAP_WIDTH = 900;
+const MAP_HEIGHT = 480;
+const MAX_ZOOM = 3;
+const FIT_MARGIN = 1.6;
+
+/** B446-g4: карта открывается приближенной к точкам выдачи (макет 4), не ко всему миру. */
+export function fitMapView(points: readonly { readonly x: number; readonly y: number }[]): {
+  readonly zoom: number;
+  readonly center: { readonly x: number; readonly y: number };
+} {
+  if (!points.length) return { zoom: 1, center: { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 } };
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  const [minX, maxX, minY, maxY] = [
+    Math.min(...xs),
+    Math.max(...xs),
+    Math.min(...ys),
+    Math.max(...ys),
+  ];
+  const spanX = Math.max(1, (maxX - minX) * FIT_MARGIN);
+  const spanY = Math.max(1, (maxY - minY) * FIT_MARGIN);
+  const zoom = Math.max(1, Math.min(MAX_ZOOM, MAP_WIDTH / spanX, MAP_HEIGHT / spanY));
+  return { zoom, center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 } };
 }

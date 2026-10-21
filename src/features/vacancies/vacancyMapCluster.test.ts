@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clusterCitiesByGrid, formatCityDisplay } from './vacancyMapCluster';
+import { clusterCitiesByGrid, formatCityDisplay, fitMapView } from './vacancyMapCluster';
 import type { CityFacet } from './vacancyFacets';
 
 describe('B375: vacancy map clustering and normalization', () => {
@@ -85,5 +85,25 @@ describe('B375: vacancy map clustering and normalization', () => {
     expect(display.city).toBe('Сидней');
     expect(display.country).toBe('Австралия');
     expect(display.tooltip).toBe('Австралия');
+  });
+});
+
+describe('fitMapView (B446-g4)', () => {
+  it('zooms to the bounds of the result points with a margin, capped at 3', () => {
+    const view = fitMapView([
+      { x: 600, y: 120 },
+      { x: 640, y: 140 },
+    ]);
+    expect(view.zoom).toBe(3);
+    expect(view.center).toEqual({ x: 620, y: 130 });
+  });
+  it('shows the whole world when points span it or there are none', () => {
+    expect(fitMapView([])).toEqual({ zoom: 1, center: { x: 450, y: 240 } });
+    expect(
+      fitMapView([
+        { x: 10, y: 10 },
+        { x: 890, y: 470 },
+      ]).zoom,
+    ).toBe(1);
   });
 });

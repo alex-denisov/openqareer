@@ -1,19 +1,21 @@
-import React from "react";
-import type { MatchedVacancyItem } from "../coach/cabinetTypes";
+import { Info } from '@phosphor-icons/react';
+import React from 'react';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import {
   calculateVacancyFacets,
   hasMapCityCoordinates,
   vacancyCityName,
   type CityFacet,
-} from "./vacancyFacets";
-import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
-import { vacancyMapNote, type VacancyMapNoteCounts } from "./vacancyMapNote";
+} from './vacancyFacets';
+import { NATURAL_EARTH_COUNTRY_CONTOURS } from './naturalEarth110m';
+import { vacancyMapNote, type VacancyMapNoteCounts } from './vacancyMapNote';
 import {
   clusterCitiesByGrid,
   formatCityDisplay,
+  fitMapView,
   projectCoords,
   type MapClusterNode as ClusterNodeType,
-} from "./vacancyMapCluster";
+} from './vacancyMapCluster';
 
 interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
@@ -23,16 +25,22 @@ interface VacancyMapViewProps {
   readonly total?: number;
 }
 
-
 export function VacancyMapView({
   items,
   selectedCity,
   onSelectCity,
   total,
 }: VacancyMapViewProps): React.JSX.Element {
-  const [zoom, setZoom] = React.useState<number>(1);
-  const [center, setCenter] = React.useState<{ x: number; y: number }>({ x: 450, y: 240 });
   const facets = calculateVacancyFacets(items);
+  const [initial] = React.useState(() =>
+    fitMapView(
+      facets.cities.flatMap((city) =>
+        city.coordinates ? [projectCoords(city.coordinates.lat, city.coordinates.lng)] : [],
+      ),
+    ),
+  );
+  const [zoom, setZoom] = React.useState<number>(initial.zoom);
+  const [center, setCenter] = React.useState<{ x: number; y: number }>(initial.center);
 
   return (
     <div className="career-vacancy-map-view vacancy-map-view">
@@ -56,8 +64,8 @@ export function VacancyMapView({
             setCenter({ x: 450, y: 240 });
           }}
         />
+        <MapHeader items={items} total={total ?? items.length} />
       </div>
-      <MapHeader items={items} total={total ?? items.length} />
     </div>
   );
 }
@@ -92,11 +100,7 @@ function MapZoomControls({
         −
       </button>
       {zoom > 1 ? (
-        <button
-          type="button"
-          className="career-chip career-map-zoom-reset"
-          onClick={onResetZoom}
-        >
+        <button type="button" className="career-chip career-map-zoom-reset" onClick={onResetZoom}>
           Сбросить масштаб
         </button>
       ) : null}
@@ -115,12 +119,10 @@ export function VacancyCityFilterBar({
   if (!selectedCity) return null;
   return (
     <div className="career-map-active-bar">
-      <span>Показаны вакансии в городе: <strong>{selectedCity}</strong></span>
-      <button
-        type="button"
-        className="career-inline-link"
-        onClick={onClear}
-      >
+      <span>
+        Показаны вакансии в городе: <strong>{selectedCity}</strong>
+      </span>
+      <button type="button" className="career-inline-link" onClick={onClear}>
         Все города
       </button>
     </div>
@@ -146,22 +148,32 @@ function MapHeader({ items, total }: { items: readonly MatchedVacancyItem[]; tot
   return (
     <div className="career-map-header">
       <p className="career-vacancy-count vacancy-map-note" aria-live="polite">
+        <Info size={16} aria-hidden="true" />
         {vacancyMapNote(mapNoteCounts(items, total))}
       </p>
     </div>
   );
 }
 
+/** Кластер называет самый крупный город и сколько ещё рядом: «Москва +2». */
+function clusterLabel(cluster: ClusterNodeType): string {
+  const top = [...cluster.cities].sort((a, b) => b.count - a.count)[0];
+  const name = top ? formatCityDisplay(top.city, top.country).city : 'Города';
+  return cluster.cities.length > 1 ? `${name} +${cluster.cities.length - 1}` : name;
+}
+
 function MapClusterNode({
   cluster,
+  zoom,
   onClick,
 }: {
   cluster: ClusterNodeType;
+  zoom: number;
   onClick: () => void;
 }) {
   const citiesNames = cluster.cities
     .map((c) => `${formatCityDisplay(c.city, c.country).city} (${c.count})`)
-    .join(", ");
+    .join(', ');
   const tooltip = `Кластер: ${cluster.totalCount} вакансий (${citiesNames}). Нажмите для приближения`;
 
   return (
@@ -172,23 +184,68 @@ function MapClusterNode({
       aria-label={tooltip}
       onClick={onClick}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onClick();
         }
       }}
     >
       <title>{tooltip}</title>
-      <circle cx={cluster.x} cy={cluster.y} r={18} className="career-map-cluster-pulse" />
-      <circle cx={cluster.x} cy={cluster.y} r={12} className="career-map-cluster-circle" />
-      <text
+      <MapCapsule
         x={cluster.x}
-        y={cluster.y + 4}
-        textAnchor="middle"
-        className="career-map-cluster-count"
-      >
-        {cluster.totalCount}
-      </text>
+        y={cluster.y}
+        label={clusterLabel(cluster)}
+        count={cluster.totalCount}
+        zoom={zoom}
+      />
+    </g>
+  );
+}
+
+/**
+ * B446-g4: метка карты — капсула «Москва 74», как в макете 4. Размеры делятся на
+ * масштаб, чтобы на экране капсула и зона касания (≥44 px) не менялись при приближении.
+ */
+function MapCapsule({
+  x,
+  y,
+  label,
+  count,
+  zoom,
+  active,
+}: {
+  x: number;
+  y: number;
+  label: string;
+  count: number;
+  zoom: number;
+  active?: boolean;
+}) {
+  const text = `${label} ${count}`;
+  const width = text.length * 7.4 + 20;
+  return (
+    <g transform={`translate(${x} ${y}) scale(${1 / zoom})`}>
+      <g className="career-map-capsule-scale">
+        <rect
+          x={-Math.max(width, 44) / 2}
+          y={-22}
+          width={Math.max(width, 44)}
+          height={44}
+          className="career-map-hit"
+        />
+        <rect
+          x={-width / 2}
+          y={-12}
+          width={width}
+          height={24}
+          rx={12}
+          className={`career-map-capsule${active ? ' is-active' : ''}`}
+        />
+        <text x={0} y={4.5} textAnchor="middle" className="career-map-label is-capsule">
+          <tspan>{label}</tspan>
+          <tspan className="career-map-label-count"> {count}</tspan>
+        </text>
+      </g>
     </g>
   );
 }
@@ -196,12 +253,12 @@ function MapClusterNode({
 function MapPinNode({
   city,
   isSelected,
-  showLabel,
+  zoom,
   onSelect,
 }: {
   city: CityFacet;
   isSelected: boolean;
-  showLabel: boolean;
+  zoom: number;
   onSelect: () => void;
 }) {
   if (!city.coordinates) return null;
@@ -210,28 +267,27 @@ function MapPinNode({
 
   return (
     <g
-      className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}
+      className={`career-map-pin-group ${isSelected ? 'is-active' : ''}`}
       role="button"
       tabIndex={0}
       aria-label={`Город ${display.city}: ${city.count} вакансий`}
       onClick={onSelect}
       onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
+        if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           onSelect();
         }
       }}
     >
       <title>{display.tooltip}</title>
-      <circle cx={x} cy={y} r={22} className="career-map-hit" />
-      <circle cx={x} cy={y} r={isSelected ? 16 : 10} className="career-map-pulse" />
-      <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
-      {showLabel ? (
-        <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
-          <tspan>{display.city}</tspan>
-          <tspan className="career-map-label-count"> {city.count}</tspan>
-        </text>
-      ) : null}
+      <MapCapsule
+        x={x}
+        y={y}
+        label={display.city}
+        count={city.count}
+        zoom={zoom}
+        active={isSelected}
+      />
     </g>
   );
 }
@@ -289,6 +345,7 @@ function renderMapNode(
       <MapClusterNode
         key={node.id}
         cluster={node}
+        zoom={zoom}
         onClick={() => onZoomChange(Math.min(3, zoom + 1), { x: node.x, y: node.y })}
       />
     );
@@ -298,7 +355,7 @@ function renderMapNode(
       key={node.id}
       city={node.city}
       isSelected={selectedCity === node.city.city}
-      showLabel={node.showLabel}
+      zoom={zoom}
       onSelect={() => onSelectCity(selectedCity === node.city.city ? undefined : node.city.city)}
     />
   );
