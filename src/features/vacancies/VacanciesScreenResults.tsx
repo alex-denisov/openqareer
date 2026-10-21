@@ -27,6 +27,8 @@ interface VacanciesMainBodyProps {
   readonly listProps: ListContentProps;
   readonly selectedCity?: string;
   readonly onSelectCity: (city?: string) => void;
+  /** B553: карта недоступна — переход к списку. */
+  readonly onShowList?: () => void;
 }
 
 function VacanciesTableHeader({
@@ -146,6 +148,7 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
         total={props.total}
         selectedCity={props.selectedCity}
         onSelectCity={props.onSelectCity}
+        onShowList={props.onShowList}
       />
     );
   }

@@ -9952,72 +9952,107 @@
   background: var(--career-bg-elevated);
 }
 
-.career-map-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  max-height: var(--career-map-max-block-size);
+/* B553: подложка MapLibre GL; капсулы городов — HTML-кнопки поверх неё. */
+.career-map-gl {
+  block-size: var(--career-map-max-block-size);
+  background: var(--career-surface);
 }
 
-.career-map-bg {
-  width: 100%;
-  height: 100%;
-  fill: var(--career-bg-elevated);
-}
-
-.career-map-country {
-  fill: var(--career-surface);
-  stroke: var(--career-line);
-  stroke-width: var(--career-border-width);
-  vector-effect: non-scaling-stroke;
-}
-
-.career-map-pin-group {
-  cursor: pointer;
-}
-
-/* B446-g4: невидимая зона касания города на карте — не меньше 44 px. */
-.career-map-hit {
-  fill: transparent;
-}
-
-/* На 390 карта сжата примерно в 2,5 раза: капсула и её зона касания растут обратно,
-   чтобы на экране остаться ≥44 px. */
-@media (max-width: 760px) {
-  .career-map-capsule-scale {
-    transform: scale(2.4);
-  }
-}
-
-.career-map-cluster-group {
-  cursor: pointer;
-}
-
-.career-map-cluster-pulse {
-  fill: var(--career-accent-soft);
-  stroke: var(--career-accent);
-  stroke-width: var(--career-border-width);
-}
-
-.career-map-cluster-group:hover .career-map-cluster-pulse,
-.career-map-cluster-group:focus-visible .career-map-cluster-pulse {
-  stroke-width: calc(var(--career-border-width) * 2);
-}
-
-.career-map-cluster-circle {
-  fill: var(--career-accent);
-}
-
-.career-map-cluster-count {
+.career-map-gl .maplibregl-ctrl-attrib {
+  background: var(--career-bg-elevated);
+  color: var(--career-text-soft);
   font-size: var(--career-text-xs);
-  font-family: var(--font-main);
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  fill: var(--career-accent-ink);
+}
+
+.career-map-gl .maplibregl-ctrl-attrib a {
+  color: var(--career-text-soft);
+  text-decoration: none;
+}
+
+.career-map-markers {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
   pointer-events: none;
 }
 
-/* B446-g4: ± поверх карты справа сверху, как в макете 4. */
+/* Зона касания капсулы — не меньше 44 px; центр кнопки совпадает с точкой города. */
+.career-map-marker {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-inline-size: var(--career-target-min);
+  min-block-size: var(--career-target-min);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--career-text);
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  translate: -50% -50%;
+}
+
+.career-map-marker:focus-visible {
+  outline: none;
+}
+
+.career-map-marker:focus-visible .career-map-capsule {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: calc(var(--career-border-width) * 2);
+}
+
+/* B446-g4: капсула города «Москва 74» (макет 4). */
+.career-map-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding: var(--career-space-1) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-pill);
+  background: var(--career-surface);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.career-map-marker:hover .career-map-capsule,
+.career-map-marker.is-active .career-map-capsule {
+  border-color: var(--career-accent);
+  background: var(--career-accent-soft);
+}
+
+.career-map-label-count {
+  color: var(--career-accent);
+  font-family: var(--font-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.career-map-status {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-3);
+  block-size: var(--career-map-max-block-size);
+  margin: 0;
+  padding: var(--career-space-6);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  text-align: center;
+}
+
+.career-map-status p {
+  margin: 0;
+}
+
+.career-map-mobile-card {
+  display: none;
+}
+
 .career-map-zoom-controls {
   position: absolute;
   inset-block-start: var(--career-space-3);
@@ -10038,55 +10073,44 @@
   font-weight: 700;
 }
 
-.career-map-pulse {
-  fill: var(--career-accent-soft);
-  stroke: var(--career-accent);
-  stroke-width: var(--career-border-width);
-}
+@media (max-width: 760px) {
+  /* B553: на 390 карта на весь экран под шапкой, «Показать список» внизу (макет 390m). */
+  .career-map-gl,
+  .career-map-status {
+    block-size: calc(
+      100dvh - var(--career-mobile-topbar-height) - var(--career-mobile-nav-height) -
+        var(--career-space-8) * 5
+    );
+  }
 
-.career-map-pin-group.is-active .career-map-pulse {
-  fill: var(--career-accent-soft);
-  stroke: var(--career-accent);
-  stroke-width: calc(var(--career-border-width) * 2);
-}
+  .career-map-mobile-card {
+    position: absolute;
+    inset-inline: var(--career-space-3);
+    inset-block-end: calc(var(--career-space-8) * 2 + var(--career-space-3));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--career-space-3);
+    padding: var(--career-space-3) var(--career-space-4);
+    border: var(--career-border-width) solid var(--career-line);
+    border-radius: var(--career-radius-md);
+    background: var(--career-bg-elevated);
+  }
 
-.career-map-dot {
-  fill: var(--career-accent);
-}
+  .career-map-mobile-card div {
+    display: flex;
+    flex-direction: column;
+    gap: var(--career-space-1);
+  }
 
-.career-map-label {
-  font-size: var(--career-text-xs);
-  font-weight: 600;
-  fill: var(--career-text);
-  paint-order: stroke;
-  stroke: var(--career-bg-elevated);
-  stroke-width: calc(var(--career-border-width) * 3);
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
+  .career-map-mobile-card small {
+    color: var(--career-text-soft);
+    font-size: var(--career-text-xs);
+  }
 
-/* B446-g4: капсула города «Москва 74» (макет 4). */
-.career-map-capsule {
-  fill: var(--career-surface);
-  stroke: var(--career-line-strong);
-  stroke-width: var(--career-border-width);
-  vector-effect: non-scaling-stroke;
-}
-
-.career-map-pin-group:hover .career-map-capsule,
-.career-map-cluster-group:hover .career-map-capsule,
-.career-map-capsule.is-active {
-  fill: var(--career-accent-soft);
-  stroke: var(--career-accent);
-}
-
-.career-map-label.is-capsule {
-  stroke: none;
-}
-
-.career-map-label-count {
-  font-family: var(--font-main);
-  font-variant-numeric: tabular-nums;
+  .career-map-mobile-card .career-btn {
+    min-block-size: var(--career-target-min);
+  }
 }
 
 .career-map-city-chips {

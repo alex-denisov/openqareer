@@ -519,6 +519,7 @@ function mainBodyProps(
       board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }));
       if (city) screenState.setViewMode('list');
     },
+    onShowList: () => screenState.setViewMode('list'),
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }

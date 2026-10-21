@@ -1,4 +1,5 @@
 import type { Page, Route } from '@playwright/test';
+import { mockMapTiles } from './mapTiles';
 import type { MatchedVacancyFacets } from '../../shared/matchedVacancyFacets';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import {
@@ -1634,6 +1635,7 @@ export async function mockSignedInCabinet(
     : null;
   let todayDecisionSelection:
     import('../../shared/todayDecision').TodayDecisionSelection | undefined;
+  await mockMapTiles(page);
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;

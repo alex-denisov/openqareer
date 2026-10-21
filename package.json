@@ -50,6 +50,7 @@
     "@tauri-apps/plugin-fs": "~2.5.2",
     "fastify": "^5.12.5",
     "fflate": "^0.8.3",
+    "maplibre-gl": "6.15.0",
     "openai": "^7.2.0",
     "pdfjs-dist": "^6.2.108",
     "playwright": "^1.40.0",
