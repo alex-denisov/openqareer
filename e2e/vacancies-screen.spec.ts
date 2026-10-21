@@ -724,7 +724,7 @@ test.describe('B250 vacancies screen', () => {
 
     if (!isMobile) {
       const summary = page.getByRole('region', { name: 'Сводка подбора' });
-      await expect(summary).toContainText('148 вакансий в подборке по роли и уровню');
+      await expect(summary).toContainText('148 вакансий подходят по роли и уровню');
       await expect(summary).toContainText(/Показано \d+ из \d+ с вашими условиями/u);
     } else {
       // B546/B547: the count follows local filters (salary, locations), not the pool total.

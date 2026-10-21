@@ -30,16 +30,12 @@ export function catalogSnapshotLabel(value?: string): string | undefined {
     .replace(', ', ' ');
 }
 
-function summaryHeadline(
-  poolTotal: number,
-  catalogSummary: MatchedVacancyFacets['catalogSummary'],
-): string {
+function summaryHeadline(catalogSummary: MatchedVacancyFacets['catalogSummary']): string {
   if (catalogSummary?.catalogTotal === undefined) {
-    return countLabel(poolTotal) + ' вакансий в подборке по роли и уровню.';
+    return 'вакансий подходят по роли и уровню.';
   }
   return (
-    countLabel(catalogSummary.roleLevelMatches) +
-    ' из ' +
+    'из ' +
     countLabel(catalogSummary.catalogTotal) +
     ' вакансий каталога подходят по роли и уровню.'
   );
@@ -49,10 +45,8 @@ function catalogProvenance(
   catalogSummary: MatchedVacancyFacets['catalogSummary'],
   asOf?: string,
 ): string {
-  if (catalogSummary?.catalogTotal === undefined) {
-    return 'Размер каталога и дата обновления неизвестны.';
-  }
-  return asOf ? 'Каталог на ' + asOf : 'Дата каталога неизвестна.';
+  if (catalogSummary?.catalogTotal === undefined) return 'размер и дата каталога неизвестны';
+  return asOf ? 'каталог на ' + asOf : 'дата каталога неизвестна';
 }
 
 export function VacanciesScreenSummary({
@@ -71,15 +65,12 @@ export function VacanciesScreenSummary({
 
   return (
     <section className="vacancies-search-summary" aria-label="Сводка подбора">
-      <span className="vacancies-summary-count" aria-hidden="true">
-        {countLabel(catalogCount)}
-      </span>
+      <span className="vacancies-summary-count">{countLabel(catalogCount)}</span>{' '}
       <p className="vacancies-summary-copy">
-        <span>{summaryHeadline(poolTotal, catalogSummary)}</span>
-        <span>
-          {shownLabel} {countLabel(shownCount)} из {countLabel(filteredTotal)} с вашими условиями
-        </span>
+        {summaryHeadline(catalogSummary)} {shownLabel} {countLabel(shownCount)} из{' '}
+        {countLabel(filteredTotal)} с вашими условиями
         <span className="vacancies-summary-provenance">
+          {' · '}
           {catalogProvenance(catalogSummary, asOf)}
         </span>
       </p>

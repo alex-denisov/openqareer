@@ -236,7 +236,7 @@
 }
 
 .vacancies-summary-copy {
-  display: grid;
+  display: block;
   font-size: var(--career-text-xs);
   gap: var(--career-space-1);
   min-inline-size: 0;

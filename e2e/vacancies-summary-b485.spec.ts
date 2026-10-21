@@ -55,7 +55,7 @@ test.describe('B485 — сводка каталога, подвал и счёт�
       await expect(summary).toContainText(
         '214 из 1 620 вакансий каталога подходят по роли и уровню.',
       );
-      await expect(summary).toContainText('Каталог на 07.10 09:12');
+      await expect(summary).toContainText('каталог на 07.10 09:12');
       await expect(footer).toContainText('Показано 20 из 148');
       await expect(
         footer.getByRole('button', { name: 'Все компании подборки в «Хочу» (61)' }),
