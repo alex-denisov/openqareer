@@ -34,6 +34,7 @@ import {
   type CirclePage,
 } from './VacancyMobilePathPages';
 import { VacancyPushMore, type VacancyPushMoreAction } from './VacancyPushMore';
+import { vacancyPushRowActions, type PushRowState } from './vacancyPushRowActions';
 import './vacancy-push.css';
 
 type PushPage = 'job' | 'path' | CirclePage;
@@ -452,11 +453,9 @@ export function VacancyRowPush({
     readonly setPitchOpen: (open: boolean) => void;
     readonly trust: ReturnType<typeof vacancyTrustSignals>;
     readonly savingApplied: boolean;
-    readonly onScheduleInterview?: () => void;
-    readonly onConfirmAlreadyApplied?: () => void;
-    readonly interviewForm?: ReactNode;
-  };
+  } & PushRowState;
 }) {
+  const more = vacancyPushRowActions(rowProps, rowState);
   const base = companyPathActions(item.cluster, rowProps, () => rowState.setPitchOpen(true));
   // Leaving for another screen closes the push, so «Подборка» returns to the list.
   const leave = (action?: () => void) =>
@@ -475,8 +474,8 @@ export function VacancyRowPush({
     <VacancyMobilePush
       {...vacancyRowPushProps(item, rowProps, rowState, actions)}
       notice={<DetailTrustAlert trust={rowState.trust} />}
-      moreActions={pushMoreActions(rowState)}
-      overlay={rowState.interviewForm}
+      moreActions={pushMoreActions({ ...rowState, ...more })}
+      overlay={more.interviewForm}
     />
   );
 }

@@ -650,13 +650,7 @@ function VacancyScreenDetailGrid({ cluster, explanation, rowProps, rowState }: D
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
   const [pathOpen, setPathOpen] = useState(false);
   if (useOpenedCompact())
-    return (
-      <VacancyRowPush
-        item={rowProps.item}
-        rowProps={rowProps}
-        rowState={{ ...rowState, ...pushRowActions(rowProps, rowState) }}
-      />
-    );
+    return <VacancyRowPush item={rowProps.item} rowProps={rowProps} rowState={rowState} />;
   const pathPanelId = `vacancy-path-${cluster.id}`;
   return (
     <div
@@ -835,23 +829,4 @@ export function VacancyRow(props: VacancyRowProps) {
       <VacancyRowModals cluster={cluster} rowState={rowState} />
     </li>
   );
-}
-
-/** The 390 push reuses the 1440 row's interview and «Я уже откликнулся» handlers (B510). */
-function pushRowActions(rowProps: VacancyRowProps, rowState: DetailProps['rowState']) {
-  const { interviewState, appliedState } = rowState;
-  return {
-    onScheduleInterview: rowProps.onScheduleInterview
-      ? () => interviewState.setScheduleOpen(true)
-      : undefined,
-    onConfirmAlreadyApplied: rowProps.onMarkAlreadyApplied
-      ? () => void appliedState.handleConfirmAlreadyApplied()
-      : undefined,
-    interviewForm: (
-      <DetailInterviewSection
-        appliedError={appliedState.appliedError}
-        interviewState={interviewState}
-      />
-    ),
-  };
 }

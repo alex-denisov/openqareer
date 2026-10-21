@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { DotsThree } from '@phosphor-icons/react';
 
 export interface VacancyPushMoreAction {
@@ -41,38 +41,44 @@ export function VacancyPushMore({
         <DotsThree size={20} weight="bold" aria-hidden="true" />
       </button>
       {open ? (
-        <>
-          <div
-            className="vacancy-push-sheet-scrim"
-            aria-hidden="true"
-            onClick={() => setOpen(false)}
-          />
-          <div className="vacancy-push-sheet" role="dialog" aria-modal="true" aria-label="Ещё">
-            {actions.map((action, index) => (
-              <button
-                key={action.label}
-                ref={index === 0 ? firstRef : undefined}
-                type="button"
-                className="vacancy-push-sheet-item"
-                disabled={action.disabled}
-                onClick={() => {
-                  setOpen(false);
-                  action.onSelect();
-                }}
-              >
-                {action.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="vacancy-push-sheet-item is-cancel"
-              onClick={() => setOpen(false)}
-            >
-              Отмена
-            </button>
-          </div>
-        </>
+        <VacancyPushSheet actions={actions} firstRef={firstRef} onClose={() => setOpen(false)} />
       ) : null}
+    </>
+  );
+}
+
+function VacancyPushSheet({
+  actions,
+  firstRef,
+  onClose,
+}: {
+  readonly actions: readonly VacancyPushMoreAction[];
+  readonly firstRef: RefObject<HTMLButtonElement>;
+  readonly onClose: () => void;
+}) {
+  return (
+    <>
+      <div className="vacancy-push-sheet-scrim" aria-hidden="true" onClick={onClose} />
+      <div className="vacancy-push-sheet" role="dialog" aria-modal="true" aria-label="Ещё">
+        {actions.map((action, index) => (
+          <button
+            key={action.label}
+            ref={index === 0 ? firstRef : undefined}
+            type="button"
+            className="vacancy-push-sheet-item"
+            disabled={action.disabled}
+            onClick={() => {
+              onClose();
+              action.onSelect();
+            }}
+          >
+            {action.label}
+          </button>
+        ))}
+        <button type="button" className="vacancy-push-sheet-item is-cancel" onClick={onClose}>
+          Отмена
+        </button>
+      </div>
     </>
   );
 }
