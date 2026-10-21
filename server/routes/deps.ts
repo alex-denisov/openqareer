@@ -78,6 +78,8 @@ export interface RouteDeps {
     import('../vacancies/titleParse/sqliteTitleParseStore').SqliteTitleParseStore,
     'getByKey'
   >;
+  /** B546: precomputed market salary estimates, read by primary key. */
+  marketSalaryEstimates?: import('../vacancies/marketSalary/attachMarketSalaryEstimates').MarketSalaryEstimateDeps['store'];
   /** Окно последних отказов ступеней называния — для администратора (INC-035). */
   roleNamingFailures: RoleNamingFailureLog;
   searchRemotive?: (input: { text: string; perPage?: number }) => Promise<VacancySample>;

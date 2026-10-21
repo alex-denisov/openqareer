@@ -149,6 +149,8 @@ export interface VacancyMatchExplanation {
    * роли такая запись стоит после остальных и подписана, но не скрыта.
    */
   outsideGeography?: boolean;
+  /** B546: market estimate for a vacancy without salary, computed by maintenance. */
+  marketSalary?: import('../../shared/marketSalaryEstimate').MarketSalaryEstimateView;
   /**
    * Решение кандидата «Сохранить» / «Пропустить с причиной» (B248), уже
    * применённое к этой странице подбора: `applyVacancyDecisions` расставляет
