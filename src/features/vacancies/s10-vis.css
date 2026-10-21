@@ -504,6 +504,8 @@
 
   .vacancies-screen-cell--status {
     display: inline-flex;
+    /* Прижат к правому краю строки, под закладкой (поле справа занято только в первой строке). */
+    margin-inline-end: calc(-1 * var(--career-target-min) + var(--career-space-2));
     grid-column: 2;
     grid-row: 2;
     align-self: start;
@@ -714,14 +716,18 @@
     display: inline;
   }
 
-  .vacancies-screen-row-actions .career-vacancy-action[data-vacancy-action='save'] {
+  .vacancies-screen-row-actions
+    .vacancy-collection-actions
+    > .career-vacancy-action[data-vacancy-action='save'] {
     border-color: transparent;
     background: transparent;
     color: var(--career-text-soft);
   }
 
   .vacancies-screen-row-actions
-    .career-vacancy-action[data-vacancy-action='save'][aria-pressed='true'] {
+    .vacancy-collection-actions
+    > .career-vacancy-action[data-vacancy-action='save'][aria-pressed='true'] {
+    background: transparent;
     color: var(--career-accent);
   }
 

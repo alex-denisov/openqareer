@@ -226,7 +226,60 @@ export function clusterCitiesByGrid(
   const gridSize = BASE_GRID_SIZE / Math.max(1, zoom);
   const buckets = groupIntoBuckets(validCities, gridSize);
   const { nodes, occupiedSpots } = createNodesFromBuckets(buckets, zoom);
-  return resolveLabels(nodes, occupiedSpots, selectedCity, zoom);
+  return resolveLabels(
+    mergeCollidingNodes(nodes, zoom, selectedCity),
+    occupiedSpots,
+    selectedCity,
+    zoom,
+  );
+}
+
+function nodeCities(node: MapNode): readonly CityFacet[] {
+  return node.isCluster ? node.cities : [node.city];
+}
+
+function nodeCount(node: MapNode): number {
+  return node.isCluster ? node.totalCount : node.count;
+}
+
+function mergedNode(into: MapNode, other: MapNode): MapClusterNode {
+  const cities = [...nodeCities(into), ...nodeCities(other)];
+  const totalCount = nodeCount(into) + nodeCount(other);
+  return {
+    id: `cluster-${into.id}`,
+    isCluster: true,
+    x: into.x,
+    y: into.y,
+    totalCount,
+    cities,
+    label: `${totalCount}`,
+  };
+}
+
+/**
+ * B446-g4: капсула «Москва 74» шире ячейки сетки — соседние капсулы наезжали.
+ * Узлы, чьи капсулы пересеклись бы, сливаются в крупнейший (выбранный город — нет).
+ */
+function mergeCollidingNodes(
+  nodes: readonly MapNode[],
+  zoom: number,
+  selectedCity?: string,
+): MapNode[] {
+  const width = (CAPSULE_HALF_WIDTH * 2) / Math.max(1, zoom);
+  const height = CAPSULE_HEIGHT / Math.max(1, zoom);
+  const isSelected = (node: MapNode) => !node.isCluster && node.city.city === selectedCity;
+  const ordered = [...nodes].sort(
+    (a, b) => Number(isSelected(b)) - Number(isSelected(a)) || nodeCount(b) - nodeCount(a),
+  );
+  const accepted: MapNode[] = [];
+  for (const node of ordered) {
+    const index = accepted.findIndex(
+      (other) => Math.abs(other.x - node.x) < width && Math.abs(other.y - node.y) < height,
+    );
+    if (index < 0 || isSelected(node)) accepted.push(node);
+    else accepted[index] = mergedNode(accepted[index]!, node);
+  }
+  return accepted;
 }
 
 const MAP_WIDTH = 900;
