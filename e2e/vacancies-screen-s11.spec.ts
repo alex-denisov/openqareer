@@ -198,12 +198,15 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
   const rowTrigger = target.locator('.vacancies-screen-row-trigger');
   if ((await rowTrigger.getAttribute('aria-expanded')) !== 'true') await rowTrigger.click();
 
-  await target.getByRole('button', { name: 'Полное описание', exact: true }).click();
+  // B549: at 390 the row opens the «Вакансия» push screen.
+  const detailScope = mobile ? page.locator('.vacancy-push') : target;
+  await detailScope.getByRole('button', { name: /Полное описание/u }).click();
   const description = page.locator('.career-modal-card.is-detail');
   await expect(description).toBeVisible();
   await capture(page, 'description', width, viewportHeight);
   await page.keyboard.press('Escape');
   await expect(description).toBeHidden();
+  if (mobile) await page.locator('.vacancy-push').getByRole('button', { name: 'Назад' }).click();
 
   await page.getByRole('tab', { name: /Сохранённые/u }).click();
   await expect(page.locator('.vacancies-saved-panel')).toBeVisible();
@@ -232,10 +235,23 @@ test('S11-VAC: capture all approved vacancy views through the real screen contro
   const companyPathTrigger = companyRow.locator('.vacancies-screen-row-trigger');
   if ((await companyPathTrigger.getAttribute('aria-expanded')) !== 'true')
     await companyPathTrigger.click();
-  await companyRow
-    .locator('.vacancies-screen-detail-actions')
-    .getByRole('button', { name: /Путь к компании/u })
-    .click();
+  if (mobile) {
+    // B549: «Вакансия» push → «Путь к компании» → the first circle without contacts.
+    const push = page.locator('.vacancy-push');
+    await push.getByRole('button', { name: /Путь к компании/u }).click();
+    await push.locator('.vacancy-push-circle').first().click();
+  } else {
+    await companyRow
+      .locator('.vacancies-screen-detail-actions')
+      .getByRole('button', { name: /Путь к компании/u })
+      .click();
+    // B549: the path opens inside the row; the people screen is one step further.
+    await companyRow
+      .locator('.vacancy-path-panel')
+      .getByRole('button', { name: 'Добавить контакты' })
+      .first()
+      .click();
+  }
   await expect(page.getByRole('heading', { name: 'Revolut' })).toBeVisible();
   await capture(page, 'company-path', width, viewportHeight);
 });

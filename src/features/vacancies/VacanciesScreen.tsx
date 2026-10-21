@@ -2,6 +2,7 @@ import { VacancyFitSortControl, sortVacancyFitItems } from './VacancyFitSort';
 import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, Check, GearSix, List, MapTrifold, Sparkle } from '@phosphor-icons/react';
+import { vacancyConsultantPrompt } from './vacancyConsultantPrompt';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { CampaignMetaView } from '../coach/matchedVacancyApi';
 import type { ApplicationView } from '../applications/applicationsApi';
@@ -32,10 +33,7 @@ import type { RoutePremisesDraft } from '../cabinet/routePremises';
 
 import { buildVacancyFilterOptions, filterByScreenState } from './vacancyScreenCriteria';
 export { filterByScreenState } from './vacancyScreenCriteria';
-import {
-  companyLookupKey,
-  useVacancyCollections,
-} from './vacancyScreenCollections';
+import { companyLookupKey, useVacancyCollections } from './vacancyScreenCollections';
 
 import './vacancies-screen.css';
 import './s10-vis.css';
@@ -84,6 +82,7 @@ export interface VacanciesScreenProps {
     stage: CoachTurnStage,
     subject?: CoachTurnSubject,
     subjectTitle?: string,
+    initialPrompt?: string,
   ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
@@ -107,7 +106,8 @@ function extractBoardRegions(campaign?: CampaignMetaView) {
 }
 
 function initialSelectedId(matched: readonly MatchedVacancyItem[]): string | undefined {
-  if (typeof window !== 'undefined' && window.innerWidth > 640) {
+  // B549: on a narrow screen a selected row opens a push screen; nothing is preselected.
+  if (typeof window !== 'undefined' && window.innerWidth > 760) {
     return matched[0]?.cluster.id;
   }
   return undefined;
@@ -120,8 +120,8 @@ function filterBoardVacancies(
   onFiltersChange?: VacanciesScreenProps['onFiltersChange'],
 ) {
   const filters = onFiltersChange ? { ...state, roles: [], regions: [], remoteOnly: false } : state;
-  const items=filterByScreenState(matched,filters,now);
-  return onFiltersChange?items:sortVacancyFitItems(items,state.sort);
+  const items = filterByScreenState(matched, filters, now);
+  return onFiltersChange ? items : sortVacancyFitItems(items, state.sort);
 }
 
 function useVacanciesScreenBoard(
@@ -156,7 +156,7 @@ function useVacanciesScreenBoard(
   useEffect(() => setVisibleCount(20), [state]);
 
   const filtered = useMemo(
-    () => filterBoardVacancies(matched,state,now,onFiltersChange),
+    () => filterBoardVacancies(matched, state, now, onFiltersChange),
     [matched, state, now, onFiltersChange],
   );
   return {
@@ -406,8 +406,25 @@ function savedClusterIdSet(
   applications: ReturnType<typeof useVacanciesScreenState>['collections']['savedApplications'],
 ): Set<string> {
   return new Set(
-    applications.map((application) => application.clusterId).filter((id): id is string => Boolean(id)),
+    applications
+      .map((application) => application.clusterId)
+      .filter((id): id is string => Boolean(id)),
   );
+}
+
+/** «Обсудить»: the consultant opens with the vacancy question (B549). */
+function discussVacancy(input: VacanciesScreenProps) {
+  const { onOpenExpert } = input;
+  if (!onOpenExpert) return undefined;
+  return (cluster: MatchedVacancyItem['cluster']) =>
+    onOpenExpert(
+      'vacancies',
+      { kind: 'vacancy', id: cluster.id },
+      'О вакансии: ' +
+        cluster.canonicalTitle +
+        (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
+      vacancyConsultantPrompt(cluster),
+    );
 }
 
 function buildListProps(
@@ -432,16 +449,7 @@ function buildListProps(
     onOpenResponses: input.onOpenResponses,
     onOpenArchive: input.onOpenArchive,
     onAddToProfile: input.onOpenProfile,
-    onDiscussWithConsultant: input.onOpenExpert
-      ? (cluster) =>
-          input.onOpenExpert?.(
-            'vacancies',
-            { kind: 'vacancy', id: cluster.id },
-            'О вакансии: ' +
-              cluster.canonicalTitle +
-              (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
-          )
-      : undefined,
+    onDiscussWithConsultant: discussVacancy(input),
     savedClusterIds,
     savedBusyIds: collections.savedBusyIds,
     ...companyRowStates(board.filtered, collections),
@@ -545,7 +553,10 @@ function VacanciesFilterContent({
         catalogSummary={input.facets?.catalogSummary}
         onReset={resetFilters}
       />
-      <VacancyFitSortControl value={board.state.sort} onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))} />
+      <VacancyFitSortControl
+        value={board.state.sort}
+        onChange={(sort) => board.setState((previous) => ({ ...previous, sort }))}
+      />
       <VacanciesFiltersSection
         facets={input.facets}
         board={board}

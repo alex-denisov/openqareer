@@ -194,10 +194,12 @@ export function VacancyFitEvidence({
   vacancyId,
   initialView,
   onAddToProfile,
+  showTable = true,
 }: {
   readonly vacancyId: string;
   readonly initialView?: VacancyFitView;
   readonly onAddToProfile?: (requirement: string) => void;
+  readonly showTable?: boolean;
 }) {
   const state = useFitRequest(vacancyId, initialView);
   return (
@@ -213,7 +215,7 @@ export function VacancyFitEvidence({
         Доля требований, подтверждённых фактами профиля. Вероятность найма не оценивается.
       </p>
       <FitGates result={state.view.result} />
-      <FitEvidenceTable view={state.view} onAddToProfile={onAddToProfile} />
+      {showTable ? <FitEvidenceTable view={state.view} onAddToProfile={onAddToProfile} /> : null}
       <FitRequestControls state={state} />
     </section>
   );
@@ -222,13 +224,16 @@ export function VacancyFitEvidence({
 export function VacancyFitEvidenceForItem({
   item,
   onAddToProfile,
+  showTable,
 }: {
   readonly item: MatchedVacancyItem;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
+  readonly showTable?: boolean;
 }) {
   return (
     <VacancyFitEvidence
       key={item.cluster.id}
+      showTable={showTable}
       vacancyId={item.cluster.id}
       initialView={item.explanation.fitView}
       onAddToProfile={

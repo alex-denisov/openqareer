@@ -133,16 +133,24 @@ describe('VacancyRow (B266/B324)', () => {
   describe('requirements summary in vacancy row', () => {
     it('shows requirements count when requirements exist', () => {
       const html = render();
-      expect(html).toContain('Требования: <span class="num">1</span> из <span class="num">2</span>');
+      expect(html).toContain(
+        'Требования: <span class="num">1</span> из <span class="num">2</span>',
+      );
     });
 
     it('shows warning when requirements do not match (0 of M)', () => {
       const zeroMatched: MatchedVacancyItem = {
         ...item(),
-        explanation: { ...item().explanation, matchingPoints: [], missingPoints: ['Req 1', 'Req 2'] },
+        explanation: {
+          ...item().explanation,
+          matchingPoints: [],
+          missingPoints: ['Req 1', 'Req 2'],
+        },
       };
       const html = render({ item: zeroMatched });
-      expect(html).toContain('Требования: не совпали (<span class="num">0</span> из <span class="num">2</span>)');
+      expect(html).toContain(
+        'Требования: не совпали (<span class="num">0</span> из <span class="num">2</span>)',
+      );
     });
 
     it('does not show requirements line when there are no requirements in description', () => {
@@ -164,7 +172,9 @@ describe('VacancyRow (B266/B324)', () => {
         },
       };
       const html = render({ item: levelItem, isSelected: true });
-      expect(html).toContain('Требования: <span class="num">1</span> из <span class="num">2</span>');
+      expect(html).toContain(
+        'Требования: <span class="num">1</span> из <span class="num">2</span>',
+      );
       expect(html).toContain('Уровень вакансии: <strong>VP</strong>');
       expect(html).toContain('PostgreSQL');
       expect(html).not.toMatch(/<li class="req-no">[^<]*<span>vp<\/span>/);
@@ -209,5 +219,58 @@ describe('VacancyRow (B266/B324)', () => {
     expect(html).toContain('Убрать из сохранённых');
     expect(html).toContain('Убрать из «Хочу»');
     expect(html).toContain('aria-pressed="true"');
+  });
+});
+
+describe('VacancyRow screen detail requirements (B549)', () => {
+  it('shows requirement chips from the fit analysis even when a fit view exists', () => {
+    const base = item();
+    const withFit: MatchedVacancyItem = {
+      ...base,
+      explanation: {
+        ...base.explanation,
+        fitView: {
+          state: 'ready',
+          requirements: [
+            {
+              id: 'r1',
+              text: 'Kafka',
+              sourceQuote: 'Kafka',
+              origin: 'explicit',
+              importance: 'high',
+              stopFactor: false,
+            },
+            {
+              id: 'r2',
+              text: 'Kubernetes',
+              sourceQuote: 'Kubernetes',
+              origin: 'explicit',
+              importance: 'high',
+              stopFactor: false,
+            },
+          ],
+          result: {
+            gates: {},
+            assessments: [{ requirementId: 'r1', status: 'matched', evidence: [] }],
+          },
+        } as unknown as NonNullable<MatchedVacancyItem['explanation']['fitView']>,
+      },
+    };
+    const html = render({ item: withFit, layout: 'screen', isSelected: true });
+    expect(html).toContain('Требования к навыкам');
+    expect(html).toMatch(/is-confirmed[^]*Kafka/u);
+    expect(html).toMatch(/is-unconfirmed[^]*Kubernetes/u);
+    expect(html).not.toContain('vacancy-fit-table');
+    expect(html).toContain('Соответствие вашему профилю');
+  });
+
+  it('says requirements are not parsed when nothing is known', () => {
+    const base = item();
+    const empty: MatchedVacancyItem = {
+      ...base,
+      explanation: { ...base.explanation, matchingPoints: [], missingPoints: [] },
+    };
+    const html = render({ item: empty, layout: 'screen', isSelected: true });
+    expect(html).toContain('Требования ещё не разобраны.');
   });
 });

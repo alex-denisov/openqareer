@@ -1,32 +1,24 @@
-import { FileText, Info } from '@phosphor-icons/react';
+import { ArrowSquareOut, Info } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { ImportModalShell } from '../connections/ImportModalShell';
 import { useVacancyDetail, type VacancyDetailState } from './vacancyDetailApi';
-import { RecruiterContactsBlock } from './RecruiterContactsBlock';
-import { recruiterEnrichPayload } from './recruiterEnrichPayload';
+import { parseDescriptionSections } from './vacancyDescriptionSections';
 
 interface VacancyInfoModalProps {
   readonly isOpen: boolean;
   readonly onClose: () => void;
   readonly cluster: MatchedVacancyItem['cluster'];
-  readonly onOpenLetter?: () => void;
 }
 
 /**
- * «Подробнее» (B266 P0-2): the row was a bare `target="_blank"` anchor,
- * which the Tauri WebView silently drops. The full description now opens
- * in-app; only the outbound link to the source board leaves the app, and it
- * goes through `openExternalLink` (system browser on desktop, new tab on
- * web) instead of a dead anchor.
+ * «Полное описание» (B266 P0-2, B549 mockup 4): the full text opens in-app,
+ * split into the vacancy's own sections; only «Открыть на площадке» leaves
+ * the app, through `openExternalLink`. Recruiter contacts live in the company
+ * path and «Компании и люди», not in this window.
  */
-export function VacancyInfoModal({
-  isOpen,
-  onClose,
-  cluster,
-  onOpenLetter,
-}: VacancyInfoModalProps) {
+export function VacancyInfoModal({ isOpen, onClose, cluster }: VacancyInfoModalProps) {
   const detail = useVacancyDetail(cluster.id, isOpen);
   return (
     <ImportModalShell
@@ -37,79 +29,38 @@ export function VacancyInfoModal({
       icon={<Info size={18} aria-hidden="true" />}
       detail
     >
-      <VacancyInfoContent cluster={cluster} detail={detail} onOpenLetter={onOpenLetter} />
-      <VacancyInfoFooter primaryUrl={cluster.primaryUrl} />
+      <div className="career-modal-body vacancies-info-body vacancies-info-scroll">
+        <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
+        <VacancyDescription detail={detail} summary={cluster.descriptionSummary} />
+      </div>
+      <VacancyInfoFooter primaryUrl={cluster.primaryUrl} onClose={onClose} />
     </ImportModalShell>
   );
 }
 
-/** Scrollable body (B250): everything except the header and the pinned
- *  «Открыть на площадке» panel, which `ImportModalShell` keeps in place. */
-function VacancyInfoContent({
-  cluster,
-  detail,
-  onOpenLetter,
+function VacancyInfoFooter({
+  primaryUrl,
+  onClose,
 }: {
-  readonly cluster: MatchedVacancyItem['cluster'];
-  readonly detail: VacancyDetailState;
-  readonly onOpenLetter?: () => void;
+  readonly primaryUrl: string;
+  readonly onClose: () => void;
 }) {
-  const sources = vacancySourceLabels(cluster.sources);
-  const skills =
-    detail.status === 'ready' && detail.detail.skills.length > 0
-      ? detail.detail.skills
-      : cluster.skills;
-  return (
-    <div className="career-modal-body vacancies-info-body vacancies-info-scroll">
-      <p className="vacancies-info-subtitle">{infoSubtitle(cluster)}</p>
-
-      <VacancyDescription detail={detail} summary={cluster.descriptionSummary} />
-
-      {skills.length > 0 ? (
-        <ul className="vacancies-info-skills">
-          {skills.map((skill) => (
-            <li key={skill}>{skill}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {sources.length > 0 ? (
-        <p className="vacancies-info-sources">Источники: {sources.join(', ')}</p>
-      ) : null}
-
-      <div className="vacancies-info-recruiter">
-        <h4>Кто нанимает</h4>
-        <RecruiterContactsBlock
-          vacancyId={cluster.id}
-          vacancyPayload={recruiterEnrichPayload(cluster)}
-        />
-      </div>
-      {onOpenLetter ? (
-        <button
-          type="button"
-          className="career-btn career-btn-secondary vacancies-info-letter"
-          onClick={onOpenLetter}
-        >
-          <FileText size={16} aria-hidden="true" />
-          Сопроводительное письмо
-        </button>
-      ) : null}
-    </div>
-  );
-}
-
-function VacancyInfoFooter({ primaryUrl }: { readonly primaryUrl: string }) {
-  if (!primaryUrl) return null;
   return (
     <div className="career-modal-footer vacancies-info-footer">
-      <button
-        type="button"
-        className="vacancies-btn vacancies-btn-secondary"
-        onClick={() => {
-          void openExternalLink(primaryUrl);
-        }}
-      >
-        Открыть на площадке
+      {primaryUrl ? (
+        <button
+          type="button"
+          className="vacancies-btn vacancies-btn-secondary"
+          onClick={() => {
+            void openExternalLink(primaryUrl);
+          }}
+        >
+          <ArrowSquareOut size={15} aria-hidden="true" />
+          Открыть на площадке
+        </button>
+      ) : null}
+      <button type="button" className="vacancies-btn vacancies-btn-secondary" onClick={onClose}>
+        Закрыть
       </button>
     </div>
   );
@@ -134,15 +85,38 @@ function VacancyDescription({
     );
   }
   const partial = detail.status === 'ready' && detail.detail.truncated;
+  const sections = parseDescriptionSections(text);
   return (
     <div className="vacancies-info-description">
-      <DescriptionBlocks text={text} />
+      {sections ? <SectionedDescription sections={sections} /> : <DescriptionBlocks text={text} />}
       {partial ? (
         <p className="is-empty">
           Площадка отдала только начало описания — полный текст откройте на площадке.
         </p>
       ) : null}
     </div>
+  );
+}
+
+function SectionedDescription({
+  sections,
+}: {
+  readonly sections: NonNullable<ReturnType<typeof parseDescriptionSections>>;
+}) {
+  return (
+    <>
+      {sections.intro.length > 0 ? <p>{sections.intro.join(' ')}</p> : null}
+      {sections.sections.map((section, index) => (
+        <section key={`${section.title}-${index}`}>
+          <h4>{section.title}</h4>
+          <ul>
+            {section.items.map((item, itemIndex) => (
+              <li key={`${itemIndex}-${item}`}>{item}</li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -170,8 +144,21 @@ function DescriptionBlocks({ text }: { readonly text: string }) {
   });
 }
 
+function observedDay(value: string | undefined): string | null {
+  if (!value || Number.isNaN(Date.parse(value))) return null;
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Europe/Moscow',
+  }).format(new Date(value));
+}
+
+/** «Вектор Банк · hh.ru, 05.10 · полный текст вакансии» (mockup 4). */
 function infoSubtitle(cluster: MatchedVacancyItem['cluster']): string {
-  return [cluster.canonicalCompany, cluster.canonicalLocation, cluster.isRemote ? 'удалённо' : null]
+  const source = vacancySourceLabels(cluster.sources)[0];
+  const day = observedDay(cluster.firstObservedAt);
+  const origin = [source, day].filter(Boolean).join(', ');
+  return [cluster.canonicalCompany, origin || null, 'полный текст вакансии']
     .filter(Boolean)
     .join(' · ');
 }

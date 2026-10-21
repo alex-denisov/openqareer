@@ -9,6 +9,10 @@ import { RecruiterContactsBlock } from './RecruiterContactsBlock';
 import { recruiterEnrichPayload } from './recruiterEnrichPayload';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { VacancyInfoModal } from './VacancyInfoModal';
+import { VacancyCompanyPathPanel, companyPathActions } from './VacancyCompanyPathPanel';
+import { VacancyRowPush } from './VacancyMobilePush';
+import { DetailTrustAlert } from './VacancyTrustAlert';
+import { useOpenedCompact } from './useCompactViewport';
 import { VacancyPitchModal } from './VacancyPitchModal';
 import { InterviewPrepModal } from '../interview/InterviewPrepModal';
 import { VacancyScreenRowCells } from './VacancyScreenRowCells';
@@ -31,8 +35,8 @@ import {
   vacancySnapshot,
 } from './VacancyRowElements';
 import {
+  VacancyScreenDescription,
   VacancyScreenDetailActions,
-  VacancyScreenFullDescriptionButton,
   VacancyScreenRequirementChips,
 } from './VacancyScreenDetails';
 
@@ -457,20 +461,6 @@ function RecruiterSection({ cluster }: { readonly cluster: MatchedVacancyItem['c
   );
 }
 
-function DetailTrustAlert({ trust }: { readonly trust: ReturnType<typeof vacancyTrustSignals> }) {
-  if (trust.level === 'ok' || trust.reasons.length === 0) return null;
-  return (
-    <div
-      className={`vacancies-detail-trust-alert is-${trust.level}`}
-      role="status"
-      data-trust-level={trust.level}
-    >
-      <Warning size={16} aria-hidden="true" />
-      <span>{trust.reasons.join(' · ')}</span>
-    </div>
-  );
-}
-
 interface DetailProps {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly explanation: MatchedVacancyItem['explanation'];
@@ -607,13 +597,18 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
   return (
     <div className="vac-detail vacancies-detail-col vacancies-detail-panel">
       <DetailTrustAlert trust={trust} />
-      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
-      {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
-      {!explanation.fitView?<DetailRequirementsSection
-        cluster={cluster}
-        explanation={explanation}
+      <VacancyFitEvidenceForItem
+        item={{ cluster, explanation }}
         onAddToProfile={rowProps.onAddToProfile}
-      />:null}
+      />
+      {source ? <p className="vac-sub vac-source">Опубликована на {source}</p> : null}
+      {!explanation.fitView ? (
+        <DetailRequirementsSection
+          cluster={cluster}
+          explanation={explanation}
+          onAddToProfile={rowProps.onAddToProfile}
+        />
+      ) : null}
 
       <RecruiterSection cluster={cluster} />
       {rowProps.onOpenCompanyPath ? (
@@ -633,35 +628,42 @@ function VacancyRowDetail({ cluster, explanation, rowProps, rowState }: DetailPr
 }
 
 function VacancyScreenDetail({ cluster, explanation, rowProps, rowState }: DetailProps) {
+  const [pathOpen, setPathOpen] = useState(false);
+  if (useOpenedCompact())
+    return <VacancyRowPush item={rowProps.item} rowProps={rowProps} rowState={rowState} />;
+  const pathPanelId = `vacancy-path-${cluster.id}`;
   return (
     <div
       id={`vacancy-details-${cluster.id}`}
       className="vac-detail vacancies-detail-panel vacancies-screen-detail"
     >
       <DetailTrustAlert trust={rowState.trust} />
-      <VacancyFitEvidenceForItem item={{cluster,explanation}} onAddToProfile={rowProps.onAddToProfile} />
       <div className="vacancies-screen-detail-grid">
-        {!explanation.fitView?<VacancyScreenRequirementChips
+        <VacancyScreenRequirementChips
           cluster={cluster}
           explanation={explanation}
           onAddToProfile={rowProps.onAddToProfile}
-        />:null}
-        <section
-          className="vacancies-screen-description"
-          aria-labelledby={`vacancy-description-${cluster.id}`}
-        >
-          <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
-          {cluster.descriptionSummary.trim() ? (
-            <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
-          ) : (
-            <p className="vacancies-screen-description-empty">
-              Краткое описание пока недоступно. Полный текст можно проверить на площадке.
-            </p>
-          )}
-          <VacancyScreenFullDescriptionButton onOpen={() => rowState.setInfoOpen(true)} />
-        </section>
+        />
+        <VacancyScreenDescription cluster={cluster} onOpenFull={() => rowState.setInfoOpen(true)} />
       </div>
-      <VacancyScreenDetailActions cluster={cluster} rowProps={rowProps} rowState={rowState} />
+      <VacancyFitEvidenceForItem
+        item={{ cluster, explanation }}
+        onAddToProfile={rowProps.onAddToProfile}
+        showTable={false}
+      />
+      <VacancyScreenDetailActions
+        cluster={cluster}
+        rowProps={rowProps}
+        rowState={rowState}
+        path={{ open: pathOpen, panelId: pathPanelId, onToggle: () => setPathOpen((v) => !v) }}
+      />
+      {pathOpen ? (
+        <VacancyCompanyPathPanel
+          id={pathPanelId}
+          vacancyId={cluster.id}
+          actions={companyPathActions(cluster, rowProps, () => rowState.setPitchOpen(true))}
+        />
+      ) : null}
       <DetailInterviewSection
         appliedError={rowState.appliedState.appliedError}
         interviewState={rowState.interviewState}
@@ -721,14 +723,6 @@ function VacancyScreenRow(
   );
 }
 
-function afterInfoClose(closeInfo: () => void, openLetter?: () => void) {
-  if (!openLetter) return undefined;
-  return () => {
-    closeInfo();
-    openLetter();
-  };
-}
-
 function VacancyRowModals({
   cluster,
   rowState,
@@ -742,7 +736,6 @@ function VacancyRowModals({
         isOpen={rowState.infoOpen}
         onClose={() => rowState.setInfoOpen(false)}
         cluster={cluster}
-        onOpenLetter={afterInfoClose(() => rowState.setInfoOpen(false), rowState.handleOpenLetter)}
       />
       {rowState.pitchOpen ? (
         <VacancyPitchModal

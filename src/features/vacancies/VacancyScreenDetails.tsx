@@ -3,26 +3,33 @@ import {
   Briefcase,
   ChatCircleText,
   Check,
+  CheckCircle,
   FileText,
   PaperPlaneTilt,
+  Question,
   Target,
-  Warning,
 } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
+import { fitRequirementChips } from './vacancyRequirementChips';
+import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
 
 interface VacancyScreenDetailRowProps {
   readonly onOpenArchive?: () => void;
   readonly onOpenResponses?: () => void;
-  readonly onOpenCompanyPath?: () => void;
-  readonly companyContactsCount?: number | null;
   readonly onToggleCompanyWant?: () => void | Promise<void>;
   readonly companyWantKnown?: boolean;
   readonly isCompanyWanted?: boolean;
   readonly companyWantBusy?: boolean;
   readonly onDiscussWithConsultant?: (cluster: MatchedVacancyItem['cluster']) => void;
+}
+
+export interface CompanyPathToggle {
+  readonly open: boolean;
+  readonly panelId: string;
+  readonly onToggle: () => void;
 }
 
 interface VacancyScreenActionState {
@@ -123,19 +130,20 @@ function PlatformAction({ cluster }: { readonly cluster: MatchedVacancyItem['clu
 }
 
 function CompanyPathAction({
-  rowProps,
+  path,
   cluster,
 }: {
-  readonly rowProps: VacancyScreenDetailRowProps;
+  readonly path?: CompanyPathToggle;
   readonly cluster: MatchedVacancyItem['cluster'];
 }) {
-  if (!rowProps.onOpenCompanyPath) return null;
+  if (!path || !cluster.canonicalCompany) return null;
   return (
     <button
       type="button"
       className="btn btn-secondary action-btn"
-      onClick={rowProps.onOpenCompanyPath}
-      disabled={!cluster.canonicalCompany}
+      aria-expanded={path.open}
+      aria-controls={path.panelId}
+      onClick={path.onToggle}
     >
       <Briefcase size={15} aria-hidden="true" />
       Путь к компании
@@ -195,11 +203,15 @@ export function VacancyScreenRequirementChips({
   readonly explanation: MatchedVacancyItem['explanation'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
-  const { skillMatching, skillMissing } = extractVacancyRequirements(
+  const fitView = useLatestVacancyFitView(cluster.id, explanation.fitView);
+  const fromFit = fitRequirementChips(fitView);
+  const legacy = extractVacancyRequirements(
     explanation.matchingPoints,
     explanation.missingPoints,
     cluster.skills,
   );
+  const skillMatching = fromFit ? fromFit.confirmed : legacy.skillMatching;
+  const skillMissing = fromFit ? fromFit.unconfirmed : legacy.skillMissing;
   const hasRequirements = skillMatching.length + skillMissing.length > 0;
 
   return (
@@ -216,9 +228,7 @@ export function VacancyScreenRequirementChips({
           onAddToProfile={onAddToProfile}
         />
       ) : (
-        <p className="vacancies-screen-no-requirements">
-          В источниках не указаны требования к навыкам.
-        </p>
+        <p className="vacancies-screen-no-requirements">Требования ещё не разобраны.</p>
       )}
       <p className="vacancies-screen-requirements-note">
         Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
@@ -243,7 +253,8 @@ function VacancySkillChips({
     <ul className="vacancies-screen-skill-chips">
       {matching.map((skill) => (
         <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
-          <Check size={14} weight="bold" aria-hidden="true" />
+          <CheckCircle size={14} aria-hidden="true" />
+          <span className="career-sr-only">Подтверждено: </span>
           <span>{skill}</span>
         </li>
       ))}
@@ -268,7 +279,12 @@ function MissingVacancySkillChip({
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
-  const icon = <Warning size={14} aria-hidden="true" />;
+  const icon = (
+    <>
+      <Question size={14} aria-hidden="true" />
+      <span className="career-sr-only">Не проверено: </span>
+    </>
+  );
   const label = <span>{skill}</span>;
   return (
     <li className="vacancies-screen-skill-chip is-unconfirmed">
@@ -303,16 +319,18 @@ export function VacancyScreenDetailActions({
   cluster,
   rowProps,
   rowState,
+  path,
 }: {
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly rowProps: VacancyScreenDetailRowProps;
   readonly rowState: VacancyScreenActionState;
+  readonly path?: CompanyPathToggle;
 }) {
   return (
     <div className="action-row vacancies-detail-actions vacancies-screen-detail-actions">
       <ApplyAction cluster={cluster} rowProps={rowProps} rowState={rowState} />
       <PlatformAction cluster={cluster} />
-      <CompanyPathAction rowProps={rowProps} cluster={cluster} />
+      <CompanyPathAction path={path} cluster={cluster} />
       <WantCompanyAction rowProps={rowProps} cluster={cluster} />
       <DiscussAction rowProps={rowProps} cluster={cluster} />
     </div>
@@ -329,5 +347,30 @@ export function VacancyScreenFullDescriptionButton({ onOpen }: { readonly onOpen
       <FileText size={15} aria-hidden="true" />
       Полное описание
     </button>
+  );
+}
+
+export function VacancyScreenDescription({
+  cluster,
+  onOpenFull,
+}: {
+  readonly cluster: MatchedVacancyItem['cluster'];
+  readonly onOpenFull: () => void;
+}) {
+  return (
+    <section
+      className="vacancies-screen-description"
+      aria-labelledby={`vacancy-description-${cluster.id}`}
+    >
+      <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
+      {cluster.descriptionSummary.trim() ? (
+        <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
+      ) : (
+        <p className="vacancies-screen-description-empty">
+          Краткое описание пока недоступно. Полный текст можно проверить на площадке.
+        </p>
+      )}
+      <VacancyScreenFullDescriptionButton onOpen={onOpenFull} />
+    </section>
   );
 }

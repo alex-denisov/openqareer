@@ -256,8 +256,14 @@ async function openInfoModal(page: Page): Promise<void> {
   ) {
     await firstItem.locator('.vacancies-screen-row-trigger').click();
   }
-  await expect(firstItem.locator('.vac-detail')).toBeVisible();
-  await firstItem.locator('.vac-detail').getByRole('button', { name: 'Полное описание' }).click();
+  // B549: on a narrow screen the row opens the «Вакансия» push screen.
+  const push = page.locator('.vacancy-push');
+  if (await push.isVisible()) {
+    await push.getByRole('button', { name: /Полное описание/u }).click();
+  } else {
+    await expect(firstItem.locator('.vac-detail')).toBeVisible();
+    await firstItem.locator('.vac-detail').getByRole('button', { name: 'Полное описание' }).click();
+  }
   await expect(page.locator('.career-modal-card.is-detail')).toBeVisible();
 }
 
