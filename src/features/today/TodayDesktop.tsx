@@ -37,10 +37,12 @@ import {
   queueKey,
 } from './todayFormat';
 import {
+  TODAY_FUNNEL_LOW_SAMPLE,
   todayFunnelBasis,
   todayFunnelHint,
   todayFunnelStages,
   type TodayFunnelContext,
+  type TodayFunnelStage,
 } from './todayFunnelData';
 import { useCanOpenQueueItem, useOpenQueueItem } from './todayQueueOpen';
 
@@ -666,6 +668,16 @@ function TodayFunnel({
           />
         ))}
       </ol>
+      {funnelLowSampleNote(stages) ? (
+        <p className="career-today-funnel-note">{funnelLowSampleNote(stages)}</p>
+      ) : null}
     </section>
   );
+}
+
+// Макет 1, карточка «Мало данных: воронка»: заметка под плитками, когда откликов меньше порога.
+function funnelLowSampleNote(stages: readonly TodayFunnelStage[]): string | undefined {
+  const applied = stages.find((stage) => stage.key === 'applied')?.value;
+  if (typeof applied !== 'number' || applied >= TODAY_FUNNEL_LOW_SAMPLE) return undefined;
+  return `Меньше ${TODAY_FUNNEL_LOW_SAMPLE} откликов за 30 дней (сейчас ${applied}): выводов о воронке нет.`;
 }

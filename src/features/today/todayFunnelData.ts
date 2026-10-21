@@ -15,7 +15,8 @@ export interface TodayFunnelStage {
   readonly value: TodayFunnelValue;
 }
 
-const LOW_SAMPLE = 10;
+export const TODAY_FUNNEL_LOW_SAMPLE = 10;
+const LOW_SAMPLE = TODAY_FUNNEL_LOW_SAMPLE;
 
 function count(value: number | undefined): TodayFunnelValue {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 'unknown';

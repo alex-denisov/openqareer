@@ -295,3 +295,10 @@
   inline-size: var(--career-text-sm);
   block-size: var(--career-text-sm);
 }
+
+/* Макет 1 «Мало данных: воронка»: заметка под плитками воронки. */
+.career-today-desktop .career-today-funnel-note {
+  margin: var(--career-space-3) 0 0;
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+}

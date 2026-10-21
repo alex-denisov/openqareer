@@ -773,7 +773,9 @@ function TodayError({ onRetry }: { onRetry: () => void }) {
     <div className="career-today-state career-today-state-error">
       <p className="career-today-error-note" role="alert">
         <WarningCircle size={16} aria-hidden="true" />
-        <span>Не удалось собрать очередь: сервер не ответил.</span>
+        <span>
+          Не удалось собрать очередь: сервер не ответил. Решение дня сохранено, очередь повторится.
+        </span>
       </p>
       <button
         type="button"
