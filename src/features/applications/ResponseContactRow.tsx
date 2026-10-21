@@ -27,7 +27,7 @@ function useLoadedContact(load: ResponseContactRowProps['load']) {
   return state;
 }
 
-/** Строка досье «Рекрутер»: его называет напоминание на «Сегодня» (B542). */
+/** Строка «Рекрутер» в карточке отклика: его называет напоминание на «Сегодня» (B542). */
 export function ResponseContactRow({ load, save }: ResponseContactRowProps) {
   const [contact, setContact] = useLoadedContact(load);
   const [draft, setDraft] = useState<string | null>(null);
