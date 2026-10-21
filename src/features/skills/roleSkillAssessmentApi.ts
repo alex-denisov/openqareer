@@ -31,6 +31,7 @@ export type RoleSkillAssessmentCurrent =
       }>;
       cases: RoleSkillAssessmentRun['cases'][number]['assessmentCase'][];
     }
+  | { state: 'focus_insufficient'; roleTitle: string; skills: string[]; notes: string[] }
   | { state: 'role_changed'; run: RoleSkillAssessmentRun }
   | { state: 'run'; run: RoleSkillAssessmentRun }
   | { state: 'result'; run: RoleSkillAssessmentRun; stale?: boolean };
@@ -45,8 +46,19 @@ export async function getCurrentRoleSkillAssessment(): Promise<RoleSkillAssessme
   return readDataObject<RoleSkillAssessmentCurrent>(response);
 }
 
-export async function startRoleSkillAssessment(): Promise<RoleSkillAssessmentCurrent> {
-  return post('/api/v1/candidate/role-skill-assessments/start', { consent: true });
+/** B552: a check limited to these skills of one vacancy. */
+export interface RoleSkillAssessmentFocusRequest {
+  vacancyId: string;
+  skills: readonly string[];
+}
+
+export async function startRoleSkillAssessment(
+  focus?: RoleSkillAssessmentFocusRequest,
+): Promise<RoleSkillAssessmentCurrent> {
+  return post('/api/v1/candidate/role-skill-assessments/start', {
+    consent: true,
+    ...(focus ? { focus: { vacancyId: focus.vacancyId, skills: [...focus.skills] } } : {}),
+  });
 }
 
 export async function answerRoleAssessmentDialogue(input: {

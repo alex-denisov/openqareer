@@ -101,6 +101,49 @@ function createAssessmentRun(): RoleSkillAssessmentRun {
   };
 }
 
+function readFocus(value: unknown): { vacancyId: string; skills: string[] } | null {
+  if (!value || typeof value !== 'object') return null;
+  const { vacancyId, skills } = value as { vacancyId?: unknown; skills?: unknown };
+  if (typeof vacancyId !== 'string' || !Array.isArray(skills) || skills.length === 0) return null;
+  return { vacancyId, skills: skills.map(String) };
+}
+
+/** B552: the first focus skill gets a case; the rest have too little data in the role sample. */
+function createFocusedRun(focus: { vacancyId: string; skills: string[] }): RoleSkillAssessmentRun {
+  const base = createAssessmentRun();
+  const [covered, ...lacking] = focus.skills;
+  const first = base.cases[0]!;
+  const focusCase = {
+    ...first,
+    assessmentCase: {
+      ...first.assessmentCase,
+      id: 'focus-case-1',
+      skillId: 'focus-skill-1',
+      skillName: covered!,
+      prompt: `Расскажите о практической ситуации, в которой вы применяли «${covered}». Как вы выбрали действия, учли риски и проверили результат?`,
+    },
+  };
+  return {
+    ...base,
+    cases: [focusCase],
+    skills: [
+      { ...base.skills[0]!, id: 'focus-skill-1', name: covered!, caseId: 'focus-case-1' },
+      ...base.skills.slice(1).map((skill) => ({ ...skill, isKeySkill: false, caseId: null })),
+    ],
+    readiness: { ready: false, confirmedCount: 0, missingKeySkillIds: ['focus-skill-1'] },
+    focus: {
+      vacancyId: focus.vacancyId,
+      vacancyTitle: 'Head of Product, Payments',
+      skills: focus.skills,
+      sampleRoleTitle: assessmentRole,
+      roleNote: null,
+      lackingNotes: lacking.map(
+        (skill) => `Мало данных по ${skill}: навык есть в 1 из нужных 3 вакансий роли.`,
+      ),
+    },
+  };
+}
+
 interface AssessmentStubResponse {
   data?: unknown;
   error?: { code: string; message: string };
@@ -217,7 +260,8 @@ function handleAssessmentRoute(
       : initialAssessmentResponse(initialState);
   }
   if (path.endsWith('/candidate/role-skill-assessments/start') && method === 'POST') {
-    return responseForRun(createAssessmentRun());
+    const focus = readFocus(body.focus);
+    return responseForRun(focus ? createFocusedRun(focus) : createAssessmentRun());
   }
   const match = path.match(/\/role-skill-assessments\/([^/]+)(\/.*)$/u);
   if (!match) return null;

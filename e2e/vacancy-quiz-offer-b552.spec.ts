@@ -88,6 +88,20 @@ for (const project of ['desktop-1440', 'mobile-390'] as const) {
     const check = page.getByTestId('role-skill-assessment');
     await expect(check).toBeVisible();
     await expect(check).toContainText('подтвердить Kafka и Kubernetes');
+    await page.getByLabel('Согласен передать ответы модели для проверки по критериям.').check();
+    const started = page.waitForRequest(
+      (request) =>
+        request.url().endsWith('/role-skill-assessments/start') && request.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Начать проверку' }).click();
+    expect((await started).postDataJSON()).toMatchObject({
+      focus: { vacancyId: expect.any(String), skills: ['Kafka', 'Kubernetes'] },
+    });
+    await expect(check).toContainText(
+      'Мало данных по Kubernetes: навык есть в 1 из нужных 3 вакансий роли.',
+    );
+    await expect(page.getByLabel('Ваш ответ')).toBeVisible();
+    await shot(page, `app-${mobile ? '390' : '1440'}-check`);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await openExpandedVacancy(page);
