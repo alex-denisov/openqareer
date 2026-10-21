@@ -701,6 +701,11 @@ function VacancyScreenRow(
       ? ' is-archived'
       : ' is-applied'
     : '';
+  // На узком экране строка открывает push-экран, а не раскрывает панель под собой;
+  // aria-controls ссылается только на существующую панель: на 390 её нет.
+  const disclosure = useOpenedCompact()
+    ? { 'aria-expanded': isSelected }
+    : { 'aria-expanded': isSelected, 'aria-controls': `vacancy-details-${cluster.id}` };
 
   return (
     <div
@@ -709,8 +714,7 @@ function VacancyScreenRow(
       <button
         type="button"
         className="vacancies-screen-row-trigger"
-        aria-expanded={isSelected}
-        aria-controls={`vacancy-details-${cluster.id}`}
+        {...disclosure}
         onClick={onSelect}
       >
         <VacancyScreenRowCells
@@ -725,8 +729,7 @@ function VacancyScreenRow(
           type="button"
           className="vacancies-screen-expand-action"
           aria-label={`${isSelected ? 'Свернуть' : 'Раскрыть'} вакансию`}
-          aria-expanded={isSelected}
-          aria-controls={`vacancy-details-${cluster.id}`}
+          {...disclosure}
           onClick={onSelect}
         >
           <ScreenVacancyRowChevron isSelected={isSelected} />
