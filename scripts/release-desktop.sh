@@ -70,6 +70,9 @@ for target in "${TARGETS[@]}"; do
   mv "$archive.part" "$archive" && mv "$archive.sig.part" "$archive.sig"
 done
 
+# A rerun keeps the published manifest (and its date) unless an archive was rebuilt.
+[[ -s "$FEED/latest.json" && "$FEED/latest.json" -nt "$FEED/OpenQareer_${VERSION}_aarch64.app.tar.gz.sig" &&
+   "$FEED/latest.json" -nt "$FEED/OpenQareer_${VERSION}_x86_64.app.tar.gz.sig" ]] ||
 node scripts/build-update-manifest.mjs --version "$VERSION" --notes "$NOTES" \
   --artifact "darwin-aarch64=$FEED/OpenQareer_${VERSION}_aarch64.app.tar.gz" \
   --artifact "darwin-x86_64=$FEED/OpenQareer_${VERSION}_x86_64.app.tar.gz" \
@@ -96,7 +99,7 @@ install -o openqareer-deploy -g openqareer-deploy -m 0644 latest.json $REMOTE_DI
 mv $REMOTE_DIR/latest.json.new $REMOTE_DIR/latest.json
 # Keep this version and the one before it, so a download already under way finishes.
 ls -1 $REMOTE_DIR | grep -E '^OpenQareer_.*\.app\.tar\.gz$' | sed -E 's/^OpenQareer_([^_]+)_.*/\1/' |
-  sort -u -V | grep -vx '$VERSION' | head -n -1 | while read -r old; do
+  sort -u -V | { grep -vx '$VERSION' || true; } | head -n -1 | while read -r old; do
     rm -f $REMOTE_DIR/OpenQareer_\${old}_*
   done
 rm -rf $STAGE
