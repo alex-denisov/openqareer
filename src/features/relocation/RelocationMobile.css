@@ -135,22 +135,91 @@
   outline-offset: calc(var(--career-border-width) * -2);
 }
 
-.career-relocation-mobile-status {
-  flex: 0 0 auto;
+.career-relocation-mobile-scenario {
+  display: inline-flex;
+  inline-size: 100%;
+  min-block-size: var(--career-target-min);
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  border: var(--career-border-width) solid var(--career-line);
+  border-radius: var(--career-radius-pill);
+  color: var(--career-text);
+  background: transparent;
+  font: inherit;
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.career-relocation-mobile-scenario:focus-visible {
+  outline: calc(var(--career-border-width) * 2) solid var(--career-accent);
+  outline-offset: var(--career-border-width);
+}
+
+.career-relocation-mobile-count {
+  margin: 0;
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
 
-.career-relocation-mobile-status.is-available {
+.career-relocation-mobile-count strong {
+  color: var(--career-text);
+}
+
+.career-relocation-group-list .career-relocation-mobile-country > strong {
+  font-size: var(--career-text-md);
+}
+
+.career-relocation-group-list .career-relocation-mobile-country > .career-relocation-mobile-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-group-list
+  .career-relocation-mobile-country
+  > .career-relocation-mobile-status.is-available {
   color: var(--career-success);
 }
 
-.career-relocation-mobile-status.is-high_barriers {
+.career-relocation-group-list
+  .career-relocation-mobile-country
+  > .career-relocation-mobile-status.is-barriers {
+  color: var(--career-accent);
+}
+
+.career-relocation-group-list
+  .career-relocation-mobile-country
+  > .career-relocation-mobile-status.is-high_barriers {
   color: var(--career-warning);
 }
 
-.career-relocation-mobile-status.is-legally_unavailable {
+.career-relocation-group-list
+  .career-relocation-mobile-country
+  > .career-relocation-mobile-status.is-legally_unavailable {
   color: var(--career-danger);
+}
+
+.career-relocation-group-list > li > button > span.career-relocation-mobile-action {
+  display: flex;
+  align-items: center;
+  gap: var(--career-space-3);
+  color: var(--career-text);
+  font-size: var(--career-text-md);
+  font-weight: 600;
+}
+
+.career-relocation-mobile-action-icon {
+  display: inline-grid;
+  inline-size: var(--career-space-8);
+  block-size: var(--career-space-8);
+  place-items: center;
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text-soft);
+  background: var(--career-surface-raised);
 }
 
 .career-relocation-mobile .career-relocation-card {
@@ -330,7 +399,7 @@
   block-size: calc(var(--career-space-6) + var(--career-space-1));
   margin: 0;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--career-radius-pill);
   display: block;
   background: var(--career-surface-raised);
   appearance: none;
@@ -457,7 +526,7 @@
   inline-size: 100%;
   block-size: var(--career-space-2);
   overflow: hidden;
-  border-radius: 999px;
+  border-radius: var(--career-radius-pill);
 }
 
 .career-relocation-economy-bar rect {
@@ -514,4 +583,18 @@
 
 .career-relocation-mobile-save > .career-btn {
   min-block-size: var(--career-target-min);
+}
+
+.career-relocation-mobile-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-2);
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+}
+
+.career-relocation-mobile-note svg {
+  flex: 0 0 auto;
+  margin-block-start: var(--career-space-1);
 }
