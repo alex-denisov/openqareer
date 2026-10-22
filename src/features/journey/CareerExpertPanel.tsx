@@ -71,6 +71,8 @@ interface CareerExpertPanelProps {
   onCommandPrepared?: () => void;
   onProposalCountChange?: (count: number) => void;
   onStartSkillCheck?: (focus: SkillCheckFocus) => void;
+  /** Opens «Карьера» when the skill check has no chosen role (B510). */
+  onChooseRole?: () => void;
   skillQuizBankRequest?: number;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
@@ -96,6 +98,7 @@ export function CareerExpertPanel({
   onCommandPrepared,
   onProposalCountChange,
   onStartSkillCheck,
+  onChooseRole,
   skillQuizBankRequest = 0,
   mobileExpanded = false,
   onToggleMobileExpanded,
@@ -360,17 +363,29 @@ export function CareerExpertPanel({
       const updated = await getCandidateWithMessages(stage);
       if (currentContext.current === operationContext) setSnapshot(updated);
     } catch {
-      if (currentContext.current === operationContext) setError('Ответ сохранён, но историю пока не удалось обновить.');
+      if (currentContext.current === operationContext)
+        setError('Ответ сохранён, но историю пока не удалось обновить.');
     }
     return true;
   }
   const turns = consultantTurns(snapshot?.messages);
-  const latestContextTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationContext);
+  const latestContextTurn = [...(snapshot?.turns ?? [])]
+    .reverse()
+    .find((turn) => turn.status === 'completed' && turn.result?.adaptationContext);
   const contextResult = liveResult?.adaptationContext ? liveResult : latestContextTurn?.result;
-  const contextTurnKey = liveResult?.adaptationContext ? liveTurnIdempotencyKey : latestContextTurn?.idempotencyKey;
-  const latestAdaptationTurn = [...(snapshot?.turns ?? [])].reverse().find(turn => turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext);
+  const contextTurnKey = liveResult?.adaptationContext
+    ? liveTurnIdempotencyKey
+    : latestContextTurn?.idempotencyKey;
+  const latestAdaptationTurn = [...(snapshot?.turns ?? [])]
+    .reverse()
+    .find(
+      (turn) =>
+        turn.status === 'completed' && turn.result?.adaptationTask && turn.result.adaptationContext,
+    );
   const adaptationResult = liveResult?.adaptationTask ? liveResult : latestAdaptationTurn?.result;
-  const adaptationTurnKey = liveResult?.adaptationTask ? liveTurnIdempotencyKey : latestAdaptationTurn?.idempotencyKey;
+  const adaptationTurnKey = liveResult?.adaptationTask
+    ? liveTurnIdempotencyKey
+    : latestAdaptationTurn?.idempotencyKey;
   const showLiveMessage =
     liveResult &&
     !snapshot?.messages.some(
@@ -565,7 +580,12 @@ export function CareerExpertPanel({
           {loadingSession ? <ExpertPanelSkeleton /> : null}
           {!loadingSession && (turns.length || showLiveMessage) ? (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
-            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
+            <div
+              className="career-dialogue-history"
+              role="log"
+              tabIndex={0}
+              aria-label="История диалога"
+            >
               {turns.map((message) => (
                 <article className={`career-dialogue-turn is-${message.role}`} key={message.id}>
                   <span>{message.role === 'user' ? 'Вы' : 'Карьерный консультант'}</span>
@@ -605,18 +625,35 @@ export function CareerExpertPanel({
                   ) : null}
                 </article>
               ) : null}
-          {stage === 'diary' && contextResult?.adaptationContext && !contextResult.adaptationTask && contextTurnKey ? <AdaptationAdviceContext key={contextTurnKey} turnKey={contextTurnKey} /> : null}
-          {stage === 'diary' && adaptationResult?.adaptationTask && adaptationResult.adaptationContext && adaptationTurnKey ? (
-            <AdaptationTaskProposal key={adaptationTurnKey} turnKey={adaptationTurnKey}
-              context={adaptationResult.adaptationContext} suggestion={adaptationResult.adaptationTask}
-              currentSubject={subject} />
-          ) : null}
+              {stage === 'diary' &&
+              contextResult?.adaptationContext &&
+              !contextResult.adaptationTask &&
+              contextTurnKey ? (
+                <AdaptationAdviceContext key={contextTurnKey} turnKey={contextTurnKey} />
+              ) : null}
+              {stage === 'diary' &&
+              adaptationResult?.adaptationTask &&
+              adaptationResult.adaptationContext &&
+              adaptationTurnKey ? (
+                <AdaptationTaskProposal
+                  key={adaptationTurnKey}
+                  turnKey={adaptationTurnKey}
+                  context={adaptationResult.adaptationContext}
+                  suggestion={adaptationResult.adaptationTask}
+                  currentSubject={subject}
+                />
+              ) : null}
 
               <div ref={historyEndRef} aria-hidden="true" />
             </div>
           ) : !loadingSession ? (
             // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Фокус нужен для прокрутки истории с клавиатуры, включая Safari.
-            <div className="career-dialogue-history" role="log" tabIndex={0} aria-label="История диалога">
+            <div
+              className="career-dialogue-history"
+              role="log"
+              tabIndex={0}
+              aria-label="История диалога"
+            >
               <article className="career-dialogue-turn is-assistant">
                 <span>Карьерный консультант</span>
                 <ConsultantMessage
@@ -649,13 +686,15 @@ export function CareerExpertPanel({
               ) : null}
             </div>
           ) : null}
-          {subjectTitle && stage === 'diary' ? <p className="career-diary-note">Контекст: {subjectTitle}</p> : null}
+          {subjectTitle && stage === 'diary' ? (
+            <p className="career-diary-note">Контекст: {subjectTitle}</p>
+          ) : null}
           {pendingQuestion ? <ExpertWaitingRow question={pendingQuestion} /> : null}
           {stage === 'profile' && user && !loadingSnapshot ? (
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
           {stage === 'vacancies' && user && !loadingSnapshot && onStartSkillCheck ? (
-            <VacancyQuizProposal onStart={onStartSkillCheck} />
+            <VacancyQuizProposal onStart={onStartSkillCheck} onChooseRole={onChooseRole} />
           ) : null}
           {stage === 'today' && turns.length > 0 && !loadingSnapshot ? (
             <TodayDecisionProposal onAvailabilityChange={setDecisionProposalCount} />

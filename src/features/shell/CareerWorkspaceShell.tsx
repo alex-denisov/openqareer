@@ -856,6 +856,7 @@ export function CareerWorkspaceShell({
               onToggleMobileExpanded={() => setExpertSheetExpanded((expanded) => !expanded)}
               onProposalCountChange={setPendingProposalCount}
               onStartSkillCheck={openRoleSkillAssessment}
+              onChooseRole={() => navigate('career')}
               onIdentityChange={resetForAccount}
               onCommandPrepared={() => setCabinetRevision((revision) => revision + 1)}
               skillQuizBankRequest={skillQuizBankRequest}
