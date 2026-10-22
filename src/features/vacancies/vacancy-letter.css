@@ -305,12 +305,18 @@
   inline-size: 100%;
   min-inline-size: 0;
   min-block-size: max(44px, var(--career-target-min));
-  padding: var(--career-space-2) var(--career-space-3);
+  block-size: max(44px, var(--career-target-min));
+  padding-block: var(--career-space-2);
+  padding-inline: var(--career-space-3) calc(var(--career-space-3) + 16px + var(--career-space-2));
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   background: var(--career-bg-elevated);
   color: var(--career-text);
   font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
 }
 
 /* G5 A5: WebKit drew the system select low and bare; same look as the «Сохранённые» selects. */
@@ -318,15 +324,6 @@
   position: relative;
   display: block;
   min-inline-size: 0;
-}
-
-.career-letter-settings select {
-  appearance: none;
-  -webkit-appearance: none;
-  block-size: max(44px, var(--career-target-min));
-  padding-inline: var(--career-space-3) calc(var(--career-space-3) + 16px + var(--career-space-2));
-  cursor: pointer;
-  text-overflow: ellipsis;
 }
 
 .career-letter-settings select:hover:not(:disabled) {
