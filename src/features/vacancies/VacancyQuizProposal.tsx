@@ -150,21 +150,29 @@ function VacancyQuizProposalCard({
             Начать
           </button>
         ) : null}
-        {availability.kind === 'unavailable' && availability.needsRole && onChooseRole ? (
-          <button
-            type="button"
-            className="career-quiet-button career-inline-ok"
-            onClick={onChooseRole}
-          >
-            <Compass size={16} aria-hidden="true" />
-            Выбрать роль
-          </button>
-        ) : null}
+        <ChooseRoleButton availability={availability} onClick={onChooseRole} />
         <button type="button" className="career-quiet-button" onClick={onDecline}>
           <X size={16} aria-hidden="true" />
           Не сейчас
         </button>
       </div>
     </section>
+  );
+}
+
+/** «Выбрать роль» leads to «Карьера», where the skill check's target role is chosen (B510). */
+function ChooseRoleButton({
+  availability,
+  onClick,
+}: {
+  readonly availability: Availability;
+  readonly onClick?: () => void;
+}) {
+  if (availability.kind !== 'unavailable' || !availability.needsRole || !onClick) return null;
+  return (
+    <button type="button" className="career-quiet-button career-inline-ok" onClick={onClick}>
+      <Compass size={16} aria-hidden="true" />
+      Выбрать роль
+    </button>
   );
 }
