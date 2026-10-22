@@ -141,6 +141,10 @@ jobs:
           for attempt in 1 2 3; do
             timeout 300 npx playwright install --with-deps chromium webkit && exit 0
             echo "playwright install attempt $attempt timed out or failed"
+            # timeout kills npx, not its apt-get child: free the dpkg lock before retrying.
+            sudo pkill -9 -f 'apt-get|dpkg' || true
+            sleep 5
+            sudo dpkg --configure -a || true
           done
           exit 1
 
