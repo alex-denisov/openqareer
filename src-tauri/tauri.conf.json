@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:3000",
-    "beforeBuildCommand": "scripts/download-sing-box-sidecars.sh && npm run build",
+    "beforeBuildCommand": "scripts/download-sing-box-sidecars.sh && npm run build && node scripts/build-update-manifest.mjs --check-signing",
     "frontendDist": "../dist"
   },
   "app": {
@@ -28,6 +28,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": false,
     "targets": "all",
     "externalBin": ["binaries/sing-box"],
     "icon": [
@@ -38,5 +39,11 @@
       "icons/icon.ico",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg3NTQ3RTExNTQwQzUyNjkKUldScFVneFVFWDVVaDhaN0tBUjVIVVBqcEFrWnN3Y0RCT01jbEtpeGd1NzMxdE03Z3Nqa1ZUbEMK",
+      "endpoints": ["https://openqareer.com/desktop/latest.json"]
+    }
   }
 }
