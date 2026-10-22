@@ -45,8 +45,11 @@ export function quizOfferSkills(view: VacancyFitView | undefined): string[] {
   return unconfirmedSkills(view).slice(0, OFFER_SKILL_LIMIT);
 }
 
+/** Skill names are free phrases («Управление командой»), so they follow a colon and are not
+ *  declined after «по» (G5 W3). */
 export function quizOfferTitle(skills: readonly string[]): string {
-  return `Пройти квиз по ${skills.join(' и ')}`;
+  const noun = skills.length === 1 ? 'навыку' : 'навыкам';
+  return `Пройти квиз по ${noun}: ${skills.join(', ')}`;
 }
 
 function readDismissed(): Record<string, readonly string[]> {

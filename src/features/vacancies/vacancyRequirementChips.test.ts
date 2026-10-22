@@ -89,3 +89,11 @@ it('keeps only skill names on legacy chips, without matcher prefixes or role poi
     unconfirmed: ['Kafka', 'Kubernetes'],
   });
 });
+
+describe('legacySkillChips sentences (G5 W2)', () => {
+  it('never turns a matcher sentence into a chip', () => {
+    expect(
+      legacySkillChips(['Функция роли и уровень совпадают по разбору названия.', 'AWS'], []),
+    ).toEqual({ confirmed: ['AWS'], unconfirmed: [] });
+  });
+});

@@ -216,4 +216,37 @@ describe('VacancyInfoModal recruiter contacts (B266)', () => {
     });
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('decodes entities and dates the subtitle like the row (G5 M2/M3)', async () => {
+    vi.spyOn(apiClient, 'apiFetch').mockResolvedValue(new Response('{}'));
+    vi.spyOn(apiClient, 'readData').mockResolvedValue({
+      id: 'c-1',
+      description: 'Oregon Tilth&rsquo;s R&amp;D team.',
+      skills: [],
+      responsibilities: [],
+    } as never);
+    await act(async () => {
+      root.render(
+        <VacancyInfoModal
+          isOpen
+          onClose={vi.fn()}
+          cluster={cluster({
+            firstObservedAt: '2026-10-15T08:00:00.000Z',
+            sources: [
+              {
+                sourceType: 'indeed',
+                sourceId: 'indeed',
+                sourceUrl: 'https://boards.example/1',
+                observedAt: '2026-10-20T08:00:00.000Z',
+              },
+            ],
+          })}
+        />,
+      );
+    });
+    const body = document.body.textContent ?? '';
+    expect(body).toContain('20.10 · полный текст вакансии');
+    expect(body).not.toContain('15.10');
+    expect(body).toContain('Oregon Tilth’s R&D team.');
+  });
 });

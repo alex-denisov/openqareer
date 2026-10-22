@@ -203,7 +203,8 @@ function DiscussAction({
  * analysis itself, so chips and the consultant offer work where no fit-evidence block is
  * rendered — the 390 push screen (B552).
  */
-function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+/** True while the ready fit's requirements are still being read. */
+function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]): boolean {
   const needsDetail = view?.state === 'ready' && view.requirements.length === 0;
   useEffect(() => {
     if (!needsDetail) return;
@@ -213,6 +214,7 @@ function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkil
       .catch(() => undefined);
     return () => controller.abort();
   }, [vacancyId, needsDetail]);
+  return needsDetail;
 }
 
 /** The expanded vacancy tells the consultant panel what a quiz could confirm (B552). */
@@ -235,6 +237,17 @@ function usePublishQuizOffer(
 /** Requirements are parsed but none has a short name yet: the model labels arrive soon (B510). */
 const REQUIREMENTS_PENDING_TEXT = 'Требования разбираются — появятся в течение часа';
 
+function requirementsStatusText(reading: boolean, fromFit: boolean): string {
+  if (reading) return 'Загружаем требования…';
+  return fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.';
+}
+
+// G5 W2: while the fit's requirements load, legacy matcher points (sentences such as «Функция
+// роли и уровень совпадают…») must not flash as chips.
+const NO_CHIPS: ReturnType<typeof legacySkillChips> = { confirmed: [], unconfirmed: [] };
+const legacyChips = (legacy: ReturnType<typeof extractVacancyRequirements>) =>
+  legacySkillChips(legacy.skillMatching, legacy.skillMissing);
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -245,7 +258,7 @@ export function VacancyScreenRequirementChips({
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
   const fitView = useLatestVacancyFitView(cluster.id, explanation.fitView);
-  useFitDetail(cluster.id, fitView);
+  const readingRequirements = useFitDetail(cluster.id, fitView);
   const fromFit = fitRequirementChips(fitView);
   usePublishQuizOffer(cluster, fitView);
   const legacy = extractVacancyRequirements(
@@ -253,7 +266,7 @@ export function VacancyScreenRequirementChips({
     explanation.missingPoints,
     cluster.skills,
   );
-  const chips = fromFit ?? legacySkillChips(legacy.skillMatching, legacy.skillMissing);
+  const chips = fromFit ?? (readingRequirements ? NO_CHIPS : legacyChips(legacy));
   const skillMatching = chips.confirmed;
   const skillMissing = chips.unconfirmed;
   const hasRequirements = skillMatching.length + skillMissing.length > 0;
@@ -274,7 +287,7 @@ export function VacancyScreenRequirementChips({
         />
       ) : (
         <p className="vacancies-screen-no-requirements">
-          {fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.'}
+          {requirementsStatusText(readingRequirements, Boolean(fromFit))}
         </p>
       )}
       <p className="vacancies-screen-requirements-note">

@@ -5,6 +5,7 @@ import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { ImportModalShell } from '../connections/ImportModalShell';
 import { useVacancyDetail, type VacancyDetailState } from './vacancyDetailApi';
 import { parseDescriptionSections } from './vacancyDescriptionSections';
+import { decodeVacancyText } from './vacancyText';
 
 interface VacancyInfoModalProps {
   readonly isOpen: boolean;
@@ -76,7 +77,7 @@ function VacancyDescription({
   if (detail.status === 'loading' || detail.status === 'idle') {
     return <p className="vacancies-info-description is-empty">Загружаем описание…</p>;
   }
-  const text = detail.status === 'ready' ? detail.detail.description : summary;
+  const text = detail.status === 'ready' ? detail.detail.description : decodeVacancyText(summary);
   if (!text) {
     return (
       <p className="vacancies-info-description is-empty">
@@ -153,10 +154,14 @@ function observedDay(value: string | undefined): string | null {
   }).format(new Date(value));
 }
 
-/** «Вектор Банк · hh.ru, 05.10 · полный текст вакансии» (mockup 4). */
+/**
+ * «Вектор Банк · hh.ru, 05.10 · полный текст вакансии» (mockup 4). The date is
+ * the row's: when the named source last showed the vacancy (G5 M3), not when
+ * the cluster was first seen.
+ */
 function infoSubtitle(cluster: MatchedVacancyItem['cluster']): string {
   const source = vacancySourceLabels(cluster.sources)[0];
-  const day = observedDay(cluster.firstObservedAt);
+  const day = observedDay(cluster.sources[0]?.observedAt ?? cluster.firstObservedAt);
   const origin = [source, day].filter(Boolean).join(', ');
   return [cluster.canonicalCompany, origin || null, 'полный текст вакансии']
     .filter(Boolean)

@@ -94,6 +94,7 @@ export interface VacanciesScreenProps {
     subject?: CoachTurnSubject,
     subjectTitle?: string,
     initialPrompt?: string,
+    options?: { readonly send?: boolean },
   ) => void;
   readonly subscriptions?: readonly VacancySubscription[];
   readonly onRefreshSubscriptions?: () => Promise<void>;
@@ -406,10 +407,9 @@ function discussVacancy(input: VacanciesScreenProps) {
     onOpenExpert(
       'vacancies',
       { kind: 'vacancy', id: cluster.id },
-      'О вакансии: ' +
-        cluster.canonicalTitle +
-        (cluster.canonicalCompany ? ' — ' + cluster.canonicalCompany : ''),
+      `О вакансии: ${cluster.canonicalTitle}${cluster.canonicalCompany ? ` — ${cluster.canonicalCompany}` : ''}`,
       vacancyConsultantPrompt(cluster),
+      { send: true }, // макет 4: вопрос сразу в ленте (G5 A2)
     );
 }
 

@@ -49,6 +49,17 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
 const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';
 const ROLE_POINT_PREFIXES = ['Целевая роль:', 'Частичное совпадение по роли:'];
 
+/** A sentence («Функция роли и уровень совпадают по разбору названия.») is never a chip (G5 W2). */
+function isChipText(text: string): boolean {
+  const clean = text.trim();
+  return (
+    Boolean(clean) &&
+    !/[.!?]$/u.test(clean) &&
+    clean.length <= 40 &&
+    clean.split(/\s+/u).length <= 5
+  );
+}
+
 /** Legacy matcher points → chip names (B446-g4): «Подтверждённый навык: X» → X;
  *  role points («Целевая роль: …») are not skill requirements and stay out. */
 export function legacySkillChips(
@@ -62,6 +73,6 @@ export function legacySkillChips(
         ? point.slice(CONFIRMED_SKILL_PREFIX.length).trim()
         : point.trim(),
     )
-    .filter(Boolean);
-  return { confirmed, unconfirmed: [...missingPoints] };
+    .filter(isChipText);
+  return { confirmed, unconfirmed: missingPoints.filter(isChipText) };
 }

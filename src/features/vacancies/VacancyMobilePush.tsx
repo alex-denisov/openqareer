@@ -469,6 +469,7 @@ export function VacancyRowPush({
     ...base,
     onShowPaths: leave(base.onShowPaths),
     onPrepareLetter: rowProps.onOpenLetter ? leave(base.onPrepareLetter) : base.onPrepareLetter,
+    onAskIntro: rowProps.onOpenLetter ? leave(base.onAskIntro) : base.onAskIntro,
   };
   return (
     <VacancyMobilePush

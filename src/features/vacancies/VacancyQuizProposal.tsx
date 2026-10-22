@@ -57,23 +57,38 @@ export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Ava
   }
 }
 
+/** The last answer survives remounts, so reopening a vacancy shows the same card at once
+ *  instead of «Начать» (disabled) flipping to «Выбрать роль» (G5 W3). */
+let lastAvailability: Availability | undefined;
+
+export function resetSkillCheckAvailabilityCache(): void {
+  lastAvailability = undefined;
+}
+
+function sameAvailability(left: Availability, right: Availability): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function useSkillCheckAvailability(skills: readonly string[]): Availability {
-  const [availability, setAvailability] = useState<Availability>({ kind: 'loading' });
+  const [availability, setAvailability] = useState<Availability>(
+    () => lastAvailability ?? { kind: 'loading' },
+  );
   const key = skills.join('\n');
   useEffect(() => {
     let active = true;
-    setAvailability({ kind: 'loading' });
+    const settle = (next: Availability) => {
+      lastAvailability = next;
+      if (active)
+        setAvailability((previous) => (sameAvailability(previous, next) ? previous : next));
+    };
     void getCurrentRoleSkillAssessment()
-      .then((current) => {
-        if (active) setAvailability(skillCheckAvailability(current));
-      })
-      .catch(() => {
-        if (active)
-          setAvailability({
-            kind: 'unavailable',
-            reason: 'Не удалось узнать, доступна ли проверка навыков. Попробуйте позже.',
-          });
-      });
+      .then((current) => settle(skillCheckAvailability(current)))
+      .catch(() =>
+        settle({
+          kind: 'unavailable',
+          reason: 'Не удалось узнать, доступна ли проверка навыков. Попробуйте позже.',
+        }),
+      );
     return () => {
       active = false;
     };
@@ -134,14 +149,15 @@ function VacancyQuizProposalCard({
       <p>
         {availability.kind === 'unavailable'
           ? availability.reason
-          : 'Около 20 минут, результат попадёт в профиль и в эту вакансию.'}
+          : availability.kind === 'loading'
+            ? 'Проверяем, можно ли собрать проверку навыков.'
+            : 'Около 20 минут, результат попадёт в профиль и в эту вакансию.'}
       </p>
       <div className="career-expert-actions">
-        {availability.kind !== 'unavailable' ? (
+        {availability.kind === 'available' ? (
           <button
             type="button"
             className="career-quiet-button career-inline-ok"
-            disabled={availability.kind === 'loading'}
             onClick={() =>
               onStart({ vacancyId: offer.vacancyId, roleTitle: offer.roleTitle, skills })
             }
