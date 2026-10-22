@@ -97,3 +97,22 @@ describe('legacySkillChips sentences (G5 W2)', () => {
     ).toEqual({ confirmed: ['AWS'], unconfirmed: [] });
   });
 });
+
+describe('fitRequirementChips conditions (G5 item 9)', () => {
+  it('lists education apart and never as a skill chip', () => {
+    const chips = fitRequirementChips({
+      state: 'ready',
+      requirements: [
+        {
+          ...requirement('e', 'Высшее образование'),
+          kind: 'education',
+          skill: false,
+          label: 'Высшее образование',
+        },
+        { ...requirement('k', 'Kafka'), kind: 'other', skill: true, label: 'Kafka' },
+      ],
+    } as never);
+    expect(chips?.unconfirmed).toEqual(['Kafka']);
+    expect(chips?.conditions).toEqual(['Высшее образование']);
+  });
+});

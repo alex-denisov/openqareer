@@ -31,7 +31,10 @@ export interface VacancyFitResult {
   readonly gates: VacancyFitGates;
   readonly coveragePercent: number | null;
   readonly requiredCoverage: { readonly matched: number; readonly total: number; readonly percent: number | null };
+  /** Skill requirements only (B510-r): conditions such as education or language never make the percent. */
   readonly coverage: { readonly matched: number; readonly total: number; readonly unknown: number };
+  /** Conditions (education, language, licence, format, work permit), listed apart from the percent. */
+  readonly conditionCoverage?: { readonly matched: number; readonly total: number; readonly unknown: number };
   readonly assessments: readonly VacancyFitRequirementAssessment[];
-  readonly reason: 'assessed' | 'blocked_gate' | 'unknown_gate' | 'no_requirements' | 'no_eligible_facts' | 'assessment_unavailable';
+  readonly reason: 'assessed' | 'blocked_gate' | 'unknown_gate' | 'no_requirements' | 'no_eligible_facts' | 'assessment_unavailable' | 'too_few_skills';
 }

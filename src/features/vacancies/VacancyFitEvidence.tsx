@@ -115,6 +115,10 @@ function FitEvidenceTable({
     </table>
   );
 }
+/** A 202 answer may carry only the state; keep what is already known about the requirements. */
+function withRequirements(next: VacancyFitView, before: VacancyFitView): VacancyFitView {
+  return { ...before, ...next, requirements: next.requirements ?? before.requirements };
+}
 function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
   const mounted = useRef(true);
   useEffect(() => {
@@ -133,15 +137,24 @@ function useFitRequest(vacancyId: string, initialView?: VacancyFitView) {
   async function load(enqueue: boolean) {
     setBusy(true);
     setError(undefined);
+    const before = view;
+    // G5 item 9: the click shows «в очереди» at once; the POST answer replaces it.
+    if (enqueue) setLoaded({ id: vacancyId, view: { ...before, state: 'processing' } });
     try {
-      if (enqueue) await requestVacancyFit(vacancyId);
-      const next = await readVacancyFit(vacancyId);
+      const next = enqueue
+        ? withRequirements(await requestVacancyFit(vacancyId), before)
+        : await readVacancyFit(vacancyId);
       if (!mounted.current) return;
       setLoaded({ id: vacancyId, view: next });
       publishVacancyFitRead(vacancyId, next);
     } catch {
-      if (mounted.current)
-        setError('Не удалось обновить соответствие. Проверьте соединение и повторите.');
+      if (!mounted.current) return;
+      if (enqueue) setLoaded({ id: vacancyId, view: before });
+      setError(
+        enqueue
+          ? 'Не удалось поставить расчёт в очередь. Проверьте соединение и повторите.'
+          : 'Не удалось обновить соответствие. Проверьте соединение и повторите.',
+      );
     } finally {
       if (mounted.current) setBusy(false);
     }
@@ -176,7 +189,11 @@ function FitRequestControls({
             type="button"
             className="career-vacancy-action vacancies-btn vacancies-btn-secondary"
             disabled={busy}
-            onClick={() => void load(true)}
+            onClick={(event) => {
+              // The button lives inside an expandable row: the click is the fit request only.
+              event.stopPropagation();
+              void load(true);
+            }}
           >
             {busy
               ? 'Отправляем запрос…'

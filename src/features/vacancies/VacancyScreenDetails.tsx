@@ -237,6 +237,26 @@ function usePublishQuizOffer(
 /** Requirements are parsed but none has a short name yet: the model labels arrive soon (B510). */
 const REQUIREMENTS_PENDING_TEXT = 'Требования разбираются — появятся в течение часа';
 
+/** «Условия: Высшее образование, английский B2 · подтверждено 1 из 2» (G5 item 9). */
+function RequirementConditions({
+  chips: { conditions },
+  coverage,
+}: {
+  readonly chips: { readonly conditions?: readonly string[] };
+  readonly coverage?: { readonly matched: number; readonly total: number };
+}) {
+  if (!conditions?.length) return null;
+  const confirmed = coverage?.total
+    ? ` · подтверждено ${coverage.matched} из ${coverage.total}`
+    : '';
+  return (
+    <p className="vacancies-screen-requirements-conditions">
+      Условия: {conditions.join(', ')}
+      {confirmed}
+    </p>
+  );
+}
+
 function requirementsStatusText(reading: boolean, fromFit: boolean): string {
   if (reading) return 'Загружаем требования…';
   return fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.';
@@ -290,6 +310,7 @@ export function VacancyScreenRequirementChips({
           {requirementsStatusText(readingRequirements, Boolean(fromFit))}
         </p>
       )}
+      <RequirementConditions chips={chips} coverage={fitView?.result?.conditionCoverage} />
       <p className="vacancies-screen-requirements-note">
         Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
         навыков.
