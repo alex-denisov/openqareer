@@ -187,7 +187,7 @@ function CircleOnePage({
           ))}
         </div>
       </section>
-      <PushRecruiterGroup vacancyId={data.vacancyId} />
+      <PushRecruiterGroup data={data} />
       <PushCircleOneDraft vacancyId={data.vacancyId} onEdit={onEditDraft} />
     </>
   );

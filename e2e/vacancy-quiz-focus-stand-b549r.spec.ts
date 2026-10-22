@@ -8,6 +8,7 @@ import { expect, test } from '@playwright/test';
  */
 const STAND = process.env.BLOCK_C_STAND_URL;
 test.use({ browserName: 'webkit', ...(STAND ? { baseURL: STAND } : {}) });
+// mobile-390 already brings isMobile/hasTouch and 390×844 from the project.
 
 test('B549-r stand: «Пройти квиз по Kafka и Kubernetes» → the check starts on those skills', async ({
   page,
@@ -39,4 +40,27 @@ test('B549-r stand: «Пройти квиз по Kafka и Kubernetes» → the c
   await expect(check.locator('.career-role-assessment-flow-side')).toContainText('Kubernetes');
   mkdirSync('output/playwright/B549-r', { recursive: true });
   await page.screenshot({ path: 'output/playwright/B549-r/stand-quiz-start-1440.png' });
+});
+
+test('B549-r stand 390: «Круг 1» of «Вектор Банк» shows the recruiter, draft and approval', async ({
+  page,
+}, testInfo) => {
+  test.skip(!STAND || testInfo.project.name !== 'mobile-390', 'needs the block C stand');
+  await page.goto('/app');
+  await page.locator('button[aria-label="Вакансии"]:visible').first().tap({ timeout: 20_000 });
+  const row = page.locator('.vac-list-item', { hasText: 'Вектор Банк' }).first();
+  await expect(row).toBeVisible({ timeout: 30_000 });
+  await row.locator('.vacancies-screen-row-trigger').tap();
+  const push = page.locator('.vacancy-push');
+  await push
+    .getByRole('button', { name: /Путь к компании/u })
+    .first()
+    .tap();
+  await push.getByRole('button', { name: /Знакомый в компании/u }).tap();
+  await expect(push.locator('#vacancy-push-title')).toHaveText('Круг 1');
+  await expect(push).toContainText('Контакты в компании');
+  await expect(push).toContainText('РекрутерМария СинтетоваIT Recruiter, Вектор Банк');
+  await expect(push.getByRole('button', { name: 'Одобрить и отправить' })).toBeVisible();
+  mkdirSync('output/playwright/B549-r', { recursive: true });
+  await page.screenshot({ path: 'output/playwright/B549-r/stand-390-circle1.png', fullPage: true });
 });
