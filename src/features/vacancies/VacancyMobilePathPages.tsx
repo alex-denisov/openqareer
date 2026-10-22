@@ -13,6 +13,7 @@ import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLe
 import { pathCircleCards, pathSourceNote, type PathCircleCard } from './vacancyPathCircles';
 import type { VacancyPathCirclesState } from './useVacancyPathCircles';
 import { PushCircleOneDraft } from './VacancyPushCircleOne';
+import { PushRecruiterGroup } from './VacancyPushRecruiter';
 
 export type CirclePage = 'c1' | 'c2' | 'c3';
 
@@ -186,6 +187,7 @@ function CircleOnePage({
           ))}
         </div>
       </section>
+      <PushRecruiterGroup vacancyId={data.vacancyId} />
       <PushCircleOneDraft vacancyId={data.vacancyId} onEdit={onEditDraft} />
     </>
   );

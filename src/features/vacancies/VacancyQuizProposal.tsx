@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Check, X } from '@phosphor-icons/react';
-import {
-  getCurrentRoleSkillAssessment,
-  type RoleSkillAssessmentCurrent,
-} from '../skills/roleSkillAssessmentApi';
+import type { RoleSkillAssessmentCurrent } from '../skills/roleSkillAssessmentApi';
 import {
   dismissQuizOffer,
   isQuizOfferDismissed,
@@ -57,45 +54,6 @@ export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Ava
   }
 }
 
-/** The last answer survives remounts, so reopening a vacancy shows the same card at once
- *  instead of «Начать» (disabled) flipping to «Выбрать роль» (G5 W3). */
-let lastAvailability: Availability | undefined;
-
-export function resetSkillCheckAvailabilityCache(): void {
-  lastAvailability = undefined;
-}
-
-function sameAvailability(left: Availability, right: Availability): boolean {
-  return JSON.stringify(left) === JSON.stringify(right);
-}
-
-function useSkillCheckAvailability(skills: readonly string[]): Availability {
-  const [availability, setAvailability] = useState<Availability>(
-    () => lastAvailability ?? { kind: 'loading' },
-  );
-  const key = skills.join('\n');
-  useEffect(() => {
-    let active = true;
-    const settle = (next: Availability) => {
-      lastAvailability = next;
-      if (active)
-        setAvailability((previous) => (sameAvailability(previous, next) ? previous : next));
-    };
-    void getCurrentRoleSkillAssessment()
-      .then((current) => settle(skillCheckAvailability(current)))
-      .catch(() =>
-        settle({
-          kind: 'unavailable',
-          reason: 'Не удалось узнать, доступна ли проверка навыков. Попробуйте позже.',
-        }),
-      );
-    return () => {
-      active = false;
-    };
-  }, [key]);
-  return availability;
-}
-
 /**
  * «Пройти квиз по Kafka и Kubernetes» (4-vakansii.html): the consultant offers the existing
  * skill check for the expanded vacancy's unconfirmed requirements; the result lands in the
@@ -134,11 +92,10 @@ function VacancyQuizProposalCard({
   readonly onDecline: () => void;
 }) {
   const skills = offer.skills.slice(0, 2);
-  const availability = useSkillCheckAvailability(skills);
   const title = quizOfferTitle(skills);
-  // G5 R1: the card offers only a check that can start; a title offering a quiz above a text
-  // refusing it was a contradiction, so an unavailable (or not yet known) check shows nothing.
-  if (availability.kind !== 'available') return null;
+  // G5 R1 (round 3): the quiz is built from the vacancy's unconfirmed skills (focus.skills), so it
+  // is offered whenever there are some; whether each skill has enough data is answered honestly
+  // by the check itself on start (B552).
   return (
     <section className="career-expert-proposal" aria-label={title}>
       <p className="career-expert-proposal-title">{title}</p>
