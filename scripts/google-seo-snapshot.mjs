@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { fetchSitemapUrls } from './seo-sitemap-urls.mjs';
 
 const ENV_FILE = process.env.OPENQAREER_ENV_FILE ?? join(homedir(), '.openqareer/openqareer.env');
 const SITE_URL = 'https://openqareer.com/';
@@ -146,20 +147,10 @@ async function querySitemaps(accessToken, siteUrl) {
   return response.json();
 }
 
-function parseSitemapUrls(xml) {
-  return [...xml.matchAll(/<loc>\s*([^<]+?)\s*<\/loc>/giu)].map((match) => match[1]);
-}
-
 function sampleEvenly(values, limit) {
   if (values.length <= limit) return values;
   const step = (values.length - 1) / Math.max(1, limit - 1);
   return Array.from({ length: limit }, (_, index) => values[Math.round(index * step)]);
-}
-
-async function fetchSitemapUrls(sitemapUrl) {
-  const response = await fetch(sitemapUrl, { headers: { 'User-Agent': 'openqareer-seo-audit/1.0' } });
-  if (!response.ok) throw new Error(`sitemap fetch HTTP ${response.status}`);
-  return parseSitemapUrls(await response.text());
 }
 
 async function inspectUrl(accessToken, siteUrl, inspectedUrl) {
