@@ -21,7 +21,9 @@ describe('Coach Stage Routes (B340)', () => {
     }
   });
 
-  async function createTestServer(options: { failSummary?: boolean; captureLogs?: boolean } = {}) {
+  async function createTestServer(
+    options: { failSummary?: boolean; captureLogs?: boolean; searchVacancies?: RouteDeps['searchVacancies'] } = {},
+  ) {
     const store = createStore();
     const candidate = createCandidate(store);
     let logOutput = '';
@@ -112,7 +114,7 @@ describe('Coach Stage Routes (B340)', () => {
       candidateStore: store,
       coachProvider,
       multiSourceEngine,
-      searchVacancies: vi.fn(),
+      searchVacancies: options.searchVacancies ?? vi.fn(),
     } as unknown as RouteDeps;
 
     registerCoachRoutes(app, deps);
@@ -397,6 +399,30 @@ describe('Coach Stage Routes (B340)', () => {
     const input = getLastInput();
     expect(input?.stageContext).toContain('Вакансия: Senior Frontend Engineer');
     expect(input?.stageContext).toContain('Компания: Tech Corp');
+  });
+
+  it('«Обсудить» вакансию не ходит за живой выборкой рынка (блок C R5)', async () => {
+    const searchVacancies = vi.fn(async () => {
+      throw new Error('hh.ru is unreachable from the host');
+    });
+    const { app, headers, getLastInput } = await createTestServer({ searchVacancies });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/coach/turn',
+      headers: { ...headers, 'idempotency-key': randomUUID() },
+      payload: {
+        messageId: randomUUID(),
+        content: 'Почему эта вакансия подходит?',
+        stage: 'vacancies',
+        subject: { kind: 'vacancy', id: 'vac-active' },
+        marketQuery: 'VP of Engineering',
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(searchVacancies).not.toHaveBeenCalled();
+    expect(getLastInput()?.marketObservations).toEqual([]);
   });
 
   it('отклоняет предложение и не возвращает его повторно', async () => {
