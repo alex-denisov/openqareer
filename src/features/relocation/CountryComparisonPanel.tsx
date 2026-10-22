@@ -2,10 +2,11 @@ import {
   calculateParetoFrontier,
   visibleFact,
   type CountryComparisonCountry,
+  type ComparisonEvidence,
   type CountryComparisonFact,
 } from '../../../shared/countryFit/countryComparison';
 import type { ReactNode } from 'react';
-import { Info } from '@phosphor-icons/react';
+import { Clock, Info } from '@phosphor-icons/react';
 import { COUNTRY_FIT_DISCLAIMER } from '../../../shared/countryFit';
 import './CountryComparisonPanel.css';
 import { relocationDay } from './relocationDates';
@@ -167,13 +168,14 @@ function DesktopMatrix({ countries }: { readonly countries: readonly CountryComp
           ))}
         </tbody>
       </table>
+      <SourcesLine countries={countries} />
     </div>
   );
 }
 
 /** Mockup 15 `vt=cmp` at 390: grouped rows «country — value», sources in one footnote. */
 function MobileStack({ countries }: { readonly countries: readonly CountryComparisonCountry[] }) {
-  const sources = mobileSources(countries);
+  const sources = comparisonSources(countries);
   return (
     <div className="career-country-comparison-mobile">
       {CRITERIA.filter(({ key }) => key !== 'monthlyRemainder').map((criterion) => (
@@ -209,7 +211,50 @@ function MobileStack({ countries }: { readonly countries: readonly CountryCompar
   );
 }
 
-function mobileSources(countries: readonly CountryComparisonCountry[]): string {
+/** One line under the matrix, as in mockup 15 `cmp`: each source once, with its date and link. */
+function SourcesLine({ countries }: { readonly countries: readonly CountryComparisonCountry[] }) {
+  const sources = uniqueSources(countries);
+  return (
+    <p className="career-country-comparison-sources-line">
+      <Clock aria-hidden="true" size={14} />
+      <span>
+        {sources.length ? 'Источники: ' : 'Проверенных источников по этим показателям пока нет.'}
+        {sources.map((source, index) => (
+          <span key={source.title}>
+            {index ? '; ' : ''}
+            {source.url ? (
+              <a href={source.url} target="_blank" rel="noopener noreferrer">
+                {source.title}
+              </a>
+            ) : (
+              source.title
+            )}
+            {source.dataYear ? `, год шкалы ${source.dataYear}` : ''},{' '}
+            {relocationDay(source.capturedAt)}
+          </span>
+        ))}
+      </span>
+    </p>
+  );
+}
+
+function uniqueSources(countries: readonly CountryComparisonCountry[]) {
+  const seen = new Map<string, ComparisonEvidence>();
+  for (const country of countries) {
+    for (const criterion of CRITERIA) {
+      const visible = visibleFact(
+        country.facts[criterion.key] as CountryComparisonFact<unknown>,
+        criterion.key,
+      );
+      if (visible.status !== 'available') continue;
+      for (const source of visible.sources)
+        if (!seen.has(source.title)) seen.set(source.title, source);
+    }
+  }
+  return [...seen.values()];
+}
+
+function comparisonSources(countries: readonly CountryComparisonCountry[]): string {
   const seen = new Map<string, string>();
   for (const country of countries) {
     for (const criterion of CRITERIA) {
@@ -227,6 +272,7 @@ function mobileSources(countries: readonly CountryComparisonCountry[]): string {
   return [...seen.values()].join('; ');
 }
 
+/** Mockup 15 `cmp` 1440: a short value per cell; the reason stays a hint, sources go under the table. */
 function FactContent({
   fact,
   metric,
@@ -236,38 +282,14 @@ function FactContent({
 }) {
   const visible = visibleFact(fact, metric);
   if (visible.status !== 'available') {
-    const label = visible.status === 'unknown' ? 'Статус неизвестен' : 'Нет проверенных данных';
     return (
-      <div className="career-country-comparison-no-data">
-        <strong>{label}</strong>
-        <span>{visible.reason}</span>
-      </div>
+      <span className="career-country-comparison-no-data" title={visible.reason}>
+        {visible.status === 'unknown' ? 'статус неизвестен' : missingFactLabel(visible.reason)}
+      </span>
     );
   }
   return (
-    <div className="career-country-comparison-fact">
-      <strong className="career-country-comparison-value">
-        {formatFact(metric, visible.value)}
-      </strong>
-      <ul className="career-country-comparison-sources" aria-label="Источники значения">
-        {visible.sources.map((source, index) => (
-          <li key={`${source.title}-${index}`}>
-            {source.url ? (
-              <a href={source.url} target="_blank" rel="noopener noreferrer">
-                {source.title}
-              </a>
-            ) : (
-              <span>{source.title}</span>
-            )}
-            {source.dataYear && <span> · год шкалы: {source.dataYear}</span>}
-            <span> · получено: {relocationDay(source.capturedAt)}</span>
-            {metric === 'relocationVacancies' && source.sampleSize && (
-              <span> · выборка: {source.sampleSize}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
+    <span className="career-country-comparison-value">{formatFact(metric, visible.value)}</span>
   );
 }
 

@@ -68,8 +68,9 @@ describe('CountryComparisonPanel', () => {
     expect(html).toContain('Германия');
     expect(html).toContain('24%');
     expect(html).toContain('Налоговый орган — ставка 2026');
-    expect(html).toContain('год шкалы: 2026');
-    expect(html).toContain('получено: 10.10.2026');
+    expect(html).toContain('год шкалы 2026');
+    expect(html).toContain('Источники: ');
+    expect(html).toContain('10.10.2026');
     expect(html).toContain('Граница Парето');
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
@@ -87,8 +88,9 @@ describe('CountryComparisonPanel', () => {
     };
     const html = renderToStaticMarkup(<CountryComparisonPanel countries={[germany, cyprus]} />);
 
-    expect(html).toContain('Нет проверенных данных');
-    expect(html).toContain('Нет данных об аренде и расходах.');
+    expect(html).toContain('нет данных');
+    // The reason stays reachable as the cell's hint.
+    expect(html).toContain('title="Нет данных об аренде и расходах."');
     expect(html).toContain('Граница Парето пока не рассчитывается');
   });
 

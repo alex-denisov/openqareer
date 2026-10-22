@@ -55,45 +55,28 @@
 }
 
 .career-country-comparison-value {
-  display: block;
   color: var(--career-text);
-  font-weight: 600;
+  font-size: var(--career-text-xs);
   font-variant-numeric: tabular-nums;
 }
 
-.career-country-comparison-sources {
-  margin: var(--career-space-2) 0 0;
-  padding-inline-start: var(--career-space-4);
+.career-country-comparison-no-data {
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
 
-.career-country-comparison-sources li + li {
-  margin-block-start: var(--career-space-2);
-}
-
-.career-country-comparison-sources a {
-  display: inline-flex;
-  min-height: var(--career-target-min);
+.career-country-comparison-sources-line {
+  display: flex;
   align-items: center;
-  color: var(--career-accent);
-  text-decoration: none;
+  gap: var(--career-space-2);
+  margin: var(--career-space-3) 0 0;
+  color: var(--career-text-dim);
+  font-size: var(--career-text-xs);
 }
 
-.career-country-comparison-sources a:focus-visible,
 .career-country-comparison-retry:focus-visible {
   outline: var(--career-border-width) solid var(--career-accent);
   outline-offset: var(--career-space-1);
-}
-
-.career-country-comparison-no-data {
-  display: grid;
-  gap: var(--career-space-2);
-  color: var(--career-text-dim);
-}
-
-.career-country-comparison-no-data strong {
-  color: var(--career-text-soft);
 }
 
 .career-country-comparison-pareto {

@@ -24,7 +24,7 @@ describe('RelocationCountryWorkspace', () => {
     expect(host?.textContent).toContain('Порог зарплаты для доступа');
     expect(host?.textContent).toContain('EU Blue Card');
     expect(host?.textContent).toContain('Вакансий с релокацией');
-    expect(host?.textContent).toContain('Нет проверенных данных');
+    expect(host?.textContent).toContain('нет данных');
     expect(host?.textContent).toContain('2026');
   });
 
