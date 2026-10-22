@@ -74,6 +74,17 @@
   font-size: var(--career-text-xs);
 }
 
+.career-country-comparison-sources-line a {
+  border-radius: var(--career-space-1);
+  color: var(--career-accent);
+  text-decoration: none;
+}
+
+.career-country-comparison-sources-line a:focus-visible {
+  outline: var(--career-border-width) solid var(--career-accent);
+  outline-offset: var(--career-space-1);
+}
+
 .career-country-comparison-retry:focus-visible {
   outline: var(--career-border-width) solid var(--career-accent);
   outline-offset: var(--career-space-1);

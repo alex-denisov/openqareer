@@ -637,7 +637,7 @@
 
 .career-relocation-country-meta {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--career-space-2);

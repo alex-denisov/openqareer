@@ -264,12 +264,12 @@ function CountryCard({
 function CountryCardMeta({ summary }: { readonly summary: RelocationCountrySummary }) {
   return (
     <div className="career-relocation-country-meta">
-      <span className="career-relocation-country-vacancies">Вакансий с релокацией: нет данных</span>
+      <span className="career-relocation-country-vacancies">вакансии: нет данных</span>
       <span title={summary.source?.title}>
         <Clock aria-hidden="true" size={14} />
         {summary.source
           ? `каталог правил, ${relocationShortDay(summary.source.retrievedAt)}`
-          : 'источник правила не указан'}
+          : 'источник не указан'}
       </span>
     </div>
   );
