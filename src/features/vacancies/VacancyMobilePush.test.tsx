@@ -6,7 +6,6 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyMobilePush, type VacancyMobilePushProps } from './VacancyMobilePush';
 import * as api from './vacancyLetterApi';
 import * as pitchApi from './vacancyPitchApi';
-import * as recruiterApi from './recruiterContactsApi';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -68,7 +67,28 @@ const circles: api.VacancyConnectionCircles = {
       ],
     },
     { circle: 2, state: 'none', message: '', paths: [] },
-    { circle: 3, state: 'available', message: '', paths: [] },
+    {
+      circle: 3,
+      state: 'available',
+      message: '',
+      paths: [
+        {
+          id: 'p3',
+          circle: 3,
+          path: [],
+          recipient: {
+            id: 'r1',
+            fullName: 'Мария Синтетова',
+            roleTitle: 'IT Recruiter',
+            companyName: 'Вектор Банк',
+          },
+          evidence: [],
+          strength: 'unknown',
+          source: 'cold',
+          nextStep: 'cold_application',
+        },
+      ],
+    },
   ],
   linkedinImport: { state: 'imported', importedAt: '2026-09-12T10:00:00.000Z', importedCount: 412 },
 };
@@ -97,17 +117,6 @@ describe('VacancyMobilePush (B549)', () => {
     const onWriteContact = vi.fn();
     const onEditContactDraft = vi.fn();
     const message = 'Ирина, добрый день! Увидел вакансию Head of Engineering.';
-    vi.spyOn(recruiterApi, 'getRecruiterContacts').mockResolvedValue({
-      contacts: [
-        {
-          id: 'r1',
-          fullName: 'Мария Синтетова',
-          roleTitle: 'IT Recruiter',
-          companyName: 'Вектор Банк',
-        },
-      ] as never,
-      job: null,
-    });
     vi.spyOn(pitchApi, 'requestVacancyPitch').mockResolvedValue({
       vacancyId: 'v1',
       emailPitch: { subject: 'Head of Engineering', body: message },

@@ -96,11 +96,11 @@ afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
 });
 
-async function rig() {
+async function rig(poolSize = 8) {
   const store = createStore();
   const candidate = createCandidate(store);
   store.saveCareerStrategy(candidate.id, STRATEGY);
-  const pool = vacancies(8);
+  const pool = vacancies(poolSize);
   const deps = {
     config,
     authService: {
@@ -158,21 +158,27 @@ describe('role skill check focused on a vacancy (B552)', () => {
       data.run.cases.map(
         (item: { assessmentCase: { skillName: string } }) => item.assessmentCase.skillName,
       ),
-    ).toEqual(['SQL analytics']);
+    ).toEqual(['SQL analytics', 'Kafka']);
     expect(data.run.skills).toHaveLength(5);
     expect(data.run.focus).toMatchObject({
       vacancyId: 'fixture-vacancy-0',
       skills: ['SQL analytics', 'Kafka'],
       sampleRoleTitle: ROLE_TITLE,
       roleNote: null,
-      lackingNotes: ['Мало данных по Kafka: навык есть в 1 из нужных 3 вакансий роли.'],
+      lackingNotes: [],
     });
   });
 
-  it('answers honestly when no focus skill has enough data', async () => {
-    const { start } = await rig();
+  it('builds the vacancy quiz without the role-wide «five skills, three cases» gate (G5 R1b)', async () => {
+    const { start } = await rig(1);
     const response = await start({ vacancyId: 'fixture-vacancy-0', skills: ['Kafka'] });
-    expect(response.json().data).toMatchObject({ state: 'focus_insufficient', skills: ['Kafka'] });
+    const data = response.json().data;
+    expect(data.state).toBe('run');
+    expect(
+      data.run.cases.map(
+        (item: { assessmentCase: { skillName: string } }) => item.assessmentCase.skillName,
+      ),
+    ).toEqual(['Kafka']);
   });
 
   it('rejects a skill that is not a requirement of this vacancy', async () => {

@@ -222,7 +222,9 @@ const roleSkillAssessmentRunSchema = z
     startedAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
     completedAt: z.string().datetime().nullable(),
-    sampleSize: z.number().int().min(MIN_ROLE_SAMPLE).max(10_000),
+    // G5 R1b: a vacancy-focused run may rest on a thin role sample; the role check keeps
+    // its own MIN_ROLE_SAMPLE gate before a run is created.
+    sampleSize: z.number().int().min(1).max(10_000),
     evidenceObservedAt: z.string().datetime(),
     dialogueQuestions: z.array(z.string().trim().min(1).max(1_000)).length(3),
     dialogueEntries: z.array(roleAssessmentDialogueEntrySchema).max(3),
@@ -230,7 +232,7 @@ const roleSkillAssessmentRunSchema = z
     suggestions: z.array(roleSkillProfileSuggestionSchema).max(12),
     profileChange: roleSkillProfileChangeSchema.optional(),
     cases: z.array(roleSkillRunCaseSchema).max(3),
-    skills: z.array(roleSkillRunSkillSchema).length(5),
+    skills: z.array(roleSkillRunSkillSchema).min(1).max(5),
     currentCaseIndex: z.number().int().min(0).max(3),
     readiness: z
       .object({
