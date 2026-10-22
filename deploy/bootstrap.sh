@@ -201,6 +201,9 @@ install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
 # beside the database so the unit's ReadWritePaths already covers it.
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
   /var/lib/openqareer/downloads
+# B359: signed updater feed served by /desktop/*; written by scripts/release-desktop.sh.
+install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0755 \
+  /var/lib/openqareer/desktop
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 0700 \
   "$RELEASE_ROOT/.ssh"
 

@@ -220,3 +220,16 @@
   border-top: var(--career-border-width) solid var(--career-line-soft);
   background: var(--career-bg);
 }
+
+/* B359: живой баннер обновления поверх любого экрана десктопа */
+.career-app-update-dock {
+  position: fixed;
+  right: var(--career-space-6);
+  bottom: var(--career-space-6);
+  z-index: 60;
+  max-width: min(560px, calc(100vw - 2 * var(--career-space-6)));
+}
+
+.career-app-update-dock .career-app-update-banner {
+  margin-bottom: 0;
+}
