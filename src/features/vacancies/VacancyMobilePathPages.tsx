@@ -12,6 +12,7 @@ import type { CompanyPathActions } from './VacancyCompanyPathPanel';
 import type { ConnectionCirclePath, VacancyConnectionCircles } from './vacancyLetterApi';
 import { pathCircleCards, pathSourceNote, type PathCircleCard } from './vacancyPathCircles';
 import type { VacancyPathCirclesState } from './useVacancyPathCircles';
+import { PushCircleOneDraft } from './VacancyPushCircleOne';
 
 export type CirclePage = 'c1' | 'c2' | 'c3';
 
@@ -161,7 +162,13 @@ function circlePaths(data: VacancyConnectionCircles, circle: 1 | 2) {
   return result?.state === 'available' ? result.paths : [];
 }
 
-function CircleOnePage({ data }: { readonly data: VacancyConnectionCircles }) {
+function CircleOnePage({
+  data,
+  onEditDraft,
+}: {
+  readonly data: VacancyConnectionCircles;
+  readonly onEditDraft?: () => void;
+}) {
   const paths = circlePaths(data, 1);
   return (
     <>
@@ -178,10 +185,8 @@ function CircleOnePage({ data }: { readonly data: VacancyConnectionCircles }) {
             />
           ))}
         </div>
-        <p className="vacancy-push-foot">
-          Черновик сообщения готовит консультант. Ничего не отправится без вашего одобрения.
-        </p>
       </section>
+      <PushCircleOneDraft vacancyId={data.vacancyId} onEdit={onEditDraft} />
     </>
   );
 }
@@ -239,11 +244,13 @@ function CircleThreePage({ data }: { readonly data: VacancyConnectionCircles }) 
 export function PushCirclePage({
   page,
   data,
+  actions,
 }: {
   readonly page: CirclePage;
   readonly data: VacancyConnectionCircles;
+  readonly actions?: CompanyPathActions;
 }) {
-  if (page === 'c1') return <CircleOnePage data={data} />;
+  if (page === 'c1') return <CircleOnePage data={data} onEditDraft={actions?.onEditContactDraft} />;
   if (page === 'c2') return <CircleTwoPage data={data} />;
   return <CircleThreePage data={data} />;
 }
@@ -252,6 +259,7 @@ export const CIRCLE_CTA: Record<
   CirclePage,
   { readonly label: string; readonly action: keyof CompanyPathActions }
 > = {
+  // Круг 1: «Одобрить и отправить» и карандаш стоят под черновиком (PushCircleOneDraft).
   c1: { label: 'Написать знакомому', action: 'onWriteContact' },
   c2: { label: 'Попросить представить', action: 'onAskIntro' },
   c3: { label: 'Подготовить письмо', action: 'onPrepareLetter' },

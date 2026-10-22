@@ -4,7 +4,7 @@ import type { VacancyFitView } from '../shared/vacancyFit';
 import { mockSignedInCabinet } from './fixtures/mockSignedInCabinet';
 
 const SHOTS = 'output/playwright/B552';
-const OFFER = 'Пройти квиз по навыкам: Kafka, Kubernetes';
+const OFFER = 'Пройти квиз по Kafka и Kubernetes';
 
 const gate = { status: 'matched', reason: 'совпадает' } as const;
 const requirement = (id: string, text: string, importance: 'critical' | 'high' | 'medium') => ({

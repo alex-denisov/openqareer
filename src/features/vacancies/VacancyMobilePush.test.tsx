@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyMobilePush, type VacancyMobilePushProps } from './VacancyMobilePush';
 import * as api from './vacancyLetterApi';
+import * as pitchApi from './vacancyPitchApi';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -93,6 +94,17 @@ describe('VacancyMobilePush (B549)', () => {
     vi.spyOn(api, 'getVacancyConnectionCircles').mockResolvedValue(circles);
     const onClose = vi.fn();
     const onWriteContact = vi.fn();
+    const onEditContactDraft = vi.fn();
+    const message = 'Ирина, добрый день! Увидел вакансию Head of Engineering.';
+    vi.spyOn(pitchApi, 'requestVacancyPitch').mockResolvedValue({
+      vacancyId: 'v1',
+      emailPitch: { subject: 'Head of Engineering', body: message },
+      linkedInNote: message,
+      atsCoverLetter: message,
+      contactMessage: message,
+      usedEvidenceIds: [],
+      generatedAt: '2026-10-05T08:00:00.000Z',
+    });
     const props: VacancyMobilePushProps = {
       item,
       onClose,
@@ -100,7 +112,7 @@ describe('VacancyMobilePush (B549)', () => {
       onApply: vi.fn(),
       applyLabel: 'Откликнуться',
       applyDisabled: false,
-      pathActions: { onWriteContact },
+      pathActions: { onWriteContact, onEditContactDraft },
     };
     const host = document.createElement('div');
     document.body.append(host);
@@ -116,8 +128,14 @@ describe('VacancyMobilePush (B549)', () => {
     await click('Знакомый в компании');
     expect(title()).toBe('Круг 1');
     expect(document.body.textContent).toContain('Ирина Захарова');
-    await click('Написать знакомому');
-    expect(onWriteContact).toHaveBeenCalledTimes(1);
+    // G5 R3: круг 1 по макету — черновик от консультанта, одобрение и карандаш, без отправки.
+    await act(async () => {});
+    expect(document.body.textContent).toContain('Черновик сообщения · Ирина Захарова');
+    expect(document.body.textContent).toContain(message);
+    expect(document.body.textContent).toContain('Ничего не отправится без вашего одобрения.');
+    expect(button('Одобрить и отправить').disabled).toBe(false);
+    await click('Править');
+    expect(onEditContactDraft).toHaveBeenCalledTimes(1);
     await click('Назад');
     expect(title()).toBe('Путь к компании');
     await click('Назад');
