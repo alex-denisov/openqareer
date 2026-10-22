@@ -136,7 +136,17 @@ jobs:
         run: npm ci
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium webkit
+        # The Ubuntu mirror sometimes stalls on WebKit's apt deps; bound each try.
+        run: |
+          for attempt in 1 2 3; do
+            timeout 300 npx playwright install --with-deps chromium webkit && exit 0
+            echo "playwright install attempt $attempt timed out or failed"
+            # timeout kills npx, not its apt-get child: free the dpkg lock before retrying.
+            sudo pkill -9 -f 'apt-get|dpkg' || true
+            sleep 5
+            sudo dpkg --configure -a || true
+          done
+          exit 1
 
       - name: Build production artifact
         run: npm run build

@@ -211,11 +211,14 @@ function useCompanySelection(
   // The company named by «Путь к компании» opens once: «Назад» must not reopen it.
   const usedPreferred = useRef<string | undefined>(undefined);
   useEffect(() => {
+    // On 390 the company is its own screen, loaded by key: a list refresh that drops
+    // it from the current page («Убрать» re-sorts «Хочу») must not close it.
+    const narrow = window.innerWidth < 761;
     if (!items.length) {
-      if (selectedKey) setSelectedKey(null);
+      if (selectedKey && !narrow) setSelectedKey(null);
       return;
     }
-    if (selectedKey && items.some((company) => company.key === selectedKey)) return;
+    if (selectedKey && (narrow || items.some((company) => company.key === selectedKey))) return;
     if (preferredName?.trim() && usedPreferred.current !== preferredName) {
       const preferred = items.find((company) =>
         company.name.toLocaleLowerCase('ru-RU').includes(preferredName.toLocaleLowerCase('ru-RU')),

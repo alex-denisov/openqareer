@@ -325,7 +325,9 @@ const handleCoachTurn: Handler = async (deps, request, reply) => {
   if (adaptationContext) body.content = labelAdaptationMessage(deps, candidate.id, key, adaptationContext, body.content);
   const started = candidateStore.startTurn(candidate.id, key, { ...body, phase, stageContext });
   if (body.stage === 'diary' && started.state === 'ready') started.input.knowledgeContext = scopeAdaptationKnowledge(started.input.knowledgeContext, stageContext ?? '');
-  return continueStartedTurn(deps, request, reply, candidate.id, key, started, body.marketQuery);
+  // A chosen vacancy is the topic itself: its turn needs no live market sample (block C R5).
+  const marketQuery = body.subject?.kind === 'vacancy' ? undefined : body.marketQuery;
+  return continueStartedTurn(deps, request, reply, candidate.id, key, started, marketQuery);
 };
 
 const handleRejectProposal: Handler = async (deps, request, reply) => {
