@@ -20,6 +20,8 @@ export interface CompanyPathActions {
   readonly onShowPaths?: () => void;
   /** Circle 3: the cover letter screen. */
   readonly onPrepareLetter?: () => void;
+  /** Circle 2 «Попросить представить»: the letter screen on circle 2. */
+  readonly onAskIntro?: () => void;
 }
 
 type Cluster = MatchedVacancyItem['cluster'];
@@ -31,7 +33,7 @@ export function companyPathActions(
   handlers: {
     readonly onOpenNetworking?: (cluster: Cluster) => void;
     readonly onOpenCompanyPath?: () => void;
-    readonly onOpenLetter?: (cluster: Cluster) => void;
+    readonly onOpenLetter?: (cluster: Cluster, circle?: ConnectionCircleNumber) => void;
   },
   fallbackLetter: () => void,
 ): CompanyPathActions {
@@ -39,7 +41,9 @@ export function companyPathActions(
   return {
     onWriteContact: onOpenNetworking ? () => onOpenNetworking(cluster) : undefined,
     onShowPaths: handlers.onOpenCompanyPath,
-    onPrepareLetter: onOpenLetter ? () => onOpenLetter(cluster) : fallbackLetter,
+    // G5 A4: «Подготовить письмо» — холодный отклик, письмо открывается на круге 3.
+    onPrepareLetter: onOpenLetter ? () => onOpenLetter(cluster, 3) : fallbackLetter,
+    onAskIntro: onOpenLetter ? () => onOpenLetter(cluster, 2) : fallbackLetter,
   };
 }
 

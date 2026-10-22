@@ -77,7 +77,8 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
     // B446-g4: в карточке 1440 соответствие одной строкой (макет 4), таблицы разбора нет.
     await expect(evidence).toContainText('1 из 2 требований');
     await expect(evidence).not.toContainText('fixture-fact-01');
-    expect(methods).toEqual(['POST', 'GET', 'GET']);
+    // G5 item 9: the POST answer is the queued view, only «Обновить результат» reads again.
+    expect(methods).toEqual(['POST', 'GET']);
   }
   const directory = join('docs/v1-release/tasks/evidence/B525', testInfo.project.name);
   await mkdir(directory, { recursive: true });

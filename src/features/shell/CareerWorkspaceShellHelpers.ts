@@ -26,7 +26,17 @@ export interface ExpertPanelConfig {
   subject?: CoachTurnSubject;
   subjectTitle?: string;
   initialPrompt?: string;
+  /** Set when the opener asked to send `initialPrompt` at once («Обсудить», G5 A2);
+   *  a new value per request, so the same question can be asked twice. */
+  sendRequest?: number;
 }
+
+export interface OpenExpertOptions {
+  /** Send `initialPrompt` as the candidate's message instead of leaving it in the input. */
+  readonly send?: boolean;
+}
+
+let expertSendRequest = 0;
 
 export function openExpertPanel(
   setConfig: Dispatch<SetStateAction<ExpertPanelConfig>>,
@@ -38,15 +48,20 @@ export function openExpertPanel(
   subject?: CoachTurnSubject,
   subjectTitle?: string,
   initialPrompt?: string,
+  options?: OpenExpertOptions,
 ) {
   setAccountOpen(false);
+  const sendRequest = options?.send && initialPrompt ? ++expertSendRequest : undefined;
   setExpanded(isCompactViewport);
   const nextStage = stage ?? stageForView(activeView);
   setConfig((previous) =>
     // Значок консультанта на открытом плане адаптации сохраняет контекст плана (макет 10, 390).
-    !subject && !subjectTitle && previous.stage === nextStage && previous.subject?.kind === 'adaptation'
-      ? { ...previous, open: true, initialPrompt }
-      : { open: true, stage: nextStage, subject, subjectTitle, initialPrompt },
+    !subject &&
+    !subjectTitle &&
+    previous.stage === nextStage &&
+    previous.subject?.kind === 'adaptation'
+      ? { ...previous, open: true, initialPrompt, sendRequest }
+      : { open: true, stage: nextStage, subject, subjectTitle, initialPrompt, sendRequest },
   );
 }
 

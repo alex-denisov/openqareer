@@ -71,8 +71,10 @@ describe('quizOfferSkills', () => {
   });
 
   it('builds the mockup title', () => {
-    expect(quizOfferTitle(['Kafka', 'Kubernetes'])).toBe('Пройти квиз по Kafka и Kubernetes');
-    expect(quizOfferTitle(['Kafka'])).toBe('Пройти квиз по Kafka');
+    expect(quizOfferTitle(['Kafka', 'Kubernetes'])).toBe(
+      'Пройти квиз по навыкам: Kafka, Kubernetes',
+    );
+    expect(quizOfferTitle(['Kafka'])).toBe('Пройти квиз по навыку: Kafka');
   });
 });
 

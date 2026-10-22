@@ -253,6 +253,6 @@ export const CIRCLE_CTA: Record<
   { readonly label: string; readonly action: keyof CompanyPathActions }
 > = {
   c1: { label: 'Написать знакомому', action: 'onWriteContact' },
-  c2: { label: 'Попросить представить', action: 'onPrepareLetter' },
+  c2: { label: 'Попросить представить', action: 'onAskIntro' },
   c3: { label: 'Подготовить письмо', action: 'onPrepareLetter' },
 };

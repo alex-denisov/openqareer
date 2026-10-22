@@ -74,4 +74,17 @@ describe('VacancyCompanyPathPanel (B549)', () => {
     await act(async () => {});
     expect(host.textContent).toContain('Холодный отклик');
   });
+
+  it('opens the letter on the circle the card names (G5 A4)', async () => {
+    const { companyPathActions } = await import('./VacancyCompanyPathPanel');
+    const onOpenLetter = vi.fn();
+    const target = { id: 'c-1' } as never;
+    const actions = companyPathActions(target, { onOpenLetter }, vi.fn());
+    actions.onPrepareLetter?.();
+    actions.onAskIntro?.();
+    expect(onOpenLetter.mock.calls).toEqual([
+      [target, 3],
+      [target, 2],
+    ]);
+  });
 });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { vacancyMoneySummary } from './VacancyMoneyCell';
 import type { VacancyRowProps } from './VacancyRow';
 import { companyPathActions } from './VacancyCompanyPathPanel';
 import { DetailTrustAlert } from './VacancyTrustAlert';
@@ -17,7 +18,6 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { pluralRu } from '../../../shared/pluralRu';
-import { formatCompensationCompact } from './vacancyCompensation';
 import { vacancyLevelLabel } from './VacancyScreenRowCells';
 import { VacancyScreenRequirementChips } from './VacancyScreenDetails';
 import { useVacancySummary } from './vacancyDetailApi';
@@ -88,6 +88,7 @@ function originLabel(item: MatchedVacancyItem): string {
 function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
   const { cluster, explanation } = item;
   const origin = originLabel(item);
+  const money = vacancyMoneySummary(item);
   const rows: readonly [string, string, boolean][] = [
     ['Уровень', vacancyLevelLabel(item), explanation.levelMatch === 'match'],
     [
@@ -95,7 +96,7 @@ function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
       cluster.canonicalLocation ?? (cluster.isRemote ? 'Удалённо' : 'Не указано'),
       !explanation.outsideGeography,
     ],
-    ['Деньги', formatCompensationCompact(cluster.salary), false],
+    ['Деньги', money.value, false],
   ];
   return (
     <section className="vacancy-push-group">
@@ -112,8 +113,8 @@ function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
         ))}
       </div>
       <p className="vacancy-push-foot">
-        {cluster.salary ? 'Зарплата указана в вакансии' : 'Зарплата в вакансии не указана'}
-        {origin ? `, ${origin}` : ''}.
+        {money.note}
+        {money.fromSource && origin ? `, ${origin}` : ''}.
       </p>
     </section>
   );
@@ -469,6 +470,7 @@ export function VacancyRowPush({
     ...base,
     onShowPaths: leave(base.onShowPaths),
     onPrepareLetter: rowProps.onOpenLetter ? leave(base.onPrepareLetter) : base.onPrepareLetter,
+    onAskIntro: rowProps.onOpenLetter ? leave(base.onAskIntro) : base.onAskIntro,
   };
   return (
     <VacancyMobilePush

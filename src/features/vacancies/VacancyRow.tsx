@@ -1,4 +1,5 @@
 import { VacancyFitEvidenceForItem } from './VacancyFitEvidence';
+import type { RowLetterOpen } from './useVacancyLetterRoute';
 import { useState, type FormEvent } from 'react';
 import { Archive, Check, Warning } from '@phosphor-icons/react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
@@ -58,7 +59,7 @@ export interface VacancyRowProps {
     vacancy: VacancyApplicationSnapshot,
   ) => Promise<ApplicationView>;
   readonly onOpenNetworking?: (vacancy: MatchedVacancyItem['cluster']) => void;
-  readonly onOpenLetter?: (vacancy: MatchedVacancyItem['cluster']) => void;
+  readonly onOpenLetter?: RowLetterOpen;
   readonly onOpenResponses?: () => void;
   readonly onOpenArchive?: () => void;
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;

@@ -66,6 +66,8 @@ interface CareerExpertPanelProps {
   subject?: CoachTurnSubject;
   subjectTitle?: string;
   initialPrompt?: string;
+  /** A new value sends `initialPrompt` once the session is ready (G5 A2). */
+  sendRequest?: number;
   initialUser: AuthUser | null;
   loadingSession?: boolean;
   initialSnapshot?: CandidateSnapshot;
@@ -93,6 +95,7 @@ export function CareerExpertPanel({
   subject,
   subjectTitle,
   initialPrompt,
+  sendRequest,
   initialUser,
   loadingSession = false,
   initialSnapshot,
@@ -286,6 +289,19 @@ export function CareerExpertPanel({
       active = false;
     };
   }, [user, stage]);
+  const handledSendRequest = useRef<number>();
+  useEffect(() => {
+    if (!sendRequest || handledSendRequest.current === sendRequest) return;
+    if (!user || loadingSnapshot || !initialPrompt) return;
+    handledSendRequest.current = sendRequest;
+    // The question goes to the feed, not the input; a failed send gives it back to retry.
+    setContent('');
+    void sendContent(initialPrompt).then((delivered) => {
+      if (!delivered) setContent((current) => current || initialPrompt);
+    });
+    // sendContent reads the latest context through refs; only a new request sends again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sendRequest, user, loadingSnapshot, initialPrompt]);
   async function handleLogin(event: React.FormEvent) {
     event.preventDefault();
     setSending(true);

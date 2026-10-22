@@ -90,10 +90,15 @@ test('B549 390: row → «Вакансия» → «Путь к компании�
   await expect(push).toHaveCount(0);
 });
 
-test('B549 «Обсудить» opens the consultant with the vacancy question', async ({
+test('B549 «Обсудить» sends the vacancy question to the consultant at once (G5 A2)', async ({
   page,
 }, testInfo) => {
   await openVacancies(page);
+  const sent: string[] = [];
+  // The reply is not needed: the question must leave in one action and show in the feed.
+  await page.route('**/api/v1/coach/turn**', (route) => {
+    sent.push(String(route.request().postDataJSON()?.content ?? ''));
+  });
   const item = await expandFirst(page);
   if (testInfo.project.name === 'mobile-390') {
     await page
@@ -107,6 +112,9 @@ test('B549 «Обсудить» opens the consultant with the vacancy question',
       .click();
   }
   await expect(page.locator('#career-expert-input')).toBeVisible();
-  await expect(page.locator('#career-expert-input')).toHaveValue(/^Почему «.+» подходит\?/u);
+  await expect.poll(() => sent.length).toBe(1);
+  expect(sent[0]).toMatch(/^Почему «.+» подходит\?/u);
+  await expect(page.locator('#career-expert-input')).toHaveValue('');
+  await expect(page.locator('#career-consultant-sheet')).toContainText(/Почему «.+» подходит\?/u);
   await shot(page, `app-discuss-${testInfo.project.name}`);
 });
