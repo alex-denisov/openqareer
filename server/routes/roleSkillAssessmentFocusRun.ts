@@ -1,4 +1,3 @@
-import type { CareerStrategy } from '../../shared/careerStrategy';
 import { titleKey } from '../../shared/poolRoleHypotheses';
 import type {
   RoleSkillAssessmentRun,
@@ -120,16 +119,16 @@ function focusContext(
 export async function startFocusedRun(
   deps: RouteDeps,
   candidateId: string,
-  strategy: CareerStrategy,
+  role: { readonly title: string; readonly version: number },
   focus: ValidatedFocus,
 ): Promise<FocusedStart> {
-  const selectedRole = strategy.current.role.title;
+  const selectedRole = role.title;
   const sample = await readFocusSample(deps, candidateId, selectedRole, focus);
   if ('state' in sample) return sample;
   const roleId = titleKey(sample.roleTitle);
   const now = new Date();
   const vacancies = toAssessmentVacancies(sample.matched, roleId, now);
-  const context = focusContext(sample, strategy.current.version, vacancies.length, now);
+  const context = focusContext(sample, role.version, vacancies.length, now);
   const plans = planFocusSkills(focus, vacancies, context.evidenceObservedAt);
   const covered = plans.flatMap((plan) => (plan.summary ? [plan.summary] : []));
   const lackingNotes = plans.filter((plan) => !plan.summary).map(lackingSkillNote);

@@ -96,10 +96,10 @@ afterEach(async () => {
   for (const app of apps.splice(0)) await app.close();
 });
 
-async function rig(poolSize = 8) {
+async function rig(poolSize = 8, withStrategy = true) {
   const store = createStore();
   const candidate = createCandidate(store);
-  store.saveCareerStrategy(candidate.id, STRATEGY);
+  if (withStrategy) store.saveCareerStrategy(candidate.id, STRATEGY);
   const pool = vacancies(poolSize);
   const deps = {
     config,
@@ -134,12 +134,12 @@ async function rig(poolSize = 8) {
   );
   registerRoleSkillAssessmentRoutes(app, deps);
   apps.push(app);
-  const start = (focus: unknown) =>
+  const start = (focus: unknown, role?: string) =>
     app.inject({
       method: 'POST',
       url: START_PATH,
       headers: { authorization: `Bearer ${candidate.accessToken}`, origin: ORIGIN },
-      payload: { consent: true, focus },
+      payload: { consent: true, ...(role ? { role } : {}), focus },
     });
   return { start };
 }
@@ -179,6 +179,14 @@ describe('role skill check focused on a vacancy (B552)', () => {
         (item: { assessmentCase: { skillName: string } }) => item.assessmentCase.skillName,
       ),
     ).toEqual(['Kafka']);
+  });
+
+  it('starts the vacancy quiz on the requested role when no «Стратегия» is chosen (block C B552)', async () => {
+    const { start } = await rig(8, false);
+    const response = await start({ vacancyId: 'fixture-vacancy-0', skills: ['Kafka'] }, ROLE_TITLE);
+    const data = response.json().data;
+    expect(data.state).toBe('run');
+    expect(data.run.roleTitle).toBe(ROLE_TITLE);
   });
 
   it('rejects a skill that is not a requirement of this vacancy', async () => {

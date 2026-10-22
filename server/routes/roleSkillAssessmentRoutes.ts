@@ -278,10 +278,9 @@ async function startRun(
   }
 
   if (focus) {
-    // A vacancy check (B552) stays on the role chosen in «Стратегия».
-    const strategy = deps.candidateStore.getCareerStrategy(candidate.id);
-    if (!strategy) return reply.send({ data: { state: 'role_not_selected' } });
-    const result = await startFocusedRun(deps, candidate.id, strategy, focus);
+    // A vacancy check (B552) runs on the resolved role: «Стратегия», else the role the
+    // vacancy was offered for — a candidate without «Стратегия» still gets the quiz.
+    const result = await startFocusedRun(deps, candidate.id, role, focus);
     if (result.state === 'run')
       deps.candidateStore.roleSkillAssessments.create(candidate.id, result.run);
     return reply.send({ data: result });
