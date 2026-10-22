@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BulkLlmClient, BulkLlmInput } from '../providers/bulkLlmClient';
 import { VacancyMechanicsRuntime } from './vacancyMechanicsRuntime';
 import { evaluateVacancyFit, type VacancyFitInput } from './vacancyFit';
+import { extractVacancyRequirements } from './vacancyRequirements';
 
 function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
   return {
@@ -15,6 +16,18 @@ function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
       region: { status: 'unknown', reason: 'region unknown' }, workFormat: { status: 'unknown', reason: 'format unknown' }, workAuthorization: { status: 'unknown', reason: 'authorization unknown' },
     },
   };
+}
+
+/**
+ * B510: with a model every description is labelled through it. Tests about the fit call wrap their
+ * mock: requirement calls get a labelled answer of the rule lines and are not counted.
+ */
+function fitClient(complete: (request: BulkLlmInput) => unknown): BulkLlmClient {
+  return { complete: async (request: BulkLlmInput) => {
+    if (request.task !== 'vacancy-requirements') return complete(request);
+    const lines = request.input.split('\n').map((line) => line.replace(/^-\s*/u, '').trim()).filter((line) => line && !/^requirements$/iu.test(line));
+    return { content: JSON.stringify({ requirements: lines.map((line) => ({ text: line, sourceQuote: line, origin: 'structural', label: line.split(/\s+/u).slice(0, 3).join(' '), kind: 'skill' })) }) };
+  } } as unknown as BulkLlmClient;
 }
 
 describe('background vacancy mechanics with real SQLite', () => {
@@ -42,6 +55,36 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(await runtime.runNext(null)).toBe(false);
     runtime.enqueue(source);
     expect(await runtime.runNext(null)).toBe(false);
+  });
+
+  it('extracts the fit job\'s own requirements in the same step instead of deferring it (B510)', async () => {
+    const runtime = setup();
+    // The vacancy's requirements are already queued behind other work: the fit must not wait for them.
+    const other = { ...input(), vacancyId: 'vacancy-other', description: 'Requirements\n- Go required' };
+    runtime.requirements.enqueue({ vacancyId: other.vacancyId, description: other.description }, { titleStrategyPriority: 5 });
+    const source = input();
+    runtime.fit.enqueue(source);
+    expect(await runtime.runNext(null)).toBe(true);
+    expect(runtime.view(source).state).toBe('ready');
+    expect(runtime.takeStats()).toMatchObject({ deferred: 0, completed: 1 });
+  });
+
+  it('upgrades rules-1 caches gradually: old chips stay, shown vacancies go first (B510)', async () => {
+    const runtime = setup(); const source = input();
+    const legacy = { ...source, vacancyId: 'vacancy-legacy' };
+    const background = { ...source, vacancyId: 'vacancy-background', description: 'Requirements\n- Go required' };
+    for (const item of [legacy, background]) {
+      const old = { vacancyId: item.vacancyId, description: item.description, extractorVersion: 'rules-1' };
+      runtime.requirements.enqueue(old);
+      await runtime.requirements.runNext('w', async (job) => ({ ...extractVacancyRequirements(job), extractorVersion: 'rules-1' }));
+    }
+    expect(runtime.requeueAfterParserUpgrade().labels).toBe(2);
+    expect(runtime.requeueAfterParserUpgrade().labels).toBe(0);
+    // The old cache still feeds the chips, labelled by the rules, and the shown vacancy jumps ahead.
+    expect(runtime.view(legacy).requirements[0]).toMatchObject({ text: 'TypeScript required', label: 'TypeScript' });
+    const order = runtime.database.prepare(`SELECT json_extract(input_json,'$.vacancyId') AS id, priority FROM vacancy_requirements_jobs
+      WHERE status='queued' ORDER BY priority DESC`).all();
+    expect(order).toEqual([{ id: 'vacancy-legacy', priority: 1.5 }, { id: 'vacancy-background', priority: 0.1 }]);
   });
 
   it('isolates candidate caches and invalidates after profile or description changes', async () => {
@@ -85,7 +128,7 @@ describe('background vacancy mechanics with real SQLite', () => {
       const requirement = JSON.parse(request.input).requirements[0];
       return { content: JSON.stringify({ assessments: [{ requirementId: requirement.id, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript services' }] }] }) };
     });
-    const client = { complete } as unknown as BulkLlmClient;
+    const client = fitClient(complete);
     runtime.enqueue(source);
     expect(complete).not.toHaveBeenCalled();
     await runtime.runNext(client);
@@ -130,9 +173,9 @@ describe('background vacancy mechanics with real SQLite', () => {
     } };
     const complete = vi.fn(async (request: BulkLlmInput) => ({ content: JSON.stringify({ assessments: [{ requirementId: JSON.parse(request.input).requirements[0].id, status: 'unknown', evidence: [] }] }) }));
     runtime.enqueue(source);
-    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    await runtime.runNext(fitClient(complete));
     expect(runtime.view(source)).toMatchObject({ state: 'ready', result: { status: 'unknown', coveragePercent: null } });
-    expect(await runtime.runNext({ complete } as unknown as BulkLlmClient)).toBe(false);
+    expect(await runtime.runNext(fitClient(complete))).toBe(false);
     expect(complete).toHaveBeenCalledTimes(1);
   });
 
@@ -144,7 +187,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     } };
     const complete = vi.fn().mockRejectedValue(new Error('candidate data must not leave'));
     runtime.enqueue(source);
-    await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    await runtime.runNext(fitClient(complete));
     expect(complete).not.toHaveBeenCalled();
     expect(runtime.view(source).state).toBe('failed');
   });
@@ -156,7 +199,7 @@ describe('background vacancy mechanics with real SQLite', () => {
       region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
     } };
     const complete = vi.fn().mockRejectedValue(new Error('provider_timeout'));
-    const client = { complete } as unknown as BulkLlmClient;
+    const client = fitClient(complete);
     vi.useFakeTimers({ toFake: ['Date'] });
     cleanup.push(() => vi.useRealTimers());
     vi.setSystemTime(Date.parse('2026-10-21T04:00:00.000Z'));
@@ -188,7 +231,7 @@ describe('background vacancy mechanics with real SQLite', () => {
     const runtime = setup(); const source = { ...input(), description: 'We build payments. 10+ years of Java.' };
     const quote = '10+ years of Java';
     const complete = vi.fn(async (request: BulkLlmInput) => request.task === 'vacancy-requirements'
-      ? { content: '```json\n' + JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, origin: 'job listing' }] }) + '\n```', model: 'deepseek/deepseek-v4-flash', provider: 'StreamLake', usage: { cost: 0, promptTokens: 1, cachedTokens: 0, completionTokens: 1 } }
+      ? { content: '```json\n' + JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, origin: 'job listing', label: 'Java', kind: 'experience' }] }) + '\n```', model: 'deepseek/deepseek-v4-flash', provider: 'StreamLake', usage: { cost: 0, promptTokens: 1, cachedTokens: 0, completionTokens: 1 } }
       : Promise.reject(new Error('provider_offline')));
     runtime.enqueue(source);
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
@@ -207,14 +250,18 @@ describe('background vacancy mechanics with real SQLite', () => {
     runtime.enqueue({ ...input(), vacancyId: 'b', description: 'We make other tools.' });
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    const beforeMidnight = runIds.length;
     vi.setSystemTime(Date.parse('2026-10-22T00:30:00.000Z'));
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
-    expect(runIds).toEqual(['vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-22']);
+    // A step may extract its own fit's requirements too (B510), so count runs, not calls.
+    expect(beforeMidnight).toBeGreaterThanOrEqual(2);
+    expect(new Set(runIds.slice(0, beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-21']));
+    expect(new Set(runIds.slice(beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-22']));
   });
 
   it('requeues model failures once at worker start and not on the next start (B522)', async () => {
     const runtime = setup();
-    expect(runtime.requeueAfterParserUpgrade()).toEqual({ requirements: 0, fit: 0 });
+    expect(runtime.requeueAfterParserUpgrade()).toEqual({ requirements: 0, fit: 0, labels: 0 });
     runtime.database.exec(`INSERT INTO vacancy_requirements_jobs(id,cache_key,input_json,status,attempts,last_error,created_at,updated_at)
       VALUES('j','k','{"vacancyId":"v","description":"d"}','failed',3,'requirements_model_invalid',1,1)`);
     expect(runtime.requeueAfterParserUpgrade().requirements).toBe(1);

@@ -232,6 +232,9 @@ function usePublishQuizOffer(
   }, [cluster.id, cluster.canonicalTitle, skillsKey]);
 }
 
+/** Requirements are parsed but none has a short name yet: the model labels arrive soon (B510). */
+const REQUIREMENTS_PENDING_TEXT = 'Требования разбираются — появятся в течение часа';
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -265,11 +268,14 @@ export function VacancyScreenRequirementChips({
         <VacancySkillChips
           matching={skillMatching}
           missing={skillMissing}
+          quotes={chips.quotes}
           cluster={cluster}
           onAddToProfile={onAddToProfile}
         />
       ) : (
-        <p className="vacancies-screen-no-requirements">Требования ещё не разобраны.</p>
+        <p className="vacancies-screen-no-requirements">
+          {fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.'}
+        </p>
       )}
       <p className="vacancies-screen-requirements-note">
         Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
@@ -282,11 +288,13 @@ export function VacancyScreenRequirementChips({
 function VacancySkillChips({
   matching,
   missing,
+  quotes,
   cluster,
   onAddToProfile,
 }: {
   readonly matching: readonly string[];
   readonly missing: readonly string[];
+  readonly quotes?: Readonly<Record<string, string>>;
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
@@ -296,13 +304,14 @@ function VacancySkillChips({
         <li className="vacancies-screen-skill-chip is-confirmed" key={`confirmed-${skill}`}>
           <CheckCircle size={14} aria-hidden="true" />
           <span className="career-sr-only">Подтверждено: </span>
-          <span>{skill}</span>
+          <span title={quotes?.[skill]}>{skill}</span>
         </li>
       ))}
       {missing.map((skill) => (
         <MissingVacancySkillChip
           key={`unconfirmed-${skill}`}
           skill={skill}
+          quote={quotes?.[skill]}
           cluster={cluster}
           onAddToProfile={onAddToProfile}
         />
@@ -313,10 +322,12 @@ function VacancySkillChips({
 
 function MissingVacancySkillChip({
   skill,
+  quote,
   cluster,
   onAddToProfile,
 }: {
   readonly skill: string;
+  readonly quote?: string;
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
@@ -326,7 +337,7 @@ function MissingVacancySkillChip({
       <span className="career-sr-only">Не проверено: </span>
     </>
   );
-  const label = <span>{skill}</span>;
+  const label = <span title={quote}>{skill}</span>;
   return (
     <li className="vacancies-screen-skill-chip is-unconfirmed">
       {onAddToProfile ? (

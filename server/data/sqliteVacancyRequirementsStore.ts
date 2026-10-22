@@ -5,6 +5,7 @@ import {
   vacancyRequirementsCacheKey,
   vacancyDescriptionHash,
   VACANCY_REQUIREMENTS_EXTRACTOR_VERSION,
+  LEGACY_REQUIREMENTS_EXTRACTOR_VERSIONS,
   type VacancyRequirementsInput,
   type VacancyRequirementsResult,
 } from '../domain/vacancyRequirements';
@@ -21,6 +22,8 @@ interface JobRow { id: string; input_json: string; lease_token: string; lease_un
 /** Public vacancy data only. Constructed by the background worker's own DB connection. */
 /** Bumped when a parser change makes earlier model failures worth one more try (B522: 2). */
 export const MECHANICS_REQUEUE_REVISION = 2;
+/** Below title strategy (0.5–1), shown pages (1.5) and fit dependencies (2): the background tail (B510). */
+export const LABEL_UPGRADE_PRIORITY = 0.1;
 const REQUEUE_PRIORITY = 0.5;
 
 export class SqliteVacancyRequirementsStore {
@@ -60,6 +63,36 @@ export class SqliteVacancyRequirementsStore {
       WHERE vacancy_id=? AND extractor_version=? ${descriptionHash ? 'AND description_hash=?' : ''} ORDER BY updated_at DESC,rowid DESC LIMIT 1`)
       .get(...(descriptionHash ? [vacancyId, extractorVersion, descriptionHash] : [vacancyId, extractorVersion])) as { result_json: string } | undefined;
     return row ? JSON.parse(row.result_json) as VacancyRequirementsResult : null;
+  }
+
+  /** Current labels first, then a cache from before them (B510): the upgrade is gradual. */
+  getLatestOrLegacy(vacancyId: string, descriptionHash?: string): VacancyRequirementsResult | null {
+    for (const version of [VACANCY_REQUIREMENTS_EXTRACTOR_VERSION, ...LEGACY_REQUIREMENTS_EXTRACTOR_VERSIONS]) {
+      const result = this.getLatest(vacancyId, descriptionHash, version);
+      if (result) return result;
+    }
+    return null;
+  }
+
+  /**
+   * B510: queue the current extractor for every description that only has a legacy cache, at the
+   * lowest priority, so shown pages and fit dependencies go first. Idempotent; the B522 budget
+   * still caps the daily spend.
+   */
+  enqueueLabelUpgrades(now = Date.now()): number {
+    const rows = this.db.prepare(`SELECT input_json FROM vacancy_requirements_jobs WHERE status='completed'`).all() as Array<{ input_json: string }>;
+    let queued = 0;
+    for (const row of rows) {
+      const input = JSON.parse(row.input_json) as VacancyRequirementsInput;
+      if (input.extractorVersion && input.extractorVersion === VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) continue;
+      const current = { vacancyId: input.vacancyId, ...(input.clusterId ? { clusterId: input.clusterId } : {}), description: input.description };
+      const key = vacancyRequirementsCacheKey(current);
+      if (this.db.prepare('SELECT 1 FROM vacancy_requirements_jobs WHERE cache_key=?').get(key)) continue;
+      if (this.db.prepare('SELECT 1 FROM vacancy_requirements_cache WHERE cache_key=?').get(key)) continue;
+      this.enqueue(current, { titleStrategyPriority: LABEL_UPGRADE_PRIORITY, now });
+      queued += 1;
+    }
+    return queued;
   }
 
   getByCluster(clusterId: string, descriptionHash: string, extractorVersion: string): VacancyRequirementsResult | null {

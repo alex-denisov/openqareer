@@ -73,6 +73,8 @@ interface CareerExpertPanelProps {
   onCommandPrepared?: () => void;
   onProposalCountChange?: (count: number) => void;
   onStartSkillCheck?: (focus: SkillCheckFocus) => void;
+  /** Opens «Карьера» when the skill check has no chosen role (B510). */
+  onChooseRole?: () => void;
   skillQuizBankRequest?: number;
   mobileExpanded?: boolean;
   onToggleMobileExpanded?: () => void;
@@ -98,6 +100,7 @@ export function CareerExpertPanel({
   onCommandPrepared,
   onProposalCountChange,
   onStartSkillCheck,
+  onChooseRole,
   skillQuizBankRequest = 0,
   mobileExpanded = false,
   onToggleMobileExpanded,
@@ -657,7 +660,7 @@ export function CareerExpertPanel({
             <ProfileFactsProposal onStart={(prompt) => void sendContent(prompt)} />
           ) : null}
           {stage === 'vacancies' && user && !loadingSnapshot && onStartSkillCheck ? (
-            <VacancyQuizProposal onStart={onStartSkillCheck} />
+            <VacancyQuizProposal onStart={onStartSkillCheck} onChooseRole={onChooseRole} />
           ) : null}
           {stage === 'vacancies' && user && !loadingSnapshot ? <CompaniesContactProposal /> : null}
           {stage === 'career' && user && !loadingSnapshot ? <CareerRoleOffer /> : null}

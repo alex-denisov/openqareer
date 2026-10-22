@@ -140,6 +140,9 @@ const TITLE_PARSE_PROGRESS_INTERVAL_MS = 5 * 60 * 1_000;
 /** Сколько тик может проходить уже размеченные окна подряд. */
 const TITLE_PARSE_IDLE_BUDGET_MS = 300;
 
+/** Как часто таймер проверяет, не пора ли пересчитать итоги каталога (B510). */
+const CATALOG_TOTALS_TICK_MS = 60 * 1_000;
+
 /** Столько строк проекции каталога за один такт: одна короткая транзакция. */
 export const CATALOG_STEP_CHUNK = 500;
 
@@ -286,14 +289,24 @@ export class MaintenanceWorker {
     return this.track(wave, 'multi-source-sync-failed', { synced: 0, failed: [], kept: 0 });
   }
 
-  /** Итоги каталога после волны (B485): не чаще CATALOG_TOTALS_REFRESH_MS. */
-  private refreshCatalogTotals(): void {
-    if (typeof this.engine.refreshCatalogTotals !== 'function') return;
+  /**
+   * Итоги каталога (B485): при старте, после волны и по таймеру, не чаще
+   * CATALOG_TOTALS_REFRESH_MS. На проде первая волна идёт часами (обход hh),
+   * поэтому одной привязки к волне мало (B510).
+   */
+  refreshCatalogTotals(): void {
+    if (this.stopped || typeof this.engine.refreshCatalogTotals !== 'function') return;
     const now = this.now();
     if (now - this.catalogTotalsAt < CATALOG_TOTALS_REFRESH_MS) return;
     this.catalogTotalsAt = now;
+    const startedAt = Date.now();
     try {
-      this.engine.refreshCatalogTotals(new Date(now).toISOString());
+      const totals = this.engine.refreshCatalogTotals(new Date(now).toISOString());
+      const clusters = (totals as { clusters?: unknown } | undefined)?.clusters;
+      this.log.info(
+        { clusters: typeof clusters === 'number' ? clusters : null, ms: Date.now() - startedAt },
+        'vacancy-catalog-totals-written',
+      );
     } catch (error: unknown) {
       this.log.warn(
         { reason: error instanceof Error ? error.message : 'unknown' },
@@ -612,8 +625,10 @@ export class MaintenanceWorker {
     if (this.linkedinPoolExecutor) {
       every(this.intervals.linkedinPoolExecutorMs, () => this.runLinkedinPoolExecutorStep());
     }
+    every(CATALOG_TOTALS_TICK_MS, () => this.refreshCatalogTotals());
     void this.runManualSyncWave();
     void this.runSyncWave();
+    this.refreshCatalogTotals();
   }
 
   /**

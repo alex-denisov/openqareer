@@ -5,15 +5,18 @@ import type { VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirementsWithFallback, vacancyDescriptionHash } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
+import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
 import type { BulkLlmClient } from '../providers/bulkLlmClient';
-import { measuredBulkClient } from './measuredBulkClient';
+import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
 
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
 const FIT_DEPENDENCY_PRIORITY = 2;
+/** A vacancy a candidate is looking at gets model labels before the background tail (B510). */
+const SHOWN_PAGE_PRIORITY = 1.5;
 
 /** The HTTP process enqueues/reads only. runNext is called by a separate worker. */
 export class VacancyMechanicsRuntime {
@@ -28,7 +31,13 @@ export class VacancyMechanicsRuntime {
     this.fit = new SqliteVacancyFitStore(this.database, new SealedText(encryptionKey));
   }
   view(input: VacancyFitInput): VacancyFitView {
-    const extracted = this.requirements.getLatest(input.vacancyId, vacancyDescriptionHash(input.description));
+    const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
+    // B510: a shown vacancy without model labels jumps ahead of the background upgrade.
+    if (input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
+      this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+    }
+    // Until the worker answers, the rules give the chips; the state below stays honest.
+    const shown = extracted ?? extractVacancyRequirements({ vacancyId: input.vacancyId, description: input.description });
     const resolved = { ...input, requirements: extracted?.requirements ?? [] };
     const result = this.fit.getCache(resolved);
     const queued = this.fit.getJobState(input) ?? this.fit.getJobState(resolved);
@@ -36,7 +45,7 @@ export class VacancyMechanicsRuntime {
       : extracted?.status === 'no_requirements' ? 'no_requirements' : result ? 'ready'
         : queued === 'failed' ? 'failed' : queued === 'retrying' ? 'retrying'
           : queued === 'pending' || queued === 'leased' ? 'processing' : 'not_requested';
-    return { state, requirements: resolved.requirements, ...(result ? { result } : {}) };
+    return { state, requirements: shown.requirements.map(labelVacancyRequirement), ...(result ? { result } : {}) };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
   enqueue(input: VacancyFitInput) {
@@ -48,8 +57,8 @@ export class VacancyMechanicsRuntime {
     return this.fit.enqueue(input);
   }
   /** Worker start: one requeue of model failures recorded under an older parser revision (B522). */
-  requeueAfterParserUpgrade(): { requirements: number; fit: number } {
-    return { requirements: this.requirements.requeueModelFailures(), fit: this.fit.requeueFailedOnce() };
+  requeueAfterParserUpgrade(): { requirements: number; fit: number; labels: number } {
+    return { requirements: this.requirements.requeueModelFailures(), fit: this.fit.requeueFailedOnce(), labels: this.requirements.enqueueLabelUpgrades() };
   }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {
@@ -64,24 +73,24 @@ export class VacancyMechanicsRuntime {
     const client = rawClient ? measuredBulkClient(rawClient, () => this.stats) : null;
     // B522 run budget is per run: a worker that never restarts is one run per UTC day, not one forever.
     const runId = `${workerId}:${new Date().toISOString().slice(0, 10)}`;
-    const extracted = await this.requirements.runNext(workerId, async (input) => {
-      const result = await extractVacancyRequirementsWithFallback(input,
-        client ? { extract: async ({ description, instructions }) => (await client.complete({
-          runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
-          input: minimizeModelText(description), maxTokens: 2048,
-        })).content } : undefined);
-      if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
-      else if (result.fallbackStatus === 'invalid') this.stats.requirementsInvalid += 1;
-      return result;
-    });
-    if (extracted) this.stats.requirementsDone += 1;
+    const extracted = await this.extractNextRequirements(client, runId, workerId);
     const job = this.fit.claim({ leaseMs: 300000 });
     if (!job) return Boolean(extracted);
     this.stats.claimed += 1;
     try {
-      const requirements = this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
+      const requirementsInput = { vacancyId: job.input.vacancyId, description: job.input.description };
+      let requirements = this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
       if (!requirements) {
-        const dependency = this.requirements.enqueue({ vacancyId: job.input.vacancyId, description: job.input.description }, { titleStrategyPriority: FIT_DEPENDENCY_PRIORITY });
+        // B510: extract this vacancy's requirements now instead of deferring. Fresh jobs are claimed
+        // first, so on prod every one of 442 queued fits was deferred once (~90 min) before any finished.
+        const dependency = this.requirements.enqueue(requirementsInput, { titleStrategyPriority: FIT_DEPENDENCY_PRIORITY, freshAt: Date.now() });
+        if (dependency.state === 'queued') {
+          await this.extractNextRequirements(client, runId, workerId);
+          requirements = this.requirements.getLatest(job.input.vacancyId, vacancyDescriptionHash(job.input.description));
+        }
+      }
+      if (!requirements) {
+        const dependency = this.requirements.enqueue(requirementsInput, { titleStrategyPriority: FIT_DEPENDENCY_PRIORITY });
         if (dependency.state === 'failed') this.recordFailure(this.fit.fail(job, { reason: 'requirements_failed' }), 'requirements_failed');
         else if (this.fit.defer(job) === 'failed') this.recordFailure(true, 'requirements_wait_timeout');
         else this.stats.deferred += 1;
@@ -105,6 +114,22 @@ export class VacancyMechanicsRuntime {
       this.settleFailure(job, error instanceof Error && /^[a-z0-9_:-]{1,80}$/iu.test(error.message) ? error.message : 'assessment_failed', job.attempts < 3);
     }
     return true;
+  }
+
+  /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
+  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string): Promise<boolean> {
+    const extracted = await this.requirements.runNext(workerId, async (input) => {
+      const result = await extractVacancyRequirementsWithFallback(input,
+        client ? { extract: async ({ description, instructions }) => (await client.complete({
+          runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
+          input: minimizeModelText(description), maxTokens: 2048,
+        })).content } : undefined);
+      if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
+      else if (result.fallbackStatus === 'invalid') this.stats.requirementsInvalid += 1;
+      return result;
+    });
+    if (extracted) this.stats.requirementsDone += 1;
+    return Boolean(extracted);
   }
 
   private settleFailure(job: Parameters<SqliteVacancyFitStore['fail']>[0], reason: string, retry: boolean): void {

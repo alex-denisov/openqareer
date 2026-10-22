@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, X } from '@phosphor-icons/react';
+import { Check, Compass, X } from '@phosphor-icons/react';
 import {
   getCurrentRoleSkillAssessment,
   type RoleSkillAssessmentCurrent,
@@ -22,17 +22,20 @@ export interface SkillCheckFocus {
 type Availability =
   | { readonly kind: 'loading' }
   | { readonly kind: 'available' }
-  | { readonly kind: 'unavailable'; readonly reason: string };
+  | { readonly kind: 'unavailable'; readonly reason: string; readonly needsRole?: boolean };
 
 /** An honest reason instead of «Начать» when the skill check cannot cover these skills. */
 export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Availability {
   // A role check that is ready or running can take the vacancy's skills; whether each skill
   // has enough data is answered honestly on start (B552).
   switch (current.state) {
+    // The check needs a role chosen in «Карьера»; roles of the vacancy search do not count (B510).
     case 'role_not_selected':
       return {
         kind: 'unavailable',
-        reason: 'Проверка навыков откроется после выбора целевой роли.',
+        reason:
+          'Проверка навыков строится по целевой роли из раздела «Карьера», а там она ещё не выбрана.',
+        needsRole: true,
       };
     case 'source_unavailable':
       return {
@@ -85,8 +88,10 @@ function useSkillCheckAvailability(skills: readonly string[]): Availability {
  */
 export function VacancyQuizProposal({
   onStart,
+  onChooseRole,
 }: {
   readonly onStart: (focus: SkillCheckFocus) => void;
+  readonly onChooseRole?: () => void;
 }) {
   const offer = useVacancyQuizOffer();
   const [declined, setDeclined] = useState(0);
@@ -96,6 +101,7 @@ export function VacancyQuizProposal({
       key={`${offer.vacancyId}:${declined}`}
       offer={offer}
       onStart={onStart}
+      onChooseRole={onChooseRole}
       onDecline={() => {
         dismissQuizOffer(offer.vacancyId, offer.skills);
         setDeclined((count) => count + 1);
@@ -107,10 +113,12 @@ export function VacancyQuizProposal({
 function VacancyQuizProposalCard({
   offer,
   onStart,
+  onChooseRole,
   onDecline,
 }: {
   readonly offer: VacancyQuizOffer;
   readonly onStart: (focus: SkillCheckFocus) => void;
+  readonly onChooseRole?: () => void;
   readonly onDecline: () => void;
 }) {
   const skills = offer.skills.slice(0, 2);
@@ -142,11 +150,29 @@ function VacancyQuizProposalCard({
             Начать
           </button>
         ) : null}
+        <ChooseRoleButton availability={availability} onClick={onChooseRole} />
         <button type="button" className="career-quiet-button" onClick={onDecline}>
           <X size={16} aria-hidden="true" />
           Не сейчас
         </button>
       </div>
     </section>
+  );
+}
+
+/** «Выбрать роль» leads to «Карьера», where the skill check's target role is chosen (B510). */
+function ChooseRoleButton({
+  availability,
+  onClick,
+}: {
+  readonly availability: Availability;
+  readonly onClick?: () => void;
+}) {
+  if (availability.kind !== 'unavailable' || !availability.needsRole || !onClick) return null;
+  return (
+    <button type="button" className="career-quiet-button career-inline-ok" onClick={onClick}>
+      <Compass size={16} aria-hidden="true" />
+      Выбрать роль
+    </button>
   );
 }

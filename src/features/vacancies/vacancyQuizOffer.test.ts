@@ -43,6 +43,24 @@ function view(matched: readonly string[]): VacancyFitView {
 }
 
 describe('quizOfferSkills', () => {
+  it('offers only labelled skills, never experience or a sentence (B510)', () => {
+    const long = 'Proven track record as a senior engineering leader with ownership of direction';
+    const offer = {
+      state: 'ready',
+      requirements: [
+        { ...requirement('a', long, 'critical'), skill: false },
+        { ...requirement('b', '10+ years in leadership roles', 'critical', 'experience') },
+        {
+          ...requirement('c', 'Deep Kafka experience in production', 'high'),
+          label: 'Kafka',
+          skill: true,
+        },
+      ],
+      result: { assessments: [] },
+    } as unknown as VacancyFitView;
+    expect(quizOfferSkills(offer)).toEqual(['Kafka']);
+  });
+
   it('names up to two unconfirmed skills, most important first, without languages', () => {
     expect(quizOfferSkills(view(['r1']))).toEqual(['Kafka', 'Kubernetes']);
   });

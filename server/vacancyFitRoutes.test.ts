@@ -121,7 +121,8 @@ describe('candidate vacancy fit HTTP boundary', () => {
       expect(validate(source)).toBe(false);
       const complete = vi.fn().mockRejectedValue(new Error('revoked data must not leave'));
       await worker.runNext({ complete } as unknown as BulkLlmClient);
-      expect(complete).not.toHaveBeenCalled();
+      // B510: the public vacancy text may still be labelled; candidate data never leaves.
+      expect(complete.mock.calls.filter(([request]) => request.dataClass !== 'public')).toEqual([]);
       expect(worker.view(source).result).toBeUndefined();
     } finally { worker.close(); }
   });

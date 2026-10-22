@@ -23,4 +23,10 @@ describe('skillCheckAvailability', () => {
     } as const;
     expect(skillCheckAvailability(current).kind).toBe('unavailable');
   });
+
+  it('names where the role is chosen and offers the way there (B510)', () => {
+    const availability = skillCheckAvailability({ state: 'role_not_selected' });
+    expect(availability).toMatchObject({ kind: 'unavailable', needsRole: true });
+    expect(availability.kind === 'unavailable' && availability.reason).toContain('«Карьера»');
+  });
 });

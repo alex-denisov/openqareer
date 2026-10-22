@@ -762,6 +762,20 @@ describe('MaintenanceWorker catalog totals (B485)', () => {
     expect(refresh).toHaveBeenNthCalledWith(1, '2026-10-07T06:12:00.000Z');
   });
 
+  it('итоги каталога пишутся без ожидания волны и попадают в журнал (B510)', () => {
+    const now = Date.parse('2026-10-22T00:10:00.000Z');
+    const log = silentLog();
+    const refresh = vi.fn().mockReturnValue({ clusters: 710_000 });
+    const engine = { refreshCatalogTotals: refresh } as unknown as ConstructorParameters<
+      typeof MaintenanceWorker
+    >[0]['engine'];
+    const worker = new MaintenanceWorker({ engine, log, now: () => now });
+    worker.refreshCatalogTotals();
+    worker.refreshCatalogTotals();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(log.entries).toEqual([{ level: 'info', msg: 'vacancy-catalog-totals-written' }]);
+  });
+
   it('сбой пересчёта итогов пишется в журнал и не роняет волну', async () => {
     const log = silentLog();
     const engine = {
