@@ -6,6 +6,7 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { VacancyMobilePush, type VacancyMobilePushProps } from './VacancyMobilePush';
 import * as api from './vacancyLetterApi';
 import * as pitchApi from './vacancyPitchApi';
+import * as recruiterApi from './recruiterContactsApi';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -96,6 +97,17 @@ describe('VacancyMobilePush (B549)', () => {
     const onWriteContact = vi.fn();
     const onEditContactDraft = vi.fn();
     const message = 'Ирина, добрый день! Увидел вакансию Head of Engineering.';
+    vi.spyOn(recruiterApi, 'getRecruiterContacts').mockResolvedValue({
+      contacts: [
+        {
+          id: 'r1',
+          fullName: 'Мария Синтетова',
+          roleTitle: 'IT Recruiter',
+          companyName: 'Вектор Банк',
+        },
+      ] as never,
+      job: null,
+    });
     vi.spyOn(pitchApi, 'requestVacancyPitch').mockResolvedValue({
       vacancyId: 'v1',
       emailPitch: { subject: 'Head of Engineering', body: message },
@@ -131,6 +143,7 @@ describe('VacancyMobilePush (B549)', () => {
     // G5 R3: круг 1 по макету — черновик от консультанта, одобрение и карандаш, без отправки.
     await act(async () => {});
     expect(document.body.textContent).toContain('Черновик сообщения · Ирина Захарова');
+    expect(document.body.textContent).toContain('РекрутерМария СинтетоваIT Recruiter, Вектор Банк');
     expect(document.body.textContent).toContain(message);
     expect(document.body.textContent).toContain('Ничего не отправится без вашего одобрения.');
     expect(button('Одобрить и отправить').disabled).toBe(false);
