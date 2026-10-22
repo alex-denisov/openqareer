@@ -372,7 +372,7 @@ export function SkillOverview({
       </ul>
       <p className="career-role-assessment-source">
         <Clock size={14} aria-hidden="true" /> Сверка с требованиями {current.sampleSize} свежих
-        вакансий · обновлено {formatDate(current.evidenceObservedAt)}.
+        вакансий · обновлено {formatDate(current.evidenceObservedAt)}
       </p>
       <p>
         Навык без кейса останется непроверенным. Роль откроется, когда подтверждены ключевые навыки.
@@ -407,7 +407,7 @@ export function RunSkillOverview({
       </ul>
       <p className="career-role-assessment-source">
         <Clock size={14} aria-hidden="true" /> Сверка требований {run.sampleSize} свежих вакансий ·
-        обновлено {formatDate(run.evidenceObservedAt)}.
+        обновлено {formatDate(run.evidenceObservedAt)}
       </p>
     </section>
   );
