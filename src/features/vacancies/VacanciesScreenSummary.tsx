@@ -61,14 +61,14 @@ export function VacanciesScreenSummary({
   const catalogCount =
     catalogSummary?.catalogTotal !== undefined ? catalogSummary.roleLevelMatches : poolTotal;
   const asOf = catalogSnapshotLabel(catalogSummary?.observedAt);
-  const shownLabel = poolComplete ? 'Показано' : 'Загружено';
 
   return (
     <section className="vacancies-search-summary" aria-label="Сводка подбора">
       <span className="vacancies-summary-count">{countLabel(catalogCount)}</span>{' '}
       <p className="vacancies-summary-copy">
-        {summaryHeadline(catalogSummary)} {shownLabel} {countLabel(shownCount)} из{' '}
+        {summaryHeadline(catalogSummary)} Показано {countLabel(shownCount)} из{' '}
         {countLabel(filteredTotal)} с вашими условиями
+        {poolComplete ? null : ' · загружаем остальные'}
         <span className="vacancies-summary-provenance">
           {' · '}
           {catalogProvenance(catalogSummary, asOf)}

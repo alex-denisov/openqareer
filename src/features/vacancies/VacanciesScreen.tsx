@@ -23,7 +23,8 @@ import {
   VacanciesFilters,
   type VacanciesScreenState,
 } from './VacanciesScreenFilters';
-import { VacanciesMainBody } from './VacanciesScreenResults';
+import { mapViewActions } from './vacancyMapScreenActions';
+import { VacanciesMainBody, savedCardRenderer } from './VacanciesScreenResults';
 import { CompaniesAndPeopleScreen } from './CompaniesAndPeopleScreen';
 import { CompanySelectionFilterChip } from './CompaniesAndPeopleControls';
 import { OpportunityTabs, type OpportunityTab } from './VacanciesScreenSections';
@@ -57,7 +58,7 @@ export interface VacanciesPathIndicator {
 export interface VacanciesScreenProps {
   readonly facets?: MatchedVacancyFacets;
   readonly initialFilters?: VacanciesScreenState;
-  /** `false` — подборка прочитана не целиком: счётчик говорит «Загружено». */
+  /** `false` — подборка прочитана не целиком: «Показано N из M · загружаем остальные». */
   readonly poolComplete?: boolean;
   readonly onFiltersChange?: (state: VacanciesScreenState) => void;
   readonly matched: readonly MatchedVacancyItem[];
@@ -347,6 +348,7 @@ function resetVacancyFilters(board: ReturnType<typeof useVacanciesScreenBoard>) 
     sources: [],
     remoteOnly: false,
     selectedCity: undefined,
+    selectedCities: [],
     selectedLocations: [],
     locationRemote: false,
     locationSearch: '',
@@ -462,6 +464,7 @@ function screenFilteredCount(
   const salaryFilter = state.salaryMinimum !== undefined || state.salaryMaximum !== undefined;
   const hasClientFilters =
     state.selectedCity !== undefined ||
+    Boolean(state.selectedCities?.length) ||
     salaryFilter ||
     Boolean(state.companyName) ||
     Boolean(state.selectedLocations?.length || state.locationRemote) ||
@@ -481,7 +484,7 @@ function ResultCount({
   readonly onToggleView: () => void;
   readonly viewMode: 'list' | 'map';
 }) {
-  const label = input.poolComplete === false ? 'Загружено' : 'Показано';
+  const label = 'Показано';
   const poolTotal = input.facets?.total;
   const ariaCount =
     poolTotal === undefined ? `${label} ${shown}` : `${label} ${shown} из ${poolTotal}`;
@@ -516,11 +519,10 @@ function mainBodyProps(
     viewMode,
     onResetFilters: resetFilters,
     selectedCity: board.state.selectedCity,
-    // B446-g4: город на карте открывает список, отфильтрованный по этому городу.
-    onSelectCity: (city?: string) => {
-      board.setState((prev: VacanciesScreenState) => ({ ...prev, selectedCity: city }));
-      if (city) screenState.setViewMode('list');
-    },
+    selectedCities: board.state.selectedCities,
+    ...mapViewActions(board.setState, screenState.setViewMode),
+    onShowList: () => screenState.setViewMode('list'),
+    onOpenExpert: input.onOpenExpert ? () => input.onOpenExpert?.('vacancies') : undefined,
     listProps: buildListProps(input, screenState, onOpenLetter),
   };
 }
@@ -664,6 +666,7 @@ function OpportunityContent({
       <SavedVacanciesPanel
         collections={screenState.collections}
         onOpenSelection={() => screenState.chooseTab('selection')}
+        renderCard={savedCardRenderer(buildListProps(input, screenState, onOpenLetter))}
       />
     );
   }
@@ -730,8 +733,11 @@ function VacanciesScreenFrame({
   return (
     <div className="vacancies-screen">
       <VacanciesScreenHeader input={input} />
-      {activeTab === 'selection' ? (
-        <VacanciesFilterContent input={input} screenState={screenState} />
+      {/* B446-g4: на «Сохранённых» карточка сводки с фильтрами остаётся (макет 4, кадр sv). */}
+      {activeTab !== 'companies' ? (
+        <div className={`vacancies-filter-host${activeTab === 'saved' ? ' is-saved-tab' : ''}`}>
+          <VacanciesFilterContent input={input} screenState={screenState} />
+        </div>
       ) : null}
       <div className="vacancies-tabs-row">
         <OpportunityTabs

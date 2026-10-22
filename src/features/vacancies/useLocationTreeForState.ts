@@ -26,6 +26,7 @@ export function useLocationTreeBuilder(
         locationRemote: false,
         locationSearch: '',
         selectedCity: undefined,
+        selectedCities: [],
       };
       return buildLocationTree(
         filterByScreenState(matched, withoutLocation, '').map((item) => ({

@@ -197,18 +197,22 @@ function useCompanyRecords(input: VacancyCollectionInput, reloadToken: number) {
   const [companyByName, setCompanyByName] = useState<
     ReadonlyMap<string, CandidateCompanyOpportunity | null>
   >(new Map());
+  // B446-g4: ключ — имена компаний, а не ссылка на массив: подборка пересобирается при
+  // догрузке, и отменённый эффект не успевал записать число компаний.
+  const namesKey = JSON.stringify(uniqueVisibleCompanyNames(input.matched));
   useEffect(() => {
     let active = true;
     setLoading(true);
-    const names = uniqueVisibleCompanyNames(input.matched);
+    const names = JSON.parse(namesKey) as string[];
     void getCandidateCompanyPage({ offset: 0 }).then(async (page) => {
+      if (active) setCount(page.total);
       const matches = await loadCompanyMatches(names, page.items);
-      if (active) { setCount(page.total); setCompanyByName(matches); }
+      if (active) setCompanyByName(matches);
     }).catch(() => {
       if (active) setCount(undefined);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [input.matched, reloadToken]);
+  }, [namesKey, reloadToken]);
   return { count, loading, companyByName, setCompanyByName };
 }
 

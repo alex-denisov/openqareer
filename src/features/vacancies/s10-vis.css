@@ -474,16 +474,19 @@
     border-block-start: var(--career-border-width) solid var(--career-line);
   }
 
+  /* Поле под закладку — только у заголовка: нижняя строка (деньги и статус) идёт до края. */
   .vacancies-screen-row-trigger {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--career-space-1) var(--career-space-3);
+    inline-size: 100%;
     min-block-size: 0;
-    padding: 0 var(--career-target-min) 0 0;
+    padding: 0 var(--career-space-1) 0 0;
   }
 
   .vacancies-screen-cell--role {
     grid-column: 1 / -1;
     grid-row: 1;
+    padding-inline-end: var(--career-target-min);
   }
 
   .vacancies-screen-cell--level,
@@ -497,10 +500,16 @@
     grid-row: 2;
   }
 
+  /* Деньги слева, статус прижат вправо отдельной колонкой — не наезжают, деньги переносятся. */
+  .vacancies-screen-cell--salary {
+    min-inline-size: 0;
+  }
+
   .vacancies-screen-cell--status {
     display: inline-flex;
-    grid-column: 1 / -1;
+    grid-column: 2;
     grid-row: 2;
+    align-self: start;
     align-items: center;
     justify-self: end;
     gap: var(--career-space-1);
@@ -692,4 +701,47 @@
 
 .vacancy-path-status p {
   margin: 0;
+}
+
+/* B446-g4: на 1440 сохранение — звезда, на 390 — закладка без плашки (mock-390-base). */
+.vacancy-save-icon-bookmark {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .vacancy-save-icon-star {
+    display: none;
+  }
+
+  .vacancy-save-icon-bookmark {
+    display: inline;
+  }
+
+  .vacancies-screen-row-actions
+    .vacancy-collection-actions
+    > .career-vacancy-action[data-vacancy-action='save'] {
+    border-color: transparent;
+    background: transparent;
+    color: var(--career-text-soft);
+  }
+
+  .vacancies-screen-row-actions
+    .vacancy-collection-actions
+    > .career-vacancy-action[data-vacancy-action='save'][aria-pressed='true'] {
+    background: transparent;
+    color: var(--career-accent);
+  }
+
+  /* Процент соответствия на 390 — только на push-экране вакансии. */
+  .vacancies-screen-cell--role .vacancy-fit-inline {
+    display: none;
+  }
+
+  /* «Показать ещё 20» — широкая нейтральная капсула светлее фона (mock-390-base). */
+  .vacancies-screen-footer .companies-people-load-more {
+    border-color: transparent;
+    border-radius: var(--career-radius-pill);
+    color: var(--career-text);
+    background: var(--career-surface);
+  }
 }

@@ -43,13 +43,13 @@ afterEach(() => {
   }
 });
 
-function createRepository() {
+function createRepository(nowProvider: () => Date = () => now) {
   const directory = mkdtempSync(join(tmpdir(), 'openqareer-linkedin-executor-'));
   const repository = new SqliteLinkedinPoolRepository({
     databasePath: join(directory, 'pool.db'),
     encryptionKey,
     runtimeRoot: join(directory, 'runtime'),
-    now: () => now,
+    now: nowProvider,
   });
   resources.push({ repository, directory });
   return repository;
@@ -766,6 +766,34 @@ describe('LinkedinPoolCompanyPageExecutor persistent profile (B373)', () => {
     expect(fake.context.addCookies).not.toHaveBeenCalled();
     expect(fake.context.close).toHaveBeenCalled();
     expect(existsSync(join(profileDirectory, '.lock'))).toBe(false);
+  });
+
+  it('updates the account heartbeat after a successful provider page read', async () => {
+    let currentNow = now;
+    const nowProvider = () => currentNow;
+    const repository = createRepository(nowProvider);
+    const account = await createReadyAccount(repository, 'pool-heartbeat@example.test');
+    seedCompany(repository);
+    const fake = fakeBrowser();
+    const executor = new LinkedinPoolCompanyPageExecutor({
+      config: enabledConfig(account.id),
+      repository,
+      database: repository.getDatabase(),
+      browserFactory: async () => fake.browser as never,
+      notifyOwner: async () => ({ status: 'disabled' }),
+      now: nowProvider,
+      wait: async () => undefined,
+      decide: () => ({ status: 'run' }),
+    });
+    const before = repository.findAccount(account.id);
+    const heartbeatAt = new Date(now.getTime() + 5_000);
+    currentNow = heartbeatAt;
+
+    await expect(executor.runStep()).resolves.toMatchObject({ status: 'processed' });
+
+    const after = repository.findAccount(account.id);
+    expect(after?.lastHeartbeatAt).toBe(heartbeatAt.toISOString());
+    expect(after?.revision).toBe(before?.revision);
   });
 
   it('waits while a browser login holds the profile', async () => {

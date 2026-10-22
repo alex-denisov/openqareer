@@ -203,10 +203,10 @@ describe('VacanciesScreen (B250)', () => {
     expect(html).not.toContain('Отклик отмечен');
   });
 
-  it('says «Загружено N из M» while the pool is still incomplete (B338)', () => {
+  it('says «Показано N из M · загружаем остальные» while the pool is still incomplete (B338, B446-g4)', () => {
     const html = render({ total: 1, poolComplete: false });
-    expect(html).toContain('Загружено');
-    expect(html).not.toContain('Показано');
+    expect(html).toContain('загружаем остальные');
+    expect(html).not.toContain('Загружено');
   });
 
   it('uses the vacancies title without the campaign eyebrow and keeps the total hint', () => {
@@ -256,7 +256,8 @@ describe('VacanciesScreen (B250)', () => {
       matched: [matchedItem('c-1', 'VP Technology Ops'), matchedItem('c-2', 'COO')],
     });
     expect(html).not.toContain('Все роли кампании');
-    expect(html).toContain('vacancies-mobile-filter-badge">0<');
+    // B446-g4: роли и регионы кампании считаются заданными фильтрами (макет 4: «Фильтры 5»).
+    expect(html).toMatch(/vacancies-mobile-filter-badge">[1-9]</u);
   });
 
   it('does not render without a campaign or a level', () => {

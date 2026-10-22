@@ -12,6 +12,7 @@ import {
   saveRoleAssessmentDraft,
   skipRoleAssessmentCase,
   startRoleSkillAssessment,
+  type RoleSkillAssessmentFocusRequest,
 } from './roleSkillAssessmentApi';
 import {
   getActiveAssessmentCase,
@@ -30,6 +31,7 @@ export class RoleSkillAssessmentActions {
     private readonly requestRef: RequestRef,
     private readonly busyRef: { current: boolean },
     private readonly roleTitle?: string,
+    private readonly focus?: RoleSkillAssessmentFocusRequest,
   ) {}
 
   get run() {
@@ -71,7 +73,10 @@ export class RoleSkillAssessmentActions {
     this.setBusy(true);
     this.patch({ error: undefined });
     try {
-      this.dispatch({ type: 'current', current: await startRoleSkillAssessment(this.roleTitle) });
+      this.dispatch({
+        type: 'current',
+        current: await startRoleSkillAssessment(this.roleTitle, this.focus),
+      });
       this.patch({ consent: false });
     } catch (reason) {
       this.patch({ error: apiErrorMessage(reason, 'Не удалось начать проверку.') });

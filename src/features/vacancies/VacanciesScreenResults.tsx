@@ -4,6 +4,7 @@ import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
 import { VacancyFitSortControl } from './VacancyFitSort';
 import type { ListContentProps } from './VacanciesScreen';
 import { BulkCompanyWantButton } from './BulkCompanyWantButton';
+import type { SavedCardRenderer } from './SavedVacanciesPanel';
 import { catalogSnapshotLabel } from './VacanciesScreenSummary';
 import {
   VacanciesEmptyFilterState,
@@ -25,7 +26,14 @@ interface VacanciesMainBodyProps {
   readonly onResetFilters: () => void;
   readonly listProps: ListContentProps;
   readonly selectedCity?: string;
+  readonly selectedCities?: readonly string[];
+  readonly onShowCities?: (cities: readonly string[]) => void;
+  readonly onBackToMap?: () => void;
   readonly onSelectCity: (city?: string) => void;
+  /** B553: карта недоступна — переход к списку. */
+  readonly onShowList?: () => void;
+  /** B553: консультант из шапки push-экрана «Карта» (390). */
+  readonly onOpenExpert?: () => void;
 }
 
 function VacanciesTableHeader({
@@ -100,8 +108,9 @@ function VacanciesListContent(props: ListContentProps) {
       </ul>
       <footer className="vacancies-screen-footer" aria-label="Навигация по подборке вакансий">
         <p className="vacancies-screen-page-count" aria-live="polite">
-          {props.poolComplete === false ? 'Загружено' : 'Показано'} {props.items.length} из{' '}
-          {props.total || props.items.length}
+          {/* B446-g4: показанные из выдачи с условиями; догрузка пула — отдельной пометкой. */}
+          Показано {props.items.length} из {props.total || props.items.length}
+          {props.poolComplete === false ? ' · загружаем остальные' : null}
           <span className="vacancies-screen-catalog-date">
             {catalogDate ? `. Каталог на ${catalogDate}.` : '. Дата каталога неизвестна.'}
           </span>
@@ -144,6 +153,9 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
         total={props.total}
         selectedCity={props.selectedCity}
         onSelectCity={props.onSelectCity}
+        onShowList={props.onShowList}
+        onShowCities={props.onShowCities}
+        onOpenExpert={props.onOpenExpert}
       />
     );
   }
@@ -151,9 +163,21 @@ export function VacanciesMainBody(props: VacanciesMainBodyProps) {
     <>
       <VacancyCityFilterBar
         selectedCity={props.selectedCity}
+        selectedCities={props.selectedCities}
         onClear={() => props.onSelectCity(undefined)}
+        onBackToMap={props.selectedCities?.length ? props.onBackToMap : undefined}
       />
       <VacanciesListContent {...props.listProps} />
     </>
+  );
+}
+
+/** B446-g4: «раскрыть» в «Сохранённых» — та же строка подборки, раскрытая; её шеврон сворачивает. */
+export function savedCardRenderer(listProps: ListContentProps): SavedCardRenderer {
+  return (item, onCollapse) => (
+    <VacancyScreenRow
+      item={item}
+      props={{ ...listProps, selectedId: item.cluster.id, onToggleSelect: onCollapse }}
+    />
   );
 }

@@ -1,3 +1,4 @@
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 /** B550: фильтр, сортировка и подписи вкладки «Сохранённые» (макет 4, кадр sv). */
 
 export interface SavedVacancySalary {
@@ -26,6 +27,8 @@ export interface SavedVacancyEntry {
   readonly company: string;
   readonly savedAt: string;
   readonly state?: SavedVacancyState;
+  /** B446-g4: состояние ещё читается — «нет в каталоге» говорить рано. */
+  readonly pending?: boolean;
 }
 
 export type SavedStateFilter = 'all' | 'open' | 'closed';
@@ -106,4 +109,52 @@ export function savedClosedLabel(state: SavedVacancyState | undefined): string |
   if (!state?.closed) return undefined;
   const date = formatShortDate(state.closedAt);
   return date ? `закрыта на площадке ${date}` : 'закрыта на площадке';
+}
+
+export interface SavedVacancyRef {
+  readonly clusterId?: string;
+  readonly title: string;
+  readonly company: string;
+  readonly url?: string;
+}
+
+/**
+ * B446-g4: сохранённая вакансия из каталога раскрывается той же карточкой, что в
+ * подборке. Карточка строится из того, что сервер знает о ней; требования, описание
+ * и соответствие карточка дочитывает сама. Вне каталога карточки нет.
+ */
+export function savedVacancyItem(
+  ref: SavedVacancyRef,
+  state: SavedVacancyState | undefined,
+): MatchedVacancyItem | undefined {
+  if (!ref.clusterId || !state?.inCatalog) return undefined;
+  return {
+    cluster: {
+      id: ref.clusterId,
+      canonicalTitle: ref.title,
+      canonicalCompany: ref.company,
+      ...(state.location ? { canonicalLocation: state.location } : {}),
+      isRemote: Boolean(state.isRemote),
+      ...(state.salary ? { salary: { ...state.salary } } : {}),
+      descriptionSummary: '',
+      skills: [],
+      primaryUrl: ref.url ?? '',
+      sources: [],
+      firstObservedAt: '',
+      lastSeenAt: '',
+      status: state.closed ? 'archived' : 'active',
+      vacanciesCount: 1,
+    },
+    explanation: {
+      clusterId: ref.clusterId,
+      roleMatch: 'none',
+      levelMatch: state.levelMatch ?? 'unknown',
+      ...(state.vacancyLevel ? { vacancyLevel: state.vacancyLevel } : {}),
+      outsideGeography: Boolean(state.outsideGeography),
+      matchingPoints: [],
+      missingPoints: [],
+      summary: '',
+      calculatedAt: '',
+    },
+  };
 }

@@ -1245,15 +1245,17 @@ async function verifyViewport(browser, baseUrl, viewport) {
   await landingHeading.waitFor({ state: 'visible', timeout: 2_000 });
   const shellMs = Math.round(performance.now() - startedAt);
 
+  // One read: a second locator call can land after hydration removed the shell (B510).
+  const bootstrapShell = await page.evaluate(() => {
+    const shells = document.querySelectorAll('[data-bootstrap-shell="true"]');
+    return { count: shells.length, inert: shells[0]?.hasAttribute('inert') ?? false };
+  });
   assert(
-    (await page.locator('[data-bootstrap-shell="true"]').count()) === 1,
+    bootstrapShell.count === 1,
     `${viewport.name}: shared shell was not prerendered before JavaScript`,
   );
   // PRB-044: до гидратации ссылка «Войти» — обычная ссылка и ничем не накрыта.
-  assert(
-    (await page.locator('[data-bootstrap-shell="true"]').getAttribute('inert')) === null,
-    `${viewport.name}: landing links are inert before hydration`,
-  );
+  assert(!bootstrapShell.inert, `${viewport.name}: landing links are inert before hydration`);
   assert(
     (await page.getByRole('heading', { level: 1, name: LANDING_HEADING }).count()) === 1,
     `${viewport.name}: landing page heading is absent from initial HTML`,
@@ -1441,8 +1443,12 @@ async function verifyViewport(browser, baseUrl, viewport) {
   if ((await firstRowToggle.getAttribute('aria-expanded')) !== 'true') {
     await firstRowToggle.click();
   }
-  await page.locator('.vacancies-detail-panel').waitFor();
-  await page.getByRole('button', { name: 'Откликнуться' }).click();
+  // B549 / макет 4: на 390 открытая вакансия — push-экран, а не панель в строке.
+  const openedVacancy = page.locator(
+    viewport.width <= 760 ? '.vacancy-push' : '.vacancies-detail-panel',
+  );
+  await openedVacancy.waitFor();
+  await openedVacancy.getByRole('button', { name: 'Откликнуться' }).click();
   assert(
     page.__recordedApplications.length === 0,
     `${viewport.name}: отклик отмечен без подтверждения`,

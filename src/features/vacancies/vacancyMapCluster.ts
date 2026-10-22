@@ -7,7 +7,6 @@ export interface MapClusterNode {
   readonly y: number;
   readonly totalCount: number;
   readonly cities: readonly CityFacet[];
-  readonly label: string;
 }
 
 export interface MapCityNode {
@@ -17,7 +16,6 @@ export interface MapCityNode {
   readonly y: number;
   readonly count: number;
   readonly city: CityFacet;
-  readonly showLabel: boolean;
 }
 
 export type MapNode = MapClusterNode | MapCityNode;
@@ -104,127 +102,172 @@ export function formatCityDisplay(rawCity: string, rawCountry?: string): CityDis
  */
 export function formatLocationDisplay(location?: string): string | undefined {
   if (!location) return undefined;
-  return location
-    .replace(/\b([A-Za-z]{2,3}):\s*/gu, '')
-    .replace(/\bSydney\b/gu, 'Сидней');
+  return location.replace(/\b([A-Za-z]{2,3}):\s*/gu, '').replace(/\bSydney\b/gu, 'Сидней');
 }
 
-export function projectCoords(lat: number, lng: number): { x: number; y: number } {
-  const minLat = -60;
-  const maxLat = 85;
-  const clampedLat = Math.max(minLat, Math.min(maxLat, lat));
-  const x = Math.round(((lng + 180) / 360) * 900);
-  const y = Math.round(((maxLat - clampedLat) / (maxLat - minLat)) * 480);
-  return { x, y };
+export type ScreenProjector = (point: { readonly lat: number; readonly lng: number }) => {
+  readonly x: number;
+  readonly y: number;
+};
+
+/** Границы [[west, south], [east, north]] — карта открывается приближенной к выдаче. */
+export type MapBounds = readonly [readonly [number, number], readonly [number, number]];
+
+const CAPSULE_CHAR_WIDTH = 7.4;
+const CAPSULE_PADDING = 32; // 12 px по бокам + 8 px между названием и числом
+const CAPSULE_MIN_WIDTH = 44;
+const CAPSULE_HEIGHT = 44;
+const CAPSULE_GAP = 4;
+
+/** Ширина капсулы «Москва 74» на экране: шрифт 13 px, поля по 10 px, не уже зоны касания. */
+export function capsuleWidth(text: string): number {
+  return Math.max(CAPSULE_MIN_WIDTH, text.length * CAPSULE_CHAR_WIDTH + CAPSULE_PADDING);
 }
 
-const LABEL_HALF_WIDTH = 46;
-const LABEL_HEIGHT = 16;
-const BASE_GRID_SIZE = 48;
-
-function groupIntoBuckets(
-  cities: readonly CityFacet[],
-  gridSize: number,
-): Map<string, { city: CityFacet; x: number; y: number }[]> {
-  const buckets = new Map<string, { city: CityFacet; x: number; y: number }[]>();
-  for (const city of cities) {
-    if (!city.coordinates) continue;
-    const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
-    const key = `${Math.floor(x / gridSize)}:${Math.floor(y / gridSize)}`;
-    const bucket = buckets.get(key) ?? [];
-    bucket.push({ city, x, y });
-    buckets.set(key, bucket);
-  }
-  return buckets;
+/** Кластер называет самый крупный город, число — сумма кластера: «Москва 94» (макет 4). */
+export function markerLabel(node: MapNode): string {
+  if (!node.isCluster) return formatCityDisplay(node.city.city, node.city.country).city;
+  const top = [...node.cities].sort((a, b) => b.count - a.count)[0];
+  return top ? formatCityDisplay(top.city, top.country).city : 'Города';
 }
 
-function createNodesFromBuckets(
-  buckets: Map<string, { city: CityFacet; x: number; y: number }[]>,
-  zoom: number,
-): { nodes: MapNode[]; occupiedSpots: { x: number; y: number }[] } {
-  const nodes: MapNode[] = [];
-  const occupiedSpots: { x: number; y: number }[] = [];
-
-  for (const [key, items] of buckets.entries()) {
-    if (items.length === 1 || zoom >= 3) {
-      for (const item of items) {
-        nodes.push({
-          id: `city-${item.city.city}`,
-          isCluster: false,
-          x: item.x,
-          y: item.y,
-          count: item.city.count,
-          city: item.city,
-          showLabel: false,
-        });
-      }
-    } else {
-      const totalCount = items.reduce((sum, i) => sum + i.city.count, 0);
-      const avgX = Math.round(items.reduce((sum, i) => sum + i.x * i.city.count, 0) / totalCount);
-      const avgY = Math.round(items.reduce((sum, i) => sum + i.y * i.city.count, 0) / totalCount);
-
-      nodes.push({
-        id: `cluster-${key}`,
-        isCluster: true,
-        x: avgX,
-        y: avgY,
-        totalCount,
-        cities: items.map((i) => i.city),
-        label: `${totalCount}`,
-      });
-      occupiedSpots.push({ x: avgX, y: avgY });
-    }
-  }
-
-  return { nodes, occupiedSpots };
+function nodeCount(node: MapNode): number {
+  return node.isCluster ? node.totalCount : node.count;
 }
 
-function resolveLabels(
-  nodes: readonly MapNode[],
-  occupiedSpots: { x: number; y: number }[],
-  selectedCity?: string,
-): readonly MapNode[] {
-  const cityNodes = nodes.filter((n): n is MapCityNode => !n.isCluster);
-  const sortedCities = [...cityNodes].sort((a, b) => {
-    if (a.city.city === selectedCity) return -1;
-    if (b.city.city === selectedCity) return 1;
-    return b.count - a.count;
-  });
+function nodeCities(node: MapNode): readonly CityFacet[] {
+  return node.isCluster ? node.cities : [node.city];
+}
 
-  const cityVisibility = new Map<string, boolean>();
-  for (const node of sortedCities) {
-    const collides = occupiedSpots.some(
-      (spot) =>
-        Math.abs(spot.x - node.x) < LABEL_HALF_WIDTH &&
-        Math.abs(spot.y - node.y) < LABEL_HEIGHT,
-    );
-    const showLabel = node.city.city === selectedCity || !collides;
-    cityVisibility.set(node.id, showLabel);
-    if (showLabel) {
-      occupiedSpots.push({ x: node.x, y: node.y });
-    }
-  }
+function nodeWidth(node: MapNode): number {
+  return capsuleWidth(`${markerLabel(node)} ${nodeCount(node)}`);
+}
 
-  return nodes.map((node) => {
-    if (node.isCluster) return node;
-    return { ...node, showLabel: Boolean(cityVisibility.get(node.id)) };
-  });
+function overlaps(a: MapNode, b: MapNode): boolean {
+  const halfWidths = (nodeWidth(a) + nodeWidth(b)) / 2 + CAPSULE_GAP;
+  return Math.abs(a.x - b.x) < halfWidths && Math.abs(a.y - b.y) < CAPSULE_HEIGHT + CAPSULE_GAP;
+}
+
+function mergedNode(into: MapNode, other: MapNode): MapClusterNode {
+  return {
+    id: `cluster-${into.id}`,
+    isCluster: true,
+    x: into.x,
+    y: into.y,
+    totalCount: nodeCount(into) + nodeCount(other),
+    cities: [...nodeCities(into), ...nodeCities(other)],
+  };
 }
 
 /**
- * Кластеризует города по сетке в зависимости от уровня зума (1..3).
- * Исключает наложение подписей друг на друга.
+ * B553: капсулы городов в пикселях экрана карты. Капсула, наехавшая бы на уже
+ * поставленную, сливается в неё (крупнейшие ставятся первыми); выбранный город
+ * не сливается. При приближении расстояния растут, и кластеры распадаются.
  */
-export function clusterCitiesByGrid(
+export function buildMapMarkers(
   cities: readonly CityFacet[],
-  zoom = 1,
+  project: ScreenProjector,
   selectedCity?: string,
 ): readonly MapNode[] {
-  const validCities = cities.filter((c) => c.coordinates !== undefined);
-  if (validCities.length === 0) return [];
+  const isSelected = (city: CityFacet) => city.city === selectedCity;
+  const ordered = cities
+    .filter((city) => city.coordinates !== undefined)
+    .sort((a, b) => Number(isSelected(b)) - Number(isSelected(a)) || b.count - a.count);
+  const accepted: MapNode[] = [];
+  for (const city of ordered) {
+    const { x, y } = project(city.coordinates!);
+    const node: MapCityNode = {
+      id: `city-${city.city}`,
+      isCluster: false,
+      x,
+      y,
+      count: city.count,
+      city,
+    };
+    const index = isSelected(city)
+      ? -1
+      : accepted.findIndex(
+          (other) => !(!other.isCluster && isSelected(other.city)) && overlaps(other, node),
+        );
+    if (index < 0) accepted.push(node);
+    else accepted[index] = mergedNode(accepted[index]!, node);
+  }
+  return accepted;
+}
 
-  const gridSize = BASE_GRID_SIZE / Math.max(1, zoom);
-  const buckets = groupIntoBuckets(validCities, gridSize);
-  const { nodes, occupiedSpots } = createNodesFromBuckets(buckets, zoom);
-  return resolveLabels(nodes, occupiedSpots, selectedCity);
+export function cityBounds(cities: readonly CityFacet[]): MapBounds | undefined {
+  const points = cities.flatMap((city) => (city.coordinates ? [city.coordinates] : []));
+  if (!points.length) return undefined;
+  const lngs = points.map((point) => point.lng);
+  const lats = points.map((point) => point.lat);
+  return [
+    [Math.min(...lngs), Math.min(...lats)],
+    [Math.max(...lngs), Math.max(...lats)],
+  ];
+}
+
+const CORE_LIMIT = 5;
+const CORE_RADIUS_KM = 3500;
+const EARTH_RADIUS_KM = 6371;
+
+function distanceKm(
+  a: { readonly lat: number; readonly lng: number },
+  b: { readonly lat: number; readonly lng: number },
+): number {
+  const rad = Math.PI / 180;
+  const h =
+    Math.sin(((b.lat - a.lat) * rad) / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(((b.lng - a.lng) * rad) / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
+}
+
+function weightedMedian(values: readonly { readonly value: number; readonly weight: number }[]) {
+  const sorted = [...values].sort((a, b) => a.value - b.value);
+  const half = sorted.reduce((sum, item) => sum + item.weight, 0) / 2;
+  let covered = 0;
+  for (const item of sorted) {
+    covered += item.weight;
+    if (covered >= half) return item.value;
+  }
+  return sorted.at(-1)?.value ?? 0;
+}
+
+/**
+ * B553: карта открывается на ядре выдачи (макет 4 — Москва, Петербург, Казань,
+ * Екатеринбург, Новосибирск): до 5 крупнейших городов не дальше 3 500 км от
+ * взвешенной медианы. Выбросы (Лондон, Владивосток) видны при отдалении.
+ */
+export function focusBounds(cities: readonly CityFacet[]): MapBounds | undefined {
+  const placed = cities.filter((city) => city.coordinates !== undefined);
+  if (!placed.length) return undefined;
+  const center = {
+    lat: weightedMedian(
+      placed.map((city) => ({ value: city.coordinates!.lat, weight: city.count })),
+    ),
+    lng: weightedMedian(
+      placed.map((city) => ({ value: city.coordinates!.lng, weight: city.count })),
+    ),
+  };
+  const core = placed
+    .filter((city) => distanceKm(center, city.coordinates!) <= CORE_RADIUS_KM)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, CORE_LIMIT);
+  return cityBounds(core.length ? core : placed);
+}
+
+/**
+ * Капсула у края сдвигается внутрь, чтобы не обрезаться; точка за краем карты не рисуется.
+ */
+export function clampMarker(
+  point: { readonly x: number; readonly y: number },
+  text: string,
+  view: { readonly width: number; readonly height: number },
+): { readonly x: number; readonly y: number } | undefined {
+  if (point.x < 0 || point.y < 0 || point.x > view.width || point.y > view.height) return undefined;
+  const half = capsuleWidth(text) / 2;
+  const halfHeight = CAPSULE_HEIGHT / 2;
+  return {
+    x: Math.min(Math.max(point.x, half), view.width - half),
+    y: Math.min(Math.max(point.y, halfHeight), view.height - halfHeight),
+  };
 }

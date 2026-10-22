@@ -460,6 +460,7 @@ export class MaintenanceWorker {
           {
             pages: result.pageCount,
             recruiters: result.recruiterCount,
+            reason: result.reason,
             notification: result.notification,
           },
           'linkedin-pool-executor-step',

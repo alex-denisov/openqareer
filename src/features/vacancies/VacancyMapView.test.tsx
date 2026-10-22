@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { VacancyCityFilterBar, VacancyMapView } from './VacancyMapView';
+import { VacancyCityFilterBar, VacancyMapUnavailable, VacancyMapView } from './VacancyMapView';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 
 function makeItem(
@@ -84,44 +84,23 @@ describe('B203: VacancyMapView Component', () => {
     expect(html).toContain('На карте 1 из 3: без точки 1 без города, 1 с нераспознанным городом.');
   });
 
-  it('подписывает город на карте как «Almaty 4», без ряда чипов и сетки карточек (B446-g4)', () => {
+  it('B553: пока чанк MapLibre грузится — состояние загрузки, заметка остаётся', () => {
     const html = renderToStaticMarkup(
-      <VacancyMapView
-        items={[
-          makeItem('v1', 'Miro', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-          makeItem('v2', 'ASML', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-          makeItem('v3', '10up', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-          makeItem('v4', 'LocalCo', 'Almaty', { lat: 43.25249, lng: 76.9115 }),
-        ]}
-        onSelectCity={vi.fn()}
-      />,
+      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
     );
 
-    expect(html).toContain('<tspan class="career-map-label-count"> 4</tspan>');
+    expect(html).toContain('Загружаем карту…');
     expect(html).not.toContain('career-map-city-chips');
-    expect(html).not.toContain('career-map-cards-grid');
     expect(html).not.toContain('Frontend Engineer v1');
   });
 
-  it('renders city pins and list with names and counts', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
-    );
+  it('B553: карта недоступна — честный текст и переход к списку', () => {
+    const onShowList = vi.fn();
+    const html = renderToStaticMarkup(<VacancyMapUnavailable onShowList={onShowList} />);
 
-    expect(html).toContain('Амстердам');
-    expect(html).toContain('Велдховен');
-  });
-
-  it('рисует локальные контуры стран, а город выбирается доступной кнопкой', () => {
-    const html = renderToStaticMarkup(
-      <VacancyMapView items={items} onSelectCity={vi.fn()} selectedCity={undefined} />,
-    );
-    const countryContours = html.match(/class="career-map-country"/gu) ?? [];
-
-    expect(html).toContain('role="img" aria-label="Контуры стран и расположение городов"');
-    expect(countryContours).toHaveLength(177);
-    // B446-g4: ряда чипов нет — близкие города доступны кнопкой-кластером на карте.
-    expect(html).toMatch(/role="button"[^>]*aria-label="Кластер/u);
+    expect(html).toContain('Карта недоступна');
+    expect(html).toContain('role="status"');
+    expect(html).toContain('Показать список');
   });
 
   it('city filter bar names the chosen city and offers all cities back', () => {

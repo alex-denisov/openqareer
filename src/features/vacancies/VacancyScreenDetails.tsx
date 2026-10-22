@@ -15,7 +15,9 @@ import { openExternalLink } from '../../services/desktop/openExternalLink';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
 import { extractVacancyRequirements } from './vacancyLevel';
 import { fitRequirementChips, legacySkillChips } from './vacancyRequirementChips';
-import { useLatestVacancyFitView } from './vacancyFitViewUpdates';
+import { publishVacancyFitRead, useLatestVacancyFitView } from './vacancyFitViewUpdates';
+import { readVacancyFit } from './vacancyFitApi';
+import { useVacancySummary } from './vacancyDetailApi';
 import { publishVacancyQuizOffer, unconfirmedSkills } from './vacancyQuizOffer';
 
 interface VacancyScreenDetailRowProps {
@@ -196,6 +198,23 @@ function DiscussAction({
   );
 }
 
+/**
+ * The list carries only the fit summary (compactFitView). An opened vacancy reads the full
+ * analysis itself, so chips and the consultant offer work where no fit-evidence block is
+ * rendered — the 390 push screen (B552).
+ */
+function useFitDetail(vacancyId: string, view: Parameters<typeof unconfirmedSkills>[0]) {
+  const needsDetail = view?.state === 'ready' && view.requirements.length === 0;
+  useEffect(() => {
+    if (!needsDetail) return;
+    const controller = new AbortController();
+    void readVacancyFit(vacancyId, controller.signal)
+      .then((next) => publishVacancyFitRead(vacancyId, next))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [vacancyId, needsDetail]);
+}
+
 /** The expanded vacancy tells the consultant panel what a quiz could confirm (B552). */
 function usePublishQuizOffer(
   cluster: MatchedVacancyItem['cluster'],
@@ -223,6 +242,7 @@ export function VacancyScreenRequirementChips({
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
 }) {
   const fitView = useLatestVacancyFitView(cluster.id, explanation.fitView);
+  useFitDetail(cluster.id, fitView);
   const fromFit = fitRequirementChips(fitView);
   usePublishQuizOffer(cluster, fitView);
   const legacy = extractVacancyRequirements(
@@ -378,14 +398,19 @@ export function VacancyScreenDescription({
   readonly cluster: MatchedVacancyItem['cluster'];
   readonly onOpenFull: () => void;
 }) {
+  const summary = useVacancySummary(cluster.id, cluster.descriptionSummary);
   return (
     <section
       className="vacancies-screen-description"
       aria-labelledby={`vacancy-description-${cluster.id}`}
     >
       <h3 id={`vacancy-description-${cluster.id}`}>Описание</h3>
-      {cluster.descriptionSummary.trim() ? (
-        <p className="vacancies-screen-description-copy">{cluster.descriptionSummary}</p>
+      {summary.text ? (
+        <p className="vacancies-screen-description-copy">{summary.text}</p>
+      ) : summary.loading ? (
+        <p className="vacancies-screen-description-empty" role="status">
+          Загружаем описание…
+        </p>
       ) : (
         <p className="vacancies-screen-description-empty">
           Краткое описание пока недоступно. Полный текст можно проверить на площадке.

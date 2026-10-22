@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { clusterCitiesByGrid, formatCityDisplay } from './vacancyMapCluster';
+import {
+  buildMapMarkers,
+  capsuleWidth,
+  cityBounds,
+  clampMarker,
+  focusBounds,
+  markerLabel,
+  formatCityDisplay,
+  type ScreenProjector,
+} from './vacancyMapCluster';
 import type { CityFacet } from './vacancyFacets';
 
 describe('B375: vacancy map clustering and normalization', () => {
@@ -27,49 +36,88 @@ describe('B375: vacancy map clustering and normalization', () => {
     companyCount: 8,
   };
 
-  it('кластеризует близкие точки при zoom=1 в один кластер с суммой вакансий', () => {
-    const nodes = clusterCitiesByGrid([amsterdam, veldhoven, moscow], 1);
-    const cluster = nodes.find((n) => n.isCluster);
+  // B553: метки считаются в пикселях экрана карты; проектор подставляет MapLibre.
+  const flat =
+    (scale: number): ScreenProjector =>
+    (point) => ({
+      x: point.lng * scale,
+      y: -point.lat * scale,
+    });
 
-    expect(cluster).toBeDefined();
-    if (cluster && cluster.isCluster) {
-      expect(cluster.totalCount).toBe(7); // 5 + 2
-      expect(cluster.cities.map((c) => c.city)).toEqual(['Amsterdam', 'Veldhoven']);
-    }
-
-    const moscowNode = nodes.find((n) => !n.isCluster && n.city.city === 'Москва');
-    expect(moscowNode).toBeDefined();
+  it('сливает капсулы, которые наехали бы друг на друга, в кластер с суммой', () => {
+    const nodes = buildMapMarkers([amsterdam, veldhoven, moscow], flat(4));
+    const cluster = nodes.find((node) => node.isCluster);
+    expect(cluster?.isCluster && cluster.totalCount).toBe(7);
+    expect(cluster?.isCluster && cluster.cities.map((city) => city.city)).toEqual([
+      'Amsterdam',
+      'Veldhoven',
+    ]);
+    expect(nodes.find((node) => !node.isCluster && node.city.city === 'Москва')).toBeDefined();
   });
 
-  it('при увеличении масштаба (zoom=3) распадается на отдельные города', () => {
-    const nodes = clusterCitiesByGrid([amsterdam, veldhoven, moscow], 3);
-    const clusters = nodes.filter((n) => n.isCluster);
-    expect(clusters).toHaveLength(0);
-
-    const amsNode = nodes.find((n) => !n.isCluster && n.city.city === 'Amsterdam');
-    const veldNode = nodes.find((n) => !n.isCluster && n.city.city === 'Veldhoven');
-    expect(amsNode).toBeDefined();
-    expect(veldNode).toBeDefined();
+  it('при приближении кластер распадается на города', () => {
+    const nodes = buildMapMarkers([amsterdam, veldhoven, moscow], flat(400));
+    expect(nodes.every((node) => !node.isCluster)).toBe(true);
+    expect(nodes).toHaveLength(3);
   });
 
-  it('не допускает наложения подписей городов', () => {
-    const closeCity1: CityFacet = {
-      city: 'CityOne',
-      coordinates: { lat: 40.0, lng: 10.0 },
-      count: 10,
-      companyCount: 5,
-    };
-    const closeCity2: CityFacet = {
-      city: 'CityTwoVeryLongName',
-      coordinates: { lat: 40.1, lng: 10.2 },
-      count: 2,
+  it('выбранный город не прячется в кластер', () => {
+    const nodes = buildMapMarkers([amsterdam, veldhoven], flat(4), 'Veldhoven');
+    expect(nodes.filter((node) => !node.isCluster)).toHaveLength(2);
+  });
+
+  it('города без координат на карту не попадают', () => {
+    const nowhere: CityFacet = { city: 'Нигде', count: 3, companyCount: 1 };
+    expect(buildMapMarkers([nowhere], flat(4))).toEqual([]);
+    expect(cityBounds([nowhere])).toBeUndefined();
+  });
+
+  it('границы охватывают все точки выдачи', () => {
+    expect(cityBounds([amsterdam, moscow])).toEqual([
+      [4.9, 52.37],
+      [37.62, 55.75],
+    ]);
+  });
+
+  it('карта открывается на ядре выдачи: 5 крупнейших близких городов, выбросы не тянут рамку', () => {
+    const city = (name: string, lat: number, lng: number, count: number): CityFacet => ({
+      city: name,
+      coordinates: { lat, lng },
+      count,
       companyCount: 1,
-    };
+    });
+    const spb = city('Санкт-Петербург', 59.94, 30.31, 18);
+    const kazan = city('Казань', 55.79, 49.12, 6);
+    const ekb = city('Екатеринбург', 56.84, 60.6, 9);
+    const nsk = city('Новосибирск', 55.03, 82.92, 5);
+    const london = city('London', 51.5, -0.12, 2);
+    const vladivostok = city('Владивосток', 43.12, 131.9, 8);
+    expect(focusBounds([moscow, spb, kazan, ekb, nsk, london, vladivostok])).toEqual([
+      [30.31, 55.03],
+      [82.92, 59.94],
+    ]);
+    expect(focusBounds([london])).toEqual(cityBounds([london]));
+  });
 
-    // При зуме, где они разделены как отдельные узлы, но их подписи пересекаются
-    const nodes = clusterCitiesByGrid([closeCity1, closeCity2], 3);
-    const visibleLabels = nodes.filter((n) => !n.isCluster && n.showLabel);
-    expect(visibleLabels.length).toBeLessThanOrEqual(1);
+  it('кластер называет крупнейший город и общее число, без «+N»', () => {
+    const [cluster] = buildMapMarkers([amsterdam, veldhoven], flat(4));
+    expect(cluster?.isCluster).toBe(true);
+    expect(cluster && markerLabel(cluster)).toBe('Amsterdam');
+  });
+
+  it('капсулу у края сдвигает внутрь, точку за краем не показывает', () => {
+    const view = { width: 400, height: 300 };
+    expect(clampMarker({ x: 5, y: 150 }, 'Москва 74', view)).toEqual({
+      x: capsuleWidth('Москва 74') / 2,
+      y: 150,
+    });
+    expect(clampMarker({ x: 200, y: 299 }, 'Казань 6', view)).toEqual({ x: 200, y: 278 });
+    expect(clampMarker({ x: -40, y: 150 }, 'Москва 74', view)).toBeUndefined();
+  });
+
+  it('ширина капсулы растёт с подписью и не меньше зоны касания 44 px', () => {
+    expect(capsuleWidth('Москва 74')).toBeGreaterThan(capsuleWidth('Уфа 1'));
+    expect(capsuleWidth('A')).toBeGreaterThanOrEqual(44);
   });
 
   it('нормализует префикс «AU: Sydney»: показывает «Сидней» и страну в подсказке', () => {

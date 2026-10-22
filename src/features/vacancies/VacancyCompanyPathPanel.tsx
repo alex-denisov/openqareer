@@ -93,6 +93,39 @@ function CircleCard({
   );
 }
 
+function PathPanelStatus({
+  state,
+  onPrepareLetter,
+}: {
+  readonly state: ReturnType<typeof useVacancyPathCircles>;
+  readonly onPrepareLetter?: () => void;
+}) {
+  return (
+    <>
+      {state.status === 'loading' ? (
+        <p className="vacancy-path-status" role="status">
+          Загружаем связи с компанией…
+        </p>
+      ) : null}
+      {state.status === 'error' ? (
+        <div className="vacancy-path-status" role="alert">
+          <p>Не удалось загрузить связи с компанией.</p>
+          <button type="button" className="btn btn-secondary action-btn" onClick={state.retry}>
+            Повторить
+          </button>
+        </div>
+      ) : null}
+      {state.status !== 'ready' && onPrepareLetter ? (
+        // B446-g4: холодное письмо (круг 3) не зависит от контактов — доступно и без кругов.
+        <button type="button" className="btn btn-secondary action-btn" onClick={onPrepareLetter}>
+          <FileText size={15} aria-hidden="true" />
+          Подготовить письмо
+        </button>
+      ) : null}
+    </>
+  );
+}
+
 export function VacancyCompanyPathPanel({
   id,
   vacancyId,
@@ -116,19 +149,7 @@ export function VacancyCompanyPathPanel({
           </CareerTooltip>
         ) : null}
       </div>
-      {state.status === 'loading' ? (
-        <p className="vacancy-path-status" role="status">
-          Загружаем связи с компанией…
-        </p>
-      ) : null}
-      {state.status === 'error' ? (
-        <div className="vacancy-path-status" role="alert">
-          <p>Не удалось загрузить связи с компанией.</p>
-          <button type="button" className="btn btn-secondary action-btn" onClick={state.retry}>
-            Повторить
-          </button>
-        </div>
-      ) : null}
+      <PathPanelStatus state={state} onPrepareLetter={actions.onPrepareLetter} />
       {state.status === 'ready' ? (
         <ul className="vacancy-path-circles">
           {pathCircleCards(state.data).map((card) => (

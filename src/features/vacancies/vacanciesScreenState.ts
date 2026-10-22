@@ -7,6 +7,8 @@ export interface VacanciesScreenState {
   readonly remoteOnly: boolean;
   readonly freshnessDays?: number;
   readonly selectedCity?: string;
+  /** B553: «Показать список» у кластера карты — все его города сразу. */
+  readonly selectedCities?: readonly string[];
   readonly selectedLocations?: readonly string[];
   readonly locationSearch?: string;
   /** «Удалённо, из любой страны» в фильтре «Локации» (B547). */

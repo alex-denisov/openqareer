@@ -566,6 +566,8 @@ const handleVacancyDetail: Handler = async (deps, request, reply) => {
     data: {
       id: clusterId,
       description: description || cluster?.descriptionSummary?.trim() || '',
+      // B446-g4: страница подборки обрезает выжимку ради веса — карточка берёт её здесь.
+      summary: cluster?.descriptionSummary?.trim() ?? '',
       truncated,
       ...(loaded.unavailable ? { unavailable: true } : {}),
       skills: cluster?.skills?.length ? cluster.skills : (full?.requiredSkills ?? []),

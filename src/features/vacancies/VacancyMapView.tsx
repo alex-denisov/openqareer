@@ -1,19 +1,12 @@
-import React from "react";
-import type { MatchedVacancyItem } from "../coach/cabinetTypes";
-import {
-  calculateVacancyFacets,
-  hasMapCityCoordinates,
-  vacancyCityName,
-  type CityFacet,
-} from "./vacancyFacets";
-import { NATURAL_EARTH_COUNTRY_CONTOURS } from "./naturalEarth110m";
-import { vacancyMapNote, type VacancyMapNoteCounts } from "./vacancyMapNote";
-import {
-  clusterCitiesByGrid,
-  formatCityDisplay,
-  projectCoords,
-  type MapClusterNode as ClusterNodeType,
-} from "./vacancyMapCluster";
+import { CaretLeft, Info, MapTrifold, Sparkle } from '@phosphor-icons/react';
+import React from 'react';
+import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import { useCompactViewport } from './useCompactViewport';
+import { calculateVacancyFacets, hasMapCityCoordinates, vacancyCityName } from './vacancyFacets';
+import { vacancyMapNote, type VacancyMapNoteCounts } from './vacancyMapNote';
+
+// B553: MapLibre (~1 МБ) грузится отдельным чанком только при открытии «Карты».
+const VacancyMapCanvas = React.lazy(() => import('./VacancyMapCanvas'));
 
 interface VacancyMapViewProps {
   readonly items: readonly MatchedVacancyItem[];
@@ -21,108 +14,200 @@ interface VacancyMapViewProps {
   readonly onSelectCity: (city?: string) => void;
   /** Вся выдача с условиями (сервер); без неё заметка считает загруженное. */
   readonly total?: number;
+  /** Назад к списку: «Показать список» в ошибке и «Назад» push-экрана 390. */
+  readonly onShowList?: () => void;
+  /** 390: «Показать список» карточки — все города капсулы (у кластера их несколько). */
+  readonly onShowCities?: (cities: readonly string[]) => void;
+  /** 390: консультант справа в шапке push-экрана «Карта». */
+  readonly onOpenExpert?: () => void;
 }
 
-
-export function VacancyMapView({
-  items,
-  selectedCity,
-  onSelectCity,
-  total,
-}: VacancyMapViewProps): React.JSX.Element {
-  const [zoom, setZoom] = React.useState<number>(1);
-  const [center, setCenter] = React.useState<{ x: number; y: number }>({ x: 450, y: 240 });
-  const facets = calculateVacancyFacets(items);
-
+export function VacancyMapView(props: VacancyMapViewProps): React.JSX.Element {
+  const compact = useCompactViewport();
+  if (compact) return <VacancyMapPush {...props} />;
   return (
     <div className="career-vacancy-map-view vacancy-map-view">
       <div className="career-map-canvas-container">
-        <MapSvg
-          cities={facets.cities}
-          selectedCity={selectedCity}
-          onSelectCity={onSelectCity}
-          zoom={zoom}
-          center={center}
-          onZoomChange={(newZoom, newCenter) => {
-            setZoom(newZoom);
-            if (newCenter) setCenter(newCenter);
-          }}
-        />
-        <MapZoomControls
-          zoom={zoom}
-          onZoomChange={(newZoom) => setZoom(newZoom)}
-          onResetZoom={() => {
-            setZoom(1);
-            setCenter({ x: 450, y: 240 });
-          }}
-        />
+        <VacancyMapStage {...props} compact={false} />
+        <MapHeader items={props.items} total={props.total ?? props.items.length} />
       </div>
-      <MapHeader items={items} total={total ?? items.length} />
     </div>
   );
 }
 
-function MapZoomControls({
-  zoom,
-  onZoomChange,
-  onResetZoom,
-}: {
-  zoom: number;
-  onZoomChange: (newZoom: number) => void;
-  onResetZoom: () => void;
-}) {
+function VacancyMapStage({
+  items,
+  selectedCity,
+  onSelectCity,
+  onShowList,
+  onShowCities,
+  compact,
+}: VacancyMapViewProps & { readonly compact: boolean }) {
+  const facets = calculateVacancyFacets(items);
+  const [unavailable, setUnavailable] = React.useState(false);
+  const markUnavailable = React.useCallback(() => setUnavailable(true), []);
   return (
-    <div className="career-map-zoom-controls" role="group" aria-label="Управление масштабом карты">
-      <button
-        type="button"
-        className="career-chip career-map-zoom-btn"
-        aria-label="Приблизить карту"
-        disabled={zoom >= 3}
-        onClick={() => onZoomChange(Math.min(3, zoom + 1))}
+    <div className="career-map-stage">
+      {unavailable ? (
+        <VacancyMapUnavailable onShowList={onShowList} />
+      ) : (
+        <MapChunkBoundary onError={markUnavailable}>
+          <React.Suspense fallback={<p className="career-map-status">Загружаем карту…</p>}>
+            <VacancyMapCanvas
+              cities={facets.cities}
+              selectedCity={selectedCity}
+              onSelectCity={onSelectCity}
+              onShowCities={onShowCities ?? ((cities) => onSelectCity(cities[0]))}
+              onUnavailable={markUnavailable}
+              compact={compact}
+            />
+          </React.Suspense>
+        </MapChunkBoundary>
+      )}
+    </div>
+  );
+}
+
+/** Push-экран открывается с фокусом на «Назад»; Escape — тоже назад. */
+function usePushBack(onBack?: () => void) {
+  const backRef = React.useRef<HTMLButtonElement>(null);
+  React.useEffect(() => {
+    backRef.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !document.querySelector('[aria-modal="true"]')) onBack?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onBack]);
+  return backRef;
+}
+
+/**
+ * B553: на 390 «Карта» — отдельный push-экран (макет 4 `?mv=map`): круглая кнопка
+ * назад, заголовок, консультант справа; карта карточкой, заметка под ней.
+ */
+function VacancyMapPush(props: VacancyMapViewProps) {
+  const { onShowList, onOpenExpert } = props;
+  const backRef = usePushBack(onShowList);
+  return (
+    <>
+      <div className="vacancy-push-backdrop" aria-hidden="true" />
+      <div
+        className="vacancy-push vacancy-map-view career-map-push"
+        role="dialog"
+        aria-labelledby="vacancy-map-push-title"
       >
-        +
-      </button>
-      <button
-        type="button"
-        className="career-chip career-map-zoom-btn"
-        aria-label="Отдалить карту"
-        disabled={zoom <= 1}
-        onClick={() => onZoomChange(Math.max(1, zoom - 1))}
-      >
-        −
-      </button>
-      {zoom > 1 ? (
-        <button
-          type="button"
-          className="career-chip career-map-zoom-reset"
-          onClick={onResetZoom}
-        >
-          Сбросить масштаб
+        <header className="vacancy-push-bar">
+          <button
+            ref={backRef}
+            type="button"
+            className="vacancy-push-back"
+            aria-label="Назад"
+            onClick={onShowList}
+          >
+            <CaretLeft size={20} aria-hidden="true" />
+          </button>
+          <h1 id="vacancy-map-push-title">Карта</h1>
+          {onOpenExpert ? (
+            <button
+              type="button"
+              className="career-map-push-expert"
+              aria-label="Спросить консультанта"
+              onClick={onOpenExpert}
+            >
+              <Sparkle size={20} aria-hidden="true" />
+            </button>
+          ) : null}
+        </header>
+        <div className="career-map-push-body">
+          <div className="career-map-canvas-container">
+            <VacancyMapStage {...props} compact />
+          </div>
+          <p className="career-map-push-note vacancy-map-note" aria-live="polite">
+            {vacancyMapNote(mapNoteCounts(props.items, props.total ?? props.items.length))}
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+/** B553: офлайн, недоступные тайлы или нет WebGL — честное состояние вместо пустого прямоугольника. */
+export function VacancyMapUnavailable({ onShowList }: { readonly onShowList?: () => void }) {
+  return (
+    <div className="career-map-status is-unavailable" role="status">
+      <MapTrifold size={24} aria-hidden="true" />
+      <p>Карта недоступна: не удалось загрузить подложку. Вакансии доступны списком.</p>
+      {onShowList ? (
+        <button type="button" className="career-btn" onClick={onShowList}>
+          Показать список
         </button>
       ) : null}
     </div>
   );
 }
 
-/** B446-g4: город с карты фильтрует список; полоса над списком снимает фильтр. */
+/** Чанк MapLibre не загрузился (офлайн после выката) — то же честное состояние. */
+class MapChunkBoundary extends React.Component<
+  { readonly onError: () => void; readonly children: React.ReactNode },
+  { readonly failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch() {
+    this.props.onError();
+  }
+
+  render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/**
+ * B446-g4: город с карты фильтрует список; полоса над списком снимает фильтр.
+ * B553: у кластера — чипы всех его городов и «К карте».
+ */
 export function VacancyCityFilterBar({
   selectedCity,
+  selectedCities = [],
   onClear,
+  onBackToMap,
 }: {
   readonly selectedCity?: string;
+  readonly selectedCities?: readonly string[];
   readonly onClear: () => void;
+  readonly onBackToMap?: () => void;
 }) {
-  if (!selectedCity) return null;
+  const cities = selectedCities.length ? selectedCities : selectedCity ? [selectedCity] : [];
+  if (!cities.length) return null;
   return (
     <div className="career-map-active-bar">
-      <span>Показаны вакансии в городе: <strong>{selectedCity}</strong></span>
-      <button
-        type="button"
-        className="career-inline-link"
-        onClick={onClear}
-      >
-        Все города
-      </button>
+      {cities.length === 1 ? (
+        <span>
+          Показаны вакансии в городе: <strong>{cities[0]}</strong>
+        </span>
+      ) : (
+        <ul className="career-map-city-chips" aria-label="Города с карты">
+          {cities.map((city) => (
+            <li key={city} className="career-chip">
+              {city}
+            </li>
+          ))}
+        </ul>
+      )}
+      {onBackToMap ? (
+        <button type="button" className="career-inline-link" onClick={onBackToMap}>
+          К карте
+        </button>
+      ) : (
+        <button type="button" className="career-inline-link" onClick={onClear}>
+          Все города
+        </button>
+      )}
     </div>
   );
 }
@@ -146,160 +231,9 @@ function MapHeader({ items, total }: { items: readonly MatchedVacancyItem[]; tot
   return (
     <div className="career-map-header">
       <p className="career-vacancy-count vacancy-map-note" aria-live="polite">
+        <Info size={16} aria-hidden="true" />
         {vacancyMapNote(mapNoteCounts(items, total))}
       </p>
     </div>
-  );
-}
-
-function MapClusterNode({
-  cluster,
-  onClick,
-}: {
-  cluster: ClusterNodeType;
-  onClick: () => void;
-}) {
-  const citiesNames = cluster.cities
-    .map((c) => `${formatCityDisplay(c.city, c.country).city} (${c.count})`)
-    .join(", ");
-  const tooltip = `Кластер: ${cluster.totalCount} вакансий (${citiesNames}). Нажмите для приближения`;
-
-  return (
-    <g
-      className="career-map-cluster-group career-map-cluster-node"
-      role="button"
-      tabIndex={0}
-      aria-label={tooltip}
-      onClick={onClick}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick();
-        }
-      }}
-    >
-      <title>{tooltip}</title>
-      <circle cx={cluster.x} cy={cluster.y} r={18} className="career-map-cluster-pulse" />
-      <circle cx={cluster.x} cy={cluster.y} r={12} className="career-map-cluster-circle" />
-      <text
-        x={cluster.x}
-        y={cluster.y + 4}
-        textAnchor="middle"
-        className="career-map-cluster-count"
-      >
-        {cluster.totalCount}
-      </text>
-    </g>
-  );
-}
-
-function MapPinNode({
-  city,
-  isSelected,
-  showLabel,
-  onSelect,
-}: {
-  city: CityFacet;
-  isSelected: boolean;
-  showLabel: boolean;
-  onSelect: () => void;
-}) {
-  if (!city.coordinates) return null;
-  const { x, y } = projectCoords(city.coordinates.lat, city.coordinates.lng);
-  const display = formatCityDisplay(city.city, city.country);
-
-  return (
-    <g
-      className={`career-map-pin-group ${isSelected ? "is-active" : ""}`}
-      role="button"
-      tabIndex={0}
-      aria-label={`Город ${display.city}: ${city.count} вакансий`}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-    >
-      <title>{display.tooltip}</title>
-      <circle cx={x} cy={y} r={22} className="career-map-hit" />
-      <circle cx={x} cy={y} r={isSelected ? 16 : 10} className="career-map-pulse" />
-      <circle cx={x} cy={y} r={isSelected ? 6 : 4} className="career-map-dot" />
-      {showLabel ? (
-        <text x={x} y={y - 12} textAnchor="middle" className="career-map-label">
-          <tspan>{display.city}</tspan>
-          <tspan className="career-map-label-count"> {city.count}</tspan>
-        </text>
-      ) : null}
-    </g>
-  );
-}
-
-function MapSvg({
-  cities,
-  selectedCity,
-  onSelectCity,
-  zoom,
-  center,
-  onZoomChange,
-}: {
-  cities: readonly CityFacet[];
-  selectedCity?: string;
-  onSelectCity: (city?: string) => void;
-  zoom: number;
-  center: { x: number; y: number };
-  onZoomChange: (newZoom: number, center?: { x: number; y: number }) => void;
-}) {
-  const width = Math.round(900 / zoom);
-  const height = Math.round(480 / zoom);
-  const x = Math.max(0, Math.min(900 - width, Math.round(center.x - width / 2)));
-  const y = Math.max(0, Math.min(480 - height, Math.round(center.y - height / 2)));
-  const viewBox = `${x} ${y} ${width} ${height}`;
-
-  const nodes = clusterCitiesByGrid(cities, zoom, selectedCity);
-
-  return (
-    <svg
-      viewBox={viewBox}
-      className="career-map-svg"
-      role="img"
-      aria-label="Контуры стран и расположение городов"
-    >
-      <rect width="900" height="480" className="career-map-bg" aria-hidden="true" />
-      <g className="career-map-country-contours" aria-hidden="true">
-        {NATURAL_EARTH_COUNTRY_CONTOURS.map((contour, index) => (
-          <path key={index} d={contour} fillRule="evenodd" className="career-map-country" />
-        ))}
-      </g>
-      {nodes.map((node) => renderMapNode(node, selectedCity, onSelectCity, zoom, onZoomChange))}
-    </svg>
-  );
-}
-
-function renderMapNode(
-  node: ReturnType<typeof clusterCitiesByGrid>[number],
-  selectedCity: string | undefined,
-  onSelectCity: (city?: string) => void,
-  zoom: number,
-  onZoomChange: (newZoom: number, center?: { x: number; y: number }) => void,
-) {
-  if (node.isCluster) {
-    return (
-      <MapClusterNode
-        key={node.id}
-        cluster={node}
-        onClick={() => onZoomChange(Math.min(3, zoom + 1), { x: node.x, y: node.y })}
-      />
-    );
-  }
-  return (
-    <MapPinNode
-      key={node.id}
-      city={node.city}
-      isSelected={selectedCity === node.city.city}
-      showLabel={node.showLabel}
-      onSelect={() => onSelectCity(selectedCity === node.city.city ? undefined : node.city.city)}
-    />
   );
 }

@@ -19,6 +19,8 @@ import { MAX_VACANCY_AGE_DAYS } from '../vacancies/vacancyPoolQuery';
 import { readMatchProfile, readMatchedSnapshot } from '../vacancies/matchedPoolContext';
 import { readTargetLevel } from './vacancyRoleContext';
 import type { RouteDeps } from './deps';
+import { focusSchema, validateFocus, type ValidatedFocus } from './roleSkillAssessmentFocus';
+import { startFocusedRun } from './roleSkillAssessmentFocusRun';
 import {
   actionSchema,
   checkReplay,
@@ -37,7 +39,9 @@ import {
 } from './helpers';
 
 const roleSchema = z.string().trim().min(1).max(200);
-const startSchema = z.object({ consent: z.literal(true), role: roleSchema.optional() }).strict();
+const startSchema = z
+  .object({ consent: z.literal(true), role: roleSchema.optional(), focus: focusSchema.optional() })
+  .strict();
 const currentQuerySchema = z.object({ role: roleSchema.optional() });
 
 /** Роль проверки: нажатая на «Карьере» или, без неё, роль «Стратегии» (B445). */
@@ -96,7 +100,7 @@ const DIALOGUE_QUESTIONS = [
   'Какие ограничения, команда или решение повлияли на этот результат?',
 ] as const;
 
-type AssessmentContext =
+export type AssessmentContext =
   | { readonly state: 'role_not_selected' }
   | { readonly state: 'source_unavailable' }
   | {
@@ -227,12 +231,26 @@ async function handleStart(deps: RouteDeps, request: FastifyRequest, reply: Fast
     deps.config,
   );
   if (!candidate) return undefined;
-  const { role: requested } = startSchema.parse(request.body);
+  const { role: requested, focus: focusRequest } = startSchema.parse(request.body);
+  let focus: ValidatedFocus | undefined;
+  if (focusRequest) {
+    const validation = validateFocus(deps, focusRequest);
+    if (!validation.ok)
+      return sendError(
+        reply,
+        request,
+        validation.status,
+        validation.code,
+        validation.message,
+        false,
+      );
+    focus = validation.focus;
+  }
   const starts = activeStarts.get(deps) ?? new Map<string, Promise<unknown>>();
   activeStarts.set(deps, starts);
   const pending = starts.get(candidate.id);
   if (pending) return pending;
-  const operation = startRun(deps, candidate, reply, requested).finally(() =>
+  const operation = startRun(deps, candidate, reply, requested, focus).finally(() =>
     starts.delete(candidate.id),
   );
   starts.set(candidate.id, operation);
@@ -244,12 +262,14 @@ async function startRun(
   candidate: NonNullable<ReturnType<typeof authenticateCandidate>>,
   reply: FastifyReply,
   requested?: string,
+  focus?: ValidatedFocus,
 ) {
   const role = resolveAssessedRole(deps, candidate.id, requested);
   if (!role) return reply.send({ data: { state: 'role_not_selected' } });
   const latest = latestRunFor(deps, candidate.id, role);
   if (
     latest &&
+    sameFocus(latest.focus, focus) &&
     latest.roleVersion === role.version &&
     latest.roleTitle === role.title &&
     latest.status !== 'complete'
@@ -257,6 +277,15 @@ async function startRun(
     return reply.send({ data: { state: 'run', run: latest } });
   }
 
+  if (focus) {
+    // A vacancy check (B552) stays on the role chosen in «Стратегия».
+    const strategy = deps.candidateStore.getCareerStrategy(candidate.id);
+    if (!strategy) return reply.send({ data: { state: 'role_not_selected' } });
+    const result = await startFocusedRun(deps, candidate.id, strategy, focus);
+    if (result.state === 'run')
+      deps.candidateStore.roleSkillAssessments.create(candidate.id, result.run);
+    return reply.send({ data: result });
+  }
   const context = await readAssessmentContext(deps, candidate.id, role);
   if (context.state !== 'ready') return reply.send({ data: context });
   const run = createInitialAssessmentRun(context);
@@ -264,7 +293,18 @@ async function startRun(
   return reply.send({ data: { state: 'run', run } });
 }
 
-function createInitialAssessmentRun(
+function sameFocus(
+  stored: RoleSkillAssessmentRun['focus'],
+  requested: ValidatedFocus | undefined,
+): boolean {
+  if (!requested) return true;
+  return (
+    stored?.vacancyId === requested.vacancyId &&
+    stored.skills.join('\n') === requested.skills.join('\n')
+  );
+}
+
+export function createInitialAssessmentRun(
   context: Extract<AssessmentContext, { state: 'ready' }>,
 ): RoleSkillAssessmentRun {
   const now = new Date().toISOString();
@@ -343,7 +383,7 @@ async function readAssessmentContext(
   return summarizeAssessmentContext(role.title, role.version, snapshot.vacancies);
 }
 
-async function readRoleSnapshot(
+export async function readRoleSnapshot(
   deps: RouteDeps,
   candidateId: string,
   roleTitle: string,
@@ -365,7 +405,7 @@ async function readRoleSnapshot(
   }
 }
 
-function summarizeAssessmentContext(
+export function summarizeAssessmentContext(
   roleTitle: string,
   roleVersion: number,
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
@@ -401,7 +441,7 @@ function summarizeAssessmentContext(
   };
 }
 
-function toAssessmentVacancies(
+export function toAssessmentVacancies(
   matched: Awaited<ReturnType<typeof readMatchedSnapshot>>,
   roleId: string,
   now: Date,

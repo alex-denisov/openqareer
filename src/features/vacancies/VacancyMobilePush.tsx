@@ -20,6 +20,7 @@ import { pluralRu } from '../../../shared/pluralRu';
 import { formatCompensationCompact } from './vacancyCompensation';
 import { vacancyLevelLabel } from './VacancyScreenRowCells';
 import { VacancyScreenRequirementChips } from './VacancyScreenDetails';
+import { useVacancySummary } from './vacancyDetailApi';
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
 import { useVacancyPathCircles, type VacancyPathCirclesState } from './useVacancyPathCircles';
 import type { VacancyProfileRequirement } from './vacancyProfileRequirement';
@@ -32,6 +33,8 @@ import {
   PushRow,
   type CirclePage,
 } from './VacancyMobilePathPages';
+import { VacancyPushMore, type VacancyPushMoreAction } from './VacancyPushMore';
+import { vacancyPushRowActions, type PushRowState } from './vacancyPushRowActions';
 import './vacancy-push.css';
 
 type PushPage = 'job' | 'path' | CirclePage;
@@ -60,6 +63,10 @@ export interface VacancyMobilePushProps {
   readonly onAddToProfile?: (context: VacancyProfileRequirement) => void;
   /** Trust warning (stale, phantom, suspicious) shown above the vacancy. */
   readonly notice?: ReactNode;
+  /** «Ещё»: interview stage or «Я уже откликнулся», the row's handlers (B510). */
+  readonly moreActions?: readonly VacancyPushMoreAction[];
+  /** The row's interview form, opened from «Ещё»; shown under the vacancy. */
+  readonly overlay?: ReactNode;
 }
 
 function observedDay(item: MatchedVacancyItem): string | null {
@@ -175,6 +182,7 @@ function JobPage({
 }) {
   const { cluster, explanation } = props.item;
   const contacts = contactsLine(circles);
+  const summary = useVacancySummary(cluster.id, cluster.descriptionSummary);
   return (
     <>
       <PushHero
@@ -194,7 +202,8 @@ function JobPage({
         <h3 className="vacancy-push-cap">Описание</h3>
         <div className="vacancy-push-list">
           <p className="vacancy-push-quote">
-            {cluster.descriptionSummary.trim() || 'Краткое описание пока недоступно.'}
+            {summary.text ??
+              (summary.loading ? 'Загружаем описание…' : 'Краткое описание пока недоступно.')}
           </p>
           <PushRow
             icon={<FileText aria-hidden="true" />}
@@ -243,6 +252,7 @@ function PushCta({
             />
           </button>
         ) : null}
+        <VacancyPushMore actions={props.moreActions ?? []} />
       </div>
     );
   }
@@ -271,7 +281,10 @@ function PushBody({
   if (page === 'job') {
     return <JobPage props={props} circles={circles} onOpenPath={() => open('path')} />;
   }
-  if (circles.status !== 'ready') return <PushCirclesStatus state={circles} />;
+  if (circles.status !== 'ready')
+    return (
+      <PushCirclesStatus state={circles} onPrepareLetter={props.pathActions.onPrepareLetter} />
+    );
   if (page === 'path') {
     return <PushPathPage data={circles.data} actions={props.pathActions} onOpenCircle={open} />;
   }
@@ -341,6 +354,7 @@ export function VacancyMobilePush(props: VacancyMobilePushProps) {
         </header>
         <div className="vacancy-push-body">
           <PushBody page={page} props={props} circles={circles} open={open} />
+          {page === 'job' ? props.overlay : null}
         </div>
         <PushCta page={page} props={props} />
       </div>
@@ -438,8 +452,10 @@ export function VacancyRowPush({
   readonly rowState: RowPushState & {
     readonly setPitchOpen: (open: boolean) => void;
     readonly trust: ReturnType<typeof vacancyTrustSignals>;
-  };
+    readonly savingApplied: boolean;
+  } & PushRowState;
 }) {
+  const more = vacancyPushRowActions(rowProps, rowState);
   const base = companyPathActions(item.cluster, rowProps, () => rowState.setPitchOpen(true));
   // Leaving for another screen closes the push, so «Подборка» returns to the list.
   const leave = (action?: () => void) =>
@@ -458,6 +474,32 @@ export function VacancyRowPush({
     <VacancyMobilePush
       {...vacancyRowPushProps(item, rowProps, rowState, actions)}
       notice={<DetailTrustAlert trust={rowState.trust} />}
+      moreActions={pushMoreActions({ ...rowState, ...more })}
+      overlay={more.interviewForm}
     />
   );
+}
+
+function pushMoreActions(rowState: {
+  readonly applicationArchived: boolean;
+  readonly alreadyApplied: boolean;
+  readonly savingApplied: boolean;
+  readonly onScheduleInterview?: () => void;
+  readonly onConfirmAlreadyApplied?: () => void;
+}): readonly VacancyPushMoreAction[] {
+  if (rowState.applicationArchived) return [];
+  if (rowState.alreadyApplied) {
+    return rowState.onScheduleInterview
+      ? [{ label: 'Назначили интервью', onSelect: rowState.onScheduleInterview }]
+      : [];
+  }
+  return rowState.onConfirmAlreadyApplied
+    ? [
+        {
+          label: rowState.savingApplied ? 'Сохраняем…' : 'Я уже откликнулся',
+          onSelect: rowState.onConfirmAlreadyApplied,
+          disabled: rowState.savingApplied,
+        },
+      ]
+    : [];
 }

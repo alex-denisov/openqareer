@@ -39,6 +39,7 @@ export function filterGroupIsActive(
     return Boolean(
       state.regions.length ||
       state.selectedCity ||
+      state.selectedCities?.length ||
       state.selectedLocations?.length ||
       state.locationRemote ||
       state.locationSearch?.trim(),
@@ -89,6 +90,8 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
     const first = selected[0]!.split(LOCATION_PATH_SEPARATOR).at(-1)!;
     return selected.length > 1 ? `${first} +${selected.length - 1}` : first;
   }
+  const cities = state.selectedCities ?? [];
+  if (cities.length) return cities.length > 1 ? `${cities[0]} +${cities.length - 1}` : cities[0];
   if (state.selectedCity) return state.selectedCity;
   if (state.regions.length)
     return state.regions
@@ -99,6 +102,41 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
   return search || undefined;
 }
 
+/**
+ * B446-g4: роли и регионы кампании уже фильтруют подборку, значит кнопки и чипы их
+ * называют (макет 4: «Роли Head, Director»). Ручной выбор важнее кампании.
+ */
+export function withCampaignDefaults(
+  state: VacanciesScreenState,
+  campaignRoles: readonly string[] = [],
+  campaignRegions: readonly string[] = [],
+): VacanciesScreenState {
+  const locationsPicked = filterGroupIsActive(state, 'locations');
+  return {
+    ...state,
+    roles: state.roles.length || state.levels?.length ? state.roles : campaignRoles,
+    regions: locationsPicked ? state.regions : campaignRegions,
+  };
+}
+
+const LEVEL_PREFIX = /^(\S+)\s+(of\s+.+)$/iu;
+
+/**
+ * B446-g4: «Head of Engineering, Director of Engineering» → «Head, Director» (макет 4);
+ * роли с разной функцией — первая и «+N».
+ */
+export function shortRoleSummary(roles: readonly string[]): string {
+  if (roles.length === 1) return roles[0]!;
+  const parts = roles.map((role) => LEVEL_PREFIX.exec(role.trim()));
+  const sameFunction =
+    parts.every(Boolean) &&
+    new Set(parts.map((part) => part![2]!.toLocaleLowerCase('en'))).size === 1;
+  if (sameFunction) return parts.map((part) => part![1]).join(', ');
+  // Уже короткие подписи уровня («Head», «Director») остаются списком.
+  if (roles.length <= 3 && roles.every((role) => !/\s/u.test(role.trim()))) return roles.join(', ');
+  return `${roles[0]} +${roles.length - 1}`;
+}
+
 export function summarizeVacancyFilterGroup(
   state: VacanciesScreenState,
   group: VacancyFilterGroup,
@@ -107,7 +145,7 @@ export function summarizeVacancyFilterGroup(
     const roles = state.roles.length
       ? state.roles
       : (state.levels ?? []).map((level) => LEVEL_SUMMARY_LABELS[level] ?? level);
-    return roles.length ? roles.slice(0, 2).join(', ') : undefined;
+    return roles.length ? shortRoleSummary(roles) : undefined;
   }
   if (group === 'locations') return summarizeLocations(state);
   if (group === 'salary') {

@@ -392,8 +392,12 @@
 }
 
 .vacancies-filter-group-value {
+  max-inline-size: 24ch;
+  overflow: hidden;
   color: var(--career-text);
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* B446-g4: заданный фильтр — подсвеченная рамка, открытый — мягкая заливка, как .fbtn макета 4. */
@@ -1051,3 +1055,16 @@
   color: var(--career-text-dim);
   font-size: var(--career-text-xs);
 }
+
+/* B446-g4: обёртка сводки не участвует в раскладке; на 390 «Сохранённые» без сводки (mock-390m-saved). */
+.vacancies-filter-host {
+  display: contents;
+}
+
+@media (max-width: 760px) {
+  .vacancies-filter-host.is-saved-tab {
+    display: none;
+  }
+}
+
+/* B446-g4: длинные роли кампании не раздвигают ряд фильтров. */

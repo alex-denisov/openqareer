@@ -5,6 +5,7 @@ import type { MatchedVacancyFacets } from '../../../shared/matchedVacancyFacets'
 import {
   VACANCY_FILTER_GROUPS,
   VacanciesFilterToolbarFromState,
+  withCampaignDefaults,
   filterGroupMatches,
   type VacancyFilterGroup,
 } from './VacanciesFilterToolbar';
@@ -61,6 +62,7 @@ export function countActiveFilters(state: VacanciesScreenState): number {
     Boolean(
       state.regions.length ||
       state.selectedCity ||
+      state.selectedCities?.length ||
       state.selectedLocations?.length ||
       state.locationRemote ||
       state.locationSearch?.trim(),
@@ -451,6 +453,7 @@ function emptyVacancyFilterState(): VacanciesScreenState {
     salaryCurrency: undefined,
     includeMissingSalary: false,
     selectedCity: undefined,
+    selectedCities: [],
   };
 }
 
@@ -509,7 +512,10 @@ function MobileFilterSheetContent({
   return (
     <MobileFilterSheet
       activeGroup={activeGroup}
-      values={mobileFilterValues(draft, catalog.sources.length)}
+      values={mobileFilterValues(
+        withCampaignDefaults(draft, props.campaignRoles, props.regions),
+        catalog.sources.length,
+      )}
       subtitle={sheetSubtitle(props.facets, resultCount)}
       resultCount={resultCount}
       onSelectGroup={onSelectGroup}
@@ -605,7 +611,7 @@ function VacancyFilterPanelBody({
   return (
     <div className="vacancies-filter-wrap">
       <VacanciesFilterToolbarFromState
-        state={model.draftProps.state}
+        state={withCampaignDefaults(model.draftProps.state, props.campaignRoles, props.regions)}
         expanded={model.expanded}
         activeGroup={activeGroup}
         onToggle={onTogglePanel}
