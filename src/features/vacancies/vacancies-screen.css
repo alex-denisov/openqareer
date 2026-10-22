@@ -427,6 +427,8 @@
 .vacancies-filter-group-buttons {
   display: flex;
   flex: 1;
+  /* B446-r (R9): в уменьшенном окне .app чипы переносятся, отступ карточки сводки сохраняется. */
+  flex-wrap: wrap;
   gap: var(--career-space-2);
   min-inline-size: 0;
 }

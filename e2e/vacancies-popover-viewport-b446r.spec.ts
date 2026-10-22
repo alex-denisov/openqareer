@@ -15,7 +15,7 @@ const SIZES = [
 
 const CITIES = ['Москва', 'Тверь', 'Тула', 'Воронеж', 'Казань', 'Самара', 'Пермь', 'Омск'];
 
-async function mockPool(page: Page): Promise<void> {
+async function mockPool(page: Page, initialFilters?: Record<string, unknown>): Promise<void> {
   await mockSignedInCabinet(page, { vacancyTotal: 400 });
   const base = matchedVacancyPage(0, 5);
   const facets = {
@@ -37,7 +37,9 @@ async function mockPool(page: Page): Promise<void> {
     ],
   };
   await page.route('**/api/v1/candidate/matched-vacancies**', (route) =>
-    route.fulfill({ json: { ...base, meta: { ...base.meta, total: 400, facets } } }),
+    route.fulfill({
+      json: { ...base, meta: { ...base.meta, total: 400, facets, initialFilters } },
+    }),
   );
 }
 
@@ -129,3 +131,42 @@ test('B446-r (R7): Escape откатывает невыбранные измен
   await chip.click();
   await expect(first).not.toBeChecked();
 });
+
+for (const width of [900, 1024, 1176]) {
+  test(`B446-r (R9): чипы фильтров переносятся внутри карточки сводки на ${width}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop-1440', 'размеры окна задаёт сам тест');
+    await page.setViewportSize({ width, height: 800 });
+    // Значения в чипах, как в .app у кандидата с кампанией: ряд шире, чем пустые чипы.
+    await mockPool(page, {
+      roles: ['Head of Engineering', 'Director of Engineering'],
+      regions: ['ru', 'cis'],
+      levels: [],
+      sources: ['source-0', 'source-1'],
+      remoteOnly: false,
+      salaryMinimum: 450_000,
+      salaryCurrency: '₽',
+      formats: ['hybrid', 'remote'],
+    });
+    await page.goto('/app', { waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+    await expect(page.locator('[data-filter-group="sources"]')).toContainText('2', {
+      timeout: 15_000,
+    });
+    const fits = await page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>('.vacancies-filter-section')!;
+      const style = getComputedStyle(card);
+      const inner = card.getBoundingClientRect().right - parseFloat(style.paddingRight);
+      const chips = [...document.querySelectorAll<HTMLElement>('[data-filter-group]')];
+      const reset = document.querySelector<HTMLElement>('.vacancies-summary-reset')!;
+      return {
+        chipRight: Math.max(...chips.map((chip) => chip.getBoundingClientRect().right)),
+        resetRight: reset.getBoundingClientRect().right,
+        inner,
+      };
+    });
+    expect(fits.chipRight).toBeLessThanOrEqual(fits.inner + 0.5);
+    expect(fits.resetRight).toBeLessThanOrEqual(fits.inner + 0.5);
+  });
+}
