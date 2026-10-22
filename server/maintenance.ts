@@ -20,6 +20,7 @@ import { TitleModelStep, VertexModelTitleParser } from './vacancies/titleParse/m
 import { logPoolWrites } from './maintenance/poolWriteLog';
 import { composeVacancyEngine } from './vacancies/composeVacancyEngine';
 import { DEFAULT_KEYED_BATCH_SIZE } from './vacancies/multiSourceVacancyEngine';
+import { scheduleSalaryMarketSnapshots } from './salaryMarket/salaryMarketSchedule';
 import { scheduleLandingStatsJob } from './landing/landingStatsSchedule';
 import { scheduleCatalogSitemapJob } from './seo/catalogSitemapSchedule';
 import { scheduleMarketSalaryEstimateJob } from './vacancies/marketSalary/marketSalaryEstimateSchedule';
@@ -116,11 +117,13 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+let stopSalaryMarketSnapshots: (() => void) | undefined;
 let shuttingDown = false;
 let restoreInFlight: Promise<unknown> | undefined;
 async function shutdown(signal: string): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  stopSalaryMarketSnapshots?.();
   log.info({ signal }, 'maintenance-shutdown-started');
   // `restoreAsync` reads the large SQLite pool in bounded chunks, but a
   // single restore can still take more than the old systemd stop window on
@@ -155,6 +158,7 @@ try {
   worker.start();
   // B535: landing numbers are counted here, never on the web server's event loop.
   scheduleLandingStatsJob(semanticDatabase, log);
+  stopSalaryMarketSnapshots = scheduleSalaryMarketSnapshots(semanticDatabase, log);
   // Sitemap files: the listings query groups the whole catalog, so it runs here too.
   scheduleCatalogSitemapJob(semanticDatabase, log);
   // B546: market salary estimates stream every salaried vacancy, so only here.
