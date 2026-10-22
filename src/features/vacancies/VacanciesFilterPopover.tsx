@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useEffect, useRef, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 
 import { CANDIDATE_REGION_CATALOGUE } from '../workspace/candidateRegions';
 
@@ -8,6 +8,7 @@ import {
   type VacancyFilterGroup,
 } from './VacanciesFilterToolbar';
 import type { VacanciesScreenFiltersProps } from './VacanciesScreenFilters';
+import { usePopoverViewportLimit } from './usePopoverViewportLimit';
 
 export interface VacanciesFilterPopoverProps {
   readonly title: string;
@@ -26,6 +27,8 @@ export function VacanciesFilterPopover({
   onClose,
   children,
 }: VacanciesFilterPopoverProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  usePopoverViewportLimit(ref, open && !mobileOpen);
   return (
     <>
       {mobileOpen ? (
@@ -37,6 +40,7 @@ export function VacanciesFilterPopover({
         />
       ) : null}
       <div
+        ref={ref}
         id="vacancies-filter-popover"
         className={`filters-panel vacancies-filters${open ? ' is-expanded' : ''}${mobileOpen ? ' is-mobile-open' : ''}`}
         aria-label="Фильтры"
