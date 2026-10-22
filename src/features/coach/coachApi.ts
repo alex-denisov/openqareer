@@ -1,4 +1,5 @@
 import { receiveCoachResult } from './coachResultDelivery';
+import { shareInFlight } from './shareInFlight';
 import type { ExperienceRevisionField } from '../../../shared/experienceRevisionField';
 import type { CoachTurnStage, CoachTurnSubject } from '../../../server/domain/coach';
 export type { CoachTurnStage, CoachTurnSubject };
@@ -664,10 +665,10 @@ export async function createVacancySubscription(input: {
   return readDataObject(response);
 }
 
-export async function getVacancySources(): Promise<VacancySourceRegistryEntry[]> {
-  const response = await apiFetch('/api/v1/candidate/vacancy-sources');
-  return readDataArray<VacancySourceRegistryEntry>(response);
-}
+// B447: фильтр, сохранённые поиски и подборка просят каталог одновременно — один запрос на всех.
+export const getVacancySources = shareInFlight(async (): Promise<VacancySourceRegistryEntry[]> =>
+  readDataArray<VacancySourceRegistryEntry>(await apiFetch('/api/v1/candidate/vacancy-sources')),
+);
 
 export async function getVacancySubscription(
   subscriptionId: string,
