@@ -1,3 +1,4 @@
+import { RelocationDateInput } from '../RelocationFormControls';
 import { useState } from 'react';
 import { Check, PencilSimple, Plus, Trash } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
@@ -111,7 +112,7 @@ function DocumentsSection({ profile, onProfileChange }: RelocationDraftProps) {
             </li>
           ))}
         </ul>
-      ) : <p>Документы не указаны.</p>}
+      ) : <p className="career-relocation-empty-line">Документы не указаны.</p>}
       <NewDocumentForm profile={profile} onProfileChange={onProfileChange} />
     </section>
   );
@@ -163,8 +164,8 @@ function DocumentFields({
     <div className="career-relocation-form-grid">
       <RelocationFormField id={kindId} label="Тип документа"><DocumentKindSelect id={kindId} value={document.kind} onChange={(kind) => onChange({ kind })} /></RelocationFormField>
       <RelocationFormField id={countryId} label="Страна"><CountrySelect id={countryId} value={document.countryCode} onChange={(countryCode) => onChange({ countryCode })} /></RelocationFormField>
-      <RelocationFormField id={issuedId} label="Дата выдачи"><input id={issuedId} type="date" value={document.issuedAt ?? ''} onChange={(event) => onChange({ issuedAt: event.target.value || undefined })} /></RelocationFormField>
-      <RelocationFormField id={expiresId} label="Действует до"><input id={expiresId} type="date" value={document.expiresAt ?? ''} onChange={(event) => onChange({ expiresAt: event.target.value || undefined })} /></RelocationFormField>
+      <RelocationFormField id={issuedId} label="Дата выдачи"><RelocationDateInput id={issuedId} value={document.issuedAt ?? ''} onChange={(event) => onChange({ issuedAt: event.target.value || undefined })} /></RelocationFormField>
+      <RelocationFormField id={expiresId} label="Действует до"><RelocationDateInput id={expiresId} value={document.expiresAt ?? ''} onChange={(event) => onChange({ expiresAt: event.target.value || undefined })} /></RelocationFormField>
     </div>
   );
 }
@@ -192,7 +193,7 @@ function NewDocumentForm({ profile, onProfileChange }: RelocationDraftProps) {
       <div className="career-relocation-form-grid">
         <RelocationFormField id={kindId} label="Тип документа"><DocumentKindSelect id={kindId} value={kind} onChange={setKind} /></RelocationFormField>
         <RelocationFormField id={countryId} label="Страна"><CountrySelect id={countryId} value={countryCode} onChange={setCountryCode} /></RelocationFormField>
-        <RelocationFormField id={expiresId} label="Действует до"><input id={expiresId} type="date" value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></RelocationFormField>
+        <RelocationFormField id={expiresId} label="Действует до"><RelocationDateInput id={expiresId} value={expiresAt} onChange={(event) => setExpiresAt(event.target.value)} /></RelocationFormField>
       </div>
       <button className="career-btn career-btn-secondary" type="button" disabled={!countryCode} onClick={add}>
         <Plus aria-hidden="true" size={16} />Добавить документ

@@ -887,8 +887,9 @@
 }
 
 /* WebKit fills an empty date field with today's date: an empty field stays empty. */
-.career-relocation input[type='date'][value='']:not(:focus)::-webkit-datetime-edit {
+.career-shell input[type='date'][data-empty='true']:not(:focus) {
   color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .career-relocation-picker-button > span {
@@ -896,4 +897,10 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.career-relocation-empty-line {
+  margin: 0;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
 }

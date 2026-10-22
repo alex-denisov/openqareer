@@ -1,3 +1,4 @@
+import { RelocationDateInput } from '../RelocationFormControls';
 import { useState } from 'react';
 import { Info, Plus, Trash } from '@phosphor-icons/react';
 import type { RelocationQuestionnaire } from '../../../../shared/relocationQuestionnaire';
@@ -89,8 +90,8 @@ function EducationRow({
         <RelocationFormField id={`${prefix}-field`} label="Направление"><input id={`${prefix}-field`} value={entry.fieldOfStudy ?? ''} onChange={(event) => update({ fieldOfStudy: event.target.value || undefined })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-country`} label="Страна диплома"><CountrySelect id={`${prefix}-country`} value={entry.countryCode} onChange={(countryCode) => update({ countryCode })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-recognition`} label="Признание за рубежом"><RecognitionSelect id={`${prefix}-recognition`} value={entry.recognitionStatus} onChange={(recognitionStatus) => update({ recognitionStatus })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-started`} label="Дата начала"><input id={`${prefix}-started`} type="date" value={entry.startedAt ?? ''} onChange={(event) => update({ startedAt: event.target.value || undefined })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><input id={`${prefix}-completed`} type="date" value={entry.completedAt ?? ''} onChange={(event) => update({ completedAt: event.target.value || undefined })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-started`} label="Дата начала"><RelocationDateInput id={`${prefix}-started`} value={entry.startedAt ?? ''} onChange={(event) => update({ startedAt: event.target.value || undefined })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><RelocationDateInput id={`${prefix}-completed`} value={entry.completedAt ?? ''} onChange={(event) => update({ completedAt: event.target.value || undefined })} /></RelocationFormField>
       </div>
       <button className="career-btn career-btn-destructive" type="button" onClick={remove}>
         <Trash aria-hidden="true" size={16} />Удалить образование
@@ -142,8 +143,8 @@ function EducationDraft({
         <div className="career-relocation-field-wide"><RelocationFormField id={`${prefix}-field`} label="Направление, специальность"><input id={`${prefix}-field`} placeholder="Например, Прикладная математика" value={draft.fieldOfStudy} onChange={(event) => onChange({ ...draft, fieldOfStudy: event.target.value })} /></RelocationFormField></div>
         <RelocationFormField id={`${prefix}-country`} label="Страна диплома"><CountrySelect id={`${prefix}-country`} value={draft.countryCode} onChange={(countryCode) => onChange({ ...draft, countryCode })} /></RelocationFormField>
         <RelocationFormField id={`${prefix}-recognition`} label="Признание диплома за рубежом"><RecognitionSelect id={`${prefix}-recognition`} value={draft.recognitionStatus} onChange={(recognitionStatus) => onChange({ ...draft, recognitionStatus })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-started`} label="Дата начала"><input id={`${prefix}-started`} type="date" value={draft.startedAt} onChange={(event) => onChange({ ...draft, startedAt: event.target.value })} /></RelocationFormField>
-        <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><input id={`${prefix}-completed`} type="date" value={draft.completedAt} onChange={(event) => onChange({ ...draft, completedAt: event.target.value })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-started`} label="Дата начала"><RelocationDateInput id={`${prefix}-started`} value={draft.startedAt} onChange={(event) => onChange({ ...draft, startedAt: event.target.value })} /></RelocationFormField>
+        <RelocationFormField id={`${prefix}-completed`} label="Дата окончания"><RelocationDateInput id={`${prefix}-completed`} value={draft.completedAt} onChange={(event) => onChange({ ...draft, completedAt: event.target.value })} /></RelocationFormField>
       </div>
       <button className="career-btn career-btn-secondary" type="button" disabled={!draft.title.trim() || !draft.countryCode} onClick={onAdd}>
         <Plus aria-hidden="true" size={16} />Добавить образование
@@ -226,8 +227,8 @@ function CertificateFields({
       <RelocationFormField id={`${prefix}-issuer`} label="Выдавшая организация"><input id={`${prefix}-issuer`} placeholder="Например, Amazon Web Services" value={entry.issuer ?? ''} onChange={(event) => onChange({ issuer: event.target.value || undefined })} /></RelocationFormField>
       <RelocationFormField id={`${prefix}-country`} label="Страна"><CountrySelect id={`${prefix}-country`} value={entry.countryCode} onChange={(countryCode) => onChange({ countryCode })} /></RelocationFormField>
       <RelocationFormField id={`${prefix}-recognition`} label="Признание"><RecognitionSelect id={`${prefix}-recognition`} value={entry.recognitionStatus} onChange={(recognitionStatus) => onChange({ recognitionStatus })} /></RelocationFormField>
-      <RelocationFormField id={`${prefix}-issued`} label="Дата выдачи"><input id={`${prefix}-issued`} type="date" value={entry.issuedAt ?? ''} onChange={(event) => onChange({ issuedAt: event.target.value || undefined })} /></RelocationFormField>
-      <RelocationFormField id={`${prefix}-expires`} label="Действует до"><input id={`${prefix}-expires`} type="date" value={entry.expiresAt ?? ''} onChange={(event) => onChange({ expiresAt: event.target.value || undefined })} /></RelocationFormField>
+      <RelocationFormField id={`${prefix}-issued`} label="Дата выдачи"><RelocationDateInput id={`${prefix}-issued`} value={entry.issuedAt ?? ''} onChange={(event) => onChange({ issuedAt: event.target.value || undefined })} /></RelocationFormField>
+      <RelocationFormField id={`${prefix}-expires`} label="Действует до"><RelocationDateInput id={`${prefix}-expires`} value={entry.expiresAt ?? ''} onChange={(event) => onChange({ expiresAt: event.target.value || undefined })} /></RelocationFormField>
     </div>
   );
 }

@@ -102,6 +102,17 @@ function DesktopTabContent({
       />
     );
   }
+  return <DesktopProfile {...{ workspace, input, onProfileUpdated, onConsentRevoked }} />;
+}
+
+/** «Мои данные»: «Изменить» opens the questionnaire as its own screen, as on mockup 15 `i1`. */
+function DesktopProfile({
+  workspace,
+  input,
+  onProfileUpdated,
+  onConsentRevoked,
+}: Pick<DesktopProps, 'workspace' | 'input' | 'onProfileUpdated' | 'onConsentRevoked'>) {
+  const { snapshot } = input;
   return (
     <RelocationProfile
       profile={snapshot.profile}
@@ -110,6 +121,7 @@ function DesktopTabContent({
       onProfileUpdated={onProfileUpdated}
       onConsentRevoked={onConsentRevoked}
       onShowCountries={() => workspace.showTab('countries')}
+      onEditStep={(step) => workspace.openQuestionnaire(step)}
     />
   );
 }

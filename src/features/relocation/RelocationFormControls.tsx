@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import { CaretDown } from '@phosphor-icons/react';
 import type {
   RelocationQuestionnaire,
@@ -160,4 +160,12 @@ export function relocationRecognitionLabel(status: RelocationEducation['recognit
     not_required: 'признание не требуется', unknown: 'не проверено',
   };
   return labels[status];
+}
+
+/**
+ * A date field that is empty says so: WebKit (the .app, Safari) paints today's date into an
+ * empty `type="date"`, which reads as a filled value. `data-empty` lets CSS hide it.
+ */
+export function RelocationDateInput(props: Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  return <input {...props} type="date" data-empty={props.value ? undefined : 'true'} />;
 }

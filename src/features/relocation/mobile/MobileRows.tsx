@@ -132,6 +132,7 @@ export function MobileInputRow({
         id={id}
         type={type}
         value={value}
+        data-empty={value ? undefined : 'true'}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
       />

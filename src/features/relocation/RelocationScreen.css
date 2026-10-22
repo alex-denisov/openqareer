@@ -347,12 +347,16 @@
 
 .career-relocation-empty {
   display: grid;
+  justify-items: start;
   gap: var(--career-space-2);
   color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
+  line-height: 1.5;
 }
 
 .career-relocation-empty strong {
   color: var(--career-text);
+  font-size: var(--career-text-sm);
 }
 
 .career-relocation-list-footer {
