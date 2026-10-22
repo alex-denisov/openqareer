@@ -53,7 +53,8 @@ const config: ServerConfig = {
   release: 'block-c-local-demo',
   logLevel: 'error',
   secureCookies: false,
-  allowedOrigins: [origin, 'tauri://localhost', 'http://tauri.localhost'],
+  // The desktop shell sends the production origin; the stand still listens on loopback only.
+  allowedOrigins: [origin, 'tauri://localhost', 'http://tauri.localhost', 'https://openqareer.com'],
   seedAccounts: [],
 };
 const now = new Date();
@@ -133,7 +134,12 @@ const authService: SessionAuth = {
   register: async () => {
     throw new Error('Registration is disabled in the local demo.');
   },
-  login: async () => null,
+  // The desktop shell keeps its own token and shows the sign-in screen without one:
+  // any credentials open the active synthetic profile, as every other request does.
+  login: async () => ({
+    principal: principalFor(scenarios.activeProfile.candidate),
+    sessionToken: 'block-local-demo-session',
+  }),
   isUsernameTaken: () => false,
   logout() {},
 };
