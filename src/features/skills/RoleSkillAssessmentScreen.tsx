@@ -328,6 +328,7 @@ function AssessmentStateContent({
   answerRef,
   onClose,
   onOpenOpportunities,
+  focus,
 }: AssessmentContentProps) {
   if (state.loading) return <LoadingState />;
   if (!state.current)
@@ -338,7 +339,7 @@ function AssessmentStateContent({
   }
   return (
     <LoadedAssessmentContent
-      {...{ state, run, activeCase, actions, answerRef, onClose, onOpenOpportunities }}
+      {...{ state, run, activeCase, actions, answerRef, onClose, onOpenOpportunities, focus }}
     />
   );
 }
@@ -364,7 +365,11 @@ function renderFocusStart(props: AssessmentContentProps) {
     state.current?.state === 'run' ||
     state.current?.state === 'result' ||
     state.current?.state === 'role_changed';
-  if (!otherCheck || runMatchesFocus(run, focus)) return null;
+  // G5 R1b: a thin role sample stops the role check, not the check of the vacancy's skills.
+  const thinRole =
+    state.current?.state === 'too_few_vacancies' ||
+    state.current?.state === 'insufficient_requirements';
+  if (!thinRole && (!otherCheck || runMatchesFocus(run, focus))) return null;
   return (
     <FocusStartCard
       focus={focus}

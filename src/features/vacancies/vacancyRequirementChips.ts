@@ -5,6 +5,8 @@ export interface RequirementChips {
   readonly unconfirmed: readonly string[];
   /** Chip name → full requirement text for the tooltip (B510). */
   readonly quotes?: Readonly<Record<string, string>>;
+  /** Conditions (education, language, format, work permit): listed apart, never as skill chips. */
+  readonly conditions?: readonly string[];
 }
 
 type Requirement = VacancyFitView['requirements'][number];
@@ -22,6 +24,12 @@ export function requirementChipLabel(requirement: Requirement): string | undefin
   return text && text.length <= 40 && text.split(/\s+/u).length <= 5 ? text : undefined;
 }
 
+/** Same split as the server's percent (B510-r): experience and skills count, conditions do not. */
+export function isSkillRequirement(requirement: Requirement): boolean {
+  const kind = requirement.kind as string | undefined;
+  return kind === 'experience' || (requirement.skill ?? (kind === undefined || kind === 'other'));
+}
+
 /** Chips for «Требования к навыкам» from the fit analysis (B523/B524): a
  *  requirement is confirmed only when a profile fact matched it. */
 export function fitRequirementChips(view: VacancyFitView | undefined): RequirementChips | null {
@@ -35,7 +43,13 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   const confirmed: string[] = [];
   const unconfirmed: string[] = [];
   const quotes: Record<string, string> = {};
+  const conditions: string[] = [];
   for (const requirement of view.requirements) {
+    if (!isSkillRequirement(requirement)) {
+      const condition = requirementChipLabel(requirement);
+      if (condition && !conditions.includes(condition)) conditions.push(condition);
+      continue;
+    }
     const label = requirementChipLabel(requirement);
     const key = label?.toLocaleLowerCase('ru');
     if (!label || !key || seen.has(key)) continue;
@@ -43,11 +57,22 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
     (matched.has(requirement.id) ? confirmed : unconfirmed).push(label);
     if (requirement.text.trim() !== label) quotes[label] = requirement.text.trim();
   }
-  return { confirmed, unconfirmed, quotes };
+  return { confirmed, unconfirmed, quotes, ...(conditions.length ? { conditions } : {}) };
 }
 
 const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';
 const ROLE_POINT_PREFIXES = ['Целевая роль:', 'Частичное совпадение по роли:'];
+
+/** A sentence («Функция роли и уровень совпадают по разбору названия.») is never a chip (G5 W2). */
+function isChipText(text: string): boolean {
+  const clean = text.trim();
+  return (
+    Boolean(clean) &&
+    !/[.!?]$/u.test(clean) &&
+    clean.length <= 40 &&
+    clean.split(/\s+/u).length <= 5
+  );
+}
 
 /** Legacy matcher points → chip names (B446-g4): «Подтверждённый навык: X» → X;
  *  role points («Целевая роль: …») are not skill requirements and stay out. */
@@ -62,6 +87,6 @@ export function legacySkillChips(
         ? point.slice(CONFIRMED_SKILL_PREFIX.length).trim()
         : point.trim(),
     )
-    .filter(Boolean);
-  return { confirmed, unconfirmed: [...missingPoints] };
+    .filter(isChipText);
+  return { confirmed, unconfirmed: missingPoints.filter(isChipText) };
 }

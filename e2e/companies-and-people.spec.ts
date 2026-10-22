@@ -241,7 +241,8 @@ test('recruiter lookup asks for consent and shows an honest queued state', async
     .getByRole('status')
     .filter({ hasText: 'Ищем рекрутёра по вакансиям компании' });
   await expect(queueStatus).toBeVisible();
-  await queueStatus.scrollIntoViewIfNeeded();
+  // The refetch after consent remounts the status node; scroll the fresh one.
+  await expect(async () => queueStatus.scrollIntoViewIfNeeded({ timeout: 2_000 })).toPass();
   await captureCompanyState(page, testInfo, 'recruiter-search-queued');
 });
 

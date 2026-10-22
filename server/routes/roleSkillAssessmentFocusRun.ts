@@ -92,6 +92,30 @@ function withRoleSkills(
   return [...covered, ...fill].slice(0, 5);
 }
 
+/**
+ * G5 R1b: a vacancy-focused check is built from that vacancy's skills; the role-wide gate
+ * («пять навыков и три кейса») applies to the role check only. The role's common skills still
+ * fill the run when the role sample has them.
+ */
+function focusContext(
+  sample: RoleSample,
+  roleVersion: number,
+  sampleSize: number,
+  now: Date,
+): Extract<AssessmentContext, { state: 'ready' }> {
+  const role = summarizeAssessmentContext(sample.roleTitle, roleVersion, sample.matched);
+  if (role.state === 'ready') return role;
+  return {
+    state: 'ready',
+    roleTitle: sample.roleTitle,
+    roleVersion,
+    sampleSize: Math.max(1, sampleSize),
+    evidenceObservedAt: now.toISOString(),
+    skills: [],
+    cases: [],
+  };
+}
+
 /** B552: a check limited to the offered vacancy's skills, with honest «мало данных». */
 export async function startFocusedRun(
   deps: RouteDeps,
@@ -102,14 +126,10 @@ export async function startFocusedRun(
   const selectedRole = strategy.current.role.title;
   const sample = await readFocusSample(deps, candidateId, selectedRole, focus);
   if ('state' in sample) return sample;
-  const context = summarizeAssessmentContext(
-    sample.roleTitle,
-    strategy.current.version,
-    sample.matched,
-  );
-  if (context.state !== 'ready') return context;
   const roleId = titleKey(sample.roleTitle);
-  const vacancies = toAssessmentVacancies(sample.matched, roleId, new Date());
+  const now = new Date();
+  const vacancies = toAssessmentVacancies(sample.matched, roleId, now);
+  const context = focusContext(sample, strategy.current.version, vacancies.length, now);
   const plans = planFocusSkills(focus, vacancies, context.evidenceObservedAt);
   const covered = plans.flatMap((plan) => (plan.summary ? [plan.summary] : []));
   const lackingNotes = plans.filter((plan) => !plan.summary).map(lackingSkillNote);

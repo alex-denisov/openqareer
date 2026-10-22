@@ -58,6 +58,7 @@ import {
   updateExpertStage,
   type ExpertPanelConfig,
   type ShellView,
+  type OpenExpertOptions,
 } from './CareerWorkspaceShellHelpers';
 import { CareerDiaryAccessProvider } from './careerDiaryAccess';
 import { CareerDiaryShellControls, CareerDiaryAccessStatus } from './CareerDiaryShellControls';
@@ -316,6 +317,7 @@ export function CareerWorkspaceShell({
       subject?: CoachTurnSubject,
       subjectTitle?: string,
       initialPrompt?: string,
+      options?: OpenExpertOptions,
     ) =>
       openExpertPanel(
         setExpertConfig,
@@ -327,6 +329,7 @@ export function CareerWorkspaceShell({
         subject,
         subjectTitle,
         initialPrompt,
+        options,
       ),
     [activeView, isCompactViewport],
   );
@@ -878,6 +881,7 @@ export function CareerWorkspaceShell({
               subject={expertConfig.subject}
               subjectTitle={expertConfig.subjectTitle}
               initialPrompt={expertConfig.initialPrompt}
+              sendRequest={expertConfig.sendRequest}
               initialUser={session ?? null}
               loadingSession={sessionPending}
               mobileExpanded={expertSheetExpanded}

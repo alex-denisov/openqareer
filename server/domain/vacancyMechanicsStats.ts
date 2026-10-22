@@ -3,6 +3,8 @@ export interface VacancyMechanicsStats {
   requirementsDone: number;
   requirementsUnavailable: number;
   requirementsInvalid: number;
+  /** Why model answers or their entries were not used (B510-r), by `ModelAnswerIssue`. */
+  modelIssues: Record<string, number>;
   claimed: number;
   completed: number;
   deferred: number;
@@ -21,6 +23,7 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     requirementsDone: 0,
     requirementsUnavailable: 0,
     requirementsInvalid: 0,
+    modelIssues: {},
     claimed: 0,
     completed: 0,
     deferred: 0,
@@ -33,6 +36,13 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     lastModel: null,
     providers: [],
   };
+}
+
+function issuesPart(issues: Readonly<Record<string, number>>): string {
+  const parts = Object.entries(issues)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([issue, count]) => `${issue}:${count}`);
+  return parts.length ? ` extract_issues=${parts.join(',')}` : '';
 }
 
 function modelPart(stats: VacancyMechanicsStats): string {
@@ -49,7 +59,7 @@ function modelPart(stats: VacancyMechanicsStats): string {
     `llm_calls=${stats.llmCalls} llm_failed=${stats.llmFailed} ` +
     `llm_avg_ms=${Math.round(stats.llmMs / stats.llmCalls)} ` +
     `extract_unavailable=${stats.requirementsUnavailable} extract_invalid=${stats.requirementsInvalid} ` +
-    `extract_failed_share=${failedShare}%`
+    `extract_failed_share=${failedShare}%${issuesPart(stats.modelIssues)}`
   );
 }
 

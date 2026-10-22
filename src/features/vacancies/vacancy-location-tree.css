@@ -168,6 +168,34 @@
   margin-inline-end: auto;
 }
 
+/* B446-r (W8): «Отмена», «Снять все», «Все N» — призрачные кнопки, не акцент (макет 4). */
+.vacancy-location-foot .filters-reset {
+  color: var(--career-text-soft);
+}
+
+.vacancy-location-foot .filters-reset:hover:not(:disabled) {
+  color: var(--career-text);
+}
+
+/* B446-r (W7): подвал одной строкой, как в макете: «Выбрано… Все… Снять все · Отмена · Применить». */
+@media (min-width: 761px) {
+  .vacancy-location-foot {
+    flex-wrap: nowrap;
+  }
+
+  .vacancy-location-foot > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .vacancy-location-foot > .vacancy-location-chosen {
+    flex-shrink: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .vacancy-location-check .career-checkbox:indeterminate {
   border-color: var(--career-accent);
   background-color: var(--career-accent);
@@ -190,5 +218,39 @@
     position: sticky;
     inset-block-end: 0;
     background: var(--career-bg-elevated, var(--career-surface));
+  }
+}
+
+/*
+ * B446-r (R6): на 1440 и в уменьшенном окне .app поповер ограничен видимой
+ * областью (--vacancies-filter-pop-max считает usePopoverViewportLimit);
+ * поиск и подвал «Выбрано… Применить» всегда на месте, прокручивается список.
+ */
+@media (min-width: 761px) {
+  .vacancies-filters.filters-panel:is(
+      [data-active-group='locations'],
+      [data-active-group='sources'],
+      [data-active-group='roles']
+    ) {
+    display: flex;
+    flex-direction: column;
+    max-block-size: var(--vacancies-filter-pop-max, calc(100dvh - var(--career-space-8)));
+    overflow: hidden;
+  }
+
+  .vacancies-filters.filters-panel .vacancy-location-filter {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+  }
+
+  .vacancies-filters.filters-panel .vacancy-location-filter > :not(.vacancy-location-body) {
+    flex: none;
+  }
+
+  .vacancies-filters.filters-panel .vacancy-location-body {
+    flex: 1 1 auto;
+    min-block-size: 0;
   }
 }

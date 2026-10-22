@@ -13,6 +13,7 @@ import {
 import { HOME_COUNTRY } from '../../../shared/locationGazetteer';
 import type { VacanciesScreenState } from './vacanciesScreenState';
 import { useRelocationSetting } from './useRelocationSetting';
+import { selectedLocationVacancies } from './campaignLocationSelection';
 import './vacancy-location-tree.css';
 
 const PAGE = 4;
@@ -327,7 +328,12 @@ function LocationFooter({
         className="filters-reset"
         disabled={!hasSelection}
         onClick={() =>
-          props.onChange((prev) => ({ ...prev, selectedLocations: [], locationRemote: false }))
+          props.onChange((prev) => ({
+            ...prev,
+            selectedLocations: [],
+            locationRemote: false,
+            regions: [],
+          }))
         }
       >
         Снять все
@@ -395,7 +401,7 @@ export function VacancyLocationTreeFilter(props: VacancyLocationTreeFilterProps)
         selectedLocations: toggleLocationNode(prev.selectedLocations ?? [], node, props.tree),
       })),
   };
-  const chosen = selected.length + (props.state.locationRemote ? 1 : 0);
+  const chosen = selectedLocationVacancies(props.tree, props.state);
   return (
     <div className="vacancy-location-filter" data-testid="location-tree-filter">
       <LocationSearch query={query} onQuery={setQuery} />
@@ -412,7 +418,11 @@ export function VacancyLocationTreeFilter(props: VacancyLocationTreeFilterProps)
         ) : null}
       </div>
       {props.withFooter === false ? null : (
-        <LocationFooter props={props} chosen={chosen} hasSelection={chosen > 0} />
+        <LocationFooter
+          props={props}
+          chosen={chosen}
+          hasSelection={selected.length > 0 || Boolean(props.state.locationRemote)}
+        />
       )}
     </div>
   );

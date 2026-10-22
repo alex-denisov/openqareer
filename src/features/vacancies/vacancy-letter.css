@@ -305,12 +305,49 @@
   inline-size: 100%;
   min-inline-size: 0;
   min-block-size: max(44px, var(--career-target-min));
-  padding: var(--career-space-2) var(--career-space-3);
+  block-size: max(44px, var(--career-target-min));
+  padding-block: var(--career-space-2);
+  padding-inline: var(--career-space-3) calc(var(--career-space-3) + 16px + var(--career-space-2));
   border: var(--career-border-width) solid var(--career-line-strong);
   border-radius: var(--career-radius-sm);
   background: var(--career-bg-elevated);
   color: var(--career-text);
   font: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+/* G5 A5: WebKit drew the system select low and bare; same look as the «Сохранённые» selects. */
+.career-letter-select {
+  position: relative;
+  display: block;
+  min-inline-size: 0;
+}
+
+.career-letter-settings select:hover:not(:disabled) {
+  border-color: var(--career-text-soft);
+}
+
+.career-letter-settings select:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+  border-color: var(--career-accent);
+}
+
+.career-letter-settings select:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.career-letter-select-caret {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--career-space-3);
+  margin-block: auto;
+  color: var(--career-text-soft);
+  pointer-events: none;
 }
 
 .career-letter-editor {

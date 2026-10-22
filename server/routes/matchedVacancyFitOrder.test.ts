@@ -61,4 +61,26 @@ describe('pool fit order', () => {
       'ready',
     ]);
   });
+
+  it('serves the previous order past the window and refreshes it in the background (PRB-040)', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const scored: Record<string, number> = { a: 10, b: 90 };
+      const pool = [item('a'), item('b')];
+      const ids = () =>
+        withVacancyFitOrder(deps(scored), 'order-swr', 'fit')(pool).map((e) => e.cluster.id);
+      expect(ids()).toEqual(['b', 'a']);
+      scored.a = 95;
+      expect(ids()).toEqual(['b', 'a']);
+      vi.advanceTimersByTime(61_000);
+      targetReads.length = 0;
+      expect(ids()).toEqual(['b', 'a']);
+      await new Promise((resolve) => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(targetReads.sort()).toEqual(['a', 'b']);
+      expect(ids()).toEqual(['a', 'b']);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

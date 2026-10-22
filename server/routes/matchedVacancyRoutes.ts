@@ -6,7 +6,9 @@ import type { CandidateRegion } from '../../src/features/workspace/candidateRegi
 import type { CampaignResolution } from '../vacancies/campaign';
 import { applyVacancyDecisions } from '../vacancies/applyVacancyDecisions';
 import { filterVacanciesByDecisionProfile } from '../../shared/workPreferences';
-import { buildMatchedVacancyPage } from '../vacancies/matchedVacancyPage';
+import { buildMatchedVacancyPage, planMatchedVacancyPages } from '../vacancies/matchedVacancyPage';
+import { createHash } from 'node:crypto';
+import { createCandidateWindowCache } from './candidateWindowCache';
 import { normalizeTitleKey } from '../vacancies/titleParse/normalizeTitleKey';
 import {
   buildMatchedVacancyFacets,
@@ -75,28 +77,6 @@ export function finishMatchedVacancies(
   return applyVacancyDecisions(withinProfile, candidateStore.listVacancyDecisions(candidateId));
 }
 
-function matchedVacancyFacetAndFilter(
-  items: readonly MatchedVacancyItem[],
-  targetRoles: readonly string[],
-  filters: MatchedVacancyFilters,
-  readLevel: (item: MatchedVacancyItem) => number | null | undefined,
-  sourceRegistry: readonly MatchedVacancySourceDefinition[],
-) {
-  return {
-    facets:
-      filters.offset === 0
-        ? buildMatchedVacancyFacets(items, targetRoles, readLevel, sourceRegistry)
-        : undefined,
-    filtered: filterMatchedVacancies(
-      items,
-      filters,
-      targetRoles,
-      readLevel,
-      sourceRegistry.map(({ id }) => id),
-    ),
-  };
-}
-
 /** Снимок подбора уже отобран по уровню; роль — тот же признак, что в списке (B485). */
 function roleLevelMatchCount(
   snapshot: readonly MatchedVacancyItem[],
@@ -104,6 +84,98 @@ function roleLevelMatchCount(
 ): number {
   if (targetRoles.length === 0) return snapshot.length;
   return snapshot.filter((item) => item.explanation.roleMatch !== 'none').length;
+}
+
+/**
+ * PRB-040: каждая страница дочитывания пересчитывала подборку целиком —
+ * ~230 мс event loop на четыре записи, сотни страниц на чтение. Посчитанная
+ * подборка живёт одно окно; страница — срез. Ключ несёт всё, из чего она
+ * считается: снимок пула, фильтры, решения и ограничения кандидата.
+ */
+const MATCHED_LIST_WINDOW_MS = 60_000;
+const matchedListCache = createCandidateWindowCache<MatchedList>(MATCHED_LIST_WINDOW_MS);
+const snapshotIds = new WeakMap<readonly MatchedVacancyItem[], number>();
+let nextSnapshotId = 0;
+
+function snapshotId(snapshot: readonly MatchedVacancyItem[]): number {
+  const known = snapshotIds.get(snapshot);
+  if (known !== undefined) return known;
+  nextSnapshotId += 1;
+  snapshotIds.set(snapshot, nextSnapshotId);
+  return nextSnapshotId;
+}
+
+interface MatchedList {
+  readonly filtered: readonly MatchedVacancyItem[];
+  readonly pageOffsets: readonly number[];
+  readonly facets: ReturnType<typeof buildMatchedVacancyFacets> & {
+    catalogSummary?: ReturnType<typeof matchedCatalogSummary>;
+  };
+  readonly campaignWithHypotheses: ReturnType<typeof readCampaign>;
+}
+
+function matchedListKey(
+  snapshot: readonly MatchedVacancyItem[],
+  campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  filters: MatchedVacancyFilters,
+): string {
+  const fingerprint = createHash('sha256')
+    .update(
+      JSON.stringify([
+        { ...filters, offset: 0 },
+        campaign.regions.value,
+        campaign.suggestedRegions ?? [],
+        campaign.remoteOnly,
+        candidateStore.decisionProfileRepo.get(candidateId) ?? null,
+        candidateStore.listVacancyDecisions(candidateId),
+      ]),
+    )
+    .digest('hex')
+    .slice(0, 16);
+  return `${candidateId}|${snapshotId(snapshot)}|${fingerprint}`;
+}
+
+function computeMatchedList(
+  snapshot: readonly MatchedVacancyItem[],
+  targetRoles: string[],
+  campaign: CampaignResolution,
+  candidateStore: RouteDeps['candidateStore'],
+  candidateId: string,
+  titleParseStore: RouteDeps['titleParseStore'],
+  filters: MatchedVacancyFilters,
+  sourceRegistry: readonly MatchedVacancySourceDefinition[],
+  decorate: (items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[],
+  catalogTotals?: () => CatalogTotals | undefined,
+): MatchedList {
+  const matched = decorate(
+    finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
+  );
+  const hypothesisSnapshot = campaign.remoteOnly
+    ? snapshot.filter((item) => item.cluster.isRemote)
+    : snapshot;
+  const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
+  const readLevel = (item: MatchedVacancyItem) =>
+    titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
+  const facets = buildMatchedVacancyFacets(matched, targetRoles, readLevel, sourceRegistry);
+  const filtered = filterMatchedVacancies(
+    matched,
+    filters,
+    targetRoles,
+    readLevel,
+    sourceRegistry.map(({ id }) => id),
+  );
+  const catalogSummary = matchedCatalogSummary(
+    catalogTotals?.(),
+    roleLevelMatchCount(hypothesisSnapshot, targetRoles),
+  );
+  return {
+    filtered,
+    pageOffsets: planMatchedVacancyPages(filtered),
+    facets: catalogSummary ? { ...facets, catalogSummary } : facets,
+    campaignWithHypotheses: readCampaign(candidateStore, candidateId, counts),
+  };
 }
 
 function buildMatchedResponse(
@@ -120,27 +192,26 @@ function buildMatchedResponse(
   catalogTotals?: () => CatalogTotals | undefined,
 ) {
   const pageAndExplanationsStartedAt = performance.now();
-  const matched = decorate(
-    finishMatchedVacancies(snapshot, targetRoles, campaign, candidateStore, candidateId),
+  let listCached = true;
+  const list = matchedListCache.read(
+    matchedListKey(snapshot, campaign, candidateStore, candidateId, filters),
+    () => {
+      listCached = false;
+      return computeMatchedList(
+        snapshot,
+        targetRoles,
+        campaign,
+        candidateStore,
+        candidateId,
+        titleParseStore,
+        filters,
+        sourceRegistry,
+        decorate,
+        catalogTotals,
+      );
+    },
   );
-  const hypothesisSnapshot = campaign.remoteOnly
-    ? snapshot.filter((item) => item.cluster.isRemote)
-    : snapshot;
-  const counts = countMatchedVacanciesByRole(hypothesisSnapshot, targetRoles);
-  const campaignWithHypotheses = readCampaign(candidateStore, candidateId, counts);
-  const readLevel = (item: MatchedVacancyItem) =>
-    titleParseStore.getByKey(normalizeTitleKey(item.cluster.canonicalTitle))?.levelRank;
-  const { facets, filtered } = matchedVacancyFacetAndFilter(
-    matched,
-    targetRoles,
-    filters,
-    readLevel,
-    sourceRegistry,
-  );
-  const page = buildMatchedVacancyPage(filtered, filters.offset);
-  const catalogSummary = facets
-    ? matchedCatalogSummary(catalogTotals?.(), roleLevelMatchCount(hypothesisSnapshot, targetRoles))
-    : undefined;
+  const page = buildMatchedVacancyPage(list.filtered, filters.offset, undefined, list.pageOffsets);
   const pageAndExplanationsMs = elapsedMs(pageAndExplanationsStartedAt);
   const titleParseStartedAt = performance.now();
   const data = addStoredVacancyLevels(page.items, targetLevel, (key) =>
@@ -149,9 +220,10 @@ function buildMatchedResponse(
   return {
     data,
     page,
-    facets: facets && catalogSummary ? { ...facets, catalogSummary } : facets,
-    preloadIds: filtered.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
-    campaignWithHypotheses,
+    facets: filters.offset === 0 ? list.facets : undefined,
+    preloadIds: list.filtered.slice(0, 20).map((item) => item.cluster.id.replace(/^cluster-/u, '')),
+    campaignWithHypotheses: list.campaignWithHypotheses,
+    listCached,
     pageAndExplanationsMs,
     titleParseAndLevelsMs: elapsedMs(titleParseStartedAt),
   };
@@ -175,6 +247,7 @@ function logMatchedTiming(
       clusterJsonAndClustersMs: 0,
       titleParseAndLevelsMs: response.titleParseAndLevelsMs,
       pageAndExplanationsMs: response.pageAndExplanationsMs,
+      listCached: response.listCached,
       enrichmentsMs: elapsedMs(requestStartedAt),
     },
     'matched-vacancies-timing',

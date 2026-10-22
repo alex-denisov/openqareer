@@ -63,7 +63,7 @@ it('POST enqueues, GET reads processing, refresh GET reveals real evidence', asy
       .find((button) => button.textContent === 'Обновить результат')!
       .click(),
   );
-  expect(methods).toEqual(['POST', 'GET', 'GET']);
+  expect(methods).toEqual(['POST', 'GET']);
   expect(container.querySelectorAll('.vacancy-fit-percent')).toHaveLength(2);
   expect(container.querySelector('table')?.textContent).toContain(
     'Требуется опыт управления продуктом.',
@@ -99,12 +99,13 @@ it('late read after leaving the vacancy cannot update a newly mounted session su
   let resolveRead!: (response: Response) => void;
   vi.stubGlobal(
     'fetch',
+    // The click's own answer (the POST) arrives after the candidate left the vacancy.
     vi.fn(async (_url: string, init?: RequestInit) =>
       init?.method === 'POST'
-        ? Response.json({ data: { state: 'processing' } }, { status: 202 })
-        : new Promise<Response>((resolve) => {
+        ? new Promise<Response>((resolve) => {
             resolveRead = resolve;
-          }),
+          })
+        : Response.json({ data: { state: 'not_requested', requirements: [] } }),
     ),
   );
   const container = await mount();

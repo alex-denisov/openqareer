@@ -629,7 +629,7 @@ test.describe('B250 vacancies screen', () => {
       page.getByRole('main').getByRole('heading', { name: 'Вакансии', exact: true }),
     ).toBeVisible();
     await expect(page.locator('.vacancies-mobile-results-summary')).toContainText(
-      '61 вакансий по вашим условиям',
+      '61 вакансия по вашим условиям',
     );
     const tabs = page.getByRole('tablist', { name: 'Разделы вакансий' });
     await expect(tabs.getByRole('tab')).toHaveCount(3);

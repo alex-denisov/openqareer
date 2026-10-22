@@ -3,8 +3,9 @@ import { CaretDown, Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { companyLookupKey, type VacancyCollectionsState } from './vacancyScreenCollections';
-import { formatCompensationCompact } from './vacancyCompensation';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
+import { VacancyMoneyCell } from './VacancyMoneyCell';
+import { observedDate } from './VacancyScreenRowCells';
 import { getSavedVacancyStates } from './savedVacancyStatesApi';
 import {
   SAVED_SORT_OPTIONS,
@@ -114,19 +115,44 @@ function toEntry(
   };
 }
 
-function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
+/**
+ * B446-r (R4): деньги сохранённой из каталога — та же ячейка, что в подборке:
+ * сумма с «указана в вакансии · hh.ru, 05.10», оценка рынка или «мало данных».
+ */
+function SavedMoney({
+  entry,
+  item,
+}: {
+  readonly entry: SavedVacancyEntry;
+  readonly item?: MatchedVacancyItem;
+}) {
   const closed = savedClosedLabel(entry.state);
-  const salary = entry.state?.salary;
-  const known = salary && (salary.from !== undefined || salary.to !== undefined);
-  const missing = entry.state ? 'Зарплата не указана' : entry.pending ? '…' : 'Зарплата неизвестна';
+  if (item) {
+    return (
+      <div className="saved-row-money is-cell">
+        <VacancyMoneyCell item={item} observedDate={observedDate(item)} />
+        {closed ? <span className="saved-row-closed">{closed}</span> : null}
+      </div>
+    );
+  }
+  const missing = entry.pending && !entry.state ? '…' : 'без зарплаты';
   return (
     <div className="saved-row-money">
-      {known ? (
-        <strong>{formatCompensationCompact(salary)}</strong>
-      ) : (
-        <span className="saved-row-money-missing">{missing}</span>
-      )}
+      <span className="saved-row-money-missing">{missing}</span>
       {closed ? <span className="saved-row-closed">{closed}</span> : null}
+    </div>
+  );
+}
+
+/** Заголовки колонок как над «Подборкой» (макет 4, кадр sv). */
+function SavedHeader() {
+  return (
+    <div className="saved-row-head" aria-hidden="true">
+      <span>Роль</span>
+      <span>Уровень</span>
+      <span>Гео</span>
+      <span>Деньги</span>
+      <span />
     </div>
   );
 }
@@ -146,20 +172,19 @@ const LEVEL_FIT_LABEL = {
   unknown: 'не указано',
 } as const;
 
-/** Вакансии нет в каталоге: уровень и гео неизвестны, так и пишем. */
+/** Вакансии нет в каталоге: одна строка «нет в каталоге» (макет 4), без «— неизвестно». */
 function SavedOutOfCatalog({ label, note }: { readonly label: string; readonly note: string }) {
   return (
     <div className="saved-row-cell" data-label={label}>
-      <span>—</span>
       <span className="saved-row-fit">{note}</span>
     </div>
   );
 }
 
-/** Пока состояние читается — «проверяем каталог»; не прочиталось — «неизвестно». */
+/** Пока состояние читается — «проверяем каталог»; иначе вакансии в каталоге нет. */
 function catalogNote(entry: SavedVacancyEntry): string {
-  if (entry.state) return 'нет в каталоге';
-  return entry.pending ? 'проверяем каталог' : 'неизвестно';
+  if (!entry.state && entry.pending) return 'проверяем каталог';
+  return 'нет в каталоге';
 }
 
 function SavedLevel({ entry }: { readonly entry: SavedVacancyEntry }) {
@@ -210,7 +235,13 @@ function SavedWantButton({
   readonly company?: string;
   readonly want?: SavedWant;
 }) {
-  if (!company || !want) return null;
+  // B446-r (A6): место кнопки есть в каждой строке, чтобы иконки стояли одинаково.
+  if (!company || !want)
+    return (
+      <button type="button" className="saved-row-want" aria-label="Компания не указана" disabled>
+        <Target aria-hidden="true" />
+      </button>
+    );
   return (
     <button
       type="button"
@@ -228,22 +259,38 @@ function SavedWantButton({
 
 function SavedExpandButton({
   title,
+  expanded,
   onExpand,
 }: {
   readonly title: string;
-  readonly onExpand?: () => void;
+  readonly expanded: boolean;
+  readonly onExpand: () => void;
 }) {
-  if (!onExpand) return null;
   return (
     <button
       type="button"
-      className="saved-row-want"
-      aria-label={`Раскрыть: ${title}`}
-      aria-expanded="false"
+      className={expanded ? 'saved-row-want is-open' : 'saved-row-want'}
+      aria-label={`${expanded ? 'Свернуть' : 'Раскрыть'}: ${title}`}
+      aria-expanded={expanded}
       onClick={onExpand}
     >
       <CaretDown aria-hidden="true" />
     </button>
+  );
+}
+
+/** Вакансии нет в каталоге — карточки нет; раскрытие говорит это и ведёт на площадку. */
+function SavedOutOfCatalogDetail({ application }: { readonly application: ApplicationView }) {
+  const url = application.vacancy?.url;
+  return (
+    <div className="saved-row-detail">
+      <p>Вакансии нет в текущем каталоге: описание и соответствие не пересчитываются.</p>
+      {url ? (
+        <a className="career-btn is-sm" href={url} target="_blank" rel="noreferrer noopener">
+          Открыть на площадке
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -254,13 +301,17 @@ function SavedRow({
   onRemove,
   want,
   onExpand,
+  expanded = false,
+  item,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
   readonly busy: boolean;
   readonly onRemove: (application: ApplicationView) => void;
   readonly want?: SavedWant;
-  readonly onExpand?: () => void;
+  readonly onExpand: () => void;
+  readonly expanded?: boolean;
+  readonly item?: MatchedVacancyItem;
 }) {
   const savedDate = formatShortDate(entry.savedAt);
   return (
@@ -274,9 +325,8 @@ function SavedRow({
       </div>
       <SavedLevel entry={entry} />
       <SavedGeo entry={entry} />
-      <SavedMoney entry={entry} />
+      <SavedMoney entry={entry} item={item} />
       <div className="saved-row-actions">
-        <SavedWantButton company={application.vacancy?.company} want={want} />
         <button
           type="button"
           className="saved-row-star"
@@ -287,8 +337,10 @@ function SavedRow({
         >
           <Star weight="fill" aria-hidden="true" />
         </button>
-        <SavedExpandButton title={entry.title} onExpand={onExpand} />
+        <SavedWantButton company={application.vacancy?.company} want={want} />
+        <SavedExpandButton title={entry.title} expanded={expanded} onExpand={onExpand} />
       </div>
+      {expanded ? <SavedOutOfCatalogDetail application={application} /> : null}
     </li>
   );
 }
@@ -300,10 +352,10 @@ function SavedSelect<T extends string>(props: {
   readonly onChange: (value: T) => void;
 }) {
   return (
-    <label className="companies-people-select-wrap">
+    <label className="companies-people-select-wrap saved-select-wrap">
       <span className="career-sr-only">{props.label}</span>
       <select
-        className="companies-people-select"
+        className="companies-people-select saved-select"
         aria-label={props.label}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value as T)}
@@ -314,6 +366,7 @@ function SavedSelect<T extends string>(props: {
           </option>
         ))}
       </select>
+      <CaretDown className="saved-select-caret" size={16} aria-hidden="true" />
     </label>
   );
 }
@@ -455,6 +508,11 @@ function SavedList({
   const byId = new Map(collections.savedApplications.map((item) => [item.id, item]));
   return (
     <ul className="saved-list">
+      {entries.length ? (
+        <li className="saved-list-head">
+          <SavedHeader />
+        </li>
+      ) : null}
       {entries.map((entry) => {
         const application = byId.get(entry.id);
         const item = application && renderCard ? savedItemFor(entry, application) : undefined;
@@ -470,7 +528,9 @@ function SavedList({
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
             want={savedWant(collections, application.vacancy?.company)}
-            onExpand={item ? () => setExpandedId(entry.id) : undefined}
+            item={item ?? (application ? savedItemFor(entry, application) : undefined)}
+            expanded={!item && expandedId === entry.id}
+            onExpand={() => setExpandedId((open) => (open === entry.id ? undefined : entry.id))}
           />
         ) : null;
       })}

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
-import { VacancyMoneyCell } from './VacancyMoneyCell';
+import { VacancyMoneyCell, vacancyMoneySummary } from './VacancyMoneyCell';
 
 const computedAt = '2026-10-05T03:00:00.000Z';
 
@@ -83,5 +83,22 @@ describe('VacancyMoneyCell (B546)', () => {
       />,
     );
     expect(text(markup)).toContain('указана в вакансии · источник неизвестен, 05.10');
+  });
+});
+
+describe('vacancyMoneySummary (G5 item 8: 390 push = 1440 row)', () => {
+  it('gives the push the market estimate, thin sample or missing salary', () => {
+    const estimate = { currency: 'RUR', sampleSize: 41, basis: 'city', computedAt } as const;
+    expect(
+      vacancyMoneySummary(item(undefined, { ...estimate, low: 480_000, high: 560_000 })),
+    ).toEqual({
+      value: '≈ 480–560 тыс. ₽ оценка',
+      note: 'Оценка рынка по 41 вакансии, 05.10',
+      fromSource: false,
+    });
+    expect(vacancyMoneySummary(item(undefined, { ...estimate, sampleSize: 1 })).value).toBe(
+      'мало данных',
+    );
+    expect(vacancyMoneySummary(item(undefined))).toMatchObject({ value: 'не указана' });
   });
 });

@@ -439,6 +439,13 @@ async function openLetter(page: Page): Promise<void> {
   if (await circleThree.isVisible()) await circleThree.click();
   await prepare.click();
   await expect(page.getByRole('heading', { name: 'Письмо под вакансию' })).toBeVisible();
+  // G5 A4: «Подготовить письмо» круга 3 открывает письмо на круге 3; сценарии ниже начинают с круга 1.
+  const tab = (circle: number) =>
+    page.getByRole('tab', { name: new RegExp(`Круг ${circle}`, 'u') });
+  if (await tab(3).count()) {
+    await expect(tab(3)).toHaveAttribute('aria-selected', 'true');
+    await tab(1).click();
+  }
 }
 
 async function waitForLetter(page: Page): Promise<void> {

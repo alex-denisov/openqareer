@@ -142,7 +142,12 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
   await expect(shell).toHaveClass(/career-shell--vacancies/u);
   await expect(shell.locator('.career-expert-peek')).toHaveCount(0);
   await expect(page.locator('.path-strip')).toHaveCount(0);
-  await expect(page.getByRole('tab', { name: 'Подборка 148' })).toBeVisible();
+  // B446-r: вкладка — то же число выдачи, что «Показано N из M» (деньги фильтруются на клиенте).
+  const resultTotal = await page
+    .locator('.vacancies-summary-copy')
+    .innerText()
+    .then((text) => /Показано \d+ из ([\d\s ]+) с вашими/u.exec(text)?.[1]?.replace(/\D/gu, ''));
+  await expect(page.getByRole('tab', { name: `Подборка ${resultTotal}` })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Сохранённые 18' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Компании и люди 61' })).toBeVisible();
   await expect(page.locator('.vacancies-filter-toolbar')).toBeVisible();

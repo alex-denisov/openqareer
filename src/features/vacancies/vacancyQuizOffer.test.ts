@@ -91,3 +91,11 @@ describe('«Не сейчас»', () => {
     expect(isQuizOfferDismissed('v1', ['Kafka', 'Terraform'])).toBe(false);
   });
 });
+
+describe('quizOfferTitle phrases (G5 W3/R1)', () => {
+  it('does not decline multi-word skill names after «по»', () => {
+    expect(quizOfferTitle(['Управление командой', 'AI'])).toBe(
+      'Пройти квиз по навыкам: Управление командой и AI',
+    );
+  });
+});

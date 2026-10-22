@@ -24,6 +24,7 @@ import { VacancyFitSortControl } from './VacancyFitSort';
 import { VacancyRoleFilter, type RoleOption } from './VacancyRoleFilter';
 import type { RoutePremisesDraft } from '../cabinet/routePremises';
 import { buildLocationTree } from '../../../shared/locationTree';
+import { locationSelectionView } from './campaignLocationSelection';
 import type { LocationTreeBuilder } from './useLocationTreeForState';
 import { VacancyLocationTreeFilter } from './VacancyLocationTreeFilter';
 
@@ -345,7 +346,10 @@ const GROUPS_WITH_OWN_FOOTER = new Set<VacancyFilterGroup>(['roles', 'locations'
 
 const EMPTY_LOCATION_TREE = buildLocationTree([]);
 
-/** Дерево считается по черновику фильтров без локаций: так счётчик совпадёт со списком. */
+/**
+ * Дерево считается по всей выдаче (места из сводки сервера, B446-r); без
+ * сводки — по загруженным строкам черновика без фильтра локаций.
+ */
 function LocationTreeSection({
   props,
   withFooter,
@@ -358,16 +362,21 @@ function LocationTreeSection({
   const { selectedLocations, locationRemote, locationSearch, ...rest } = props.state;
   const otherFilters = JSON.stringify(rest);
   const { locationTreeFor } = props;
-  const tree = useMemo(
-    () => locationTreeFor?.(JSON.parse(otherFilters)) ?? EMPTY_LOCATION_TREE,
-    [locationTreeFor, otherFilters],
-  );
+  const places = props.facets?.places;
+  const tree = useMemo(() => {
+    if (places) return buildLocationTree(places);
+    return locationTreeFor?.(JSON.parse(otherFilters)) ?? EMPTY_LOCATION_TREE;
+  }, [places, locationTreeFor, otherFilters]);
+  const view = locationSelectionView(props.state, tree, places ?? [], props.regions ?? []);
+  const onChange: VacanciesScreenFiltersProps['onChange'] = view.fromRegions
+    ? (update) => props.onChange(() => ({ ...update(view.state), regions: [] }))
+    : props.onChange;
   return (
     <VacancyLocationTreeFilter
       withFooter={withFooter}
-      state={props.state}
+      state={view.state}
       tree={tree}
-      onChange={props.onChange}
+      onChange={onChange}
       onCancel={locationActions.onCancel}
       onApply={locationActions.onApply}
     />

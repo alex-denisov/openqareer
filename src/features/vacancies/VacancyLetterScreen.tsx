@@ -4,6 +4,7 @@ import { useVacancyLetterController } from './vacancyLetterController';
 import {
   ArrowLeft,
   ArrowSquareOut,
+  CaretDown,
   ChatCircleText,
   Check,
   CircleNotch,
@@ -358,29 +359,35 @@ function LetterSettings({
     <div className="career-letter-settings">
       <label>
         Язык
-        <select
-          value={language}
-          disabled={frozen}
-          onChange={(event) => onLanguage(event.currentTarget.value as 'auto' | PitchLanguage)}
-        >
-          <option value="auto">Определить по вакансии</option>
-          <option value="ru">Русский</option>
-          <option value="en">English</option>
-        </select>
+        <span className="career-letter-select">
+          <select
+            value={language}
+            disabled={frozen}
+            onChange={(event) => onLanguage(event.currentTarget.value as 'auto' | PitchLanguage)}
+          >
+            <option value="auto">Определить по вакансии</option>
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+          </select>
+          <CaretDown className="career-letter-select-caret" size={16} aria-hidden="true" />
+        </span>
       </label>
       <label>
         Тон
-        <select
-          value={tone}
-          disabled={frozen}
-          onChange={(event) => onTone(event.currentTarget.value as PitchTone)}
-        >
-          {TONE_OPTIONS.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <span className="career-letter-select">
+          <select
+            value={tone}
+            disabled={frozen}
+            onChange={(event) => onTone(event.currentTarget.value as PitchTone)}
+          >
+            {TONE_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <CaretDown className="career-letter-select-caret" size={16} aria-hidden="true" />
+        </span>
       </label>
     </div>
   );

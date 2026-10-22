@@ -41,7 +41,7 @@ test('B550: saved tab searches, filters closed, sorts by money and keeps the cho
   await expect(found.locator('[data-label="Гео"]')).toContainText('Москва');
   const missing = page.locator('.saved-row').filter({ hasText: 'Saved role 3' });
   await expect(missing.locator('[data-label="Гео"]')).toContainText('нет в каталоге');
-  await expect(missing.locator('[data-label="Уровень"]')).toContainText('—');
+  await expect(missing.locator('[data-label="Уровень"]')).toContainText('нет в каталоге');
 
   const search = page.getByRole('searchbox', { name: 'Компания или роль среди 6 сохранённых' });
   await search.fill('Saved company 3');

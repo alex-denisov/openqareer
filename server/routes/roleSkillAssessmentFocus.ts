@@ -11,8 +11,12 @@ import { readVacancyFitTarget } from './vacancyFitContext';
 
 /** A consultant offer names at most this many skills of one vacancy (B552). */
 export const MAX_FOCUS_SKILLS = 3;
-/** A focus case needs the skill in this many role vacancies, the offered one included. */
-export const FOCUS_MIN_VACANCIES = 3;
+/**
+ * A focus case needs the skill in this many vacancies, the offered one included. G5 R1b: the
+ * quiz is about the opened vacancy's own unconfirmed skills, so that vacancy is enough; the
+ * role sample only adds dated sources.
+ */
+export const FOCUS_MIN_VACANCIES = 1;
 
 export const focusSchema = z
   .object({

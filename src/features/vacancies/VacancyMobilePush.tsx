@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { vacancyMoneySummary } from './VacancyMoneyCell';
 import type { VacancyRowProps } from './VacancyRow';
 import { companyPathActions } from './VacancyCompanyPathPanel';
 import { DetailTrustAlert } from './VacancyTrustAlert';
@@ -17,8 +18,8 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { openExternalLink } from '../../services/desktop/openExternalLink';
 import { vacancySourceLabels } from '../../../shared/vacancySourceLabel';
 import { pluralRu } from '../../../shared/pluralRu';
-import { formatCompensationCompact } from './vacancyCompensation';
-import { vacancyLevelLabel } from './VacancyScreenRowCells';
+import { CheckCircle } from '@phosphor-icons/react';
+import { vacancyGeoLabel, vacancyLevelLabel } from './VacancyScreenRowCells';
 import { VacancyScreenRequirementChips } from './VacancyScreenDetails';
 import { useVacancySummary } from './vacancyDetailApi';
 import type { CompanyPathActions } from './VacancyCompanyPathPanel';
@@ -86,16 +87,14 @@ function originLabel(item: MatchedVacancyItem): string {
 }
 
 function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
-  const { cluster, explanation } = item;
+  const { explanation } = item;
   const origin = originLabel(item);
+  const money = vacancyMoneySummary(item);
   const rows: readonly [string, string, boolean][] = [
     ['Уровень', vacancyLevelLabel(item), explanation.levelMatch === 'match'],
-    [
-      'Гео',
-      cluster.canonicalLocation ?? (cluster.isRemote ? 'Удалённо' : 'Не указано'),
-      !explanation.outsideGeography,
-    ],
-    ['Деньги', formatCompensationCompact(cluster.salary), false],
+    // Макет 4 (390): «✓ Москва, гибрид» — город и формат, как в колонке 1440 (G5 R2).
+    ['Гео', vacancyGeoLabel(item), !explanation.outsideGeography],
+    ['Деньги', money.value, false],
   ];
   return (
     <section className="vacancy-push-group">
@@ -105,15 +104,20 @@ function ConditionsGroup({ item }: { readonly item: MatchedVacancyItem }) {
           <div className="vacancy-push-kv" key={label}>
             <span>{label}</span>
             <b className={ok ? 'is-ok' : undefined}>
-              {ok ? <span className="career-sr-only">Совпадает: </span> : null}
+              {ok ? (
+                <>
+                  <CheckCircle aria-hidden="true" />
+                  <span className="career-sr-only">Совпадает: </span>
+                </>
+              ) : null}
               {value}
             </b>
           </div>
         ))}
       </div>
       <p className="vacancy-push-foot">
-        {cluster.salary ? 'Зарплата указана в вакансии' : 'Зарплата в вакансии не указана'}
-        {origin ? `, ${origin}` : ''}.
+        {money.note}
+        {money.fromSource && origin ? `, ${origin}` : ''}.
       </p>
     </section>
   );
@@ -256,6 +260,7 @@ function PushCta({
       </div>
     );
   }
+  if (page === 'c1') return null;
   const cta = CIRCLE_CTA[page];
   const action = props.pathActions[cta.action];
   return action ? (
@@ -288,7 +293,7 @@ function PushBody({
   if (page === 'path') {
     return <PushPathPage data={circles.data} actions={props.pathActions} onOpenCircle={open} />;
   }
-  return <PushCirclePage page={page} data={circles.data} />;
+  return <PushCirclePage page={page} data={circles.data} actions={props.pathActions} />;
 }
 
 function useEscapeBack(back: () => void) {
@@ -469,6 +474,8 @@ export function VacancyRowPush({
     ...base,
     onShowPaths: leave(base.onShowPaths),
     onPrepareLetter: rowProps.onOpenLetter ? leave(base.onPrepareLetter) : base.onPrepareLetter,
+    onAskIntro: rowProps.onOpenLetter ? leave(base.onAskIntro) : base.onAskIntro,
+    onEditContactDraft: leave(base.onEditContactDraft),
   };
   return (
     <VacancyMobilePush

@@ -34,7 +34,8 @@
 
 .saved-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* B446-r (A6): поиск шире — плейсхолдер «…среди N сохранённых» не обрезается. */
+  grid-template-columns: minmax(20rem, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--career-space-2);
 }
 
@@ -71,6 +72,80 @@
 .saved-controls .companies-people-select {
   display: block;
   inline-size: 100%;
+}
+
+/* B446-r (A5): выбор как в макете — без системного вида WebKit, своя стрелка, 44 px. */
+.saved-controls .saved-select-wrap {
+  position: relative;
+}
+
+.saved-controls .saved-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline: var(--career-space-3) calc(var(--career-space-3) + 16px + var(--career-space-2));
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.saved-controls .saved-select:hover:not(:disabled) {
+  border-color: var(--career-text-soft);
+}
+
+.saved-controls .saved-select:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+  border-color: var(--career-accent);
+}
+
+.saved-select-caret {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--career-space-3);
+  margin-block: auto;
+  color: var(--career-text-soft);
+  pointer-events: none;
+}
+
+.saved-row-want.is-open svg {
+  rotate: 180deg;
+}
+
+.saved-row-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+  align-items: center;
+  grid-column: 1 / -1;
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+}
+
+.saved-row-detail p {
+  margin: 0;
+}
+
+.saved-list-head {
+  display: block;
+}
+
+/* B446-r (R4): заголовки колонок той же сеткой, что строки. */
+.saved-row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.3fr) calc(
+      var(--career-target-min) * 3 + var(--career-space-2) * 2
+    );
+  gap: var(--career-space-4);
+  padding-inline: calc(var(--career-space-4) + var(--career-border-width));
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.saved-row-money.is-cell .vacancies-screen-cell {
+  display: grid;
+  gap: var(--career-space-1);
 }
 
 .saved-list {
@@ -198,7 +273,8 @@
 
 @media (max-width: 760px) {
   /* Макет 390 (mock-390m-saved): без поиска и выборов — пояснение, список, подвал. */
-  .saved-controls {
+  .saved-controls,
+  .saved-list-head {
     display: none;
   }
 
@@ -351,6 +427,8 @@
 .vacancies-filter-group-buttons {
   display: flex;
   flex: 1;
+  /* B446-r (R9): в уменьшенном окне .app чипы переносятся, отступ карточки сводки сохраняется. */
+  flex-wrap: wrap;
   gap: var(--career-space-2);
   min-inline-size: 0;
 }
@@ -460,7 +538,8 @@
 }
 
 .vacancies-filters[data-active-group='sources'] {
-  width: min(100%, calc(var(--career-target-min) * 10));
+  /* B446-r (W7): «is-wide» макета 4, как «Локации» (34 rem): счёт и подвал в одну строку. */
+  width: min(100%, calc(var(--career-target-min) * 12 + var(--career-space-4)));
 }
 
 .vacancies-filters[data-active-group='roles'] .chip-row {

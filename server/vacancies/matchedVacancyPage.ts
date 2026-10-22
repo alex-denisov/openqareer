@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeCityLabel } from '../../shared/cityLabel';
+import { northAmericanCountryOf } from '../../shared/postalPlace';
 import { detectVacancyWorkFormat } from '../../shared/vacancyWorkFormat';
 import { isKnownCountry } from '../domain/geoCoordinates';
 import { getCompanyRegistry } from '../domain/companyRegistry';
@@ -22,7 +23,16 @@ import type { Company } from '../domain/company';
  * около полутора килобайт на запись, а на экране видно не больше трёх; чтобы
  * покрытие осталось честным, вместо списков едет их счёт.
  */
-export const MATCHED_PAGE_BYTE_BUDGET = 12_288;
+export const MATCHED_PAGE_BYTE_BUDGET = 40_000;
+
+/**
+ * PRB-040: страница в 12 КБ несла четыре вакансии, и подборка из двух тысяч
+ * дочитывалась пятью сотнями запросов. Стена канала (~20 КБ у ретранслятора
+ * для России) меряется байтами на проводе, а Caddy сжимает JSON (`encode
+ * gzip`): 9,5 КБ записей прода сжимались в 2,4 КБ. 40 000 байт записей — это
+ * ~10 КБ на проводе, вместе с фасетами первой страницы — меньше стены.
+ */
+export const MATCHED_PAGE_ITEM_LIMIT = 20;
 
 /** Столько требований печатает карточка вакансии — и совпавших, и нет. */
 const VISIBLE_POINTS = 3;
@@ -46,6 +56,13 @@ export interface MatchedVacancyPage {
   readonly pageOffsets?: readonly number[];
 }
 
+/** Страна и город одним именем: «Singapore 069542» — точка, а не страна без города (A9). */
+const CITY_STATES = new Set(['singapore', 'сингапур', 'hong kong', 'гонконг', 'monaco', 'luxembourg']);
+
+function isCityState(label: string): boolean {
+  return CITY_STATES.has(label.trim().toLocaleLowerCase());
+}
+
 function extractLocationCoordinates(
   canonicalLocation?: string,
   company?: Company,
@@ -65,19 +82,26 @@ function extractLocationCoordinates(
     const named = normalizeCityLabel(parts[0]);
     // «Alma · Italy»: площадка положила в место страну. Страна — не городской
     // хаб, и выдавать её за точку на карте нельзя (B203).
-    city = named && isKnownCountry(named) ? undefined : named;
-    country = parts[1] || (named && isKnownCountry(named) ? named : undefined);
+    city = named && isKnownCountry(named) && !isCityState(named) ? undefined : named;
+    // «Chicago, IL»: второй сегмент — штат, страна у него — США (A9).
+    const second = parts[1] ? (northAmericanCountryOf(parts[1]) ?? parts[1]) : undefined;
+    country = second || (named && isKnownCountry(named) ? named : undefined);
     coordinates = city ? lookupLocationCoordinates(city, country) : undefined;
   }
 
   if (!coordinates && company && company.locations.length > 0) {
-    const locWithCoords = company.locations.find((l) => l.coordinates);
+    // A9: точка офиса компании — только для того же города. «Singapore 069542»
+    // получал координаты европейского офиса той же компании; неузнанный город
+    // честнее оставить без точки.
+    const sameCity = (location: Company['locations'][number]) =>
+      !city || normalizeCityLabel(location.city)?.toLocaleLowerCase() === city.toLocaleLowerCase();
+    const locWithCoords = company.locations.find((l) => l.coordinates && sameCity(l));
     if (locWithCoords) {
       coordinates = locWithCoords.coordinates;
       if (!city) city = normalizeCityLabel(locWithCoords.city);
       if (!country) country = locWithCoords.country;
-    } else {
-      if (!city) city = normalizeCityLabel(company.locations[0].city);
+    } else if (!city) {
+      city = normalizeCityLabel(company.locations[0].city);
       if (!country) country = company.locations[0].country;
     }
   }
@@ -153,7 +177,11 @@ function takePage(
   // Открывающая и закрывающая скобки массива входят в тот же бюджет.
   let size = 2;
 
-  for (let index = start; index < all.length; index += 1) {
+  for (
+    let index = start;
+    index < all.length && items.length < MATCHED_PAGE_ITEM_LIMIT;
+    index += 1
+  ) {
     const trimmed = trim(all[index]);
     const cost = Buffer.byteLength(JSON.stringify(trimmed), 'utf8') + (items.length > 0 ? 1 : 0);
     // Запись, которая одна не влезает в бюджет, всё равно уходит первой: иначе
@@ -197,6 +225,7 @@ export function buildMatchedVacancyPage(
   all: readonly MatchedVacancyItem[],
   offset: number,
   budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
+  plannedOffsets?: readonly number[],
 ): MatchedVacancyPage {
   const start = Math.max(0, Math.trunc(offset));
   const items = takePage(all, start, budgetBytes);
@@ -209,6 +238,8 @@ export function buildMatchedVacancyPage(
     nextOffset: nextOffset < all.length ? nextOffset : null,
     // План едет только с первой страницей: в каждом ответе он был бы лишними
     // байтами внутри того самого бюджета, ради которого пул и режется.
-    ...(start === 0 ? { pageOffsets: planMatchedVacancyPages(all, budgetBytes) } : {}),
+    ...(start === 0
+      ? { pageOffsets: plannedOffsets ?? planMatchedVacancyPages(all, budgetBytes) }
+      : {}),
   };
 }

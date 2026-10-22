@@ -21,10 +21,11 @@ interface JobRow { id: string; input_json: string; lease_token: string; lease_un
 
 /** Public vacancy data only. Constructed by the background worker's own DB connection. */
 /** Bumped when a parser change makes earlier model failures worth one more try (B522: 2). */
-export const MECHANICS_REQUEUE_REVISION = 2;
+export const MECHANICS_REQUEUE_REVISION = 3;
 /** Below title strategy (0.5–1), shown pages (1.5) and fit dependencies (2): the background tail (B510). */
 export const LABEL_UPGRADE_PRIORITY = 0.1;
-const REQUEUE_PRIORITY = 0.5;
+/** A requeue keeps label upgrades (0.1) and title strategy below shown pages, and never lifts a job above them (B510-r). */
+const REQUEUE_PRIORITY = 1.5;
 
 export class SqliteVacancyRequirementsStore {
   constructor(private readonly db: DatabaseSync) { this.ensureSchema(); }
@@ -174,7 +175,7 @@ export class SqliteVacancyRequirementsStore {
 
   /**
    * One requeue of model failures after a parser upgrade: rows that failed under an older
-   * revision go back once, below the shown pages (priority 1). Later failures carry the current
+   * revision go back once, at most at the shown-page priority (1.5). Later failures carry the current
    * revision and are never requeued by this again.
    */
   requeueModelFailures(revision = MECHANICS_REQUEUE_REVISION, now = Date.now()): number {

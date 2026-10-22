@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiFetch, readData } from '../coach/apiClient';
+import { decodeVacancyText } from './vacancyText';
 
 export interface VacancyDetailText {
   readonly id: string;
@@ -19,7 +20,11 @@ export async function fetchVacancyDetail(clusterId: string): Promise<VacancyDeta
   const detail = await readData<VacancyDetailText | null>(response);
   // Пустой ответ — это «не загрузилось», а не карточка без полей (B510).
   if (!detail) throw new Error('Vacancy detail is empty');
-  return detail;
+  return {
+    ...detail,
+    description: decodeVacancyText(detail.description ?? ''),
+    ...(detail.summary ? { summary: decodeVacancyText(detail.summary) } : {}),
+  };
 }
 
 export type VacancyDetailState =
@@ -52,7 +57,7 @@ export function vacancySummaryText(
   pageSummary: string,
   detail: VacancyDetailState,
 ): VacancySummaryText {
-  const fromPage = pageSummary.trim();
+  const fromPage = decodeVacancyText(pageSummary).trim();
   if (fromPage) return { text: fromPage };
   if (detail.status === 'loading' || detail.status === 'idle') return { loading: true };
   if (detail.status === 'ready' && detail.detail.summary?.trim())

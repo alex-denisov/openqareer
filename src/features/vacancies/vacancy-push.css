@@ -13,8 +13,11 @@
     calc(var(--career-mobile-nav-height) + var(--career-space-4) + env(safe-area-inset-bottom));
   z-index: 26;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  /* M1: the body row grows with its content so the push scrolls; minmax(0, 1fr)
+     squeezed the overflow-hidden action list to zero height. */
+  grid-template-rows: auto minmax(max-content, 1fr) auto;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--career-bg);
   color: var(--career-text);
   scroll-padding-block: var(--career-mobile-topbar-height)
@@ -95,6 +98,7 @@
 }
 
 .vacancy-push-requirements .vacancies-screen-requirements-note,
+.vacancy-push-requirements .vacancies-screen-requirements-conditions,
 .vacancy-push-requirements .vacancies-screen-no-requirements {
   margin: 0;
   padding-inline: var(--career-space-4);
@@ -104,6 +108,7 @@
 
 .vacancy-push-list {
   display: grid;
+  min-block-size: max-content;
   border-radius: var(--career-radius-lg);
   background: var(--career-surface);
   overflow: hidden;
@@ -154,6 +159,16 @@
 }
 
 .vacancy-push-kv b.is-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+}
+
+/* G5 R2: the match is the icon; the value stays in the body colour (mockup 4, 390). */
+.vacancy-push-kv b.is-ok svg {
+  flex: none;
+  inline-size: 1.1em;
+  block-size: 1.1em;
   color: var(--career-success);
 }
 

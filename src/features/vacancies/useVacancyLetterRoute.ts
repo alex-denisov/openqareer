@@ -13,10 +13,16 @@ export type CompanyLetterOpen = (
   circle: ConnectionCircleNumber,
 ) => void;
 
+/** A row's letter: without a circle the controller picks the warmest known one. */
+export type RowLetterOpen = (
+  vacancy: MatchedVacancyItem['cluster'],
+  circle?: ConnectionCircleNumber,
+) => void;
+
 export function useVacancyLetterRoute() {
   const [request, setRequest] = useState<VacancyLetterRouteRequest | null>(null);
-  const openFromRow = useCallback(
-    (vacancy: MatchedVacancyItem['cluster']) => setRequest({ vacancy }),
+  const openFromRow = useCallback<RowLetterOpen>(
+    (vacancy, circle) => setRequest(circle ? { vacancy, initialCircle: circle } : { vacancy }),
     [],
   );
   const openFromCompany = useCallback<CompanyLetterOpen>(
