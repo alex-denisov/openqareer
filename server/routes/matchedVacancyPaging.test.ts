@@ -95,6 +95,18 @@ async function createPagingApp(
 }
 
 describe('чтение подбора страницами', () => {
+  it('отдаёт подборку страницами по 20 записей из одной посчитанной подборки (PRB-040)', async () => {
+    const { app, authorization } = await createPagingApp();
+    const get = (offset: number) => app.inject({
+      url: `/api/v1/candidate/matched-vacancies?offset=${offset}`, headers: { authorization } });
+    const first = (await get(0)).json();
+    expect(first.data).toHaveLength(20);
+    expect(first.meta.pageOffsets).toEqual([0, 20]);
+    const second = (await get(20)).json();
+    expect(second.data).toHaveLength(20);
+    expect(second.meta.nextOffset).toBeNull();
+  });
+
   it('serves session and connections while a matching read is still running', async () => {
     let finish!: () => void;
     const waiting = new Promise<void>((resolve) => { finish = resolve; });

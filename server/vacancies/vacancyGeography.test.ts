@@ -85,3 +85,14 @@ describe('markGeography', () => {
     ]);
   });
 });
+
+describe('штаты и провинции после города (B546)', () => {
+  it('«City, ST» — Северная Америка, а не ISO-страна', () => {
+    expect(regionOfVacancy({ location: 'Chicago, IL' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Indianapolis, IN 46209' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Honolulu, HI 96813', country: 'HI 96813' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Mississauga, ON L4W 5J1' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Atlanta, GA; Dallas, TX' })).toBe('us');
+    expect(regionOfVacancy({ location: 'Tel Aviv, Israel' })).toBe('mena');
+  });
+});

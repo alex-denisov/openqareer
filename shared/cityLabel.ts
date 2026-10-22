@@ -9,6 +9,7 @@
  * Правило одно на сервер и на экран, поэтому живёт в общем слое.
  */
 import { isRegionLabel } from './placeNames';
+import { stripPostalCode } from './postalPlace';
 
 /** Перечисление мест, а не место: такую строку картой показывать нельзя. */
 const LIST_SEPARATORS = /[;|/]|\s+·\s+/;
@@ -58,7 +59,8 @@ export function normalizeCityLabel(raw?: string): string | undefined {
   const withoutPrefix = place.replace(COUNTRY_PREFIX, '').replace(CITY_PREFIX, '').trim();
   const withoutQualifier = withoutPrefix.replace(/\s*\([^)]*\)\s*/gu, ' ').replace(DISTRICT_SUFFIX, '').trim();
   if (OFFICE_ONLY.test(withoutQualifier)) return undefined;
-  const withoutOffice = withoutQualifier.replace(OFFICE_SUFFIX, '').trim();
+  // A9: «Singapore 069542» — тот же Сингапур, а не неизвестный город.
+  const withoutOffice = stripPostalCode(withoutQualifier.replace(OFFICE_SUFFIX, '').trim());
   const label = withoutOffice || withoutQualifier || withoutMode;
 
   if (!label) return undefined;

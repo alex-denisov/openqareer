@@ -12,6 +12,8 @@
  * left out of it.
  */
 import { pluralWordRu } from './pluralRu';
+import { normalizeCityLabel } from './cityLabel';
+import { isCountryName } from './placeNames';
 
 export const MARKET_SALARY_MIN_SAMPLE = 5;
 /** Below this a stated amount is an hourly rate, not a monthly or yearly salary. */
@@ -98,10 +100,15 @@ export function marketSalaryKey(
   return `${functionCode}|${level}|${basis}|${place.trim().toLocaleLowerCase('ru-RU')}`;
 }
 
-/** First segment of a free-text location: «Москва, Россия» → «Москва». */
+/**
+ * The city of a free-text location: «Москва, Россия» → «Москва». The same
+ * label the map uses (A9): «London EC1V 8AB» and «London EC1M» are one London
+ * group, and «Remote» or a country is no city at all.
+ */
 export function marketSalaryCity(location: string | null | undefined): string | undefined {
-  const city = location?.split(/[;,/]/u)[0]?.trim();
-  return city ? city : undefined;
+  const first = location?.split(/[;,/]/u)[0]?.trim();
+  const city = first ? normalizeCityLabel(first) : undefined;
+  return city && !isCountryName(city) ? city : undefined;
 }
 
 const CURRENCY_SIGN: Readonly<Record<string, string>> = {
