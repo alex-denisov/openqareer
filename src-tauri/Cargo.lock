@@ -2547,7 +2547,7 @@ dependencies = [
 
 [[package]]
 name = "openqareer-desktop"
-version = "1.0.3"
+version = "1.0.9"
 dependencies = [
  "base64 0.22.1",
  "block2",

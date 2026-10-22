@@ -1,6 +1,6 @@
 [package]
 name = "openqareer-desktop"
-version = "1.0.3"
+version = "1.0.9"
 description = "OpenQareer — Candidate-Owned Career OS Desktop Companion"
 authors = ["OpenQareer Team"]
 edition = "2021"
