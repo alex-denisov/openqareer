@@ -59,7 +59,7 @@
   padding: var(--career-space-3) var(--career-space-4);
   border-radius: var(--career-radius-md);
   background: var(--career-bg-elevated);
-  border: var(--career-border-width) solid var(--career-line-soft);
+  border: var(--career-border-width) solid var(--career-line-strong);
   font-size: var(--career-text-sm);
   color: var(--career-text-secondary);
   margin-bottom: var(--career-space-4);
@@ -113,7 +113,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--career-space-4) var(--career-space-5);
-  border-bottom: var(--career-border-width) solid var(--career-line-soft);
+  border-bottom: var(--career-border-width) solid var(--career-line-strong);
 }
 
 .career-app-update-modal-title {
@@ -161,7 +161,7 @@
 }
 
 .career-app-update-tag.is-fixed {
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   color: var(--career-text-secondary);
 }
 
@@ -191,7 +191,7 @@
   flex: 1;
   min-inline-size: 8rem;
   height: 8px;
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   border-radius: var(--career-radius-full);
   overflow: hidden;
 }
@@ -217,7 +217,7 @@
   justify-content: flex-end;
   gap: var(--career-space-3);
   padding: var(--career-space-4) var(--career-space-5);
-  border-top: var(--career-border-width) solid var(--career-line-soft);
+  border-top: var(--career-border-width) solid var(--career-line-strong);
   background: var(--career-bg);
 }
 
@@ -229,12 +229,12 @@
   appearance: none;
   border: 0;
   border-radius: var(--career-radius-full);
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   overflow: hidden;
 }
 
 .career-app-update-progress::-webkit-progress-bar {
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   border-radius: var(--career-radius-full);
 }
 
@@ -251,7 +251,8 @@
 }
 
 .career-app-update-banner > .career-app-update-progress-row {
-  flex: 1 1 16rem;
+  flex: 1 0 100%;
+  padding-inline-start: calc(18px + var(--career-space-4));
 }
 
 /* Макет 16 (shared.css): малые кнопки полоски — видимые 32 px внутри цели 44,
