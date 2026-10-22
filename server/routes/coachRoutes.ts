@@ -149,7 +149,12 @@ async function deliverTurn(
     .finally(() => active.delete(operation));
   if ((request.query as { delivery?: string }).delivery === 'receipt') {
     // Failure is persisted by the worker; polling does not restart generation.
-    void work.catch(() => undefined);
+    void work.catch((error: unknown) => {
+      request.log.error(
+        { err: error, code: error instanceof CoachProviderError ? error.code : 'internal_error' },
+        'coach-turn-failed',
+      );
+    });
     return pending();
   }
   const output = await work;
