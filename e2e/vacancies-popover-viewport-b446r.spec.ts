@@ -80,3 +80,52 @@ for (const size of SIZES) {
     }
   });
 }
+
+const GROUPS = ['roles', 'locations', 'salary', 'format', 'sources'] as const;
+
+test('B446-r (R7): Escape и клик снаружи закрывают каждый поповер, фокус на чипе', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'поповеры — раскладка от 761 px');
+  test.setTimeout(60_000);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockPool(page);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+  await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
+  const popover = page.locator('#vacancies-filter-popover');
+  for (const group of GROUPS) {
+    const chip = page.locator(`[data-filter-group="${group}"]`);
+    await chip.click();
+    await expect(popover).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(popover).toBeHidden();
+    await expect(chip).toBeFocused();
+
+    await chip.click();
+    await expect(popover).toBeVisible();
+    await page.locator('.vacancies-screen-header, h1').first().click({ force: true });
+    await expect(popover).toBeHidden();
+    await expect(chip).toBeFocused();
+  }
+});
+
+test('B446-r (R7): Escape откатывает невыбранные изменения, как «Отмена»', async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== 'desktop-1440', 'поповеры — раскладка от 761 px');
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockPool(page);
+  await page.goto('/app', { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Вакансии', exact: true }).click();
+  await expect(page.locator('.vac-list-item').first()).toBeVisible({ timeout: 15_000 });
+  const chip = page.locator('[data-filter-group="sources"]');
+  await chip.click();
+  const first = page
+    .locator('#vacancies-filter-popover')
+    .getByRole('checkbox', { name: 'Источник 1', exact: true });
+  await first.check();
+  await page.keyboard.press('Escape');
+  await chip.click();
+  await expect(first).not.toBeChecked();
+});

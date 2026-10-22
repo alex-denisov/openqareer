@@ -9,6 +9,7 @@ import {
 } from './VacanciesFilterToolbar';
 import type { VacanciesScreenFiltersProps } from './VacanciesScreenFilters';
 import { usePopoverViewportLimit } from './usePopoverViewportLimit';
+import { usePopoverDismiss } from './usePopoverDismiss';
 
 export interface VacanciesFilterPopoverProps {
   readonly title: string;
@@ -28,7 +29,14 @@ export function VacanciesFilterPopover({
   children,
 }: VacanciesFilterPopoverProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const desktopGroup = open && !mobileOpen && activeGroup ? activeGroup : undefined;
   usePopoverViewportLimit(ref, open && !mobileOpen);
+  usePopoverDismiss(
+    ref,
+    desktopGroup !== undefined,
+    desktopGroup ? `[data-filter-group="${desktopGroup}"]` : undefined,
+    onClose,
+  );
   return (
     <>
       {mobileOpen ? (
