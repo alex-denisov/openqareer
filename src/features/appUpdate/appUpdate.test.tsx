@@ -46,10 +46,8 @@ describe('B469: Desktop App Update Mechanics', () => {
     act(() => installBtn.click());
     expect(actions.onInstall).toHaveBeenCalled();
 
-    const enableAutoBtn = container.querySelector('[data-testid="app-update-enable-auto-btn"]') as HTMLButtonElement;
-    expect(enableAutoBtn).not.toBeNull();
-    act(() => enableAutoBtn.click());
-    expect(actions.onEnableAutoUpdate).toHaveBeenCalled();
+    expect(container.querySelector('[data-testid="app-update-enable-auto-btn"]')).toBeNull();
+    expect(container.textContent).toContain('Установится после перезапуска. Черновики и вход сохранятся.');
 
     const whatsNewBtn = container.querySelector('[data-testid="app-update-whats-new-btn"]') as HTMLButtonElement;
     expect(whatsNewBtn).not.toBeNull();
@@ -199,5 +197,27 @@ describe('B469: Desktop App Update Mechanics', () => {
 
     act(() => root.unmount());
     container.remove();
+  });
+});
+
+describe('B359 download inside the strip', () => {
+  it('shows the version, archive size and percent in the banner, without a dialog', () => {
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    act(() => {
+      root.render(
+        <AppUpdateBanner
+          state="downloading"
+          info={{ ...DEFAULT_UPDATE_INFO, version: '1.0.3', downloadSizeMb: 35, progressPercent: 57 }}
+          actions={createMockActions()}
+        />,
+      );
+    });
+    const banner = container.querySelector('[data-testid="app-update-downloading"]');
+    expect(banner?.textContent).toContain('Загружаем версию 1.0.3, 35 МБ');
+    expect(banner?.textContent).toContain('57 %');
+    expect(banner?.querySelector('progress')?.getAttribute('value')).toBe('57');
+    expect(container.textContent).not.toMatch(/из 35/u);
+    act(() => root.unmount());
   });
 });

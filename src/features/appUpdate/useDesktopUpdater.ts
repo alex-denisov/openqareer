@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import {
   SignatureVerificationError,
   checkForUpdate,
@@ -24,6 +24,16 @@ const EMPTY_INFO: AppUpdateReleaseInfo = {
 
 export const IDLE_UPDATER_STATUS: AppUpdateStatusData = { state: 'idle', modal: 'none', info: EMPTY_INFO };
 
+type Patch = (next: Partial<AppUpdateStatusData>, info?: Partial<AppUpdateReleaseInfo>) => void;
+
+export interface DesktopUpdater {
+  readonly getStatus: () => AppUpdateStatusData;
+  readonly subscribe: (listener: () => void) => () => void;
+  readonly start: () => () => void;
+  readonly check: () => Promise<void>;
+  readonly actions: AppUpdateActions;
+}
+
 function releaseDate(date?: string): string {
   const parsed = date ? new Date(date.replace(' ', 'T').replace(/ \+00:00:00$/u, 'Z')) : null;
   if (!parsed || Number.isNaN(parsed.getTime())) return '';
@@ -40,10 +50,8 @@ function progressInfo(progress: UpdateProgress): Partial<AppUpdateReleaseInfo> {
 
 function errorText(error: unknown): string {
   if (error instanceof SignatureVerificationError) return error.message;
-  return 'Не удалось загрузить обновление. Проверьте соединение и повторите.';
+  return 'Загрузка прервалась. Работа продолжается на текущей версии, ничего не потеряно.';
 }
-
-type Patch = (next: Partial<AppUpdateStatusData>, info?: Partial<AppUpdateReleaseInfo>) => void;
 
 function createActions(patch: Patch, install: () => Promise<void>): AppUpdateActions {
   const close = () => patch({ modal: 'none' });
@@ -67,14 +75,17 @@ function createActions(patch: Patch, install: () => Promise<void>): AppUpdateAct
   };
 }
 
-/** Drives the update banner from the real Tauri updater; the web build stays idle. */
-export function useDesktopUpdater() {
-  const [status, setStatus] = useState<AppUpdateStatusData>(IDLE_UPDATER_STATUS);
-  const patch = useCallback<Patch>((next, info) => {
-    setStatus((prev) => ({ ...prev, ...next, info: { ...prev.info, ...info } }));
-  }, []);
+/** One updater per app window: the banner can unmount with its screen, the download goes on. */
+export function createDesktopUpdater(): DesktopUpdater {
+  let status = IDLE_UPDATER_STATUS;
+  const listeners = new Set<() => void>();
+  const patch: Patch = (next, info) => {
+    status = { ...status, ...next, info: { ...status.info, ...info } };
+    for (const listener of listeners) listener();
+  };
 
-  const check = useCallback(async () => {
+  const check = async () => {
+    if (status.state !== 'idle') return;
     try {
       const result = await checkForUpdate();
       if (result.status !== 'available') return;
@@ -85,30 +96,44 @@ export function useDesktopUpdater() {
         changelog: result.notes ? [{ tag: 'new', tagLabel: 'Новое', text: result.notes }] : [],
       });
     } catch {
-      // Offline or the manifest is unreachable: stay quiet, the next check retries.
+      // Offline or the feed is unreachable: stay quiet, the next check retries.
     }
-  }, [patch]);
+  };
 
-  const install = useCallback(async () => {
-    patch({ state: 'downloading', modal: 'downloading', errorMessage: undefined }, { progressPercent: 0, downloadedMb: 0 });
+  const install = async () => {
+    patch({ state: 'downloading', modal: 'none', errorMessage: undefined }, { progressPercent: 0, downloadedMb: 0 });
     try {
       await downloadAndInstall((progress) => patch({}, progressInfo(progress)));
       patch({ state: 'ready', modal: 'none' });
     } catch (error: unknown) {
-      patch({ state: 'error', modal: 'error', errorMessage: errorText(error) });
+      patch({ state: 'error', modal: 'none', errorMessage: errorText(error) });
     }
-  }, [patch]);
+  };
 
-  useEffect(() => {
+  const start = () => {
     const first = window.setTimeout(() => void check(), UPDATE_CHECK_DELAY_MS);
     const repeat = window.setInterval(() => void check(), UPDATE_CHECK_INTERVAL_MS);
     return () => {
       window.clearTimeout(first);
       window.clearInterval(repeat);
     };
-  }, [check]);
+  };
 
-  const actions = useMemo(() => createActions(patch, install), [install, patch]);
+  return {
+    getStatus: () => status,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    start,
+    check,
+    actions: createActions(patch, install),
+  };
+}
 
-  return { status, actions, check };
+export const desktopUpdater = createDesktopUpdater();
+
+export function useDesktopUpdater(updater: DesktopUpdater = desktopUpdater) {
+  const status = useSyncExternalStore(updater.subscribe, updater.getStatus, updater.getStatus);
+  return { status, actions: updater.actions, check: updater.check };
 }

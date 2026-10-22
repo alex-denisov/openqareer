@@ -48,7 +48,7 @@
 .career-app-update-actions {
   display: flex;
   align-items: center;
-  gap: var(--career-space-2);
+  gap: var(--career-space-3);
   flex-wrap: wrap;
 }
 
@@ -59,7 +59,7 @@
   padding: var(--career-space-3) var(--career-space-4);
   border-radius: var(--career-radius-md);
   background: var(--career-bg-elevated);
-  border: var(--career-border-width) solid var(--career-line-soft);
+  border: var(--career-border-width) solid var(--career-line-strong);
   font-size: var(--career-text-sm);
   color: var(--career-text-secondary);
   margin-bottom: var(--career-space-4);
@@ -113,7 +113,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--career-space-4) var(--career-space-5);
-  border-bottom: var(--career-border-width) solid var(--career-line-soft);
+  border-bottom: var(--career-border-width) solid var(--career-line-strong);
 }
 
 .career-app-update-modal-title {
@@ -161,7 +161,7 @@
 }
 
 .career-app-update-tag.is-fixed {
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   color: var(--career-text-secondary);
 }
 
@@ -191,7 +191,7 @@
   flex: 1;
   min-inline-size: 8rem;
   height: 8px;
-  background: var(--career-line-soft);
+  background: var(--career-line-strong);
   border-radius: var(--career-radius-full);
   overflow: hidden;
 }
@@ -217,19 +217,96 @@
   justify-content: flex-end;
   gap: var(--career-space-3);
   padding: var(--career-space-4) var(--career-space-5);
-  border-top: var(--career-border-width) solid var(--career-line-soft);
+  border-top: var(--career-border-width) solid var(--career-line-strong);
   background: var(--career-bg);
 }
 
-/* B359: живой баннер обновления поверх любого экрана десктопа */
-.career-app-update-dock {
-  position: fixed;
-  right: var(--career-space-6);
-  bottom: var(--career-space-6);
-  z-index: 60;
-  max-width: min(560px, calc(100vw - 2 * var(--career-space-6)));
+/* B359: загрузка внутри полоски, без окна */
+.career-app-update-progress {
+  flex: 1;
+  min-inline-size: 8rem;
+  block-size: 8px;
+  appearance: none;
+  border: 0;
+  border-radius: var(--career-radius-full);
+  background: var(--career-line-strong);
+  overflow: hidden;
 }
 
-.career-app-update-dock .career-app-update-banner {
-  margin-bottom: 0;
+.career-app-update-progress::-webkit-progress-bar {
+  background: var(--career-line-strong);
+  border-radius: var(--career-radius-full);
+}
+
+.career-app-update-progress::-webkit-progress-value {
+  background: var(--career-accent);
+  border-radius: var(--career-radius-full);
+  transition: inline-size 0.2s ease;
+}
+
+.career-app-update-percent {
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 3.5em;
+  text-align: end;
+}
+
+.career-app-update-banner > .career-app-update-progress-row {
+  flex: 1 0 100%;
+  padding-inline-start: calc(18px + var(--career-space-4));
+}
+
+/* Макет 16 (shared.css): малые кнопки полоски — видимые 32 px внутри цели 44,
+   призрачные без контура, основная — акцентная заливка. */
+.career-app-update-actions .career-btn {
+  --sm-gutter: calc((var(--career-target-min) - var(--career-space-8)) / 2);
+  --edge: var(--career-field-edge);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--career-space-2);
+  min-block-size: var(--career-target-min);
+  margin-inline: calc(var(--sm-gutter) * -1);
+  padding: 0 var(--career-space-3);
+  border: var(--sm-gutter) solid transparent;
+  border-radius: calc(var(--career-radius-sm) + var(--sm-gutter));
+  background: transparent;
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 var(--career-border-width) var(--edge);
+  color: var(--career-text);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.career-app-update-actions .career-btn.is-ghost {
+  --edge: transparent;
+  color: var(--career-text-soft);
+}
+
+.career-app-update-actions .career-btn.is-ghost:hover:not(:disabled) {
+  color: var(--career-text);
+  background-color: var(--career-surface);
+}
+
+.career-app-update-actions .career-btn.is-primary {
+  --edge: var(--career-accent);
+  color: var(--career-accent-ink);
+  background-color: var(--career-accent);
+}
+
+.career-app-update-actions .career-btn.is-primary:hover:not(:disabled) {
+  background-color: color-mix(in oklch, var(--career-accent), var(--career-text) 16%);
+}
+
+.career-app-update-actions .career-btn:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: calc(2px - var(--sm-gutter));
+}
+
+/* Полоска стоит первой в «Сегодня»: до следующего блока как в макете, 12 px. */
+.career-today > .career-app-update-banner {
+  margin-block-end: calc(var(--career-space-3) - var(--career-space-6));
 }

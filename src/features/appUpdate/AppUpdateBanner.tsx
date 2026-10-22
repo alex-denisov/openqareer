@@ -5,20 +5,15 @@ interface BannerProps {
   readonly state: AppUpdateState;
   readonly info: AppUpdateReleaseInfo;
   readonly actions: AppUpdateActions;
+  readonly errorMessage?: string;
 }
 
-function AvailableBannerActions({
-  actions,
-  autoUpdateEnabled,
-}: {
-  readonly actions: AppUpdateActions;
-  readonly autoUpdateEnabled: boolean;
-}) {
+function AvailableBannerActions({ actions }: { readonly actions: AppUpdateActions }) {
   return (
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-whats-new-btn"
         onClick={actions.onWhatsNew}
       >
@@ -26,26 +21,16 @@ function AvailableBannerActions({
       </button>
       <button
         type="button"
-        className="career-primary-button career-btn-sm"
+        className="career-btn is-sm is-primary"
         data-testid="app-update-install-btn"
         onClick={actions.onInstall}
       >
         <DownloadSimple size={16} aria-hidden="true" />
         <span>Установить</span>
       </button>
-      {!autoUpdateEnabled ? (
-        <button
-          type="button"
-          className="career-secondary-button career-btn-sm"
-          data-testid="app-update-enable-auto-btn"
-          onClick={actions.onEnableAutoUpdate}
-        >
-          Включить автообновление
-        </button>
-      ) : null}
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-later-btn"
         onClick={actions.onPostpone}
       >
@@ -60,7 +45,7 @@ function ReadyBannerActions({ actions }: { readonly actions: AppUpdateActions })
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-primary-button career-btn-sm"
+        className="career-btn is-sm is-primary"
         data-testid="app-update-restart-btn"
         onClick={actions.onRestart}
       >
@@ -69,7 +54,7 @@ function ReadyBannerActions({ actions }: { readonly actions: AppUpdateActions })
       </button>
       <button
         type="button"
-        className="career-secondary-button career-btn-sm"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-next-launch-btn"
         onClick={actions.onNextLaunch}
       >
@@ -84,7 +69,7 @@ function UpdatedBannerActions({ actions }: { readonly actions: AppUpdateActions 
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-whats-new-btn"
         onClick={actions.onWhatsNew}
       >
@@ -92,7 +77,7 @@ function UpdatedBannerActions({ actions }: { readonly actions: AppUpdateActions 
       </button>
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-close-btn"
         onClick={actions.onDismissBanner}
       >
@@ -134,17 +119,66 @@ function AvailableBanner({ info, actions }: { readonly info: AppUpdateReleaseInf
   return (
     <div className="career-app-update-banner" role="status">
       <div className="career-app-update-ico">
-        <DownloadSimple size={24} aria-hidden="true" />
+        <DownloadSimple size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Доступна версия {info.version}</strong>
-        <p>
-          {info.autoUpdateEnabled
-            ? 'Установится после перезапуска. Черновики и вход сохранятся.'
-            : 'Автообновление выключено в «Аккаунте», вкладка «Приложение».'}
-        </p>
+        <p>Установится после перезапуска. Черновики и вход сохранятся.</p>
       </div>
-      <AvailableBannerActions actions={actions} autoUpdateEnabled={info.autoUpdateEnabled} />
+      <AvailableBannerActions actions={actions} />
+    </div>
+  );
+}
+
+/** B359: the download runs inside the banner, no dialog; the size is the archive's megabytes. */
+function DownloadingBanner({ info }: { readonly info: AppUpdateReleaseInfo }) {
+  const percent = info.progressPercent ?? 0;
+  const size = info.downloadSizeMb > 0 ? `, ${info.downloadSizeMb} МБ` : '';
+  return (
+    <div className="career-app-update-banner" role="status" data-testid="app-update-downloading">
+      <div className="career-app-update-ico">
+        <DownloadSimple size={18} aria-hidden="true" />
+      </div>
+      <div className="career-app-update-text">
+        <strong>Загружаем версию {info.version}{size}</strong>
+        <p>Можно продолжать работать: установка начнётся только после вашего перезапуска.</p>
+      </div>
+      <div className="career-app-update-progress-row">
+        <progress
+          className="career-app-update-progress"
+          max={100}
+          value={percent}
+          aria-label={`Загрузка обновления: ${percent} %`}
+        />
+        <strong className="career-app-update-percent">{percent} %</strong>
+      </div>
+    </div>
+  );
+}
+
+function ErrorBanner({ message, actions }: { readonly message?: string; readonly actions: AppUpdateActions }) {
+  return (
+    <div className="career-app-update-banner is-error" role="alert">
+      <div className="career-app-update-ico">
+        <Info size={18} aria-hidden="true" />
+      </div>
+      <div className="career-app-update-text">
+        <strong>Не удалось загрузить обновление</strong>
+        <p>{message ?? 'Работа продолжается на текущей версии, ничего не потеряно.'}</p>
+      </div>
+      <div className="career-app-update-actions">
+        <button type="button" className="career-btn is-sm is-ghost" onClick={actions.onPostpone}>
+          Позже
+        </button>
+        <button
+          type="button"
+          className="career-btn is-sm is-primary"
+          data-testid="app-update-strip-retry-btn"
+          onClick={actions.onRetryNow}
+        >
+          Повторить сейчас
+        </button>
+      </div>
     </div>
   );
 }
@@ -153,7 +187,7 @@ function ReadyBanner({ info, actions }: { readonly info: AppUpdateReleaseInfo; r
   return (
     <div className="career-app-update-banner" role="status">
       <div className="career-app-update-ico">
-        <Sparkle size={24} aria-hidden="true" />
+        <Sparkle size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Версия {info.version} загружена</strong>
@@ -168,7 +202,7 @@ function UpdatedBanner({ info, actions }: { readonly info: AppUpdateReleaseInfo;
   return (
     <div className="career-app-update-banner is-ok" role="status">
       <div className="career-app-update-ico">
-        <Check size={24} aria-hidden="true" />
+        <Check size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Обновлено до {info.version}</strong>
@@ -179,11 +213,13 @@ function UpdatedBanner({ info, actions }: { readonly info: AppUpdateReleaseInfo;
   );
 }
 
-export function AppUpdateBanner({ state, info, actions }: BannerProps) {
+export function AppUpdateBanner({ state, info, actions, errorMessage }: BannerProps) {
   if (state === 'offline' || state === 'busy_sending' || state === 'idle') {
     return <BannerInfoNotice state={state} version={info.version} />;
   }
   if (state === 'available') return <AvailableBanner info={info} actions={actions} />;
+  if (state === 'downloading') return <DownloadingBanner info={info} />;
+  if (state === 'error') return <ErrorBanner message={errorMessage} actions={actions} />;
   if (state === 'ready') return <ReadyBanner info={info} actions={actions} />;
   if (state === 'updated') return <UpdatedBanner info={info} actions={actions} />;
   return null;

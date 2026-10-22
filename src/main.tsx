@@ -38,10 +38,6 @@ ReactDOM.createRoot(root).render(
 );
 
 if (isTauriEnvironment()) {
-  // B359: the updater lives in its own root so no screen can unmount it.
-  void import('./features/appUpdate/DesktopUpdateDock').then(({ DesktopUpdateDock }) => {
-    const dock = document.createElement('div');
-    document.body.append(dock);
-    ReactDOM.createRoot(dock).render(<DesktopUpdateDock />);
-  });
+  // B359: one updater for the window; «Сегодня» shows its strip.
+  void import('./features/appUpdate/useDesktopUpdater').then(({ desktopUpdater }) => desktopUpdater.start());
 }
