@@ -102,9 +102,14 @@ export class ResilientCoachProvider implements CoachProvider {
       }
     }
 
-    throw (
-      lastError ??
-      new CoachProviderError('provider_unavailable', 503, true)
+    const failure = lastError ?? new CoachProviderError('provider_unavailable', 503, true);
+    throw new CoachProviderError(
+      failure.code,
+      failure.statusCode,
+      failure.retryable,
+      failure.diagnostic,
+      failure.role,
+      attempts,
     );
   }
 }
