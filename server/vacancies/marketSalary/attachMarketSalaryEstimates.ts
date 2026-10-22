@@ -25,15 +25,16 @@ function hasSalary(item: MatchedVacancyItem): boolean {
   return Boolean(salary && (salary.from !== undefined || salary.to !== undefined));
 }
 
-function estimateFor(
-  item: MatchedVacancyItem,
+export function estimateFor(
+  item: Pick<MatchedVacancyItem, 'cluster'>,
   deps: MarketSalaryEstimateDeps,
 ): MarketSalaryEstimateView | undefined {
   const parsed = deps.readTitle(normalizeTitleKey(item.cluster.canonicalTitle));
   const functionCode = parsed?.functions[0];
   if (!parsed || !functionCode) return undefined;
   const city = marketSalaryCity(item.cluster.canonicalLocation);
-  const region = matchedVacancyRegion(item);
+  // Регион читается только по кластеру.
+  const region = matchedVacancyRegion(item as MatchedVacancyItem);
   const cityEstimate = city
     ? deps.store.get(marketSalaryKey(functionCode, parsed.levelRank, 'city', city))
     : undefined;

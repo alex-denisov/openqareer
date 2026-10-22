@@ -1,4 +1,5 @@
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
+import type { MarketSalaryEstimateView } from '../../../shared/marketSalaryEstimate';
 /** B550: фильтр, сортировка и подписи вкладки «Сохранённые» (макет 4, кадр sv). */
 
 export interface SavedVacancySalary {
@@ -19,6 +20,10 @@ export interface SavedVacancyState {
   readonly location?: string;
   readonly isRemote?: boolean;
   readonly outsideGeography?: boolean;
+  /** B446-r: подпись и оценка денег — как в строке подборки. */
+  readonly sourceName?: string;
+  readonly observedAt?: string;
+  readonly marketSalary?: MarketSalaryEstimateView;
 }
 
 export interface SavedVacancyEntry {
@@ -139,8 +144,18 @@ export function savedVacancyItem(
       descriptionSummary: '',
       skills: [],
       primaryUrl: ref.url ?? '',
-      sources: [],
-      firstObservedAt: '',
+      sources: state.sourceName
+        ? [
+            {
+              sourceType: '',
+              sourceId: '',
+              sourceName: state.sourceName,
+              sourceUrl: ref.url ?? '',
+              observedAt: state.observedAt ?? '',
+            },
+          ]
+        : [],
+      firstObservedAt: state.observedAt ?? '',
       lastSeenAt: '',
       status: state.closed ? 'archived' : 'active',
       vacanciesCount: 1,
@@ -155,6 +170,7 @@ export function savedVacancyItem(
       missingPoints: [],
       summary: '',
       calculatedAt: '',
+      ...(state.marketSalary ? { marketSalary: state.marketSalary } : {}),
     },
   };
 }

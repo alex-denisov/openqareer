@@ -126,6 +126,28 @@
   margin: 0;
 }
 
+.saved-list-head {
+  display: block;
+}
+
+/* B446-r (R4): заголовки колонок той же сеткой, что строки. */
+.saved-row-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.3fr) calc(
+      var(--career-target-min) * 3 + var(--career-space-2) * 2
+    );
+  gap: var(--career-space-4);
+  padding-inline: calc(var(--career-space-4) + var(--career-border-width));
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+  font-weight: 600;
+}
+
+.saved-row-money.is-cell .vacancies-screen-cell {
+  display: grid;
+  gap: var(--career-space-1);
+}
+
 .saved-list {
   display: grid;
   gap: var(--career-space-3);
@@ -251,7 +273,8 @@
 
 @media (max-width: 760px) {
   /* Макет 390 (mock-390m-saved): без поиска и выборов — пояснение, список, подвал. */
-  .saved-controls {
+  .saved-controls,
+  .saved-list-head {
     display: none;
   }
 

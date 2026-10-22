@@ -12,6 +12,8 @@ import {
   withDeps,
 } from './helpers';
 import { readTargetLevel } from './vacancyRoleContext';
+import { estimateFor } from '../vacancies/marketSalary/attachMarketSalaryEstimates';
+import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 
 const bodySchema = z.object({
   items: z
@@ -24,6 +26,15 @@ const bodySchema = z.object({
     .max(SAVED_VACANCY_STATES_LIMIT),
 });
 
+/** B446-r: оценка рынка сохранённой — тем же чтением, что у строки подборки (B546). */
+function marketSalaryReader(deps: RouteDeps) {
+  const store = deps.marketSalaryEstimates;
+  if (!store) return undefined;
+  const readTitle = (key: string) => deps.titleParseStore.getByKey(key) ?? undefined;
+  return (cluster: unknown) =>
+    estimateFor({ cluster } as Pick<MatchedVacancyItem, 'cluster'>, { store, readTitle });
+}
+
 /** Тот же контекст, что у подборки: целевой уровень и рынки кампании кандидата. */
 function matchContext(deps: RouteDeps, candidateId: string) {
   const campaign = readCampaign(deps.candidateStore, candidateId);
@@ -34,6 +45,7 @@ function matchContext(deps: RouteDeps, candidateId: string) {
       ...((campaign.suggestedRegions ?? []) as CandidateRegion[]),
     ],
     getTitleParse: (titleKey: string) => deps.titleParseStore.getByKey(titleKey),
+    marketSalary: marketSalaryReader(deps),
   };
 }
 
