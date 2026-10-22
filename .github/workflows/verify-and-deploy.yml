@@ -86,7 +86,7 @@ jobs:
     name: Coverage thresholds
     needs: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20 # прогон с покрытием подошёл к 10 мин и снимался (23.10)
     steps:
       - name: Check out exact commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
