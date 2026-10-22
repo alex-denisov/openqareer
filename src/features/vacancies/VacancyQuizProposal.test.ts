@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { skillCheckAvailability } from './VacancyQuizProposal';
+import { focusCheckStartable, skillCheckAvailability } from './VacancyQuizProposal';
 import type { RoleSkillAssessmentCurrent } from '../skills/roleSkillAssessmentApi';
 
 const ready = (names: readonly string[]) =>
@@ -28,5 +28,16 @@ describe('skillCheckAvailability', () => {
     const availability = skillCheckAvailability({ state: 'role_not_selected' });
     expect(availability).toMatchObject({ kind: 'unavailable', needsRole: true });
     expect(availability.kind === 'unavailable' && availability.reason).toContain('«Карьера»');
+  });
+});
+
+describe('focusCheckStartable (B552)', () => {
+  it('offers the vacancy quiz without a chosen «Стратегия»: it runs on the vacancy role', () => {
+    expect(focusCheckStartable('role_not_selected')).toBe(true);
+    expect(focusCheckStartable('ready')).toBe(true);
+  });
+
+  it('hides it only when the vacancy source cannot be read', () => {
+    expect(focusCheckStartable('source_unavailable')).toBe(false);
   });
 });

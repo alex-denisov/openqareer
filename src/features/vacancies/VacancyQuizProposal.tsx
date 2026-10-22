@@ -58,9 +58,14 @@ export function skillCheckAvailability(current: RoleSkillAssessmentCurrent): Ava
 }
 
 /**
- * G5 R1b: a vacancy-focused check is built from the vacancy's own skills, so only a missing
- * target role or an unavailable source stop it. The answer is kept across remounts.
+ * G5 R1b: a vacancy-focused check is built from the vacancy's own skills and runs on the
+ * vacancy's role when no «Стратегия» is chosen (B552), so only an unavailable source stops it.
  */
+export function focusCheckStartable(state: RoleSkillAssessmentCurrent['state']): boolean {
+  return state !== 'source_unavailable';
+}
+
+/** The answer is kept across remounts. */
 let lastFocusStartable: boolean | undefined;
 
 function useFocusCheckStartable(): boolean | undefined {
@@ -69,7 +74,7 @@ function useFocusCheckStartable(): boolean | undefined {
     let active = true;
     void getCurrentRoleSkillAssessment()
       .then((current) => {
-        lastFocusStartable = !['role_not_selected', 'source_unavailable'].includes(current.state);
+        lastFocusStartable = focusCheckStartable(current.state);
         if (active) setStartable(lastFocusStartable);
       })
       .catch(() => {
