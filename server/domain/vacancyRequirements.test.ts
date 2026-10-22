@@ -81,18 +81,45 @@ describe('vacancy requirement extraction', () => {
     expect(result.requirements[0]).toMatchObject({ importance: 'low', hard: false, stopFactor: false });
   });
 
-  it('does not spend model calls on rule-covered or absent descriptions', async () => {
-    const model = { extract: vi.fn() };
-    await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: 'Requirements\n- SQL' }, model);
+  it('spends no model call on an absent description, but labels rule-covered ones through the model (B510)', async () => {
+    const model = { extract: vi.fn(async () => JSON.stringify({ requirements: [{ text: 'SQL', sourceQuote: 'SQL', origin: 'structural', label: 'SQL', kind: 'skill' }] })) };
     await extractVacancyRequirementsWithFallback({ vacancyId: 'v' }, model);
     expect(model.extract).not.toHaveBeenCalled();
+    const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: 'Requirements\n- SQL' }, model);
+    expect(result).toMatchObject({ method: 'model', requirements: [{ label: 'SQL', skill: true }] });
+  });
+
+  describe('strict label schema (B510)', () => {
+    const description = 'Requirements\n- Proven track record as a senior engineering leader owning technical direction';
+    const quote = 'Proven track record as a senior engineering leader owning technical direction';
+    const answer = (label: unknown, kind: unknown = 'experience') => JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, origin: 'structural', label, kind }] });
+
+    it('keeps a short label and maps the kind', async () => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer('Engineering leadership') });
+      expect(result.fallbackStatus).toBeUndefined();
+      expect(result.requirements[0]).toMatchObject({ label: 'Engineering leadership', kind: 'experience', skill: false, text: quote });
+    });
+
+    it.each([
+      ['more than five words', 'Proven senior engineering leader with direction'],
+      ['more than 40 characters', 'Engineeringleadershipandtechnicaldirection!'],
+      ['missing', undefined],
+    ])('calls a label %s invalid, so the job retries', async (_case, label) => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer(label) });
+      expect(result.fallbackStatus).toBe('invalid');
+    });
+
+    it('calls an unknown kind invalid', async () => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer('Leadership', 'responsibility') });
+      expect(result.fallbackStatus).toBe('invalid');
+    });
   });
 
   it('validates model JSON and quote provenance; inferred never blocks', async () => {
     const description = 'We use a distributed team.';
     const model = { extract: vi.fn(async () => JSON.stringify({ requirements: [
-      { text: 'Remote collaboration', sourceQuote: description, kind: 'workFormat', origin: 'inferred', importance: 'critical', stopFactor: true },
-      { text: 'Invented MBA', sourceQuote: 'MBA required', kind: 'education', origin: 'explicit', importance: 'critical' },
+      { text: 'Remote collaboration', sourceQuote: description, kind: 'condition', label: 'Remote work', origin: 'inferred', importance: 'critical', stopFactor: true },
+      { text: 'Invented MBA', sourceQuote: 'MBA required', kind: 'condition', label: 'MBA', origin: 'explicit', importance: 'critical' },
     ] })) };
     const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, model);
     expect(result.requirements).toHaveLength(1);
@@ -108,7 +135,7 @@ describe('vacancy requirement extraction', () => {
   describe('model answers seen on prod 21.10 (B522)', () => {
     const description = 'We build payments. 10+ years of Java. Experience with Kafka.';
     const quote = '10+ years of Java';
-    const answer = (origin: string) => JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, kind: 'experience', origin, importance: 'required' }] });
+    const answer = (origin: string) => JSON.stringify({ requirements: [{ text: quote, sourceQuote: quote, kind: 'experience', label: 'Java', origin, importance: 'required' }] });
 
     it('reads JSON wrapped in a markdown fence (4 of 12 sampled answers)', async () => {
       const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => '```json\n' + answer('explicit') + '\n```' });
@@ -138,12 +165,14 @@ describe('vacancy requirement extraction', () => {
       expect(down.fallbackStatus).toBe('unavailable');
     });
 
-    it('asks for the three origin values and only the fields the parser uses, as compact JSON', async () => {
+    it('asks for the three origin values, a short label and the three kinds, as compact JSON', async () => {
       const model = { extract: vi.fn(async (_request: { description: string; instructions: string }) => answer('explicit')) };
       await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, model);
       const { instructions } = model.extract.mock.calls[0][0];
       expect(instructions).toMatch(/"explicit".*"structural".*"inferred"/su);
-      expect(instructions).not.toMatch(/importance|kind/u);
+      expect(instructions).not.toMatch(/importance/u);
+      expect(instructions).toMatch(/"skill".*"experience".*"condition"/su);
+      expect(instructions).toMatch(/2 to 5 words/u);
       expect(instructions).toMatch(/no markdown/iu);
     });
   });

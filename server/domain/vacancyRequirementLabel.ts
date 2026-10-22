@@ -43,6 +43,8 @@ function kindLabel(requirement: VacancyRequirement): string | undefined {
  * without a known skill gets no label and never becomes a chip. The full text stays in `text`.
  */
 export function labelVacancyRequirement(requirement: VacancyRequirement): VacancyRequirement {
+  // The model's label (labels-1) wins; the rules only fill caches written before it.
+  if (requirement.label) return requirement;
   const skillKinds = requirement.kind === 'other' || requirement.kind === 'experience';
   const skill = skillKinds ? extractSkillsFromText(requirement.text)[0] : undefined;
   if (skill) return { ...requirement, label: skill, skill: true };
