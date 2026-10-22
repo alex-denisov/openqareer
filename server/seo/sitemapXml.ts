@@ -1,8 +1,8 @@
 /**
  * Sitemap files of openqareer.com (SEO review, 20.10).
  *
- * `/sitemap.xml` is an index of three kinds of child files: permanent pages,
- * place/role listings, and the narrow set of indexable vacancy cards
+ * `/sitemap.xml` is an index of child files under `/sitemaps/`: permanent
+ * pages, place/role listings, and the narrow set of indexable vacancy cards
  * (`catalogIndexing`). Deep catalog pages are not listed anywhere.
  */
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
@@ -10,17 +10,20 @@ import { LEGAL_DOCS, LEGAL_PACK_PUBLISHED_AT, legalPath } from '../../shared/leg
 import { CATALOG_ROOT } from '../../shared/vacancyCatalogRoutes';
 
 /**
- * URLs per child file. The protocol allows 50 000 URLs and 10 MB; a card
- * address is up to ~250 characters, so 25 000 entries stay under ~8.5 MB even
- * in the worst case.
+ * URLs per child file. The site's working limit leaves headroom below the
+ * protocol maximum of 50,000 URLs and 50 MB per sitemap.
  */
-export const SITEMAP_FILE_URL_LIMIT = 25_000;
+export const SITEMAP_FILE_URL_LIMIT = 10_000;
 
-export const STATIC_SITEMAP = 'sitemap-static.xml';
-export const LISTINGS_SITEMAP = 'sitemap-listings.xml';
+export const STATIC_SITEMAP = 'static-1.xml';
+export const LISTINGS_SITEMAP = 'listings-1.xml';
 
 export function jobsSitemapName(index: number): string {
-  return `sitemap-jobs-${index}.xml`;
+  return `jobs-${index}.xml`;
+}
+
+export function listingsSitemapName(index: number): string {
+  return `listings-${index}.xml`;
 }
 
 export interface SitemapUrl {
@@ -34,6 +37,8 @@ export interface SitemapFile {
   readonly xml: string;
   readonly urlCount: number;
   readonly lastmod?: string;
+  /** Present in a newly built maintenance snapshot; not needed by HTTP readers. */
+  readonly urls?: readonly SitemapUrl[];
 }
 
 const XML_HEAD = '<?xml version="1.0" encoding="UTF-8"?>\n';
@@ -68,7 +73,7 @@ export function renderSitemapIndex(
   const body = files
     .map(
       (file) =>
-        `  <sitemap><loc>${escapeXml(`${SITE_ORIGIN}/${file.name}`)}</loc>${lastmodTag(file.lastmod)}</sitemap>`,
+        `  <sitemap><loc>${escapeXml(`${SITE_ORIGIN}/sitemaps/${file.name}`)}</loc>${lastmodTag(file.lastmod)}</sitemap>`,
     )
     .join('\n');
   return `${XML_HEAD}<sitemapindex xmlns="${NAMESPACE}">\n${body}\n</sitemapindex>\n`;
@@ -88,6 +93,7 @@ function file(name: string, urls: readonly SitemapUrl[]): SitemapFile {
     name,
     xml: renderUrlset(urls),
     urlCount: urls.length,
+    urls,
     ...(lastmod ? { lastmod } : {}),
   };
 }
@@ -120,8 +126,10 @@ export function buildSitemapFiles(input: {
   readonly jobs: readonly SitemapUrl[];
 }): SitemapFile[] {
   const files = [file(STATIC_SITEMAP, staticSitemapUrls(newest(input.listings)))];
-  const listings = input.listings.slice(0, SITEMAP_FILE_URL_LIMIT);
-  if (listings.length > 0) files.push(file(LISTINGS_SITEMAP, listings));
+  for (let start = 0; start < input.listings.length; start += SITEMAP_FILE_URL_LIMIT) {
+    const chunk = input.listings.slice(start, start + SITEMAP_FILE_URL_LIMIT);
+    files.push(file(listingsSitemapName(start / SITEMAP_FILE_URL_LIMIT + 1), chunk));
+  }
   for (let start = 0; start < input.jobs.length; start += SITEMAP_FILE_URL_LIMIT) {
     const chunk = input.jobs.slice(start, start + SITEMAP_FILE_URL_LIMIT);
     files.push(file(jobsSitemapName(start / SITEMAP_FILE_URL_LIMIT + 1), chunk));

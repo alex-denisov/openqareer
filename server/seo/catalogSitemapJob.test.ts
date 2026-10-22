@@ -85,13 +85,37 @@ function locs(xml: string): string[] {
   return [...xml.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1] ?? '');
 }
 
+/** Parses the renderer's deliberately small XML vocabulary and checks well-formed nesting. */
+function parseSitemapXml(xml: string): string {
+  const tokens = xml.match(/<\?xml[^?]*\?>|<\/?[A-Za-z][^>]*>|[^<]+/gu) ?? [];
+  expect(tokens.join('')).toBe(xml);
+  const stack: string[] = [];
+  let root = '';
+  for (const token of tokens) {
+    if (token.startsWith('<?xml')) continue;
+    if (!token.startsWith('<')) continue;
+    const closing = /^<\/([A-Za-z][\w]*)>$/u.exec(token);
+    if (closing) {
+      expect(stack.pop()).toBe(closing[1]);
+      continue;
+    }
+    const opening = /^<([A-Za-z][\w]*)(?:\s[^>]*)?>$/u.exec(token);
+    expect(opening).toBeTruthy();
+    if (!opening) continue;
+    if (!root) root = opening[1] ?? '';
+    if (!token.endsWith('/>')) stack.push(opening[1] ?? '');
+  }
+  expect(stack).toEqual([]);
+  return root;
+}
+
 describe('computeCatalogSitemaps', () => {
   it('splits the sitemap into static, listings and job files', () => {
     const files = computeCatalogSitemaps(database(berlinRows('a')), NOW);
     expect(files.map((file) => file.name)).toEqual([
-      'sitemap-static.xml',
-      'sitemap-listings.xml',
-      'sitemap-jobs-1.xml',
+      'static-1.xml',
+      'listings-1.xml',
+      'jobs-1.xml',
     ]);
   });
 
@@ -110,7 +134,7 @@ describe('computeCatalogSitemaps', () => {
       ]),
       NOW,
     );
-    const jobs = files.find((file) => file.name === 'sitemap-jobs-1.xml')!;
+    const jobs = files.find((file) => file.name === 'jobs-1.xml')!;
     expect(locs(jobs.xml)).toEqual([
       'https://openqareer.com/vacancies/job/frontend-developer-at-acme-good',
     ]);
@@ -128,7 +152,7 @@ describe('computeCatalogSitemaps', () => {
       ]),
       NOW,
     );
-    const listings = files.find((file) => file.name === 'sitemap-listings.xml')!;
+    const listings = files.find((file) => file.name === 'listings-1.xml')!;
     expect(listings.xml).toContain(
       `<url><loc>https://openqareer.com/vacancies/berlin</loc><lastmod>${iso(2).slice(0, 10)}</lastmod></url>`,
     );
@@ -146,7 +170,7 @@ describe('computeCatalogSitemaps', () => {
     expect(all.some((loc) => loc.includes('gone'))).toBe(false);
     expect(all.some((loc) => loc.includes('/page/'))).toBe(false);
     // No job file when nothing qualifies: an empty urlset is not a valid child.
-    expect(files.map((file) => file.name)).not.toContain('sitemap-jobs-1.xml');
+    expect(files.map((file) => file.name)).not.toContain('jobs-1.xml');
   });
 });
 
@@ -162,20 +186,55 @@ describe('buildSitemapFiles', () => {
     expect(urls).toHaveLength(8);
   });
 
-  it('chunks job files under the per-file URL limit', () => {
-    const jobs = Array.from({ length: SITEMAP_FILE_URL_LIMIT + 1 }, (_, index) => ({
-      path: `/vacancies/job/frontend-developer-${index}`,
-      lastmod: '2026-10-19',
+  it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {
+    for (const count of [0, 1, 10_000, 10_001, 25_000]) {
+      const jobs = Array.from({ length: count }, (_, index) => ({
+        path: `/vacancies/job/frontend-developer-${index}`,
+        lastmod: index < SITEMAP_FILE_URL_LIMIT ? '2026-10-19' : '2026-10-20',
+      }));
+      const files = buildSitemapFiles({ listings: [], jobs });
+      const jobFiles = files.filter((file) => file.name.startsWith('jobs-'));
+      expect(jobFiles.reduce((sum, file) => sum + file.urlCount, 0)).toBe(count);
+      expect(jobFiles.every((file) => file.urlCount <= 10_000)).toBe(true);
+      expect(jobFiles.map((file) => file.urlCount)).toEqual(
+        count === 0
+          ? []
+          : Array.from({ length: Math.ceil(count / 10_000) }, (_, index) =>
+              Math.min(10_000, count - index * 10_000),
+            ),
+      );
+      expect(jobFiles.map((file) => file.name)).toEqual(
+        jobFiles.map((_, index) => `jobs-${index + 1}.xml`),
+      );
+    }
+    expect(SITEMAP_FILE_URL_LIMIT).toBe(10_000);
+  });
+
+  it('chunks every listing and gives each child its maximum URL lastmod', () => {
+    const listings = Array.from({ length: 10_001 }, (_, index) => ({
+      path: `/vacancies/place-${index}`,
+      lastmod: index === 0 ? '2026-10-20' : '2026-10-19',
     }));
-    const files = buildSitemapFiles({ listings: [], jobs });
-    const jobFiles = files.filter((file) => file.name.startsWith('sitemap-jobs-'));
-    expect(jobFiles.map((file) => [file.name, file.urlCount])).toEqual([
-      ['sitemap-jobs-1.xml', SITEMAP_FILE_URL_LIMIT],
-      ['sitemap-jobs-2.xml', 1],
+    const files = buildSitemapFiles({ listings, jobs: [] });
+    const listingFiles = files.filter((file) => file.name.startsWith('listings-'));
+    expect(listingFiles.map((file) => [file.name, file.urlCount, file.lastmod])).toEqual([
+      ['listings-1.xml', 10_000, '2026-10-20'],
+      ['listings-2.xml', 1, '2026-10-19'],
     ]);
-    // 50 000 URLs and 10 MB are the protocol limits; the chunk keeps well under both.
-    expect(SITEMAP_FILE_URL_LIMIT).toBeLessThanOrEqual(50_000);
-    expect(Buffer.byteLength(jobFiles[0]!.xml)).toBeLessThan(10 * 1024 * 1024);
+  });
+
+  it('parses the sitemap index and every child as well-formed namespaced XML', () => {
+    const files = buildSitemapFiles({
+      listings: [{ path: '/vacancies/berlin', lastmod: '2026-10-19' }],
+      jobs: [{ path: '/vacancies/job/role', lastmod: '2026-10-20' }],
+    });
+    const index = renderSitemapIndex(files);
+    expect(parseSitemapXml(index)).toBe('sitemapindex');
+    expect(index).toContain('xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"');
+    for (const file of files) {
+      expect(parseSitemapXml(file.xml)).toBe('urlset');
+      expect(file.urlCount).toBeLessThanOrEqual(10_000);
+    }
   });
 });
 
@@ -187,15 +246,15 @@ describe('sitemap XML', () => {
       '<url><loc>https://openqareer.com/faq</loc><lastmod>2026-10-01</lastmod></url>',
     );
     const index = renderSitemapIndex([
-      { name: 'sitemap-static.xml', lastmod: '2026-10-01' },
-      { name: 'sitemap-jobs-1.xml' },
+      { name: 'static-1.xml', lastmod: '2026-10-01' },
+      { name: 'jobs-1.xml' },
     ]);
     expect(index).toContain('<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
     expect(index).toContain(
-      '<sitemap><loc>https://openqareer.com/sitemap-static.xml</loc><lastmod>2026-10-01</lastmod></sitemap>',
+      '<sitemap><loc>https://openqareer.com/sitemaps/static-1.xml</loc><lastmod>2026-10-01</lastmod></sitemap>',
     );
     expect(index).toContain(
-      '<sitemap><loc>https://openqareer.com/sitemap-jobs-1.xml</loc></sitemap>',
+      '<sitemap><loc>https://openqareer.com/sitemaps/jobs-1.xml</loc></sitemap>',
     );
   });
 
@@ -220,11 +279,11 @@ describe('catalog_sitemaps storage', () => {
     expect(readCatalogSitemaps(db)).toBeNull();
     writeCatalogSitemaps(db, computeCatalogSitemaps(db, NOW), NOW);
     expect(readCatalogSitemaps(db)?.map((file) => file.name)).toEqual([
-      'sitemap-static.xml',
-      'sitemap-listings.xml',
-      'sitemap-jobs-1.xml',
+      'static-1.xml',
+      'listings-1.xml',
+      'jobs-1.xml',
     ]);
     writeCatalogSitemaps(db, buildSitemapFiles({ listings: [], jobs: [] }), NOW);
-    expect(readCatalogSitemaps(db)?.map((file) => file.name)).toEqual(['sitemap-static.xml']);
+    expect(readCatalogSitemaps(db)?.map((file) => file.name)).toEqual(['static-1.xml']);
   });
 });

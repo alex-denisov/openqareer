@@ -41,19 +41,11 @@ import {
   renderGoneDocument,
   renderVacancyDocument,
 } from '../vacancies/vacancyCatalogDocument';
-import { isIndexableCard } from '../seo/catalogIndexing';
 import { getCatalogSitemaps } from '../seo/catalogSitemapSchedule';
-import {
-  LISTINGS_SITEMAP,
-  STATIC_SITEMAP,
-  buildSitemapFiles,
-  jobsSitemapName,
-  renderSitemapIndex,
-  type SitemapFile,
-} from '../seo/sitemapXml';
+import { isValidIndexNowKey } from '../seo/indexNow';
+import { renderSitemapIndex, type SitemapFile } from '../seo/sitemapXml';
 import type { RouteDeps } from './deps';
 import { withDeps } from './helpers';
-import { createTtlMemo, type TtlMemo } from './ttlMemo';
 
 function sendDocument(reply: FastifyReply, html: string, status = 200): FastifyReply {
   return (
@@ -296,48 +288,8 @@ async function handleVacancy(deps: RouteDeps, request: FastifyRequest, reply: Fa
   return sendDocument(reply, renderVacancyDocument(detail));
 }
 
-const SITEMAP_TTL_MS = 15 * 60 * 1000;
-/**
- * Fallback only: the freshest rows of the projection. Indexable cards are
- * posted within 7 days, so the newest 10 000 rows cover them on any pool we
- * run today (6 075 indexable on prod, 20.10) at a fifth of the old 50 000 read.
- */
-const FALLBACK_JOB_SCAN = 10_000;
-const fallbackSitemaps = new WeakMap<RouteDeps, TtlMemo<SitemapFile[]>>();
-
-/**
- * Used until the maintenance process has written `catalog_sitemaps` (first
- * run 90 s after its start) and in tests with an in-memory pool.
- */
-function buildFallbackSitemapFiles(deps: RouteDeps): SitemapFile[] {
-  const now = new Date();
-  const projected = deps.multiSourceEngine.getPublicCatalogEntriesPage({
-    limit: FALLBACK_JOB_SCAN,
-  });
-  const projectedListings = deps.multiSourceEngine.getPublicCatalogListings();
-  const entries =
-    projected && projectedListings
-      ? projected.items
-      : catalogEntries(deps.multiSourceEngine.getPublicCatalogClusters());
-  const listings = projected && projectedListings ? projectedListings : catalogListings(entries);
-  return buildSitemapFiles({
-    listings: listings.map((listing) => ({ path: listing.path })),
-    jobs: entries
-      .filter((entry) => isIndexableCard(entry, now))
-      .map((entry) => ({ path: entry.path, lastmod: entry.publishedAt.slice(0, 10) })),
-  });
-}
-
-function sitemapFiles(deps: RouteDeps): readonly SitemapFile[] {
-  const written = getCatalogSitemaps();
-  if (written) return written;
-  // The fallback read holds the event loop; build once per window (B535).
-  let memo = fallbackSitemaps.get(deps);
-  if (!memo) {
-    memo = createTtlMemo<SitemapFile[]>(SITEMAP_TTL_MS);
-    fallbackSitemaps.set(deps, memo);
-  }
-  return memo.get(() => buildFallbackSitemapFiles(deps));
+function sitemapFiles(): readonly SitemapFile[] {
+  return getCatalogSitemaps() ?? [];
 }
 
 function sendXml(reply: FastifyReply, xml: string): FastifyReply {
@@ -347,14 +299,14 @@ function sendXml(reply: FastifyReply, xml: string): FastifyReply {
     .send(xml);
 }
 
-async function handleSitemapIndex(deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
-  return sendXml(reply, renderSitemapIndex(sitemapFiles(deps)));
+async function handleSitemapIndex(_deps: RouteDeps, _request: FastifyRequest, reply: FastifyReply) {
+  return sendXml(reply, renderSitemapIndex(sitemapFiles()));
 }
 
 function sitemapFileHandler(name: (request: FastifyRequest) => string) {
   return async (deps: RouteDeps, request: FastifyRequest, reply: FastifyReply) => {
     const wanted = name(request);
-    const found = sitemapFiles(deps).find((file) => file.name === wanted);
+    const found = sitemapFiles().find((file) => file.name === wanted);
     if (!found) return reply.status(404).send({ error: 'not_found' });
     return sendXml(reply, found.xml);
   };
@@ -370,30 +322,22 @@ export function registerVacancyCatalogRoutes(app: FastifyInstance, deps: RouteDe
   app.get(`${CATALOG_ROOT}/:place/:role`, withDeps(deps, handleListing));
   app.get(`${CATALOG_ROOT}/:place/:role/page/:page`, withDeps(deps, handleListing));
   // Карта сайта живая, поэтому маршрут перекрывает файл сборки. Сама карта —
-  // индекс дочерних файлов (SEO-ревью 20.10).
+  // индекс дочерних файлов, подготовленных процессом обслуживания.
   app.get('/sitemap.xml', withDeps(deps, handleSitemapIndex));
   app.get(
-    `/${STATIC_SITEMAP}`,
-    withDeps(
-      deps,
-      sitemapFileHandler(() => STATIC_SITEMAP),
-    ),
+    '/sitemaps/:name',
+    withDeps(deps, sitemapFileHandler((request) => {
+      const raw = (request.params as { name?: string }).name ?? '';
+      return /^[a-z]+-[1-9]\d{0,3}\.xml$/u.test(raw) ? raw : '';
+    })),
   );
-  app.get(
-    `/${LISTINGS_SITEMAP}`,
-    withDeps(
-      deps,
-      sitemapFileHandler(() => LISTINGS_SITEMAP),
-    ),
-  );
-  app.get(
-    '/sitemap-jobs-:n.xml',
-    withDeps(
-      deps,
-      sitemapFileHandler((request) => {
-        const raw = (request.params as { n?: string }).n ?? '';
-        return /^[1-9]\d{0,3}$/u.test(raw) ? jobsSitemapName(Number(raw)) : '';
-      }),
-    ),
-  );
+  const indexNowKey = process.env.INDEXNOW_KEY?.trim() ?? '';
+  if (isValidIndexNowKey(indexNowKey)) {
+    app.get(`/${indexNowKey}.txt`, async (_request, reply) =>
+      reply
+        .header('Content-Type', 'text/plain; charset=utf-8')
+        .header('Cache-Control', 'public, max-age=3600')
+        .send(indexNowKey),
+    );
+  }
 }
