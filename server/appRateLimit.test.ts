@@ -1,19 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { createApp } from './appTestHarness';
+import { candidateAuthorization, createApp } from './appTestHarness';
 
 describe('API rate limits on the real route set', () => {
-  it('lets a client page through the companies list far past the old 120-per-hour cap', async () => {
+  const companies = (app: Awaited<ReturnType<typeof createApp>>, authorization: string) =>
+    app.inject({ method: 'GET', url: '/api/v1/candidate/companies', headers: { authorization } });
+
+  it('never limits a signed-in candidate, even far past the route cap', async () => {
     const app = await createApp();
     const statuses = new Set<number>();
     for (let index = 0; index < 130; index += 1) {
-      const response = await app.inject({
-        method: 'GET',
-        url: '/api/v1/candidate/companies',
-        headers: { authorization: 'Bearer reader-one' },
-      });
-      statuses.add(response.statusCode);
+      statuses.add((await companies(app, candidateAuthorization(app))).statusCode);
     }
     expect(statuses.has(429)).toBe(false);
+    await app.close();
+  });
+
+  it('keeps the route cap for a forged token', async () => {
+    const app = await createApp();
+    const statuses = new Set<number>();
+    for (let index = 0; index < 130; index += 1) {
+      statuses.add((await companies(app, 'Bearer forged')).statusCode);
+    }
+    expect(statuses.has(429)).toBe(true);
     await app.close();
   });
 

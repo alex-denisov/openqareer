@@ -183,7 +183,11 @@ describe('cookie auth routes', () => {
       },
     });
     const firstSessionCookie = String(created.headers['set-cookie']).split(';')[0];
-    const secondSession = await login(app, 'recover@example.com', 'candidate-password-before-reset');
+    const secondSession = await login(
+      app,
+      'recover@example.com',
+      'candidate-password-before-reset',
+    );
 
     const requested = await app.inject({
       method: 'POST',
@@ -464,12 +468,13 @@ describe('cookie auth routes', () => {
       });
       expect(repeated.statusCode).toBe(200);
     }
-    const limitedDownload = await app.inject({
+    const unlimitedDownload = await app.inject({
       method: 'GET',
       url: `/api/v1/candidate/documents/${documentId}/download`,
       headers: { cookie: candidate.cookie },
     });
-    expect(limitedDownload.statusCode).toBe(429);
+    // B557: вошедший кандидат не упирается в лимит частоты.
+    expect(unlimitedDownload.statusCode).toBe(200);
 
     const deleted = await app.inject({
       method: 'DELETE',
