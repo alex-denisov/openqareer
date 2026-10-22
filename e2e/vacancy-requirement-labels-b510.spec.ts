@@ -31,11 +31,14 @@ function longRequirementsFit(vacancyId: string): VacancyFitView {
   };
 }
 
-async function openVacancies(page: Page): Promise<string> {
+async function openVacancies(
+  page: Page,
+  shape: (fit: VacancyFitView) => VacancyFitView = (fit) => fit,
+): Promise<string> {
   await mockSignedInCabinet(page, { vacancyTotal: 1 });
   const base = matchedVacancyPage(0, 1);
   const vacancyId = base.data[0]!.cluster.id;
-  const fit = longRequirementsFit(vacancyId);
+  const fit = shape(longRequirementsFit(vacancyId));
   await page.route('**/api/v1/candidate/matched-vacancies*', (route) =>
     route.fulfill({
       json: {
@@ -74,4 +77,16 @@ test('B510: long prod requirements become short skill chips, the sentence stays 
     'title',
     BLOCK_C_LONG_REQUIREMENTS[1],
   );
+});
+
+test('B510: parsed requirements without a short name say they arrive within the hour', async ({
+  page,
+}) => {
+  await openVacancies(page, (fit) => ({
+    ...fit,
+    requirements: fit.requirements.map(({ label: _label, ...item }) => ({ ...item, skill: false })),
+  }));
+  const section = page.locator('.vacancies-screen-requirements').first();
+  await expect(section).toContainText('Требования разбираются — появятся в течение часа');
+  await expect(section.locator('.vacancies-screen-skill-chip')).toHaveCount(0);
 });

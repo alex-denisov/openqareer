@@ -232,6 +232,9 @@ function usePublishQuizOffer(
   }, [cluster.id, cluster.canonicalTitle, skillsKey]);
 }
 
+/** Requirements are parsed but none has a short name yet: the model labels arrive soon (B510). */
+const REQUIREMENTS_PENDING_TEXT = 'Требования разбираются — появятся в течение часа';
+
 export function VacancyScreenRequirementChips({
   cluster,
   explanation,
@@ -270,7 +273,9 @@ export function VacancyScreenRequirementChips({
           onAddToProfile={onAddToProfile}
         />
       ) : (
-        <p className="vacancies-screen-no-requirements">Требования ещё не разобраны.</p>
+        <p className="vacancies-screen-no-requirements">
+          {fromFit ? REQUIREMENTS_PENDING_TEXT : 'Требования ещё не разобраны.'}
+        </p>
       )}
       <p className="vacancies-screen-requirements-note">
         Из описания вакансии и тегов источника. «Подтверждено» — навык проверен квизом или проверкой
