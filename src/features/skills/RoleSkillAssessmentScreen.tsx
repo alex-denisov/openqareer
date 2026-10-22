@@ -87,19 +87,13 @@ export function RoleSkillAssessmentScreen(props: RoleSkillAssessmentScreenProps)
     run,
     activeCase,
   );
-  useEffect(() => {
-    document.querySelector<HTMLElement>('.career-main')?.scrollTo(0, 0);
-  }, [screenKey]);
+  useScrollTopOn(screenKey);
 
   return (
     <section className="career-role-assessment" data-testid="role-skill-assessment">
       <AssessmentHeader {...{ state, run, actions, onClose }} fromCareer={Boolean(roleTitle)} />
       {focus ? <SkillCheckFocusNote focus={focus} run={run} /> : null}
-      {run ? (
-        <ProgressTrack step={getProgressStep(run)} caseCount={run.cases.length} />
-      ) : state.current?.state === 'ready' ? (
-        <ProgressTrack step={1} />
-      ) : null}
+      <AssessmentProgress state={state} run={run} />
       <AssessmentBody
         state={state}
         run={run}
@@ -112,6 +106,21 @@ export function RoleSkillAssessmentScreen(props: RoleSkillAssessmentScreenProps)
       />
     </section>
   );
+}
+
+function AssessmentProgress({
+  state,
+  run,
+}: Pick<AssessmentContentProps, 'state' | 'run'>) {
+  if (run) return <ProgressTrack step={getProgressStep(run)} caseCount={run.cases.length} />;
+  return state.current?.state === 'ready' ? <ProgressTrack step={1} /> : null;
+}
+
+/** Each new step of the check starts at the top of the page. */
+function useScrollTopOn(screenKey: string) {
+  useEffect(() => {
+    document.querySelector<HTMLElement>('.career-main')?.scrollTo(0, 0);
+  }, [screenKey]);
 }
 
 function useLatestRef<T>(value: T): MutableRefObject<T> {

@@ -46,6 +46,7 @@ import {
   extractBoardRegions,
   filterBoardVacancies,
   initialSelectedId,
+  screenFilteredCount,
 } from './vacanciesBoardHelpers';
 import './vacancies-screen.css';
 import './s10-vis.css';
@@ -453,24 +454,6 @@ function buildListProps(
     sort: board.state.sort,
     onSortChange: (sort) => board.setState((previous) => ({ ...previous, sort })),
   };
-}
-
-function screenFilteredCount(
-  input: VacanciesScreenProps,
-  localCount: number,
-  state: Parameters<typeof countActiveFilters>[0],
-) {
-  // Salary is filtered only here, never by the server (B546): its count is local.
-  const salaryFilter = state.salaryMinimum !== undefined || state.salaryMaximum !== undefined;
-  const hasClientFilters =
-    state.selectedCity !== undefined ||
-    Boolean(state.selectedCities?.length) ||
-    salaryFilter ||
-    Boolean(state.companyName) ||
-    Boolean(state.selectedLocations?.length || state.locationRemote) ||
-    (!input.onFiltersChange && countActiveFilters(state) > 0);
-  if (hasClientFilters && input.poolComplete !== false) return localCount;
-  return input.total ?? localCount;
 }
 
 function ResultCount({

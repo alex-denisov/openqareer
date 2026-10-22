@@ -50,16 +50,10 @@ export function useRelocationWorkspace({
   const [grossAnnualIncome, setGrossAnnualIncome] = useState<number>();
   const countries = useMemo(() => listRelocationCountries(), []);
   const counts = relocationTabCounts(countries, selectedCountryCodes);
-  const comparisonCountries = useComparisonCountries(
+  const { comparisonCountries, comparisonMeanings } = useComparisonView(
     snapshot.profile,
     selectedCountryCodes,
-    economyCountryCode,
-    grossAnnualIncome,
-  );
-  const comparisonMeanings = useComparisonMeanings(
-    countries,
-    selectedCountryCodes,
-    snapshot.profile,
+    { countries, economyCountryCode, grossAnnualIncome },
   );
   const showTab = (next: RelocationTab) => {
     setMode({ kind: 'tabs' });
@@ -93,6 +87,30 @@ export function useRelocationWorkspace({
 }
 
 export type RelocationWorkspaceState = ReturnType<typeof useRelocationWorkspace>;
+
+/** The «Сравнение» tab: the selected countries' facts and what each means. */
+function useComparisonView(
+  profile: RelocationWorkspaceInput['snapshot']['profile'],
+  selectedCountryCodes: readonly string[],
+  economy: {
+    readonly countries: ReturnType<typeof listRelocationCountries>;
+    readonly economyCountryCode: string;
+    readonly grossAnnualIncome: number | undefined;
+  },
+) {
+  const comparisonCountries = useComparisonCountries(
+    profile,
+    selectedCountryCodes,
+    economy.economyCountryCode,
+    economy.grossAnnualIncome,
+  );
+  const comparisonMeanings = useComparisonMeanings(
+    economy.countries,
+    selectedCountryCodes,
+    profile,
+  );
+  return { comparisonCountries, comparisonMeanings };
+}
 
 function useWorkspaceView(profile: RelocationProfileData, startInQuestionnaire: boolean) {
   const [tab, setTab] = useState<RelocationTab>('countries');
