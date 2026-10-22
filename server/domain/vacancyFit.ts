@@ -28,6 +28,20 @@ function sourcedRequirements(input: VacancyFitInput): readonly VacancyRequiremen
     return true;
   }).sort((a, b) => Number(b.hard || b.stopFactor) - Number(a.hard || a.stopFactor) || a.id.localeCompare(b.id));
 }
+/**
+ * Fewer skill requirements than this give no percent (B510-r): on prod 22.10 one condition
+ * («Высшее образование») made «100 %, 1 из 1». 3 hides 29 % of model-labelled vacancies (155 of 540).
+ */
+export const MIN_SKILL_REQUIREMENTS = 3;
+/** Unconfirmed key conditions lower the ceiling, so «100 %» needs a confirmed role, region and permit. */
+const KEY_GATES = ['role', 'region', 'workAuthorization'] as const;
+const UNCONFIRMED_GATE_PENALTY = 10;
+
+/** Experience and model skills count; conditions (education, language, format, permit) do not. */
+export function isSkillRequirement(requirement: VacancyRequirement): boolean {
+  return requirement.kind === 'experience' || (requirement.skill ?? requirement.kind === 'other');
+}
+
 function normalizedSource(value: string): string {
   return value.replace(/<[^>]*>/gu, ' ').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&').replace(/&#39;/gu, "'").replace(/&quot;/gu, '"').replace(/\s+/gu, ' ').trim();
 }
@@ -65,20 +79,28 @@ export function evaluateVacancyFit(input: VacancyFitInput, now = new Date().toIS
   });
   const blocked = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status === 'blocked');
   // Неподтверждённые ворота не прячут процент (почти у всех профилей регион, формат и право на работу
-  // не подтверждены), а остаются в результате как «неизвестно»; число прячут только закрытые ворота.
+  // не подтверждены), а остаются в результате как «неизвестно» и снижают потолок процента.
   const unknownGate = VACANCY_FIT_GATE_NAMES.some((name) => gates[name].status !== 'matched');
-  const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : !facts.length ? 'no_eligible_facts' : !assessments.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
-  const matchedIds = new Set(assessments.filter((item) => item.status === 'matched').map((item) => item.requirementId));
-  const required = requirements.filter((item) => item.hard || item.stopFactor);
-  const matched = assessments.filter((item) => item.status === 'matched').length;
+  const skillIds = new Set(requirements.filter(isSkillRequirement).map((item) => item.id));
+  const skills = assessments.filter((item) => skillIds.has(item.requirementId));
+  const conditions = assessments.filter((item) => !skillIds.has(item.requirementId));
+  const reason = blocked ? 'blocked_gate' : !requirements.length ? 'no_requirements' : skills.length < MIN_SKILL_REQUIREMENTS ? 'too_few_skills'
+    : !facts.length ? 'no_eligible_facts' : !skills.some((item) => item.status !== 'unknown') ? 'assessment_unavailable' : 'assessed';
+  const matchedIds = new Set(skills.filter((item) => item.status === 'matched').map((item) => item.requirementId));
+  const required = requirements.filter((item) => skillIds.has(item.id) && (item.hard || item.stopFactor));
   const canScore = reason === 'assessed';
+  const ceiling = 100 - UNCONFIRMED_GATE_PENALTY * KEY_GATES.filter((name) => gates[name].status !== 'matched').length;
+  const percent = (matched: number, total: number) => canScore && total ? Math.min(ceiling, Math.round(matched / total * 100)) : null;
+  const count = (items: readonly VacancyFitRequirementAssessment[]) => ({
+    matched: items.filter((item) => item.status === 'matched').length, total: items.length, unknown: items.filter((item) => item.status === 'unknown').length,
+  });
   return {
     candidateId: input.candidateId, vacancyId: input.vacancyId, algorithmVersion: VACANCY_FIT_ALGORITHM_VERSION,
     status: blocked ? 'blocked' : canScore ? 'assessed' : 'unknown', gates,
-    calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || assessments.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
-    coveragePercent: canScore ? Math.round(matched / requirements.length * 100) : null,
-    requiredCoverage: { matched: required.filter((item) => matchedIds.has(item.id)).length, total: required.length, percent: canScore && required.length ? Math.round(required.filter((item) => matchedIds.has(item.id)).length / required.length * 100) : null },
-    coverage: { matched, total: requirements.length, unknown: assessments.filter((item) => item.status === 'unknown').length },
+    calculatedAt: now, dataState: !canScore ? 'unknown' : unknownGate || skills.some((item) => item.status === 'unknown') ? 'partial' : 'confirmed',
+    coveragePercent: percent(matchedIds.size, skills.length),
+    requiredCoverage: { matched: required.filter((item) => matchedIds.has(item.id)).length, total: required.length, percent: percent(required.filter((item) => matchedIds.has(item.id)).length, required.length) },
+    coverage: count(skills), conditionCoverage: count(conditions),
     assessments, reason,
   };
 }

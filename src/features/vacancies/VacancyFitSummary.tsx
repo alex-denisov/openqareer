@@ -15,6 +15,7 @@ const REASONS = {
   no_requirements: 'Нет извлечённых требований для расчёта',
   no_eligible_facts: 'В профиле нет подтверждённых фактов для сравнения',
   assessment_unavailable: 'Сравнение с фактами профиля пока недоступно',
+  too_few_skills: 'Мало требований к навыкам для расчёта',
   assessed: 'Недостаточно подтверждённых данных для расчёта',
 };
 export function fitHasNumber(view?: VacancyFitView) {

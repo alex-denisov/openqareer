@@ -9,7 +9,7 @@ import { extractVacancyRequirements } from './vacancyRequirements';
 
 function input(candidateId = 'candidate-secret-owner'): VacancyFitInput {
   return {
-    candidateId, vacancyId: 'vacancy-public', description: 'Requirements\n- TypeScript required', requirements: [],
+    candidateId, vacancyId: 'vacancy-public', description: 'Requirements\n- TypeScript required\n- Node services\n- SQL queries', requirements: [],
     facts: [{ id: 'private-fact', candidateId, kind: 'fact', status: 'confirmed', sensitive: false, sourceMessageIds: ['private-message'], statement: 'PRIVATE_OWNER_STATEMENT TypeScript services' }],
     gates: {
       role: { status: 'unknown', reason: 'role not confirmed' }, level: { status: 'unknown', reason: 'level unknown' },
@@ -120,13 +120,13 @@ describe('background vacancy mechanics with real SQLite', () => {
 
   it('assesses only in the worker and caches sourced numeric coverage under candidate data class', async () => {
     const runtime = setup(); const original = input();
-    const source: VacancyFitInput = { ...original, description: 'Requirements\n- TypeScript experience required', gates: {
+    const source: VacancyFitInput = { ...original, description: 'Requirements\n- TypeScript experience required\n- Node services\n- SQL queries', gates: {
       role: { status: 'matched', reason: 'confirmed' }, level: { status: 'matched', reason: 'confirmed' },
       region: { status: 'matched', reason: 'confirmed' }, workFormat: { status: 'matched', reason: 'confirmed' }, workAuthorization: { status: 'matched', reason: 'confirmed' },
     } };
     const complete = vi.fn(async (request: BulkLlmInput) => {
-      const requirement = JSON.parse(request.input).requirements[0];
-      return { content: JSON.stringify({ assessments: [{ requirementId: requirement.id, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript services' }] }] }) };
+      const { requirements } = JSON.parse(request.input) as { requirements: { id: string }[] };
+      return { content: JSON.stringify({ assessments: requirements.map(({ id }) => ({ requirementId: id, status: 'matched', evidence: [{ factId: 'private-fact', quote: 'TypeScript services' }] })) }) };
     });
     const client = fitClient(complete);
     runtime.enqueue(source);
@@ -236,7 +236,8 @@ describe('background vacancy mechanics with real SQLite', () => {
     runtime.enqueue(source);
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
     expect(runtime.requirements.getLatest(source.vacancyId)?.requirements[0]).toMatchObject({ text: quote, origin: 'structural' });
-    expect(runtime.takeStats()).toMatchObject({ requirementsDone: 1, requirementsInvalid: 0, llmCalls: 2, llmFailed: 1, lastModel: 'deepseek/deepseek-v4-flash', providers: ['StreamLake'] });
+    // One skill requirement is below MIN_SKILL_REQUIREMENTS: no fit call is spent (B510-r).
+    expect(runtime.takeStats()).toMatchObject({ requirementsDone: 1, requirementsInvalid: 0, llmCalls: 1, llmFailed: 0, lastModel: 'deepseek/deepseek-v4-flash', providers: ['StreamLake'] });
   });
 
   it('spends under one budget run per UTC day: the run changes at midnight and accumulates inside the day (B522)', async () => {
