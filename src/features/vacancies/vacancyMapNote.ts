@@ -1,3 +1,5 @@
+import { pluralWordRu } from '../../../shared/pluralRu';
+
 export interface VacancyMapNoteCounts {
   readonly onMap: number;
   /** Сколько строк выдачи загружено и разложено по карте. */
@@ -25,9 +27,20 @@ function offMapReason(counts: VacancyMapNoteCounts): string {
   return `: без точки ${parts.join(', ')}.`;
 }
 
-/** Заметка под картой (макет 4): числа из выдачи, без округлений и догадок. */
+const format = (value: number) => new Intl.NumberFormat('ru-RU').format(value);
+
+/**
+ * Заметка под картой (макет 4): «На карте 112 из 148: у остальных 36
+ * удалённая работа, без точки». Пока выдача дочитывается — честно, что
+ * разложены загруженные, и сколько ещё в пути (B446-r, W9).
+ */
 export function vacancyMapNote(counts: VacancyMapNoteCounts): string {
-  const partial =
-    counts.total > counts.shown ? ` Отмечены загруженные ${counts.shown} из ${counts.total}.` : '';
-  return `На карте ${counts.onMap} из ${counts.shown}${offMapReason(counts)}${partial} ${CLUSTERS_HINT}`;
+  const pending = counts.total - counts.shown;
+  if (pending <= 0) {
+    return `На карте ${format(counts.onMap)} из ${format(counts.shown)}${offMapReason(counts)} ${CLUSTERS_HINT}`;
+  }
+  return (
+    `На карте ${format(counts.onMap)} из ${format(counts.shown)} загруженных` +
+    `${offMapReason(counts)} Ещё ${format(pending)} ${pluralWordRu(pending, ['вакансия', 'вакансии', 'вакансий'])} из ${format(counts.total)} ${pluralWordRu(pending, ['догружается', 'догружаются', 'догружаются'])}. ${CLUSTERS_HINT}`
+  );
 }

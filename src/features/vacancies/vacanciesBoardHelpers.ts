@@ -55,7 +55,8 @@ export function screenFilteredCount(
     Boolean(state.selectedCities?.length) ||
     salaryFilter ||
     Boolean(state.companyName) ||
-    Boolean(state.selectedLocations?.length || state.locationRemote) ||
+    // B446-r: при серверной подборке локации фильтрует сервер, его число и верно.
+    (!input.onFiltersChange && Boolean(state.selectedLocations?.length || state.locationRemote)) ||
     (!input.onFiltersChange && countActiveFilters(state) > 0);
   if (hasClientFilters && input.poolComplete !== false) return localCount;
   return input.total ?? localCount;

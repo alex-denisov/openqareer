@@ -3,6 +3,8 @@ import { SavedSearchesPanel } from './SavedSearchesPanel';
 
 export type OpportunityTab = 'selection' | 'saved' | 'companies';
 
+const tabCount = new Intl.NumberFormat('ru-RU');
+
 export function OpportunityTabs({
   active,
   totalVacancies,
@@ -20,7 +22,7 @@ export function OpportunityTabs({
   readonly selectionOnly?: boolean;
 }) {
   const allTabs: Array<{ id: OpportunityTab; label: string }> = [
-    { id: 'selection', label: `Подборка ${totalVacancies}` },
+    { id: 'selection', label: `Подборка ${tabCount.format(totalVacancies)}` },
     { id: 'saved', label: `Сохранённые ${savedCount}` },
     {
       id: 'companies',

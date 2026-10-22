@@ -67,33 +67,50 @@ export function useSourceCatalog() {
   return { sources, loading, failed };
 }
 
-function buildSourceOptions(
+const sourceNameKey = (name: string) =>
+  name
+    .replace(/\s*\([^)]*\)\s*$/u, '')
+    .trim()
+    .toLocaleLowerCase();
+
+/**
+ * B446-r (W7): id реестра и id источника выдачи расходятся («indeed» и
+ * «src-indeed»), поэтому счёт сводится по id или по имени без пометки канала.
+ * Источники с вакансиями выдачи идут первыми — как в макете «5 120, 2 310…».
+ */
+export function buildSourceOptions(
   facets: MatchedVacancyFacets,
   catalog: readonly VacancySourceRegistryEntry[],
 ): SourceOption[] {
-  const counts = new Map(facets.sources.map(({ sourceId, count }) => [sourceId, count]));
-  const catalogIds = new Set<string>(catalog.map(({ id }) => id));
+  const byId = new Map(facets.sources.map((source) => [source.sourceId, source]));
+  const byName = new Map(facets.sources.map((source) => [sourceNameKey(source.name), source]));
+  const used = new Set<string>();
   const fromCatalog = catalog.map((source) => {
-    const count = counts.get(source.id) ?? 0;
+    const facet = byId.get(source.id) ?? byName.get(sourceNameKey(source.name));
+    if (facet) used.add(facet.sourceId);
+    const categoryGroup = source.category ? SOURCE_GROUP_BY_CATEGORY[source.category] : undefined;
     return {
-      sourceId: source.id,
+      sourceId: facet?.sourceId ?? source.id,
       name: source.name,
-      count,
-      groupId: source.category ? (SOURCE_GROUP_BY_CATEGORY[source.category] ?? null) : null,
+      count: facet?.count ?? 0,
+      groupId: categoryGroup ?? facet?.groupId ?? null,
       market: source.market,
       searchableText: sourceSearchText(source),
     };
   });
   const fromFacets = facets.sources
-    .filter(({ sourceId }) => !catalogIds.has(sourceId))
-    .map(({ sourceId, name, count }) => ({
+    .filter(({ sourceId }) => !used.has(sourceId))
+    .map(({ sourceId, name, count, groupId }) => ({
       sourceId,
-      name,
+      name: name.replace(/\s*\(страница поиска\)$/u, ''),
       count,
-      groupId: null,
+      groupId: groupId ?? null,
       searchableText: [sourceId, name].join(' ').toLocaleLowerCase(),
     }));
-  return [...fromCatalog, ...fromFacets];
+  return [...fromCatalog, ...fromFacets]
+    .map((option, index) => ({ option, index }))
+    .sort((a, b) => b.option.count - a.option.count || a.index - b.index)
+    .map(({ option }) => option);
 }
 
 function sourceSearchText(source: VacancySourceRegistryEntry): string {

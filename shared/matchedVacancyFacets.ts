@@ -30,6 +30,14 @@ export interface MatchedVacancyCatalogSummary {
   readonly observedAt?: string;
 }
 
+export interface MatchedVacancyPlaceFacet {
+  readonly location?: string;
+  readonly country?: string;
+  readonly isRemote?: boolean;
+  readonly region?: CandidateRegion;
+  readonly count: number;
+}
+
 export interface MatchedVacancyFacets {
   readonly total: number;
   /** Optional source-backed count of role/level matches in the wider catalog. */
@@ -42,6 +50,13 @@ export interface MatchedVacancyFacets {
     readonly sourceId: string;
     readonly name: string;
     readonly count: number;
+    /** Категория поповера «Источники»: реестр клиента знает не все источники выдачи. */
+    readonly groupId?: MatchedVacancySourceGroupId;
   }[];
+  /**
+   * B446-r: места всей выдачи с числом вакансий — дерево «Локаций» считает по
+   * ним, а не по загруженным строкам. `region` — регион кампании места.
+   */
+  readonly places?: readonly MatchedVacancyPlaceFacet[];
   readonly sourceGroups?: readonly MatchedVacancySourceGroup[];
 }

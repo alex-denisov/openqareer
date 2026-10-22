@@ -168,6 +168,34 @@
   margin-inline-end: auto;
 }
 
+/* B446-r (W8): «Отмена», «Снять все», «Все N» — призрачные кнопки, не акцент (макет 4). */
+.vacancy-location-foot .filters-reset {
+  color: var(--career-text-soft);
+}
+
+.vacancy-location-foot .filters-reset:hover:not(:disabled) {
+  color: var(--career-text);
+}
+
+/* B446-r (W7): подвал одной строкой, как в макете: «Выбрано… Все… Снять все · Отмена · Применить». */
+@media (min-width: 761px) {
+  .vacancy-location-foot {
+    flex-wrap: nowrap;
+  }
+
+  .vacancy-location-foot > * {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .vacancy-location-foot > .vacancy-location-chosen {
+    flex-shrink: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 .vacancy-location-check .career-checkbox:indeterminate {
   border-color: var(--career-accent);
   background-color: var(--career-accent);

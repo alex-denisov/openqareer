@@ -118,7 +118,8 @@ function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
   const closed = savedClosedLabel(entry.state);
   const salary = entry.state?.salary;
   const known = salary && (salary.from !== undefined || salary.to !== undefined);
-  const missing = entry.state ? 'Зарплата не указана' : entry.pending ? '…' : 'Зарплата неизвестна';
+  // B446-r (A6): формулировки макета 4 — «без зарплаты», а не «Зарплата не указана».
+  const missing = entry.pending && !entry.state ? '…' : 'без зарплаты';
   return (
     <div className="saved-row-money">
       {known ? (
@@ -146,20 +147,19 @@ const LEVEL_FIT_LABEL = {
   unknown: 'не указано',
 } as const;
 
-/** Вакансии нет в каталоге: уровень и гео неизвестны, так и пишем. */
+/** Вакансии нет в каталоге: одна строка «нет в каталоге» (макет 4), без «— неизвестно». */
 function SavedOutOfCatalog({ label, note }: { readonly label: string; readonly note: string }) {
   return (
     <div className="saved-row-cell" data-label={label}>
-      <span>—</span>
       <span className="saved-row-fit">{note}</span>
     </div>
   );
 }
 
-/** Пока состояние читается — «проверяем каталог»; не прочиталось — «неизвестно». */
+/** Пока состояние читается — «проверяем каталог»; иначе вакансии в каталоге нет. */
 function catalogNote(entry: SavedVacancyEntry): string {
-  if (entry.state) return 'нет в каталоге';
-  return entry.pending ? 'проверяем каталог' : 'неизвестно';
+  if (!entry.state && entry.pending) return 'проверяем каталог';
+  return 'нет в каталоге';
 }
 
 function SavedLevel({ entry }: { readonly entry: SavedVacancyEntry }) {
@@ -210,7 +210,13 @@ function SavedWantButton({
   readonly company?: string;
   readonly want?: SavedWant;
 }) {
-  if (!company || !want) return null;
+  // B446-r (A6): место кнопки есть в каждой строке, чтобы иконки стояли одинаково.
+  if (!company || !want)
+    return (
+      <button type="button" className="saved-row-want" aria-label="Компания не указана" disabled>
+        <Target aria-hidden="true" />
+      </button>
+    );
   return (
     <button
       type="button"
@@ -228,22 +234,38 @@ function SavedWantButton({
 
 function SavedExpandButton({
   title,
+  expanded,
   onExpand,
 }: {
   readonly title: string;
-  readonly onExpand?: () => void;
+  readonly expanded: boolean;
+  readonly onExpand: () => void;
 }) {
-  if (!onExpand) return null;
   return (
     <button
       type="button"
-      className="saved-row-want"
-      aria-label={`Раскрыть: ${title}`}
-      aria-expanded="false"
+      className={expanded ? 'saved-row-want is-open' : 'saved-row-want'}
+      aria-label={`${expanded ? 'Свернуть' : 'Раскрыть'}: ${title}`}
+      aria-expanded={expanded}
       onClick={onExpand}
     >
       <CaretDown aria-hidden="true" />
     </button>
+  );
+}
+
+/** Вакансии нет в каталоге — карточки нет; раскрытие говорит это и ведёт на площадку. */
+function SavedOutOfCatalogDetail({ application }: { readonly application: ApplicationView }) {
+  const url = application.vacancy?.url;
+  return (
+    <div className="saved-row-detail">
+      <p>Вакансии нет в текущем каталоге: описание и соответствие не пересчитываются.</p>
+      {url ? (
+        <a className="career-btn is-sm" href={url} target="_blank" rel="noreferrer noopener">
+          Открыть на площадке
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -254,13 +276,15 @@ function SavedRow({
   onRemove,
   want,
   onExpand,
+  expanded = false,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
   readonly busy: boolean;
   readonly onRemove: (application: ApplicationView) => void;
   readonly want?: SavedWant;
-  readonly onExpand?: () => void;
+  readonly onExpand: () => void;
+  readonly expanded?: boolean;
 }) {
   const savedDate = formatShortDate(entry.savedAt);
   return (
@@ -276,7 +300,6 @@ function SavedRow({
       <SavedGeo entry={entry} />
       <SavedMoney entry={entry} />
       <div className="saved-row-actions">
-        <SavedWantButton company={application.vacancy?.company} want={want} />
         <button
           type="button"
           className="saved-row-star"
@@ -287,8 +310,10 @@ function SavedRow({
         >
           <Star weight="fill" aria-hidden="true" />
         </button>
-        <SavedExpandButton title={entry.title} onExpand={onExpand} />
+        <SavedWantButton company={application.vacancy?.company} want={want} />
+        <SavedExpandButton title={entry.title} expanded={expanded} onExpand={onExpand} />
       </div>
+      {expanded ? <SavedOutOfCatalogDetail application={application} /> : null}
     </li>
   );
 }
@@ -300,10 +325,10 @@ function SavedSelect<T extends string>(props: {
   readonly onChange: (value: T) => void;
 }) {
   return (
-    <label className="companies-people-select-wrap">
+    <label className="companies-people-select-wrap saved-select-wrap">
       <span className="career-sr-only">{props.label}</span>
       <select
-        className="companies-people-select"
+        className="companies-people-select saved-select"
         aria-label={props.label}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value as T)}
@@ -314,6 +339,7 @@ function SavedSelect<T extends string>(props: {
           </option>
         ))}
       </select>
+      <CaretDown className="saved-select-caret" size={16} aria-hidden="true" />
     </label>
   );
 }
@@ -470,7 +496,8 @@ function SavedList({
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
             want={savedWant(collections, application.vacancy?.company)}
-            onExpand={item ? () => setExpandedId(entry.id) : undefined}
+            expanded={!item && expandedId === entry.id}
+            onExpand={() => setExpandedId((open) => (open === entry.id ? undefined : entry.id))}
           />
         ) : null;
       })}

@@ -48,6 +48,7 @@ import {
   initialSelectedId,
   screenFilteredCount,
 } from './vacanciesBoardHelpers';
+import { ResultCount } from './VacanciesResultCount';
 import './vacancies-screen.css';
 import './s10-vis.css';
 
@@ -456,34 +457,6 @@ function buildListProps(
   };
 }
 
-function ResultCount({
-  input,
-  shown,
-  onToggleView,
-  viewMode,
-}: {
-  readonly input: VacanciesScreenProps;
-  readonly shown: number;
-  readonly onToggleView: () => void;
-  readonly viewMode: 'list' | 'map';
-}) {
-  const label = 'Показано';
-  const poolTotal = input.facets?.total;
-  const ariaCount =
-    poolTotal === undefined ? `${label} ${shown}` : `${label} ${shown} из ${poolTotal}`;
-  return (
-    <div className="vacancies-mobile-results-summary">
-      <p className="list-hint" aria-live="polite" aria-label={ariaCount}>
-        <span className="vacancy-facet-count">{shown}</span> вакансий по вашим условиям
-      </p>
-      <button type="button" className="vacancies-mobile-map-action" onClick={onToggleView}>
-        {viewMode === 'list' ? <MapTrifold aria-hidden="true" /> : <List aria-hidden="true" />}
-        <span>{viewMode === 'list' ? 'Карта' : 'Список'}</span>
-      </button>
-    </div>
-  );
-}
-
 function mainBodyProps(
   input: VacanciesScreenProps,
   screenState: ReturnType<typeof useVacanciesScreenState>,
@@ -524,6 +497,8 @@ function VacanciesFilterContent({
     input.matched,
     board.state,
     Boolean(input.onFiltersChange),
+    screenFilteredCount(input, board.filtered.length, board.state),
+    input.poolComplete !== false,
   );
   const filterOptions = useMemo(
     () => ({ ...baseOptions, locationTreeFor, resultCountFor }),
@@ -577,7 +552,7 @@ function VacanciesScreenContent({
         actions={screenState.actions}
       />
       <ResultCount
-        input={input}
+        poolTotal={input.facets?.total}
         shown={shown}
         onToggleView={() =>
           screenState.setViewMode((current) => (current === 'list' ? 'map' : 'list'))
@@ -698,6 +673,14 @@ function VacancyOutreachDialog({
   );
 }
 
+/** B446-r: вкладка «Подборка» — то же число выдачи, что шапка и подвал. */
+function selectionTotal(
+  input: VacanciesScreenProps,
+  screenState: ReturnType<typeof useVacanciesScreenState>,
+): number {
+  return screenFilteredCount(input, screenState.board.filtered.length, screenState.board.state);
+}
+
 function VacanciesScreenFrame({
   input,
   screenState,
@@ -725,7 +708,7 @@ function VacanciesScreenFrame({
       <div className="vacancies-tabs-row">
         <OpportunityTabs
           active={activeTab}
-          totalVacancies={input.total}
+          totalVacancies={selectionTotal(input, screenState)}
           savedCount={screenState.collections.savedApplications.length}
           companiesCount={screenState.collections.companiesCount}
           onSelect={onSelectTab}
