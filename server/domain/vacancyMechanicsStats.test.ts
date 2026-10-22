@@ -43,4 +43,20 @@ describe('model part of the batch journal line (B522)', () => {
       '| model=deepseek/deepseek-v4-flash providers=StreamLake,DeepInfra llm_calls=10 llm_failed=0 llm_avg_ms=10100 extract_unavailable=0 extract_invalid=1 extract_failed_share=10%',
     );
   });
+  it('counts why model answers and entries were not used (B510-r)', () => {
+    const line = formatVacancyMechanicsStats(
+      {
+        ...emptyVacancyMechanicsStats(),
+        requirementsDone: 3,
+        requirementsInvalid: 1,
+        llmCalls: 4,
+        llmMs: 4_000,
+        modelIssues: { long_label: 3, no_valid_entries: 1, quote: 2 },
+      },
+      60_000,
+    );
+    expect(line).toMatch(
+      /extract_failed_share=25% extract_issues=long_label:3,no_valid_entries:1,quote:2$/u,
+    );
+  });
 });
