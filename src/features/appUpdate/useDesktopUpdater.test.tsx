@@ -15,7 +15,7 @@ vi.mock('./appUpdateBridge', async (original) => ({
 }));
 
 import { SignatureVerificationError } from './appUpdateBridge';
-import { UPDATE_CHECK_DELAY_MS, useDesktopUpdater } from './useDesktopUpdater';
+import { UPDATE_CHECK_DELAY_MS, createDesktopUpdater, useDesktopUpdater } from './useDesktopUpdater';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -27,8 +27,10 @@ afterEach(() => {
 
 async function launched() {
   const result = { current: null as unknown as ReturnType<typeof useDesktopUpdater> };
+  const updater = createDesktopUpdater();
+  updater.start();
   function Probe() {
-    result.current = useDesktopUpdater();
+    result.current = useDesktopUpdater(updater);
     return null;
   }
   await act(async () => createRoot(document.createElement('div')).render(<Probe />));
@@ -58,7 +60,7 @@ describe('useDesktopUpdater', () => {
     expect(result.current.status.state).toBe('available');
     expect(result.current.status.info).toMatchObject({ version: '1.0.2', currentVersion: '1.0.1' });
     await act(async () => result.current.actions.onInstall());
-    expect(result.current.status.state).toBe('ready');
+    expect(result.current.status).toMatchObject({ state: 'ready', modal: 'none' });
     expect(result.current.status.info.progressPercent).toBe(50);
     act(() => result.current.actions.onRestart());
     expect(bridge.relaunch).toHaveBeenCalledTimes(1);
@@ -69,7 +71,7 @@ describe('useDesktopUpdater', () => {
     bridge.downloadAndInstall.mockRejectedValue(new SignatureVerificationError());
     const { result } = await launched();
     await act(async () => result.current.actions.onInstall());
-    expect(result.current.status).toMatchObject({ state: 'error', modal: 'error' });
+    expect(result.current.status).toMatchObject({ state: 'error', modal: 'none' });
     expect(result.current.status.errorMessage).toMatch(/Подпись/u);
     expect(bridge.relaunch).not.toHaveBeenCalled();
   });

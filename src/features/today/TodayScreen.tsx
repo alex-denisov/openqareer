@@ -1,4 +1,5 @@
 import { useId, useMemo, useState } from 'react';
+import { DesktopUpdateStrip } from '../appUpdate/DesktopUpdateStrip';
 import {
   Briefcase,
   ArrowsClockwise,
@@ -268,6 +269,7 @@ interface TodayContentProps {
 function TodayContent(props: TodayContentProps) {
   return (
     <div className="career-today">
+      <DesktopUpdateStrip />
       <TodayMobileContent
         {...props}
         queueRemainder={{

@@ -221,15 +221,35 @@
   background: var(--career-bg);
 }
 
-/* B359: живой баннер обновления поверх любого экрана десктопа */
-.career-app-update-dock {
-  position: fixed;
-  right: var(--career-space-6);
-  bottom: var(--career-space-6);
-  z-index: 60;
-  max-width: min(560px, calc(100vw - 2 * var(--career-space-6)));
+/* B359: загрузка внутри полоски, без окна */
+.career-app-update-progress {
+  flex: 1;
+  min-inline-size: 8rem;
+  block-size: 8px;
+  appearance: none;
+  border: 0;
+  border-radius: var(--career-radius-full);
+  background: var(--career-line-soft);
+  overflow: hidden;
 }
 
-.career-app-update-dock .career-app-update-banner {
-  margin-bottom: 0;
+.career-app-update-progress::-webkit-progress-bar {
+  background: var(--career-line-soft);
+  border-radius: var(--career-radius-full);
+}
+
+.career-app-update-progress::-webkit-progress-value {
+  background: var(--career-accent);
+  border-radius: var(--career-radius-full);
+  transition: inline-size 0.2s ease;
+}
+
+.career-app-update-percent {
+  font-variant-numeric: tabular-nums;
+  min-inline-size: 3.5em;
+  text-align: end;
+}
+
+.career-app-update-banner > .career-app-update-progress-row {
+  flex: 1 1 16rem;
 }
