@@ -1,6 +1,7 @@
 import type { CandidateRegion } from '../../src/features/workspace/candidateRegions';
 import type { OrderableMatch } from '../../shared/vacancyMatchOrder';
 import { compareMatchedVacancies } from '../../shared/vacancyMatchOrder';
+import { northAmericanCountryOf } from '../../shared/postalPlace';
 
 /**
  * География вакансии по её локации и стране (PRB-040).
@@ -111,14 +112,16 @@ export interface VacancyPlace {
 }
 
 export function regionOfVacancy(place: VacancyPlace): PlaceRegion | undefined {
-  if (place.country) {
+  if (place.country && !northAmericanCountryOf(place.country)) {
     const byCountry = regionOfCountryName(place.country);
     if (byCountry) return byCountry;
   }
   const location = place.location?.trim();
   if (!location) return undefined;
   // Страна обычно стоит последней: «Düsseldorf, North Rhine-Westphalia, Germany».
-  const parts = location.split(/[,·|/]/u).map((part) => part.trim()).filter(Boolean);
+  const parts = location.split(/[,·|/;]/u).map((part) => part.trim()).filter(Boolean);
+  // «Chicago, IL»: после города код штата, а не ISO-код Израиля (B546).
+  if (parts.length > 1 && northAmericanCountryOf(parts.at(-1) ?? '')) return 'us';
   for (const part of [...parts].reverse()) {
     const byCountry = regionOfCountryName(part);
     if (byCountry) return byCountry;

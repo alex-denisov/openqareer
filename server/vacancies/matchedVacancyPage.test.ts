@@ -217,6 +217,35 @@ describe('место вакансии на карте называется че�
   });
 });
 
+describe('точка на карте принадлежит городу вакансии (A9)', () => {
+  function at(location: string, company = 'Компания 0'): MatchedVacancyItem {
+    const base = item(0);
+    return {
+      ...base,
+      cluster: { ...base.cluster, canonicalCompany: company, canonicalLocation: location },
+    };
+  }
+
+  it('почтовый индекс в названии города не мешает найти город', () => {
+    const [first] = buildMatchedVacancyPage([at('Singapore 069542')], 0).items;
+    expect(first?.cluster.companyFeatures?.city).toBe('Singapore');
+    expect(first?.cluster.companyFeatures?.coordinates?.lat).toBeCloseTo(1.29, 1);
+  });
+
+  it('офис компании в другом городе не становится точкой вакансии', () => {
+    // У Miro в реестре Амстердам: неузнанный город вакансии остаётся без точки.
+    const [first] = buildMatchedVacancyPage([at('Nowhereville 12345', 'Miro')], 0).items;
+    expect(first?.cluster.companyFeatures?.city).toBe('Nowhereville');
+    expect(first?.cluster.companyFeatures?.coordinates).toBeUndefined();
+  });
+
+  it('код штата после города — США, а не ISO-код страны', () => {
+    const [first] = buildMatchedVacancyPage([at('Chicago, IL')], 0).items;
+    expect(first?.cluster.companyFeatures?.country).toBe('United States');
+    expect(first?.cluster.companyFeatures?.coordinates?.lng).toBeLessThan(-80);
+  });
+});
+
 describe('локальное геокодирование набора из 190 вакансий (B365)', () => {
   const fixtureCityLocations = [
     'Москва',

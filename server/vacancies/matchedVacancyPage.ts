@@ -1,6 +1,7 @@
 import type { MatchedVacancyItem } from './multiSourceVacancyEngine';
 import type { VacancyCompanyFeatures, VacancyCluster } from '../domain/unifiedVacancy';
 import { normalizeCityLabel } from '../../shared/cityLabel';
+import { northAmericanCountryOf } from '../../shared/postalPlace';
 import { detectVacancyWorkFormat } from '../../shared/vacancyWorkFormat';
 import { isKnownCountry } from '../domain/geoCoordinates';
 import { getCompanyRegistry } from '../domain/companyRegistry';
@@ -55,6 +56,13 @@ export interface MatchedVacancyPage {
   readonly pageOffsets?: readonly number[];
 }
 
+/** Страна и город одним именем: «Singapore 069542» — точка, а не страна без города (A9). */
+const CITY_STATES = new Set(['singapore', 'сингапур', 'hong kong', 'гонконг', 'monaco', 'luxembourg']);
+
+function isCityState(label: string): boolean {
+  return CITY_STATES.has(label.trim().toLocaleLowerCase());
+}
+
 function extractLocationCoordinates(
   canonicalLocation?: string,
   company?: Company,
@@ -74,19 +82,26 @@ function extractLocationCoordinates(
     const named = normalizeCityLabel(parts[0]);
     // «Alma · Italy»: площадка положила в место страну. Страна — не городской
     // хаб, и выдавать её за точку на карте нельзя (B203).
-    city = named && isKnownCountry(named) ? undefined : named;
-    country = parts[1] || (named && isKnownCountry(named) ? named : undefined);
+    city = named && isKnownCountry(named) && !isCityState(named) ? undefined : named;
+    // «Chicago, IL»: второй сегмент — штат, страна у него — США (A9).
+    const second = parts[1] ? (northAmericanCountryOf(parts[1]) ?? parts[1]) : undefined;
+    country = second || (named && isKnownCountry(named) ? named : undefined);
     coordinates = city ? lookupLocationCoordinates(city, country) : undefined;
   }
 
   if (!coordinates && company && company.locations.length > 0) {
-    const locWithCoords = company.locations.find((l) => l.coordinates);
+    // A9: точка офиса компании — только для того же города. «Singapore 069542»
+    // получал координаты европейского офиса той же компании; неузнанный город
+    // честнее оставить без точки.
+    const sameCity = (location: Company['locations'][number]) =>
+      !city || normalizeCityLabel(location.city)?.toLocaleLowerCase() === city.toLocaleLowerCase();
+    const locWithCoords = company.locations.find((l) => l.coordinates && sameCity(l));
     if (locWithCoords) {
       coordinates = locWithCoords.coordinates;
       if (!city) city = normalizeCityLabel(locWithCoords.city);
       if (!country) country = locWithCoords.country;
-    } else {
-      if (!city) city = normalizeCityLabel(company.locations[0].city);
+    } else if (!city) {
+      city = normalizeCityLabel(company.locations[0].city);
       if (!country) country = company.locations[0].country;
     }
   }
