@@ -446,6 +446,18 @@ pub fn focus_main_window(app: AppHandle) -> Result<(), String> {
     let window = app
         .get_webview_window("main")
         .ok_or_else(|| "main_window_unavailable".to_string())?;
+    bring_window_to_front(&app, &window)
+}
+
+// На macOS show()+set_focus() не поднимают окно, пока активно другое приложение
+// (клик в строке меню или по уведомлению), поэтому сначала активируем приложение.
+fn bring_window_to_front(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    app.show()
+        .map_err(|_| "app_activate_failed".to_string())?;
+    #[cfg(not(target_os = "macos"))]
+    let _ = app;
+    let _ = window.unminimize();
     window
         .show()
         .map_err(|_| "main_window_show_failed".to_string())?;
@@ -505,8 +517,9 @@ pub fn configure_tray(app: &mut App) -> tauri::Result<()> {
 
 fn show_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.set_focus();
+        if let Err(reason) = bring_window_to_front(app, &window) {
+            eprintln!("[desktop-notify] show_main_window: {reason}");
+        }
     }
 }
 
