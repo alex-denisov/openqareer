@@ -470,6 +470,7 @@
   background: var(--career-bg);
   font: inherit;
   font-size: var(--career-text-sm);
+  text-align: start;
   cursor: pointer;
 }
 
@@ -806,10 +807,11 @@
   padding: var(--career-space-6);
 }
 
+/* Three fields in a row only while each gets room; a narrow form wraps them. */
 .career-relocation-questionnaire-form
   .career-relocation-add-form:has(#relocation-new-document-kind)
   .career-relocation-form-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--career-space-8) * 5)), 1fr));
 }
 
 @media (max-width: 760px) {
@@ -871,4 +873,27 @@
   inline-size: var(--career-space-5);
   block-size: var(--career-space-5);
   accent-color: var(--career-accent);
+}
+
+/* WebKit (.app): a select keeps its native popup look and height without this. */
+.career-relocation select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: calc(var(--career-space-3) * 2 + var(--career-space-3));
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpolyline points='208 96 128 176 48 96' fill='none' stroke='%23a3acb9' stroke-linecap='round' stroke-linejoin='round' stroke-width='20'/%3E%3C/svg%3E");
+  background-position: right var(--career-space-3) center;
+  background-repeat: no-repeat;
+  background-size: var(--career-space-4) var(--career-space-4);
+}
+
+/* WebKit fills an empty date field with today's date: an empty field stays empty. */
+.career-relocation input[type='date'][value='']:not(:focus)::-webkit-datetime-edit {
+  color: transparent;
+}
+
+.career-relocation-picker-button > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

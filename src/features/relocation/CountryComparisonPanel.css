@@ -212,6 +212,7 @@
 .career-country-comparison-meanings {
   display: grid;
   gap: var(--career-space-3);
+  margin-block-start: var(--career-space-4);
 }
 
 .career-country-comparison-meanings h3 {
@@ -245,10 +246,6 @@
   border: var(--career-border-width) solid var(--career-line);
   border-radius: var(--career-radius-md);
   padding: var(--career-space-3) var(--career-space-4);
-}
-
-.career-country-comparison-meanings {
-  margin-block-start: var(--career-space-4);
 }
 
 .career-country-comparison-meaning-icon {

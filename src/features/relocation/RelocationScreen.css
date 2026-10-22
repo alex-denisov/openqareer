@@ -629,6 +629,7 @@
 
 .career-relocation-country-meta {
   display: flex;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--career-space-2);
@@ -636,8 +637,10 @@
 
 .career-relocation-country-meta span {
   display: inline-flex;
+  min-width: 0;
   align-items: center;
   gap: var(--career-space-1);
+  white-space: nowrap;
 }
 
 .career-relocation-country-card .career-relocation-country-actions {
@@ -801,15 +804,6 @@
 /* B468-r3 return: country card by mockup 15 `main`. */
 .career-relocation-country-card .career-relocation-country-scenario {
   margin-block-start: calc(var(--career-space-3) * -1);
-}
-
-.career-relocation-country-meta {
-  flex-wrap: nowrap;
-}
-
-.career-relocation-country-meta span {
-  min-width: 0;
-  white-space: nowrap;
 }
 
 .career-relocation-country-meta span:last-child {

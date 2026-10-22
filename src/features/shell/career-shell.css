@@ -1209,6 +1209,10 @@
   padding: 12px 13px;
   color: var(--career-text);
   background: var(--career-bg-elevated);
+}
+
+/* Only multi-line fields grow: WebKit draws a resize grip on a date input otherwise. */
+.career-shell textarea {
   resize: vertical;
 }
 
