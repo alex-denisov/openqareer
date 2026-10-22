@@ -41,6 +41,18 @@ describe('summarizeVacancyFilterGroup', () => {
     };
     expect(summarizeVacancyFilterGroup(state, 'locations')).toBe('Berlin');
   });
+
+  it('names two regions and counts the rest, never drops them silently', () => {
+    const state: VacanciesScreenState = {
+      roles: [],
+      regions: ['ru', 'cis', 'us', 'eu', 'mena'],
+      remoteOnly: false,
+    };
+    expect(summarizeVacancyFilterGroup(state, 'locations')).toBe('Россия, СНГ +3');
+    expect(summarizeVacancyFilterGroup({ ...state, regions: ['ru', 'cis'] }, 'locations')).toBe(
+      'Россия, СНГ',
+    );
+  });
 });
 
 describe('B446 filter group count', () => {

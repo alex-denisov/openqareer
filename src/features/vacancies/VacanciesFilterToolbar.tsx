@@ -93,11 +93,15 @@ function summarizeLocations(state: VacanciesScreenState): string | undefined {
   const cities = state.selectedCities ?? [];
   if (cities.length) return cities.length > 1 ? `${cities[0]} +${cities.length - 1}` : cities[0];
   if (state.selectedCity) return state.selectedCity;
-  if (state.regions.length)
-    return state.regions
-      .map((id) => CANDIDATE_REGION_CATALOGUE.find((region) => region.id === id)?.label ?? id)
+  if (state.regions.length) {
+    // Two names fit the button; the rest are counted, as roles do («+N»).
+    const shown = state.regions
       .slice(0, 2)
+      .map((id) => CANDIDATE_REGION_CATALOGUE.find((region) => region.id === id)?.label ?? id)
       .join(', ');
+    const rest = state.regions.length - 2;
+    return rest > 0 ? `${shown} +${rest}` : shown;
+  }
   const search = state.locationSearch?.trim();
   return search || undefined;
 }
