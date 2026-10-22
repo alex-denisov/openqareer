@@ -597,7 +597,11 @@
 
 .career-relocation-country-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /* Two cards while each has room, one when the column is narrow (.app at 1024–900). */
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(min(100%, calc(var(--career-space-8) * 10)), 1fr)
+  );
   gap: var(--career-space-4);
   margin: 0;
   padding: 0;
@@ -629,7 +633,7 @@
 
 .career-relocation-country-meta {
   display: flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--career-space-2);

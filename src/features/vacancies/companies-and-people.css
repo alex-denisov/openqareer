@@ -349,12 +349,14 @@
 
 .companies-people-detail-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: start;
   gap: var(--career-space-4);
 }
 
+/* Name and sources keep a readable column; «Хочу» / «Убрать» move to their own line instead. */
 .companies-people-detail-title {
-  flex: 1 1 auto;
+  flex: 1 1 calc(var(--career-space-8) * 7);
   min-inline-size: 0;
 }
 
@@ -865,4 +867,15 @@
 .company-push-people {
   display: grid;
   gap: var(--career-space-5);
+}
+
+/* WebKit (.app): the sort select keeps its native popup look and height without this. */
+select.companies-people-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: calc(var(--career-space-3) * 3);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpolyline points='208 96 128 176 48 96' fill='none' stroke='%23a3acb9' stroke-linecap='round' stroke-linejoin='round' stroke-width='20'/%3E%3C/svg%3E");
+  background-position: right var(--career-space-3) center;
+  background-repeat: no-repeat;
+  background-size: var(--career-space-4) var(--career-space-4);
 }
