@@ -80,7 +80,7 @@ function vacancy(input: {
 }
 
 describe('GET /api/v1/candidate/matched-vacancies description preload (B304)', () => {
-  it('stores skills and full descriptions for hh.ru vacancies in the first 20 results, beyond the first response page', async () => {
+  it('stores skills and full descriptions for hh.ru vacancies in the first 20 results', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'openqareer-b304-preload-'));
     const databasePath = join(directory, 'app.db');
     const encryptionKey = Buffer.alloc(32, 8);
@@ -212,8 +212,8 @@ describe('GET /api/v1/candidate/matched-vacancies description preload (B304)', (
     });
     expect(response.statusCode).toBe(200);
     const firstPage = response.json().data as Array<{ cluster: { id: string } }>;
-    expect(firstPage.length).toBeLessThan(10);
-    expect(firstPage.every((item) => !item.cluster.id.includes('src-hh-search:'))).toBe(true);
+    // PRB-040: страница несёт до 20 записей — первые 20 совпадений и есть первая страница.
+    expect(firstPage.length).toBeLessThanOrEqual(20);
 
     const summaries = await Promise.all(preloadTasks);
 

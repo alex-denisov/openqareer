@@ -4,51 +4,113 @@ import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { VacancyFitView } from '../../shared/vacancyFit';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
-import { createFitOrderCache } from './fitOrderCache';
+import { createCandidateWindowCache } from './candidateWindowCache';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
-const fitOrderCache = createFitOrderCache<MatchedVacancyItem>(FIT_ORDER_WINDOW_MS);
+/** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
+const FIT_REFRESH_SLICE = 25;
+type FitViews = ReadonlyMap<string, VacancyFitView>;
+const fitViewsCache = createCandidateWindowCache<FitViews>(FIT_ORDER_WINDOW_MS);
+const refreshingFitViews = new Set<string>();
 
-/** Runs before pagination, so a cached match on a later page can move to the front. */
+/**
+ * Runs before pagination, so a cached match on a later page can move to the front.
+ *
+ * PRB-040: точный разбор всех вакансий с результатом стоил на проде ~4 с
+ * синхронного SQL и стоял перед первой страницей каждые 60 с. Вышедшее окно
+ * больше не держит ответ: порядок строится по прежним разборам, а свежие
+ * считаются в фоне порциями, уступая event loop. Синхронно — только первый
+ * раз для этого профиля, когда прежних разборов нет.
+ */
 export function withVacancyFitOrder(
   deps: RouteDeps,
   candidateId: string,
   sort: 'fit' | 'freshness' = 'fit',
 ) {
-  const context = deps.vacancyMechanics
-    ? createVacancyFitContextReader(deps, candidateId)
-    : undefined;
-  const stamp = context
+  const reader = createFitViewReader(deps, candidateId);
+  const stamp = reader
     ? vacancyFitProfileStamp(
         deps.candidateStore.getSnapshot(candidateId),
         deps.candidateStore.getCandidateWorkspace(candidateId),
       )
     : 'none';
+  const key = `${candidateId}|${stamp}`;
   return (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] => {
-    const key = [
-      candidateId,
-      sort,
-      stamp,
-      items.length,
-      items[0]?.cluster.id,
-      items.at(-1)?.cluster.id,
-    ].join('|');
-    return [...fitOrderCache.read(key, () => decorateAndSort(items))];
+    const known = fitViewsCache.peek(key);
+    if (!known) {
+      const views = reader
+        ? reader.read(reader.scoredIds(items))
+        : new Map<string, VacancyFitView>();
+      fitViewsCache.write(key, views);
+      return orderByFit(items, views, sort);
+    }
+    if (known.stale && reader) void refreshFitViews(key, reader, items);
+    return orderByFit(items, known.value, sort);
   };
+}
 
-  function decorateAndSort(items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] {
+interface FitViewReader {
+  scoredIds(items: readonly MatchedVacancyItem[]): string[];
+  read(ids: readonly string[]): Map<string, VacancyFitView>;
+}
+
+function createFitViewReader(deps: RouteDeps, candidateId: string): FitViewReader | undefined {
+  const runtime = deps.vacancyMechanics;
+  if (!runtime) return undefined;
+  const context = createVacancyFitContextReader(deps, candidateId);
+  return {
     // Точный разбор дорог (отпечатки всех фактов, проверка результата, полный
     // текст вакансии) — только для вакансий с сохранённым результатом.
-    const scored = deps.vacancyMechanics?.cachedVacancyIds(candidateId) ?? new Set<string>();
-    const decorated = items.map((item) => {
-      if (!context || !deps.vacancyMechanics || !scored.has(item.cluster.id)) return item;
-      const target = readVacancyFitTarget(deps, item.cluster.id);
-      if (!target) return item;
-      const fitView = compactFitView(deps.vacancyMechanics.view(context(target, [])));
-      return { ...item, explanation: { ...item.explanation, fitView } };
-    });
-    return decorated.sort((left, right) => compareFitOrder(left, right, sort));
+    scoredIds(items) {
+      const scored = runtime.cachedVacancyIds(candidateId);
+      return items.map((item) => item.cluster.id).filter((id) => scored.has(id));
+    },
+    read(ids) {
+      const views = new Map<string, VacancyFitView>();
+      for (const id of ids) {
+        const target = readVacancyFitTarget(deps, id);
+        if (target) views.set(id, compactFitView(runtime.view(context(target, []))));
+      }
+      return views;
+    },
+  };
+}
+
+async function refreshFitViews(
+  key: string,
+  reader: FitViewReader,
+  items: readonly MatchedVacancyItem[],
+): Promise<void> {
+  if (refreshingFitViews.has(key)) return;
+  refreshingFitViews.add(key);
+  try {
+    const ids = reader.scoredIds(items);
+    const views = new Map<string, VacancyFitView>();
+    for (let start = 0; start < ids.length; start += FIT_REFRESH_SLICE) {
+      for (const entry of reader.read(ids.slice(start, start + FIT_REFRESH_SLICE))) {
+        views.set(...entry);
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+    fitViewsCache.write(key, views);
+  } catch {
+    // Прежний порядок остаётся в силе, а следующее чтение после окна
+    // попробует пересчёт снова: отказ фона не должен ронять список.
+  } finally {
+    refreshingFitViews.delete(key);
   }
+}
+
+function orderByFit(
+  items: readonly MatchedVacancyItem[],
+  views: FitViews,
+  sort: 'fit' | 'freshness',
+): MatchedVacancyItem[] {
+  const decorated = items.map((item) => {
+    const fitView = views.get(item.cluster.id);
+    return fitView ? { ...item, explanation: { ...item.explanation, fitView } } : item;
+  });
+  return decorated.sort((left, right) => compareFitOrder(left, right, sort));
 }
 
 /**

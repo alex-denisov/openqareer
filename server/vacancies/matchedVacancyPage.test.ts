@@ -251,7 +251,10 @@ describe('локальное геокодирование набора из 190 
   });
 
   it('оставляет без координат только вакансии, где город действительно не указан', () => {
-    const resolved = buildMatchedVacancyPage(fixture, 0, 1_000_000).items;
+    // Страница несёт не больше MATCHED_PAGE_ITEM_LIMIT записей (PRB-040) — читаем весь набор.
+    const resolved = planMatchedVacancyPages(fixture, 1_000_000).flatMap(
+      (offset) => buildMatchedVacancyPage(fixture, offset, 1_000_000).items,
+    );
     const withoutCoordinates = resolved.filter(
       (entry) => entry.cluster.companyFeatures?.coordinates === undefined,
     );

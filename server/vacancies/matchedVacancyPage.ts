@@ -22,7 +22,16 @@ import type { Company } from '../domain/company';
  * около полутора килобайт на запись, а на экране видно не больше трёх; чтобы
  * покрытие осталось честным, вместо списков едет их счёт.
  */
-export const MATCHED_PAGE_BYTE_BUDGET = 12_288;
+export const MATCHED_PAGE_BYTE_BUDGET = 40_000;
+
+/**
+ * PRB-040: страница в 12 КБ несла четыре вакансии, и подборка из двух тысяч
+ * дочитывалась пятью сотнями запросов. Стена канала (~20 КБ у ретранслятора
+ * для России) меряется байтами на проводе, а Caddy сжимает JSON (`encode
+ * gzip`): 9,5 КБ записей прода сжимались в 2,4 КБ. 40 000 байт записей — это
+ * ~10 КБ на проводе, вместе с фасетами первой страницы — меньше стены.
+ */
+export const MATCHED_PAGE_ITEM_LIMIT = 20;
 
 /** Столько требований печатает карточка вакансии — и совпавших, и нет. */
 const VISIBLE_POINTS = 3;
@@ -153,7 +162,11 @@ function takePage(
   // Открывающая и закрывающая скобки массива входят в тот же бюджет.
   let size = 2;
 
-  for (let index = start; index < all.length; index += 1) {
+  for (
+    let index = start;
+    index < all.length && items.length < MATCHED_PAGE_ITEM_LIMIT;
+    index += 1
+  ) {
     const trimmed = trim(all[index]);
     const cost = Buffer.byteLength(JSON.stringify(trimmed), 'utf8') + (items.length > 0 ? 1 : 0);
     // Запись, которая одна не влезает в бюджет, всё равно уходит первой: иначе
@@ -197,6 +210,7 @@ export function buildMatchedVacancyPage(
   all: readonly MatchedVacancyItem[],
   offset: number,
   budgetBytes: number = MATCHED_PAGE_BYTE_BUDGET,
+  plannedOffsets?: readonly number[],
 ): MatchedVacancyPage {
   const start = Math.max(0, Math.trunc(offset));
   const items = takePage(all, start, budgetBytes);
@@ -209,6 +223,8 @@ export function buildMatchedVacancyPage(
     nextOffset: nextOffset < all.length ? nextOffset : null,
     // План едет только с первой страницей: в каждом ответе он был бы лишними
     // байтами внутри того самого бюджета, ради которого пул и режется.
-    ...(start === 0 ? { pageOffsets: planMatchedVacancyPages(all, budgetBytes) } : {}),
+    ...(start === 0
+      ? { pageOffsets: plannedOffsets ?? planMatchedVacancyPages(all, budgetBytes) }
+      : {}),
   };
 }
