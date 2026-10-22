@@ -13,7 +13,7 @@ function AvailableBannerActions({ actions }: { readonly actions: AppUpdateAction
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-quiet-button career-btn-sm"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-whats-new-btn"
         onClick={actions.onWhatsNew}
       >
@@ -21,7 +21,7 @@ function AvailableBannerActions({ actions }: { readonly actions: AppUpdateAction
       </button>
       <button
         type="button"
-        className="career-primary-button career-btn-sm"
+        className="career-btn is-sm is-primary"
         data-testid="app-update-install-btn"
         onClick={actions.onInstall}
       >
@@ -30,7 +30,7 @@ function AvailableBannerActions({ actions }: { readonly actions: AppUpdateAction
       </button>
       <button
         type="button"
-        className="career-quiet-button career-btn-sm"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-later-btn"
         onClick={actions.onPostpone}
       >
@@ -45,7 +45,7 @@ function ReadyBannerActions({ actions }: { readonly actions: AppUpdateActions })
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-primary-button career-btn-sm"
+        className="career-btn is-sm is-primary"
         data-testid="app-update-restart-btn"
         onClick={actions.onRestart}
       >
@@ -54,7 +54,7 @@ function ReadyBannerActions({ actions }: { readonly actions: AppUpdateActions })
       </button>
       <button
         type="button"
-        className="career-secondary-button career-btn-sm"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-next-launch-btn"
         onClick={actions.onNextLaunch}
       >
@@ -69,7 +69,7 @@ function UpdatedBannerActions({ actions }: { readonly actions: AppUpdateActions 
     <div className="career-app-update-actions">
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-whats-new-btn"
         onClick={actions.onWhatsNew}
       >
@@ -77,7 +77,7 @@ function UpdatedBannerActions({ actions }: { readonly actions: AppUpdateActions 
       </button>
       <button
         type="button"
-        className="career-quiet-button"
+        className="career-btn is-sm is-ghost"
         data-testid="app-update-close-btn"
         onClick={actions.onDismissBanner}
       >
@@ -119,7 +119,7 @@ function AvailableBanner({ info, actions }: { readonly info: AppUpdateReleaseInf
   return (
     <div className="career-app-update-banner" role="status">
       <div className="career-app-update-ico">
-        <DownloadSimple size={20} aria-hidden="true" />
+        <DownloadSimple size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Доступна версия {info.version}</strong>
@@ -137,7 +137,7 @@ function DownloadingBanner({ info }: { readonly info: AppUpdateReleaseInfo }) {
   return (
     <div className="career-app-update-banner" role="status" data-testid="app-update-downloading">
       <div className="career-app-update-ico">
-        <DownloadSimple size={20} aria-hidden="true" />
+        <DownloadSimple size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Загружаем версию {info.version}{size}</strong>
@@ -160,19 +160,19 @@ function ErrorBanner({ message, actions }: { readonly message?: string; readonly
   return (
     <div className="career-app-update-banner is-error" role="alert">
       <div className="career-app-update-ico">
-        <Info size={20} aria-hidden="true" />
+        <Info size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Не удалось загрузить обновление</strong>
         <p>{message ?? 'Работа продолжается на текущей версии, ничего не потеряно.'}</p>
       </div>
       <div className="career-app-update-actions">
-        <button type="button" className="career-quiet-button career-btn-sm" onClick={actions.onPostpone}>
+        <button type="button" className="career-btn is-sm is-ghost" onClick={actions.onPostpone}>
           Позже
         </button>
         <button
           type="button"
-          className="career-primary-button career-btn-sm"
+          className="career-btn is-sm is-primary"
           data-testid="app-update-retry-btn"
           onClick={actions.onRetryNow}
         >
@@ -187,7 +187,7 @@ function ReadyBanner({ info, actions }: { readonly info: AppUpdateReleaseInfo; r
   return (
     <div className="career-app-update-banner" role="status">
       <div className="career-app-update-ico">
-        <Sparkle size={20} aria-hidden="true" />
+        <Sparkle size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Версия {info.version} загружена</strong>
@@ -202,7 +202,7 @@ function UpdatedBanner({ info, actions }: { readonly info: AppUpdateReleaseInfo;
   return (
     <div className="career-app-update-banner is-ok" role="status">
       <div className="career-app-update-ico">
-        <Check size={20} aria-hidden="true" />
+        <Check size={18} aria-hidden="true" />
       </div>
       <div className="career-app-update-text">
         <strong>Обновлено до {info.version}</strong>
