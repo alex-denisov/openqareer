@@ -3,6 +3,23 @@ import type { VacancyFitView } from '../../../shared/vacancyFit';
 export interface RequirementChips {
   readonly confirmed: readonly string[];
   readonly unconfirmed: readonly string[];
+  /** Chip name → full requirement text for the tooltip (B510). */
+  readonly quotes?: Readonly<Record<string, string>>;
+}
+
+type Requirement = VacancyFitView['requirements'][number];
+
+/**
+ * The chip name of a requirement (B510). The server labels every requirement it serves; a
+ * requirement without the field (an older cache) keeps its text only when it is already short.
+ * A sentence never becomes a chip.
+ */
+export function requirementChipLabel(requirement: Requirement): string | undefined {
+  if (requirement.skill !== undefined || requirement.label !== undefined) {
+    return requirement.label?.trim() || undefined;
+  }
+  const text = requirement.text.trim();
+  return text && text.length <= 40 && text.split(/\s+/u).length <= 5 ? text : undefined;
 }
 
 /** Chips for «Требования к навыкам» from the fit analysis (B523/B524): a
@@ -17,14 +34,16 @@ export function fitRequirementChips(view: VacancyFitView | undefined): Requireme
   const seen = new Set<string>();
   const confirmed: string[] = [];
   const unconfirmed: string[] = [];
+  const quotes: Record<string, string> = {};
   for (const requirement of view.requirements) {
-    const text = requirement.text.trim();
-    const key = text.toLocaleLowerCase('ru');
-    if (!text || seen.has(key)) continue;
+    const label = requirementChipLabel(requirement);
+    const key = label?.toLocaleLowerCase('ru');
+    if (!label || !key || seen.has(key)) continue;
     seen.add(key);
-    (matched.has(requirement.id) ? confirmed : unconfirmed).push(text);
+    (matched.has(requirement.id) ? confirmed : unconfirmed).push(label);
+    if (requirement.text.trim() !== label) quotes[label] = requirement.text.trim();
   }
-  return { confirmed, unconfirmed };
+  return { confirmed, unconfirmed, quotes };
 }
 
 const CONFIRMED_SKILL_PREFIX = 'Подтверждённый навык: ';

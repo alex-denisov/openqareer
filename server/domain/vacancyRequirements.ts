@@ -15,6 +15,10 @@ export interface VacancyRequirement {
   readonly stopFactor: boolean;
   readonly value?: string;
   readonly minYears?: number;
+  /** Short chip name (B510); added on read by `labelVacancyRequirement`, absent on long sentences. */
+  readonly label?: string;
+  /** A skill a quiz can check, not a condition such as language or work format (B510). */
+  readonly skill?: boolean;
 }
 export interface VacancyRequirementsInput {
   readonly vacancyId: string;

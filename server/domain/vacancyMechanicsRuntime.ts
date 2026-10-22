@@ -6,6 +6,7 @@ import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirement
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
 import { extractVacancyRequirementsWithFallback, vacancyDescriptionHash } from './vacancyRequirements';
+import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
 import type { BulkLlmClient } from '../providers/bulkLlmClient';
@@ -36,7 +37,7 @@ export class VacancyMechanicsRuntime {
       : extracted?.status === 'no_requirements' ? 'no_requirements' : result ? 'ready'
         : queued === 'failed' ? 'failed' : queued === 'retrying' ? 'retrying'
           : queued === 'pending' || queued === 'leased' ? 'processing' : 'not_requested';
-    return { state, requirements: resolved.requirements, ...(result ? { result } : {}) };
+    return { state, requirements: resolved.requirements.map(labelVacancyRequirement), ...(result ? { result } : {}) };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
   enqueue(input: VacancyFitInput) {

@@ -33,6 +33,29 @@ describe('fitRequirementChips', () => {
     expect(fitRequirementChips(view)).toEqual({
       confirmed: ['Kafka'],
       unconfirmed: ['Go', 'SQL'],
+      quotes: {},
+    });
+  });
+
+  it('shows the short label and keeps the sentence for the tooltip (B510)', () => {
+    const long =
+      'Proven track record as a senior engineering leader - you have owned technical direction';
+    const view = {
+      state: 'ready',
+      requirements: [
+        {
+          ...requirement('a', 'Strong Kafka skills in event-driven systems at scale'),
+          label: 'Kafka',
+          skill: true,
+        },
+        { ...requirement('b', long), skill: false },
+        requirement('c', long),
+      ],
+    } as unknown as VacancyFitView;
+    expect(fitRequirementChips(view)).toEqual({
+      confirmed: [],
+      unconfirmed: ['Kafka'],
+      quotes: { Kafka: 'Strong Kafka skills in event-driven systems at scale' },
     });
   });
 
@@ -41,7 +64,11 @@ describe('fitRequirementChips', () => {
       state: 'ready',
       requirements: [requirement('a', 'Kafka'), requirement('b', 'kafka')],
     };
-    expect(fitRequirementChips(view)).toEqual({ confirmed: [], unconfirmed: ['Kafka'] });
+    expect(fitRequirementChips(view)).toEqual({
+      confirmed: [],
+      unconfirmed: ['Kafka'],
+      quotes: {},
+    });
   });
 });
 
