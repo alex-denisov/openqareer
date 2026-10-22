@@ -68,7 +68,7 @@ import type { RobokassaGateway } from './billing/robokassaGateway';
 import { SqliteBillingRepository } from './billing/sqliteBillingRepository';
 import { registerBillingRoutes } from './billing/billingRoutes';
 import { installRateLimitPolicy } from './routes/rateLimitPolicy';
-import { sessionCookieName } from './routes/helpers';
+import { authenticateSession } from './routes/helpers';
 import { createRobokassaGateway } from './billing/robokassaProtocol';
 import { runDueBillingRenewals } from './billing/renewalRunner';
 import { sendBillingRenewalReminder } from './billing/billingReminderEmail';
@@ -212,16 +212,33 @@ export function redactRequestUrlForLogs(value: unknown): string {
   }
 }
 
-function sessionTokenForRateLimit(config: ServerConfig): (request: FastifyRequest) => string {
+/** B557: вошедший — действующая сессия или токен кандидата; лимиты частоты его не касаются. */
+function signedInCheck(
+  config: ServerConfig,
+  authService: SessionAuth,
+  candidateStore: CandidateStore,
+): (request: FastifyRequest) => boolean {
   return (request) => {
-    const authorization = request.headers.authorization;
-    if (authorization?.startsWith('Bearer ')) return authorization.slice('Bearer '.length).trim();
-    return request.cookies[sessionCookieName(config.secureCookies)] ?? '';
+    const authorization = request.headers.authorization ?? '';
+    const bearer = authorization.startsWith('Bearer ') ? authorization.slice('Bearer '.length) : '';
+    return (
+      (bearer !== '' && candidateStore.authenticate(bearer) !== null) ||
+      authenticateSession(request, authService, config) !== null
+    );
   };
+}
+
+async function registerRateLimits(
+  app: FastifyInstance,
+  isSignedIn: (request: FastifyRequest) => boolean,
+): Promise<void> {
+  installRateLimitPolicy(app, { isSignedIn });
+  await app.register(rateLimit, { global: false, keyGenerator: (request) => request.ip });
 }
 
 async function createFastifyBase(
   config: ServerConfig,
+  isSignedIn: (request: FastifyRequest) => boolean,
   logDestination?: { write(line: string): void },
 ): Promise<FastifyInstance> {
   const app = Fastify({
@@ -235,11 +252,7 @@ async function createFastifyBase(
   });
 
   await app.register(cookie);
-  installRateLimitPolicy(app, { tokenOf: sessionTokenForRateLimit(config) });
-  await app.register(rateLimit, {
-    global: false,
-    keyGenerator: (request) => request.ip,
-  });
+  await registerRateLimits(app, isSignedIn);
   registerBillingFormParser(app);
 
   app.addHook('onRequest', async (request, reply) => {
@@ -537,7 +550,8 @@ export async function buildApp(options: BuildAppOptions): Promise<FastifyInstanc
   deps.bulkLlmRuntime =
     options.bulkLlmRuntime ?? createBulkLlmRuntime({ databasePath: config.databasePath });
   const ownedMarketSalaryEstimates = attachMarketSalaryStore(deps, options);
-  const app = await createFastifyBase(config, logDestination);
+  const isSignedIn = signedInCheck(config, deps.authService, candidateStore);
+  const app = await createFastifyBase(config, isSignedIn, logDestination);
   const stopBillingScheduler = registerBillingRenewalScheduler(app, config, deps);
   app.addHook('onClose', () => {
     stopBillingScheduler();
