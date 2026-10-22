@@ -283,6 +283,8 @@ test('B446: filter a vacancy, save it, set company want, and keep it after reloa
     path: `output/playwright/B446/B446-company-path-${viewportSuffix}.png`,
     fullPage: true,
   });
+  // B439-r1: on a narrow screen the company is a push screen over the tabs; back first.
+  if (viewportSuffix === '390') await page.locator('.vacancy-push-back:visible').first().click();
   await page.getByRole('tab', { name: /Подборка/u }).click();
   await focusWithKeyboard(page, saveButton);
   await page.keyboard.press('Space');

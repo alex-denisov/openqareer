@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Warning } from '@phosphor-icons/react';
 import type {
   CandidateCompanyDetails,
@@ -208,17 +208,20 @@ function useCompanySelection(
   preferredName?: string,
 ) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  // The company named by «Путь к компании» opens once: «Назад» must not reopen it.
+  const usedPreferred = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (!items.length) {
       if (selectedKey) setSelectedKey(null);
       return;
     }
     if (selectedKey && items.some((company) => company.key === selectedKey)) return;
-    if (preferredName?.trim()) {
+    if (preferredName?.trim() && usedPreferred.current !== preferredName) {
       const preferred = items.find((company) =>
         company.name.toLocaleLowerCase('ru-RU').includes(preferredName.toLocaleLowerCase('ru-RU')),
       );
       if (preferred) {
+        usedPreferred.current = preferredName;
         setSelectedKey(preferred.key);
         return;
       }
