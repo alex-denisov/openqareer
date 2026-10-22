@@ -5,10 +5,15 @@ const api = vi.hoisted(() => ({
   setCandidateCompanyWant: vi.fn(),
   setCandidateCompanyWantByName: vi.fn(),
   removeCandidateCompanyWant: vi.fn(),
+  listCandidateCompanyWants: vi.fn(),
 }));
 vi.mock('./candidateCompaniesApi', () => api);
 
-import { toggleCompanyWantByName } from './vacancyScreenCollections';
+import {
+  mergeCompanyRecords,
+  toggleCompanyWantByName,
+  wantedCompanyRecords,
+} from './vacancyScreenCollections';
 
 describe('toggleCompanyWantByName (B422)', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -34,5 +39,41 @@ describe('toggleCompanyWantByName (B422)', () => {
     await expect(toggleCompanyWantByName('NewStore', new Map())).rejects.toThrow(
       'Сервис недоступен',
     );
+  });
+});
+
+describe('состояние «Хочу» в строке вакансии (B422)', () => {
+  const want = (name: string) => ({
+    companyKey: `${name}-key`,
+    companyName: name,
+    nextStep: null,
+    nextStepDueAt: null,
+    updatedAt: '2026-10-23T00:00:00Z',
+  });
+
+  it('список отметок сразу даёт известную запись с want=true по имени', () => {
+    const records = wantedCompanyRecords([want('NewStore')]);
+    expect(records.get('newstore')).toMatchObject({
+      key: 'NewStore-key',
+      name: 'NewStore',
+      want: true,
+    });
+  });
+
+  it('поздний поиск, ничего не нашедший, не стирает отметку', () => {
+    const merged = mergeCompanyRecords(
+      wantedCompanyRecords([want('NewStore')]),
+      new Map([['newstore', null]]),
+    );
+    expect(merged.get('newstore')).toMatchObject({ want: true });
+  });
+
+  it('найденная поиском полная запись заменяет краткую', () => {
+    const full = { key: 'NewStore-key', name: 'NewStore', want: true, contactsCount: 3 } as never;
+    const merged = mergeCompanyRecords(
+      wantedCompanyRecords([want('NewStore')]),
+      new Map([['newstore', full]]),
+    );
+    expect(merged.get('newstore')).toBe(full);
   });
 });
