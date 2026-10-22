@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Compass, X } from '@phosphor-icons/react';
+import { Check, X } from '@phosphor-icons/react';
 import {
   getCurrentRoleSkillAssessment,
   type RoleSkillAssessmentCurrent,
@@ -103,9 +103,9 @@ function useSkillCheckAvailability(skills: readonly string[]): Availability {
  */
 export function VacancyQuizProposal({
   onStart,
-  onChooseRole,
 }: {
   readonly onStart: (focus: SkillCheckFocus) => void;
+  /** Kept for callers; an unavailable check now hides the card instead (G5 R1). */
   readonly onChooseRole?: () => void;
 }) {
   const offer = useVacancyQuizOffer();
@@ -116,7 +116,6 @@ export function VacancyQuizProposal({
       key={`${offer.vacancyId}:${declined}`}
       offer={offer}
       onStart={onStart}
-      onChooseRole={onChooseRole}
       onDecline={() => {
         dismissQuizOffer(offer.vacancyId, offer.skills);
         setDeclined((count) => count + 1);
@@ -128,67 +127,38 @@ export function VacancyQuizProposal({
 function VacancyQuizProposalCard({
   offer,
   onStart,
-  onChooseRole,
   onDecline,
 }: {
   readonly offer: VacancyQuizOffer;
   readonly onStart: (focus: SkillCheckFocus) => void;
-  readonly onChooseRole?: () => void;
   readonly onDecline: () => void;
 }) {
   const skills = offer.skills.slice(0, 2);
   const availability = useSkillCheckAvailability(skills);
   const title = quizOfferTitle(skills);
+  // G5 R1: the card offers only a check that can start; a title offering a quiz above a text
+  // refusing it was a contradiction, so an unavailable (or not yet known) check shows nothing.
+  if (availability.kind !== 'available') return null;
   return (
-    <section
-      className="career-expert-proposal"
-      aria-label={title}
-      aria-busy={availability.kind === 'loading'}
-    >
+    <section className="career-expert-proposal" aria-label={title}>
       <p className="career-expert-proposal-title">{title}</p>
-      <p>
-        {availability.kind === 'unavailable'
-          ? availability.reason
-          : availability.kind === 'loading'
-            ? 'Проверяем, можно ли собрать проверку навыков.'
-            : 'Около 20 минут, результат попадёт в профиль и в эту вакансию.'}
-      </p>
+      <p>Около 15 минут, результат попадёт в профиль и в эту вакансию.</p>
       <div className="career-expert-actions">
-        {availability.kind === 'available' ? (
-          <button
-            type="button"
-            className="career-quiet-button career-inline-ok"
-            onClick={() =>
-              onStart({ vacancyId: offer.vacancyId, roleTitle: offer.roleTitle, skills })
-            }
-          >
-            <Check size={16} aria-hidden="true" />
-            Начать
-          </button>
-        ) : null}
-        <ChooseRoleButton availability={availability} onClick={onChooseRole} />
+        <button
+          type="button"
+          className="career-quiet-button career-inline-ok"
+          onClick={() =>
+            onStart({ vacancyId: offer.vacancyId, roleTitle: offer.roleTitle, skills })
+          }
+        >
+          <Check size={16} aria-hidden="true" />
+          Начать
+        </button>
         <button type="button" className="career-quiet-button" onClick={onDecline}>
           <X size={16} aria-hidden="true" />
           Не сейчас
         </button>
       </div>
     </section>
-  );
-}
-
-/** «Выбрать роль» leads to «Карьера», where the skill check's target role is chosen (B510). */
-function ChooseRoleButton({
-  availability,
-  onClick,
-}: {
-  readonly availability: Availability;
-  readonly onClick?: () => void;
-}) {
-  if (availability.kind !== 'unavailable' || !availability.needsRole || !onClick) return null;
-  return (
-    <button type="button" className="career-quiet-button career-inline-ok" onClick={onClick}>
-      <Compass size={16} aria-hidden="true" />
-      Выбрать роль
-    </button>
   );
 }

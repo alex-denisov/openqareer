@@ -45,11 +45,12 @@ export function quizOfferSkills(view: VacancyFitView | undefined): string[] {
   return unconfirmedSkills(view).slice(0, OFFER_SKILL_LIMIT);
 }
 
-/** Skill names are free phrases («Управление командой»), so they follow a colon and are not
- *  declined after «по» (G5 W3). */
+/** «Пройти квиз по Kafka и Kubernetes» (mockup 4). A name of several words («Управление
+ *  командой») would need declining after «по», so such skills follow «по навыкам:» (G5 W3). */
 export function quizOfferTitle(skills: readonly string[]): string {
-  const noun = skills.length === 1 ? 'навыку' : 'навыкам';
-  return `Пройти квиз по ${noun}: ${skills.join(', ')}`;
+  const list = skills.join(' и ');
+  if (skills.every((skill) => !/\s/u.test(skill.trim()))) return `Пройти квиз по ${list}`;
+  return `Пройти квиз по ${skills.length === 1 ? 'навыку' : 'навыкам'}: ${list}`;
 }
 
 function readDismissed(): Record<string, readonly string[]> {

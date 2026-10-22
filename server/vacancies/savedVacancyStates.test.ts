@@ -88,3 +88,31 @@ describe('savedVacancyStates', () => {
     });
   });
 });
+
+describe('B446-r: деньги сохранённой — как в подборке', () => {
+  it('несёт площадку, дату и оценку рынка, если зарплаты нет', () => {
+    const estimate = { low: 480_000, high: 560_000, currency: 'RUR', sampleSize: 41 };
+    const withSource: SavedVacancyStateSource = {
+      ...source(),
+      getActiveCluster: () => ({
+        ...head,
+        salary: undefined,
+        sources: [{ sourceName: 'hh.ru', observedAt: '2026-10-05T09:00:00.000Z' }],
+      }),
+    };
+    const states = savedVacancyStates(
+      withSource,
+      [{ clusterId: 'any' }],
+      { ...context, marketSalary: () => estimate as never },
+    );
+    expect(states.any).toMatchObject({
+      sourceName: 'hh.ru',
+      observedAt: '2026-10-05T09:00:00.000Z',
+      marketSalary: estimate,
+    });
+    expect(savedVacancyStates(source(), [{ clusterId: 'open-1' }], {
+      ...context,
+      marketSalary: () => estimate as never,
+    })['open-1']).not.toHaveProperty('marketSalary');
+  });
+});

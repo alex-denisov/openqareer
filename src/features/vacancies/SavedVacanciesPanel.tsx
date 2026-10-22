@@ -3,8 +3,9 @@ import { CaretDown, Info, MagnifyingGlass, Star, Target } from '@phosphor-icons/
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { ApplicationView } from '../applications/applicationsApi';
 import { companyLookupKey, type VacancyCollectionsState } from './vacancyScreenCollections';
-import { formatCompensationCompact } from './vacancyCompensation';
 import { GeoFitDot, LevelFitDot } from './VacancyFitDots';
+import { VacancyMoneyCell } from './VacancyMoneyCell';
+import { observedDate } from './VacancyScreenRowCells';
 import { getSavedVacancyStates } from './savedVacancyStatesApi';
 import {
   SAVED_SORT_OPTIONS,
@@ -114,20 +115,44 @@ function toEntry(
   };
 }
 
-function SavedMoney({ entry }: { readonly entry: SavedVacancyEntry }) {
+/**
+ * B446-r (R4): деньги сохранённой из каталога — та же ячейка, что в подборке:
+ * сумма с «указана в вакансии · hh.ru, 05.10», оценка рынка или «мало данных».
+ */
+function SavedMoney({
+  entry,
+  item,
+}: {
+  readonly entry: SavedVacancyEntry;
+  readonly item?: MatchedVacancyItem;
+}) {
   const closed = savedClosedLabel(entry.state);
-  const salary = entry.state?.salary;
-  const known = salary && (salary.from !== undefined || salary.to !== undefined);
-  // B446-r (A6): формулировки макета 4 — «без зарплаты», а не «Зарплата не указана».
+  if (item) {
+    return (
+      <div className="saved-row-money is-cell">
+        <VacancyMoneyCell item={item} observedDate={observedDate(item)} />
+        {closed ? <span className="saved-row-closed">{closed}</span> : null}
+      </div>
+    );
+  }
   const missing = entry.pending && !entry.state ? '…' : 'без зарплаты';
   return (
     <div className="saved-row-money">
-      {known ? (
-        <strong>{formatCompensationCompact(salary)}</strong>
-      ) : (
-        <span className="saved-row-money-missing">{missing}</span>
-      )}
+      <span className="saved-row-money-missing">{missing}</span>
       {closed ? <span className="saved-row-closed">{closed}</span> : null}
+    </div>
+  );
+}
+
+/** Заголовки колонок как над «Подборкой» (макет 4, кадр sv). */
+function SavedHeader() {
+  return (
+    <div className="saved-row-head" aria-hidden="true">
+      <span>Роль</span>
+      <span>Уровень</span>
+      <span>Гео</span>
+      <span>Деньги</span>
+      <span />
     </div>
   );
 }
@@ -277,6 +302,7 @@ function SavedRow({
   want,
   onExpand,
   expanded = false,
+  item,
 }: {
   readonly entry: SavedVacancyEntry;
   readonly application: ApplicationView;
@@ -285,6 +311,7 @@ function SavedRow({
   readonly want?: SavedWant;
   readonly onExpand: () => void;
   readonly expanded?: boolean;
+  readonly item?: MatchedVacancyItem;
 }) {
   const savedDate = formatShortDate(entry.savedAt);
   return (
@@ -298,7 +325,7 @@ function SavedRow({
       </div>
       <SavedLevel entry={entry} />
       <SavedGeo entry={entry} />
-      <SavedMoney entry={entry} />
+      <SavedMoney entry={entry} item={item} />
       <div className="saved-row-actions">
         <button
           type="button"
@@ -481,6 +508,11 @@ function SavedList({
   const byId = new Map(collections.savedApplications.map((item) => [item.id, item]));
   return (
     <ul className="saved-list">
+      {entries.length ? (
+        <li className="saved-list-head">
+          <SavedHeader />
+        </li>
+      ) : null}
       {entries.map((entry) => {
         const application = byId.get(entry.id);
         const item = application && renderCard ? savedItemFor(entry, application) : undefined;
@@ -496,6 +528,7 @@ function SavedList({
             busy={collections.savedBusyIds.has(application.clusterId ?? application.id)}
             onRemove={(value) => void collections.removeSaved(value)}
             want={savedWant(collections, application.vacancy?.company)}
+            item={item ?? (application ? savedItemFor(entry, application) : undefined)}
             expanded={!item && expandedId === entry.id}
             onExpand={() => setExpandedId((open) => (open === entry.id ? undefined : entry.id))}
           />

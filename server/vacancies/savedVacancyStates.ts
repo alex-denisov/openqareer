@@ -14,6 +14,7 @@ import {
 } from './levelMatcher';
 import { normalizeTitleKey } from './titleParse/normalizeTitleKey';
 import { isOutsideGeography } from './vacancyGeography';
+import type { MarketSalaryEstimateView } from '../../shared/marketSalaryEstimate';
 
 interface ClusterLike {
   readonly status: 'active' | 'archived';
@@ -24,6 +25,8 @@ interface ClusterLike {
   readonly salary?: { readonly from?: number; readonly to?: number; readonly currency?: string };
   readonly deadLink?: boolean;
   readonly linkStatus?: 'open' | 'gone' | 'unknown';
+  readonly sources?: readonly { readonly sourceName?: string; readonly observedAt?: string }[];
+  readonly firstObservedAt?: string;
 }
 
 export interface SavedVacancyStateSource {
@@ -37,6 +40,8 @@ export interface SavedVacancyMatchContext {
   readonly candidateLevel: SeniorityLevel | undefined;
   readonly regions: readonly CandidateRegion[];
   readonly getTitleParse: (titleKey: string) => { readonly levelRank: number | null } | undefined;
+  /** B446-r: оценка рынка для вакансии без зарплаты — та же, что в подборке (B546). */
+  readonly marketSalary?: (cluster: ClusterLike) => MarketSalaryEstimateView | undefined;
 }
 
 export interface SavedVacancyRef {
@@ -55,6 +60,10 @@ export interface SavedVacancyStateView {
   readonly location?: string;
   readonly isRemote?: boolean;
   readonly outsideGeography?: boolean;
+  /** B446-r: подпись денег как в подборке — «указана в вакансии · hh.ru, 05.10». */
+  readonly sourceName?: string;
+  readonly observedAt?: string;
+  readonly marketSalary?: MarketSalaryEstimateView;
 }
 
 export const SAVED_VACANCY_STATES_LIMIT = 100;
@@ -90,10 +99,17 @@ function catalogState(
     parsed === undefined
       ? inferSeniorityLevel(cluster.canonicalTitle)
       : levelFromRank(parsed.levelRank);
+  const source = cluster.sources?.[0];
+  const observedAt = source?.observedAt ?? cluster.firstObservedAt;
+  const salaryKnown = Boolean(cluster.salary?.from ?? cluster.salary?.to);
+  const marketSalary = salaryKnown ? undefined : context.marketSalary?.(cluster);
   return {
     closed: Boolean(cluster.deadLink || cluster.linkStatus === 'gone'),
     inCatalog: true,
     ...(cluster.salary ? { salary: cluster.salary } : {}),
+    ...(source?.sourceName ? { sourceName: source.sourceName } : {}),
+    ...(observedAt ? { observedAt } : {}),
+    ...(marketSalary ? { marketSalary } : {}),
     ...(vacancyLevel ? { vacancyLevel } : {}),
     levelMatch: evaluateLevelMatch(
       context.candidateLevel,

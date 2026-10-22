@@ -29,7 +29,7 @@ function titleLevelLabel(title: string): string {
   );
 }
 
-function observedDate(item: MatchedVacancyItem): string | undefined {
+export function observedDate(item: MatchedVacancyItem): string | undefined {
   const value = item.cluster.sources[0]?.observedAt ?? item.cluster.firstObservedAt;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return undefined;

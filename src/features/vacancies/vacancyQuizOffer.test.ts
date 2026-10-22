@@ -71,10 +71,8 @@ describe('quizOfferSkills', () => {
   });
 
   it('builds the mockup title', () => {
-    expect(quizOfferTitle(['Kafka', 'Kubernetes'])).toBe(
-      'Пройти квиз по навыкам: Kafka, Kubernetes',
-    );
-    expect(quizOfferTitle(['Kafka'])).toBe('Пройти квиз по навыку: Kafka');
+    expect(quizOfferTitle(['Kafka', 'Kubernetes'])).toBe('Пройти квиз по Kafka и Kubernetes');
+    expect(quizOfferTitle(['Kafka'])).toBe('Пройти квиз по Kafka');
   });
 });
 
@@ -91,5 +89,13 @@ describe('«Не сейчас»', () => {
     dismissQuizOffer('v1', ['Kafka', 'Kubernetes']);
     expect(isQuizOfferDismissed('v1', ['Kafka'])).toBe(true);
     expect(isQuizOfferDismissed('v1', ['Kafka', 'Terraform'])).toBe(false);
+  });
+});
+
+describe('quizOfferTitle phrases (G5 W3/R1)', () => {
+  it('does not decline multi-word skill names after «по»', () => {
+    expect(quizOfferTitle(['Управление командой', 'AI'])).toBe(
+      'Пройти квиз по навыкам: Управление командой и AI',
+    );
   });
 });

@@ -22,6 +22,8 @@ export interface CompanyPathActions {
   readonly onPrepareLetter?: () => void;
   /** Circle 2 «Попросить представить»: the letter screen on circle 2. */
   readonly onAskIntro?: () => void;
+  /** Circle 1 draft on 390: the pencil opens the letter screen on circle 1 to edit it. */
+  readonly onEditContactDraft?: () => void;
 }
 
 type Cluster = MatchedVacancyItem['cluster'];
@@ -44,6 +46,7 @@ export function companyPathActions(
     // G5 A4: «Подготовить письмо» — холодный отклик, письмо открывается на круге 3.
     onPrepareLetter: onOpenLetter ? () => onOpenLetter(cluster, 3) : fallbackLetter,
     onAskIntro: onOpenLetter ? () => onOpenLetter(cluster, 2) : fallbackLetter,
+    onEditContactDraft: onOpenLetter ? () => onOpenLetter(cluster, 1) : undefined,
   };
 }
 
