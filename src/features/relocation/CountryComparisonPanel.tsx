@@ -130,6 +130,9 @@ function ReadyComparison({
         {titleAction}
       </div>
       <DesktopMatrix countries={countries} />
+      <div className="career-country-comparison-desktop-sources">
+        <SourcesLine countries={countries} />
+      </div>
       <MobileStack countries={countries} />
       {showParetoSummary ? <ParetoSummary countries={countries} result={pareto} /> : null}
       <ComparisonMeanings meanings={meanings} />
@@ -168,7 +171,6 @@ function DesktopMatrix({ countries }: { readonly countries: readonly CountryComp
           ))}
         </tbody>
       </table>
-      <SourcesLine countries={countries} />
     </div>
   );
 }
