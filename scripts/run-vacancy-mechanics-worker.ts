@@ -40,7 +40,7 @@ try {
   else if (!process.argv.includes('--migrate-only')) {
     const requeued = runtime.requeueAfterParserUpgrade();
     console.info(
-      `vacancy-mechanics start: requeued requirements=${requeued.requirements} fit=${requeued.fit}`,
+      `vacancy-mechanics start: requeued requirements=${requeued.requirements} fit=${requeued.fit} labels=${requeued.labels}`,
     );
     let batchStartedAt = Date.now();
     // One worker id for every lane: the B522 budget run is keyed by it, so lanes share one budget.

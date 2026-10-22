@@ -5,7 +5,7 @@ import type { VacancyFitView } from '../../shared/vacancyFit';
 import { SqliteVacancyRequirementsStore } from '../data/sqliteVacancyRequirementsStore';
 import { SqliteVacancyFitStore } from '../data/sqliteVacancyFitStore';
 import { SealedText } from '../data/sealedText';
-import { extractVacancyRequirementsWithFallback, vacancyDescriptionHash } from './vacancyRequirements';
+import { extractVacancyRequirements, extractVacancyRequirementsWithFallback, vacancyDescriptionHash, VACANCY_REQUIREMENTS_EXTRACTOR_VERSION } from './vacancyRequirements';
 import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
@@ -15,6 +15,8 @@ import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacanc
 
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
 const FIT_DEPENDENCY_PRIORITY = 2;
+/** A vacancy a candidate is looking at gets model labels before the background tail (B510). */
+const SHOWN_PAGE_PRIORITY = 1.5;
 
 /** The HTTP process enqueues/reads only. runNext is called by a separate worker. */
 export class VacancyMechanicsRuntime {
@@ -29,7 +31,13 @@ export class VacancyMechanicsRuntime {
     this.fit = new SqliteVacancyFitStore(this.database, new SealedText(encryptionKey));
   }
   view(input: VacancyFitInput): VacancyFitView {
-    const extracted = this.requirements.getLatest(input.vacancyId, vacancyDescriptionHash(input.description));
+    const extracted = this.requirements.getLatestOrLegacy(input.vacancyId, vacancyDescriptionHash(input.description));
+    // B510: a shown vacancy without model labels jumps ahead of the background upgrade.
+    if (input.description.trim() && extracted?.extractorVersion !== VACANCY_REQUIREMENTS_EXTRACTOR_VERSION) {
+      this.requirements.enqueue({ vacancyId: input.vacancyId, description: input.description }, { titleStrategyPriority: SHOWN_PAGE_PRIORITY });
+    }
+    // Until the worker answers, the rules give the chips; the state below stays honest.
+    const shown = extracted ?? extractVacancyRequirements({ vacancyId: input.vacancyId, description: input.description });
     const resolved = { ...input, requirements: extracted?.requirements ?? [] };
     const result = this.fit.getCache(resolved);
     const queued = this.fit.getJobState(input) ?? this.fit.getJobState(resolved);
@@ -37,7 +45,7 @@ export class VacancyMechanicsRuntime {
       : extracted?.status === 'no_requirements' ? 'no_requirements' : result ? 'ready'
         : queued === 'failed' ? 'failed' : queued === 'retrying' ? 'retrying'
           : queued === 'pending' || queued === 'leased' ? 'processing' : 'not_requested';
-    return { state, requirements: resolved.requirements.map(labelVacancyRequirement), ...(result ? { result } : {}) };
+    return { state, requirements: shown.requirements.map(labelVacancyRequirement), ...(result ? { result } : {}) };
   }
   cachedVacancyIds(candidateId: string): Set<string> { return this.fit.cachedVacancyIds(candidateId); }
   enqueue(input: VacancyFitInput) {
@@ -49,8 +57,8 @@ export class VacancyMechanicsRuntime {
     return this.fit.enqueue(input);
   }
   /** Worker start: one requeue of model failures recorded under an older parser revision (B522). */
-  requeueAfterParserUpgrade(): { requirements: number; fit: number } {
-    return { requirements: this.requirements.requeueModelFailures(), fit: this.fit.requeueFailedOnce() };
+  requeueAfterParserUpgrade(): { requirements: number; fit: number; labels: number } {
+    return { requirements: this.requirements.requeueModelFailures(), fit: this.fit.requeueFailedOnce(), labels: this.requirements.enqueueLabelUpgrades() };
   }
   /** Counters since the previous call: the worker writes one journal line per batch. */
   takeStats(): VacancyMechanicsStats {
