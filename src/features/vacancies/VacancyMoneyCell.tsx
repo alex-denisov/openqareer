@@ -115,3 +115,31 @@ export function VacancyMoneyCell({
     </span>
   );
 }
+
+/** The same «Деньги» answer as one value and one note, for the 390 push (G5, item 8). */
+export function vacancyMoneySummary(item: MatchedVacancyItem): {
+  readonly value: string;
+  readonly note: string;
+  readonly fromSource: boolean;
+} {
+  const estimate = item.explanation.marketSalary;
+  if (item.cluster.salary || !estimate) {
+    return item.cluster.salary
+      ? {
+          value: formatCompensationCompact(item.cluster.salary),
+          note: 'Зарплата указана в вакансии',
+          fromSource: true,
+        }
+      : { value: 'не указана', note: 'Зарплата в вакансии не указана', fromSource: true };
+  }
+  const basis = marketSalaryBasis(estimate.sampleSize, estimate.computedAt);
+  if (estimate.low === undefined || estimate.high === undefined) {
+    return { value: 'мало данных', note: `Нет зарплаты, оценка ${basis}`, fromSource: false };
+  }
+  const range = formatMarketSalaryRange({
+    low: estimate.low,
+    high: estimate.high,
+    currency: estimate.currency,
+  });
+  return { value: `${range} оценка`, note: `Оценка рынка ${basis}`, fromSource: false };
+}
