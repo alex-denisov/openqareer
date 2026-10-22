@@ -70,6 +70,11 @@ describe('сводка всей подборки', () => {
         { id: 'aggregators', name: 'Агрегаторы', count: 0 },
         { id: 'channels', name: 'Каналы', count: 0 },
       ],
+      places: [
+        { location: 'Berlin', region: 'eu', count: 1 },
+        { location: 'Berlin', isRemote: true, region: 'eu', count: 1 },
+        { location: 'Dubai', region: 'mena', count: 1 },
+      ],
     });
     expect(items[0].cluster.sources).toHaveLength(2);
   });
@@ -104,9 +109,9 @@ describe('сводка всей подборки', () => {
       { id: 'channels', name: 'Каналы', count: 1 },
     ]);
     expect(facets.sources).toEqual([
-      { sourceId: 'hh', name: 'hh.ru', count: 2 },
-      { sourceId: 'ats-acme', name: 'Acme', count: 1 },
-      { sourceId: 'tg-jobs', name: 'Telegram', count: 1 },
+      { sourceId: 'hh', name: 'hh.ru', count: 2, groupId: 'aggregators' },
+      { sourceId: 'ats-acme', name: 'Acme', count: 1, groupId: 'ats' },
+      { sourceId: 'tg-jobs', name: 'Telegram', count: 1, groupId: 'channels' },
     ]);
     expect(facets).not.toHaveProperty('sourceCatalog');
   });
@@ -170,12 +175,29 @@ describe('каталог источников на выборке SQLite', () =>
         { id: 'channels', name: 'Каналы', count: 0 },
       ]);
       expect(facets.sources).toEqual([
-        { sourceId: 'acme-careers', name: 'Acme Careers', count: 1 },
-        { sourceId: 'remotive', name: 'Remotive', count: 1 },
+        { sourceId: 'acme-careers', name: 'Acme Careers', count: 1, groupId: 'ats' },
+        { sourceId: 'remotive', name: 'Remotive', count: 1, groupId: 'platforms' },
       ]);
       expect(facets).not.toHaveProperty('sourceCatalog');
     } finally {
       pool.close();
     }
+  });
+});
+
+describe('B446-r: места и фильтр локаций по всей выдаче', () => {
+  it('сводит места в записи с числом и фильтрует выдачу ключами дерева', () => {
+    const items = [item('Head of Engineering', 'Москва'), item('Engineering', 'Москва'),
+      item('VP of Engineering', 'Berlin', true)];
+    expect(buildMatchedVacancyFacets(items).places).toEqual([
+      { location: 'Москва', region: 'ru', count: 2 },
+      { location: 'Berlin', isRemote: true, region: 'eu', count: 1 },
+    ]);
+    const base = matchedVacanciesQuerySchema.parse({});
+    const russia = matchedVacanciesQuerySchema.parse({ place: 'Россия' });
+    expect(filterMatchedVacancies(items, base, [])).toHaveLength(3);
+    expect(filterMatchedVacancies(items, russia, [])).toEqual([items[0], items[1]]);
+    const remote = matchedVacanciesQuerySchema.parse({ placeRemote: '1' });
+    expect(filterMatchedVacancies(items, remote, [])).toEqual([items[2]]);
   });
 });

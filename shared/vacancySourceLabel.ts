@@ -23,8 +23,14 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   html: 'Страница вакансий',
 };
 
+/**
+ * B446-r (A8): пометка канала в скобках («hh.ru (страница поиска)») —
+ * внутреннее различие сбора; кандидату площадка та же, «hh.ru».
+ */
+const INTERNAL_CHANNEL_NOTE = /\s*\(страница поиска\)\s*$/u;
+
 export function vacancySourceLabel(source: NamedVacancySource): string {
-  const name = source.sourceName?.trim();
+  const name = source.sourceName?.replace(INTERNAL_CHANNEL_NOTE, '').trim();
   if (name) return name;
   return SOURCE_TYPE_LABELS[source.sourceType] ?? source.sourceType;
 }

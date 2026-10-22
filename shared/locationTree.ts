@@ -25,6 +25,8 @@ export interface VacancyPlaceInput {
   readonly location?: string;
   readonly country?: string;
   readonly isRemote?: boolean;
+  /** B446-r: сколько вакансий стоит за местом (сводка сервера); нет — одна. */
+  readonly count?: number;
 }
 
 export interface LocationPath {
@@ -124,7 +126,7 @@ interface MutableNode {
   children: Map<string, MutableNode>;
 }
 
-function addPath(root: Map<string, MutableNode>, path: LocationPath) {
+function addPath(root: Map<string, MutableNode>, path: LocationPath, weight = 1) {
   const labels = [path.country, path.region, path.city].filter(Boolean) as string[];
   const kinds: LocationNodeKind[] = ['country', 'region', 'city'];
   let level = root;
@@ -141,7 +143,7 @@ function addPath(root: Map<string, MutableNode>, path: LocationPath) {
       count: 0,
       children: new Map(),
     };
-    node.count += 1;
+    node.count += weight;
     level.set(key, node);
     level = node.children;
     parentKey = key;
@@ -179,9 +181,10 @@ export function buildLocationTree(places: readonly VacancyPlaceInput[]): Locatio
   const root = new Map<string, MutableNode>();
   let remote = 0;
   for (const place of places) {
-    if (place.isRemote) remote += 1;
+    const weight = place.count ?? 1;
+    if (place.isRemote) remote += weight;
     const path = parseVacancyLocation(place);
-    if (path) addPath(root, path);
+    if (path) addPath(root, path, weight);
   }
   const nodes = new Map<string, LocationTreeNode>();
   return { remote, countries: freeze(root, nodes), nodes };

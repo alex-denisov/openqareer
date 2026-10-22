@@ -63,7 +63,8 @@ describe('VacancyLocationTreeFilter', () => {
     expect(checkbox(container, 'Москва').checked).toBe(true);
     expect(checkbox(container, 'Россия').indeterminate).toBe(true);
     expect(latest.selectedLocations).toEqual(['Россия › Центральный ФО']);
-    expect(container.textContent).toContain('Выбрано 1');
+    // B446-r: «Выбрано» — вакансии (как «Выбрано 47» в макете), а не строки.
+    expect(container.textContent).toContain('Выбрано 2');
     act(() => root.unmount());
   });
 

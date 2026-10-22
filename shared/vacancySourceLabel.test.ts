@@ -21,3 +21,17 @@ describe('vacancySourceLabel', () => {
     ).toEqual(['Himalayas']);
   });
 });
+
+describe('B446-r (A8): пометка канала не доходит до кандидата', () => {
+  it('«hh.ru (страница поиска)» читается как hh.ru и сливается с hh.ru', () => {
+    expect(
+      vacancySourceLabel({ sourceType: 'hh_search', sourceName: 'hh.ru (страница поиска)' }),
+    ).toBe('hh.ru');
+    expect(
+      vacancySourceLabels([
+        { sourceType: 'hh', sourceName: 'hh.ru' },
+        { sourceType: 'hh_search', sourceName: 'hh.ru (страница поиска)' },
+      ]),
+    ).toEqual(['hh.ru']);
+  });
+});

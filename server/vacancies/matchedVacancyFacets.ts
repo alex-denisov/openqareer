@@ -2,6 +2,7 @@ import {
   MATCHED_VACANCY_SOURCE_GROUPS,
   type MatchedVacancyFacets,
   type MatchedVacancyFacetLevel,
+  type MatchedVacancyPlaceFacet,
   type MatchedVacancySourceGroup,
   type MatchedVacancySourceGroupId,
 } from '../../shared/matchedVacancyFacets';
@@ -44,13 +45,38 @@ function sourceFacets(
   const sources = items.flatMap((item) => [...new Map(item.cluster.sources
     .map((source) => [source.sourceId, source])).values()]);
   const names = new Map(sources.map((source) => [source.sourceId, source.sourceName ?? source.sourceId]));
-  const registryNames = new Map(registry.map(({ id, name }) => [id, name]));
+  const byId = new Map(registry.map((source) => [source.id, source]));
   return counted(sources.map((source) => source.sourceId))
-    .map(({ value: sourceId, count }) => ({
-      sourceId,
-      name: registryNames.get(sourceId) ?? names.get(sourceId)!,
-      count,
-    }));
+    .map(({ value: sourceId, count }) => {
+      const name = byId.get(sourceId)?.name ?? names.get(sourceId)!;
+      const groupId = sourceGroupId(byId.get(sourceId) ?? { id: sourceId, name });
+      return { sourceId, name, count, ...(groupId ? { groupId } : {}) };
+    });
+}
+
+/** B446-r: одно место — одна запись с числом, а не строка на вакансию. */
+function placeFacets(items: readonly MatchedVacancyItem[]): MatchedVacancyPlaceFacet[] {
+  const places = new Map<string, MatchedVacancyPlaceFacet>();
+  for (const item of items) {
+    const location = item.cluster.canonicalLocation?.trim() || undefined;
+    const country = item.cluster.companyFeatures?.country?.trim() || undefined;
+    const isRemote = Boolean(item.cluster.isRemote);
+    const key = JSON.stringify([location, country, isRemote]);
+    const known = places.get(key);
+    if (known) {
+      places.set(key, { ...known, count: known.count + 1 });
+      continue;
+    }
+    const region = matchedVacancyRegion(item);
+    places.set(key, {
+      ...(location ? { location } : {}),
+      ...(country ? { country } : {}),
+      ...(isRemote ? { isRemote } : {}),
+      ...(region ? { region } : {}),
+      count: 1,
+    });
+  }
+  return [...places.values()];
 }
 
 /** Сводка строится по полному совпавшему списку до пользовательских фильтров. */
@@ -152,5 +178,6 @@ export function buildMatchedVacancyFacets(
       .sort((a, b) => b.count - a.count || a.role.localeCompare(b.role)),
     sources: sourceFacets(items, registry),
     sourceGroups: sourceGroupsFor(items, registry),
+    places: placeFacets(items),
   };
 }

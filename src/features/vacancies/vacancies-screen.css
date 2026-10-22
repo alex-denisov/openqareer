@@ -34,7 +34,8 @@
 
 .saved-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  /* B446-r (A6): поиск шире — плейсхолдер «…среди N сохранённых» не обрезается. */
+  grid-template-columns: minmax(20rem, 2fr) minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--career-space-2);
 }
 
@@ -71,6 +72,58 @@
 .saved-controls .companies-people-select {
   display: block;
   inline-size: 100%;
+}
+
+/* B446-r (A5): выбор как в макете — без системного вида WebKit, своя стрелка, 44 px. */
+.saved-controls .saved-select-wrap {
+  position: relative;
+}
+
+.saved-controls .saved-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline: var(--career-space-3) calc(var(--career-space-3) + 16px + var(--career-space-2));
+  color: var(--career-text);
+  background: var(--career-bg-elevated);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.saved-controls .saved-select:hover:not(:disabled) {
+  border-color: var(--career-text-soft);
+}
+
+.saved-controls .saved-select:focus-visible {
+  outline: 2px solid var(--career-accent);
+  outline-offset: -2px;
+  border-color: var(--career-accent);
+}
+
+.saved-select-caret {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--career-space-3);
+  margin-block: auto;
+  color: var(--career-text-soft);
+  pointer-events: none;
+}
+
+.saved-row-want.is-open svg {
+  rotate: 180deg;
+}
+
+.saved-row-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-3);
+  align-items: center;
+  grid-column: 1 / -1;
+  color: var(--career-text-muted);
+  font-size: var(--career-text-xs);
+}
+
+.saved-row-detail p {
+  margin: 0;
 }
 
 .saved-list {

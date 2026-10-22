@@ -81,6 +81,8 @@ function hasMatchedPoolFilters(filters: VacanciesScreenState | undefined): boole
         filters.regions.length > 0 ||
         (filters.levels?.length ?? 0) > 0 ||
         (filters.sources?.length ?? 0) > 0 ||
+        (filters.selectedLocations?.length ?? 0) > 0 ||
+        filters.locationRemote ||
         filters.remoteOnly),
   );
 }
@@ -164,11 +166,13 @@ async function loadMatchedPool(
         if (!isActive()) return;
         setters.setMatched((read) => [...read, ...items]);
         setters.setPoolTotal(poolSize);
+        // B446-r: число выдачи — ответ сервера, а не число дочитанных строк.
+        setters.setTotal(poolSize);
         setters.setLoading(false);
       },
     );
     if (!isActive()) return;
-    setters.setTotal(pool.complete ? pool.total : pool.items.length);
+    setters.setTotal(pool.total);
     setters.setComplete(pool.complete);
   } catch {
     if (!isActive()) return;
