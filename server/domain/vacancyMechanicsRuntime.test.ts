@@ -44,6 +44,18 @@ describe('background vacancy mechanics with real SQLite', () => {
     expect(await runtime.runNext(null)).toBe(false);
   });
 
+  it('extracts the fit job\'s own requirements in the same step instead of deferring it (B510)', async () => {
+    const runtime = setup();
+    // The vacancy's requirements are already queued behind other work: the fit must not wait for them.
+    const other = { ...input(), vacancyId: 'vacancy-other', description: 'Requirements\n- Go required' };
+    runtime.requirements.enqueue({ vacancyId: other.vacancyId, description: other.description }, { titleStrategyPriority: 5 });
+    const source = input();
+    runtime.fit.enqueue(source);
+    expect(await runtime.runNext(null)).toBe(true);
+    expect(runtime.view(source).state).toBe('ready');
+    expect(runtime.takeStats()).toMatchObject({ deferred: 0, completed: 1 });
+  });
+
   it('isolates candidate caches and invalidates after profile or description changes', async () => {
     const runtime = setup(); const source = input(); runtime.enqueue(source); await runtime.runNext(null);
     expect(runtime.view(input('another-candidate')).result).toBeUndefined();
@@ -207,9 +219,13 @@ describe('background vacancy mechanics with real SQLite', () => {
     runtime.enqueue({ ...input(), vacancyId: 'b', description: 'We make other tools.' });
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
+    const beforeMidnight = runIds.length;
     vi.setSystemTime(Date.parse('2026-10-22T00:30:00.000Z'));
     await runtime.runNext({ complete } as unknown as BulkLlmClient);
-    expect(runIds).toEqual(['vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-21', 'vacancy-mechanics:2026-10-22']);
+    // A step may extract its own fit's requirements too (B510), so count runs, not calls.
+    expect(beforeMidnight).toBeGreaterThanOrEqual(2);
+    expect(new Set(runIds.slice(0, beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-21']));
+    expect(new Set(runIds.slice(beforeMidnight))).toEqual(new Set(['vacancy-mechanics:2026-10-22']));
   });
 
   it('requeues model failures once at worker start and not on the next start (B522)', async () => {
