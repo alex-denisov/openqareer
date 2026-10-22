@@ -27,6 +27,7 @@ const LATE_COLUMNS = [
   ['requeue_revision', 'INTEGER'],
 ] as const;
 
+const VERIFIED_FIELDS = ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'conditionCoverage', 'requiredCoverage', 'reason'] as const;
 interface JobRow { cache_key: string; input_cipher: string; lease_token: string; lease_until: string; attempts: number }
 
 /** Candidate facts/results are encrypted; all tenant correlation indexes use keyed HMAC. */
@@ -70,8 +71,9 @@ export class SqliteVacancyFitStore {
     if (!row) return undefined;
     try {
       const result = JSON.parse(this.sealedText.open(row.result_cipher, key)) as VacancyFitResult;
-      this.validateResult(input, result);
-      return result;
+      // The percent policy may change without a new algorithm version (B510-r): the verified
+      // evidence stays, the numbers are derived again, so no model call is repeated.
+      return this.validateResult(input, result, ['gates', 'assessments']);
     } catch { return undefined; }
   }
 
@@ -206,12 +208,13 @@ export class SqliteVacancyFitStore {
     } catch (error) { this.database.exec('ROLLBACK'); throw error; }
   }
 
-  private validateResult(input: VacancyFitInput, result: VacancyFitResult): void {
+  private validateResult(input: VacancyFitInput, result: VacancyFitResult, fields: readonly (keyof VacancyFitResult)[] = VERIFIED_FIELDS): VacancyFitResult {
     if (result.candidateId !== input.candidateId || result.vacancyId !== input.vacancyId || result.algorithmVersion !== vacancyFitFingerprint(input).algorithmVersion) throw new Error('vacancy fit result scope mismatch');
     if (!Number.isFinite(Date.parse(result.calculatedAt))) throw new Error('invalid vacancy fit result date');
     const checked = evaluateVacancyFit({ ...input, assessments: result.assessments }, result.calculatedAt);
-    for (const field of ['gates', 'assessments', 'status', 'dataState', 'coveragePercent', 'coverage', 'requiredCoverage', 'reason'] as const) {
+    for (const field of fields) {
       if (JSON.stringify(checked[field]) !== JSON.stringify(result[field])) throw new Error('unverified vacancy fit result');
     }
+    return checked;
   }
 }

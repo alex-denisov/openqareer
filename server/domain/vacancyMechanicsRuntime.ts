@@ -122,8 +122,11 @@ export class VacancyMechanicsRuntime {
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
           runId, task: 'vacancy-requirements', dataClass: 'public', prefix: instructions,
-          input: minimizeModelText(description), maxTokens: 2048,
-        })).content } : undefined);
+          // 35 entries took ~2 000 tokens on prod (22.10): 50 need headroom, or the JSON is cut.
+          input: minimizeModelText(description), maxTokens: 4096,
+        })).content } : undefined, (issue) => {
+          this.stats.modelIssues = { ...this.stats.modelIssues, [issue]: (this.stats.modelIssues[issue] ?? 0) + 1 };
+        });
       if (result.fallbackStatus === 'unavailable') this.stats.requirementsUnavailable += 1;
       else if (result.fallbackStatus === 'invalid') this.stats.requirementsInvalid += 1;
       return result;

@@ -104,14 +104,83 @@ describe('vacancy requirement extraction', () => {
       ['more than five words', 'Proven senior engineering leader with direction'],
       ['more than 40 characters', 'Engineeringleadershipandtechnicaldirection!'],
       ['missing', undefined],
-    ])('calls a label %s invalid, so the job retries', async (_case, label) => {
-      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer(label) });
-      expect(result.fallbackStatus).toBe('invalid');
+    ])('keeps the requirement without a model label when the label is %s (B510-r)', async (_case, label) => {
+      const issues: string[] = [];
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer(label) }, (issue) => issues.push(issue));
+      expect(result.fallbackStatus).toBeUndefined();
+      expect(result.requirements).toHaveLength(1);
+      expect(result.requirements[0].label).toBeUndefined();
+      expect(issues).toEqual(['long_label']);
     });
 
-    it('calls an unknown kind invalid', async () => {
-      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer('Leadership', 'responsibility') });
+    it('infers an unknown kind by the rules instead of refusing the answer (B510-r)', async () => {
+      const issues: string[] = [];
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => answer('Leadership', 'responsibility') }, (issue) => issues.push(issue));
+      expect(result.fallbackStatus).toBeUndefined();
+      expect(result.requirements[0]).toMatchObject({ label: 'Leadership', kind: 'other', skill: true });
+      expect(issues).toEqual(['unknown_kind']);
+    });
+  });
+
+  describe('mixed model answers seen on prod 22.10 (B510-r)', () => {
+    const description = 'Requirements\n- 5+ years with Kafka.\n- Physical lifting up to 40 lbs.\n- A Bachelor’s degree in CS.';
+    const entry = (text: string, sourceQuote: string, label: string, origin = 'structural') => ({ text, sourceQuote, origin, label, kind: 'skill' });
+
+    it('drops only the bad label of a mixed answer, never the whole answer', async () => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => JSON.stringify({ requirements: [
+        entry('5+ years with Kafka.', '5+ years with Kafka.', 'Kafka'),
+        entry('Physical lifting up to 40 lbs.', 'Physical lifting up to 40 lbs.', 'Physical lifting up to 40 lbs'),
+      ] }) });
+      expect(result).toMatchObject({ status: 'extracted', method: 'model' });
+      expect(result.requirements.map((item) => item.label)).toEqual(['Kafka', undefined]);
+    });
+
+    it('keeps the verbatim quote as the text when the model trimmed a stated requirement', async () => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => JSON.stringify({ requirements: [
+        entry('5+ years with Kafka', '5+ years with Kafka.', 'Kafka', 'explicit'),
+      ] }) });
+      expect(result.requirements[0]).toMatchObject({ text: '5+ years with Kafka.', origin: 'explicit' });
+    });
+
+    it('matches a quote that differs only by typographic apostrophes, spacing or the final period', async () => {
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => JSON.stringify({ requirements: [
+        entry("A Bachelor's  degree in CS", "A Bachelor's  degree in CS", 'CS degree'),
+      ] }) });
+      expect(result.requirements).toHaveLength(1);
+      expect(result.requirements[0].sourceQuote).toBe('A Bachelor’s degree in CS.');
+    });
+
+    it('matches a CJK quote whose source line break the model joined', async () => {
+      const japanese = '＜必須スキル＞\n\n・事業責任者、\n\nオペレーション責任者などのマネジメント経験\n';
+      const quote = '事業責任者、オペレーション責任者などのマネジメント経験';
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description: japanese }, { extract: async () => JSON.stringify({ requirements: [entry(quote, quote, '事業管理経験')] }) });
+      expect(result.requirements).toHaveLength(1);
+      expect(result.requirements[0].sourceQuote).toBe('事業責任者、\n\nオペレーション責任者などのマネジメント経験');
+    });
+
+    it('salvages the complete entries of JSON cut at the output limit', async () => {
+      const full = JSON.stringify({ requirements: [entry('5+ years with Kafka.', '5+ years with Kafka.', 'Kafka'), entry('A Bachelor’s degree in CS.', 'A Bachelor’s degree in CS.', 'CS degree')] });
+      const issues: string[] = [];
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => full.slice(0, full.length - 20) }, (issue) => issues.push(issue));
+      expect(result.fallbackStatus).toBeUndefined();
+      expect(result.requirements.map((item) => item.label)).toEqual(['Kafka']);
+      expect(issues).toEqual(['truncated']);
+    });
+
+    it('salvages a truncated answer inside a markdown fence', async () => {
+      const full = '```json\n' + JSON.stringify({ requirements: [entry('5+ years with Kafka.', '5+ years with Kafka.', 'Kafka'), entry('A Bachelor’s degree in CS.', 'A Bachelor’s degree in CS.', 'CS degree')] });
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => full.slice(0, full.length - 20) });
+      expect(result.requirements).toHaveLength(1);
+    });
+
+    it('names the reason of an answer with no usable entry', async () => {
+      const issues: string[] = [];
+      const result = await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => JSON.stringify({ requirements: [entry('MBA', 'MBA required', 'MBA')] }) }, (issue) => issues.push(issue));
       expect(result.fallbackStatus).toBe('invalid');
+      expect(issues).toEqual(['quote', 'no_valid_entries']);
+      const broken: string[] = [];
+      await extractVacancyRequirementsWithFallback({ vacancyId: 'v', description }, { extract: async () => 'not json' }, (issue) => broken.push(issue));
+      expect(broken).toEqual(['parse']);
     });
   });
 

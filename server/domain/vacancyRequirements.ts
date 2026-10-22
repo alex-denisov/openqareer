@@ -143,19 +143,64 @@ const MODEL_KINDS = ['skill', 'experience', 'condition'] as const;
 const MAX_LABEL_WORDS = 5;
 const MAX_LABEL_CHARS = 40;
 
-/** Strict label (B510): a long label means the model wrote a sentence, so the answer is invalid. */
+/** Strict label (B510): a long label means the model wrote a sentence, so the chip falls back to rule labels. */
 export function validModelLabel(label: unknown): label is string {
   if (typeof label !== 'string') return false;
   const trimmed = label.trim();
   return trimmed.length > 0 && trimmed.length <= MAX_LABEL_CHARS && trimmed.split(/\s+/u).length <= MAX_LABEL_WORDS;
 }
 
-class InvalidModelAnswer extends Error {}
+/**
+ * Why a model answer or one of its entries was not used (B510-r). Entry issues drop only that
+ * entry or its label; `parse`, `shape` and `no_valid_entries` make the whole answer invalid.
+ */
+export type ModelAnswerIssue = 'parse' | 'shape' | 'no_valid_entries' | 'truncated' | 'long_label' | 'unknown_kind' | 'quote' | 'paraphrase';
 
-/** Models wrap JSON in a markdown fence despite instructions (4 of 12 sampled prod answers). */
-function parseModelJson(response: string): unknown {
-  const fenced = response.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu);
-  return JSON.parse(fenced ? fenced[1] : response);
+/**
+ * Models wrap JSON in a markdown fence despite instructions (4 of 12 sampled prod answers), and an
+ * answer cut at the output limit keeps its complete entries: the array is closed after the last one.
+ */
+function parseModelJson(response: string): { readonly value: unknown; readonly truncated: boolean } {
+  const trimmed = response.trim();
+  const body = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/iu)?.[1] ?? trimmed.replace(/^```(?:json)?\s*/iu, '');
+  try { return { value: JSON.parse(body), truncated: false }; } catch (error) {
+    for (let end = body.lastIndexOf('}'); end > 0; end = body.lastIndexOf('}', end - 1)) {
+      try { return { value: JSON.parse(`${body.slice(0, end + 1)}]}`), truncated: true }; } catch { /* try the previous entry end */ }
+    }
+    throw error;
+  }
+}
+
+const TYPOGRAPHIC: Readonly<Record<string, string>> = { '’': "'", '‘': "'", '“': '"', '”': '"', '«': '"', '»': '"' };
+
+/**
+ * The description span a model quote stands for. The model swaps typographic quotes, squeezes
+ * spaces and drops the final period (6 of 9 invalid prod answers on 22.10), and joins CJK lines
+ * the source broke mid-sentence; the stored quote is then the original span, so it stays verbatim.
+ */
+function verbatimQuote(quote: string, description: string): string | null {
+  if (description.includes(quote)) return quote;
+  return spanIgnoringSpacing(quote, description, ' ') ?? spanIgnoringSpacing(quote, description, '');
+}
+
+function spanIgnoringSpacing(quote: string, description: string, space: string): string | null {
+  const normal: string[] = [];
+  const origin: number[] = [];
+  for (let index = 0; index < description.length; index += 1) {
+    const char = TYPOGRAPHIC[description[index]] ?? description[index];
+    if (/\s/u.test(char)) {
+      if (!space || normal.at(-1) === space) continue;
+      normal.push(space);
+    } else normal.push(char);
+    origin.push(index);
+  }
+  const needle = quote.replace(/[’‘“”«»]/gu, (char) => TYPOGRAPHIC[char]).trim().replace(/\s+/gu, space).replace(/[.;,!]+$/u, '');
+  if (needle.length < 2) return null;
+  const at = normal.join('').indexOf(needle);
+  if (at < 0) return null;
+  let end = origin[at + needle.length - 1] + 1;
+  while (/[.;,!]/u.test(description[end] ?? '')) end += 1;
+  return description.slice(origin[at], end);
 }
 
 /**
@@ -167,49 +212,54 @@ function modelOrigin(origin: unknown, text: string, sourceQuote: string): Requir
   return text.trim() === sourceQuote.trim() ? 'structural' : null;
 }
 
-function modelRequirements(entries: readonly unknown[], description: string): VacancyRequirement[] {
-  const requirements: VacancyRequirement[] = [];
-  for (const entry of entries.slice(0, 50)) {
-    if (typeof entry !== 'object' || entry === null) continue;
-    const { text, sourceQuote, origin: label, label: name, kind } = entry as Record<string, unknown>;
-    if (!validModelLabel(name) || !MODEL_KINDS.includes(kind as typeof MODEL_KINDS[number])) throw new InvalidModelAnswer();
-    if (typeof text !== 'string' || !text.trim() || text.length > 1500 || typeof sourceQuote !== 'string' || !sourceQuote.trim() || !description.includes(sourceQuote)) continue;
-    const origin = modelOrigin(label, text, sourceQuote);
-    if (!origin) continue;
-    if (origin !== 'inferred' && text.trim() !== sourceQuote.trim()) continue;
-    if (/ignore (?:all |previous )?instructions|system prompt|api.?key|credentials|игнорируй.*инструкц/iu.test(sourceQuote)) continue;
-    const base = makeRequirement(text.trim(), sourceQuote, origin);
-    const ruleKind = kind === 'experience' ? 'experience' : kind === 'skill' ? 'other' : base.kind;
-    requirements.push({ ...base, kind: ruleKind, label: name.trim(), skill: kind === 'skill' });
-  }
-  return requirements;
+function modelRequirement(entry: unknown, description: string, report: (issue: ModelAnswerIssue) => void): VacancyRequirement | null {
+  if (typeof entry !== 'object' || entry === null) return null;
+  const { text, sourceQuote: quoted, origin: originLabel, label: name, kind } = entry as Record<string, unknown>;
+  if (typeof text !== 'string' || !text.trim() || text.length > 1500 || typeof quoted !== 'string' || !quoted.trim()) return null;
+  const sourceQuote = verbatimQuote(quoted, description);
+  if (!sourceQuote) { report('quote'); return null; }
+  const origin = modelOrigin(originLabel, text, quoted);
+  if (!origin) { report('paraphrase'); return null; }
+  if (/ignore (?:all |previous )?instructions|system prompt|api.?key|credentials|игнорируй.*инструкц/iu.test(sourceQuote)) return null;
+  // A stated requirement is the quote itself: a trimmed or retold `text` must not drop it.
+  const base = makeRequirement(origin === 'inferred' ? text.trim() : sourceQuote.trim(), sourceQuote, origin);
+  const modelKind = MODEL_KINDS.includes(kind as typeof MODEL_KINDS[number]) ? kind as typeof MODEL_KINDS[number] : null;
+  if (!modelKind) report('unknown_kind');
+  const label = validModelLabel(name) ? name.trim() : null;
+  if (!label) report('long_label');
+  const ruleKind = modelKind === 'experience' ? 'experience' : modelKind === 'skill' ? 'other' : base.kind;
+  return { ...base, kind: ruleKind, ...(label ? { label } : {}), skill: modelKind ? modelKind === 'skill' : base.kind === 'other' };
 }
 
 /**
  * B510: with a model, every description goes to it for short labels; the rules stay as the fallback.
  * A failed or invalid answer is retried by the job; meanwhile the reader shows older or rule results.
  */
-export async function extractVacancyRequirementsWithFallback(input: VacancyRequirementsInput, model?: VacancyRequirementsModel): Promise<VacancyRequirementsResult> {
+export async function extractVacancyRequirementsWithFallback(
+  input: VacancyRequirementsInput,
+  model?: VacancyRequirementsModel,
+  report: (issue: ModelAnswerIssue) => void = () => undefined,
+): Promise<VacancyRequirementsResult> {
   const rules = extractVacancyRequirements(input);
   if (rules.status === 'no_description' || !model) return rules;
   const fallback = (status: 'unavailable' | 'invalid' | 'empty'): VacancyRequirementsResult =>
     status === 'empty' && rules.status === 'extracted' ? rules
       : { ...rules, ...(status === 'empty' ? { method: 'model' as const } : {}), fallbackStatus: status };
+  const invalid = (issue: ModelAnswerIssue): VacancyRequirementsResult => { report(issue); return fallback('invalid'); };
   const description = plainText(input.description ?? '').slice(0, 12000);
   let response: string;
   try {
     response = await model.extract({ description, instructions: MODEL_INSTRUCTIONS });
   } catch { return fallback('unavailable'); }
   // From here the model answered: anything unusable is `invalid`, not `unavailable`.
-  if (response.length > 60000) return fallback('invalid');
-  let parsed: unknown;
-  try { parsed = parseModelJson(response); } catch { return fallback('invalid'); }
-  const entries = typeof parsed === 'object' && parsed !== null && 'requirements' in parsed ? parsed.requirements : null;
-  if (!Array.isArray(entries)) return fallback('invalid');
-  let requirements: VacancyRequirement[];
-  try { requirements = modelRequirements(entries, description); } catch (error) {
-    if (error instanceof InvalidModelAnswer) return fallback('invalid');
-    throw error;
-  }
-  return requirements.length ? resultFor(input, requirements, 'model') : fallback(entries.length ? 'invalid' : 'empty');
+  if (response.length > 60000) return invalid('shape');
+  let parsed: ReturnType<typeof parseModelJson>;
+  try { parsed = parseModelJson(response); } catch { return invalid('parse'); }
+  const { value } = parsed;
+  const entries = typeof value === 'object' && value !== null && 'requirements' in value ? value.requirements : null;
+  if (!Array.isArray(entries)) return invalid('shape');
+  if (parsed.truncated) report('truncated');
+  const requirements = entries.slice(0, 50).flatMap((entry) => modelRequirement(entry, description, report) ?? []);
+  if (requirements.length) return resultFor(input, requirements, 'model');
+  return entries.length ? invalid('no_valid_entries') : fallback('empty');
 }

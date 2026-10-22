@@ -18,7 +18,7 @@ function failRequirement(store: SqliteVacancyRequirementsStore, vacancyId: strin
 }
 
 describe('one requeue of model failures after a parser upgrade (B522)', () => {
-  it('requeues failed model extractions once, below shown pages, and leaves other failures alone', () => {
+  it('requeues failed model extractions once, never above shown pages, and leaves other failures alone', () => {
     const database = new DatabaseSync(':memory:');
     const store = new SqliteVacancyRequirementsStore(database);
     const now = Date.parse('2026-10-21T05:00:00Z');
@@ -29,7 +29,7 @@ describe('one requeue of model failures after a parser upgrade (B522)', () => {
     database.exec('UPDATE vacancy_requirements_jobs SET requeue_revision=NULL');
     expect(store.requeueModelFailures(2, now + 1e6)).toBe(2);
     expect(store.requeueModelFailures(2, now + 2e6)).toBe(0);
-    store.enqueue({ vacancyId: 'shown', description: 'shown text' }, { titleStrategyPriority: 1, now: now + 2e6 });
+    store.enqueue({ vacancyId: 'shown', description: 'shown text' }, { titleStrategyPriority: 2, now: now + 2e6 });
     expect(store.claim('w', now + 3e6)?.input.vacancyId).toBe('shown');
     database.close();
   });
@@ -41,6 +41,20 @@ describe('one requeue of model failures after a parser upgrade (B522)', () => {
     store.requeueModelFailures(2, now);
     failRequirement(store, 'later', 'requirements_model_invalid', now);
     expect(store.requeueModelFailures(2, now + 1e6)).toBe(0);
+    database.close();
+  });
+
+  it('requeues jobs failed under the strict B510 parser once, keeping label upgrades at 0.1 and shown pages at 1.5 (B510-r)', () => {
+    const database = new DatabaseSync(':memory:');
+    const store = new SqliteVacancyRequirementsStore(database);
+    const now = Date.parse('2026-10-22T03:00:00Z');
+    failRequirement(store, 'upgrade', 'requirements_model_invalid', now);
+    failRequirement(store, 'shown', 'requirements_model_invalid', now);
+    database.exec(`UPDATE vacancy_requirements_jobs SET requeue_revision=2, priority=CASE json_extract(input_json,'$.vacancyId') WHEN 'upgrade' THEN 0.1 ELSE 1.5 END`);
+    expect(store.requeueModelFailures(undefined, now + 1e6)).toBe(2);
+    expect(store.requeueModelFailures(undefined, now + 2e6)).toBe(0);
+    const priorities = database.prepare(`SELECT json_extract(input_json,'$.vacancyId') id, priority FROM vacancy_requirements_jobs ORDER BY id`).all();
+    expect(priorities).toEqual([{ id: 'shown', priority: 1.5 }, { id: 'upgrade', priority: 0.1 }]);
     database.close();
   });
 
