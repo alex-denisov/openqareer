@@ -10,7 +10,7 @@ import { labelVacancyRequirement } from './vacancyRequirementLabel';
 import { assessVacancyFit, type VacancyFitInput } from './vacancyFit';
 import { createVacancyFitAssessor } from './vacancyFitAssessor';
 import type { BulkLlmClient } from '../providers/bulkLlmClient';
-import { measuredBulkClient } from './measuredBulkClient';
+import { measuredBulkClient, type BulkCompletion } from './measuredBulkClient';
 import { emptyVacancyMechanicsStats, type VacancyMechanicsStats } from './vacancyMechanicsStats';
 
 /** Requirements a fit job is waiting for jump ahead of title-strategy work (priority 1). */
@@ -109,7 +109,7 @@ export class VacancyMechanicsRuntime {
   }
 
   /** One queued requirements job (highest priority first); the counters feed the batch journal line. */
-  private async extractNextRequirements(client: BulkLlmClient | null, runId: string, workerId: string): Promise<boolean> {
+  private async extractNextRequirements(client: BulkCompletion | null, runId: string, workerId: string): Promise<boolean> {
     const extracted = await this.requirements.runNext(workerId, async (input) => {
       const result = await extractVacancyRequirementsWithFallback(input,
         client ? { extract: async ({ description, instructions }) => (await client.complete({
