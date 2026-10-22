@@ -60,6 +60,8 @@ export class CoachProviderError extends Error {
     readonly retryable: boolean,
     readonly diagnostic?: ProviderOutputDiagnostic,
     readonly role?: CoachTurnInput['activeRole'],
+    /** Every route tried before giving up: the journal names who failed and how. */
+    readonly attempts?: NonNullable<CoachProviderResult['routing']>['attempts'],
   ) {
     super(code);
     this.name = 'CoachProviderError';

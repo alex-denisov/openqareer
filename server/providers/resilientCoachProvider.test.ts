@@ -135,6 +135,30 @@ describe('несовместимый провайдер в пуле (B183)', () 
   });
 });
 
+describe('ResilientCoachProvider: журнал отказа', () => {
+  it('ошибка «отказали все» несёт попытки каждого маршрута', async () => {
+    const rejecting = (code: 'provider_unavailable' | 'provider_timeout'): CoachProvider => ({
+      async createTurn() {
+        throw new CoachProviderError(code, 503, true);
+      },
+    });
+    const failure = await new ResilientCoachProvider({
+      routes: [
+        { id: 'openrouter', model: 'free', provider: rejecting('provider_timeout') },
+        { id: 'openai', model: 'luna', provider: rejecting('provider_unavailable') },
+      ],
+    })
+      .createTurn(input, 'idempotency-key')
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(CoachProviderError);
+    expect((failure as CoachProviderError).attempts).toEqual([
+      { provider: 'openrouter', model: 'free', status: 'failed', code: 'provider_timeout' },
+      { provider: 'openai', model: 'luna', status: 'failed', code: 'provider_unavailable' },
+    ]);
+  });
+});
+
 /**
  * B183. Владелец назвал очередь из трёх моделей, две из которых живут за
  * `openrouter`. Если остывание считать по провайдеру, отказ первой из них
