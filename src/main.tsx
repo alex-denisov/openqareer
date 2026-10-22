@@ -36,3 +36,12 @@ ReactDOM.createRoot(root).render(
     <App />
   </React.StrictMode>,
 );
+
+if (isTauriEnvironment()) {
+  // B359: the updater lives in its own root so no screen can unmount it.
+  void import('./features/appUpdate/DesktopUpdateDock').then(({ DesktopUpdateDock }) => {
+    const dock = document.createElement('div');
+    document.body.append(dock);
+    ReactDOM.createRoot(dock).render(<DesktopUpdateDock />);
+  });
+}

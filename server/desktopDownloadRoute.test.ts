@@ -56,3 +56,40 @@ describe('desktop macOS download', () => {
     expect((await traversal.inject({ method: 'GET', url: '/api/v1/desktop/macos' })).json().data.available).toBe(false);
   });
 });
+
+describe('desktop updater feed', () => {
+  function createFeed(files: Record<string, string>) {
+    const root = mkdtempSync(join(tmpdir(), 'openqareer-desktop-feed-'));
+    directories.push(root);
+    mkdirSync(join(root, 'desktop'));
+    for (const [name, content] of Object.entries(files)) writeFileSync(join(root, 'desktop', name), content);
+    const app = Fastify();
+    registerDesktopDownloadRoutes(app, { config: { databasePath: join(root, 'openqareer.db') } } as RouteDeps);
+    return app;
+  }
+
+  it('serves the manifest uncached and the signed archives immutable', async () => {
+    const app = createFeed({
+      'latest.json': '{"version":"1.0.1"}',
+      'OpenQareer_1.0.1_aarch64.app.tar.gz': 'archive',
+      'OpenQareer_1.0.1_aarch64.app.tar.gz.sig': 'sig',
+    });
+    const manifest = await app.inject({ method: 'GET', url: '/desktop/latest.json' });
+    expect(manifest.statusCode).toBe(200);
+    expect(manifest.headers['cache-control']).toBe('no-cache');
+    expect(manifest.json()).toEqual({ version: '1.0.1' });
+    const archive = await app.inject({ method: 'GET', url: '/desktop/OpenQareer_1.0.1_aarch64.app.tar.gz' });
+    expect(archive.statusCode).toBe(200);
+    expect(archive.headers['content-type']).toBe('application/gzip');
+    expect(archive.body).toBe('archive');
+    const signature = await app.inject({ method: 'GET', url: '/desktop/OpenQareer_1.0.1_aarch64.app.tar.gz.sig' });
+    expect(signature.body).toBe('sig');
+  });
+
+  it('answers 404 for a missing feed and for names outside the feed', async () => {
+    const app = createFeed({ 'notes.txt': 'secret' });
+    for (const url of ['/desktop/latest.json', '/desktop/notes.txt', '/desktop/..%2Fopenqareer.db']) {
+      expect((await app.inject({ method: 'GET', url })).statusCode).toBe(404);
+    }
+  });
+});

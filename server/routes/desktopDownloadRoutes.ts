@@ -17,6 +17,13 @@ export interface DesktopDownloadInfo {
   fileName: string;
 }
 
+/** B359: the updater feed; `scripts/release-desktop.sh` writes it, `latest.json` last. */
+const UPDATE_FILE_PATTERN = /^(latest\.json|OpenQareer_[0-9A-Za-z.+-]+_(aarch64|x86_64)\.app\.tar\.gz(\.sig)?)$/;
+
+export function updatesDirectory(databasePath: string): string {
+  return join(dirname(databasePath), 'desktop');
+}
+
 export function downloadsDirectory(databasePath: string): string {
   return join(dirname(databasePath), 'downloads');
 }
@@ -58,6 +65,23 @@ export function registerDesktopDownloadRoutes(app: FastifyInstance, deps: RouteD
     if (!download) return { data: { available: false } };
     const { path: _path, ...info } = download;
     return { data: { available: true, ...info } };
+  });
+
+  const updates = updatesDirectory(deps.config.databasePath);
+  app.get<{ Params: { file: string } }>('/desktop/:file', async (request, reply) => {
+    const { file } = request.params;
+    const info = UPDATE_FILE_PATTERN.test(file)
+      ? await stat(join(updates, file)).catch(() => null)
+      : null;
+    if (!info?.isFile()) {
+      return reply.code(404).type('text/plain; charset=utf-8').send('Обновление не найдено.');
+    }
+    const isManifest = file === 'latest.json';
+    return reply
+      .header('Cache-Control', isManifest ? 'no-cache' : 'public, max-age=31536000, immutable')
+      .header('Content-Length', String(info.size))
+      .type(isManifest ? 'application/json; charset=utf-8' : file.endsWith('.sig') ? 'text/plain; charset=utf-8' : 'application/gzip')
+      .send(createReadStream(join(updates, file)));
   });
 
   app.get('/downloads/openqareer-macos.dmg', async (_request, reply) => {
