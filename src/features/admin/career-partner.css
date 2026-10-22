@@ -1,0 +1,153 @@
+.career-partner-view,
+.career-partner-profile {
+  display: grid;
+  gap: var(--career-space-4);
+  min-inline-size: 0;
+}
+
+.career-partner-heading,
+.career-partner-profile__header,
+.career-partner-section {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+}
+
+.career-partner-heading h1,
+.career-partner-profile__header h2,
+.career-partner-section h3,
+.career-partner-section h4 {
+  margin: 0;
+}
+
+.career-partner-candidates {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.career-partner-candidate {
+  display: grid;
+  gap: var(--career-space-1);
+  min-inline-size: 0;
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  color: var(--text-main);
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.career-partner-candidate.is-selected {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+}
+
+.career-partner-candidate span,
+.career-partner-candidate small,
+.career-partner-resume-summary dt,
+.career-partner-funnel dt {
+  color: var(--text-muted);
+}
+
+.career-partner-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.career-partner-profile__header {
+  padding-block-end: var(--career-space-3);
+  border-block-end: var(--career-border-width) solid var(--line);
+}
+
+.career-partner-section {
+  padding: var(--career-space-4);
+  border: var(--career-border-width) solid var(--line);
+  border-radius: var(--radius-medium);
+  background: var(--surface);
+}
+
+.career-partner-resume-summary,
+.career-partner-funnel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--career-space-3);
+  margin: 0;
+}
+
+.career-partner-resume-summary div,
+.career-partner-funnel div {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+.career-partner-resume-summary dd,
+.career-partner-funnel dd {
+  margin: var(--career-space-1) 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.career-partner-experience {
+  display: grid;
+  gap: var(--career-space-2);
+  margin: 0;
+  padding-inline-start: var(--career-space-4);
+}
+
+.career-partner-experience li {
+  display: grid;
+  gap: var(--career-space-1);
+  overflow-wrap: anywhere;
+}
+
+.career-partner-campaign-form {
+  display: grid;
+  gap: var(--career-space-3);
+}
+
+.career-partner-region-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2) var(--career-space-4);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.career-partner-region-list legend {
+  margin-block-end: var(--career-space-2);
+}
+
+.career-partner-region-list label,
+.career-partner-remote-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding-block: var(--career-space-2);
+}
+
+.career-partner-region-list input,
+.career-partner-remote-choice input {
+  accent-color: var(--primary-accent);
+}
+
+.career-partner-save-status {
+  margin: 0;
+  color: var(--primary-success);
+  font-size: var(--career-text-xs);
+}
+
+.career-partner-heading {
+  padding-block-start: var(--career-space-4);
+}
+
+.career-partner-subheading {
+  margin: var(--career-space-2) 0 0;
+  font-size: var(--career-text-sm);
+  font-weight: 600;
+}

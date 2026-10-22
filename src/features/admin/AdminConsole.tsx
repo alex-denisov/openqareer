@@ -6,7 +6,6 @@ import {
   Briefcase,
   Broadcast,
   LinkedinLogo,
-  MagnifyingGlass,
   GearSix,
   SignIn,
   ShieldCheck,
@@ -14,6 +13,7 @@ import {
 } from '@phosphor-icons/react';
 import { BrandMark } from '../brand/BrandMark';
 import type { AuthUser } from '../coach/coachApi';
+import { CareerPartnerConsole } from './CareerPartnerConsole';
 import {
   ADMIN_PAGE_SIZE,
   listAdminUsers,
@@ -36,10 +36,14 @@ import { AdminVacanciesView } from './AdminVacanciesView';
 import { AdminAuditView } from './AdminAuditView';
 import { AdminUserProfileModal } from './AdminUserProfileModal';
 import { AdminLinkedinPoolView } from './AdminLinkedinPoolView';
+import { AdminSearchForm } from './AdminSearchForm';
 import { roleCan } from '../../../shared/roleMatrix';
+export type AdminConsoleSession = Omit<AuthUser, 'role'> & {
+  role: AuthUser['role'] | 'CareerPartner';
+};
 
 interface AdminConsoleProps {
-  session?: AuthUser | null;
+  session?: AdminConsoleSession | null;
   sessionPending?: boolean;
   onUnauthorized?: () => void;
 }
@@ -191,17 +195,19 @@ export function AdminConsole({
   onUnauthorized,
 }: AdminConsoleProps) {
   const isAdmin = session ? roleCan(session.role, 'admin.console') : false;
+  const isCareerPartner = session?.role === 'CareerPartner';
+  const isAuthorized = isAdmin || isCareerPartner;
   const [activeTab, setActiveTab] = useState<
     'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin'
   >(getInitialAdminTab);
 
   useEffect(() => {
-    document.title = 'Администрирование · openqareer';
-  }, []);
+    document.title = isCareerPartner ? 'Кандидаты · openqareer' : 'Администрирование · openqareer';
+  }, [isCareerPartner]);
 
   useEffect(() => {
-    if (!sessionPending && !isAdmin) onUnauthorized?.();
-  }, [isAdmin, onUnauthorized, sessionPending]);
+    if (!sessionPending && !isAuthorized) onUnauthorized?.();
+  }, [isAuthorized, onUnauthorized, sessionPending]);
 
   const handleSelectTab = (tab: 'users' | 'vacancies' | 'sources' | 'audit' | 'linkedin') => {
     setActiveTab(tab);
@@ -230,9 +236,17 @@ export function AdminConsole({
     );
   }
 
-  if (!isAdmin) {
+  if (!isAuthorized) {
     if (onUnauthorized) return null;
     return <AdminRefusal signedIn={Boolean(session)} />;
+  }
+
+  if (isCareerPartner) {
+    return (
+      <AdminFrame>
+        <CareerPartnerConsole />
+      </AdminFrame>
+    );
   }
 
   return (
@@ -243,7 +257,12 @@ export function AdminConsole({
           {activeTab === 'users' && <AdminDirectory />}
           {activeTab === 'vacancies' && <AdminVacanciesView />}
           {activeTab === 'sources' && <AdminVacancySourcesTab />}
-          {activeTab === 'audit' && <><AdminBulkLlmSpend /><AdminAuditView /></>}
+          {activeTab === 'audit' && (
+            <>
+              <AdminBulkLlmSpend />
+              <AdminAuditView />
+            </>
+          )}
           {activeTab === 'linkedin' && <AdminLinkedinPoolView />}
         </div>
       </div>
@@ -271,20 +290,33 @@ function AdminRefusal({ signedIn }: { signedIn: boolean }) {
 function AdminDirectory() {
   const [query, setQuery] = useState('');
   const [submittedQuery, setSubmittedQuery] = useState('');
-  const [searchField, setSearchField] = useState<'all' | 'username' | 'email' | 'displayName'>('all');
+  const [searchField, setSearchField] = useState<'all' | 'username' | 'email' | 'displayName'>(
+    'all',
+  );
   const [offset, setOffset] = useState(0);
-  const [role, setRole] = useState<'all' | 'candidate' | 'admin'>('all');
+  const [role, setRole] = useState<'all' | 'candidate' | 'admin' | 'CareerPartner'>('all');
   const [tier, setTier] = useState<'all' | 'free' | 'pro' | 'executive' | 'enterprise'>('all');
   const [blocked, setBlocked] = useState<'all' | 'yes' | 'no'>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'role' | 'tier' | 'created' | 'sessions'>('created');
+  const [sortBy, setSortBy] = useState<'name' | 'role' | 'tier' | 'created' | 'sessions'>(
+    'created',
+  );
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
   const { state, load } = useDirectoryPage({
-    query: submittedQuery, searchField, offset, role, tier, blocked, sortBy, sortDirection,
+    query: submittedQuery,
+    searchField,
+    offset,
+    role,
+    tier,
+    blocked,
+    sortBy,
+    sortDirection,
   });
   const changeSort = (column: typeof sortBy) => {
     setOffset(0);
-    setSortDirection((current) => column === sortBy ? (current === 'asc' ? 'desc' : 'asc') : 'asc');
+    setSortDirection((current) =>
+      column === sortBy ? (current === 'asc' ? 'desc' : 'asc') : 'asc',
+    );
     setSortBy(column);
   };
 
@@ -295,33 +327,84 @@ function AdminDirectory() {
         query={query}
         onQueryChange={setQuery}
         searchField={searchField}
-        onSearchFieldChange={(field) => { setSearchField(field); setOffset(0); }}
+        onSearchFieldChange={(field) => {
+          setSearchField(field);
+          setOffset(0);
+        }}
         onSubmit={() => {
           setOffset(0);
           setSubmittedQuery(query);
         }}
       />
       <div className="admin-directory-filters" aria-label="Фильтры учётных записей">
-        <label>Роль
-          <select value={role} onChange={(event) => { setRole(event.target.value as typeof role); setOffset(0); }}>
-            <option value="all">Все роли</option><option value="candidate">Кандидаты</option><option value="admin">Администраторы</option>
+        <label>
+          Роль
+          <select
+            value={role}
+            onChange={(event) => {
+              setRole(event.target.value as typeof role);
+              setOffset(0);
+            }}
+          >
+            <option value="all">Все роли</option>
+            <option value="candidate">Кандидаты</option>
+            <option value="CareerPartner">Карьерные консультанты</option>
+            <option value="admin">Суперадминистраторы</option>
           </select>
         </label>
-        <label>Тариф
-          <select value={tier} onChange={(event) => { setTier(event.target.value as typeof tier); setOffset(0); }}>
-            <option value="all">Все тарифы</option><option value="free">Free</option><option value="pro">Pro</option>
-            <option value="executive">Executive</option><option value="enterprise">Enterprise</option>
+        <label>
+          Тариф
+          <select
+            value={tier}
+            onChange={(event) => {
+              setTier(event.target.value as typeof tier);
+              setOffset(0);
+            }}
+          >
+            <option value="all">Все тарифы</option>
+            <option value="free">Free</option>
+            <option value="pro">Pro</option>
+            <option value="executive">Executive</option>
+            <option value="enterprise">Enterprise</option>
           </select>
         </label>
-        <label>Блокировка
-          <select value={blocked} onChange={(event) => { setBlocked(event.target.value as typeof blocked); setOffset(0); }}>
-            <option value="all">Все</option><option value="yes">Заблокированы</option><option value="no">Активны</option>
+        <label>
+          Блокировка
+          <select
+            value={blocked}
+            onChange={(event) => {
+              setBlocked(event.target.value as typeof blocked);
+              setOffset(0);
+            }}
+          >
+            <option value="all">Все</option>
+            <option value="yes">Заблокированы</option>
+            <option value="no">Активны</option>
           </select>
         </label>
       </div>
-      <div className="admin-directory-sort-mobile admin-register-chips" aria-label="Сортировка учётных записей">
-        {([['name', 'Имя'], ['role', 'Роль'], ['tier', 'Тариф'], ['created', 'Создан'], ['sessions', 'Сессии']] as const).map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={sortBy === value} onClick={() => changeSort(value)}>{label}{sortBy === value ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</button>
+      <div
+        className="admin-directory-sort-mobile admin-register-chips"
+        aria-label="Сортировка учётных записей"
+      >
+        {(
+          [
+            ['name', 'Имя'],
+            ['role', 'Роль'],
+            ['tier', 'Тариф'],
+            ['created', 'Создан'],
+            ['sessions', 'Сессии'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={sortBy === value}
+            onClick={() => changeSort(value)}
+          >
+            {label}
+            {sortBy === value ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+          </button>
         ))}
       </div>
       <AdminDirectoryStatus state={state} onRetry={() => void load()} />
@@ -384,52 +467,6 @@ function AdminDirectoryStatus({ state, onRetry }: { state: DirectoryState; onRet
     );
   }
   return null;
-}
-
-function AdminSearchForm({
-  query,
-  onQueryChange,
-  searchField,
-  onSearchFieldChange,
-  onSubmit,
-}: {
-  query: string;
-  onQueryChange: (value: string) => void;
-  searchField: 'all' | 'username' | 'email' | 'displayName';
-  onSearchFieldChange: (value: 'all' | 'username' | 'email' | 'displayName') => void;
-  onSubmit: () => void;
-}) {
-  return (
-    <form
-      className="admin-search"
-      role="search"
-      onSubmit={(e) => {
-        e.preventDefault();
-        onSubmit();
-      }}
-    >
-      <label htmlFor="admin-query">Поиск по логину, email или имени</label>
-      <div>
-        <input
-          id="admin-query"
-          type="search"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Поиск пользователей…"
-          autoComplete="off"
-        />
-        <button className="admin-btn is-secondary" type="submit">
-          <MagnifyingGlass size={16} />
-          Найти
-        </button>
-      </div>
-      <div className="admin-register-chips" aria-label="Поле поиска">
-        {([['all', 'Везде'], ['username', 'Логин'], ['email', 'Email'], ['displayName', 'Имя']] as const).map(([value, label]) => (
-          <button key={value} type="button" aria-pressed={searchField === value} onClick={() => onSearchFieldChange(value)}>{label}</button>
-        ))}
-      </div>
-    </form>
-  );
 }
 
 function AdminTableRowActions({
@@ -627,9 +664,17 @@ function AdminTable({
   onSort: (column: 'name' | 'role' | 'tier' | 'created' | 'sessions') => void;
 }) {
   const heading = (column: typeof sortBy, label: string) => (
-    <th scope="col" aria-sort={sortBy === column ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}>
+    <th
+      scope="col"
+      aria-sort={
+        sortBy === column ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'
+      }
+    >
       <button className="admin-column-sort" type="button" onClick={() => onSort(column)}>
-        {label}<span aria-hidden="true">{sortBy === column ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}</span>
+        {label}
+        <span aria-hidden="true">
+          {sortBy === column ? (sortDirection === 'asc' ? ' ↑' : ' ↓') : ''}
+        </span>
       </button>
     </th>
   );
@@ -689,7 +734,7 @@ function useDirectoryPage(input: {
   query: string;
   searchField: 'all' | 'username' | 'email' | 'displayName';
   offset: number;
-  role: 'all' | 'candidate' | 'admin';
+  role: 'all' | 'candidate' | 'admin' | 'CareerPartner';
   tier: 'all' | 'free' | 'pro' | 'executive' | 'enterprise';
   blocked: 'all' | 'yes' | 'no';
   sortBy: 'name' | 'role' | 'tier' | 'created' | 'sessions';
@@ -703,11 +748,15 @@ function useDirectoryPage(input: {
       setState({ status: 'loading' });
       try {
         const page = await listAdminUsers({
-          query, searchField, offset, signal,
+          query,
+          searchField,
+          offset,
+          signal,
           ...(role === 'all' ? {} : { role }),
           ...(tier === 'all' ? {} : { tier }),
           ...(blocked === 'all' ? {} : { blocked: blocked === 'yes' }),
-          sortBy, sortDirection,
+          sortBy,
+          sortDirection,
         });
         if (!signal?.aborted) setState({ status: 'ready', page });
       } catch (reason) {
@@ -733,7 +782,8 @@ function useDirectoryPage(input: {
 }
 
 function roleLabel(role: AdminUser['role']) {
-  return role === 'admin' ? 'Администратор' : 'Кандидат';
+  if (role === 'CareerPartner') return 'Карьерный консультант';
+  return role === 'admin' ? 'Суперадминистратор' : 'Кандидат';
 }
 
 function formatMoment(value: string) {

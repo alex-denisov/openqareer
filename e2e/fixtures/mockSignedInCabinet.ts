@@ -28,7 +28,7 @@ import {
   workspace,
 } from './readabilityWorkspace';
 import type { ResumeDraft } from '../../server/domain/resumeDraft';
-import type { CandidateConnection } from '../../src/features/coach/coachApi';
+import type { AuthUser, CandidateConnection } from '../../src/features/coach/coachApi';
 
 export interface MockCareerDiaryFixture {
   overview: Record<string, unknown>;
@@ -396,6 +396,12 @@ export interface MockSignedInCabinetOptions extends MockRoleSkillAssessmentOptio
   /** Freeze Date at FIXTURE_NOW for specs that compare fixture dates with the present. */
   readonly freezeNow?: boolean;
   readonly candidateId?: string;
+  readonly initialSession?:
+    | (Omit<AuthUser, 'role'> & {
+        role: AuthUser['role'] | 'CareerPartner';
+      })
+    | null;
+  readonly adminRouteHandler?: (route: Route, path: string) => Promise<boolean>;
   readonly careerDiary?: MockCareerDiaryFixture;
   /** B445: роли «Карьеры» с решениями кандидата и принятой ролью. */
   readonly careerRoles?: MockCareerRolesOptions;
@@ -1653,6 +1659,9 @@ export async function mockSignedInCabinet(
   await page.route('**/api/v1/**', async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname;
+    if (path.startsWith('/api/v1/admin/') && options.adminRouteHandler) {
+      if (await options.adminRouteHandler(route, path)) return;
+    }
     if (await mockCandidateNotificationRoutes(route, path, options)) return;
     if (await mockLineCRoutes(route, path, options, assessmentFixture, starStoriesFixture)) return;
     if (await mockCareerDiaryRoutes(route, path, careerDiary)) return;
@@ -1675,7 +1684,14 @@ export async function mockSignedInCabinet(
       });
     }
     if (path.endsWith('/auth/me')) {
-      return route.fulfill({ json: { data: { ...candidate, emailVerified: true } } });
+      return route.fulfill({
+        json: {
+          data:
+            options.initialSession === undefined
+              ? { ...candidate, emailVerified: true }
+              : options.initialSession,
+        },
+      });
     }
     if (path.endsWith('/candidate/workspace')) {
       return route.fulfill({ json: { data: workspace } });

@@ -1,4 +1,6 @@
 import { apiFetch, readData } from '../coach/apiClient';
+import type { ApplicationStage } from '../../../shared/applicationStage';
+import type { ResumeDraft } from '../../../server/domain/resumeDraft';
 
 export type SubscriptionTier = 'free' | 'pro' | 'executive' | 'enterprise';
 export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled';
@@ -6,7 +8,7 @@ export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled'
 export interface AdminUser {
   id: string;
   username: string;
-  role: 'candidate' | 'admin';
+  role: 'candidate' | 'admin' | 'CareerPartner';
   isTest: boolean;
   email: string | null;
   displayName: string | null;
@@ -27,6 +29,55 @@ export interface AdminUser {
 export interface AdminUserPage {
   total: number;
   users: AdminUser[];
+}
+
+export const ADMIN_PERMISSION_KEYS = [
+  'can_view_candidates',
+  'can_edit_campaigns',
+  'can_manage_pool',
+  'can_view_audit',
+] as const;
+
+export type AdminPermission = (typeof ADMIN_PERMISSION_KEYS)[number];
+export type AdminPermissions = Readonly<Record<AdminPermission, boolean>>;
+export type AdminPermissionOverrides = Readonly<Partial<Record<AdminPermission, boolean>>>;
+
+export interface AdminPermissionSnapshot {
+  role: AdminUser['role'];
+  overrides: AdminPermissionOverrides;
+  permissions: AdminPermissions;
+}
+
+export interface CareerPartnerCandidate {
+  userId: string;
+  displayName: string | null;
+  headline: string | null;
+  location: string | null;
+}
+
+export interface CareerPartnerCandidatePage {
+  total: number;
+  items: CareerPartnerCandidate[];
+  nextOffset: number | null;
+}
+
+export interface CareerPartnerCandidateDirectory extends CareerPartnerCandidatePage {
+  permissions: AdminPermissions;
+}
+
+export interface CareerPartnerCandidateProfile {
+  candidate: CareerPartnerCandidate;
+  resume: { draft: ResumeDraft } | null;
+  applications: {
+    total: number;
+    funnel: Record<ApplicationStage, number> & { opened: number };
+  };
+}
+
+export interface CareerPartnerCampaign {
+  roles: { value: string[]; origin: string };
+  regions: { value: string[]; origin: string };
+  remoteOnly: boolean;
 }
 
 export interface AdminAuditRecord {
@@ -234,7 +285,7 @@ export const ADMIN_PAGE_SIZE = 25;
 export async function listAdminUsers(input: {
   query?: string;
   searchField?: 'all' | 'username' | 'email' | 'displayName';
-  role?: 'candidate' | 'admin';
+  role?: 'candidate' | 'admin' | 'CareerPartner';
   tier?: SubscriptionTier;
   blocked?: boolean;
   sortBy?: 'name' | 'role' | 'tier' | 'created' | 'sessions';
@@ -263,7 +314,7 @@ export async function listAdminUsers(input: {
 export async function updateAdminUser(
   userId: string,
   input: {
-    role?: 'candidate' | 'admin';
+    role?: 'candidate' | 'admin' | 'CareerPartner';
     email?: string | null;
     displayName?: string | null;
     headline?: string | null;
@@ -281,6 +332,102 @@ export async function updateAdminUser(
     body: JSON.stringify(input),
   });
   return readData<AdminUser>(response);
+}
+
+export async function getAdminPermissionSnapshot(userId: string): Promise<AdminPermissionSnapshot> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/permissions`);
+  return readData<AdminPermissionSnapshot>(response);
+}
+
+export async function setAdminUserPermission(
+  userId: string,
+  permission: AdminPermission,
+  enabled: boolean,
+): Promise<AdminPermissionSnapshot> {
+  const response = await apiFetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/permissions`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ permission, enabled }),
+  });
+  return readData<AdminPermissionSnapshot>(response);
+}
+
+export async function listAdminPartnerAssignments(
+  partnerId: string,
+): Promise<CareerPartnerCandidatePage> {
+  const response = await apiFetch(
+    `/api/v1/admin/users/${encodeURIComponent(partnerId)}/partner-assignments?limit=100`,
+  );
+  return readData<CareerPartnerCandidatePage>(response);
+}
+
+export async function assignAdminCandidate(
+  partnerId: string,
+  candidateUserId: string,
+): Promise<void> {
+  await apiFetch(`/api/v1/admin/users/${encodeURIComponent(partnerId)}/partner-assignments`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ candidateUserId }),
+  });
+}
+
+export async function removeAdminCandidateAssignment(
+  partnerId: string,
+  candidateUserId: string,
+): Promise<void> {
+  await apiFetch(
+    `/api/v1/admin/users/${encodeURIComponent(partnerId)}/partner-assignments/${encodeURIComponent(candidateUserId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+export async function listCareerPartnerCandidates(input: {
+  offset?: number;
+  signal?: AbortSignal;
+} = {}): Promise<CareerPartnerCandidateDirectory> {
+  const params = new URLSearchParams({ limit: '20', offset: String(input.offset ?? 0) });
+  const response = await apiFetch(`/api/v1/admin/partner/candidates?${params.toString()}`, {
+    ...(input.signal ? { signal: input.signal } : {}),
+  });
+  return readData<CareerPartnerCandidateDirectory>(response);
+}
+
+export async function getCareerPartnerCandidate(
+  candidateUserId: string,
+  signal?: AbortSignal,
+): Promise<CareerPartnerCandidateProfile> {
+  const response = await apiFetch(
+    `/api/v1/admin/partner/candidates/${encodeURIComponent(candidateUserId)}`,
+    signal ? { signal } : {},
+  );
+  return readData<CareerPartnerCandidateProfile>(response);
+}
+
+export async function getCareerPartnerCampaign(
+  candidateUserId: string,
+  signal?: AbortSignal,
+): Promise<CareerPartnerCampaign> {
+  const response = await apiFetch(
+    `/api/v1/admin/partner/candidates/${encodeURIComponent(candidateUserId)}/campaign`,
+    signal ? { signal } : {},
+  );
+  return readData<CareerPartnerCampaign>(response);
+}
+
+export async function updateCareerPartnerCampaign(
+  candidateUserId: string,
+  input: { roles: string[]; regions: string[]; remoteOnly: boolean },
+): Promise<CareerPartnerCampaign> {
+  const response = await apiFetch(
+    `/api/v1/admin/partner/candidates/${encodeURIComponent(candidateUserId)}/campaign`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  );
+  return readData<CareerPartnerCampaign>(response);
 }
 
 export async function blockAdminUser(userId: string, blocked: boolean): Promise<AdminUser> {

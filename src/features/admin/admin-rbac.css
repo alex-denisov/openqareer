@@ -1,0 +1,121 @@
+.admin-role-picker {
+  grid-column: 1 / -1;
+  min-inline-size: 0;
+  margin: var(--career-space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-role-picker__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--career-space-2) var(--career-space-4);
+}
+
+.admin-role-picker__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-2);
+  padding-block: var(--career-space-4);
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.admin-role-picker__option input {
+  accent-color: var(--primary-accent);
+}
+
+.admin-role-picker__option input:disabled {
+  cursor: not-allowed;
+}
+
+.admin-rbac-section {
+  display: grid;
+  gap: var(--career-space-3);
+  padding-block: var(--career-space-4);
+  border-block-start: var(--career-border-width) solid var(--line);
+}
+
+.admin-rbac-section__title {
+  margin: 0;
+  font-size: var(--career-text-md);
+}
+
+.admin-permission-grid {
+  display: grid;
+  gap: var(--career-space-2);
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.admin-permission-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--career-space-3);
+  padding: var(--career-space-3);
+  border: var(--career-border-width) solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.admin-permission-option input,
+.admin-role-picker__option input {
+  accent-color: var(--primary-accent);
+}
+
+.admin-permission-grid:disabled .admin-permission-option {
+  cursor: wait;
+}
+
+.admin-permission-option__copy {
+  display: grid;
+  gap: var(--career-space-1);
+}
+
+.admin-permission-option__copy small,
+.admin-rbac-status {
+  color: var(--text-muted);
+  font-size: var(--career-text-xs);
+}
+
+.admin-rbac-status {
+  margin: 0;
+  color: var(--primary-success);
+}
+
+.admin-assignment-search {
+  display: grid;
+  gap: var(--career-space-2);
+}
+
+.admin-assignment-search__controls,
+.admin-assignment-result,
+.admin-assignment-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--career-space-2);
+}
+
+.admin-assignment-search__controls .admin-input {
+  flex: 1 1 0;
+  min-inline-size: 0;
+}
+
+.admin-assignment-result,
+.admin-assignment-list li {
+  padding-block: var(--career-space-2);
+  border-block-start: var(--career-border-width) solid var(--line);
+}
+
+.admin-assignment-list {
+  display: grid;
+  gap: var(--career-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

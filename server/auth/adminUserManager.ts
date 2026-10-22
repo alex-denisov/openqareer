@@ -16,6 +16,13 @@ import type {
   SubscriptionTier,
   UserRole,
 } from './authTypes';
+import {
+  ADMIN_PERMISSION_KEYS,
+  DEFAULT_ADMIN_PERMISSIONS,
+  resolveAdminPermissions,
+  type AdminPermission,
+  type AdminPermissionOverrides,
+} from '../../shared/roleMatrix';
 
 const scrypt = promisify(scryptCallback);
 
@@ -125,11 +132,19 @@ export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminU
     const pattern = likePattern(needle);
     params.push(...searchColumns.map(() => pattern));
   }
-  if (input.role) { where.push('users.role = ?'); params.push(input.role); }
-  if (input.tier) { where.push("COALESCE(users.subscription_tier, 'free') = ?"); params.push(input.tier); }
-  if (input.blocked !== undefined) where.push(input.blocked ? 'users.blocked_at IS NOT NULL' : 'users.blocked_at IS NULL');
+  if (input.role) {
+    where.push('COALESCE(users.role_override, users.role) = ?');
+    params.push(input.role);
+  }
+  if (input.tier) {
+    where.push("COALESCE(users.subscription_tier, 'free') = ?");
+    params.push(input.tier);
+  }
+  if (input.blocked !== undefined)
+    where.push(input.blocked ? 'users.blocked_at IS NOT NULL' : 'users.blocked_at IS NULL');
   const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
-  const countRow = database.prepare(`SELECT COUNT(*) AS total FROM users ${condition}`)
+  const countRow = database
+    .prepare(`SELECT COUNT(*) AS total FROM users ${condition}`)
     .get(...params) as { total: number };
   const orderColumns = {
     name: 'COALESCE(users.display_name, users.username) COLLATE NOCASE',
@@ -145,7 +160,7 @@ export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminU
     SELECT
       users.id,
       users.username,
-      users.role,
+      COALESCE(users.role_override, users.role) AS role,
       users.is_test,
       users.candidate_id,
       users.email,
@@ -171,7 +186,8 @@ export function listUsers(database: DatabaseSync, input: AdminUserQuery): AdminU
     ORDER BY ${order} ${direction}, users.id ASC
     LIMIT ? OFFSET ?;
   `;
-  const rows = database.prepare(selectSql)
+  const rows = database
+    .prepare(selectSql)
     .all(now, ...params, input.limit, input.offset) as unknown as AdminUserRow[];
 
   return {
@@ -187,7 +203,7 @@ export function getUser(database: DatabaseSync, userId: string): AdminUserRecord
       `SELECT
         users.id,
         users.username,
-        users.role,
+        COALESCE(users.role_override, users.role) AS role,
         users.is_test,
         users.candidate_id,
         users.email,
@@ -226,20 +242,21 @@ export function setUserRole(
   const user = getUser(database, targetUserId);
   if (!user) throw new Error('Пользователь не найден.');
   if (user.role === newRole) return user;
-
-  if (newRole === 'admin') {
-    database
-      .prepare(`UPDATE users SET role = 'admin', candidate_id = NULL, updated_at = ? WHERE id = ?`)
-      .run(new Date().toISOString(), targetUserId);
-  } else {
-    const candidate = candidateStore.createCandidate({
-      dataClass: 'personal',
-      locale: 'ru-RU',
-    });
-    database
-      .prepare(`UPDATE users SET role = 'candidate', candidate_id = ?, updated_at = ? WHERE id = ?`)
-      .run(candidate.id, new Date().toISOString(), targetUserId);
+  if (
+    actorPrincipal?.userId === targetUserId &&
+    user.role === 'admin' &&
+    newRole !== 'admin' &&
+    activeAdminCount(database) <= 1
+  ) {
+    throw new Error('Последний суперадминистратор не может менять свою роль.');
   }
+
+  database
+    .prepare(
+      'DELETE FROM career_partner_assignments WHERE partner_user_id = ? OR candidate_user_id = ?',
+    )
+    .run(targetUserId, targetUserId);
+  persistRoleChange(database, candidateStore, targetUserId, newRole);
 
   if (actorPrincipal) {
     recordAdminAudit(database, {
@@ -253,6 +270,124 @@ export function setUserRole(
   }
 
   return getUser(database, targetUserId)!;
+}
+
+function persistRoleChange(
+  database: DatabaseSync,
+  candidateStore: CandidateStore,
+  userId: string,
+  newRole: UserRole,
+): void {
+  const now = new Date().toISOString();
+  if (newRole !== 'candidate') {
+    database
+      .prepare(
+        `UPDATE users
+      SET role = 'admin', role_override = ?, candidate_id = NULL,
+          admin_permissions_json = NULL, updated_at = ? WHERE id = ?`,
+      )
+      .run(newRole === 'CareerPartner' ? 'CareerPartner' : null, now, userId);
+    return;
+  }
+  const candidate = candidateStore.createCandidate({ dataClass: 'personal', locale: 'ru-RU' });
+  database
+    .prepare(
+      `UPDATE users
+    SET role = 'candidate', role_override = NULL, candidate_id = ?,
+        admin_permissions_json = NULL, updated_at = ? WHERE id = ?`,
+    )
+    .run(candidate.id, now, userId);
+}
+
+function deniedPermissionOverrides(): AdminPermissionOverrides {
+  return {
+    can_view_candidates: false,
+    can_edit_campaigns: false,
+    can_manage_pool: false,
+    can_view_audit: false,
+  };
+}
+
+function parsePermissionOverrides(value: string | null): AdminPermissionOverrides {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return deniedPermissionOverrides();
+    }
+    const source = parsed as Record<string, unknown>;
+    return Object.fromEntries(
+      ADMIN_PERMISSION_KEYS.flatMap((key) =>
+        typeof source[key] === 'boolean' ? [[key, source[key]]] : [],
+      ),
+    ) as AdminPermissionOverrides;
+  } catch {
+    return deniedPermissionOverrides();
+  }
+}
+
+export function getAdminPermissionSnapshot(database: DatabaseSync, userId: string) {
+  const row = database
+    .prepare(
+      `SELECT COALESCE(role_override, role) AS role, admin_permissions_json
+     FROM users WHERE id = ?`,
+    )
+    .get(userId) as { role: UserRole; admin_permissions_json: string | null } | undefined;
+  if (!row) return null;
+  const overrides = parsePermissionOverrides(row.admin_permissions_json);
+  return { role: row.role, overrides, permissions: resolveAdminPermissions(row.role, overrides) };
+}
+
+function activeAdminCount(database: DatabaseSync): number {
+  const row = database
+    .prepare(
+      `SELECT COUNT(*) AS count FROM users
+     WHERE role = 'admin' AND role_override IS NULL AND blocked_at IS NULL`,
+    )
+    .get() as { count: number };
+  return row.count;
+}
+
+export function setAdminPermission(
+  database: DatabaseSync,
+  targetUserId: string,
+  permission: AdminPermission,
+  enabled: boolean,
+  actorPrincipal: AuthPrincipal,
+) {
+  if (actorPrincipal.role !== 'admin') throw new Error('Недостаточно прав.');
+  database.exec('BEGIN IMMEDIATE');
+  try {
+    const current = getAdminPermissionSnapshot(database, targetUserId);
+    if (!current) throw new Error('Пользователь не найден.');
+    if (current.permissions[permission] === enabled) {
+      database.exec('ROLLBACK');
+      return current;
+    }
+    if (actorPrincipal.userId === targetUserId && activeAdminCount(database) <= 1) {
+      throw new Error('Последний суперадминистратор не может менять свои права.');
+    }
+    const overrides: Partial<Record<AdminPermission, boolean>> = { ...current.overrides };
+    if (DEFAULT_ADMIN_PERMISSIONS[current.role][permission] === enabled)
+      delete overrides[permission];
+    else overrides[permission] = enabled;
+    database
+      .prepare('UPDATE users SET admin_permissions_json = ? WHERE id = ?')
+      .run(Object.keys(overrides).length ? JSON.stringify(overrides) : null, targetUserId);
+    recordAdminAudit(database, {
+      actorUserId: actorPrincipal.userId,
+      actorUsername: actorPrincipal.username,
+      action: 'change_user_permission',
+      subjectUserId: targetUserId,
+      subjectUsername: getUser(database, targetUserId)?.username ?? null,
+      detail: JSON.stringify({ permission, enabled }),
+    });
+    database.exec('COMMIT');
+  } catch (error) {
+    database.exec('ROLLBACK');
+    throw error;
+  }
+  return getAdminPermissionSnapshot(database, targetUserId)!;
 }
 
 export function setUserBlocked(
@@ -400,7 +535,6 @@ export function deleteUserByAdmin(
 
   database.prepare(`DELETE FROM users WHERE id = ?`).run(targetUserId);
 
-
   if (actorPrincipal) {
     recordAdminAudit(database, {
       actorUserId: actorPrincipal.userId,
@@ -427,12 +561,19 @@ export function listAudit(database: DatabaseSync, query?: AdminAuditQuery): Admi
   if (query?.action === 'block_user') {
     where.push('action IN (?, ?)');
     params.push('block_user', 'unblock_user');
-  } else if (query?.action) { where.push('action = ?'); params.push(query.action); }
+  } else if (query?.action) {
+    where.push('action = ?');
+    params.push(query.action);
+  }
   const condition = where.length ? `WHERE ${where.join(' AND ')}` : '';
   const direction = query?.sortDirection === 'asc' ? 'ASC' : 'DESC';
-  const countRow = database.prepare(`SELECT COUNT(*) AS total FROM admin_audit ${condition}`)
+  const countRow = database
+    .prepare(`SELECT COUNT(*) AS total FROM admin_audit ${condition}`)
     .get(...params) as { total: number };
-  const rows = database.prepare(`SELECT * FROM admin_audit ${condition} ORDER BY created_at ${direction}, id ASC LIMIT ? OFFSET ?`)
+  const rows = database
+    .prepare(
+      `SELECT * FROM admin_audit ${condition} ORDER BY created_at ${direction}, id ASC LIMIT ? OFFSET ?`,
+    )
     .all(...params, limit, offset) as unknown as AuditRow[];
 
   return {
