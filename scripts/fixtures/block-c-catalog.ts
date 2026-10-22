@@ -222,11 +222,28 @@ function daysAgo(now: Date, days: number): string {
   return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+/**
+ * B510: prod requirements are long English sentences; the stand's short Russian ones hid that
+ * chips showed whole sentences. These rows carry prod-like lines next to their skills.
+ */
+export const BLOCK_C_LONG_REQUIREMENT_ROWS: ReadonlySet<string> = new Set([
+  'bc-greencode-director',
+  'bc-arka-platform',
+  'bc-oblako-head',
+]);
+export const BLOCK_C_LONG_REQUIREMENTS = [
+  'Proven track record as a senior engineering leader - you have owned technical direction for several product teams at once',
+  'Hands-on experience designing event-driven systems on Kafka with strict delivery guarantees across regions',
+  'Strong background in Kubernetes and cloud infrastructure, including cost control and incident management at scale',
+  'Ability to explain complex technical trade-offs to executives and to build trust with business stakeholders',
+] as const;
+
 export function blockCDescription(
   title: string,
   company: string,
   skills: readonly string[],
   workFormat: string,
+  extraRequirements: readonly string[] = [],
 ): string {
   return [
     // B553: формат в первой строке — сервер читает его из первых 300 знаков (выжимки).
@@ -238,6 +255,7 @@ export function blockCDescription(
     // The mockup says «Что мы ждём»; the product's rule extractor knows «Что мы ожидаем».
     'Что мы ожидаем:',
     ...skills.map((skill) => `- ${skill}`),
+    ...extraRequirements.map((line) => `- ${line}`),
     '- опыт управления командой от 30 человек.',
     'Условия:',
     '- оформление по ТК, ДМС;',
@@ -266,7 +284,13 @@ function blockCWorkFormat(row: RowInput): string {
 
 export function blockCVacancy(row: RowInput): UnifiedVacancy {
   const url = `https://${row.source.host}/vacancy/${row.id}`;
-  const description = blockCDescription(row.title, row.company, row.skills, blockCWorkFormat(row));
+  const description = blockCDescription(
+    row.title,
+    row.company,
+    row.skills,
+    blockCWorkFormat(row),
+    BLOCK_C_LONG_REQUIREMENT_ROWS.has(row.id) ? BLOCK_C_LONG_REQUIREMENTS : [],
+  );
   return {
     id: row.id,
     fingerprint: `block-c:${row.id}`,
