@@ -513,7 +513,8 @@
 }
 
 .vacancies-filters[data-active-group='sources'] {
-  width: min(100%, calc(var(--career-target-min) * 10));
+  /* B446-r (W7): «is-wide» макета 4, как «Локации» (34 rem): счёт и подвал в одну строку. */
+  width: min(100%, calc(var(--career-target-min) * 12 + var(--career-space-4)));
 }
 
 .vacancies-filters[data-active-group='roles'] .chip-row {

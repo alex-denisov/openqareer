@@ -96,6 +96,8 @@ function VacancyScreenRow({
   );
 }
 
+const pageCount = new Intl.NumberFormat('ru-RU');
+
 function VacanciesListContent(props: ListContentProps) {
   const catalogDate = catalogSnapshotLabel(props.catalogObservedAt);
   return (
@@ -109,7 +111,8 @@ function VacanciesListContent(props: ListContentProps) {
       <footer className="vacancies-screen-footer" aria-label="Навигация по подборке вакансий">
         <p className="vacancies-screen-page-count" aria-live="polite">
           {/* B446-g4: показанные из выдачи с условиями; догрузка пула — отдельной пометкой. */}
-          Показано {props.items.length} из {props.total || props.items.length}
+          Показано {pageCount.format(props.items.length)} из{' '}
+          {pageCount.format(props.total || props.items.length)}
           {props.poolComplete === false ? ' · загружаем остальные' : null}
           <span className="vacancies-screen-catalog-date">
             {catalogDate ? `. Каталог на ${catalogDate}.` : '. Дата каталога неизвестна.'}
