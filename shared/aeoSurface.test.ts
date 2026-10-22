@@ -61,3 +61,23 @@ describe('витрина для ИИ-поисковиков (B209)', () => {
     expect(full).toContain('Чего продукт не делает');
   });
 });
+
+
+describe('B545: dated pool evidence', () => {
+  const stats = { activeCount: 123, remoteCount: 45, sourceCount: 6, updatedAt: '2026-10-23', vacancies: [] };
+  it('both surfaces name the observation date, source and duplicate boundary', () => {
+    for (const build of [buildLlmsTxt, buildLlmsFullTxt]) {
+      const text = build(stats);
+      expect(text).toContain('2026-10-23');
+      expect(text).toContain('123');
+      expect(text).toContain('45');
+      expect(text).toContain('6');
+      expect(text).toContain('vacancy_pool_index');
+      expect(text).toContain('могут повторяться');
+    }
+  });
+  it('does not invent a current reading when no snapshot was supplied', () => {
+    expect(buildLlmsTxt()).not.toContain('## Срез пула');
+    expect(buildLlmsFullTxt()).not.toContain('## Срез пула');
+  });
+});
