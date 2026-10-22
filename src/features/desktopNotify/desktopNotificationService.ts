@@ -9,6 +9,7 @@ import {
   type DesktopNotificationTarget,
 } from './desktopNotificationPolicy';
 
+import { OPEN_VIEW_EVENT } from './openViewEvent';
 const POLL_INTERVAL_MS = 5 * 60 * 1000;
 const PAGE_SIZE = 50;
 const MAX_PAGES_PER_POLL = 20;
@@ -58,9 +59,7 @@ async function initializeDesktopNotificationService(): Promise<void> {
   }
 
   try {
-    const stored = await invoke<StoredDesktopNotificationState>(
-      'get_desktop_notification_state',
-    );
+    const stored = await invoke<StoredDesktopNotificationState>('get_desktop_notification_state');
     state = stateWithPermission(stored, await readPermission());
     await persistState(state);
   } catch (error) {
@@ -89,7 +88,12 @@ async function toggleNotifications(): Promise<void> {
   if (!state) throw new Error('notification state is unavailable');
   const permission = await readPermission();
   if (permission === false) {
-    await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+    await persistState({
+      ...state,
+      enabled: false,
+      permissionStatus: 'denied',
+      permissionReason: null,
+    });
     return;
   }
   if (state.enabled) {
@@ -141,7 +145,12 @@ async function requestPermission(): Promise<boolean> {
   const permission = permissionGrant(result);
   if (permission === false) {
     if (!state) throw new Error('notification state is unavailable');
-    await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+    await persistState({
+      ...state,
+      enabled: false,
+      permissionStatus: 'denied',
+      permissionReason: null,
+    });
     return false;
   }
   if (permission !== true) throw new Error(`notification permission is unresolved: ${result}`);
@@ -184,7 +193,8 @@ function stateWithPermission(
   if (permission === false) {
     return { ...stored, enabled: false, permissionStatus: 'denied', permissionReason: null };
   }
-  if (permission === true) return { ...stored, permissionStatus: 'granted', permissionReason: null };
+  if (permission === true)
+    return { ...stored, permissionStatus: 'granted', permissionReason: null };
   return { ...stored, enabled: false, permissionStatus: 'unknown', permissionReason: null };
 }
 
@@ -269,10 +279,8 @@ async function runNotificationActionSafely(value: unknown): Promise<void> {
 async function handleNotificationAction(value: unknown): Promise<void> {
   const target = safeNotificationTarget(value);
   if (!target) return;
-  const url = new URL(window.location.href);
-  url.searchParams.set('view', target);
-  url.searchParams.delete('notificationSource');
-  window.location.assign(url.href);
+  // Переход внутри приложения, без перезагрузки: оболочка слушает это событие.
+  window.dispatchEvent(new CustomEvent(OPEN_VIEW_EVENT, { detail: { view: target } }));
 }
 
 function safeNotificationTarget(value: unknown): DesktopNotificationTarget | null {
@@ -302,7 +310,12 @@ async function updateMenuState(next: StoredDesktopNotificationState): Promise<vo
 async function setPermissionDenied(error: unknown, context: string): Promise<void> {
   await reportFailure(context, error);
   if (!state) return;
-  await persistState({ ...state, enabled: false, permissionStatus: 'denied', permissionReason: null });
+  await persistState({
+    ...state,
+    enabled: false,
+    permissionStatus: 'denied',
+    permissionReason: null,
+  });
 }
 
 async function setUnavailable(reason: string, error: unknown, context: string): Promise<void> {
@@ -343,9 +356,8 @@ async function reportFailure(context: string, error: unknown): Promise<void> {
     await invoke('log_desktop_notification_failure', { context, reason });
   } catch (logError) {
     const message = `[desktop-notify] ${context}: ${reason}; журнал недоступен: ${errorMessage(logError)}`;
-    const reportError = (
-      globalThis as typeof globalThis & { reportError?: (error: Error) => void }
-    ).reportError;
+    const reportError = (globalThis as typeof globalThis & { reportError?: (error: Error) => void })
+      .reportError;
     if (reportError) {
       reportError(new Error(message));
     } else if (typeof window !== 'undefined') {

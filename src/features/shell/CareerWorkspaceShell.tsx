@@ -1,4 +1,5 @@
 import { useAdaptationPanelContext } from '../diary/adaptationDiscussion';
+import { OPEN_VIEW_EVENT } from '../desktopNotify/openViewEvent';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AuthUser, CoachTurnStage, CoachTurnSubject } from '../coach/coachApi';
 import { CareerCabinet, type CareerCabinetView } from '../cabinet/CareerCabinet';
@@ -289,6 +290,19 @@ export function CareerWorkspaceShell({
       });
     });
   }
+
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
+  useEffect(() => {
+    const onOpenView = (event: Event) => {
+      const view = (event as CustomEvent<{ view?: unknown }>).detail?.view;
+      if (view === 'opportunities' || view === 'responses' || view === 'notifications') {
+        navigateRef.current(view);
+      }
+    };
+    window.addEventListener(OPEN_VIEW_EVENT, onOpenView);
+    return () => window.removeEventListener(OPEN_VIEW_EVENT, onOpenView);
+  }, []);
 
   const openExpert = useCallback(
     (

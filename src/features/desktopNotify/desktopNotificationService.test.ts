@@ -13,7 +13,9 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: mocks.invoke,
 }));
 vi.mock('@tauri-apps/api/event', () => ({ listen: mocks.listen }));
-vi.mock('../notifications/notificationsApi', () => ({ listNotifications: mocks.listNotifications }));
+vi.mock('../notifications/notificationsApi', () => ({
+  listNotifications: mocks.listNotifications,
+}));
 vi.mock('../../services/desktop/desktopBridge', () => ({
   isTauriEnvironment: () => mocks.tauri,
 }));
@@ -29,6 +31,7 @@ describe('desktopNotificationService in the browser', () => {
       addEventListener: vi.fn(),
       setInterval: vi.fn(),
       location: { href: 'http://localhost/app?keep=1', assign: vi.fn() },
+      dispatchEvent: vi.fn(),
     });
     vi.stubGlobal('navigator', { onLine: true });
   });
@@ -88,15 +91,16 @@ describe('desktopNotificationService in the browser', () => {
 
     expect(mocks.openHandler).toBeTypeOf('function');
     mocks.openHandler?.({ payload: 'private-target' });
-    await vi.waitFor(() => expect(window.location.assign).not.toHaveBeenCalled());
+    await vi.waitFor(() => expect(window.dispatchEvent).not.toHaveBeenCalled());
 
     mocks.openHandler?.({ payload: 'responses' });
 
     await vi.waitFor(() => {
-      expect(window.location.assign).toHaveBeenCalledWith(
-        'http://localhost/app?keep=1&view=responses',
+      expect(window.dispatchEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'openqareer:open-view', detail: { view: 'responses' } }),
       );
     });
+    expect(window.location.assign).not.toHaveBeenCalled();
   });
 
   it('requests permission, sends the native confirmation, and turns notifications off on the next click', async () => {

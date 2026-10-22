@@ -278,6 +278,7 @@ define_class!(
             response: &UNNotificationResponse,
             completion_handler: &DynBlock<dyn Fn()>,
         ) {
+            eprintln!("[desktop-notify] notification_clicked");
             let target = response
                 .notification()
                 .request()
@@ -449,12 +450,35 @@ pub fn focus_main_window(app: AppHandle) -> Result<(), String> {
     bring_window_to_front(&app, &window)
 }
 
+// AppHandle::show() на macOS делает только unhide; активируем приложение явно.
+#[cfg(target_os = "macos")]
+fn activate_macos_app(app: &AppHandle) -> Result<(), String> {
+    let _ = app.show();
+    match objc2::MainThreadMarker::new() {
+        Some(mtm) => activate_shared_app(mtm),
+        None => app
+            .run_on_main_thread(|| {
+                if let Some(mtm) = objc2::MainThreadMarker::new() {
+                    activate_shared_app(mtm);
+                }
+            })
+            .map_err(|_| "app_activate_dispatch_failed".to_string())?,
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn activate_shared_app(mtm: objc2::MainThreadMarker) {
+    let ns_app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+    #[allow(deprecated)]
+    ns_app.activateIgnoringOtherApps(true);
+}
+
 // На macOS show()+set_focus() не поднимают окно, пока активно другое приложение
 // (клик в строке меню или по уведомлению), поэтому сначала активируем приложение.
 fn bring_window_to_front(app: &AppHandle, window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
-    app.show()
-        .map_err(|_| "app_activate_failed".to_string())?;
+    activate_macos_app(app)?;
     #[cfg(not(target_os = "macos"))]
     let _ = app;
     let _ = window.unminimize();
