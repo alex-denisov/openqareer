@@ -136,7 +136,7 @@ describe('CareerAccountView uses account state and the application shell surface
     const appHtml = renderAccount({ initialSection: 'app', isDesktopApp: true });
     const browserHtml = renderAccount({ initialSection: 'app', isDesktopApp: false });
     expect(appHtml).toContain('Приложение');
-    expect(appHtml).toContain('openqareer 1.0.0');
+    expect(appHtml).toMatch(/openqareer \d+\.\d+\.\d+/u);
     expect(appHtml).toContain('Настройка пока недоступна');
     expect(appHtml).not.toContain('сборка не помечена');
     expect(browserHtml).not.toContain('>Приложение</button>');

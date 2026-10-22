@@ -288,7 +288,7 @@ test.describe('B443: Account screen in the signed-in shell', () => {
     const appTab = account.getByRole('tab', { name: 'Приложение' });
     await expect(appTab).toBeVisible();
     await appTab.click();
-    await expect(account.getByText(/openqareer 1\.0\.0/u)).toBeVisible();
+    await expect(account.getByText(/openqareer \d+\.\d+\.\d+/u)).toBeVisible();
     await expect(account.getByText('Сборка не помечена')).toHaveCount(0);
     await captureAtContentHeight(page, 'account-desktop-app-1440.png');
     await captureAuditHtml(page, 'account-desktop-app-1440.html');

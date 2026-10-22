@@ -67,7 +67,7 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
       'Доступна версия 1.0.1',
     );
     await expect(page.getByTestId('app-update-install-btn')).toBeVisible();
-    await expect(page.getByTestId('app-update-enable-auto-btn')).toBeVisible();
+    await expect(page.getByTestId('app-update-enable-auto-btn')).toHaveCount(0);
     await expect(page.getByTestId('app-update-whats-new-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-later-btn')).toBeVisible();
 
@@ -224,7 +224,7 @@ test.describe('B469: Desktop App Update Dialogs & Banners (1440)', () => {
     );
     await expect(page.getByTestId('app-update-cancel-download-btn')).toBeVisible();
     await expect(page.getByTestId('app-update-minimize-btn')).toBeVisible();
-    await expect(page.locator('.career-app-update-progress-row strong')).toHaveText('64 %');
+    await expect(page.getByRole('dialog').locator('.career-app-update-progress-row strong')).toHaveText('64 %');
 
     await verifyNoHorizontalOverflow(page);
     await page.screenshot({

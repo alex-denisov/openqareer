@@ -173,7 +173,7 @@ function ErrorBanner({ message, actions }: { readonly message?: string; readonly
         <button
           type="button"
           className="career-btn is-sm is-primary"
-          data-testid="app-update-retry-btn"
+          data-testid="app-update-strip-retry-btn"
           onClick={actions.onRetryNow}
         >
           Повторить сейчас
