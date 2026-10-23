@@ -58,6 +58,18 @@ export async function setCandidateCompanyWantByName(
   return readData<{ key: string; name: string }>(response);
 }
 
+export interface CandidateCompanyWantEntry {
+  readonly companyKey: string;
+  readonly companyName: string;
+}
+
+/** B422: список отметок «Хочу» — быстрый, без сборки всех компаний подборки. */
+export async function listCandidateCompanyWants(): Promise<CandidateCompanyWantEntry[]> {
+  const response = await apiFetch('/api/v1/candidate/applications/company-wants');
+  const wants = await readData<unknown>(response);
+  return Array.isArray(wants) ? (wants as CandidateCompanyWantEntry[]) : [];
+}
+
 export async function removeCandidateCompanyWant(companyKey: string): Promise<void> {
   const response = await apiFetch(
     `/api/v1/candidate/companies/${encodeURIComponent(companyKey)}/want`,

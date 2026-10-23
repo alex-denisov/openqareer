@@ -11,7 +11,9 @@ import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import type { VacancyApplicationSnapshot } from '../../../shared/vacancyApplication';
 import {
   getCandidateCompanyPage,
+  listCandidateCompanyWants,
   removeCandidateCompanyWant,
+  type CandidateCompanyWantEntry,
   setCandidateCompanyWant,
   setCandidateCompanyWantByName,
 } from './candidateCompaniesApi';
@@ -131,6 +133,27 @@ function companyRecordFromWant(want: { readonly key: string; readonly name: stri
   };
 }
 
+type CompanyRecords = ReadonlyMap<string, CandidateCompanyOpportunity | null>;
+
+/** B422: отметки «Хочу» видны в строке сразу, не дожидаясь поиска каждой компании. */
+export function wantedCompanyRecords(wants: readonly CandidateCompanyWantEntry[]): CompanyRecords {
+  return new Map(
+    wants.map((want) => [
+      companyLookupKey(want.companyName),
+      companyRecordFromWant({ key: want.companyKey, name: want.companyName }),
+    ]),
+  );
+}
+
+/** Найденная запись заменяет прежнюю; ненайденная (null) прежнюю не стирает. */
+export function mergeCompanyRecords(previous: CompanyRecords, next: CompanyRecords): CompanyRecords {
+  const merged = new Map(previous);
+  for (const [key, record] of next) {
+    if (record || !merged.get(key)) merged.set(key, record);
+  }
+  return merged;
+}
+
 async function persistCompanyWant(
   company: CandidateCompanyOpportunity,
 ): Promise<CandidateCompanyOpportunity> {
@@ -207,12 +230,24 @@ function useCompanyRecords(input: VacancyCollectionInput, reloadToken: number) {
     void getCandidateCompanyPage({ offset: 0 }).then(async (page) => {
       if (active) setCount(page.total);
       const matches = await loadCompanyMatches(names, page.items);
-      if (active) setCompanyByName(matches);
+      if (active) setCompanyByName((previous) => mergeCompanyRecords(previous, matches));
     }).catch(() => {
       if (active) setCount(undefined);
     }).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [namesKey, reloadToken]);
+  useEffect(() => {
+    let active = true;
+    void listCandidateCompanyWants()
+      .then((wants) => {
+        const wanted = wantedCompanyRecords(wants); // вне функции обновления: ошибка не роняет отрисовку
+        if (active) setCompanyByName((previous) => mergeCompanyRecords(wanted, previous));
+      })
+      .catch(() => undefined); // без списка отметок строка ждёт полного поиска, как раньше
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
   return { count, loading, companyByName, setCompanyByName };
 }
 
