@@ -1441,8 +1441,100 @@ pub async fn read_session_page(
     })
 }
 
+/// Kept on this machine only (B448): a sanitized LinkedIn page that yielded
+/// nothing, so the parser can be tuned to the real markup. Never uploaded.
+const CAPTURE_DUMP_DIR: &str = "capture-dumps";
+const CAPTURE_DUMPS_KEPT: usize = 10;
+
+/// `linkedin-<kind>-<millis>.html`, or `None` for a kind outside `[a-z-]{1,40}`.
+fn capture_dump_file_name(kind: &str, millis: u128) -> Option<String> {
+    let valid = !kind.is_empty()
+        && kind.len() <= 40
+        && kind.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+    valid.then(|| format!("linkedin-{kind}-{millis}.html"))
+}
+
+/// The oldest dumps beyond `CAPTURE_DUMPS_KEPT`; names sort by their timestamp
+/// within one kind, and every kind is pruned together by name order.
+fn capture_dumps_to_prune(mut names: Vec<String>) -> Vec<String> {
+    names.retain(|name| name.starts_with("linkedin-") && name.ends_with(".html"));
+    names.sort_by_key(|name| {
+        name.trim_end_matches(".html")
+            .rsplit('-')
+            .next()
+            .and_then(|millis| millis.parse::<u128>().ok())
+            .unwrap_or(0)
+    });
+    let excess = names.len().saturating_sub(CAPTURE_DUMPS_KEPT);
+    names.into_iter().take(excess).collect()
+}
+
+/// Saves the open LinkedIn session page through the same sanitizer as
+/// `read_session_page`; the caller cannot hand in a body of its own.
+pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or(0);
+    let name = capture_dump_file_name(kind, millis).ok_or("capture_dump_kind_invalid")?;
+    let label = session_window_label("linkedin").ok_or("session_window_missing")?;
+    let window = app
+        .get_webview(label)
+        .ok_or_else(|| "session_window_missing".to_string())?;
+    let body_json = eval_json(&window, &page_sanitize_script("linkedin")).await?;
+    let body = validate_page_body(
+        serde_json::from_str::<String>(&body_json)
+            .map_err(|error| format!("body_shape: {error}"))?,
+    )?;
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("capture_dump_dir_unavailable: {error}"))?
+        .join(CAPTURE_DUMP_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(&name), body)
+        .map_err(|error| format!("capture_dump_write_failed: {error}"))?;
+    let existing = std::fs::read_dir(&root)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for stale in capture_dumps_to_prune(existing) {
+        let _ = std::fs::remove_file(root.join(stale));
+    }
+    Ok(name)
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn capture_dump_name_accepts_only_a_plain_kind() {
+        assert_eq!(
+            capture_dump_file_name("connections", 1_700_000_000_000).as_deref(),
+            Some("linkedin-connections-1700000000000.html")
+        );
+        assert_eq!(capture_dump_file_name("../etc", 1), None);
+        assert_eq!(capture_dump_file_name("", 1), None);
+        assert_eq!(capture_dump_file_name("Conn", 1), None);
+    }
+
+    #[test]
+    fn capture_dumps_keep_only_the_newest_ten() {
+        let names: Vec<String> = (1..=12)
+            .map(|n| format!("linkedin-connections-{n}.html"))
+            .chain(["notes.txt".to_string()])
+            .collect();
+        assert_eq!(
+            capture_dumps_to_prune(names),
+            vec![
+                "linkedin-connections-1.html".to_string(),
+                "linkedin-connections-2.html".to_string()
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]

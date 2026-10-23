@@ -27,6 +27,7 @@ import {
   disconnectAndForgetSession,
 } from './connectionState';
 import { resetConnectorSession } from './connectorSession';
+import { startLinkedInContactsRefresh } from './linkedinContactsRefresh';
 import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
@@ -106,6 +107,14 @@ export function AccountConnectionsManager({
       current = false;
     };
   }, [initialConnections, publishConnections]);
+
+  const linkedinConnected = connections.some(
+    (connection) => connection.platform === 'linkedin' && connection.status === 'connected',
+  );
+  // B448: contacts only, at most once per 24 h, never the profile.
+  useEffect(() => {
+    if (linkedinConnected) void startLinkedInContactsRefresh(true);
+  }, [linkedinConnected]);
 
   /**
    * The dialog hands over one resume it has already read inside the

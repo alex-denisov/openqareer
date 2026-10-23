@@ -24,6 +24,12 @@ export interface LinkedInConnectionsImportDependencies {
     contacts: readonly LinkedInConnectionImportContact[],
   ) => Promise<LinkedInConnectionImportReceipt | unknown>;
   readonly throttle?: DetailReadThrottle;
+  /**
+   * Keeps the already-sanitized page on this machine when it yields no
+   * contacts, so the parser can be tuned to LinkedIn's real markup. Local
+   * only: nothing here goes to the server.
+   */
+  readonly saveCaptureDump?: (body: string) => Promise<unknown>;
 }
 
 export type LinkedInConnectionsImportOutcome =
@@ -62,7 +68,10 @@ export async function importLinkedInConnectionsFromSession(
     extractLinkedInConnections(page.body),
     MAX_IMPORTED_CONNECTIONS,
   );
-  if (contacts.length === 0) return { status: 'skipped', reason: 'no_contacts' };
+  if (contacts.length === 0) {
+    await dependencies.saveCaptureDump?.(page.body).catch(() => undefined);
+    return { status: 'skipped', reason: 'no_contacts' };
+  }
   // The server logs its own failures; a lost upload is retried on the next read.
   void dependencies.upload(contacts).catch(() => undefined);
   return { status: 'uploading', count: contacts.length };

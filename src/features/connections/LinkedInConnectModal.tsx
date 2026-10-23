@@ -11,6 +11,7 @@ import {
   isConnectorSessionOpen,
   openConnectorSession,
   readSessionPage,
+  saveLinkedInCaptureDump,
   resizeConnectorSession,
   sessionCheckFailure,
   showConnectorSession,
@@ -252,6 +253,7 @@ export function LinkedInConnectModal({
         return importLinkedInConnectionsFromSession({
           readSessionPage: (url) => readSessionPage('linkedin', url),
           upload: importLinkedInConnectionContacts,
+          saveCaptureDump: () => saveLinkedInCaptureDump('connections'),
         });
       },
       onProviderDataCaptured: async () => {

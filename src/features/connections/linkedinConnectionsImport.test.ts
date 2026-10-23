@@ -79,4 +79,32 @@ describe('LinkedIn connections import from the session (B448)', () => {
     expect(uploading.status).toBe('uploading');
     await Promise.resolve();
   });
+
+  it('saves the page locally when it yields no contacts, so the parser can be tuned', async () => {
+    const saveCaptureDump = vi.fn().mockResolvedValue(undefined);
+    const upload = vi.fn();
+    const page = '<main><div>Unknown layout</div></main>';
+    const outcome = await importLinkedInConnectionsFromSession({
+      readSessionPage: vi
+        .fn()
+        .mockResolvedValue({ ok: true, body: page, url: LINKEDIN_CONNECTIONS_URL }),
+      upload,
+      saveCaptureDump,
+      throttle: throttle(),
+    });
+    expect(outcome).toEqual({ status: 'skipped', reason: 'no_contacts' });
+    expect(saveCaptureDump).toHaveBeenCalledWith(page);
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it('does not save a page that yielded contacts', async () => {
+    const saveCaptureDump = vi.fn();
+    await importLinkedInConnectionsFromSession({
+      readSessionPage: vi.fn().mockResolvedValue({ ok: true, body, url: LINKEDIN_CONNECTIONS_URL }),
+      upload: vi.fn().mockResolvedValue({}),
+      saveCaptureDump,
+      throttle: throttle(),
+    });
+    expect(saveCaptureDump).not.toHaveBeenCalled();
+  });
 });
