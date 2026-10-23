@@ -7,7 +7,10 @@ import type {
 } from '../../shared/salaryMarketSnapshot';
 import { leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 
-import { MIN_SALARY_MARKET_SAMPLE } from '../../shared/salaryMarketSnapshot';
+import {
+  MIN_SALARY_MARKET_SAMPLE,
+  MAX_SALARY_MARKET_GROUPS,
+} from '../../shared/salaryMarketSnapshot';
 export type MutableExclusions = { -readonly [Key in keyof SalaryMarketExclusions]: number };
 export function emptySalaryExclusions(): MutableExclusions {
   return {
@@ -29,7 +32,9 @@ interface RangeEvidence {
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 }
-function parseEvidence(json: string | null): RangeEvidence | keyof SalaryMarketExclusions {
+function parseEvidence(
+  json: string | null,
+): RangeEvidence | 'missingPeriod' | 'missingCurrency' | 'openRange' | 'invalidRange' {
   let salary: Record<string, unknown>;
   try {
     salary = object(JSON.parse(json ?? '{}'));
@@ -129,13 +134,19 @@ export function salaryRangeDistribution(
     .prepare(
       `SELECT currency, period, tax_basis AS taxBasis, count(*) AS sampleSize
     FROM salary_market_ranges WHERE role = ? GROUP BY currency, period, tax_basis
-    ORDER BY currency, period, tax_basis`,
+    ORDER BY sampleSize DESC, currency, period, tax_basis`,
     )
-    .all(role) as unknown as SalaryGroupRow[];
+    .iterate(role) as unknown as Iterable<SalaryGroupRow>;
   const groups: SalaryMarketGroup[] = [];
+  let hasCandidates = false;
   for (const group of candidates) {
+    hasCandidates = true;
     if (group.sampleSize < MIN_SALARY_MARKET_SAMPLE) {
       excluded.belowMinimumSample += group.sampleSize;
+      continue;
+    }
+    if (groups.length >= MAX_SALARY_MARKET_GROUPS) {
+      excluded.outsidePublishedGroups = (excluded.outsidePublishedGroups ?? 0) + group.sampleSize;
       continue;
     }
     groups.push({
@@ -149,7 +160,7 @@ export function salaryRangeDistribution(
     : {
         status: 'unavailable',
         reason:
-          candidates.length === 0 && excluded.missingPeriod > 0
+          !hasCandidates && excluded.missingPeriod > 0
             ? 'missing_explicit_salary_period'
             : 'no_comparable_ranges',
         excluded,

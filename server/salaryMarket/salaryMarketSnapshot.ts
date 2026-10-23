@@ -1,8 +1,16 @@
 import {
+  prepareClassifiedSalaryCatalog,
+  selectClassifiedSalaryRoles,
+  classifiedSalaryPage,
+  type ClassifiedSalaryRow,
+} from './salaryMarketClassifiedCatalog';
+import { prepareSalarySkillCounts, salarySkillsOf } from './salaryMarketSkillCounts';
+import {
   SALARY_MARKET_INDEX_LIMIT,
-  SALARY_MARKET_ROLE_LIMIT,
   salarySnapshotIndexable,
   type SalaryMarketIndexEntry,
+  type SalaryMarketGrade,
+  type SalaryMarketProfession,
 } from '../../shared/salaryMarketSnapshot';
 import {
   emptySalaryExclusions,
@@ -48,109 +56,104 @@ export function salaryPercentiles(observations: readonly SalaryObservation[]) {
   };
 }
 
-interface CatalogRow {
-  readonly cluster_id: string;
-  readonly role_slug: string;
-  readonly role_label: string | null;
-  readonly skills_json: string;
-  readonly salary_json: string | null;
+interface SliceState {
+  count: number;
+  excluded: MutableExclusions;
+  markers: Set<string>;
 }
-
-function skillsOf(json: string): string[] {
-  try {
-    const parsed: unknown = JSON.parse(json);
-    return Array.isArray(parsed)
-      ? [
-          ...new Set(
-            parsed
-              .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-              .map((item) => item.trim()),
-          ),
-        ]
-      : [];
-  } catch {
-    return [];
-  }
+interface RoleState extends SliceState {
+  readonly label: string;
+  readonly profession: SalaryMarketProfession;
+  readonly gradeStates: Map<SalaryMarketGrade, SliceState>;
 }
-
-function prepareSkillCounts(database: DatabaseSync) {
-  // Keep the potentially large skill vocabulary in SQLite, not an unbounded JS map.
-  database.exec(`CREATE TEMP TABLE IF NOT EXISTS salary_market_skill_counts (
-    role TEXT NOT NULL, skill TEXT NOT NULL, count INTEGER NOT NULL,
-    PRIMARY KEY (role, skill)
-  ) WITHOUT ROWID`);
-  database.exec('DELETE FROM salary_market_skill_counts');
-  const addSkill = database.prepare(`INSERT INTO salary_market_skill_counts VALUES (?, ?, 1)
-    ON CONFLICT(role, skill) DO UPDATE SET count = count + 1`);
-  const topSkills = database.prepare(`SELECT skill AS name, count FROM salary_market_skill_counts
-    WHERE role = ? ORDER BY count DESC, skill ASC LIMIT 15`);
-  return { addSkill, topSkills };
+function sliceState(): SliceState {
+  return { count: 0, excluded: emptySalaryExclusions(), markers: new Set() };
 }
-
-/** Limit the role vocabulary before reading any per-cluster JSON. */
-function selectedTitleRoles(database: DatabaseSync, now: Date): string[] {
-  const rows = database
-    .prepare(
-      `SELECT role_slug FROM catalog_entries
-    WHERE status = 'active' AND role_slug IS NOT NULL AND published_ms >= ? AND published_ms <= ?
-    GROUP BY role_slug ORDER BY count(*) DESC, role_slug ASC LIMIT ?`,
-    )
-    .all(now.getTime() - 90 * 86_400_000, now.getTime(), SALARY_MARKET_ROLE_LIMIT) as {
-    role_slug: string;
-  }[];
-  return rows.map((row) => row.role_slug);
+function roleState(row: ClassifiedSalaryRow): RoleState {
+  const profession: SalaryMarketProfession = row.profession_id
+    ? { kind: 'b267', roleId: row.profession_id, matchedAlias: row.matched_alias ?? undefined }
+    : { kind: 'unclassified_title' };
+  return { ...sliceState(), label: row.role_label, profession, gradeStates: new Map() };
 }
-
-/** Maintenance only. Keyset chunks bound JSON materialization; the HTTP reader never scans. */
-function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMarketSnapshot[] {
-  const roles = selectedTitleRoles(database, now);
-  if (roles.length === 0) return [];
-  const statement = database.prepare(`SELECT e.cluster_id, e.role_slug, e.role_label, e.skills_json,
-      json_extract(c.cluster_json, '$.salary') AS salary_json FROM catalog_entries e
-      LEFT JOIN vacancy_clusters c ON c.id = e.cluster_id
-    WHERE e.cluster_id > ? AND status = 'active'
-      AND published_ms >= ? AND published_ms <= ? AND e.role_slug IN (${roles.map(() => '?').join(',')}) ORDER BY e.cluster_id LIMIT 500`);
-  const { addSkill, topSkills } = prepareSkillCounts(database);
-  prepareSalaryRangeScratch(database);
-  const groups = new Map<string, { label: string; count: number; excluded: MutableExclusions }>();
+type SkillCounter = ReturnType<typeof prepareSalarySkillCounts>;
+function recordObservation(
+  database: DatabaseSync,
+  skills: SkillCounter,
+  key: string,
+  row: ClassifiedSalaryRow,
+  state: SliceState,
+): void {
+  state.count += 1;
+  recordSalaryRange(database, key, row.cluster_id, row.salary_json, state.excluded);
+  skills.add(key, salarySkillsOf(row.skills_json));
+  if (row.marker && state.markers.size < 8) state.markers.add(row.marker);
+}
+function accumulateClassifiedRoles(
+  database: DatabaseSync,
+  skills: SkillCounter,
+  roles: readonly string[],
+): Map<string, RoleState> {
+  const groups = new Map<string, RoleState>();
   let cursor = '';
   while (true) {
-    const rows = statement.all(
-      cursor,
-      now.getTime() - 90 * 86_400_000,
-      now.getTime(),
-      ...roles,
-    ) as unknown as CatalogRow[];
+    const rows = classifiedSalaryPage(database, roles, cursor);
     if (rows.length === 0) break;
     for (const row of rows) {
-      const group = groups.get(row.role_slug) ?? {
-        label: row.role_label ?? row.role_slug,
-        count: 0,
-        excluded: emptySalaryExclusions(),
-      };
-      group.count += 1;
-      recordSalaryRange(database, row.role_slug, row.cluster_id, row.salary_json, group.excluded);
-      for (const name of skillsOf(row.skills_json)) addSkill.run(row.role_slug, name);
-      groups.set(row.role_slug, group);
+      const group = groups.get(row.role) ?? roleState(row);
+      recordObservation(database, skills, row.role, row, group);
+      const grade = group.gradeStates.get(row.grade) ?? sliceState();
+      recordObservation(database, skills, `${row.role}|${row.grade}`, row, grade);
+      group.gradeStates.set(row.grade, grade);
+      groups.set(row.role, group);
     }
     cursor = rows[rows.length - 1]!.cluster_id;
   }
-  return [...groups.entries()].map(([role, group]) => ({
+  return groups;
+}
+function assembleRoleSnapshot(
+  database: DatabaseSync,
+  skills: SkillCounter,
+  role: string,
+  group: RoleState,
+  now: Date,
+): SalaryMarketSnapshot {
+  const gradeSlices = [...group.gradeStates.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([grade, state]) => ({
+      grade,
+      sampleSize: state.count,
+      skills: skills.read(`${role}|${grade}`, state.count),
+      salary: salaryRangeDistribution(database, `${role}|${grade}`, state.excluded),
+      evidence: { field: 'title' as const, markers: [...state.markers] },
+    }));
+  return {
     role,
     roleLabel: group.label,
+    profession: group.profession,
     updatedAt: now.toISOString(),
     windowDays: 90,
     sampleSize: group.count,
-    skills: (topSkills.all(role) as { name: string; count: number }[]).map(({ name, count }) => ({
-      name,
-      count,
-      frequency: Math.round((count / group.count) * 10000) / 100,
-    })),
+    skills: skills.read(role, group.count),
     salary: salaryRangeDistribution(database, role, group.excluded),
+    gradeSlices,
     quarterlyTrend: 'unavailable',
-    grades: 'unavailable',
+    grades: gradeSlices.some((slice) => slice.grade !== 'unknown')
+      ? 'published_title_evidence'
+      : 'unavailable',
     source: 'deduplicated_public_catalog',
-  }));
+  };
+}
+
+/** Classification is disk-backed before the bounded role publication decision, never on HTTP. */
+function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMarketSnapshot[] {
+  prepareClassifiedSalaryCatalog(database, now);
+  const roles = selectClassifiedSalaryRoles(database);
+  if (roles.length === 0) return [];
+  const skills = prepareSalarySkillCounts(database);
+  prepareSalaryRangeScratch(database);
+  return [...accumulateClassifiedRoles(database, skills, roles)].map(([role, state]) =>
+    assembleRoleSnapshot(database, skills, role, state, now),
+  );
 }
 
 /** Always release the maintenance-only scratch vocabulary, including after failed writes. */
@@ -162,7 +165,7 @@ export function computeSalaryMarketSnapshots(
     return buildSalaryMarketSnapshots(database, now);
   } finally {
     database.exec(
-      'DROP TABLE IF EXISTS temp.salary_market_skill_counts; DROP TABLE IF EXISTS temp.salary_market_ranges',
+      'DROP TABLE IF EXISTS temp.salary_market_skill_counts; DROP TABLE IF EXISTS temp.salary_market_ranges; DROP TABLE IF EXISTS temp.salary_market_classified',
     );
   }
 }
@@ -182,6 +185,7 @@ export function writeSalaryMarketSnapshots(
       .map((snapshot) => ({
         role: snapshot.role,
         roleLabel: snapshot.roleLabel,
+        profession: snapshot.profession,
         sampleSize: snapshot.sampleSize,
         updatedAt: snapshot.updatedAt,
         indexable: salarySnapshotIndexable(snapshot),

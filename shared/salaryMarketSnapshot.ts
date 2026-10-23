@@ -1,13 +1,14 @@
 export const MIN_SALARY_MARKET_SAMPLE = 5;
+export const MAX_SALARY_MARKET_GROUPS = 12;
 export const SALARY_MARKET_ROLE_LIMIT = 100;
 export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
 
 /** B351: one deduplicated catalog cluster is one observation; no source-row weighting.
- * Skill frequency uses all active catalog clusters published within the last 90 days
- * for the role, including clusters without extracted skills. This is a catalog sample,
- * not a census of the complete vacancy pool. At most 100 title-derived role slugs
- * are selected by eligible sample size; this is not B267-normalized profession/grade
- * aggregation. Grade/trend require evidence not yet stored.
+ * Roles use unambiguous B267 ontology aliases. Unknown raw titles remain separate,
+ * explicitly unclassified and noindex. Classification happens before the top100
+ * publication cap. Skill frequency includes rows without extracted skills.
+ * Grade slices use explicit published title markers only; IC is never Junior.
+ * This remains a catalog sample, not a census or representative-market claim.
  */
 export interface SalaryMarketSnapshot {
   readonly role: string;
@@ -22,7 +23,9 @@ export interface SalaryMarketSnapshot {
   }[];
   readonly salary: SalaryMarketDistribution;
   readonly quarterlyTrend: 'unavailable';
-  readonly grades: 'unavailable';
+  readonly grades: 'unavailable' | 'published_title_evidence';
+  readonly profession?: SalaryMarketProfession;
+  readonly gradeSlices?: readonly SalaryMarketGradeSlice[];
   readonly source: 'deduplicated_public_catalog';
 }
 
@@ -49,6 +52,7 @@ export interface SalaryMarketExclusions {
   readonly openRange: number;
   readonly invalidRange: number;
   readonly belowMinimumSample: number;
+  readonly outsidePublishedGroups?: number;
 }
 export interface SalaryMarketGroup {
   readonly currency: string;
@@ -79,6 +83,7 @@ export type SalaryMarketDistribution =
 export interface SalaryMarketIndexEntry {
   readonly role: string;
   readonly roleLabel: string;
+  readonly profession?: SalaryMarketProfession;
   readonly sampleSize: number;
   readonly updatedAt: string;
   readonly indexable: boolean;
@@ -87,8 +92,21 @@ export interface SalaryMarketIndexEntry {
 export function salarySnapshotIndexable(snapshot: SalaryMarketSnapshot | null): boolean {
   return (
     snapshot !== null &&
+    snapshot.profession?.kind === 'b267' &&
     snapshot.sampleSize >= MIN_SALARY_MARKET_SAMPLE &&
     snapshot.salary.status === 'available' &&
     snapshot.salary.groups.some((group) => group.sampleSize >= MIN_SALARY_MARKET_SAMPLE)
   );
+}
+
+export type SalaryMarketGrade = 'junior' | 'middle' | 'senior' | 'lead' | 'unknown';
+export type SalaryMarketProfession =
+  | { readonly kind: 'b267'; readonly roleId: string; readonly matchedAlias?: string }
+  | { readonly kind: 'unclassified_title' };
+export interface SalaryMarketGradeSlice {
+  readonly grade: SalaryMarketGrade;
+  readonly sampleSize: number;
+  readonly skills: SalaryMarketSnapshot['skills'];
+  readonly salary: SalaryMarketDistribution;
+  readonly evidence: { readonly field: 'title'; readonly markers: readonly string[] };
 }

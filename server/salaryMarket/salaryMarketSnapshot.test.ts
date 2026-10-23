@@ -12,9 +12,14 @@ function fixture() {
   const db = new DatabaseSync(':memory:');
   db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
   db.exec(
-    `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT)`,
+    `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT, title TEXT)`,
   );
-  const insert = db.prepare('INSERT INTO catalog_entries VALUES (?, ?, ?, ?, ?, ?)');
+  db.exec(
+    'CREATE TRIGGER fixture_title AFTER INSERT ON catalog_entries BEGIN UPDATE catalog_entries SET title = NEW.role_label WHERE cluster_id = NEW.cluster_id; END',
+  );
+  const insert = db.prepare(
+    'INSERT INTO catalog_entries (cluster_id, role_slug, role_label, skills_json, published_ms, status) VALUES (?, ?, ?, ?, ?, ?)',
+  );
   const now = Date.parse('2026-10-23T00:00:00Z');
   insert.run('a', 'developer', 'Developer', '["TypeScript","TypeScript","SQL"]', now, 'active');
   insert.run('b', 'developer', 'Developer', '["SQL"]', now, 'active');
@@ -46,11 +51,12 @@ describe('public salary market snapshot', () => {
     expect(readSalaryMarketIndex(db)).toEqual([]);
     const snapshots = computeSalaryMarketSnapshots(db, new Date(now));
     writeSalaryMarketSnapshots(db, snapshots);
-    expect(readSalaryMarketSnapshot(db, 'developer')).toEqual(snapshots[0]);
+    expect(readSalaryMarketSnapshot(db, snapshots[0]!.role)).toEqual(snapshots[0]);
     expect(readSalaryMarketIndex(db)).toEqual([
       {
-        role: 'developer',
+        role: snapshots[0]!.role,
         roleLabel: 'Developer',
+        profession: { kind: 'unclassified_title' },
         sampleSize: 2,
         updatedAt: new Date(now).toISOString(),
         indexable: false,
@@ -81,24 +87,26 @@ describe('public salary market snapshot', () => {
   });
   it('computes at most 100 deterministic title roles while preserving every selected role observation', () => {
     const { db, now } = fixture();
-    const insert = db.prepare('INSERT INTO catalog_entries VALUES (?, ?, ?, ?, ?, ?)');
+    const insert = db.prepare(
+      'INSERT INTO catalog_entries (cluster_id, role_slug, role_label, skills_json, published_ms, status) VALUES (?, ?, ?, ?, ?, ?)',
+    );
     for (let index = 0; index < 120; index += 1)
       insert.run(`title-${index}`, `role-${index}`, `Role ${index}`, '["SQL"]', now, 'active');
     for (let index = 0; index < 550; index += 1)
       insert.run(`popular-${index}`, 'popular', 'Popular title', '["SQL"]', now, 'active');
     const snapshots = computeSalaryMarketSnapshots(db, new Date(now));
     expect(snapshots).toHaveLength(100);
-    expect(snapshots.find((snapshot) => snapshot.role === 'popular')).toMatchObject({
+    expect(snapshots.find((snapshot) => snapshot.roleLabel === 'Popular title')).toMatchObject({
       sampleSize: 550,
       skills: [{ name: 'SQL', count: 550, frequency: 100 }],
     });
-    expect(snapshots.some((snapshot) => snapshot.role === 'role-99')).toBe(false);
+    expect(snapshots.some((snapshot) => snapshot.roleLabel === 'Role 99')).toBe(false);
     expect(
       computeSalaryMarketSnapshots(db, new Date(now)).map((snapshot) => snapshot.role),
     ).toEqual(snapshots.map((snapshot) => snapshot.role));
     writeSalaryMarketSnapshots(db, snapshots);
     expect(readSalaryMarketIndex(db)).toHaveLength(100);
-    expect(readSalaryMarketIndex(db)[0]?.role).toBe('popular');
+    expect(readSalaryMarketIndex(db)[0]?.roleLabel).toBe('Popular title');
     db.close();
   });
   it('cleans temporary counters on success and failed computation before a repeated run', () => {

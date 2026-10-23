@@ -1,24 +1,38 @@
-# B351 public market snapshot foundation
+# B351 public profession, posted-grade and salary snapshots
 
-The maintenance process computes a rolling 90-day snapshot of the deduplicated
-public catalog, one `cluster_id` per observation. Before reading cluster JSON,
-SQL selects at most 100 title-derived role slugs by eligible sample size descending,
-with role slug ascending to break ties. Only those selected roles are scanned;
-the JS role map and snapshot output are globally bounded to 100. All eligible
-observations within each selected role remain in its denominator.
+The maintenance process classifies raw published catalog titles into B267 role
+IDs with the existing `rulesParse` dictionary, then aggregates a rolling 90-day
+sample. An ontology alias must be unambiguous; generic single-word aliases must
+also be a canonical role name. The dictionary's first collision is not treated
+as classification evidence. Function-only matches do not invent a profession.
+Unmatched/ambiguous titles stay separate per normalized raw title, have an
+`unclassified_title` label and are excluded from search indexing.
 
-A role here is the published job title normalized by the public catalog, not a
-B267-normalized profession or a grade. The slice does not establish general
-profession-wide salary estimates, representative market coverage, Junior/Middle/
-Senior/Lead distributions or quarterly trends. Full US-14.6/B351 remains open
-until those results have their own data and acceptance evidence. It counts each skill once per
-cluster; vacancies without extracted skills remain in the denominator. Top 15
-skills, catalog sample size and calculation timestamp are real derived values.
-This is a catalog sample, not the complete pool or a representative population.
-JSON is materialized in keyset batches of 500; skill counters stay in SQLite.
+Classification materializes only 500 source rows in JS at a time; its compact
+projection lives in temporary SQLite tables. Only after classification does SQL
+select at most 100 published groups: recognized professions first, then sample
+size descending, then stable slug. All eligible deduplicated clusters in each
+selected profession remain in its denominator. This is a catalog sample, not a
+census or a claim of market representativeness. The bounded result has at most
+100 roles, five posted-grade slices per role, 15 skills per slice and 12 salary
+cohorts per slice. A source row contributes once to the aggregate and once to its
+own grade slice, never twice within one denominator.
+
+The canonical public slug derives from the ontology English role title, while
+`profession.roleId` retains the B267 ID. Grade evidence is separate: only explicit
+Junior/Middle/Senior/Lead markers in the original published title are used, before
+catalog title cleanup. IC is never Junior. Lead Generation, Middle East, Senior
+Director and conflicting grade markers remain unconfirmed. Grade evidence stores
+`field: title` and up to eight actual marker examples; it describes the posting,
+not the actual seniority of a person or a general qualification assessment.
+Unconfirmed rows have their own unknown slice, with its own denominator.
+
 The web-facing readers perform primary-key lookups only: one role snapshot or
 a prepared directory limited to 100 roles. The directory and role rows publish
-in one transaction, with indexable roles first, then sample size descending.
+in one transaction. Grade filters select already prepared slices; no catalog scan
+or live classification belongs in HTTP. Scratch tables are released after success
+and failure. No candidate-owned resume, account, session or private outcome data
+is read by this pipeline.
 
 Salary distributions use only closed ranges with explicit provider period evidence.
 Each currency, period and gross/net/unknown tax basis has a separate group with a
@@ -37,10 +51,11 @@ reads only salary JSON from the existing catalog-to-cluster join; no migration o
 historical backfill assigns periods to legacy data. Until normal source sync has
 observed enough comparable records, the salary result remains unavailable.
 
-Junior/Middle/Senior/Lead, quarterly trend and candidate outcomes remain unavailable.
-A standalone point helper additionally rejects mixed period/currency/tax basis or
+Quarterly trend and candidate outcomes remain unavailable: no historical or
+candidate-outcome evidence has been added. A standalone point helper rejects
+mixed period/currency/tax basis or
 duplicate cluster IDs. Salary snapshot tests cover actual provider-to-persisted-
-catalog roundtrips and use role slugs directly from the catalog projection.
+catalog roundtrips and verify canonical profession IDs and posted-grade denominators.
 
 ## Provider evidence and remaining work
 
@@ -68,5 +83,7 @@ catalog roundtrips and use role slugs directly from the catalog projection.
    must be checked after a normal sync; fixture counts are not provider evidence.
 
 No live crawling, provider account action, HTTP route or UI is part of this
-foundation. Full B351 acceptance additionally requires observed comparable salary samples,
-filters, public SSR/UI and verified owner acceptance.
+foundation. Full US-14.6 acceptance additionally requires production observation evidence,
+public SSR/UI and owner acceptance, as well as any historical/trend claims and
+other story criteria that remain unsupported. Implementing this pipeline alone
+does not prove those external outcomes.
