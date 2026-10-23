@@ -1384,6 +1384,10 @@ fn next_quiet_readings(
 struct LazyWalk {
     /// Card count on the page after each step, for the diagnostics log.
     cards_per_step: Vec<u32>,
+    /// Cards with text the collector returned at each step.
+    batch_per_step: Vec<usize>,
+    /// The first collector failure, as a code, if any step failed.
+    collect_error: Option<String>,
     /// Connections kept by the shell, merged from every step's batch.
     collected: CollectedConnections,
     /// The first path segment of a page the walk was moved to, if any.
@@ -1470,9 +1474,23 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyW
         walk.cards_per_step.push(state.cards);
         if budget.compact_connections {
             // Before the list recycles the rows that just scrolled past.
-            if let Ok(json) = eval_json(window, &connections_collect_call()).await {
-                if let Ok(batch) = serde_json::from_str::<Vec<(String, String, usize)>>(&json) {
+            let batch = eval_json(window, connections_collect_call())
+                .await
+                .and_then(|json| {
+                    serde_json::from_str::<String>(&json)
+                        .and_then(|batch| {
+                            serde_json::from_str::<Vec<(String, String, usize)>>(&batch)
+                        })
+                        .map_err(|_| "collect_shape".to_string())
+                });
+            match batch {
+                Ok(batch) => {
+                    walk.batch_per_step.push(batch.len());
                     walk.collected.merge(batch);
+                }
+                Err(error) => {
+                    walk.batch_per_step.push(0);
+                    walk.collect_error.get_or_insert(error);
                 }
             }
         }
@@ -1590,8 +1608,13 @@ pub async fn read_session_page(
         if scroll_budget.compact_connections {
             let millis = started.elapsed().as_millis().to_string();
             read_diagnostic(app, request, "walk_ms", Some(&millis));
-            for cards in &walk.cards_per_step {
+            for (cards, batch) in walk.cards_per_step.iter().zip(&walk.batch_per_step) {
                 read_diagnostic(app, request, "cards", Some(&cards.to_string()));
+                read_diagnostic(app, request, "step_cards", Some(&batch.to_string()));
+            }
+            if let Some(error) = walk.collect_error.as_deref() {
+                let code = first_code(error);
+                read_diagnostic(app, request, "collect_failed", Some(code));
             }
             if let Some(segment) = walk.left_for.as_deref() {
                 read_diagnostic(app, request, "left", Some(segment));
@@ -1613,7 +1636,14 @@ pub async fn read_session_page(
             });
         }
         if scroll_budget.compact_connections {
+            // A full sanitize of a list this long exceeds the body limit by
+            // design (run 8); an empty list ends in `no_contacts` instead.
             read_diagnostic(app, request, "compact_empty", None);
+            return Ok(SessionPageReport {
+                ok: true,
+                url: requested_url,
+                body: "<main></main>".to_string(),
+            });
         }
     }
 
@@ -1661,8 +1691,23 @@ async fn sanitized_page_json(
 /// Reads the connection cards showing text now; see the script's own header.
 const CONNECTIONS_COLLECT_SCRIPT: &str = include_str!("connections_collect.js");
 
-fn connections_collect_call() -> String {
-    format!("({CONNECTIONS_COLLECT_SCRIPT})()")
+/// The script as the page runs it: the file is already self-invoking, and
+/// wrapping it again turned its trailing `;` into a syntax error (run 8).
+fn connections_collect_call() -> &'static str {
+    CONNECTIONS_COLLECT_SCRIPT
+}
+
+/// The leading `snake_case` code of an error, for the diagnostics log.
+fn first_code(error: &str) -> &str {
+    let end = error
+        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+        .unwrap_or(error.len())
+        .min(60);
+    if end == 0 {
+        "unknown"
+    } else {
+        &error[..end]
+    }
 }
 
 /// `eval_cancelled` / `eval_timeout`: the page moved under the script.
@@ -1757,6 +1802,19 @@ fn is_connections_page_url(raw: &str) -> bool {
 /// Saves the open LinkedIn session page through the same sanitizer as
 /// `read_session_page`; the caller cannot hand in a body of its own.
 pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
+    let saved = write_session_capture_dump(app, kind).await;
+    if let Err(error) = &saved {
+        let _ = append_connector_diagnostic(
+            app,
+            "linkedin-read",
+            "dump_failed",
+            Some(first_code(error)),
+        );
+    }
+    saved
+}
+
+async fn write_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
     let millis = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|elapsed| elapsed.as_millis())
@@ -1859,10 +1917,17 @@ pub fn append_connector_diagnostic(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_collector_is_a_plain_call() {
-        let call = connections_collect_call();
-        assert!(call.starts_with("(/**"));
-        assert!(call.ends_with(")()"));
+    fn error_codes_stop_at_the_first_non_code_character() {
+        assert_eq!(first_code("eval_failed: boom"), "eval_failed");
+        assert_eq!(first_code("collect_shape"), "collect_shape");
+        assert_eq!(first_code(": nothing"), "unknown");
+    }
+
+    #[test]
+    fn the_collector_runs_unwrapped() {
+        let call = connections_collect_call().trim_end();
+        assert!(call.starts_with("/**"));
+        assert!(call.ends_with("})();"));
     }
 
     #[test]

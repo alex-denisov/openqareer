@@ -10,11 +10,24 @@ const fixture = readFileSync(
   'utf8',
 );
 type Card = [path: string, html: string, lines: number];
-const batch = (): Card[] => (0, eval)(source)() as Card[];
+/**
+ * The shell evaluates the file exactly as it is, with no wrapping
+ * (`connector_session.rs`). A wrapper around a trailing `;` once made every
+ * call a syntax error, and the walk collected nothing (run 8).
+ */
+const batch = (): Card[] => JSON.parse((0, eval)(source) as string) as Card[];
 /** What the shell builds from the batches it kept (connector_session.rs). */
 const emit = (cards: readonly Card[]) => `<main>${cards.map((card) => card[1]).join('')}</main>`;
 
 describe('LinkedIn connections batch collector (B448)', () => {
+  it('returns its batch when evaluated as the shell evaluates it', () => {
+    document.documentElement.innerHTML = fixture;
+    // A string, like the sanitize pass: the shell parses it as JSON twice.
+    const value = (0, eval)(source) as unknown;
+    expect(typeof value).toBe('string');
+    expect(JSON.parse(value as string)).toHaveLength(4);
+  });
+
   beforeEach(() => {
     document.documentElement.innerHTML = fixture;
   });

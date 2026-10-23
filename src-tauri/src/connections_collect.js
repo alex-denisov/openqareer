@@ -6,7 +6,11 @@
  * page: the shell calls this after every scroll step and merges the batches
  * by profile path on its own side.
  *
- * Returns `[path, html, lines]` per card, where `html` is the minimal
+ * The file is a complete self-invoking script: the shell evaluates it as it
+ * is, with no wrapper (a wrapper around the trailing `;` broke run 8).
+ *
+ * Returns a JSON string (the same shape the sanitize pass hands back) of
+ * `[path, html, lines]` per card, where `html` is the minimal
  * `<div><a href="/in/…"><p>name</p><p>headline</p></a></div>`: only the
  * profile path and the first two text lines of the profile link leave the
  * page, HTML-escaped. A card without text is left out.
@@ -55,8 +59,8 @@
         break;
       }
     }
-    return out;
+    return JSON.stringify(out);
   } catch (e) {
-    return [];
+    return '[]';
   }
-});
+})();
