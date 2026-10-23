@@ -10,6 +10,7 @@ describe('salary snapshot maintenance schedule', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-23T00:00:00Z'));
     const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
     db.exec(
       `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT)`,
     );
@@ -37,6 +38,7 @@ describe('salary snapshot maintenance schedule', () => {
   it('reports a failed projection without publishing fabricated data', () => {
     vi.useFakeTimers();
     const db = new DatabaseSync(':memory:');
+    db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
     const log = { info: vi.fn(), error: vi.fn() };
     const stop = scheduleSalaryMarketSnapshots(db, log);
     vi.advanceTimersByTime(4 * 60_000);

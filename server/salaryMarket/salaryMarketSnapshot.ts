@@ -1,9 +1,24 @@
+import {
+  SALARY_MARKET_INDEX_LIMIT,
+  salarySnapshotIndexable,
+  type SalaryMarketIndexEntry,
+} from '../../shared/salaryMarketSnapshot';
+import {
+  emptySalaryExclusions,
+  prepareSalaryRangeScratch,
+  recordSalaryRange,
+  salaryRangeDistribution,
+  type MutableExclusions,
+} from './salaryMarketRanges';
 import type { DatabaseSync } from 'node:sqlite';
 import type { SalaryMarketSnapshot, SalaryObservation } from '../../shared/salaryMarketSnapshot';
 
 export const SALARY_MARKET_TABLE_SQL = `CREATE TABLE IF NOT EXISTS salary_market_snapshots (
   role TEXT PRIMARY KEY,
   payload TEXT NOT NULL
+) STRICT;
+CREATE TABLE IF NOT EXISTS salary_market_index (
+  id INTEGER PRIMARY KEY CHECK(id = 1), payload TEXT NOT NULL
 ) STRICT`;
 
 /** Nearest-rank percentiles. Callers must supply a single comparable evidence group. */
@@ -37,6 +52,7 @@ interface CatalogRow {
   readonly role_slug: string;
   readonly role_label: string | null;
   readonly skills_json: string;
+  readonly salary_json: string | null;
 }
 
 function skillsOf(json: string): string[] {
@@ -72,12 +88,14 @@ function prepareSkillCounts(database: DatabaseSync) {
 
 /** Maintenance only. Keyset chunks bound JSON materialization; the HTTP reader never scans. */
 function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMarketSnapshot[] {
-  const statement =
-    database.prepare(`SELECT cluster_id, role_slug, role_label, skills_json FROM catalog_entries
-    WHERE cluster_id > ? AND status = 'active' AND role_slug IS NOT NULL
-      AND published_ms >= ? AND published_ms <= ? ORDER BY cluster_id LIMIT 500`);
+  const statement = database.prepare(`SELECT e.cluster_id, e.role_slug, e.role_label, e.skills_json,
+      json_extract(c.cluster_json, '$.salary') AS salary_json FROM catalog_entries e
+      LEFT JOIN vacancy_clusters c ON c.id = e.cluster_id
+    WHERE e.cluster_id > ? AND status = 'active' AND role_slug IS NOT NULL
+      AND published_ms >= ? AND published_ms <= ? ORDER BY e.cluster_id LIMIT 500`);
   const { addSkill, topSkills } = prepareSkillCounts(database);
-  const groups = new Map<string, { label: string; count: number }>();
+  prepareSalaryRangeScratch(database);
+  const groups = new Map<string, { label: string; count: number; excluded: MutableExclusions }>();
   let cursor = '';
   while (true) {
     const rows = statement.all(
@@ -90,8 +108,10 @@ function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMa
       const group = groups.get(row.role_slug) ?? {
         label: row.role_label ?? row.role_slug,
         count: 0,
+        excluded: emptySalaryExclusions(),
       };
       group.count += 1;
+      recordSalaryRange(database, row.role_slug, row.cluster_id, row.salary_json, group.excluded);
       for (const name of skillsOf(row.skills_json)) addSkill.run(row.role_slug, name);
       groups.set(row.role_slug, group);
     }
@@ -108,7 +128,7 @@ function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMa
       count,
       frequency: Math.round((count / group.count) * 10000) / 100,
     })),
-    salary: { status: 'unavailable', reason: 'missing_explicit_salary_period' },
+    salary: salaryRangeDistribution(database, role, group.excluded),
     quarterlyTrend: 'unavailable',
     grades: 'unavailable',
     source: 'deduplicated_public_catalog',
@@ -123,7 +143,9 @@ export function computeSalaryMarketSnapshots(
   try {
     return buildSalaryMarketSnapshots(database, now);
   } finally {
-    database.exec('DROP TABLE IF EXISTS temp.salary_market_skill_counts');
+    database.exec(
+      'DROP TABLE IF EXISTS temp.salary_market_skill_counts; DROP TABLE IF EXISTS temp.salary_market_ranges',
+    );
   }
 }
 
@@ -138,6 +160,27 @@ export function writeSalaryMarketSnapshots(
     database.exec('DELETE FROM salary_market_snapshots');
     const insert = database.prepare('INSERT INTO salary_market_snapshots VALUES (?, ?)');
     for (const snapshot of snapshots) insert.run(snapshot.role, JSON.stringify(snapshot));
+    const index = snapshots
+      .map((snapshot) => ({
+        role: snapshot.role,
+        roleLabel: snapshot.roleLabel,
+        sampleSize: snapshot.sampleSize,
+        updatedAt: snapshot.updatedAt,
+        indexable: salarySnapshotIndexable(snapshot),
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.indexable) - Number(a.indexable) ||
+          b.sampleSize - a.sampleSize ||
+          a.role.localeCompare(b.role, 'en'),
+      )
+      .slice(0, SALARY_MARKET_INDEX_LIMIT);
+    database
+      .prepare(
+        `INSERT INTO salary_market_index VALUES (1, ?)
+      ON CONFLICT(id) DO UPDATE SET payload = excluded.payload`,
+      )
+      .run(JSON.stringify(index));
     database.exec('COMMIT');
   } catch (error) {
     database.exec('ROLLBACK');
@@ -166,5 +209,23 @@ export function readSalaryMarketSnapshot(
     return JSON.parse(row.payload) as SalaryMarketSnapshot;
   } catch {
     return null;
+  }
+}
+
+/** Directory prepared by maintenance: at most SALARY_MARKET_INDEX_LIMIT entries, one key read. */
+export function readSalaryMarketIndex(database: DatabaseSync): readonly SalaryMarketIndexEntry[] {
+  if (
+    !database
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'salary_market_index'")
+      .get()
+  )
+    return [];
+  const row = database.prepare('SELECT payload FROM salary_market_index WHERE id = 1').get() as
+    { payload: string } | undefined;
+  if (!row) return [];
+  try {
+    return JSON.parse(row.payload) as SalaryMarketIndexEntry[];
+  } catch {
+    return [];
   }
 }

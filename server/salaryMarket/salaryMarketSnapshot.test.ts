@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   computeSalaryMarketSnapshots,
   readSalaryMarketSnapshot,
+  readSalaryMarketIndex,
   writeSalaryMarketSnapshots,
   salaryPercentiles,
 } from './salaryMarketSnapshot';
 
 function fixture() {
   const db = new DatabaseSync(':memory:');
+  db.exec('CREATE TABLE vacancy_clusters (id TEXT PRIMARY KEY, cluster_json TEXT)');
   db.exec(
     `CREATE TABLE catalog_entries (cluster_id TEXT PRIMARY KEY, role_slug TEXT, role_label TEXT, skills_json TEXT, published_ms INTEGER, status TEXT)`,
   );
@@ -31,7 +33,7 @@ describe('public salary market snapshot', () => {
       { name: 'SQL', count: 2, frequency: 100 },
       { name: 'TypeScript', count: 1, frequency: 50 },
     ]);
-    expect(snapshot?.salary).toEqual({
+    expect(snapshot?.salary).toMatchObject({
       status: 'unavailable',
       reason: 'missing_explicit_salary_period',
     });
@@ -41,12 +43,40 @@ describe('public salary market snapshot', () => {
   it('publishes atomically and reads only the requested role; missing snapshot is null', () => {
     const { db, now } = fixture();
     expect(readSalaryMarketSnapshot(db, 'developer')).toBeNull();
+    expect(readSalaryMarketIndex(db)).toEqual([]);
     const snapshots = computeSalaryMarketSnapshots(db, new Date(now));
     writeSalaryMarketSnapshots(db, snapshots);
     expect(readSalaryMarketSnapshot(db, 'developer')).toEqual(snapshots[0]);
+    expect(readSalaryMarketIndex(db)).toEqual([
+      {
+        role: 'developer',
+        roleLabel: 'Developer',
+        sampleSize: 2,
+        updatedAt: new Date(now).toISOString(),
+        indexable: false,
+      },
+    ]);
     expect(readSalaryMarketSnapshot(db, 'unknown')).toBeNull();
     writeSalaryMarketSnapshots(db, []);
+    expect(readSalaryMarketIndex(db)).toEqual([]);
     expect(readSalaryMarketSnapshot(db, 'developer')).toBeNull();
+    db.close();
+  });
+  it('bounds the prepared directory and preserves the previous atomic publication on failure', () => {
+    const { db, now } = fixture();
+    const [base] = computeSalaryMarketSnapshots(db, new Date(now));
+    const snapshots = Array.from({ length: 120 }, (_, index) => ({
+      ...base!,
+      role: `role-${index}`,
+      sampleSize: index + 1,
+    }));
+    writeSalaryMarketSnapshots(db, snapshots);
+    const index = readSalaryMarketIndex(db);
+    expect(index).toHaveLength(100);
+    expect(index[0]?.sampleSize).toBe(120);
+    expect(() => writeSalaryMarketSnapshots(db, [base!, base!])).toThrow();
+    expect(readSalaryMarketIndex(db)).toEqual(index);
+    expect(readSalaryMarketSnapshot(db, 'role-119')?.sampleSize).toBe(120);
     db.close();
   });
   it('cleans temporary counters on success and failed computation before a repeated run', () => {
@@ -58,6 +88,9 @@ describe('public salary market snapshot', () => {
       db
         .prepare("SELECT 1 FROM sqlite_temp_master WHERE name = 'salary_market_skill_counts'")
         .get(),
+    ).toBeUndefined();
+    expect(
+      db.prepare("SELECT 1 FROM sqlite_temp_master WHERE name = 'salary_market_ranges'").get(),
     ).toBeUndefined();
     expect(computeSalaryMarketSnapshots(db, new Date(now))[0]?.sampleSize).toBe(2);
     expect(

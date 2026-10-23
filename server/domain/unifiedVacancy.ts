@@ -1,3 +1,4 @@
+import type { SalaryPeriodEvidence, VacancySalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import type {
   VacancyLevelMatch,
   VacancyRequirementCoverage,
@@ -32,6 +33,8 @@ export interface VacancySalary {
   to?: number;
   currency?: string;
   gross?: boolean;
+  period?: VacancySalaryPeriod;
+  periodEvidence?: SalaryPeriodEvidence;
 }
 
 export interface VacancyProvenance {

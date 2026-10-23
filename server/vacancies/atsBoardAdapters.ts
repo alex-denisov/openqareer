@@ -1,3 +1,4 @@
+import { leverSalaryPeriod } from '../../shared/vacancySalaryPeriod';
 import type { UnifiedVacancy } from '../domain/unifiedVacancy';
 import { htmlToFeedText } from '../connectors/feedText';
 import {
@@ -279,7 +280,7 @@ const READERS: Readonly<Record<AtsProvider, BoardReader>> = {
         description: leverText(job),
         skills: [],
         employmentType: text(categories.commitment) || undefined,
-        salary: rangeSalary(job.salaryRange),
+        salary: leverSalary(job.salaryRange),
         url: text(job.hostedUrl) || text(job.applyUrl),
         publishedAt: fromEpochMilliseconds(job.createdAt),
       });
@@ -520,6 +521,20 @@ function cleanXmlText(value: string): string {
 function placeOf(city: string, country: string): string | undefined {
   const parts = [city, country].map((part) => part.trim()).filter((part) => part.length > 0);
   return parts.length > 0 ? parts.join(', ') : undefined;
+}
+
+function leverSalary(value: unknown): UnifiedVacancy['salary'] | undefined {
+  const salary = rangeSalary(value);
+  if (!salary) return undefined;
+  const rawPeriod = record(value).interval;
+  const period = leverSalaryPeriod(rawPeriod);
+  return period && typeof rawPeriod === 'string'
+    ? {
+        ...salary,
+        period,
+        periodEvidence: { field: 'lever.salaryRange.interval', value: rawPeriod },
+      }
+    : salary;
 }
 
 /**
