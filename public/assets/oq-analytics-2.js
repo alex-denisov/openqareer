@@ -6,7 +6,7 @@
  * Отдельный файл, потому что CSP прода запрещает встроенные скрипты и стили:
  * вид баннера — классы .oq-consent в src/features/site/publicSite.css.
  * Работает только на публичных страницах openqareer.com (лендинг, /faq, /support,
- * /legal/*, /tools/country-fit, /salaries и страницы профессий). В кабинете (/app), в приложении для компьютера и в тестах на
+ * /legal/*). В кабинете (/app), в приложении для компьютера и в тестах на
  * localhost счётчиков и баннера нет. Проверка на localhost:
  * localStorage['oq-analytics-dev'] = '1'.
  * Ссылка «Настройки cookie» в подвале — любой элемент с data-oq-consent-open.
@@ -37,25 +37,9 @@
   if (!production && storageGet('oq-analytics-dev') !== '1') return;
 
   var path = location.pathname.replace(/\/$/, '') || '/';
-  var publicTool =
-    path === '/tools/country-fit' ||
-    path === '/salaries' ||
-    /^\/salaries\/[a-z0-9]+(?:-[a-z0-9]+)*$/.test(path);
   var publicPage =
-    path === '/' ||
-    path === '/faq' ||
-    path === '/support' ||
-    path.indexOf('/legal/') === 0 ||
-    publicTool;
+    path === '/' || path === '/faq' || path === '/support' || path.indexOf('/legal/') === 0;
   if (!publicPage) return;
-  var toolReferrer = '';
-  if (publicTool && document.referrer) {
-    try {
-      toolReferrer = new URL(document.referrer).origin;
-    } catch (_error) {
-      toolReferrer = '';
-    }
-  }
 
   // Выбор: { ym: boolean, ga: boolean } или null, если посетитель ещё не выбирал.
   // GDPR: для посетителей из ЕС/ЕЭЗ, Великобритании и Швейцарии отказ стоит рядом
@@ -122,11 +106,11 @@
     window.ym.l = 1 * new Date();
     window.ym(YM_ID, 'init', {
       ssr: true,
-      webvisor: !publicTool,
-      clickmap: !publicTool,
+      webvisor: true,
+      clickmap: true,
       ecommerce: 'dataLayer',
-      referrer: publicTool ? toolReferrer : document.referrer,
-      url: publicTool ? location.origin + path : location.href,
+      referrer: document.referrer,
+      url: location.href,
       accurateTrackBounce: true,
       trackLinks: true,
     });
@@ -140,17 +124,7 @@
       window.dataLayer.push(arguments);
     };
     window.gtag('js', new Date());
-    window.gtag(
-      'config',
-      GA_ID,
-      publicTool
-        ? {
-            page_location: location.origin + path,
-            page_referrer: toolReferrer,
-            page_title: 'Public career tool',
-          }
-        : {},
-    );
+    window.gtag('config', GA_ID);
     load('https://www.googletagmanager.com/gtag/js?id=' + GA_ID);
   }
   function start(choice) {

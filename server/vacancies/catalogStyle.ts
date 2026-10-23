@@ -250,7 +250,7 @@ export const CATALOG_STYLE = `body{margin:0}
   margin-bottom: 16px;
 }
 /*
- * B535: cookie notice built by public/assets/oq-analytics-2.js on the public
+ * B535: cookie notice built by public/assets/oq-analytics-3.js on the public
  * pages (landing, /faq, /support, /legal/*). Global on purpose: legal pages
  * are not wrapped in \`.ps\`. Quiet bottom card, no backdrop, no layout shift.
  */

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-const script = readFileSync(new URL('../public/assets/oq-analytics-2.js', import.meta.url), 'utf8');
+const script = readFileSync(new URL('../public/assets/oq-analytics-3.js', import.meta.url), 'utf8');
 function run(path: string, consent: boolean) {
   const dom = new JSDOM('<!doctype html><body></body>', {
     url: `https://openqareer.com${path}`,
@@ -52,4 +52,14 @@ describe('consented public-tool analytics privacy', () => {
       dom.window.close();
     },
   );
+});
+
+describe('immutable analytics asset references', () => {
+  it('points public entry and server catalog HTML at the new asset', () => {
+    for (const file of ['../index.html', '../server/vacancies/vacancyCatalogDocument.ts']) {
+      const source = readFileSync(new URL(file, import.meta.url), 'utf8');
+      expect(source).toContain('/assets/oq-analytics-3.js');
+      expect(source).not.toContain('/assets/oq-analytics-2.js');
+    }
+  });
 });
