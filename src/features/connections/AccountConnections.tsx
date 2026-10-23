@@ -27,7 +27,10 @@ import {
   disconnectAndForgetSession,
 } from './connectionState';
 import { resetConnectorSession } from './connectorSession';
-import { startLinkedInContactsRefresh } from './linkedinContactsRefresh';
+import {
+  scheduleLinkedInContactsRefresh,
+  startLinkedInContactsRefresh,
+} from './linkedinContactsRefresh';
 import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
@@ -113,7 +116,8 @@ export function AccountConnectionsManager({
   );
   // B448: contacts only, at most once per 24 h, never the profile.
   useEffect(() => {
-    if (linkedinConnected) void startLinkedInContactsRefresh(true);
+    if (!linkedinConnected) return undefined;
+    return scheduleLinkedInContactsRefresh(() => void startLinkedInContactsRefresh(true));
   }, [linkedinConnected]);
 
   /**

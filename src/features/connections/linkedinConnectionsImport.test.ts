@@ -27,7 +27,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
     });
 
     expect(readSessionPage).toHaveBeenCalledWith(LINKEDIN_CONNECTIONS_URL);
-    expect(outcome).toEqual({ status: 'uploading', count: 3 });
+    expect(outcome).toEqual({ status: 'uploading', count: 3, parsed: 4 });
     expect(upload).toHaveBeenCalledWith(
       expect.arrayContaining([expect.objectContaining({ companyName: 'Север Тех' })]),
     );

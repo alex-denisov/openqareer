@@ -1386,6 +1386,9 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u
     let mut last_cards = 0;
     let mut quiet = 0;
     let mut cards_per_step = Vec::new();
+    if budget.compact_connections {
+        let _ = eval_json(window, &connections_collect_call("reset")).await;
+    }
     let deadline = tokio::time::Instant::now() + budget.max_duration;
     for _ in 0..budget.max_steps {
         if tokio::time::Instant::now() >= deadline {
@@ -1404,6 +1407,10 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u
             break;
         };
         cards_per_step.push(state.cards);
+        if budget.compact_connections {
+            // Before the list recycles the rows that just scrolled past.
+            let _ = eval_json(window, &connections_collect_call("collect")).await;
+        }
         quiet = next_quiet_readings(quiet, &state, last_height, last_cards);
         if quiet >= budget.quiet_readings {
             break;
@@ -1570,27 +1577,21 @@ async fn sanitized_page_json(
     Err(last_error)
 }
 
-/// One `<div><a href="/in/…"><p>name</p><p>headline</p></a></div>` per card:
-/// only the profile path and the first two text lines of the profile link,
-/// HTML-escaped. Empty when no card matches, so the caller falls back to the
-/// full sanitize and the zero-contacts capture still sees the page.
-const CONNECTIONS_COMPACT_SCRIPT: &str = r#"(function(){try{
-var esc=function(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
-var cards=document.querySelectorAll('[componentkey^="ConnectionCard_"]');var out=[];
-for(var i=0;i<cards.length;i++){var links=cards[i].querySelectorAll('a[href]');
-for(var j=0;j<links.length;j++){var u;try{u=new URL(links[j].getAttribute('href'),location.origin);}catch(e){continue;}
-if(!/^\/in\/[^\/]+\/?$/.test(u.pathname))continue;var ps=links[j].querySelectorAll('p');var lines=[];
-for(var k=0;k<ps.length&&lines.length<2;k++){var t=(ps[k].textContent||'').replace(/\s+/g,' ').trim();if(t)lines.push(t.slice(0,300));}
-if(!lines.length)continue;out.push('<div><a href="'+esc(u.pathname)+'">'+lines.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</a></div>');break;}}
-return out.length?'<main>'+out.join('')+'</main>':'';}catch(e){return '';}})()"#;
+/// Collects connection cards during the walk; see the script's own header.
+const CONNECTIONS_COLLECT_SCRIPT: &str = include_str!("connections_collect.js");
 
-/// The compact card list, or the full sanitize when the page has no cards.
+fn connections_collect_call(mode: &str) -> String {
+    format!("({CONNECTIONS_COLLECT_SCRIPT})('{mode}')")
+}
+
+/// The cards collected during the walk, or the full sanitize when none was
+/// seen, so the zero-contacts capture still sees the page.
 async fn compact_connections_json(
     app: &AppHandle,
     request: &SessionWindowRequest,
     window: &Webview,
 ) -> Result<String, String> {
-    let compact = eval_json(window, CONNECTIONS_COMPACT_SCRIPT).await;
+    let compact = eval_json(window, &connections_collect_call("emit")).await;
     let has_cards = compact
         .as_deref()
         .is_ok_and(|json| serde_json::from_str::<String>(json).is_ok_and(|body| !body.is_empty()));
@@ -1598,6 +1599,12 @@ async fn compact_connections_json(
         read_diagnostic(app, request, "compact_empty", None);
         return sanitized_page_json(app, request, window).await;
     }
+    let collected = compact
+        .as_deref()
+        .map(|json| json.matches("<div><a href=").count())
+        .unwrap_or(0)
+        .to_string();
+    read_diagnostic(app, request, "collected", Some(&collected));
     compact
 }
 
@@ -1794,6 +1801,13 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_collector_is_called_with_its_mode() {
+        let call = connections_collect_call("collect");
+        assert!(call.starts_with("(/**"));
+        assert!(call.ends_with(")('collect')"));
+    }
+
     #[test]
     fn the_connections_list_gets_a_longer_and_more_patient_walk() {
         let connections = lazy_scroll_budget("/mynetwork/invite-connect/connections/");

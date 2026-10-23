@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { refreshLinkedInContacts } from './linkedinContactsRefresh';
+import {
+  refreshLinkedInContacts,
+  scheduleLinkedInContactsRefresh,
+} from './linkedinContactsRefresh';
 
 function deps(overrides: Partial<Parameters<typeof refreshLinkedInContacts>[0]> = {}) {
   return {
@@ -10,7 +13,7 @@ function deps(overrides: Partial<Parameters<typeof refreshLinkedInContacts>[0]> 
       markRead: vi.fn<(at: number) => void>(),
     },
     openOutOfSight: vi.fn().mockResolvedValue(true),
-    importContacts: vi.fn().mockResolvedValue({ status: 'uploading', count: 3 }),
+    importContacts: vi.fn().mockResolvedValue({ status: 'uploading', count: 3, parsed: 12 }),
     close: vi.fn().mockResolvedValue(undefined),
     prepareRoute: vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) }),
     log: vi.fn(),
@@ -21,7 +24,11 @@ function deps(overrides: Partial<Parameters<typeof refreshLinkedInContacts>[0]> 
 describe('contacts-only LinkedIn refresh (B448)', () => {
   it('opens the session out of sight, reads contacts, then closes it', async () => {
     const d = deps();
-    await expect(refreshLinkedInContacts(d)).resolves.toEqual({ status: 'uploading', count: 3 });
+    await expect(refreshLinkedInContacts(d)).resolves.toEqual({
+      status: 'uploading',
+      count: 3,
+      parsed: 12,
+    });
     expect(d.openOutOfSight).toHaveBeenCalledOnce();
     expect(d.importContacts).toHaveBeenCalledOnce();
     expect(d.close).toHaveBeenCalledOnce();
@@ -133,6 +140,31 @@ describe('contacts-only LinkedIn refresh (B448)', () => {
     expect(
       Math.abs((vi.mocked(done.throttle.markRead).mock.calls[0]?.[0] as number) - Date.now()),
     ).toBeLessThan(5_000);
+    expect(done.log).toHaveBeenCalledWith('parsed', '12');
+    expect(done.log).toHaveBeenCalledWith('with_company', '3');
     expect(done.log).toHaveBeenCalledWith('uploading', '3');
+  });
+});
+
+describe('contacts refresh scheduling (B448)', () => {
+  it('starts only after the delay, so the account load comes first', () => {
+    vi.useFakeTimers();
+    const start = vi.fn();
+    scheduleLinkedInContactsRefresh(start, 30_000);
+    vi.advanceTimersByTime(29_999);
+    expect(start).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1);
+    expect(start).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it('does not start when the screen closes before the delay', () => {
+    vi.useFakeTimers();
+    const start = vi.fn();
+    const cancel = scheduleLinkedInContactsRefresh(start, 30_000);
+    cancel();
+    vi.advanceTimersByTime(60_000);
+    expect(start).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

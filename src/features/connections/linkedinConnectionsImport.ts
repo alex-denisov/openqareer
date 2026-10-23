@@ -33,7 +33,13 @@ export interface LinkedInConnectionsImportDependencies {
 }
 
 export type LinkedInConnectionsImportOutcome =
-  | { readonly status: 'uploading'; readonly count: number }
+  | {
+      readonly status: 'uploading';
+      /** Contacts with a company, sent to the server. */
+      readonly count: number;
+      /** People read from the page. */
+      readonly parsed: number;
+    }
   | {
       readonly status: 'skipped';
       readonly reason: 'recently_read' | 'read_failed' | 'not_connections_page' | 'no_contacts';
@@ -70,17 +76,15 @@ export async function importLinkedInConnectionsFromSession(
   ) {
     return { status: 'skipped', reason: 'not_connections_page', detail: landedSection(page) };
   }
-  const contacts = toConnectionImportContacts(
-    extractLinkedInConnections(page.body),
-    MAX_IMPORTED_CONNECTIONS,
-  );
+  const connections = extractLinkedInConnections(page.body);
+  const contacts = toConnectionImportContacts(connections, MAX_IMPORTED_CONNECTIONS);
   if (contacts.length === 0) {
     await dependencies.saveCaptureDump?.(page.body).catch(() => undefined);
-    return { status: 'skipped', reason: 'no_contacts' };
+    return { status: 'skipped', reason: 'no_contacts', detail: String(connections.length) };
   }
   // The server logs its own failures; a lost upload is retried on the next read.
   void dependencies.upload(contacts).catch(() => undefined);
-  return { status: 'uploading', count: contacts.length };
+  return { status: 'uploading', count: contacts.length, parsed: connections.length };
 }
 
 /** The leading `snake_case` code of a shell error, e.g. `page_load_timeout`. */

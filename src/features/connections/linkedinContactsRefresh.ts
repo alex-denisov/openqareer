@@ -67,10 +67,13 @@ export async function refreshLinkedInContacts(
   const completed = outcome.status === 'uploading' || outcome.reason === 'no_contacts';
   const now = Date.now();
   throttle.markRead(completed ? now : now - CONTACTS_REFRESH_INTERVAL_MS + FAILURE_RETRY_MS);
-  dependencies.log(
-    outcome.status === 'uploading' ? 'uploading' : outcome.reason,
-    outcome.status === 'uploading' ? String(outcome.count) : outcome.detail,
-  );
+  if (outcome.status === 'uploading') {
+    dependencies.log('parsed', String(outcome.parsed));
+    dependencies.log('with_company', String(outcome.count));
+    dependencies.log('uploading', String(outcome.count));
+  } else {
+    dependencies.log(outcome.reason, outcome.detail);
+  }
   return outcome;
 }
 
@@ -180,4 +183,20 @@ export function startLinkedInContactsRefresh(
       inFlight = undefined;
     });
   return inFlight;
+}
+
+/** Delay before the background read after «Подключения» opens (B448). */
+export const CONTACTS_REFRESH_START_DELAY_MS = 30_000;
+
+/**
+ * Starts the refresh only after the account screen has settled: the read
+ * raises the protected route and opens a window, none of which may compete
+ * with the account load. Returns a cancel for the effect cleanup.
+ */
+export function scheduleLinkedInContactsRefresh(
+  start: () => void,
+  delayMs: number = CONTACTS_REFRESH_START_DELAY_MS,
+): () => void {
+  const timer = setTimeout(start, delayMs);
+  return () => clearTimeout(timer);
 }
