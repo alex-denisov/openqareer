@@ -1,5 +1,13 @@
 import { Minus, Plus } from '@phosphor-icons/react';
-import { formatCityDisplay, markerLabel, type MapNode } from './vacancyMapCluster';
+import { pluralRu } from '../../../shared/pluralRu';
+import {
+  formatCityDisplay,
+  markerLabel,
+  type MapClusterNode,
+  type MapNode,
+} from './vacancyMapCluster';
+
+const TIP_CITY_ROWS = 6;
 
 function capsuleAccessibleName(node: MapNode): string {
   if (!node.isCluster) {
@@ -9,6 +17,38 @@ function capsuleAccessibleName(node: MapNode): string {
     .map((city) => `${formatCityDisplay(city.city, city.country).city} (${city.count})`)
     .join(', ');
   return `Кластер: ${node.totalCount} вакансий (${names}). Нажмите для приближения`;
+}
+
+/** B553: состав кластера — заголовок, до шести крупнейших городов, остаток одной строкой. */
+function ClusterTip({ node }: { readonly node: MapClusterNode }) {
+  const cities = [...node.cities].sort((a, b) => b.count - a.count);
+  const shown = cities.slice(0, TIP_CITY_ROWS);
+  const rest = cities.slice(TIP_CITY_ROWS);
+  const restCount = rest.reduce((sum, city) => sum + city.count, 0);
+  const where = cities.length === 1 ? 'в 1 городе' : `в ${cities.length} городах`;
+  return (
+    <>
+      <span className="career-map-tip-title">
+        {pluralRu(node.totalCount, ['вакансия', 'вакансии', 'вакансий'])} {where}
+      </span>
+      <span className="career-map-tip-list">
+        {shown.map((city) => (
+          <span className="career-map-tip-row" key={`${city.city}|${city.country ?? ''}`}>
+            <span className="career-map-tip-city">
+              {formatCityDisplay(city.city, city.country).city}
+            </span>
+            <span className="career-map-tip-count">{city.count}</span>
+          </span>
+        ))}
+      </span>
+      {rest.length > 0 ? (
+        <span className="career-map-tip-more">
+          и ещё {pluralRu(rest.length, ['город', 'города', 'городов'])} · {restCount}
+        </span>
+      ) : null}
+      <span className="career-map-tip-hint">Нажмите, чтобы приблизить</span>
+    </>
+  );
 }
 
 /** B446-g4/B553: капсула «Москва 74» поверх карты (макет 4: 44 px, 13 px, число акцентом). */
@@ -27,9 +67,6 @@ export function MapCapsuleButton({
   readonly active: boolean;
   readonly onClick: () => void;
 }) {
-  const tooltip = node.isCluster
-    ? capsuleAccessibleName(node)
-    : formatCityDisplay(node.city.city, node.city.country).tooltip;
   return (
     <button
       type="button"
@@ -51,7 +88,11 @@ export function MapCapsuleButton({
       </span>
       {/* B553: свой элемент вместо title — нативная подсказка в окне Tauri без фона. Текст уже в aria-label. */}
       <span className="career-map-tip" aria-hidden="true">
-        {tooltip}
+        {node.isCluster ? (
+          <ClusterTip node={node} />
+        ) : (
+          formatCityDisplay(node.city.city, node.city.country).tooltip
+        )}
       </span>
     </button>
   );
