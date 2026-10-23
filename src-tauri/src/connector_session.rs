@@ -22,6 +22,10 @@ const PAGE_READY_TIMEOUT: Duration = Duration::from_secs(25);
 const PAGE_POLL_INTERVAL: Duration = Duration::from_millis(350);
 /// Single-page platforms keep painting after `readyState` flips to complete.
 const PAGE_SETTLE_DELAY: Duration = Duration::from_millis(900);
+/// hh.ru keeps the profile page at `interactive` for over a minute (a request
+/// that never settles), while the resume list is already in the server-rendered
+/// DOM after ~2 s. Waiting for `complete` timed out every read (23.10.2026).
+const HH_INTERACTIVE_GRACE: Duration = Duration::from_secs(3);
 const EVAL_TIMEOUT: Duration = Duration::from_secs(15);
 const HH_SIGNED_IN_SELECTOR: &str = r#"[data-qa^="mainmenu_applicantProfile"], [data-qa^="mainmenu_profileAndResumes"], [data-qa^="profile-activator"]"#;
 /// Shared with the live hh.ru evidence gate, so a drifted recogniser cannot
@@ -1055,6 +1059,12 @@ catch(e){return {ready: 'error', href: ''};}})()",
     serde_json::from_str::<DocumentState>(&raw).map_err(|error| format!("eval_shape: {error}"))
 }
 
+/// LinkedIn fills sections after load, so it still waits for `complete`.
+fn page_ready_to_read(platform: &str, ready: &str, interactive_for: Duration) -> bool {
+    ready == "complete"
+        || (platform == "hh" && ready == "interactive" && interactive_for >= HH_INTERACTIVE_GRACE)
+}
+
 fn validate_page_body(body: String) -> Result<String, String> {
     if body == "__OPENQAREER_PAGE_TOO_LARGE__" || body.chars().count() > MAX_SESSION_PAGE_BODY_CHARS
     {
@@ -1391,9 +1401,19 @@ pub async fn read_session_page(
     }
 
     let deadline = tokio::time::Instant::now() + PAGE_READY_TIMEOUT;
+    let mut interactive_since: Option<tokio::time::Instant> = None;
     loop {
         let state = read_document_state(&window).await?;
-        if state.ready == "complete" && !state.href.is_empty() {
+        let interactive_for = if state.ready == "interactive" {
+            interactive_since
+                .get_or_insert_with(tokio::time::Instant::now)
+                .elapsed()
+        } else {
+            Duration::ZERO
+        };
+        if !state.href.is_empty()
+            && page_ready_to_read(&request.platform, &state.ready, interactive_for)
+        {
             tokio::time::sleep(PAGE_SETTLE_DELAY).await;
             break;
         }
@@ -1424,6 +1444,29 @@ pub async fn read_session_page(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hh_page_is_readable_once_it_stays_interactive() {
+        let grace = HH_INTERACTIVE_GRACE;
+        assert!(page_ready_to_read("hh", "complete", Duration::ZERO));
+        assert!(page_ready_to_read("hh", "interactive", grace));
+        assert!(!page_ready_to_read(
+            "hh",
+            "interactive",
+            grace - Duration::from_millis(1)
+        ));
+        assert!(!page_ready_to_read("hh", "loading", grace * 10));
+    }
+
+    #[test]
+    fn linkedin_page_still_waits_for_complete() {
+        assert!(page_ready_to_read("linkedin", "complete", Duration::ZERO));
+        assert!(!page_ready_to_read(
+            "linkedin",
+            "interactive",
+            HH_INTERACTIVE_GRACE * 10
+        ));
+    }
 
     fn scroll_state(height: f64, at_end: bool) -> LazyScrollState {
         LazyScrollState { height, at_end }

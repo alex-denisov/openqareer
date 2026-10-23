@@ -94,3 +94,32 @@ describe('connector inspection script', () => {
     ).toMatchObject({ signedInApplicant: true, accountMarker: 'emmy-rupp-a24857422' });
   });
 });
+
+describe('page readiness', () => {
+  const rawSource = readFileSync(new URL('./connector_inspection.js', import.meta.url), 'utf8');
+  function readiness(platform: 'hh' | 'linkedin', readyState: string) {
+    const script = rawSource
+      .replaceAll('__OPENQAREER_PLATFORM__', JSON.stringify(platform))
+      .replaceAll('__OPENQAREER_HH_MARKER__', JSON.stringify('[data-qa="profile"]'));
+    const document = {
+      readyState,
+      title: '',
+      body: { innerText: '' },
+      querySelector: () => null,
+    };
+    const location = { origin: 'https://hh.ru', pathname: '/', href: 'https://hh.ru/' };
+    return runInNewContext(script, { document, location, URL }).ready;
+  }
+
+  // hh.ru never reaches `complete` (a request that does not settle), while its
+  // server-rendered markup is already there at `interactive` (23.10.2026).
+  it('treats an interactive hh.ru page as ready', () => {
+    expect(readiness('hh', 'interactive')).toBe(true);
+    expect(readiness('hh', 'loading')).toBe(false);
+  });
+
+  it('keeps LinkedIn waiting for complete', () => {
+    expect(readiness('linkedin', 'interactive')).toBe(false);
+    expect(readiness('linkedin', 'complete')).toBe(true);
+  });
+});
