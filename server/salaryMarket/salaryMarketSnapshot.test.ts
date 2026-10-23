@@ -79,6 +79,28 @@ describe('public salary market snapshot', () => {
     expect(readSalaryMarketSnapshot(db, 'role-119')?.sampleSize).toBe(120);
     db.close();
   });
+  it('computes at most 100 deterministic title roles while preserving every selected role observation', () => {
+    const { db, now } = fixture();
+    const insert = db.prepare('INSERT INTO catalog_entries VALUES (?, ?, ?, ?, ?, ?)');
+    for (let index = 0; index < 120; index += 1)
+      insert.run(`title-${index}`, `role-${index}`, `Role ${index}`, '["SQL"]', now, 'active');
+    for (let index = 0; index < 550; index += 1)
+      insert.run(`popular-${index}`, 'popular', 'Popular title', '["SQL"]', now, 'active');
+    const snapshots = computeSalaryMarketSnapshots(db, new Date(now));
+    expect(snapshots).toHaveLength(100);
+    expect(snapshots.find((snapshot) => snapshot.role === 'popular')).toMatchObject({
+      sampleSize: 550,
+      skills: [{ name: 'SQL', count: 550, frequency: 100 }],
+    });
+    expect(snapshots.some((snapshot) => snapshot.role === 'role-99')).toBe(false);
+    expect(
+      computeSalaryMarketSnapshots(db, new Date(now)).map((snapshot) => snapshot.role),
+    ).toEqual(snapshots.map((snapshot) => snapshot.role));
+    writeSalaryMarketSnapshots(db, snapshots);
+    expect(readSalaryMarketIndex(db)).toHaveLength(100);
+    expect(readSalaryMarketIndex(db)[0]?.role).toBe('popular');
+    db.close();
+  });
   it('cleans temporary counters on success and failed computation before a repeated run', () => {
     const { db, now } = fixture();
     db.exec(`CREATE TEMP TABLE salary_market_skill_counts (

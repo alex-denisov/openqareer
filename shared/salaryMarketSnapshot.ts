@@ -1,10 +1,13 @@
 export const MIN_SALARY_MARKET_SAMPLE = 5;
-export const SALARY_MARKET_INDEX_LIMIT = 100;
+export const SALARY_MARKET_ROLE_LIMIT = 100;
+export const SALARY_MARKET_INDEX_LIMIT = SALARY_MARKET_ROLE_LIMIT;
 
 /** B351: one deduplicated catalog cluster is one observation; no source-row weighting.
  * Skill frequency uses all active catalog clusters published within the last 90 days
  * for the role, including clusters without extracted skills. This is a catalog sample,
- * not a census of the complete vacancy pool. Grade/trend require evidence not yet stored.
+ * not a census of the complete vacancy pool. At most 100 title-derived role slugs
+ * are selected by eligible sample size; this is not B267-normalized profession/grade
+ * aggregation. Grade/trend require evidence not yet stored.
  */
 export interface SalaryMarketSnapshot {
   readonly role: string;

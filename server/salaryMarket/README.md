@@ -1,7 +1,17 @@
 # B351 public market snapshot foundation
 
 The maintenance process computes a rolling 90-day snapshot of the deduplicated
-public catalog, one `cluster_id` per observation. It counts each skill once per
+public catalog, one `cluster_id` per observation. Before reading cluster JSON,
+SQL selects at most 100 title-derived role slugs by eligible sample size descending,
+with role slug ascending to break ties. Only those selected roles are scanned;
+the JS role map and snapshot output are globally bounded to 100. All eligible
+observations within each selected role remain in its denominator.
+
+A role here is the published job title normalized by the public catalog, not a
+B267-normalized profession or a grade. The slice does not establish general
+profession-wide salary estimates, representative market coverage, Junior/Middle/
+Senior/Lead distributions or quarterly trends. Full US-14.6/B351 remains open
+until those results have their own data and acceptance evidence. It counts each skill once per
 cluster; vacancies without extracted skills remain in the denominator. Top 15
 skills, catalog sample size and calculation timestamp are real derived values.
 This is a catalog sample, not the complete pool or a representative population.

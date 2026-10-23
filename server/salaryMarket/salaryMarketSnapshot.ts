@@ -1,5 +1,6 @@
 import {
   SALARY_MARKET_INDEX_LIMIT,
+  SALARY_MARKET_ROLE_LIMIT,
   salarySnapshotIndexable,
   type SalaryMarketIndexEntry,
 } from '../../shared/salaryMarketSnapshot';
@@ -86,13 +87,29 @@ function prepareSkillCounts(database: DatabaseSync) {
   return { addSkill, topSkills };
 }
 
+/** Limit the role vocabulary before reading any per-cluster JSON. */
+function selectedTitleRoles(database: DatabaseSync, now: Date): string[] {
+  const rows = database
+    .prepare(
+      `SELECT role_slug FROM catalog_entries
+    WHERE status = 'active' AND role_slug IS NOT NULL AND published_ms >= ? AND published_ms <= ?
+    GROUP BY role_slug ORDER BY count(*) DESC, role_slug ASC LIMIT ?`,
+    )
+    .all(now.getTime() - 90 * 86_400_000, now.getTime(), SALARY_MARKET_ROLE_LIMIT) as {
+    role_slug: string;
+  }[];
+  return rows.map((row) => row.role_slug);
+}
+
 /** Maintenance only. Keyset chunks bound JSON materialization; the HTTP reader never scans. */
 function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMarketSnapshot[] {
+  const roles = selectedTitleRoles(database, now);
+  if (roles.length === 0) return [];
   const statement = database.prepare(`SELECT e.cluster_id, e.role_slug, e.role_label, e.skills_json,
       json_extract(c.cluster_json, '$.salary') AS salary_json FROM catalog_entries e
       LEFT JOIN vacancy_clusters c ON c.id = e.cluster_id
-    WHERE e.cluster_id > ? AND status = 'active' AND role_slug IS NOT NULL
-      AND published_ms >= ? AND published_ms <= ? ORDER BY e.cluster_id LIMIT 500`);
+    WHERE e.cluster_id > ? AND status = 'active'
+      AND published_ms >= ? AND published_ms <= ? AND e.role_slug IN (${roles.map(() => '?').join(',')}) ORDER BY e.cluster_id LIMIT 500`);
   const { addSkill, topSkills } = prepareSkillCounts(database);
   prepareSalaryRangeScratch(database);
   const groups = new Map<string, { label: string; count: number; excluded: MutableExclusions }>();
@@ -102,6 +119,7 @@ function buildSalaryMarketSnapshots(database: DatabaseSync, now: Date): SalaryMa
       cursor,
       now.getTime() - 90 * 86_400_000,
       now.getTime(),
+      ...roles,
     ) as unknown as CatalogRow[];
     if (rows.length === 0) break;
     for (const row of rows) {
