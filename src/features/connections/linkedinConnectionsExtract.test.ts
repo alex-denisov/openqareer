@@ -63,4 +63,22 @@ describe('LinkedIn 1st-degree connections extract (B448)', () => {
   it('returns nothing for a page without profile links', () => {
     expect(extractLinkedInConnections('<main><p>Войдите</p></main>')).toEqual([]);
   });
+
+  it('reads the compact card list the desktop shell returns for long networks', () => {
+    const compact =
+      '<main><div><a href="/in/irina-kotova-test/"><p>Ирина Котова</p><p>Head of QA at Север Тех</p></a></div>' +
+      '<div><a href="/in/oleg-smirnov-test/"><p>Олег Смирнов</p></a></div></main>';
+    expect(extractLinkedInConnections(compact)).toEqual([
+      {
+        fullName: 'Ирина Котова',
+        headline: 'Head of QA at Север Тех',
+        linkedinUrl: 'https://www.linkedin.com/in/irina-kotova-test/',
+      },
+      {
+        fullName: 'Олег Смирнов',
+        headline: '',
+        linkedinUrl: 'https://www.linkedin.com/in/oleg-smirnov-test/',
+      },
+    ]);
+  });
 });

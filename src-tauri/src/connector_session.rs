@@ -1286,9 +1286,12 @@ pub async fn inspect_session_page_for(
 /// chunk (Languages on the profile, skills past the tenth) a beat after the
 /// scroll lands, so the walk now waits for several quiet readings (B266).
 const LAZY_SCROLL_MAX_STEPS: usize = 40;
-/// The connections list appends ~7 cards a step: 40 steps reached 278 of
-/// 1 996 (23.10 capture); 150 bounds the walk near 1 000 contacts (B448).
-const CONNECTIONS_SCROLL_MAX_STEPS: usize = 150;
+/// The connections list appends ~7 cards a step (run 5: 1 053 cards in 150
+/// steps); 450 steps let a network of ~3 000 finish, and the walk is also
+/// bounded in time (B448).
+const CONNECTIONS_SCROLL_MAX_STEPS: usize = 450;
+const CONNECTIONS_SCROLL_MAX_DURATION: Duration = Duration::from_secs(8 * 60);
+const LAZY_SCROLL_MAX_DURATION: Duration = Duration::from_secs(3 * 60);
 /// The list loads its next chunk well after the scroll lands; four quiet
 /// readings ended run 4 after 7 steps (B448).
 const CONNECTIONS_QUIET_READINGS: usize = 8;
@@ -1297,6 +1300,10 @@ const CONNECTIONS_QUIET_READINGS: usize = 8;
 struct LazyScrollBudget {
     max_steps: usize,
     quiet_readings: usize,
+    max_duration: Duration,
+    /// Return only name, headline and profile path per card: the sanitized
+    /// page of 1 000+ cards broke the body limit in run 5 (B448).
+    compact_connections: bool,
 }
 
 fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
@@ -1304,11 +1311,15 @@ fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
         LazyScrollBudget {
             max_steps: CONNECTIONS_SCROLL_MAX_STEPS,
             quiet_readings: CONNECTIONS_QUIET_READINGS,
+            max_duration: CONNECTIONS_SCROLL_MAX_DURATION,
+            compact_connections: true,
         }
     } else {
         LazyScrollBudget {
             max_steps: LAZY_SCROLL_MAX_STEPS,
             quiet_readings: LAZY_SCROLL_QUIET_READINGS,
+            max_duration: LAZY_SCROLL_MAX_DURATION,
+            compact_connections: false,
         }
     }
 }
@@ -1375,7 +1386,11 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u
     let mut last_cards = 0;
     let mut quiet = 0;
     let mut cards_per_step = Vec::new();
+    let deadline = tokio::time::Instant::now() + budget.max_duration;
     for _ in 0..budget.max_steps {
+        if tokio::time::Instant::now() >= deadline {
+            break;
+        }
         let raw = match eval_json(window, LAZY_SCROLL_SCRIPT).await {
             Ok(raw) => raw,
             Err(error) if is_transient_eval_error(&error) => {
@@ -1497,8 +1512,11 @@ pub async fn read_session_page(
     }
 
     if request.platform == "linkedin" {
+        let started = std::time::Instant::now();
         let cards_per_step = load_lazy_sections(&window, scroll_budget).await;
-        if scroll_budget.max_steps == CONNECTIONS_SCROLL_MAX_STEPS {
+        if scroll_budget.compact_connections {
+            let millis = started.elapsed().as_millis().to_string();
+            read_diagnostic(app, request, "walk_ms", Some(&millis));
             for cards in &cards_per_step {
                 read_diagnostic(app, request, "cards", Some(&cards.to_string()));
             }
@@ -1507,7 +1525,11 @@ pub async fn read_session_page(
         read_diagnostic(app, request, "scrolled", Some(&steps));
     }
 
-    let body_json = sanitized_page_json(app, request, &window).await?;
+    let body_json = if scroll_budget.compact_connections {
+        compact_connections_json(app, request, &window).await?
+    } else {
+        sanitized_page_json(app, request, &window).await?
+    };
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
             .map_err(|error| format!("body_shape: {error}"))?,
@@ -1546,6 +1568,37 @@ async fn sanitized_page_json(
         }
     }
     Err(last_error)
+}
+
+/// One `<div><a href="/in/…"><p>name</p><p>headline</p></a></div>` per card:
+/// only the profile path and the first two text lines of the profile link,
+/// HTML-escaped. Empty when no card matches, so the caller falls back to the
+/// full sanitize and the zero-contacts capture still sees the page.
+const CONNECTIONS_COMPACT_SCRIPT: &str = r#"(function(){try{
+var esc=function(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');};
+var cards=document.querySelectorAll('[componentkey^="ConnectionCard_"]');var out=[];
+for(var i=0;i<cards.length;i++){var links=cards[i].querySelectorAll('a[href]');
+for(var j=0;j<links.length;j++){var u;try{u=new URL(links[j].getAttribute('href'),location.origin);}catch(e){continue;}
+if(!/^\/in\/[^\/]+\/?$/.test(u.pathname))continue;var ps=links[j].querySelectorAll('p');var lines=[];
+for(var k=0;k<ps.length&&lines.length<2;k++){var t=(ps[k].textContent||'').replace(/\s+/g,' ').trim();if(t)lines.push(t.slice(0,300));}
+if(!lines.length)continue;out.push('<div><a href="'+esc(u.pathname)+'">'+lines.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</a></div>');break;}}
+return out.length?'<main>'+out.join('')+'</main>':'';}catch(e){return '';}})()"#;
+
+/// The compact card list, or the full sanitize when the page has no cards.
+async fn compact_connections_json(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    window: &Webview,
+) -> Result<String, String> {
+    let compact = eval_json(window, CONNECTIONS_COMPACT_SCRIPT).await;
+    let has_cards = compact
+        .as_deref()
+        .is_ok_and(|json| serde_json::from_str::<String>(json).is_ok_and(|body| !body.is_empty()));
+    if !has_cards {
+        read_diagnostic(app, request, "compact_empty", None);
+        return sanitized_page_json(app, request, window).await;
+    }
+    compact
 }
 
 /// `eval_cancelled` / `eval_timeout`: the page moved under the script.
@@ -1746,10 +1799,13 @@ mod tests {
         let connections = lazy_scroll_budget("/mynetwork/invite-connect/connections/");
         assert_eq!(
             (connections.max_steps, connections.quiet_readings),
-            (150, 8)
+            (450, 8)
         );
+        assert_eq!(connections.max_duration, Duration::from_secs(8 * 60));
+        assert!(connections.compact_connections);
         let profile = lazy_scroll_budget("/in/someone/");
         assert_eq!((profile.max_steps, profile.quiet_readings), (40, 4));
+        assert!(!profile.compact_connections);
     }
 
     #[test]
