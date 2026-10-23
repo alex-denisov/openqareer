@@ -89,7 +89,10 @@
     var marker =
       platform === 'linkedin' ? linkedinMarker || linkedinAuthenticatedRoute : hhMarker;
     return {
-      ready: document.readyState === 'complete',
+      // hh.ru stays `interactive` for minutes with its markup already rendered.
+      ready:
+        document.readyState === 'complete' ||
+        (platform === 'hh' && document.readyState === 'interactive'),
       url: location.href,
       signedInApplicant: Boolean(marker) && !login && !otp && !captcha,
       accountMarker: linkedinAccountMarker,
