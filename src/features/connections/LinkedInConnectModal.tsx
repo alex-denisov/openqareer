@@ -11,7 +11,6 @@ import {
   isConnectorSessionOpen,
   openConnectorSession,
   readSessionPage,
-  saveLinkedInCaptureDump,
   resizeConnectorSession,
   sessionCheckFailure,
   showConnectorSession,
@@ -37,8 +36,7 @@ import {
   type LinkedInWaitingNotice,
   type StructuredFallbackReason,
 } from './linkedinSessionPoll';
-import { importLinkedInConnectionsFromSession } from './linkedinConnectionsImport';
-import { importLinkedInConnectionContacts } from '../outreach/connectionContactsApi';
+import { startLinkedInContactsRefresh } from './linkedinContactsRefresh';
 import {
   endLinkedInProtectedRoute,
   ProtectedRouteError,
@@ -248,25 +246,20 @@ export function LinkedInConnectModal({
         signedIn.current = true;
         setWaiting({ text: 'Вход выполнен — читаем ваш профиль…', stuck: false });
       },
-      importConnections: () => {
-        setWaiting({ text: 'Профиль прочитан — читаем ваши контакты…', stuck: false });
-        return importLinkedInConnectionsFromSession({
-          readSessionPage: (url) => readSessionPage('linkedin', url),
-          upload: importLinkedInConnectionContacts,
-          saveCaptureDump: () => saveLinkedInCaptureDump('connections'),
-        });
-      },
       onProviderDataCaptured: async () => {
         await closeConnectorSession('linkedin');
       },
-      onReady: (result) => {
+      onReady: async (result) => {
         onClose();
-        return onImportSuccess(
+        await onImportSuccess(
           result.parsed,
           result.rawUrl,
           result.structured,
           result.structuredFallback,
         );
+        // B448: contacts are read afterwards, out of sight, so the import
+        // never waits on the long connections walk.
+        void startLinkedInContactsRefresh(true);
       },
     });
     return sessionFlow.current;

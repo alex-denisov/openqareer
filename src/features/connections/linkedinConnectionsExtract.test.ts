@@ -8,10 +8,7 @@ import {
   toConnectionImportContacts,
 } from './linkedinConnectionsExtract';
 
-const fixture = readFileSync(
-  join(__dirname, '__fixtures__/linkedin/connections-provisional.html'),
-  'utf8',
-);
+const fixture = readFileSync(join(__dirname, '__fixtures__/linkedin/connections.html'), 'utf8');
 
 describe('LinkedIn 1st-degree connections extract (B448)', () => {
   it('reads one entry per profile with name, headline and canonical URL', () => {
@@ -22,7 +19,14 @@ describe('LinkedIn 1st-degree connections extract (B448)', () => {
       headline: 'Head of QA at Север Тех',
       linkedinUrl: 'https://www.linkedin.com/in/irina-kotova-test/',
     });
-    expect(connections[1]?.linkedinUrl).toBe('https://www.linkedin.com/in/petr-volkov-test/');
+    expect(connections[1]).toEqual({
+      fullName: 'Петр Волков',
+      headline: 'Engineering Manager в Вектор Банк | Платформа данных',
+      linkedinUrl: 'https://www.linkedin.com/in/petr-volkov-test/',
+    });
+    expect(connections.map((connection) => connection.headline)).not.toContain(
+      'Connected on October 1, 2026',
+    );
   });
 
   it('takes the current company from the headline', () => {

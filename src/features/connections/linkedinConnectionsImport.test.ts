@@ -7,10 +7,7 @@ import {
   importLinkedInConnectionsFromSession,
 } from './linkedinConnectionsImport';
 
-const body = readFileSync(
-  join(__dirname, '__fixtures__/linkedin/connections-provisional.html'),
-  'utf8',
-);
+const body = readFileSync(join(__dirname, '__fixtures__/linkedin/connections.html'), 'utf8');
 
 function throttle(last?: number) {
   return { lastReadAt: () => last, markRead: vi.fn() };

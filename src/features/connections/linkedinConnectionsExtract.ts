@@ -26,15 +26,10 @@ export function extractLinkedInConnections(html: string): LinkedInConnection[] {
   for (const anchor of Array.from(document.querySelectorAll('a[href]'))) {
     const slug = profileSlug(anchor.getAttribute('href'));
     if (!slug || seen.has(slug)) continue;
-    const card = ownCard(anchor, slug);
-    const fullName = nameIn(card, slug);
-    if (!fullName) continue;
+    const person = personIn(ownCard(anchor, slug), slug);
+    if (!person) continue;
     seen.add(slug);
-    connections.push({
-      fullName,
-      headline: headlineIn(card, fullName),
-      linkedinUrl: `https://www.linkedin.com/in/${slug}/`,
-    });
+    connections.push({ ...person, linkedinUrl: `https://www.linkedin.com/in/${slug}/` });
   }
   return connections;
 }
@@ -102,21 +97,30 @@ function ownCard(anchor: Element, slug: string): Element {
   return card;
 }
 
-function nameIn(card: Element, slug: string): string | undefined {
+/**
+ * The real page (23.10 capture) wraps the name and the headline in one
+ * profile link: `<a href="/in/…"><p>name</p><div><p><span>headline</span></p></div></a>`,
+ * with the photo link and the "Connected on" line beside it.
+ */
+function personIn(
+  card: Element,
+  slug: string,
+): { readonly fullName: string; readonly headline: string } | undefined {
   const links = [card, ...Array.from(card.querySelectorAll('a[href]'))].filter(
     (link) => link.matches('a[href]') && profileSlug(link.getAttribute('href')) === slug,
   );
   for (const link of links) {
-    const name = textOf(link.querySelector('[aria-hidden="true"]')) ?? textOf(link);
-    if (name && !NOISE_LINE.test(name)) return name;
+    const lines = textLines(link);
+    const [fullName, headline = ''] = lines;
+    if (fullName) return { fullName, headline };
   }
   return undefined;
 }
 
-function headlineIn(card: Element, fullName: string): string {
-  const lines = Array.from(card.querySelectorAll('*'))
-    .filter((node) => node.children.length === 0 && !node.closest('button, a'))
+/** Leaf text in document order, without buttons and boilerplate. */
+function textLines(root: Element): string[] {
+  return Array.from(root.querySelectorAll('*'))
+    .filter((node) => node.children.length === 0 && !node.closest('button'))
     .map((node) => textOf(node) ?? '')
-    .filter((line) => line && line !== fullName && !NOISE_LINE.test(line));
-  return lines[0] ?? '';
+    .filter((line) => line && !NOISE_LINE.test(line));
 }

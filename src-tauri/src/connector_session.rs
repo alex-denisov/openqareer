@@ -1286,6 +1286,17 @@ pub async fn inspect_session_page_for(
 /// chunk (Languages on the profile, skills past the tenth) a beat after the
 /// scroll lands, so the walk now waits for several quiet readings (B266).
 const LAZY_SCROLL_MAX_STEPS: usize = 40;
+/// The connections list appends ~7 cards a step: 40 steps reached 278 of
+/// 1 996 (23.10 capture); 150 bounds the walk near 1 000 contacts (B448).
+const CONNECTIONS_SCROLL_MAX_STEPS: usize = 150;
+
+fn lazy_scroll_budget(path: &str) -> usize {
+    if path.starts_with("/mynetwork/invite-connect/connections") {
+        CONNECTIONS_SCROLL_MAX_STEPS
+    } else {
+        LAZY_SCROLL_MAX_STEPS
+    }
+}
 const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(900);
 /// ±30 % around the step delay: no fixed-interval clockwork (security §3).
 const LAZY_SCROLL_JITTER_PERCENT: u64 = 30;
@@ -1333,11 +1344,11 @@ fn next_quiet_readings(quiet: usize, state: &LazyScrollState, last_height: f64) 
 }
 
 /// Returns how many scroll steps ran, for the local diagnostics log.
-async fn load_lazy_sections(window: &Webview) -> usize {
+async fn load_lazy_sections(window: &Webview, max_steps: usize) -> usize {
     let mut last_height = -1.0;
     let mut quiet = 0;
     let mut steps = 0;
-    for _ in 0..LAZY_SCROLL_MAX_STEPS {
+    for _ in 0..max_steps {
         steps += 1;
         let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
             break;
@@ -1389,6 +1400,7 @@ pub async fn read_session_page(
     request: &SessionWindowRequest,
 ) -> Result<SessionPageReport, String> {
     let (label, url, _) = validate(request)?;
+    let scroll_budget = lazy_scroll_budget(url.path());
     let window = app
         .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
@@ -1452,7 +1464,7 @@ pub async fn read_session_page(
     }
 
     if request.platform == "linkedin" {
-        let steps = load_lazy_sections(&window).await.to_string();
+        let steps = load_lazy_sections(&window, scroll_budget).await.to_string();
         read_diagnostic(app, request, "scrolled", Some(&steps));
     }
 
@@ -1690,6 +1702,16 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_connections_list_gets_a_longer_scroll_budget() {
+        assert_eq!(
+            lazy_scroll_budget("/mynetwork/invite-connect/connections/"),
+            150
+        );
+        assert_eq!(lazy_scroll_budget("/in/someone/"), 40);
+        assert_eq!(lazy_scroll_budget("/in/someone/details/skills/"), 40);
+    }
+
     #[test]
     fn a_rewritten_query_or_slash_is_the_same_page() {
         assert!(same_page(
