@@ -29,6 +29,11 @@ describe('installTitleTooltips (B331)', () => {
     expect(button.getAttribute('title')).toBe('Роль: совпадает');
   });
 
+  it('carries the design tokens although it lives in body, outside the shell (B553)', () => {
+    uninstall = installTitleTooltips(document);
+    expect(tip()?.classList.contains('career-token-scope')).toBe(true);
+  });
+
   it('also opens on click so the ⓘ button does something', () => {
     uninstall = installTitleTooltips(document);
     const button = document.createElement('button');

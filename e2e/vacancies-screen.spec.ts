@@ -1630,7 +1630,7 @@ test.describe('B250 vacancies screen', () => {
     // Sydney normalized to Сидней with tooltip showing Australia
     const sydneyPin = mapView.getByRole('button', { name: /Сидней/ });
     await expect(sydneyPin).toBeVisible();
-    await expect(sydneyPin).toHaveAttribute('title', 'Австралия');
+    await expect(sydneyPin.locator('.career-map-tip')).toHaveText('Австралия');
     await drag(60, (canvasBox?.height ?? 440) - 60);
     await expect(clusterPin).toBeVisible();
 

@@ -11,7 +11,8 @@ const PARKED = 'data-oq-title';
 
 export function installTitleTooltips(root: Document): () => void {
   const tip = root.createElement('div');
-  tip.className = TIP_CLASS;
+  // B553: подсказка живёт в body, вне .career-shell — без области токенов у неё не было фона и рамки.
+  tip.className = `${TIP_CLASS} career-token-scope`;
   tip.setAttribute('role', 'tooltip');
   tip.hidden = true;
   root.body.appendChild(tip);
