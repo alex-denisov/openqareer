@@ -73,6 +73,8 @@ export interface CoverLetterVacancy {
     readonly name?: string;
     readonly role?: string;
   };
+  /** B422: кандидат отметил компанию «Хочу в эту компанию». */
+  readonly targetCompany?: true;
 }
 
 export interface CoverLetterWriteInput {
@@ -230,6 +232,7 @@ export function serializeInput(input: CoverLetterWriteInput): string {
       requirements: (input.vacancy.requirements ?? [])
         .slice(0, MAX_REQUIREMENTS)
         .map((requirement) => requirement.slice(0, MAX_REQUIREMENT)),
+      ...(input.vacancy.targetCompany ? { targetCompany: true } : {}),
     },
     ...(input.vacancy.recipient ? { recipient: input.vacancy.recipient } : {}),
     facts: rankedFacts.slice(0, MAX_FACTS).map((fact) => ({

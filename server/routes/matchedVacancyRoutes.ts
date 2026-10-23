@@ -35,7 +35,7 @@ import { campaignMeta, readCampaign } from './campaignContext';
 import {
   requestFitForShownPage,
   withShownPageFitViews,
-  withVacancyFitOrder,
+  withWantedCompanyOrder,
 } from './matchedVacancyFit';
 import { unconfirmedCandidateMatchResponse } from './matchedVacancyResponse';
 import { authenticateCandidate, withDeps } from './helpers';
@@ -388,7 +388,7 @@ const handleMatchedVacancies: Handler = async (deps, request, reply) => {
     titleParseStore,
     filters,
     sourceRegistry,
-    withVacancyFitOrder(deps, candidate.id, filters.sort ?? 'fit'),
+    withWantedCompanyOrder(deps, candidate.id, filters.sort ?? 'fit'),
   );
   const shown = withShownPageFitViews(deps, candidate.id, orderedPage.data);
   const response = { ...orderedPage, data: withMarketSalary(deps, shown) };

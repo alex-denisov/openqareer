@@ -4,6 +4,7 @@ import type { ChatCompletionClient } from './roleNamer';
 import {
   LlmCoverLetterWriter,
   QueuedCoverLetterWriter,
+  serializeInput,
   withinTimeBudget,
   type CoverLetterOutcome,
 } from './coverLetterWriter';
@@ -395,5 +396,17 @@ describe('withinTimeBudget (B266)', () => {
   it('passes a timely answer through untouched', async () => {
     const outcome = await withinTimeBudget(Promise.resolve({ body: 'Letter', stage: 's' }), 1_000);
     expect(outcome).toEqual({ body: 'Letter', stage: 's' });
+  });
+});
+
+describe('B422: компания «Хочу» в письме', () => {
+  it('передаёт модели отметку кандидата, только если она есть', () => {
+    const base = { facts: [], language: 'ru', tone: 'technical' } as const;
+    const marked = JSON.parse(
+      serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme', targetCompany: true } }),
+    );
+    const plain = JSON.parse(serializeInput({ ...base, vacancy: { title: 'QA Lead', company: 'Acme' } }));
+    expect(marked.vacancy.targetCompany).toBe(true);
+    expect(plain.vacancy).not.toHaveProperty('targetCompany');
   });
 });

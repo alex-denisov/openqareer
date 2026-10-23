@@ -39,3 +39,11 @@ describe('coverLetterBodySchema', () => {
     expect(result.success).toBe(false);
   });
 });
+
+describe('B422: инструкция для компании «Хочу»', () => {
+  it('просит одну фразу о желании работать здесь, без выдуманных причин', () => {
+    const text = coverLetterInstructions('ru', 'technical');
+    expect(text).toContain('targetCompany');
+    expect(text).toContain('не придумывай причин');
+  });
+});
