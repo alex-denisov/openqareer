@@ -25,7 +25,8 @@ function ClusterTip({ node }: { readonly node: MapClusterNode }) {
   const shown = cities.slice(0, TIP_CITY_ROWS);
   const rest = cities.slice(TIP_CITY_ROWS);
   const restCount = rest.reduce((sum, city) => sum + city.count, 0);
-  const where = cities.length === 1 ? 'в 1 городе' : `в ${cities.length} городах`;
+  const singular = cities.length % 10 === 1 && cities.length % 100 !== 11;
+  const where = `в ${cities.length} ${singular ? 'городе' : 'городах'}`;
   return (
     <>
       <span className="career-map-tip-title">

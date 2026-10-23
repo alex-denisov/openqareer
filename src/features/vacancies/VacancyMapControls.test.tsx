@@ -51,3 +51,22 @@ describe('подсказка капсулы на карте', () => {
     expect(tip).toContain('Нажмите, чтобы приблизить');
   });
 });
+
+it('после 21 — «в 21 городе»', () => {
+  const many: MapNode = {
+    id: 'c2',
+    isCluster: true,
+    x: 0,
+    y: 0,
+    totalCount: 21,
+    cities: Array.from({ length: 21 }, (_, index) => ({
+      city: `Город ${index}`,
+      count: 1,
+      companyCount: 1,
+    })),
+  };
+  const html = renderToStaticMarkup(
+    <MapCapsuleButton node={many} x={0} y={0} count={21} active={false} onClick={() => {}} />,
+  );
+  expect(html).toContain('21 вакансия в 21 городе');
+});
