@@ -1332,10 +1332,13 @@ fn next_quiet_readings(quiet: usize, state: &LazyScrollState, last_height: f64) 
     }
 }
 
-async fn load_lazy_sections(window: &Webview) {
+/// Returns how many scroll steps ran, for the local diagnostics log.
+async fn load_lazy_sections(window: &Webview) -> usize {
     let mut last_height = -1.0;
     let mut quiet = 0;
+    let mut steps = 0;
     for _ in 0..LAZY_SCROLL_MAX_STEPS {
+        steps += 1;
         let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
             break;
         };
@@ -1355,6 +1358,7 @@ async fn load_lazy_sections(window: &Webview) {
     )
     .await;
     tokio::time::sleep(PAGE_SETTLE_DELAY).await;
+    steps
 }
 
 /// The candidate's LinkedIn session is paced here, not only in the web layer
@@ -1392,8 +1396,18 @@ pub async fn read_session_page(
         tokio::time::sleep(admit_linkedin_read(app, url.path())?).await;
     }
 
-    let already_there = window.url().is_ok_and(|current| current == url);
+    // LinkedIn rewrites the query and trailing slash of a page it just
+    // served; comparing the whole URL navigated again mid-load (B448).
+    let already_there = window
+        .url()
+        .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
     if !already_there {
+        read_diagnostic(
+            app,
+            request,
+            "navigate",
+            Some(first_path_segment(url.as_str())),
+        );
         window
             .navigate(url)
             .map_err(|error| format!("navigate_failed: {error}"))?;
@@ -1403,7 +1417,21 @@ pub async fn read_session_page(
     let deadline = tokio::time::Instant::now() + PAGE_READY_TIMEOUT;
     let mut interactive_since: Option<tokio::time::Instant> = None;
     loop {
-        let state = read_document_state(&window).await?;
+        // A check that runs while the page unloads is dropped by WebKit
+        // (`eval_cancelled`): the page is not ready yet, so poll again (B448).
+        let state = match read_document_state(&window).await {
+            Ok(state) => state,
+            Err(error) if is_transient_eval_error(&error) => {
+                read_diagnostic(app, request, "load_retry", Some(&error));
+                interactive_since = None;
+                if tokio::time::Instant::now() >= deadline {
+                    return Err("page_load_timeout".to_string());
+                }
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let interactive_for = if state.ready == "interactive" {
             interactive_since
                 .get_or_insert_with(tokio::time::Instant::now)
@@ -1424,21 +1452,98 @@ pub async fn read_session_page(
     }
 
     if request.platform == "linkedin" {
-        load_lazy_sections(&window).await;
+        let steps = load_lazy_sections(&window).await.to_string();
+        read_diagnostic(app, request, "scrolled", Some(&steps));
     }
 
-    let body_json = eval_json(&window, &page_sanitize_script(&request.platform)).await?;
+    let body_json = sanitized_page_json(app, request, &window).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
             .map_err(|error| format!("body_shape: {error}"))?,
     )?;
-    let final_state = read_document_state(&window).await?;
+    let final_url = match read_document_state(&window).await {
+        Ok(state) => state.href,
+        Err(_) => window.url().map(|url| url.to_string()).unwrap_or_default(),
+    };
+    read_diagnostic(app, request, "read", Some(first_path_segment(&final_url)));
 
     Ok(SessionPageReport {
         ok: !body.is_empty(),
-        url: final_state.href,
+        url: final_url,
         body,
     })
+}
+
+const SANITIZE_ATTEMPTS: usize = 3;
+
+/// The sanitize pass, retried when a late LinkedIn navigation drops it.
+async fn sanitized_page_json(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    window: &Webview,
+) -> Result<String, String> {
+    let mut last_error = String::new();
+    for _ in 0..SANITIZE_ATTEMPTS {
+        match eval_json(window, &page_sanitize_script(&request.platform)).await {
+            Ok(json) => return Ok(json),
+            Err(error) if is_transient_eval_error(&error) => {
+                read_diagnostic(app, request, "sanitize_retry", Some(&error));
+                last_error = error;
+                tokio::time::sleep(PAGE_SETTLE_DELAY).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error)
+}
+
+/// `eval_cancelled` / `eval_timeout`: the page moved under the script.
+fn is_transient_eval_error(error: &str) -> bool {
+    error == "eval_cancelled" || error == "eval_timeout"
+}
+
+/// Same host and path, ignoring the query, fragment and a trailing slash.
+fn same_page(current: &str, wanted: &str) -> bool {
+    match (Url::parse(current), Url::parse(wanted)) {
+        (Ok(a), Ok(b)) => {
+            a.host_str() == b.host_str()
+                && a.path().trim_end_matches('/') == b.path().trim_end_matches('/')
+        }
+        _ => false,
+    }
+}
+
+/// The first path segment as a log code (`mynetwork`, `checkpoint`, `in`).
+fn first_path_segment(raw: &str) -> &str {
+    let path = raw
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split_once('/'))
+        .map(|(_, path)| path)
+        .unwrap_or("");
+    let segment = path.split(['/', '?', '#']).next().unwrap_or("");
+    if segment.is_empty() {
+        "root"
+    } else if segment.len() <= 40
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        segment
+    } else {
+        "other"
+    }
+}
+
+/// Steps of the candidate's own LinkedIn reads in the local diagnostics log.
+fn read_diagnostic(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    event: &str,
+    detail: Option<&str>,
+) {
+    if request.platform == "linkedin" && request.session_key.is_none() {
+        let _ = append_connector_diagnostic(app, "linkedin-read", event, detail);
+    }
 }
 
 /// Kept on this machine only (B448): a sanitized LinkedIn page that yielded
@@ -1585,6 +1690,39 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_rewritten_query_or_slash_is_the_same_page() {
+        assert!(same_page(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections?x=1",
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+        assert!(!same_page(
+            "https://www.linkedin.com/feed/",
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+    }
+
+    #[test]
+    fn only_a_dropped_script_is_retried() {
+        assert!(is_transient_eval_error("eval_cancelled"));
+        assert!(is_transient_eval_error("eval_timeout"));
+        assert!(!is_transient_eval_error("session_window_missing"));
+    }
+
+    #[test]
+    fn path_segment_is_a_plain_code() {
+        assert_eq!(
+            first_path_segment("https://www.linkedin.com/checkpoint/challenge/x"),
+            "checkpoint"
+        );
+        assert_eq!(first_path_segment("https://www.linkedin.com/"), "root");
+        assert_eq!(
+            first_path_segment("https://www.linkedin.com/in/Ирина/"),
+            "in"
+        );
+        assert_eq!(first_path_segment("not a url"), "root");
+    }
+
     #[test]
     fn diagnostic_line_keeps_codes_and_refuses_free_text() {
         assert_eq!(
