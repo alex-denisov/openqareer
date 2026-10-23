@@ -4,6 +4,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import React from 'react';
 import type { CityFacet } from './vacancyFacets';
 import { focusBounds } from './vacancyMapCluster';
+import { vacancyMapFitPadding } from './vacancyMapPadding';
 import { buildVacancyMapStyle, type VacancyMapPalette } from './vacancyMapStyle';
 
 // B553: воркер MapLibre — отдельный файл с нашего origin (CSP `worker-src 'self'`,
@@ -12,10 +13,6 @@ setWorkerUrl(workerUrl);
 
 const FIT_MAX_ZOOM = 6;
 const WORLD_VIEW = { center: [40, 50] as [number, number], zoom: 2 };
-const NARROW_WIDTH = 600;
-/** Отступы подгонки: по бокам — половина широкой капсулы и ±; снизу — заметка (1440) или карточка города (390). */
-const WIDE_PADDING = { top: 56, bottom: 96, left: 96, right: 112 };
-const NARROW_PADDING = { top: 56, bottom: 128, left: 80, right: 80 };
 
 /** MapLibre не понимает oklch: токен рисуется в пиксель холста и читается обратно как rgba. */
 function tokenColor(element: HTMLElement, token: string, fallback: string): string {
@@ -44,7 +41,7 @@ function initialView(cities: readonly CityFacet[], width: number): Partial<MapOp
   return {
     bounds: bounds as MapOptions['bounds'],
     fitBoundsOptions: {
-      padding: width < NARROW_WIDTH ? NARROW_PADDING : WIDE_PADDING,
+      padding: { ...vacancyMapFitPadding(width) },
       maxZoom: FIT_MAX_ZOOM,
     },
   };

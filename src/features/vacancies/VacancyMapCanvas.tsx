@@ -12,6 +12,7 @@ import {
 } from './vacancyMapCluster';
 import { MapCapsuleButton, MapZoomControls } from './VacancyMapControls';
 import { prefersReducedMotion, useVacancyMapLibre } from './useVacancyMapLibre';
+import { vacancyMapFitPadding } from './vacancyMapPadding';
 
 export interface VacancyMapCanvasProps {
   readonly cities: readonly CityFacet[];
@@ -71,7 +72,10 @@ function useMapActions(
     const bounds = cityBounds(node.isCluster ? node.cities : [node.city]);
     if (!map || !bounds) return;
     map.fitBounds(bounds as [[number, number], [number, number]], {
-      padding: FIT_PADDING,
+      // 390: те же отступы, что при открытии — капсулы не уходят под ± и карточку.
+      padding: options.compact
+        ? { ...vacancyMapFitPadding(map.getContainer().clientWidth) }
+        : FIT_PADDING,
       maxZoom: Math.max(map.getZoom() + 2, FIT_MAX_ZOOM),
       animate,
     });
