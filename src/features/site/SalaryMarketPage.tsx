@@ -1,14 +1,25 @@
 import React from 'react';
-import { salaryRolePath } from '../../../shared/salaryMarketPublic';
+import {
+  SALARY_GRADE_LABELS,
+  salaryDisplayLabel,
+  salaryRoleLabel,
+  selectSalaryGrade,
+  salaryRolePath,
+} from '../../../shared/salaryMarketPublic';
 export { salaryRolePath } from '../../../shared/salaryMarketPublic';
 export { salarySnapshotIndexable } from '../../../shared/salaryMarketSnapshot';
-import { MIN_SALARY_MARKET_SAMPLE } from '../../../shared/salaryMarketSnapshot';
+import {
+  MIN_SALARY_MARKET_SAMPLE,
+  MAX_SALARY_MARKET_GROUPS,
+  SALARY_MARKET_INDEX_LIMIT,
+} from '../../../shared/salaryMarketSnapshot';
 import type {
+  SalaryMarketGrade,
   SalaryMarketIndexEntry,
   SalaryMarketSnapshot,
 } from '../../../shared/salaryMarketSnapshot';
 
-export const SALARY_MARKET_TITLE = 'Зарплаты и навыки по должностям | openqareer';
+export const SALARY_MARKET_TITLE = 'Зарплаты и навыки по профессиям | openqareer';
 export const SALARY_MARKET_DESCRIPTION =
   'Зарплатные вилки и навыки по данным публичного каталога вакансий. Сравнимые выборки с валютой, периодом оплаты, размером и датой наблюдения.';
 export const SALARY_MARKET_TEMPLATE = 'salary-market.html';
@@ -26,7 +37,9 @@ const TAX_BASIS = {
 const RANKS = ['p25', 'p50', 'p75', 'p90'] as const;
 
 export function salaryPageTitle(snapshot: SalaryMarketSnapshot | null): string {
-  return snapshot ? `Зарплаты и навыки: ${snapshot.roleLabel} | openqareer` : SALARY_MARKET_TITLE;
+  return snapshot
+    ? `Зарплаты и навыки: ${salaryRoleLabel(snapshot)} | openqareer`
+    : SALARY_MARKET_TITLE;
 }
 export function salaryGroupLabel(group: SalaryGroup): string {
   return `${group.currency}, ${PERIOD[group.period]}, ${TAX_BASIS[group.taxBasis]}`;
@@ -62,6 +75,8 @@ function SalaryDistribution({ group }: { readonly group: SalaryGroup }) {
 export interface SalaryMarketPageProps {
   readonly snapshot: SalaryMarketSnapshot | null;
   readonly selectedGroup?: number;
+  readonly grade?: SalaryMarketGrade;
+  readonly skillsPage?: number;
 }
 function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
   return (
@@ -71,7 +86,7 @@ function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
         <span>/</span>
         <a href="/salaries">Зарплаты и навыки</a>
         <span>/</span>
-        <span>{snapshot?.roleLabel ?? 'Нет данных'}</span>
+        <span>{snapshot ? salaryRoleLabel(snapshot) : 'Нет данных'}</span>
       </nav>
       <p className="ps-label">Данные публичного каталога</p>
       <h1>
@@ -79,10 +94,10 @@ function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
           <>
             Зарплаты и навыки
             <br />
-            {snapshot.roleLabel}
+            {salaryRoleLabel(snapshot)}
           </>
         ) : (
-          'Зарплаты и навыки по должностям'
+          'Зарплаты и навыки по профессиям'
         )}
       </h1>
       <p className="ps-intro">
@@ -101,36 +116,41 @@ function MarketHeading({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
     </header>
   );
 }
-function MarketSkills({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
+function MarketSkills({
+  snapshot,
+  grade,
+  selectedGroup = 0,
+  skillsPage = 1,
+}: SalaryMarketPageProps) {
+  const pageCount = Math.max(1, Math.ceil((snapshot?.skills.length ?? 0) / 5));
+  const currentPage = Math.max(1, Math.min(pageCount, skillsPage));
+  const rows = snapshot?.skills.slice((currentPage - 1) * 5, currentPage * 5) ?? [];
+  const href = (page: number) =>
+    `${snapshot ? salaryRolePath(snapshot.role) : '/salaries'}?${grade ? `grade=${grade}&` : ''}group=${selectedGroup}&skills=${page}`;
   return (
     <section className="sm-skills" aria-labelledby="skills-title">
       <div className="sm-section-heading">
         <h2 id="skills-title">Навыки в вакансиях</h2>
         <span className="ps-soft">До 15 самых частых</span>
       </div>
+      <p className="ps-note">
+        Длинные названия сокращены с многоточием. Исходные формулировки — в{' '}
+        <a href="/vacancies">каталоге вакансий</a>.
+      </p>
       {snapshot && snapshot.sampleSize >= MIN_SALARY_MARKET_SAMPLE && snapshot.skills.length > 0 ? (
-        <ol className="sm-skill-list">
-          {snapshot.skills.map((skill) => (
-            <li key={skill.name}>
-              <span>{skill.name}</span>
-              <span>
-                <b>{skill.frequency.toLocaleString('ru-RU')}%</b>{' '}
-                <small>
-                  {skill.count.toLocaleString('ru-RU')} из{' '}
-                  {snapshot.sampleSize.toLocaleString('ru-RU')}
-                </small>
-              </span>
-              <meter
-                min="0"
-                max="100"
-                value={skill.frequency}
-                aria-label={`${skill.name}: доля вакансий`}
-              >
-                {skill.frequency}%
-              </meter>
-            </li>
-          ))}
-        </ol>
+        <>
+          <SkillsRows
+            rows={rows}
+            denominator={snapshot.sampleSize}
+            start={(currentPage - 1) * 5 + 1}
+          />
+          <DirectoryPages
+            currentPage={currentPage}
+            pageCount={pageCount}
+            kind="навыки"
+            hrefForPage={href}
+          />
+        </>
       ) : (
         <p className="sm-unavailable">
           Недостаточно опубликованных наблюдений для рейтинга навыков. Откройте каталог и сравните
@@ -138,6 +158,39 @@ function MarketSkills({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
         </p>
       )}
     </section>
+  );
+}
+function SkillsRows({
+  rows,
+  denominator,
+  start,
+}: {
+  rows: SalaryMarketSnapshot['skills'];
+  denominator: number;
+  start: number;
+}) {
+  return (
+    <ol className="sm-skill-list" start={start}>
+      {rows.map((skill) => (
+        <li key={skill.name}>
+          <span>{salaryDisplayLabel(skill.name, 24)}</span>
+          <span>
+            <b>{skill.frequency.toLocaleString('ru-RU')}%</b>{' '}
+            <small>
+              {skill.count.toLocaleString('ru-RU')} из {denominator.toLocaleString('ru-RU')}
+            </small>
+          </span>
+          <meter
+            min="0"
+            max="100"
+            value={skill.frequency}
+            aria-label={`${salaryDisplayLabel(skill.name, 24)}: доля вакансий`}
+          >
+            {skill.frequency}%
+          </meter>
+        </li>
+      ))}
+    </ol>
   );
 }
 function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
@@ -149,8 +202,11 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
           <h3>Каталожная выборка за 90 дней</h3>
           <p>
             Одна сведённая карточка каталога считается одним наблюдением. Частота навыка рассчитана
-            от всех карточек с этим названием должности в выборке, включая карточки без извлечённых
-            навыков. Это срез каталога, а не всего рынка.
+            от всех карточек выбранного среза, включая карточки без извлечённых навыков.{' '}
+            {snapshot?.profession?.kind === 'b267'
+              ? 'Названия объединены в профессию по классификатору openqareer.'
+              : 'Это выборка по названию вакансии, которое пока не сопоставлено с профессией.'}{' '}
+            Это срез каталога, а не всего рынка.
           </p>
         </div>
         <div>
@@ -158,18 +214,31 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
           <p>
             Разные валюты, периоды и налоговые условия показаны отдельно. P50 означает середину
             упорядоченного ряда границ вилок. Неполные диапазоны и суммы без периода исключены.
-            Перцентили рассчитаны методом ближайшего ранга.
+            Перцентили рассчитаны методом ближайшего ранга. Показываем до {MAX_SALARY_MARKET_GROUPS}{' '}
+            самых крупных сопоставимых групп.
           </p>
         </div>
         <div>
-          <h3>Грейды и динамика пока недоступны</h3>
+          <h3>
+            {snapshot?.grades === 'published_title_evidence'
+              ? 'Грейд только из названия вакансии'
+              : 'Грейды пока не подтверждены'}
+          </h3>
           <p>
-            В данных нет достаточного подтверждения для общего сравнения по грейдам и кварталам.
-            Individual contributor не означает junior. Историю роста зарплат и персональную оценку
-            мы здесь не рассчитываем.
+            Грейд показывается только при явном маркере в опубликованном названии вакансии. Это не
+            проверка уровня специалиста. Individual contributor не означает junior. Историю роста
+            зарплат пока нет, персональную оценку мы здесь не рассчитываем.
           </p>
         </div>
       </div>
+      <MarketExclusions snapshot={snapshot} />
+    </section>
+  );
+}
+function MarketExclusions({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>) {
+  return (
+    <>
+      {' '}
       {snapshot?.salary.excluded ? (
         <p className="ps-note">
           Не вошли в расчёт зарплат: без периода {snapshot.salary.excluded.missingPeriod}, без
@@ -177,9 +246,18 @@ function MarketMethodology({ snapshot }: Pick<SalaryMarketPageProps, 'snapshot'>
           {snapshot.salary.excluded.openRange}, с некорректной вилкой{' '}
           {snapshot.salary.excluded.invalidRange}, в слишком малых группах{' '}
           {snapshot.salary.excluded.belowMinimumSample}.
+          {snapshot.salary.excluded.outsidePublishedGroups ? (
+            <>
+              {' '}
+              В других сравнимых группах осталось {
+                snapshot.salary.excluded.outsidePublishedGroups
+              }{' '}
+              вакансий, не включённых в публикацию.
+            </>
+          ) : null}
         </p>
       ) : null}
-    </section>
+    </>
   );
 }
 function CompareResumeCta() {
@@ -195,7 +273,46 @@ function CompareResumeCta() {
     </section>
   );
 }
-function MarketSalaries({ snapshot, selectedGroup = 0 }: SalaryMarketPageProps) {
+function SalaryBucketNavigation({
+  groups,
+  selectedGroup,
+  path,
+  grade,
+}: {
+  groups: readonly SalaryGroup[];
+  selectedGroup: number;
+  path: string;
+  grade?: SalaryMarketGrade;
+}) {
+  const selected = groups[selectedGroup] ? selectedGroup : 0;
+  const start = Math.floor(selected / 3) * 3;
+  const href = (index: number) => `${path}?${grade ? `grade=${grade}&` : ''}group=${index}`;
+  return (
+    <nav className="sm-groups" aria-label="Валюта, период оплаты и налоги">
+      {start > 0 ? (
+        <a className="ps-btn" href={href(start - 3)}>
+          Предыдущие группы
+        </a>
+      ) : null}
+      {groups.slice(start, start + 3).map((group, offset) => (
+        <a
+          className="ps-btn"
+          key={`${group.currency}-${group.period}-${group.taxBasis}`}
+          href={href(start + offset)}
+          aria-current={selected === start + offset ? 'true' : undefined}
+        >
+          {salaryGroupLabel(group)}
+        </a>
+      ))}
+      {start + 3 < groups.length ? (
+        <a className="ps-btn" href={href(start + 3)}>
+          Другие валюты и периоды
+        </a>
+      ) : null}
+    </nav>
+  );
+}
+function MarketSalaries({ snapshot, selectedGroup = 0, grade }: SalaryMarketPageProps) {
   const groups = snapshot?.salary.status === 'available' ? snapshot.salary.groups : [];
   const current = groups[selectedGroup] ?? groups[0];
   const path = snapshot ? salaryRolePath(snapshot.role) : '/salaries';
@@ -207,27 +324,21 @@ function MarketSalaries({ snapshot, selectedGroup = 0 }: SalaryMarketPageProps) 
       </div>
       {current ? (
         <>
-          <nav className="sm-groups" aria-label="Валюта, период оплаты и налоги">
-            {groups.map((group, index) => (
-              <a
-                className="ps-btn"
-                key={`${group.currency}-${group.period}-${group.taxBasis}`}
-                href={`${path}?group=${index}`}
-                aria-current={current === group ? 'true' : undefined}
-              >
-                {salaryGroupLabel(group)}
-              </a>
-            ))}
-          </nav>
+          <SalaryBucketNavigation
+            groups={groups}
+            selectedGroup={selectedGroup}
+            path={path ?? '/salaries'}
+            grade={grade}
+          />
           <SalaryDistribution group={current} />
         </>
       ) : (
         <div className="sm-unavailable">
           <h3>Сравнимой зарплатной выборки пока нет</h3>
           <p>
-            Для расчёта нужны хотя бы 5 вакансий одного названия должности с полной вилкой,
-            одинаковой валютой, периодом оплаты и способом указания налогов. Мы не определяем месяц
-            или год по величине суммы.
+            Для расчёта нужны хотя бы 5 сопоставимых вакансий с полной вилкой, одинаковой валютой,
+            периодом оплаты и способом указания налогов. Мы не определяем месяц или год по величине
+            суммы.
           </p>
           <a className="ps-btn" href="/vacancies">
             Посмотреть опубликованные вакансии
@@ -237,14 +348,58 @@ function MarketSalaries({ snapshot, selectedGroup = 0 }: SalaryMarketPageProps) 
     </section>
   );
 }
+function MarketGrades({ snapshot, grade }: Pick<SalaryMarketPageProps, 'snapshot' | 'grade'>) {
+  const slices = snapshot?.gradeSlices?.filter((row) => row.sampleSize > 0) ?? [];
+  if (!snapshot || slices.length === 0) return null;
+  const path = salaryRolePath(snapshot.role);
+  const selected = slices.find((row) => row.grade === grade);
+  return (
+    <section className="sm-skills" aria-labelledby="grade-title">
+      <h2 id="grade-title">Уровень в названии вакансии</h2>
+      <nav className="sm-groups" aria-label="Грейд из опубликованного названия">
+        <a className="ps-btn" href={path} aria-current={!grade ? 'true' : undefined}>
+          Все уровни ({snapshot.sampleSize})
+        </a>
+        {slices.map((slice) => (
+          <a
+            className="ps-btn"
+            key={slice.grade}
+            href={`${path}?grade=${slice.grade}`}
+            aria-current={grade === slice.grade ? 'true' : undefined}
+          >
+            {SALARY_GRADE_LABELS[slice.grade]} ({slice.sampleSize})
+          </a>
+        ))}
+      </nav>
+      <p className="ps-soft">
+        Фильтр использует только явные слова в названии вакансии. Уровень без подтверждённого
+        маркера остаётся неизвестным. Частоты навыков и зарплатные выборки пересчитываются для
+        выбранного среза.
+      </p>
+      {selected && selected.evidence.markers.length > 0 ? (
+        <p className="ps-note">
+          Маркеры в опубликованных названиях:{' '}
+          {selected.evidence.markers
+            .slice(0, 8)
+            .map((marker) => salaryDisplayLabel(marker, 24))
+            .join(', ')}
+          .
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
 export function SalaryMarketPage(props: SalaryMarketPageProps) {
+  const visible = selectSalaryGrade(props.snapshot, props.grade);
   return (
     <>
       <main id="main" tabIndex={-1} className="ps-wrap ps-page sm-page">
-        <MarketHeading snapshot={props.snapshot} />
-        <MarketSalaries {...props} />
-        <MarketSkills snapshot={props.snapshot} />
-        <MarketMethodology snapshot={props.snapshot} />
+        <MarketHeading snapshot={visible} />
+        <MarketGrades snapshot={props.snapshot} grade={props.grade} />
+        <MarketSalaries {...props} snapshot={visible} />
+        <MarketSkills {...props} snapshot={visible} />
+        <MarketMethodology snapshot={visible} />
         <CompareResumeCta />
       </main>
     </>
@@ -260,10 +415,10 @@ function DirectoryHeading() {
         <span>Зарплаты и навыки</span>
       </nav>
       <p className="ps-label">Публичный инструмент</p>
-      <h1>Зарплаты и навыки по должностям</h1>
+      <h1>Зарплаты и навыки по профессиям</h1>
       <p className="ps-intro">
-        Выберите название должности из текущего среза каталога. Мы показываем опубликованные вилки
-        только там, где есть сравнимые данные.
+        Выберите профессию или название вакансии из текущего среза каталога. Мы показываем
+        опубликованные вилки только там, где есть сравнимые данные.
       </p>
     </header>
   );
@@ -276,12 +431,14 @@ function DirectoryRoles({ roles }: { roles: readonly SalaryMarketIndexEntry[] })
         .map((role) => (
           <li key={role.role}>
             <a href={salaryRolePath(role.role)}>
-              <b>{role.roleLabel}</b>
+              <b>{salaryRoleLabel(role)}</b>
               <span>
                 {role.sampleSize.toLocaleString('ru-RU')} вакансий ·{' '}
-                {role.indexable
-                  ? 'зарплатная выборка доступна'
-                  : 'сравнимых зарплат пока недостаточно'}
+                {role.profession?.kind === 'unclassified_title'
+                  ? 'профессия пока не определена'
+                  : role.indexable
+                    ? 'зарплатная выборка доступна'
+                    : 'сравнимых зарплат пока недостаточно'}
               </span>
             </a>
           </li>
@@ -289,23 +446,33 @@ function DirectoryRoles({ roles }: { roles: readonly SalaryMarketIndexEntry[] })
     </ul>
   );
 }
-function DirectoryPages({ currentPage, pageCount }: { currentPage: number; pageCount: number }) {
+function DirectoryPages({
+  currentPage,
+  pageCount,
+  kind = 'должности',
+  hrefForPage = (page) => `/salaries?page=${page}`,
+}: {
+  currentPage: number;
+  pageCount: number;
+  kind?: 'должности' | 'навыки';
+  hrefForPage?: (page: number) => string;
+}) {
   return (
     <>
       {' '}
       {pageCount > 1 ? (
-        <nav className="sm-groups" aria-label="Страницы должностей">
+        <nav className="sm-groups" aria-label={`Страницы: ${kind}`}>
           {currentPage > 1 ? (
-            <a className="ps-btn" href={`/salaries?page=${currentPage - 1}`}>
-              Предыдущие должности
+            <a className="ps-btn" href={hrefForPage(currentPage - 1)}>
+              Предыдущие {kind}
             </a>
           ) : null}
           <span>
             Страница {currentPage} из {pageCount}
           </span>
           {currentPage < pageCount ? (
-            <a className="ps-btn" href={`/salaries?page=${currentPage + 1}`}>
-              Следующие должности
+            <a className="ps-btn" href={hrefForPage(currentPage + 1)}>
+              Следующие {kind}
             </a>
           ) : null}
         </nav>
@@ -320,20 +487,20 @@ export function SalaryMarketDirectory({
   readonly page?: number;
   readonly roles: readonly SalaryMarketIndexEntry[];
 }) {
-  const pageCount = Math.max(1, Math.ceil(roles.length / 20));
+  const pageCount = Math.max(1, Math.ceil(roles.length / 10));
   const currentPage = Math.max(1, Math.min(pageCount, page));
-  const visible = roles.slice((currentPage - 1) * 20, currentPage * 20);
+  const visible = roles.slice((currentPage - 1) * 10, currentPage * 10);
   return (
     <>
       <main id="main" tabIndex={-1} className="ps-wrap ps-page sm-page">
         <DirectoryHeading />
         <section className="sm-skills">
-          <h2>Названия должностей в текущем срезе</h2>
+          <h2>Профессии и названия вакансий в текущем срезе</h2>
           {roles.length ? (
             <>
               <p className="ps-soft">
-                До 100 названий должностей, сначала с доступной зарплатной выборкой. Число
-                наблюдений относится к каталогу за 90 дней.
+                До {SALARY_MARKET_INDEX_LIMIT} профессий и названий вакансий, сначала с доступной
+                зарплатной выборкой. Число наблюдений относится к каталогу за 90 дней.
               </p>
               <DirectoryRoles roles={visible} />
               <DirectoryPages currentPage={currentPage} pageCount={pageCount} />

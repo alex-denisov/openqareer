@@ -1,10 +1,16 @@
+import {
+  isSalaryMarketGrade,
+  selectSalaryGrade,
+  salaryRoleLabel,
+} from '../../shared/salaryMarketPublic';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import type {
+  SalaryMarketGrade,
   SalaryMarketIndexEntry,
   SalaryMarketSnapshot,
 } from '../../shared/salaryMarketSnapshot';
@@ -52,20 +58,23 @@ export function renderSalaryMarketDocument(
   role: string,
   selectedGroup = 0,
   directory?: readonly SalaryMarketIndexEntry[],
+  grade?: SalaryMarketGrade,
+  skillsPage = 1,
 ): string {
   const path = directory ? '/salaries' : (salaryRolePath(role) ?? '/salaries');
   const canonical = `${SITE_ORIGIN}${path}`;
-  const title = escapeHtml(salaryPageTitle(snapshot));
+  const visible = selectSalaryGrade(snapshot, grade);
+  const title = escapeHtml(salaryPageTitle(visible ?? snapshot));
   const robots = (
-    directory ? directory.some((entry) => entry.indexable) : salarySnapshotIndexable(snapshot)
+    directory ? directory.some((entry) => entry.indexable) : salarySnapshotIndexable(visible)
   )
     ? 'index, follow'
     : 'noindex, follow';
-  const structured = salaryStructuredData(snapshot, canonical);
+  const structured = salaryStructuredData(visible, canonical);
   const content = renderToStaticMarkup(
     directory
       ? React.createElement(SalaryMarketDirectory, { roles: directory, page: selectedGroup || 1 })
-      : React.createElement(SalaryMarketPage, { snapshot, selectedGroup }),
+      : React.createElement(SalaryMarketPage, { snapshot, selectedGroup, grade, skillsPage }),
   );
   return salaryDocumentHead(template, { title, canonical, robots, structured }).replace(
     '%%SALARY_CONTENT%%',
@@ -82,7 +91,7 @@ function salaryStructuredData(snapshot: SalaryMarketSnapshot | null, canonical: 
         {
           '@type': 'ListItem',
           position: 2,
-          name: snapshot?.roleLabel ?? 'Зарплаты и навыки',
+          name: snapshot ? salaryRoleLabel(snapshot) : 'Зарплаты и навыки',
           item: canonical,
         },
       ],
@@ -152,31 +161,23 @@ export function registerSalaryMarketRoutes(
   registerSalaryDirectoryRoute(app, options, template);
   const read =
     options.read ?? ((role: string) => loadPublicSalarySnapshot(options.databasePath, role));
-  app.get<{ Params: { role: string }; Querystring: { group?: string } }>(
-    '/salaries/:role',
-    (request, reply) => {
-      const role = request.params.role;
-      if (!salaryRolePath(role))
-        return reply.code(404).header('X-Robots-Tag', 'noindex').send('Профессия не найдена');
-      if (!template)
-        return reply
-          .code(503)
-          .header('X-Robots-Tag', 'noindex')
-          .send('Страница временно недоступна');
-      let snapshot: SalaryMarketSnapshot | null;
-      try {
-        snapshot = read(role);
-      } catch {
-        return reply.code(503).header('X-Robots-Tag', 'noindex').send('Данные временно недоступны');
-      }
-      const group = /^\d{1,3}$/u.test(request.query.group ?? '') ? Number(request.query.group) : 0;
-      return reply
-        .type('text/html; charset=utf-8')
-        .header('Cache-Control', 'no-cache')
-        .code(snapshot ? 200 : 404)
-        .send(renderSalaryMarketDocument(template, snapshot, role, group));
-    },
-  );
+  app.get<{
+    Params: { role: string };
+    Querystring: { group?: string; grade?: string; skills?: string };
+  }>('/salaries/:role', (request, reply) => {
+    const role = request.params.role;
+    if (!salaryRolePath(role))
+      return reply.code(404).header('X-Robots-Tag', 'noindex').send('Профессия не найдена');
+    if (!template)
+      return reply.code(503).header('X-Robots-Tag', 'noindex').send('Страница временно недоступна');
+    let snapshot: SalaryMarketSnapshot | null;
+    try {
+      snapshot = read(role);
+    } catch {
+      return reply.code(503).header('X-Robots-Tag', 'noindex').send('Данные временно недоступны');
+    }
+    return sendSalaryView(reply, template, snapshot, role, request.query);
+  });
 }
 
 function registerSalaryDirectoryRoute(
@@ -200,4 +201,31 @@ function registerSalaryDirectoryRoute(
       return reply.code(503).header('X-Robots-Tag', 'noindex').send('Данные временно недоступны');
     }
   });
+}
+
+function sendSalaryView(
+  reply: FastifyReply,
+  template: string,
+  snapshot: SalaryMarketSnapshot | null,
+  role: string,
+  query: { grade?: string; group?: string; skills?: string },
+) {
+  const rawGrade = query.grade;
+  const grade = rawGrade && isSalaryMarketGrade(rawGrade) ? rawGrade : undefined;
+  if (rawGrade && !grade)
+    return reply.code(400).header('X-Robots-Tag', 'noindex').send('Неизвестный грейд');
+  if (grade && !selectSalaryGrade(snapshot, grade))
+    return reply
+      .code(404)
+      .header('X-Robots-Tag', 'noindex')
+      .send('Срез для этого грейда не подготовлен');
+  const group = /^\d{1,3}$/u.test(query.group ?? '') ? Number(query.group) : 0;
+  const skillsPage = /^\d{1,3}$/u.test(query.skills ?? '') ? Number(query.skills) : 1;
+  return reply
+    .type('text/html; charset=utf-8')
+    .header('Cache-Control', 'no-cache')
+    .code(snapshot ? 200 : 404)
+    .send(
+      renderSalaryMarketDocument(template, snapshot, role, group, undefined, grade, skillsPage),
+    );
 }

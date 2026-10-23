@@ -93,7 +93,7 @@ describe('bounded salary SSR', () => {
     const json = html.match(/<script type="application\/ld\+json">(.*?)<\/script>/u)![1]!;
     expect(JSON.parse(json)['@graph'][0].itemListElement[1].name).toBe(label);
   });
-  it('bounds the prepared directory to 20 visible roles and offers real pagination', async () => {
+  it('bounds the prepared directory to 10 visible roles and offers real pagination', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'salary-directory-'));
     writeFileSync(join(dir, 'salary-market.html'), template);
     const roles = Array.from({ length: 25 }, (_, i) => ({
@@ -110,7 +110,7 @@ describe('bounded salary SSR', () => {
       expect(first.statusCode).toBe(200);
       expect(first.body).toContain('href="/salaries?page=2"');
       expect(first.body).not.toContain('Analyst 24');
-      const second = await app.inject('/salaries?page=2');
+      const second = await app.inject('/salaries?page=3');
       expect(second.body).toContain('Analyst 24');
       expect(second.body).not.toContain('>Analyst 0<');
     } finally {
@@ -137,5 +137,58 @@ describe('bounded salary SSR', () => {
       await app.close();
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+  it('rejects unsupported grade names and absent slices rather than showing aggregate data', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'salary-grade-'));
+    writeFileSync(join(dir, 'salary-market.html'), template);
+    const app = Fastify();
+    registerSalaryMarketRoutes(app, { staticRoot: dir, databasePath: '', read: () => snapshot });
+    try {
+      const invalid = await app.inject('/salaries/analyst?grade=executive');
+      expect(invalid.statusCode).toBe(400);
+      const missing = await app.inject('/salaries/analyst?grade=senior');
+      expect(missing.statusCode).toBe(404);
+      expect(missing.headers['x-robots-tag']).toBe('noindex');
+    } finally {
+      await app.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('gates metadata on the selected grade rather than borrowing the whole profession sample', () => {
+    const full: SalaryMarketSnapshot = {
+      ...snapshot,
+      profession: { kind: 'b267', roleId: 'eng.analyst' },
+      salary: {
+        status: 'available',
+        methodology: 'published_range_bounds',
+        excluded: snapshot.salary.excluded,
+        groups: [
+          {
+            currency: 'EUR',
+            period: 'year',
+            taxBasis: 'gross',
+            sampleSize: 5,
+            lower: { p25: 1, p50: 2, p75: 3, p90: 4 },
+            upper: { p25: 2, p50: 3, p75: 4, p90: 5 },
+          },
+        ],
+      },
+      gradeSlices: [
+        {
+          grade: 'unknown',
+          sampleSize: 2,
+          skills: [],
+          salary: snapshot.salary,
+          evidence: { field: 'title', markers: [] },
+        },
+      ],
+    };
+    expect(renderSalaryMarketDocument(template, full, 'analyst')).toContain(
+      'content="index, follow"',
+    );
+    const selected = renderSalaryMarketDocument(template, full, 'analyst', 0, undefined, 'unknown');
+    expect(selected).toContain('content="noindex, follow"');
+    expect(selected).not.toContain('"@type":"Occupation"');
+    expect(selected).not.toContain('<dt>P50</dt>');
   });
 });

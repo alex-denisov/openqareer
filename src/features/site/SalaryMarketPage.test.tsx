@@ -6,6 +6,7 @@ import { SalaryMarketPage, salarySnapshotIndexable, salaryRolePath } from './Sal
 import type { SalaryMarketSnapshot } from '../../../shared/salaryMarketSnapshot';
 export const TEST_SALARY_SNAPSHOT: SalaryMarketSnapshot = {
   role: 'software-engineer',
+  profession: { kind: 'b267', roleId: 'eng.frontend.ic' },
   roleLabel: 'Software Engineer',
   updatedAt: '2026-10-23T00:00:00Z',
   windowDays: 90,
@@ -68,5 +69,100 @@ describe('public salary evidence page', () => {
     expect(html).not.toContain('<dt>P50</dt>');
     expect(salarySnapshotIndexable(null)).toBe(false);
     expect(salaryRolePath('../private')).toBeUndefined();
+  });
+});
+
+describe('prepared profession and grade views', () => {
+  const graded: SalaryMarketSnapshot = {
+    ...TEST_SALARY_SNAPSHOT,
+    profession: { kind: 'b267', roleId: 'eng.software-engineer' },
+    grades: 'published_title_evidence',
+    gradeSlices: [
+      {
+        grade: 'senior',
+        sampleSize: 8,
+        skills: [{ name: 'SQL', count: 2, frequency: 25 }],
+        salary:
+          TEST_SALARY_SNAPSHOT.salary.status === 'available'
+            ? {
+                ...TEST_SALARY_SNAPSHOT.salary,
+                groups: TEST_SALARY_SNAPSHOT.salary.groups.map((group) => ({
+                  ...group,
+                  sampleSize: 5,
+                })),
+                excluded: {
+                  missingPeriod: 3,
+                  missingCurrency: 0,
+                  openRange: 0,
+                  invalidRange: 0,
+                  belowMinimumSample: 0,
+                },
+              }
+            : TEST_SALARY_SNAPSHOT.salary,
+        evidence: { field: 'title', markers: ['Senior'] },
+      },
+      {
+        grade: 'unknown',
+        sampleSize: 2,
+        skills: [],
+        salary: {
+          status: 'unavailable',
+          reason: 'no_comparable_ranges',
+          excluded: {
+            missingPeriod: 2,
+            missingCurrency: 0,
+            openRange: 0,
+            invalidRange: 0,
+            belowMinimumSample: 0,
+          },
+        },
+        evidence: { field: 'title', markers: [] },
+      },
+    ],
+  };
+  it('uses the selected grade denominator and preserves it in the salary bucket link', () => {
+    const html = renderToStaticMarkup(<SalaryMarketPage snapshot={graded} grade="senior" />);
+    expect(html).toContain('Senior (8)');
+    expect(html).toContain('2 из 8');
+    expect(html).not.toContain('10 из 20');
+    expect(html).toContain('grade=senior&amp;group=0');
+    expect(html).toContain('Маркеры в опубликованных названиях: Senior');
+    expect(html).toContain('Названия объединены в профессию');
+  });
+  it('never labels the unknown slice Junior or fills its missing salary from all grades', () => {
+    const html = renderToStaticMarkup(<SalaryMarketPage snapshot={graded} grade="unknown" />);
+    expect(html).toContain('Грейд не подтверждён (2)');
+    expect(html).not.toContain('<dt>P50</dt>');
+    expect(html).not.toContain('Маркеры в опубликованных названиях:');
+  });
+  it('keeps unclassified raw titles outside the indexed profession barometer', () => {
+    expect(
+      salarySnapshotIndexable({
+        ...TEST_SALARY_SNAPSHOT,
+        profession: { kind: 'unclassified_title' },
+      }),
+    ).toBe(false);
+  });
+  it('paginates the actual top-15 skills while preserving grade and currency group', () => {
+    const source: SalaryMarketSnapshot = {
+      ...graded,
+      gradeSlices: graded.gradeSlices?.map((slice) => ({
+        ...slice,
+        skills: Array.from({ length: 15 }, (_, i) => ({
+          name: `Technology ${i}`,
+          count: 2,
+          frequency: 25,
+        })),
+      })),
+    };
+    const first = renderToStaticMarkup(<SalaryMarketPage snapshot={source} grade="senior" />);
+    expect((first.match(/<meter /gu) ?? []).length).toBe(5);
+    expect(first).toContain('grade=senior&amp;group=0&amp;skills=2');
+    const second = renderToStaticMarkup(
+      <SalaryMarketPage snapshot={source} grade="senior" skillsPage={2} />,
+    );
+    expect(second).toContain('start="6"');
+    expect(second).toContain('Technology 5');
+    expect(second).not.toContain('Technology 0<');
   });
 });
