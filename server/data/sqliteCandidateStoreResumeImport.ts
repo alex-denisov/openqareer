@@ -112,6 +112,17 @@ export function commitSourceConnectionOnly(
   receipt: NativeSourceReceiptInput,
   sourceLabel: string,
 ): StoredNativeSourceConnection {
+  // A platform that already owns profile facts keeps them: connecting it
+  // again must not orphan them from its receipt (prod, 23.10.2026).
+  const owned = dependencies.sourceConnections
+    .list(candidateId)
+    .find((connection) => connection.platform === receipt.platform && connection.receipt.factCount > 0);
+  if (owned) {
+    return dependencies.sourceConnections.upsert(candidateId, receipt, {
+      messageId: owned.receipt.sourceMessageId,
+      memoryIds: owned.receipt.memoryIds,
+    });
+  }
   const evidence = dependencies.conversations.importResumeEvidenceInTransaction(candidateId, {
     sourceLabel,
     platform: receipt.platform,
@@ -134,7 +145,18 @@ export function replaceProfileWithImport(
   input: ResumeImportCommit & { readonly sourceReceipt: NativeSourceReceiptInput },
 ): CommittedResumeImport {
   releaseOtherImportSources(dependencies, candidateId, input.sourceReceipt.platform);
-  return commitNewResumeImport(dependencies, candidateId, input);
+  const committed = commitNewResumeImport(dependencies, candidateId, input);
+  // Untouched imported facts no connection owns any more (file uploads,
+  // receipts lost earlier) leave too: the profile is this platform only.
+  dependencies.conversations.purgeSupersededFileImportFacts(
+    candidateId,
+    committed.evidence.messageId,
+    dependencies.sourceConnections
+      .list(candidateId)
+      .filter((connection) => connection.platform === input.sourceReceipt.platform)
+      .map((connection) => connection.receipt.sourceMessageId),
+  );
+  return committed;
 }
 
 function releaseOtherImportSources(
