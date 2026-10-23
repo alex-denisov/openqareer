@@ -121,7 +121,9 @@ export function HhConnectModal({
   );
 
   useEffect(() => {
-    if (!isOpen || step !== 'session_open') return;
+    // A resume choice means the sign-in already happened: the window may close,
+    // the import reopens it (B157) — nothing to blame then (B464).
+    if (!isOpen || step !== 'session_open' || choice?.length) return;
     let cancelled = false;
     const checkPopup = async () => {
       if (await isConnectorSessionOpen('hh')) return;
@@ -136,7 +138,7 @@ export function HhConnectModal({
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [isOpen, step]);
+  }, [isOpen, step, choice]);
 
   useEffect(() => {
     if (!isOpen) {
