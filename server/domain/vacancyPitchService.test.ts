@@ -499,3 +499,34 @@ describe('vacancyPitchService', () => {
     expect(pitch.contactMessage).toMatch(/call|discuss|connect/iu);
   });
 });
+
+describe('B422: компания «Хочу» в шаблонном письме', () => {
+  const vacancy: VacancyPitchInputVacancy = {
+    id: 'vac-422',
+    title: 'VP Engineering',
+    company: 'Kerry',
+    requiredSkills: [],
+  };
+
+  it('ru: одна фраза о желании работать в компании, только при отметке', () => {
+    const marked = generateVacancyPitch({
+      vacancy,
+      facts: [],
+      language: 'ru',
+      targetCompany: true,
+    });
+    const plain = generateVacancyPitch({ vacancy, facts: [], language: 'ru' });
+    expect(marked.atsCoverLetter).toContain('Kerry — компания, в которой я хочу работать.');
+    expect(plain.atsCoverLetter).not.toContain('хочу работать');
+  });
+
+  it('en: the same sentence in English', () => {
+    const marked = generateVacancyPitch({
+      vacancy,
+      facts: [],
+      language: 'en',
+      targetCompany: true,
+    });
+    expect(marked.atsCoverLetter).toContain('Kerry is a company I want to work for.');
+  });
+});
