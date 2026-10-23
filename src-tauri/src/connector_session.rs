@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
-    WebviewWindowBuilder,
+    webview::PageLoadEvent, AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview,
+    WebviewUrl, WebviewWindowBuilder,
 };
 use uuid::Uuid;
 
@@ -132,6 +132,15 @@ fn session_window_chrome(managed: bool) -> (bool, bool, bool) {
 fn should_parent_session_window(session_key: Option<&str>) -> bool {
     session_key.is_none()
 }
+
+/// A candidate's sign-in window stays hidden until its page has loaded, so the
+/// dialog's «Загружаем страницу…» shows instead of a blank dark rectangle (B464).
+fn starts_hidden_until_loaded(session_key: Option<&str>) -> bool {
+    session_key.is_none()
+}
+
+/// Shown anyway after this long, so a slow page never leaves the window hidden.
+const HIDDEN_WINDOW_SHOW_AFTER: Duration = Duration::from_secs(12);
 
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
     let raw = session_key
@@ -761,8 +770,23 @@ pub async fn open_session_window(
         builder = builder.proxy_url(proxy);
     }
 
+    let hidden = starts_hidden_until_loaded(request.session_key.as_deref());
+    if hidden {
+        builder = builder.visible(false).on_page_load(|window, payload| {
+            if matches!(payload.event(), PageLoadEvent::Finished) {
+                let _ = window.show();
+            }
+        });
+    }
+
     match builder.build() {
-        Ok(_) => {
+        Ok(window) => {
+            if hidden {
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(HIDDEN_WINDOW_SHOW_AFTER).await;
+                    let _ = window.show();
+                });
+            }
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
             if await_registered_window(app, &label).await {
@@ -1011,12 +1035,38 @@ fn platform_name(platform: &str) -> &'static str {
     }
 }
 
+/// Logical origin of the main window's content: the outer frame plus its title
+/// bar. `inner_position()` on macOS can report the frame itself, which put the
+/// sign-in window over the dialog's own «Отмена» row (B464).
+fn content_origin(
+    outer: (i32, i32),
+    outer_height: u32,
+    inner_height: u32,
+    scale: f64,
+) -> (f64, f64) {
+    let title_bar = f64::from(outer_height.saturating_sub(inner_height));
+    (
+        f64::from(outer.0) / scale,
+        (f64::from(outer.1) + title_bar) / scale,
+    )
+}
+
 fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> SessionLayout {
     let scale = main.scale_factor().unwrap_or(1.0);
-    let origin = main.inner_position().unwrap_or_default();
+    let outer = main.outer_position().unwrap_or_default();
+    let outer_height = main
+        .outer_size()
+        .map(|size| size.height)
+        .unwrap_or_default();
+    let inner_height = main
+        .inner_size()
+        .map(|size| size.height)
+        .unwrap_or(outer_height);
+    let (origin_x, origin_y) =
+        content_origin((outer.x, outer.y), outer_height, inner_height, scale);
     SessionLayout {
-        x: f64::from(origin.x) / scale + layout.x,
-        y: f64::from(origin.y) / scale + layout.y,
+        x: origin_x + layout.x,
+        y: origin_y + layout.y,
         width: layout.width,
         height: layout.height,
     }
@@ -1916,6 +1966,22 @@ pub fn append_connector_diagnostic(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn content_origin_skips_the_title_bar() {
+        // macOS: outer frame at (160, 60) px, 56 px of title bar at scale 2.
+        assert_eq!(
+            super::content_origin((160, 60), 1668, 1612, 2.0),
+            (80.0, 58.0)
+        );
+        assert_eq!(super::content_origin((80, 30), 806, 806, 1.0), (80.0, 30.0));
+    }
+
+    #[test]
+    fn candidate_window_waits_for_its_page_before_showing() {
+        assert!(super::starts_hidden_until_loaded(None));
+        assert!(!super::starts_hidden_until_loaded(Some("profile_x")));
+    }
+
     #[test]
     fn error_codes_stop_at_the_first_non_code_character() {
         assert_eq!(first_code("eval_failed: boom"), "eval_failed");

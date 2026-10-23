@@ -7295,12 +7295,18 @@
 }
 
 .career-connector-webview-placeholder {
+  display: grid;
+  gap: var(--career-space-2);
   margin: 0;
   padding: 24px;
   max-width: 42ch;
   font-size: var(--career-text-xs);
   line-height: 1.5;
   color: #4a5568;
+}
+
+.career-connector-webview-placeholder p {
+  margin: 0;
 }
 
 .career-modal-error svg {
@@ -9972,10 +9978,11 @@
   background: var(--career-surface);
 }
 
-/* Атрибуция — компактная кнопка «i» (раскрывается по нажатию), без крупного текста. */
+/* Атрибуция OSM — мелкая подпись справа внизу, как в макете 4 (B553). */
 .career-map-stage .career-map-gl .maplibregl-ctrl.maplibregl-ctrl-attrib {
-  margin: var(--career-space-2);
-  background: var(--career-bg-elevated);
+  margin: 0;
+  padding: 0 var(--career-space-1);
+  background: color-mix(in oklch, var(--career-bg) 60%, transparent);
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
 }
@@ -10295,9 +10302,27 @@
   font-weight: 700;
 }
 
+/* Макет 390: название и число — по одной строке, длинное название обрезается. */
+.career-map-city-card strong,
+.career-map-city-card small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .career-map-city-card small {
   color: var(--career-text-soft);
   font-size: var(--career-text-xs);
+}
+
+/* Макет 390: подпись OSM видна под карточкой города. */
+.career-map-push .career-map-city-card {
+  inset-block-end: var(--career-space-5);
+}
+
+/* Макет 390: ± нет — масштаб жестом. */
+.career-map-push .career-map-zoom-controls {
+  display: none;
 }
 
 .career-map-city-card-cta {

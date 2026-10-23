@@ -62,11 +62,8 @@ function createMap(element: HTMLDivElement, cities: readonly CityFacet[]): MapLi
     renderWorldCopies: false,
     ...initialView(cities, element.clientWidth),
   });
-  // Атрибуция — компактная кнопка «i», раскрывается по нажатию.
-  map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
-  map.once('load', () =>
-    element.querySelector('.maplibregl-compact-show')?.classList.remove('maplibregl-compact-show'),
-  );
+  // Атрибуция OSM видна текстом справа внизу, как в макете 4 (B553).
+  map.addControl(new AttributionControl({ compact: false }), 'bottom-right');
   map.touchZoomRotate.disableRotation();
   return map;
 }

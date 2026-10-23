@@ -54,15 +54,17 @@ export function VacancyFitSummary({
   const result = view?.result;
   const numeric = fitHasNumber(view);
   const reason =
-    view?.state === 'ready' && result
+    (view?.state === 'ready' && result
       ? REASONS[result.reason === 'assessed' && !numeric ? 'too_few_skills' : result.reason]
-      : STATE_LABELS[view?.state ?? 'not_requested'];
+      : STATE_LABELS[view?.state ?? 'not_requested']) ?? STATE_LABELS.ready;
   return (
     <span
       className={`vacancy-fit-summary${compact ? ' is-compact' : ''}`}
       data-fit-state={view?.state ?? 'not_requested'}
     >
-      <span className="vacancy-fit-label">Соответствие вашему профилю</span>
+      <span className={compact ? 'career-sr-only' : 'vacancy-fit-label'}>
+        Соответствие вашему профилю
+      </span>
       {numeric && result && result.coveragePercent !== null ? (
         <>
           <strong className="vacancy-fit-percent">{result.coveragePercent}%</strong>
@@ -79,26 +81,15 @@ export function VacancyFitSummary({
           {result.dataState === 'partial' ? <span>{partialNote(result)}</span> : null}
         </>
       ) : (
-        <span>{reason}</span>
+        <span>{compact ? `Соответствие: ${lowerFirst(reason)}` : reason}</span>
       )}
     </span>
   );
 }
 
-const PENDING_STATES = new Set(['not_requested', 'processing', 'retrying', 'failed']);
+const lowerFirst = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
-/** One short row label (B525): «уточняется», «нет требований», «недостаточно данных». */
-function fitInlineText(view: VacancyFitView): string {
-  if (fitHasNumber(view)) return `соответствие ${view.result!.coveragePercent}\u00a0%`;
-  if (PENDING_STATES.has(view.state)) return 'соответствие уточняется';
-  if (view.state === 'no_requirements' || view.state === 'no_description')
-    return 'соответствие: нет требований';
-  if (view.result?.reason === 'no_requirements') return 'соответствие: нет требований';
-  if (view.result?.reason === 'blocked_gate') return 'соответствие: условие не совпадает';
-  return 'соответствие: недостаточно данных';
-}
-
-/** The row keeps the fit inside its subtitle line, never as extra lines (V3). */
+/** The row shows only a calculated percent inside its subtitle line (V3); states live in the card. */
 export function VacancyFitInline({
   view: initialView,
   vacancyId,
@@ -107,13 +98,11 @@ export function VacancyFitInline({
   readonly vacancyId?: string;
 }) {
   const view = useLatestVacancyFitView(vacancyId, initialView);
-  if (!view) return null;
+  if (!fitHasNumber(view)) return null;
   return (
-    <span
-      className={`vacancy-fit-inline${fitHasNumber(view) ? ' is-number' : ''}`}
-      data-fit-state={view.state}
-    >
-      {fitInlineText(view)}
+    <span className="vacancy-fit-inline is-number" data-fit-state={view!.state}>
+      соответствие {view!.result!.coveragePercent}
+      {'\u00a0%'}
     </span>
   );
 }

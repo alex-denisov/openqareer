@@ -19,6 +19,7 @@ import {
   type ConnectorSessionStep,
 } from './connectorSession';
 import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
+import { ConnectorWindowPlaceholder } from './ConnectorWindowPlaceholder';
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
@@ -274,8 +275,7 @@ export function HhConnectModal({
         stuck: false,
       };
     }
-    unrecognisedPolls.current =
-      result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
+    unrecognisedPolls.current = result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
     return hhWaitingNotice(result.stage, unrecognisedPolls.current);
   }
 
@@ -337,9 +337,7 @@ export function HhConnectModal({
       setAutoPollPaused(true);
       setWaiting(undefined);
       setChoice(resumes);
-      setSelectedResumeId(
-        resumes.find((item) => item.url === rawUrl)?.id ?? resumes[0]?.id ?? '',
-      );
+      setSelectedResumeId(resumes.find((item) => item.url === rawUrl)?.id ?? resumes[0]?.id ?? '');
       setError(hhResumeImportFailure(reason));
       return;
     }
@@ -349,8 +347,7 @@ export function HhConnectModal({
 
   /** Reads the resume the candidate chose, in the window they chose it from. */
   async function importChoice() {
-    const selected =
-      choice?.find((item) => item.id === selectedResumeId) ?? choice?.[0];
+    const selected = choice?.find((item) => item.id === selectedResumeId) ?? choice?.[0];
     if (!selected) return;
     setImporting(true);
     setError(undefined);
@@ -364,11 +361,7 @@ export function HhConnectModal({
               await openConnectorSession(
                 'hh',
                 url,
-                sessionLayoutForHost(
-                  webviewHost.current,
-                  window.innerWidth,
-                  window.innerHeight,
-                ),
+                sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
               )
             ).opened,
         },
@@ -399,7 +392,8 @@ export function HhConnectModal({
         sessionOpened: sessionOpened.current,
         paused: autoPollPaused,
       })
-    ) return;
+    )
+      return;
     let cancelled = false;
     const run = () => {
       void (async () => {
@@ -426,9 +420,7 @@ export function HhConnectModal({
   // The step is never silent: while the window is being built there is nothing
   // to poll yet, and silence is exactly what an undetected sign-in looks like.
   const status: HhWaitingNotice | undefined =
-    step === 'opening'
-      ? { text: 'Открываем окно входа hh.ru…', stuck: false }
-      : waiting;
+    step === 'opening' ? { text: 'Открываем окно входа hh.ru…', stuck: false } : waiting;
   // The frame is part of the step from the moment the window is being opened:
   // it is what the native window is measured against, and it is where the
   // candidate's own controls live.
@@ -453,9 +445,9 @@ export function HhConnectModal({
           <>
             <RouteNoticeLine notice={route} />
             <p className="career-modal-intro">
-              Вход проходит на странице самой hh.ru, в вашей собственной сессии.
-              После входа OpenQareer сам загрузит резюме и закроет окно. Если
-              резюме несколько, вы выберете нужное.
+              Вход проходит на странице самой hh.ru, в вашей собственной сессии. После входа
+              OpenQareer сам загрузит резюме и закроет окно. Если резюме несколько, вы выберете
+              нужное.
             </p>
           </>
         )}
@@ -480,10 +472,7 @@ export function HhConnectModal({
         ) : null}
 
         {status ? (
-          <p
-            className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`}
-            role="status"
-          >
+          <p className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`} role="status">
             {status.stuck ? (
               <WarningCircle size={16} weight="fill" />
             ) : (
@@ -495,7 +484,8 @@ export function HhConnectModal({
 
         {sessionActive && !isTauriEnvironment() ? (
           <p className="career-connector-waiting" role="status">
-            Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит резюме.
+            Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит
+            резюме.
           </p>
         ) : null}
 
@@ -506,13 +496,7 @@ export function HhConnectModal({
             role="group"
             aria-label="Вход в hh.ru"
           >
-            {/* Visible only when the native window is not covering this area —
-                a blank white rectangle is what the owner saw instead (B157). */}
-            <p className="career-connector-webview-placeholder">
-              Окно входа hh.ru открывается поверх этой области. Если его не
-              видно, оно может быть свёрнуто или за другим окном — найдите его и
-              завершите вход.
-            </p>
+            <ConnectorWindowPlaceholder platform="hh" />
           </div>
         ) : null}
 

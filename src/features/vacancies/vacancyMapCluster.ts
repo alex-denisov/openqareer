@@ -117,6 +117,8 @@ const CAPSULE_CHAR_WIDTH = 7.4;
 const CAPSULE_PADDING = 32; // 12 px по бокам + 8 px между названием и числом
 const CAPSULE_MIN_WIDTH = 44;
 const CAPSULE_HEIGHT = 44;
+/** B553 390: капсула не прилипает к боковому краю карты. */
+const CAPSULE_EDGE_INSET = 8;
 const CAPSULE_GAP = 4;
 
 /** Ширина капсулы «Москва 74» на экране: шрифт 13 px, поля по 10 px, не уже зоны касания. */
@@ -279,7 +281,10 @@ export function clampMarker(
   if (point.x < 0 || point.y < 0 || point.x > view.width || point.y > view.height) return undefined;
   const half = capsuleWidth(text) / 2;
   const halfHeight = CAPSULE_HEIGHT / 2;
-  const x = Math.min(Math.max(point.x, half), view.width - half);
+  const x = Math.min(
+    Math.max(point.x, half + CAPSULE_EDGE_INSET),
+    view.width - half - CAPSULE_EDGE_INSET,
+  );
   const y = Math.min(Math.max(point.y, halfHeight), view.height - halfHeight);
   const hidden = (view.blocked ?? []).some(
     (rect) =>

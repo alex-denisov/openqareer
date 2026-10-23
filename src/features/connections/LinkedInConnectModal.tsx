@@ -17,6 +17,7 @@ import {
   type ConnectorSessionStep,
 } from './connectorSession';
 import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
+import { ConnectorWindowPlaceholder } from './ConnectorWindowPlaceholder';
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
@@ -422,12 +423,7 @@ export function LinkedInConnectModal({
             role="group"
             aria-label="Вход в LinkedIn"
           >
-            {/* Visible only when the native window is not covering this area —
-                a blank white rectangle is what the owner saw instead (B157). */}
-            <p className="career-connector-webview-placeholder">
-              Окно входа LinkedIn открывается поверх этой области. Если его не видно, оно может быть
-              свёрнуто или за другим окном — найдите его и завершите вход.
-            </p>
+            <ConnectorWindowPlaceholder platform="linkedin" />
           </div>
         ) : null}
         {error ? (

@@ -108,9 +108,12 @@ describe('B375: vacancy map clustering and normalization', () => {
   it('капсулу у края сдвигает внутрь, точку за краем не показывает', () => {
     const view = { width: 400, height: 300 };
     expect(clampMarker({ x: 5, y: 150 }, 'Москва 74', view)).toEqual({
-      x: capsuleWidth('Москва 74') / 2,
+      x: capsuleWidth('Москва 74') / 2 + 8,
       y: 150,
     });
+    // B553 390: капсула не прилипает к правому краю карточки карты — отступ 8 px.
+    const right = clampMarker({ x: 398, y: 150 }, 'Петрозаводск 1', view);
+    expect(right && right.x + capsuleWidth('Петрозаводск 1') / 2).toBe(392);
     expect(clampMarker({ x: 200, y: 299 }, 'Казань 6', view)).toEqual({ x: 200, y: 278 });
     expect(clampMarker({ x: -40, y: 150 }, 'Москва 74', view)).toBeUndefined();
   });
