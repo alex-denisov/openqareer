@@ -300,7 +300,15 @@ function resumeIdFromHref(href: string): string | undefined {
  * «Менеджер по продукту Обновлено 9&nbsp;августа&nbsp;2026&nbsp;в&nbsp;16:09»
  * — which is what the candidate saw in the picker (owner report, 2026-08-26).
  */
+// Since 10.2026 the card wraps the title in employment type, salary and
+// visibility notes; its own cell is the only reliable label.
+const RESUME_TITLE_CELL =
+  /data-qa=["']resume-title["'][^>]*>[\s\S]*?data-qa=["']cell-text-content["'][^>]*>([\s\S]*?)<\/span>/u;
+
 function resumeCardTitle(linkHtml: string): string {
+  const cell = RESUME_TITLE_CELL.exec(linkHtml)?.[1];
+  const cellText = cell ? plainText(cell).trim() : '';
+  if (cellText) return cellText;
   const text = plainText(linkHtml);
   const name = text.split(/\s+Обновлено\s+/u)[0].trim();
   return name || text;

@@ -258,4 +258,15 @@ describe('the resume card label the candidate picks from', () => {
       },
     ]);
   });
+
+  it('takes the resume title cell, not the employment type and visibility around it (23.10.2026)', () => {
+    const html =
+      '<a data-qa="resume-card-link-ab12" href="/resume/ab12cd34">' +
+      '<div data-qa="title-header">Постоянная работа, подработка</div>' +
+      '<div data-qa="resume-title"><div><span data-qa="cell-text-content">Head of Platform</span></div></div>' +
+      '<div data-qa="title-description"><span data-qa="cell-text-content">Уровень дохода не указан</span></div>' +
+      '<span>Многие не видят ваше резюме</span></a>';
+
+    expect(parseHhResumesList(html).map((resume) => resume.title)).toEqual(['Head of Platform']);
+  });
 });
