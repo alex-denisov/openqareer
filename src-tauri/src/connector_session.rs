@@ -1469,6 +1469,18 @@ fn capture_dumps_to_prune(mut names: Vec<String>) -> Vec<String> {
     names.into_iter().take(excess).collect()
 }
 
+fn is_connections_page_url(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url
+                .host_str()
+                .is_some_and(|host| host_belongs_to(host, "linkedin.com"))
+            && url
+                .path()
+                .starts_with("/mynetwork/invite-connect/connections")
+    })
+}
+
 /// Saves the open LinkedIn session page through the same sanitizer as
 /// `read_session_page`; the caller cannot hand in a body of its own.
 pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
@@ -1481,6 +1493,13 @@ pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<St
     let window = app
         .get_webview(label)
         .ok_or_else(|| "session_window_missing".to_string())?;
+    // Only the connections list is ever kept: never a profile, feed or message page.
+    if !window
+        .url()
+        .is_ok_and(|current| is_connections_page_url(current.as_str()))
+    {
+        return Err("capture_dump_page_not_allowed".to_string());
+    }
     let body_json = eval_json(&window, &page_sanitize_script("linkedin")).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
@@ -1518,6 +1537,22 @@ mod tests {
         assert_eq!(capture_dump_file_name("../etc", 1), None);
         assert_eq!(capture_dump_file_name("", 1), None);
         assert_eq!(capture_dump_file_name("Conn", 1), None);
+    }
+
+    #[test]
+    fn capture_dump_is_limited_to_the_connections_page() {
+        assert!(is_connections_page_url(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://www.linkedin.com/in/someone/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://www.linkedin.com/messaging/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://evil.example/mynetwork/invite-connect/connections/"
+        ));
     }
 
     #[test]
