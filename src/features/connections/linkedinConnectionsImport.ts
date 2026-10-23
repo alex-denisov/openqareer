@@ -12,8 +12,8 @@ import {
 export const LINKEDIN_CONNECTIONS_URL =
   'https://www.linkedin.com/mynetwork/invite-connect/connections/';
 const CONNECTIONS_PATH = '/mynetwork/invite-connect/connections';
-/** The server's import route accepts at most 400 contacts per call. */
-export const MAX_IMPORTED_CONNECTIONS = 400;
+/** The server's import route accepts at most 2 000 contacts per call. */
+export const MAX_IMPORTED_CONNECTIONS = 2_000;
 const MAX_CONNECTIONS_PAGE_BYTES = 8 * 1_024 * 1_024;
 const CONNECTIONS_READ_INTERVAL_MS = 12 * 60 * 60 * 1_000;
 const CONNECTIONS_READ_STORAGE_KEY = 'openqareer.linkedin.lastConnectionsReadAt.v1';
@@ -39,6 +39,8 @@ export type LinkedInConnectionsImportOutcome =
       readonly count: number;
       /** People read from the page. */
       readonly parsed: number;
+      /** People with a company, before the per-import cap. */
+      readonly withCompany: number;
     }
   | {
       readonly status: 'skipped';
@@ -77,14 +79,20 @@ export async function importLinkedInConnectionsFromSession(
     return { status: 'skipped', reason: 'not_connections_page', detail: landedSection(page) };
   }
   const connections = extractLinkedInConnections(page.body);
-  const contacts = toConnectionImportContacts(connections, MAX_IMPORTED_CONNECTIONS);
+  const placed = toConnectionImportContacts(connections, Number.POSITIVE_INFINITY);
+  const contacts = placed.slice(0, MAX_IMPORTED_CONNECTIONS);
   if (contacts.length === 0) {
     await dependencies.saveCaptureDump?.(page.body).catch(() => undefined);
     return { status: 'skipped', reason: 'no_contacts', detail: String(connections.length) };
   }
   // The server logs its own failures; a lost upload is retried on the next read.
   void dependencies.upload(contacts).catch(() => undefined);
-  return { status: 'uploading', count: contacts.length, parsed: connections.length };
+  return {
+    status: 'uploading',
+    count: contacts.length,
+    parsed: connections.length,
+    withCompany: placed.length,
+  };
 }
 
 /** The leading `snake_case` code of a shell error, e.g. `page_load_timeout`. */

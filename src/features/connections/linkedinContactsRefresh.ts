@@ -69,7 +69,7 @@ export async function refreshLinkedInContacts(
   throttle.markRead(completed ? now : now - CONTACTS_REFRESH_INTERVAL_MS + FAILURE_RETRY_MS);
   if (outcome.status === 'uploading') {
     dependencies.log('parsed', String(outcome.parsed));
-    dependencies.log('with_company', String(outcome.count));
+    dependencies.log('with_company', String(outcome.withCompany));
     dependencies.log('uploading', String(outcome.count));
   } else {
     dependencies.log(outcome.reason, outcome.detail);

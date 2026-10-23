@@ -13,7 +13,9 @@ function deps(overrides: Partial<Parameters<typeof refreshLinkedInContacts>[0]> 
       markRead: vi.fn<(at: number) => void>(),
     },
     openOutOfSight: vi.fn().mockResolvedValue(true),
-    importContacts: vi.fn().mockResolvedValue({ status: 'uploading', count: 3, parsed: 12 }),
+    importContacts: vi
+      .fn()
+      .mockResolvedValue({ status: 'uploading', count: 3, parsed: 12, withCompany: 5 }),
     close: vi.fn().mockResolvedValue(undefined),
     prepareRoute: vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined) }),
     log: vi.fn(),
@@ -28,6 +30,7 @@ describe('contacts-only LinkedIn refresh (B448)', () => {
       status: 'uploading',
       count: 3,
       parsed: 12,
+      withCompany: 5,
     });
     expect(d.openOutOfSight).toHaveBeenCalledOnce();
     expect(d.importContacts).toHaveBeenCalledOnce();
@@ -141,7 +144,7 @@ describe('contacts-only LinkedIn refresh (B448)', () => {
       Math.abs((vi.mocked(done.throttle.markRead).mock.calls[0]?.[0] as number) - Date.now()),
     ).toBeLessThan(5_000);
     expect(done.log).toHaveBeenCalledWith('parsed', '12');
-    expect(done.log).toHaveBeenCalledWith('with_company', '3');
+    expect(done.log).toHaveBeenCalledWith('with_company', '5');
     expect(done.log).toHaveBeenCalledWith('uploading', '3');
   });
 });
