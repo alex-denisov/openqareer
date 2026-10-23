@@ -1289,12 +1289,27 @@ const LAZY_SCROLL_MAX_STEPS: usize = 40;
 /// The connections list appends ~7 cards a step: 40 steps reached 278 of
 /// 1 996 (23.10 capture); 150 bounds the walk near 1 000 contacts (B448).
 const CONNECTIONS_SCROLL_MAX_STEPS: usize = 150;
+/// The list loads its next chunk well after the scroll lands; four quiet
+/// readings ended run 4 after 7 steps (B448).
+const CONNECTIONS_QUIET_READINGS: usize = 8;
 
-fn lazy_scroll_budget(path: &str) -> usize {
+#[derive(Debug, Clone, Copy)]
+struct LazyScrollBudget {
+    max_steps: usize,
+    quiet_readings: usize,
+}
+
+fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
     if path.starts_with("/mynetwork/invite-connect/connections") {
-        CONNECTIONS_SCROLL_MAX_STEPS
+        LazyScrollBudget {
+            max_steps: CONNECTIONS_SCROLL_MAX_STEPS,
+            quiet_readings: CONNECTIONS_QUIET_READINGS,
+        }
     } else {
-        LAZY_SCROLL_MAX_STEPS
+        LazyScrollBudget {
+            max_steps: LAZY_SCROLL_MAX_STEPS,
+            quiet_readings: LAZY_SCROLL_QUIET_READINGS,
+        }
     }
 }
 const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(900);
@@ -1324,44 +1339,62 @@ window.scrollBy(0,step);if(box){box.scrollTop+=step;}\
 var root=document.scrollingElement||document.documentElement;\
 var height=Math.max(root.scrollHeight,box?box.scrollHeight:0);\
 var bottom=Math.max(window.scrollY+window.innerHeight,box?box.scrollTop+box.clientHeight:0);\
-return {height:height,atEnd:bottom>=height-4};\
-}catch(e){return {height:0,atEnd:true};}})()";
+var cards=document.querySelectorAll('[componentkey^=\"ConnectionCard_\"]').length;\
+return {height:height,atEnd:bottom>=height-4,cards:cards};\
+}catch(e){return {height:0,atEnd:true,cards:0};}})()";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LazyScrollState {
     height: f64,
     at_end: bool,
+    /// Connection cards on the page; 0 on every other page.
+    #[serde(default)]
+    cards: u32,
 }
 
-/// Counts consecutive readings where the page sits at its end and has not grown.
-fn next_quiet_readings(quiet: usize, state: &LazyScrollState, last_height: f64) -> usize {
-    if state.at_end && (state.height - last_height).abs() < 1.0 {
+/// Counts consecutive readings where the page sits at its end and has
+/// neither grown nor gained a card.
+fn next_quiet_readings(
+    quiet: usize,
+    state: &LazyScrollState,
+    last_height: f64,
+    last_cards: u32,
+) -> usize {
+    if state.at_end && (state.height - last_height).abs() < 1.0 && state.cards == last_cards {
         quiet + 1
     } else {
         0
     }
 }
 
-/// Returns how many scroll steps ran, for the local diagnostics log.
-async fn load_lazy_sections(window: &Webview, max_steps: usize) -> usize {
+/// Returns the card count after each step, for the local diagnostics log.
+/// A script dropped by a LinkedIn navigation counts as a step, not the end.
+async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u32> {
     let mut last_height = -1.0;
+    let mut last_cards = 0;
     let mut quiet = 0;
-    let mut steps = 0;
-    for _ in 0..max_steps {
-        steps += 1;
-        let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
-            break;
+    let mut cards_per_step = Vec::new();
+    for _ in 0..budget.max_steps {
+        let raw = match eval_json(window, LAZY_SCROLL_SCRIPT).await {
+            Ok(raw) => raw,
+            Err(error) if is_transient_eval_error(&error) => {
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+                continue;
+            }
+            Err(_) => break,
         };
         tokio::time::sleep(jittered_step_delay(clock_seed())).await;
         let Ok(state) = serde_json::from_str::<LazyScrollState>(&raw) else {
             break;
         };
-        quiet = next_quiet_readings(quiet, &state, last_height);
-        if quiet >= LAZY_SCROLL_QUIET_READINGS {
+        cards_per_step.push(state.cards);
+        quiet = next_quiet_readings(quiet, &state, last_height, last_cards);
+        if quiet >= budget.quiet_readings {
             break;
         }
         last_height = state.height;
+        last_cards = state.cards;
     }
     let _ = eval_json(
         window,
@@ -1369,7 +1402,7 @@ async fn load_lazy_sections(window: &Webview, max_steps: usize) -> usize {
     )
     .await;
     tokio::time::sleep(PAGE_SETTLE_DELAY).await;
-    steps
+    cards_per_step
 }
 
 /// The candidate's LinkedIn session is paced here, not only in the web layer
@@ -1464,7 +1497,13 @@ pub async fn read_session_page(
     }
 
     if request.platform == "linkedin" {
-        let steps = load_lazy_sections(&window, scroll_budget).await.to_string();
+        let cards_per_step = load_lazy_sections(&window, scroll_budget).await;
+        if scroll_budget.max_steps == CONNECTIONS_SCROLL_MAX_STEPS {
+            for cards in &cards_per_step {
+                read_diagnostic(app, request, "cards", Some(&cards.to_string()));
+            }
+        }
+        let steps = cards_per_step.len().to_string();
         read_diagnostic(app, request, "scrolled", Some(&steps));
     }
 
@@ -1703,13 +1742,25 @@ pub fn append_connector_diagnostic(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_connections_list_gets_a_longer_scroll_budget() {
+    fn the_connections_list_gets_a_longer_and_more_patient_walk() {
+        let connections = lazy_scroll_budget("/mynetwork/invite-connect/connections/");
         assert_eq!(
-            lazy_scroll_budget("/mynetwork/invite-connect/connections/"),
-            150
+            (connections.max_steps, connections.quiet_readings),
+            (150, 8)
         );
-        assert_eq!(lazy_scroll_budget("/in/someone/"), 40);
-        assert_eq!(lazy_scroll_budget("/in/someone/details/skills/"), 40);
+        let profile = lazy_scroll_budget("/in/someone/");
+        assert_eq!((profile.max_steps, profile.quiet_readings), (40, 4));
+    }
+
+    #[test]
+    fn new_cards_keep_the_walk_going_even_when_the_height_holds() {
+        let state = LazyScrollState {
+            height: 5_000.0,
+            at_end: true,
+            cards: 120,
+        };
+        assert_eq!(next_quiet_readings(3, &state, 5_000.0, 100), 0);
+        assert_eq!(next_quiet_readings(3, &state, 5_000.0, 120), 4);
     }
 
     #[test]
@@ -1839,7 +1890,11 @@ mod tests {
     }
 
     fn scroll_state(height: f64, at_end: bool) -> LazyScrollState {
-        LazyScrollState { height, at_end }
+        LazyScrollState {
+            height,
+            at_end,
+            cards: 0,
+        }
     }
 
     #[cfg(unix)]
@@ -1898,10 +1953,10 @@ mod tests {
     fn lazy_scroll_waits_for_several_quiet_readings_before_stopping() {
         let mut quiet = 0;
         for _ in 0..LAZY_SCROLL_QUIET_READINGS - 1 {
-            quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+            quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0, 0);
             assert!(quiet < LAZY_SCROLL_QUIET_READINGS);
         }
-        quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+        quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0, 0);
         assert_eq!(quiet, LAZY_SCROLL_QUIET_READINGS);
         const { assert!(LAZY_SCROLL_QUIET_READINGS >= 4) };
     }
@@ -1918,11 +1973,11 @@ mod tests {
     #[test]
     fn lazy_scroll_restarts_the_count_when_linkedin_appends_a_chunk() {
         assert_eq!(
-            next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0),
+            next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0, 0),
             0
         );
         assert_eq!(
-            next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0),
+            next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0, 0),
             0
         );
     }
