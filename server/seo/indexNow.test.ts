@@ -74,7 +74,7 @@ describe('IndexNow notifier', () => {
       ['https://openqareer.com/vacancies/job/b'],
     ]);
     expect(submitted[0]).toMatchObject({ host: 'openqareer.com', key: 'a1b2c3d4e5f6a7b8' });
-    expect(fetcher.mock.calls.every(([input]) => input === 'https://yandex.com/indexnow')).toBe(true);
+    expect(fetcher.mock.calls.every(([input]) => input === 'https://api.indexnow.org/indexnow')).toBe(true);
   });
 
   it('splits requests at 10,000 URLs', async () => {

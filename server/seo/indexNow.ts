@@ -2,7 +2,9 @@ import type { DatabaseSync } from 'node:sqlite';
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
 import type { SitemapUrl } from './sitemapXml';
 
-export const INDEXNOW_ENDPOINT = 'https://yandex.com/indexnow';
+// The global participating endpoint shares receipts across IndexNow search engines.
+// The Yandex-specific endpoint timed out from production; the global endpoint accepted a live probe.
+export const INDEXNOW_ENDPOINT = 'https://api.indexnow.org/indexnow';
 export const INDEXNOW_URL_LIMIT = 10_000;
 const INDEXNOW_REQUEST_TIMEOUT_MS = 15_000;
 
