@@ -13,7 +13,6 @@ import {
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
-  resizeConnectorSession,
   sessionCheckFailure,
   showConnectorSession,
   type ConnectorSessionStep,
@@ -25,7 +24,7 @@ import {
   shouldPollConnectorSession,
   startConnectorSession,
 } from './connectorSessionStart';
-import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import { workAreaLayout } from './connectorLayout';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createHhSessionImportFlow,
@@ -88,7 +87,6 @@ export function HhConnectModal({
   const [choice, setChoice] = useState<readonly HhResumeItem[]>();
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [importing, setImporting] = useState(false);
-  const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
   /** What the profile page stated, kept for the resume the candidate picks. */
   const hhProfile = useRef<HhProfileIdentity>();
@@ -123,16 +121,9 @@ export function HhConnectModal({
   );
 
   useEffect(() => {
-    if (!isOpen || !isTauriEnvironment() || step === 'idle') return;
-    const host = webviewHost.current;
-    if (!host) return;
-    return watchConnectorHost('hh', host, (layout) => {
-      void resizeConnectorSession('hh', layout);
-    });
-  }, [isOpen, step]);
-
-  useEffect(() => {
-    if (!isOpen || isTauriEnvironment() || step !== 'session_open') return;
+    // A resume choice means the sign-in already happened: the window may close,
+    // the import reopens it (B157) — nothing to blame then (B464).
+    if (!isOpen || step !== 'session_open' || choice?.length) return;
     let cancelled = false;
     const checkPopup = async () => {
       if (await isConnectorSessionOpen('hh')) return;
@@ -140,16 +131,14 @@ export function HhConnectModal({
       sessionOpened.current = false;
       setWaiting(undefined);
       setStep('idle');
-      setError(
-        'Окно входа hh.ru закрыто. Браузер не подтвердил вход и резюме не обновлено. Подключите снова, чтобы повторить попытку.',
-      );
+      setError('Окно закрыто, вход не завершён. Подключение не изменилось.');
     };
     const timer = window.setInterval(() => void checkPopup(), SESSION_POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [isOpen, step]);
+  }, [isOpen, step, choice]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -212,8 +201,7 @@ export function HhConnectModal({
     const started = await startConnectorSession({
       platform: 'hh',
       url: HH_LOGIN_URL,
-      measureLayout: () =>
-        sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+      measureLayout: () => workAreaLayout(document.getElementById('career-main')),
       waitForFrame: nextAnimationFrame,
       isDesktop: isTauriEnvironment(),
       onStep: setStep,
@@ -274,8 +262,7 @@ export function HhConnectModal({
         stuck: false,
       };
     }
-    unrecognisedPolls.current =
-      result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
+    unrecognisedPolls.current = result.stage === 'unrecognised' ? unrecognisedPolls.current + 1 : 0;
     return hhWaitingNotice(result.stage, unrecognisedPolls.current);
   }
 
@@ -337,9 +324,7 @@ export function HhConnectModal({
       setAutoPollPaused(true);
       setWaiting(undefined);
       setChoice(resumes);
-      setSelectedResumeId(
-        resumes.find((item) => item.url === rawUrl)?.id ?? resumes[0]?.id ?? '',
-      );
+      setSelectedResumeId(resumes.find((item) => item.url === rawUrl)?.id ?? resumes[0]?.id ?? '');
       setError(hhResumeImportFailure(reason));
       return;
     }
@@ -349,8 +334,7 @@ export function HhConnectModal({
 
   /** Reads the resume the candidate chose, in the window they chose it from. */
   async function importChoice() {
-    const selected =
-      choice?.find((item) => item.id === selectedResumeId) ?? choice?.[0];
+    const selected = choice?.find((item) => item.id === selectedResumeId) ?? choice?.[0];
     if (!selected) return;
     setImporting(true);
     setError(undefined);
@@ -364,11 +348,7 @@ export function HhConnectModal({
               await openConnectorSession(
                 'hh',
                 url,
-                sessionLayoutForHost(
-                  webviewHost.current,
-                  window.innerWidth,
-                  window.innerHeight,
-                ),
+                workAreaLayout(document.getElementById('career-main')),
               )
             ).opened,
         },
@@ -399,7 +379,8 @@ export function HhConnectModal({
         sessionOpened: sessionOpened.current,
         paused: autoPollPaused,
       })
-    ) return;
+    )
+      return;
     let cancelled = false;
     const run = () => {
       void (async () => {
@@ -426,9 +407,7 @@ export function HhConnectModal({
   // The step is never silent: while the window is being built there is nothing
   // to poll yet, and silence is exactly what an undetected sign-in looks like.
   const status: HhWaitingNotice | undefined =
-    step === 'opening'
-      ? { text: 'Открываем окно входа hh.ru…', stuck: false }
-      : waiting;
+    step === 'opening' ? { text: 'Открываем окно входа hh.ru…', stuck: false } : waiting;
   // The frame is part of the step from the moment the window is being opened:
   // it is what the native window is measured against, and it is where the
   // candidate's own controls live.
@@ -441,7 +420,7 @@ export function HhConnectModal({
       titleId="hh-modal-title"
       title="Подключение hh.ru"
       icon={<PlatformLogo platform="hh" size={26} />}
-      wide={isTauriEnvironment() && sessionActive}
+      wide={false}
       detail={!isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
@@ -453,9 +432,9 @@ export function HhConnectModal({
           <>
             <RouteNoticeLine notice={route} />
             <p className="career-modal-intro">
-              Вход проходит на странице самой hh.ru, в вашей собственной сессии.
-              После входа OpenQareer сам загрузит резюме и закроет окно. Если
-              резюме несколько, вы выберете нужное.
+              Вход проходит на странице самой hh.ru, в вашей собственной сессии. После входа
+              OpenQareer сам загрузит резюме и закроет окно. Если резюме несколько, вы выберете
+              нужное.
             </p>
           </>
         )}
@@ -480,10 +459,7 @@ export function HhConnectModal({
         ) : null}
 
         {status ? (
-          <p
-            className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`}
-            role="status"
-          >
+          <p className={`career-connector-waiting${status.stuck ? ' is-stuck' : ''}`} role="status">
             {status.stuck ? (
               <WarningCircle size={16} weight="fill" />
             ) : (
@@ -495,25 +471,9 @@ export function HhConnectModal({
 
         {sessionActive && !isTauriEnvironment() ? (
           <p className="career-connector-waiting" role="status">
-            Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит резюме.
+            Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит
+            резюме.
           </p>
-        ) : null}
-
-        {isTauriEnvironment() && step !== 'idle' ? (
-          <div
-            ref={webviewHost}
-            className="career-connector-webview-host"
-            role="group"
-            aria-label="Вход в hh.ru"
-          >
-            {/* Visible only when the native window is not covering this area —
-                a blank white rectangle is what the owner saw instead (B157). */}
-            <p className="career-connector-webview-placeholder">
-              Окно входа hh.ru открывается поверх этой области. Если его не
-              видно, оно может быть свёрнуто или за другим окном — найдите его и
-              завершите вход.
-            </p>
-          </div>
         ) : null}
 
         {choice && choice.length > 0 ? (

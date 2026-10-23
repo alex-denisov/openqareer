@@ -78,7 +78,7 @@ test('B549-r 1440: «Рассчитать соответствие» posts once 
   ).toHaveCount(0);
 
   await detail.getByRole('button', { name: 'Рассчитать соответствие' }).click();
-  await expect(detail).toContainText('Расчёт в очереди');
+  await expect(detail).toContainText('Соответствие: расчёт в очереди');
   expect(posts).toBe(1);
   await expect(page.locator('.vacancies-screen-row-trigger').first()).toHaveAttribute(
     'aria-expanded',

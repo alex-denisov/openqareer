@@ -65,7 +65,7 @@ test('B525 factual fit, real enqueue/readback, evidence and alternate ordering',
       await card.locator('.vacancies-screen-row-trigger').click();
     const evidence = card.getByRole('region', { name: 'Соответствие вашему профилю' });
     await evidence.getByRole('button', { name: 'Рассчитать соответствие', exact: true }).click();
-    await expect(evidence.getByRole('status')).toContainText('Расчёт в очереди');
+    await expect(evidence.getByRole('status')).toContainText('Соответствие: расчёт в очереди');
     await expect(evidence.locator('.vacancy-fit-percent')).toHaveCount(0);
     completed = true;
     await evidence.getByRole('button', { name: 'Обновить результат' }).click();

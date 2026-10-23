@@ -118,19 +118,17 @@ pub fn session_window_label(platform: &str) -> Option<&'static str> {
 
 const MANAGED_LINKEDIN_LABEL_PREFIX: &str = "connector-linkedin-pool-";
 
-fn session_window_chrome(managed: bool) -> (bool, bool, bool) {
-    if managed {
-        // Pool accounts need native close/resize controls because there is no
-        // candidate wizard shell behind their standalone window.
-        (true, true, false)
-    } else {
-        // Candidate sessions are visually hosted by the wizard modal.
-        (false, false, true)
-    }
+/// Mockup 12 (B464): every sign-in window — candidate or pool — is a native
+/// macOS window with its frame, close/minimise/full-screen controls and a Dock
+/// entry; nothing of ours is drawn around the platform's page.
+fn session_window_chrome(_managed: bool) -> (bool, bool, bool) {
+    (true, true, false)
 }
 
-fn should_parent_session_window(session_key: Option<&str>) -> bool {
-    session_key.is_none()
+/// Parenting a decorated WebView on macOS can keep it from showing at all, so
+/// sign-in windows stay top-level (B464).
+fn should_parent_session_window(_session_key: Option<&str>) -> bool {
+    false
 }
 
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
@@ -692,6 +690,22 @@ pub async fn open_session_window(
         };
     };
     let screen_layout = screen_layout(&layout, &main_window);
+    let _ = append_connector_diagnostic(
+        app,
+        "session-window",
+        "open",
+        Some(&format!(
+            "cy{}_sy{}_in{}_out{}_sc{}_tb{}",
+            layout.y as i64,
+            screen_layout.y as i64,
+            main_window.inner_position().map(|p| p.y).unwrap_or(-1),
+            main_window.outer_position().map(|p| p.y).unwrap_or(-1),
+            (main_window.scale_factor().unwrap_or(0.0) * 10.0) as i64,
+            native_title_bar(&main_window)
+                .map(|bar| bar as i64)
+                .unwrap_or(-1)
+        )),
+    );
     let platform = request.platform.clone();
     let mut builder = WebviewWindowBuilder::new(app, label.clone(), WebviewUrl::External(url))
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
@@ -741,9 +755,8 @@ pub async fn open_session_window(
             .data_store_identifier(identifier);
     }
 
-    // Candidate sessions are borderless overlays hosted by the wizard. A pool
-    // session is a real standalone operator window; parenting a decorated
-    // WebView on macOS can prevent it from being shown at all.
+    // Sign-in windows are standalone native windows (mockup 12); parenting a
+    // decorated WebView on macOS can prevent it from being shown at all.
     if should_parent_session_window(request.session_key.as_deref()) {
         builder = match builder.parent(&main_window) {
             Ok(parented) => parented,
@@ -765,7 +778,31 @@ pub async fn open_session_window(
         Ok(_) => {
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
+            if request.session_key.is_none() {
+                tauri::async_runtime::spawn(show_load_failure_if_blank(
+                    app.clone(),
+                    label.clone(),
+                    if request.platform == "linkedin" {
+                        "linkedin.com"
+                    } else {
+                        "hh.ru"
+                    },
+                    request.url.clone(),
+                ));
+            }
             if await_registered_window(app, &label).await {
+                if let Some(window) = app.get_webview_window(&label) {
+                    let _ = append_connector_diagnostic(
+                        app,
+                        "session-window",
+                        "placed",
+                        Some(&format!(
+                            "out{}_in{}",
+                            window.outer_position().map(|p| p.y).unwrap_or(-1),
+                            window.inner_position().map(|p| p.y).unwrap_or(-1)
+                        )),
+                    );
+                }
                 SessionWindowReport {
                     opened: true,
                     label: label.to_string(),
@@ -1011,12 +1048,125 @@ fn platform_name(platform: &str) -> &'static str {
     }
 }
 
+/// A sign-in page that drew no text by then never opened (no network, no route).
+const LOAD_FAILURE_AFTER: Duration = Duration::from_secs(20);
+const DRAWN_PROBE: &str =
+    "JSON.stringify(((document.body && document.body.innerText) || '').trim().length)";
+
+/// The probe answers a text length, possibly JSON-quoted more than once.
+fn page_has_text(value: &str) -> bool {
+    value
+        .trim_matches(|c: char| c == '"' || c == '\\' || c.is_whitespace())
+        .parse::<usize>()
+        .is_ok_and(|length| length > 0)
+}
+
+/// Mockup 12, «Страница не открылась»: drawn inside the window itself, with a
+/// retry that reloads the platform's own address (allowed by the navigation list).
+fn load_failure_script(host: &str, retry_url: &str) -> String {
+    let url = serde_json::to_string(retry_url).unwrap_or_else(|_| "\"about:blank\"".into());
+    let markup = format!(
+        "<div style='min-height:100vh;display:grid;place-items:center;font:14px -apple-system,sans-serif;color:#1f2328;background:#fff'>\
+         <div style='text-align:center;display:grid;gap:12px;justify-items:center'>\
+         <div style='width:28px;height:28px;border:2px solid #b42318;border-radius:50%;color:#b42318;font-weight:700;line-height:26px'>!</div>\
+         <strong style='font-size:16px'>Страница не открылась</strong>\
+         <p style='margin:0'>Нет связи с {host}. Проверьте сеть и повторите.</p>\
+         <button id='oq-retry' style='padding:8px 20px;border:1px solid #1f2328;border-radius:10px;background:#fff;font:inherit;cursor:pointer'>Повторить</button>\
+         </div></div>"
+    );
+    format!(
+        "document.documentElement.innerHTML = {};\
+         document.getElementById('oq-retry').onclick = () => location.replace({url});",
+        serde_json::to_string(&markup).unwrap_or_default()
+    )
+}
+
+/// Shows the in-window failure when the platform page has drawn nothing by
+/// `LOAD_FAILURE_AFTER` (B464, mockup 12).
+async fn show_load_failure_if_blank(
+    app: AppHandle,
+    label: String,
+    host: &'static str,
+    retry_url: String,
+) {
+    tokio::time::sleep(LOAD_FAILURE_AFTER).await;
+    let Some(webview) = app.get_webview(&label) else {
+        return;
+    };
+    let drawn = eval_json(&webview, DRAWN_PROBE)
+        .await
+        .is_ok_and(|value| page_has_text(&value));
+    if !drawn {
+        let _ = webview.eval(load_failure_script(host, &retry_url));
+    }
+}
+
+/// Logical title-bar height above the page. On macOS tao reports the frame as
+/// the content origin (23.10: inner == outer, 0 pt), which placed the window
+/// 28 pt too high (B464); the NSWindow's own layout rect fills in.
+/// Implausible values (over 100 pt) are ignored.
+fn title_bar_offset(outer_height: u32, inner_height: u32, scale: f64, native: Option<f64>) -> f64 {
+    let reported = f64::from(outer_height.saturating_sub(inner_height)) / scale;
+    if reported > 0.0 {
+        return reported;
+    }
+    native
+        .filter(|top| (0.0..=100.0).contains(top))
+        .unwrap_or(0.0)
+}
+
+/// Title bar read from the NSWindow: frame height minus the area the title bar
+/// leaves uncovered. AppKit answers only on the main thread, so the read is
+/// posted there and awaited briefly.
+#[cfg(target_os = "macos")]
+fn native_title_bar(main: &tauri::WebviewWindow) -> Option<f64> {
+    fn read(window: &tauri::WebviewWindow) -> Option<f64> {
+        objc2::MainThreadMarker::new()?;
+        let pointer = window.ns_window().ok()?.cast::<objc2_app_kit::NSWindow>();
+        // SAFETY: Tauri hands out the live NSWindow of this window; only geometry is read.
+        let ns_window = unsafe { pointer.as_ref() }?;
+        Some(ns_window.frame().size.height - ns_window.contentLayoutRect().size.height)
+    }
+    if objc2::MainThreadMarker::new().is_some() {
+        return read(main);
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let window = main.clone();
+    main.run_on_main_thread(move || {
+        let _ = sender.send(read(&window));
+    })
+    .ok()?;
+    receiver
+        .recv_timeout(Duration::from_millis(300))
+        .ok()
+        .flatten()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_title_bar(_main: &tauri::WebviewWindow) -> Option<f64> {
+    None
+}
+
 fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> SessionLayout {
     let scale = main.scale_factor().unwrap_or(1.0);
     let origin = main.inner_position().unwrap_or_default();
+    let outer = main.outer_position().unwrap_or_default();
+    let title_bar = if origin == outer {
+        let outer_height = main
+            .outer_size()
+            .map(|size| size.height)
+            .unwrap_or_default();
+        let inner_height = main
+            .inner_size()
+            .map(|size| size.height)
+            .unwrap_or(outer_height);
+        title_bar_offset(outer_height, inner_height, scale, native_title_bar(main))
+    } else {
+        0.0
+    };
     SessionLayout {
         x: f64::from(origin.x) / scale + layout.x,
-        y: f64::from(origin.y) / scale + layout.y,
+        y: f64::from(origin.y) / scale + title_bar + layout.y,
         width: layout.width,
         height: layout.height,
     }
@@ -2376,14 +2526,40 @@ https://media.licdn.com/dms/image/c 800w";
     }
 
     #[test]
-    fn gives_managed_windows_native_controls_without_changing_candidate_chrome() {
+    fn every_sign_in_window_is_a_native_macos_window() {
+        // Mockup 12: frame, close/minimise/full screen, resizable, in the Dock.
         assert_eq!(session_window_chrome(true), (true, true, false));
-        assert_eq!(session_window_chrome(false), (false, false, true));
+        assert_eq!(session_window_chrome(false), (true, true, false));
     }
 
     #[test]
-    fn keeps_managed_pool_windows_top_level_but_parents_candidate_overlays() {
-        assert!(should_parent_session_window(None));
+    fn title_bar_comes_from_the_nswindow_when_tao_reports_none() {
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, Some(28.0)), 28.0);
+        assert_eq!(super::title_bar_offset(1668, 1612, 2.0, Some(28.0)), 28.0);
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, None), 0.0);
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, Some(500.0)), 0.0);
+    }
+
+    #[test]
+    fn a_page_that_never_drew_shows_the_mockup_failure_with_a_retry() {
+        let script = super::load_failure_script("linkedin.com", "https://www.linkedin.com/login");
+        assert!(script.contains("Страница не открылась"));
+        assert!(script.contains("Нет связи с linkedin.com. Проверьте сеть и повторите."));
+        assert!(script.contains("Повторить"));
+        assert!(script.contains("location.replace(\"https://www.linkedin.com/login\")"));
+    }
+
+    #[test]
+    fn a_page_counts_as_drawn_once_it_has_text() {
+        assert!(super::page_has_text("\"12\""));
+        assert!(super::page_has_text("7"));
+        assert!(!super::page_has_text("\"0\""));
+        assert!(!super::page_has_text("null"));
+    }
+
+    #[test]
+    fn sign_in_windows_are_top_level_not_overlays() {
+        assert!(!should_parent_session_window(None));
         assert!(!should_parent_session_window(Some(
             "profile_123e4567-e89b-12d3-a456-426614174000"
         )));

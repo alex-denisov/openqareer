@@ -215,6 +215,7 @@
 .vac-sub .vacancy-fit-inline {
   display: inline;
   font-size: inherit;
+  white-space: nowrap;
 }
 
 .vac-sub .vacancy-fit-inline::before {

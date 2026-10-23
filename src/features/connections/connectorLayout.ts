@@ -19,17 +19,36 @@ export function sessionLayoutForHost(
   const rect = host.getBoundingClientRect();
   if (rect.width <= 0 || rect.height <= 0) return undefined;
 
-  const width = Math.min(
-    Math.max(rect.width, MIN_SESSION_SIZE.width),
-    viewportWidth,
-  );
-  const height = Math.min(
-    Math.max(rect.height, MIN_SESSION_SIZE.height),
-    viewportHeight,
-  );
+  const width = Math.min(Math.max(rect.width, MIN_SESSION_SIZE.width), viewportWidth);
+  const height = Math.min(Math.max(rect.height, MIN_SESSION_SIZE.height), viewportHeight);
   const x = clamp(rect.x, 0, Math.max(0, viewportWidth - width));
   const y = clamp(rect.y, 0, Math.max(0, viewportHeight - height));
   return { x, y, width, height };
+}
+
+/** Mockup 12: the sign-in window sits this far inside the work area. */
+const WORK_AREA_INSET = 16;
+/** DESIGN.md: the desktop top bar band, kept even where a screen hides the bar (Аккаунт). */
+const DESKTOP_TOPBAR_HEIGHT = 64;
+
+/**
+ * Where the native sign-in window opens (mockup 12, B464): the work area of
+ * the main window — right of the navigation rail, below the section header —
+ * with a small inset. Without a work area the native default applies.
+ */
+export function workAreaLayout(main: HTMLElement | null): SessionLayout | undefined {
+  if (!main) return undefined;
+  const area = main.getBoundingClientRect();
+  // The first header can be the hidden mobile bar (0 px), and «Аккаунт» hides the
+  // desktop bar altogether: take a visible header, else the 64 px band (B464).
+  const header = [...main.querySelectorAll('header')]
+    .map((element) => element.getBoundingClientRect())
+    .find((rect) => rect.height > 0);
+  const top = header?.bottom ?? area.top + DESKTOP_TOPBAR_HEIGHT;
+  const width = area.right - area.left - WORK_AREA_INSET * 2;
+  const height = area.bottom - top - WORK_AREA_INSET * 2;
+  if (width < MIN_SESSION_SIZE.width || height < MIN_SESSION_SIZE.height) return undefined;
+  return { x: area.left + WORK_AREA_INSET, y: top + WORK_AREA_INSET, width, height };
 }
 
 function clamp(value: number, min: number, max: number): number {

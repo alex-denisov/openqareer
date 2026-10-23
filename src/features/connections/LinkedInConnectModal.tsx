@@ -11,7 +11,6 @@ import {
   isConnectorSessionOpen,
   openConnectorSession,
   readSessionPage,
-  resizeConnectorSession,
   sessionCheckFailure,
   showConnectorSession,
   type ConnectorSessionStep,
@@ -23,7 +22,7 @@ import {
   shouldPollConnectorSession,
   startConnectorSession,
 } from './connectorSessionStart';
-import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import { workAreaLayout } from './connectorLayout';
 import { applyLinkedInImportProgress } from './linkedinImportProgress';
 import { createImportWalkSync } from './importWalkSync';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
@@ -76,7 +75,6 @@ export function LinkedInConnectModal({
   // measurement to report at all (B167).
   const [autoPollPaused, setAutoPollPaused] = useState(false);
   const [waiting, setWaiting] = useState<LinkedInWaitingNotice>();
-  const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<LinkedInSessionImportFlow>();
   /** This opening of the dialog really did put a sign-in window on screen. */
   const sessionOpened = useRef(false);
@@ -116,16 +114,7 @@ export function LinkedInConnectModal({
   );
 
   useEffect(() => {
-    if (!isOpen || !isTauriEnvironment() || step === 'idle') return;
-    const host = webviewHost.current;
-    if (!host) return;
-    return watchConnectorHost('linkedin', host, (layout) => {
-      void resizeConnectorSession('linkedin', layout);
-    });
-  }, [isOpen, step]);
-
-  useEffect(() => {
-    if (!isOpen || isTauriEnvironment() || step !== 'session_open') return;
+    if (!isOpen || step !== 'session_open') return;
     let cancelled = false;
     const checkPopup = async () => {
       if (await isConnectorSessionOpen('linkedin')) return;
@@ -133,9 +122,7 @@ export function LinkedInConnectModal({
       sessionOpened.current = false;
       setWaiting(undefined);
       setStep('idle');
-      setError(
-        'Окно входа LinkedIn закрыто. Браузер не подтвердил вход и профиль не обновлён. Подключите снова, чтобы повторить попытку.',
-      );
+      setError('Окно закрыто, вход не завершён. Подключение не изменилось.');
     };
     const timer = window.setInterval(() => void checkPopup(), SESSION_POLL_INTERVAL_MS);
     return () => {
@@ -217,8 +204,7 @@ export function LinkedInConnectModal({
     const started = await startConnectorSession({
       platform: 'linkedin',
       url: LINKEDIN_LOGIN_URL,
-      measureLayout: () =>
-        sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+      measureLayout: () => workAreaLayout(document.getElementById('career-main')),
       waitForFrame: nextAnimationFrame,
       isDesktop: isTauriEnvironment(),
       onStep: setStep,
@@ -365,7 +351,7 @@ export function LinkedInConnectModal({
       titleId="linkedin-modal-title"
       title="Подключение LinkedIn"
       icon={<PlatformLogo platform="linkedin" size={26} />}
-      wide={isTauriEnvironment() && sessionActive}
+      wide={false}
       detail={!isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
@@ -415,21 +401,6 @@ export function LinkedInConnectModal({
           </p>
         ) : null}
 
-        {isTauriEnvironment() && step !== 'idle' ? (
-          <div
-            ref={webviewHost}
-            className="career-connector-webview-host"
-            role="group"
-            aria-label="Вход в LinkedIn"
-          >
-            {/* Visible only when the native window is not covering this area —
-                a blank white rectangle is what the owner saw instead (B157). */}
-            <p className="career-connector-webview-placeholder">
-              Окно входа LinkedIn открывается поверх этой области. Если его не видно, оно может быть
-              свёрнуто или за другим окном — найдите его и завершите вход.
-            </p>
-          </div>
-        ) : null}
         {error ? (
           <p className="career-modal-error" role="alert">
             <WarningCircle size={18} weight="fill" />

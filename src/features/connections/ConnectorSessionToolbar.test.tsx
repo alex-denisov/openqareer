@@ -2,25 +2,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
 
-describe('ConnectorSessionToolbar', () => {
-  it('shows the verified platform address and working show/cancel actions', () => {
-    const onShow = vi.fn();
-    const onCancel = vi.fn();
+describe('ConnectorSessionToolbar (mockup 12)', () => {
+  it('waits for the sign-in in the native window with show and cancel, no address line', () => {
     const html = renderToStaticMarkup(
-      <ConnectorSessionToolbar
-        platform="linkedin"
-        onShow={onShow}
-        onCancel={onCancel}
-      />,
+      <ConnectorSessionToolbar platform="linkedin" onShow={vi.fn()} onCancel={vi.fn()} />,
     );
-
-    expect(html).toContain('https://www.linkedin.com');
-    expect(html).toContain('Показать окно входа');
+    expect(html).toContain('Войдите в открывшемся окне');
+    expect(html).toContain('Ждём вход');
+    expect(html).toContain('Показать окно');
     expect(html).toContain('Отмена');
-    expect(html).toContain('aria-label="Защищённый адрес входа"');
+    expect(html).not.toContain('https://');
   });
 
-  it('uses the hh.ru address for the hh session', () => {
+  it('says the password stays on the platform page', () => {
     const html = renderToStaticMarkup(
       <ConnectorSessionToolbar
         platform="hh"
@@ -28,8 +22,6 @@ describe('ConnectorSessionToolbar', () => {
         onCancel={() => undefined}
       />,
     );
-
-    expect(html).toContain('https://hh.ru');
-    expect(html).not.toContain('www.linkedin.com');
+    expect(html).toContain('Пароль вводится на странице площадки, мы его не видим.');
   });
 });

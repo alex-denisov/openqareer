@@ -6,23 +6,25 @@
   padding-block: var(--career-space-2);
 }
 
-.career-connector-address {
-  display: flex;
-  align-items: center;
-  gap: var(--career-space-2);
+.career-connector-hint {
   min-width: 0;
   margin: 0;
-  font: inherit;
-  overflow-wrap: anywhere;
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
 }
 
-.career-connector-address svg {
-  flex: none;
+.career-connector-waiting-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--career-space-1);
+  color: var(--career-text-soft);
+  font-size: var(--career-text-xs);
 }
 
 .career-connector-toolbar-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--career-space-2);
 }

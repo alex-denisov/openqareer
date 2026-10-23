@@ -99,23 +99,42 @@ it('names unconfirmed conditions next to the percent instead of passing them off
   expect(html).toContain('Не подтверждено: регион, право на работу');
 });
 
-it('row inline fit names the honest state in one line, never an empty slot (B525)', () => {
+it('row inline fit shows only a calculated percent, states stay in the card (B525 V3)', () => {
   const inline = (view?: Parameters<typeof VacancyFitInline>[0]['view']) =>
     renderToStaticMarkup(<VacancyFitInline view={view} />);
   expect(inline(readyVacancyFit())).toContain('соответствие 50\u00a0%');
-  for (const state of ['not_requested', 'processing', 'retrying', 'failed'] as const) {
-    expect(inline({ state, requirements: [] })).toContain('соответствие уточняется');
-  }
-  for (const state of ['no_requirements', 'no_description'] as const) {
-    expect(inline({ state, requirements: [] })).toContain('нет требований');
+  for (const state of [
+    'not_requested',
+    'processing',
+    'retrying',
+    'failed',
+    'no_requirements',
+  ] as const) {
+    expect(inline({ state, requirements: [] })).toBe('');
   }
   const ready = readyVacancyFit();
-  const withReason = (reason: NonNullable<typeof ready.result>['reason']) =>
-    inline({ ...ready, result: { ...ready.result!, status: 'unknown', reason } });
-  expect(withReason('no_eligible_facts')).toContain('недостаточно данных');
-  expect(withReason('too_few_skills')).toContain('недостаточно данных');
-  expect(withReason('no_requirements')).toContain('нет требований');
+  expect(
+    inline({
+      ...ready,
+      result: { ...ready.result!, status: 'unknown', reason: 'no_eligible_facts' },
+    }),
+  ).toBe('');
   expect(inline()).toBe('');
+});
+
+it('compact card summary is one caption line «Соответствие: …» (B525 V4)', () => {
+  const ready = readyVacancyFit();
+  const html = renderToStaticMarkup(
+    <VacancyFitSummary
+      compact
+      view={{
+        ...ready,
+        result: { ...ready.result!, status: 'unknown', reason: 'no_eligible_facts' },
+      }}
+    />,
+  );
+  expect(html).toContain('Соответствие: в профиле нет подтверждённых фактов для сравнения');
+  expect(html).toContain('career-sr-only');
 });
 
 it('a single requirement never yields a percent, even from a stale result (A1)', () => {
@@ -133,6 +152,6 @@ it('a single requirement never yields a percent, even from a stale result (A1)',
     renderToStaticMarkup(<VacancyFitSummary view={single} />),
   ]) {
     expect(html).not.toContain('100');
-    expect(html).toMatch(/недостаточно данных|Мало требований/);
   }
+  expect(renderToStaticMarkup(<VacancyFitSummary view={single} />)).toMatch(/Мало требований/);
 });

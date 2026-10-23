@@ -44,8 +44,10 @@ test.describe('B464 browser connector window', () => {
     await dialog.getByRole('button', { name: 'Открыть окно входа в hh.ru' }).click();
     const popup = await popupPromise;
     await expect(popup).toHaveURL('https://hh.ru/account/login');
-    await expect(dialog.locator('.career-connector-address')).toContainText('https://hh.ru');
-    await expect(dialog.getByRole('button', { name: 'Показать окно входа' })).toBeVisible();
+    // Mockup 12: no address line, only «Ждём вход · Показать окно · Отмена».
+    await expect(dialog.getByText('Ждём вход')).toBeVisible();
+    await expect(dialog.getByText('https://hh.ru')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Показать окно', exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Отмена' })).toBeVisible();
     await expect(dialog).toHaveClass(/is-detail/u);
     const activeOverflow = await page.evaluate(
@@ -56,7 +58,7 @@ test.describe('B464 browser connector window', () => {
 
     await popup.close();
     await expect(
-      dialog.getByText(/Браузер не подтвердил вход и резюме не обновлено/u),
+      dialog.getByText('Окно закрыто, вход не завершён. Подключение не изменилось.'),
     ).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Подключить снова' })).toBeVisible();
     await expect(dialog.getByText('Подключено', { exact: true })).toHaveCount(0);
@@ -123,16 +125,15 @@ test.describe('B464 browser connector window', () => {
     await dialog.getByRole('button', { name: 'Открыть окно входа в LinkedIn' }).click();
     const popup = await popupPromise;
     await expect(popup).toHaveURL(/linkedin\.com/);
-    await expect(dialog.locator('.career-connector-address')).toContainText(
-      'https://www.linkedin.com',
-    );
-    await expect(dialog.getByRole('button', { name: 'Показать окно входа' })).toBeVisible();
+    await expect(dialog.getByText('Ждём вход')).toBeVisible();
+    await expect(dialog.getByText('https://www.linkedin.com')).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Показать окно', exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Отмена' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('b464-linkedin-session-open.png') });
 
     await popup.close();
     await expect(
-      dialog.getByText(/Браузер не подтвердил вход и профиль не обновлён/u),
+      dialog.getByText('Окно закрыто, вход не завершён. Подключение не изменилось.'),
     ).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Подключить снова' })).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath('b464-linkedin-session-closed.png') });
@@ -231,7 +232,7 @@ test.describe('B464 browser connector window', () => {
     await expect(
       dialog.getByText('Сессия hh.ru истекла. Войдите снова в открытом окне.'),
     ).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Показать окно входа' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Показать окно', exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Отмена' })).toBeVisible();
     await expect(dialog.getByText('Подключено', { exact: true })).toHaveCount(0);
     expect(unmatched).toEqual([]);

@@ -54,6 +54,10 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
       let sessionOpen = false;
       let missingLeft = missingWindowReads;
       (window as unknown as { __connectorCalls: string[] }).__connectorCalls = calls;
+      // The candidate closes the native window with its own red button.
+      (window as unknown as { __closeConnectorWindow: () => void }).__closeConnectorWindow = () => {
+        sessionOpen = false;
+      };
       (window as unknown as { __TAURI_INTERNALS__: Record<string, unknown> }).__TAURI_INTERNALS__ =
         {
           invoke: (command: string, args: Record<string, unknown>) => {
@@ -71,7 +75,8 @@ async function stubDesktopBridge(page: Page, options: BridgeOptions = {}): Promi
               sessionOpen = true;
               return Promise.resolve({ opened: true, label: 'connector-hh', reason: null });
             }
-            if (command === 'show_connector_session') return Promise.resolve(sessionOpen);
+            if (command === 'show_connector_session' || command === 'is_connector_session_open')
+              return Promise.resolve(sessionOpen);
             if (command === 'close_connector_session' || command === 'reset_connector_session') {
               sessionOpen = false;
               return Promise.resolve(true);
@@ -243,7 +248,7 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
     await expect(dialog).toBeVisible();
-    const showWindow = dialog.getByRole('button', { name: 'Показать окно входа' });
+    const showWindow = dialog.getByRole('button', { name: 'Показать окно', exact: true });
     await expect(showWindow).toBeVisible();
     await showWindow.click();
 
@@ -305,5 +310,24 @@ test.describe('B157 the hh.ru dialog owns its sign-in window', () => {
     await expect(accountHhRow(page).getByText('Подключено', { exact: true })).toBeVisible();
     // No dead end, and no sentence blaming the resume for a missing window.
     await expect(page.getByText('Импортировать выбранное резюме не удалось')).toHaveCount(0);
+  });
+
+  test('closing the window after signing in keeps the resume choice and blames nothing', async ({
+    page,
+  }) => {
+    await stubDesktopBridge(page);
+    await stubCandidateApi(page);
+    await openHhDialog(page);
+
+    const dialog = page.getByRole('dialog', { name: 'Подключение hh.ru' });
+    const picker = dialog.getByLabel('Выберите резюме для импорта');
+    await expect(picker).toBeVisible();
+    await page.evaluate(() =>
+      (window as unknown as { __closeConnectorWindow: () => void }).__closeConnectorWindow(),
+    );
+    // Two poll intervals: the dialog must not claim the sign-in was unfinished.
+    await page.waitForTimeout(1600);
+    await expect(picker).toBeVisible();
+    await expect(dialog.getByText('Окно закрыто, вход не завершён')).toHaveCount(0);
   });
 });
