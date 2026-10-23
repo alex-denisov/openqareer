@@ -66,7 +66,8 @@ export interface CandidateCompanyWantEntry {
 /** B422: список отметок «Хочу» — быстрый, без сборки всех компаний подборки. */
 export async function listCandidateCompanyWants(): Promise<CandidateCompanyWantEntry[]> {
   const response = await apiFetch('/api/v1/candidate/applications/company-wants');
-  return readData<CandidateCompanyWantEntry[]>(response);
+  const wants = await readData<unknown>(response);
+  return Array.isArray(wants) ? (wants as CandidateCompanyWantEntry[]) : [];
 }
 
 export async function removeCandidateCompanyWant(companyKey: string): Promise<void> {

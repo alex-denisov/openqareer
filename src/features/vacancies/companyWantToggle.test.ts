@@ -77,3 +77,22 @@ describe('состояние «Хочу» в строке вакансии (B422
     expect(merged.get('newstore')).toBe(full);
   });
 });
+
+describe('список отметок от сервера (B422)', () => {
+  it('ответ без массива считается пустым списком, а не роняет экран', async () => {
+    vi.resetModules();
+    vi.doUnmock('./candidateCompaniesApi');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        new Response(JSON.stringify({ data: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    );
+    const real = await import('./candidateCompaniesApi');
+    await expect(real.listCandidateCompanyWants()).resolves.toEqual([]);
+    vi.unstubAllGlobals();
+  });
+});

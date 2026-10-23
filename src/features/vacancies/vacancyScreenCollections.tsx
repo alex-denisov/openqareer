@@ -240,7 +240,8 @@ function useCompanyRecords(input: VacancyCollectionInput, reloadToken: number) {
     let active = true;
     void listCandidateCompanyWants()
       .then((wants) => {
-        if (active) setCompanyByName((previous) => mergeCompanyRecords(wantedCompanyRecords(wants), previous));
+        const wanted = wantedCompanyRecords(wants); // вне функции обновления: ошибка не роняет отрисовку
+        if (active) setCompanyByName((previous) => mergeCompanyRecords(wanted, previous));
       })
       .catch(() => undefined); // без списка отметок строка ждёт полного поиска, как раньше
     return () => {
