@@ -73,3 +73,28 @@ export async function deleteCandidateConnectionContact(contactId: string): Promi
   );
   if (!response.ok) await readData<unknown>(response);
 }
+
+export interface LinkedInConnectionImportContact {
+  readonly fullName: string;
+  readonly companyName: string;
+  readonly roleTitle: string;
+  readonly linkedinUrl: string | null;
+}
+
+export interface LinkedInConnectionImportReceipt {
+  readonly state: 'imported';
+  readonly importedAt: string;
+  readonly importedCount: number;
+}
+
+/** Replaces the candidate's LinkedIn-sourced contacts; manual ones stay (B448). */
+export async function importLinkedInConnectionContacts(
+  contacts: readonly LinkedInConnectionImportContact[],
+): Promise<LinkedInConnectionImportReceipt> {
+  const response = await apiFetch('/api/v1/candidate/connection-contacts/linkedin-import', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contacts }),
+  });
+  return readData<LinkedInConnectionImportReceipt>(response);
+}

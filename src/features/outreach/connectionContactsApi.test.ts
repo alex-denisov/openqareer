@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as apiClient from '../coach/apiClient';
 import {
   deleteCandidateConnectionContact,
+  importLinkedInConnectionContacts,
   listCandidateConnectionContacts,
   saveCandidateConnectionContact,
 } from './connectionContactsApi';
@@ -60,5 +61,26 @@ describe('candidate connection contacts API', () => {
     expect(request).toHaveBeenCalledWith('/api/v1/candidate/connection-contacts/manual-contact-1', {
       method: 'DELETE',
     });
+  });
+
+  it('replaces the LinkedIn-imported contacts through the import route', async () => {
+    const contacts = [
+      {
+        fullName: 'Ирина Котова',
+        companyName: 'Север Тех',
+        roleTitle: 'Head of QA',
+        linkedinUrl: 'https://www.linkedin.com/in/irina-kotova-test/',
+      },
+    ];
+    const receipt = { state: 'imported', importedAt: '2026-10-23T12:00:00.000Z', importedCount: 1 };
+    const request = vi
+      .spyOn(apiClient, 'apiFetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: receipt }), { status: 200 }));
+
+    await expect(importLinkedInConnectionContacts(contacts)).resolves.toEqual(receipt);
+    expect(request).toHaveBeenCalledWith(
+      '/api/v1/candidate/connection-contacts/linkedin-import',
+      expect.objectContaining({ method: 'PUT', body: JSON.stringify({ contacts }) }),
+    );
   });
 });

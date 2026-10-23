@@ -26,8 +26,11 @@ import type { CandidateSnapshot } from '../data/candidateStore';
 
 const CONNECTION_SCOPE_ID = '__b448_candidate_connections__';
 const CONNECTION_IMPORT_RECEIPT_ID = '__b448_linkedin_import_receipt__';
-const MAX_CONNECTION_CONTACTS = 500;
-const MAX_IMPORTED_CONNECTIONS = 400;
+// A whole LinkedIn network: run 9 read 1 888 connections, and circles need
+// every contact with a company (B448). 2 000 contacts are ~600 KB, inside
+// the import route's 1 MB body limit.
+const MAX_CONNECTION_CONTACTS = 2_500;
+const MAX_IMPORTED_CONNECTIONS = 2_000;
 
 const workplaceSchema = z
   .object({

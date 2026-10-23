@@ -534,3 +534,22 @@ export function looksLikeHhLoginPage(body: string): boolean {
 export function looksLikeHhVpnBlock(body: string): boolean {
   return body.includes('VPN мешает работе сайта') || body.includes('vpn-cheeck');
 }
+
+/**
+ * Keeps the open LinkedIn page, sanitized by the shell, in the app's local
+ * `capture-dumps/` folder for parser tuning (B448). Local only; a no-op on web.
+ */
+export async function saveLinkedInCaptureDump(kind: string): Promise<void> {
+  if (!isTauriEnvironment()) return;
+  await invokeDesktopCommand<string>('save_connector_capture_dump', { kind });
+}
+
+/** One code-only line in the shell's local connector diagnostics log (B448). */
+export function logConnectorDiagnostic(scope: string, event: string, detail?: string): void {
+  if (!isTauriEnvironment()) return;
+  void invokeDesktopCommand<void>('log_connector_diagnostic', {
+    scope,
+    event,
+    detail: detail ?? null,
+  }).catch(() => undefined);
+}

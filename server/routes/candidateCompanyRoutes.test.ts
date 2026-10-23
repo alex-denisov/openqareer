@@ -378,6 +378,53 @@ describe('candidate company routes (B439)', () => {
 });
 
 describe('B448 candidate connection circles', () => {
+  it('puts an imported LinkedIn contact at the vacancy company into circle 1 (B448)', async () => {
+    const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
+    // The body the desktop client sends after reading the connections list.
+    const imported = await importConnectionContacts(app, authorization, [
+      {
+        fullName: 'Ирина Котова',
+        companyName: 'Вектор Банк',
+        roleTitle: 'Head of QA',
+        linkedinUrl: 'https://www.linkedin.com/in/irina-kotova-test/',
+      },
+      {
+        fullName: 'Петр Волков',
+        companyName: 'Север Тех',
+        roleTitle: 'Engineering Manager',
+        linkedinUrl: 'https://www.linkedin.com/in/petr-volkov-test/',
+      },
+    ]);
+    expect(imported.statusCode).toBe(200);
+
+    const response = await app.inject({
+      url: '/api/v1/candidate/vacancies/cluster-v1/connection-circles',
+      headers: { authorization },
+    });
+    const [first] = response.json().data.circles;
+    expect(first.circle).toBe(1);
+    expect(first.paths).toHaveLength(1);
+    expect(first.paths[0]).toMatchObject({
+      circle: 1,
+      source: 'linkedin_import',
+      nextStep: 'write_known_contact',
+      recipient: { fullName: 'Ирина Котова', companyName: 'Вектор Банк' },
+    });
+  });
+
+  it('accepts a full network import well above 400 contacts (B448)', async () => {
+    const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
+    const contacts = Array.from({ length: 1_500 }, (_, index) => ({
+      fullName: `Контакт ${index}`,
+      companyName: `Компания ${index % 300}`,
+      roleTitle: 'Engineer',
+      linkedinUrl: `https://www.linkedin.com/in/contact-${index}-test/`,
+    }));
+    const imported = await importConnectionContacts(app, authorization, contacts);
+    expect(imported.statusCode).toBe(200);
+    expect(imported.json().data.importedCount).toBe(1_500);
+  });
+
   it('keeps missing connections unknown and makes an imported empty list distinct', async () => {
     const { app, authorization } = await setup([matchedVacancy('cluster-v1', 'Вектор Банк')]);
     const path = '/api/v1/candidate/vacancies/cluster-v1/connection-circles';

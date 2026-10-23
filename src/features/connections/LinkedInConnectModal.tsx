@@ -36,6 +36,7 @@ import {
   type LinkedInWaitingNotice,
   type StructuredFallbackReason,
 } from './linkedinSessionPoll';
+import { startLinkedInContactsRefresh } from './linkedinContactsRefresh';
 import {
   endLinkedInProtectedRoute,
   ProtectedRouteError,
@@ -248,14 +249,17 @@ export function LinkedInConnectModal({
       onProviderDataCaptured: async () => {
         await closeConnectorSession('linkedin');
       },
-      onReady: (result) => {
+      onReady: async (result) => {
         onClose();
-        return onImportSuccess(
+        await onImportSuccess(
           result.parsed,
           result.rawUrl,
           result.structured,
           result.structuredFallback,
         );
+        // B448: contacts are read afterwards, out of sight, so the import
+        // never waits on the long connections walk.
+        void startLinkedInContactsRefresh(true);
       },
     });
     return sessionFlow.current;

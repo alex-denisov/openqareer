@@ -1286,6 +1286,43 @@ pub async fn inspect_session_page_for(
 /// chunk (Languages on the profile, skills past the tenth) a beat after the
 /// scroll lands, so the walk now waits for several quiet readings (B266).
 const LAZY_SCROLL_MAX_STEPS: usize = 40;
+/// The connections list appends ~7 cards a step (run 5: 1 053 cards in 150
+/// steps); 450 steps let a network of ~3 000 finish, and the walk is also
+/// bounded in time (B448).
+const CONNECTIONS_SCROLL_MAX_STEPS: usize = 450;
+const CONNECTIONS_SCROLL_MAX_DURATION: Duration = Duration::from_secs(8 * 60);
+const LAZY_SCROLL_MAX_DURATION: Duration = Duration::from_secs(3 * 60);
+/// The list loads its next chunk well after the scroll lands; four quiet
+/// readings ended run 4 after 7 steps (B448).
+const CONNECTIONS_QUIET_READINGS: usize = 8;
+
+#[derive(Debug, Clone, Copy)]
+struct LazyScrollBudget {
+    max_steps: usize,
+    quiet_readings: usize,
+    max_duration: Duration,
+    /// Return only name, headline and profile path per card: the sanitized
+    /// page of 1 000+ cards broke the body limit in run 5 (B448).
+    compact_connections: bool,
+}
+
+fn lazy_scroll_budget(path: &str) -> LazyScrollBudget {
+    if path.starts_with("/mynetwork/invite-connect/connections") {
+        LazyScrollBudget {
+            max_steps: CONNECTIONS_SCROLL_MAX_STEPS,
+            quiet_readings: CONNECTIONS_QUIET_READINGS,
+            max_duration: CONNECTIONS_SCROLL_MAX_DURATION,
+            compact_connections: true,
+        }
+    } else {
+        LazyScrollBudget {
+            max_steps: LAZY_SCROLL_MAX_STEPS,
+            quiet_readings: LAZY_SCROLL_QUIET_READINGS,
+            max_duration: LAZY_SCROLL_MAX_DURATION,
+            compact_connections: false,
+        }
+    }
+}
 const LAZY_SCROLL_STEP_DELAY: Duration = Duration::from_millis(900);
 /// ±30 % around the step delay: no fixed-interval clockwork (security §3).
 const LAZY_SCROLL_JITTER_PERCENT: u64 = 30;
@@ -1313,41 +1350,156 @@ window.scrollBy(0,step);if(box){box.scrollTop+=step;}\
 var root=document.scrollingElement||document.documentElement;\
 var height=Math.max(root.scrollHeight,box?box.scrollHeight:0);\
 var bottom=Math.max(window.scrollY+window.innerHeight,box?box.scrollTop+box.clientHeight:0);\
-return {height:height,atEnd:bottom>=height-4};\
-}catch(e){return {height:0,atEnd:true};}})()";
+var cards=document.querySelectorAll('[componentkey^=\"ConnectionCard_\"]').length;\
+return {height:height,atEnd:bottom>=height-4,cards:cards};\
+}catch(e){return {height:0,atEnd:true,cards:0};}})()";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct LazyScrollState {
     height: f64,
     at_end: bool,
+    /// Connection cards on the page; 0 on every other page.
+    #[serde(default)]
+    cards: u32,
 }
 
-/// Counts consecutive readings where the page sits at its end and has not grown.
-fn next_quiet_readings(quiet: usize, state: &LazyScrollState, last_height: f64) -> usize {
-    if state.at_end && (state.height - last_height).abs() < 1.0 {
+/// Counts consecutive readings where the page sits at its end and has
+/// neither grown nor gained a card.
+fn next_quiet_readings(
+    quiet: usize,
+    state: &LazyScrollState,
+    last_height: f64,
+    last_cards: u32,
+) -> usize {
+    if state.at_end && (state.height - last_height).abs() < 1.0 && state.cards == last_cards {
         quiet + 1
     } else {
         0
     }
 }
 
-async fn load_lazy_sections(window: &Webview) {
+/// What one walk of a lazily loaded page saw.
+#[derive(Debug, Default)]
+struct LazyWalk {
+    /// Card count on the page after each step, for the diagnostics log.
+    cards_per_step: Vec<u32>,
+    /// Cards with text the collector returned at each step.
+    batch_per_step: Vec<usize>,
+    /// The first collector failure, as a code, if any step failed.
+    collect_error: Option<String>,
+    /// Connections kept by the shell, merged from every step's batch.
+    collected: CollectedConnections,
+    /// The first path segment of a page the walk was moved to, if any.
+    left_for: Option<String>,
+}
+
+/// Connection cards kept across the walk, by profile path, in first-seen
+/// order. A reload or a blank page mid-walk loses nothing already read (B448).
+#[derive(Debug, Default)]
+struct CollectedConnections {
+    order: Vec<String>,
+    cards: std::collections::HashMap<String, (usize, String)>,
+}
+
+impl CollectedConnections {
+    /// Keeps each card's fullest reading: a row the list later empties or
+    /// trims never replaces one already read with more lines.
+    fn merge(&mut self, batch: Vec<(String, String, usize)>) {
+        for (path, html, lines) in batch {
+            match self.cards.get(&path) {
+                Some((known, _)) if *known >= lines => {}
+                Some(_) => {
+                    self.cards.insert(path, (lines, html));
+                }
+                None => {
+                    self.order.push(path.clone());
+                    self.cards.insert(path, (lines, html));
+                }
+            }
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.order.len()
+    }
+
+    /// The minimal card list the TS parser reads, or `None` when empty.
+    fn render(&self) -> Option<String> {
+        if self.order.is_empty() {
+            return None;
+        }
+        let cards: String = self
+            .order
+            .iter()
+            .filter_map(|path| self.cards.get(path).map(|(_, html)| html.as_str()))
+            .collect();
+        Some(format!("<main>{cards}</main>"))
+    }
+}
+
+/// Scrolls until the page stops growing, within the budget. On the
+/// connections list it also reads each step's cards into the shell and stops
+/// when the window is moved off the list, keeping what it already read.
+/// A script dropped by a LinkedIn navigation counts as a step, not the end.
+async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyWalk {
+    let mut walk = LazyWalk::default();
     let mut last_height = -1.0;
+    let mut last_cards = 0;
     let mut quiet = 0;
-    for _ in 0..LAZY_SCROLL_MAX_STEPS {
-        let Ok(raw) = eval_json(window, LAZY_SCROLL_SCRIPT).await else {
+    let deadline = tokio::time::Instant::now() + budget.max_duration;
+    for _ in 0..budget.max_steps {
+        if tokio::time::Instant::now() >= deadline {
             break;
+        }
+        if budget.compact_connections {
+            let current = window.url().map(|url| url.to_string()).unwrap_or_default();
+            if !is_connections_page_url(&current) {
+                walk.left_for = Some(first_path_segment(&current).to_string());
+                break;
+            }
+        }
+        let raw = match eval_json(window, LAZY_SCROLL_SCRIPT).await {
+            Ok(raw) => raw,
+            Err(error) if is_transient_eval_error(&error) => {
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+                continue;
+            }
+            Err(_) => break,
         };
         tokio::time::sleep(jittered_step_delay(clock_seed())).await;
         let Ok(state) = serde_json::from_str::<LazyScrollState>(&raw) else {
             break;
         };
-        quiet = next_quiet_readings(quiet, &state, last_height);
-        if quiet >= LAZY_SCROLL_QUIET_READINGS {
+        walk.cards_per_step.push(state.cards);
+        if budget.compact_connections {
+            // Before the list recycles the rows that just scrolled past.
+            let batch = eval_json(window, connections_collect_call())
+                .await
+                .and_then(|json| {
+                    serde_json::from_str::<String>(&json)
+                        .and_then(|batch| {
+                            serde_json::from_str::<Vec<(String, String, usize)>>(&batch)
+                        })
+                        .map_err(|_| "collect_shape".to_string())
+                });
+            match batch {
+                Ok(batch) => {
+                    walk.batch_per_step.push(batch.len());
+                    walk.collected.merge(batch);
+                }
+                Err(error) => {
+                    walk.batch_per_step.push(0);
+                    walk.collect_error.get_or_insert(error);
+                }
+            }
+        }
+        quiet = next_quiet_readings(quiet, &state, last_height, last_cards);
+        if quiet >= budget.quiet_readings {
             break;
         }
         last_height = state.height;
+        last_cards = state.cards;
     }
     let _ = eval_json(
         window,
@@ -1355,6 +1507,7 @@ async fn load_lazy_sections(window: &Webview) {
     )
     .await;
     tokio::time::sleep(PAGE_SETTLE_DELAY).await;
+    walk
 }
 
 /// The candidate's LinkedIn session is paced here, not only in the web layer
@@ -1385,6 +1538,8 @@ pub async fn read_session_page(
     request: &SessionWindowRequest,
 ) -> Result<SessionPageReport, String> {
     let (label, url, _) = validate(request)?;
+    let scroll_budget = lazy_scroll_budget(url.path());
+    let requested_url = url.to_string();
     let window = app
         .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
@@ -1392,8 +1547,18 @@ pub async fn read_session_page(
         tokio::time::sleep(admit_linkedin_read(app, url.path())?).await;
     }
 
-    let already_there = window.url().is_ok_and(|current| current == url);
+    // LinkedIn rewrites the query and trailing slash of a page it just
+    // served; comparing the whole URL navigated again mid-load (B448).
+    let already_there = window
+        .url()
+        .is_ok_and(|current| same_page(current.as_str(), url.as_str()));
     if !already_there {
+        read_diagnostic(
+            app,
+            request,
+            "navigate",
+            Some(first_path_segment(url.as_str())),
+        );
         window
             .navigate(url)
             .map_err(|error| format!("navigate_failed: {error}"))?;
@@ -1403,7 +1568,21 @@ pub async fn read_session_page(
     let deadline = tokio::time::Instant::now() + PAGE_READY_TIMEOUT;
     let mut interactive_since: Option<tokio::time::Instant> = None;
     loop {
-        let state = read_document_state(&window).await?;
+        // A check that runs while the page unloads is dropped by WebKit
+        // (`eval_cancelled`): the page is not ready yet, so poll again (B448).
+        let state = match read_document_state(&window).await {
+            Ok(state) => state,
+            Err(error) if is_transient_eval_error(&error) => {
+                read_diagnostic(app, request, "load_retry", Some(&error));
+                interactive_since = None;
+                if tokio::time::Instant::now() >= deadline {
+                    return Err("page_load_timeout".to_string());
+                }
+                tokio::time::sleep(PAGE_POLL_INTERVAL).await;
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let interactive_for = if state.ready == "interactive" {
             interactive_since
                 .get_or_insert_with(tokio::time::Instant::now)
@@ -1424,25 +1603,480 @@ pub async fn read_session_page(
     }
 
     if request.platform == "linkedin" {
-        load_lazy_sections(&window).await;
+        let started = std::time::Instant::now();
+        let walk = load_lazy_sections(&window, scroll_budget).await;
+        if scroll_budget.compact_connections {
+            let millis = started.elapsed().as_millis().to_string();
+            read_diagnostic(app, request, "walk_ms", Some(&millis));
+            for (cards, batch) in walk.cards_per_step.iter().zip(&walk.batch_per_step) {
+                read_diagnostic(app, request, "cards", Some(&cards.to_string()));
+                read_diagnostic(app, request, "step_cards", Some(&batch.to_string()));
+            }
+            if let Some(error) = walk.collect_error.as_deref() {
+                let code = first_code(error);
+                read_diagnostic(app, request, "collect_failed", Some(code));
+            }
+            if let Some(segment) = walk.left_for.as_deref() {
+                read_diagnostic(app, request, "left", Some(segment));
+            }
+            let collected = walk.collected.len().to_string();
+            read_diagnostic(app, request, "collected", Some(&collected));
+        }
+        let steps = walk.cards_per_step.len().to_string();
+        read_diagnostic(app, request, "scrolled", Some(&steps));
+        // The cards were read on the connections list, even if the window
+        // has since moved; report them as that page (B448, run 7).
+        if let Some(body) = walk.collected.render() {
+            let body = validate_page_body(body)?;
+            read_diagnostic(app, request, "read", Some("mynetwork"));
+            return Ok(SessionPageReport {
+                ok: true,
+                url: requested_url,
+                body,
+            });
+        }
+        if scroll_budget.compact_connections {
+            // A full sanitize of a list this long exceeds the body limit by
+            // design (run 8); an empty list ends in `no_contacts` instead.
+            read_diagnostic(app, request, "compact_empty", None);
+            return Ok(SessionPageReport {
+                ok: true,
+                url: requested_url,
+                body: "<main></main>".to_string(),
+            });
+        }
     }
 
-    let body_json = eval_json(&window, &page_sanitize_script(&request.platform)).await?;
+    let body_json = sanitized_page_json(app, request, &window).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
             .map_err(|error| format!("body_shape: {error}"))?,
     )?;
-    let final_state = read_document_state(&window).await?;
+    let final_url = match read_document_state(&window).await {
+        Ok(state) => state.href,
+        Err(_) => window.url().map(|url| url.to_string()).unwrap_or_default(),
+    };
+    read_diagnostic(app, request, "read", Some(first_path_segment(&final_url)));
 
     Ok(SessionPageReport {
         ok: !body.is_empty(),
-        url: final_state.href,
+        url: final_url,
         body,
     })
 }
 
+const SANITIZE_ATTEMPTS: usize = 3;
+
+/// The sanitize pass, retried when a late LinkedIn navigation drops it.
+async fn sanitized_page_json(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    window: &Webview,
+) -> Result<String, String> {
+    let mut last_error = String::new();
+    for _ in 0..SANITIZE_ATTEMPTS {
+        match eval_json(window, &page_sanitize_script(&request.platform)).await {
+            Ok(json) => return Ok(json),
+            Err(error) if is_transient_eval_error(&error) => {
+                read_diagnostic(app, request, "sanitize_retry", Some(&error));
+                last_error = error;
+                tokio::time::sleep(PAGE_SETTLE_DELAY).await;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error)
+}
+
+/// Reads the connection cards showing text now; see the script's own header.
+const CONNECTIONS_COLLECT_SCRIPT: &str = include_str!("connections_collect.js");
+
+/// The script as the page runs it: the file is already self-invoking, and
+/// wrapping it again turned its trailing `;` into a syntax error (run 8).
+fn connections_collect_call() -> &'static str {
+    CONNECTIONS_COLLECT_SCRIPT
+}
+
+/// The leading `snake_case` code of an error, for the diagnostics log.
+fn first_code(error: &str) -> &str {
+    let end = error
+        .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'))
+        .unwrap_or(error.len())
+        .min(60);
+    if end == 0 {
+        "unknown"
+    } else {
+        &error[..end]
+    }
+}
+
+/// `eval_cancelled` / `eval_timeout`: the page moved under the script.
+fn is_transient_eval_error(error: &str) -> bool {
+    error == "eval_cancelled" || error == "eval_timeout"
+}
+
+/// Same host and path, ignoring the query, fragment and a trailing slash.
+fn same_page(current: &str, wanted: &str) -> bool {
+    match (Url::parse(current), Url::parse(wanted)) {
+        (Ok(a), Ok(b)) => {
+            a.host_str() == b.host_str()
+                && a.path().trim_end_matches('/') == b.path().trim_end_matches('/')
+        }
+        _ => false,
+    }
+}
+
+/// The first path segment as a log code (`mynetwork`, `checkpoint`, `in`).
+fn first_path_segment(raw: &str) -> &str {
+    let path = raw
+        .split_once("://")
+        .and_then(|(_, rest)| rest.split_once('/'))
+        .map(|(_, path)| path)
+        .unwrap_or("");
+    let segment = path.split(['/', '?', '#']).next().unwrap_or("");
+    if segment.is_empty() {
+        "root"
+    } else if segment.len() <= 40
+        && segment
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
+        segment
+    } else {
+        "other"
+    }
+}
+
+/// Steps of the candidate's own LinkedIn reads in the local diagnostics log.
+fn read_diagnostic(
+    app: &AppHandle,
+    request: &SessionWindowRequest,
+    event: &str,
+    detail: Option<&str>,
+) {
+    if request.platform == "linkedin" && request.session_key.is_none() {
+        let _ = append_connector_diagnostic(app, "linkedin-read", event, detail);
+    }
+}
+
+/// Kept on this machine only (B448): a sanitized LinkedIn page that yielded
+/// nothing, so the parser can be tuned to the real markup. Never uploaded.
+const CAPTURE_DUMP_DIR: &str = "capture-dumps";
+const CAPTURE_DUMPS_KEPT: usize = 10;
+
+/// `linkedin-<kind>-<millis>.html`, or `None` for a kind outside `[a-z-]{1,40}`.
+fn capture_dump_file_name(kind: &str, millis: u128) -> Option<String> {
+    let valid = !kind.is_empty()
+        && kind.len() <= 40
+        && kind.chars().all(|c| c.is_ascii_lowercase() || c == '-');
+    valid.then(|| format!("linkedin-{kind}-{millis}.html"))
+}
+
+/// The oldest dumps beyond `CAPTURE_DUMPS_KEPT`; names sort by their timestamp
+/// within one kind, and every kind is pruned together by name order.
+fn capture_dumps_to_prune(mut names: Vec<String>) -> Vec<String> {
+    names.retain(|name| name.starts_with("linkedin-") && name.ends_with(".html"));
+    names.sort_by_key(|name| {
+        name.trim_end_matches(".html")
+            .rsplit('-')
+            .next()
+            .and_then(|millis| millis.parse::<u128>().ok())
+            .unwrap_or(0)
+    });
+    let excess = names.len().saturating_sub(CAPTURE_DUMPS_KEPT);
+    names.into_iter().take(excess).collect()
+}
+
+fn is_connections_page_url(raw: &str) -> bool {
+    Url::parse(raw).is_ok_and(|url| {
+        url.scheme() == "https"
+            && url
+                .host_str()
+                .is_some_and(|host| host_belongs_to(host, "linkedin.com"))
+            && url
+                .path()
+                .starts_with("/mynetwork/invite-connect/connections")
+    })
+}
+
+/// Saves the open LinkedIn session page through the same sanitizer as
+/// `read_session_page`; the caller cannot hand in a body of its own.
+pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
+    let saved = write_session_capture_dump(app, kind).await;
+    if let Err(error) = &saved {
+        let _ = append_connector_diagnostic(
+            app,
+            "linkedin-read",
+            "dump_failed",
+            Some(first_code(error)),
+        );
+    }
+    saved
+}
+
+async fn write_session_capture_dump(app: &AppHandle, kind: &str) -> Result<String, String> {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or(0);
+    let name = capture_dump_file_name(kind, millis).ok_or("capture_dump_kind_invalid")?;
+    let label = session_window_label("linkedin").ok_or("session_window_missing")?;
+    let window = app
+        .get_webview(label)
+        .ok_or_else(|| "session_window_missing".to_string())?;
+    // Only the connections list is ever kept: never a profile, feed or message page.
+    if !window
+        .url()
+        .is_ok_and(|current| is_connections_page_url(current.as_str()))
+    {
+        return Err("capture_dump_page_not_allowed".to_string());
+    }
+    let body_json = eval_json(&window, &page_sanitize_script("linkedin")).await?;
+    let body = validate_page_body(
+        serde_json::from_str::<String>(&body_json)
+            .map_err(|error| format!("body_shape: {error}"))?,
+    )?;
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("capture_dump_dir_unavailable: {error}"))?
+        .join(CAPTURE_DUMP_DIR);
+    create_private_directory(&root)?;
+    std::fs::write(root.join(&name), body)
+        .map_err(|error| format!("capture_dump_write_failed: {error}"))?;
+    let existing = std::fs::read_dir(&root)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    for stale in capture_dumps_to_prune(existing) {
+        let _ = std::fs::remove_file(root.join(stale));
+    }
+    Ok(name)
+}
+
+/// Local diagnostics for background connector reads (B448): the candidate
+/// never sees it, the team can read it. Codes only, never page text.
+const DIAGNOSTICS_DIR: &str = "diagnostics";
+const DIAGNOSTICS_FILE: &str = "connector.log";
+const DIAGNOSTICS_MAX_BYTES: u64 = 256 * 1_024;
+
+fn diagnostic_token(value: &str, max_len: usize) -> Option<&str> {
+    let valid = !value.is_empty()
+        && value.len() <= max_len
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+    valid.then_some(value)
+}
+
+/// `<unix-ms> <scope> <event> [detail]`, or `None` when any part is not a plain code.
+fn diagnostic_line(millis: u128, scope: &str, event: &str, detail: Option<&str>) -> Option<String> {
+    let scope = diagnostic_token(scope, 40)?;
+    let event = diagnostic_token(event, 60)?;
+    let detail = match detail {
+        Some(value) => format!(" {}", diagnostic_token(value, 60)?),
+        None => String::new(),
+    };
+    Some(format!("{millis} {scope} {event}{detail}\n"))
+}
+
+pub fn append_connector_diagnostic(
+    app: &AppHandle,
+    scope: &str,
+    event: &str,
+    detail: Option<&str>,
+) -> Result<(), String> {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or(0);
+    let line = diagnostic_line(millis, scope, event, detail).ok_or("diagnostic_invalid")?;
+    eprint!("[connector-diagnostic] {line}");
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    let path = root.join(DIAGNOSTICS_FILE);
+    if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > DIAGNOSTICS_MAX_BYTES) {
+        let _ = std::fs::rename(&path, root.join(format!("{DIAGNOSTICS_FILE}.1")));
+    }
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut file| file.write_all(line.as_bytes()))
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn error_codes_stop_at_the_first_non_code_character() {
+        assert_eq!(first_code("eval_failed: boom"), "eval_failed");
+        assert_eq!(first_code("collect_shape"), "collect_shape");
+        assert_eq!(first_code(": nothing"), "unknown");
+    }
+
+    #[test]
+    fn the_collector_runs_unwrapped() {
+        let call = connections_collect_call().trim_end();
+        assert!(call.starts_with("/**"));
+        assert!(call.ends_with("})();"));
+    }
+
+    #[test]
+    fn collected_cards_survive_rows_that_empty_or_trim_later() {
+        let mut collected = CollectedConnections::default();
+        collected.merge(vec![
+            ("/in/a/".into(), "<div>a2</div>".into(), 2),
+            ("/in/b/".into(), "<div>b1</div>".into(), 1),
+        ]);
+        collected.merge(vec![
+            ("/in/a/".into(), "<div>a1</div>".into(), 1),
+            ("/in/b/".into(), "<div>b2</div>".into(), 2),
+            ("/in/c/".into(), "<div>c2</div>".into(), 2),
+        ]);
+        collected.merge(Vec::new());
+        assert_eq!(collected.len(), 3);
+        assert_eq!(
+            collected.render().as_deref(),
+            Some("<main><div>a2</div><div>b2</div><div>c2</div></main>")
+        );
+        assert_eq!(CollectedConnections::default().render(), None);
+    }
+
+    #[test]
+    fn the_connections_list_gets_a_longer_and_more_patient_walk() {
+        let connections = lazy_scroll_budget("/mynetwork/invite-connect/connections/");
+        assert_eq!(
+            (connections.max_steps, connections.quiet_readings),
+            (450, 8)
+        );
+        assert_eq!(connections.max_duration, Duration::from_secs(8 * 60));
+        assert!(connections.compact_connections);
+        let profile = lazy_scroll_budget("/in/someone/");
+        assert_eq!((profile.max_steps, profile.quiet_readings), (40, 4));
+        assert!(!profile.compact_connections);
+    }
+
+    #[test]
+    fn new_cards_keep_the_walk_going_even_when_the_height_holds() {
+        let state = LazyScrollState {
+            height: 5_000.0,
+            at_end: true,
+            cards: 120,
+        };
+        assert_eq!(next_quiet_readings(3, &state, 5_000.0, 100), 0);
+        assert_eq!(next_quiet_readings(3, &state, 5_000.0, 120), 4);
+    }
+
+    #[test]
+    fn a_rewritten_query_or_slash_is_the_same_page() {
+        assert!(same_page(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections?x=1",
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+        assert!(!same_page(
+            "https://www.linkedin.com/feed/",
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+    }
+
+    #[test]
+    fn only_a_dropped_script_is_retried() {
+        assert!(is_transient_eval_error("eval_cancelled"));
+        assert!(is_transient_eval_error("eval_timeout"));
+        assert!(!is_transient_eval_error("session_window_missing"));
+    }
+
+    #[test]
+    fn path_segment_is_a_plain_code() {
+        assert_eq!(
+            first_path_segment("https://www.linkedin.com/checkpoint/challenge/x"),
+            "checkpoint"
+        );
+        assert_eq!(first_path_segment("https://www.linkedin.com/"), "root");
+        assert_eq!(
+            first_path_segment("https://www.linkedin.com/in/Ирина/"),
+            "in"
+        );
+        assert_eq!(first_path_segment("not a url"), "root");
+    }
+
+    #[test]
+    fn diagnostic_line_keeps_codes_and_refuses_free_text() {
+        assert_eq!(
+            diagnostic_line(
+                5,
+                "linkedin-contacts",
+                "read_failed",
+                Some("page_load_timeout")
+            )
+            .as_deref(),
+            Some("5 linkedin-contacts read_failed page_load_timeout\n")
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "uploading", Some("42")).as_deref(),
+            Some("5 linkedin-contacts uploading 42\n")
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "Ирина Котова", None),
+            None
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "ok", Some("a b")),
+            None
+        );
+    }
+
+    #[test]
+    fn capture_dump_name_accepts_only_a_plain_kind() {
+        assert_eq!(
+            capture_dump_file_name("connections", 1_700_000_000_000).as_deref(),
+            Some("linkedin-connections-1700000000000.html")
+        );
+        assert_eq!(capture_dump_file_name("../etc", 1), None);
+        assert_eq!(capture_dump_file_name("", 1), None);
+        assert_eq!(capture_dump_file_name("Conn", 1), None);
+    }
+
+    #[test]
+    fn capture_dump_is_limited_to_the_connections_page() {
+        assert!(is_connections_page_url(
+            "https://www.linkedin.com/mynetwork/invite-connect/connections/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://www.linkedin.com/in/someone/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://www.linkedin.com/messaging/"
+        ));
+        assert!(!is_connections_page_url(
+            "https://evil.example/mynetwork/invite-connect/connections/"
+        ));
+    }
+
+    #[test]
+    fn capture_dumps_keep_only_the_newest_ten() {
+        let names: Vec<String> = (1..=12)
+            .map(|n| format!("linkedin-connections-{n}.html"))
+            .chain(["notes.txt".to_string()])
+            .collect();
+        assert_eq!(
+            capture_dumps_to_prune(names),
+            vec![
+                "linkedin-connections-1.html".to_string(),
+                "linkedin-connections-2.html".to_string()
+            ]
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -1469,7 +2103,11 @@ mod tests {
     }
 
     fn scroll_state(height: f64, at_end: bool) -> LazyScrollState {
-        LazyScrollState { height, at_end }
+        LazyScrollState {
+            height,
+            at_end,
+            cards: 0,
+        }
     }
 
     #[cfg(unix)]
@@ -1528,10 +2166,10 @@ mod tests {
     fn lazy_scroll_waits_for_several_quiet_readings_before_stopping() {
         let mut quiet = 0;
         for _ in 0..LAZY_SCROLL_QUIET_READINGS - 1 {
-            quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+            quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0, 0);
             assert!(quiet < LAZY_SCROLL_QUIET_READINGS);
         }
-        quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0);
+        quiet = next_quiet_readings(quiet, &scroll_state(5_000.0, true), 5_000.0, 0);
         assert_eq!(quiet, LAZY_SCROLL_QUIET_READINGS);
         const { assert!(LAZY_SCROLL_QUIET_READINGS >= 4) };
     }
@@ -1548,11 +2186,11 @@ mod tests {
     #[test]
     fn lazy_scroll_restarts_the_count_when_linkedin_appends_a_chunk() {
         assert_eq!(
-            next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0),
+            next_quiet_readings(1, &scroll_state(7_400.0, true), 5_000.0, 0),
             0
         );
         assert_eq!(
-            next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0),
+            next_quiet_readings(1, &scroll_state(5_000.0, false), 5_000.0, 0),
             0
         );
     }
