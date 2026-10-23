@@ -778,6 +778,18 @@ pub async fn open_session_window(
         Ok(_) => {
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
+            if request.session_key.is_none() {
+                tauri::async_runtime::spawn(show_load_failure_if_blank(
+                    app.clone(),
+                    label.clone(),
+                    if request.platform == "linkedin" {
+                        "linkedin.com"
+                    } else {
+                        "hh.ru"
+                    },
+                    request.url.clone(),
+                ));
+            }
             if await_registered_window(app, &label).await {
                 if let Some(window) = app.get_webview_window(&label) {
                     let _ = append_connector_diagnostic(
@@ -1033,6 +1045,59 @@ fn platform_name(platform: &str) -> &'static str {
         "LinkedIn"
     } else {
         "hh.ru"
+    }
+}
+
+/// A sign-in page that drew no text by then never opened (no network, no route).
+const LOAD_FAILURE_AFTER: Duration = Duration::from_secs(20);
+const DRAWN_PROBE: &str =
+    "JSON.stringify(((document.body && document.body.innerText) || '').trim().length)";
+
+/// The probe answers a text length, possibly JSON-quoted more than once.
+fn page_has_text(value: &str) -> bool {
+    value
+        .trim_matches(|c: char| c == '"' || c == '\\' || c.is_whitespace())
+        .parse::<usize>()
+        .is_ok_and(|length| length > 0)
+}
+
+/// Mockup 12, «Страница не открылась»: drawn inside the window itself, with a
+/// retry that reloads the platform's own address (allowed by the navigation list).
+fn load_failure_script(host: &str, retry_url: &str) -> String {
+    let url = serde_json::to_string(retry_url).unwrap_or_else(|_| "\"about:blank\"".into());
+    let markup = format!(
+        "<div style='min-height:100vh;display:grid;place-items:center;font:14px -apple-system,sans-serif;color:#1f2328;background:#fff'>\
+         <div style='text-align:center;display:grid;gap:12px;justify-items:center'>\
+         <div style='width:28px;height:28px;border:2px solid #b42318;border-radius:50%;color:#b42318;font-weight:700;line-height:26px'>!</div>\
+         <strong style='font-size:16px'>Страница не открылась</strong>\
+         <p style='margin:0'>Нет связи с {host}. Проверьте сеть и повторите.</p>\
+         <button id='oq-retry' style='padding:8px 20px;border:1px solid #1f2328;border-radius:10px;background:#fff;font:inherit;cursor:pointer'>Повторить</button>\
+         </div></div>"
+    );
+    format!(
+        "document.documentElement.innerHTML = {};\
+         document.getElementById('oq-retry').onclick = () => location.replace({url});",
+        serde_json::to_string(&markup).unwrap_or_default()
+    )
+}
+
+/// Shows the in-window failure when the platform page has drawn nothing by
+/// `LOAD_FAILURE_AFTER` (B464, mockup 12).
+async fn show_load_failure_if_blank(
+    app: AppHandle,
+    label: String,
+    host: &'static str,
+    retry_url: String,
+) {
+    tokio::time::sleep(LOAD_FAILURE_AFTER).await;
+    let Some(webview) = app.get_webview(&label) else {
+        return;
+    };
+    let drawn = eval_json(&webview, DRAWN_PROBE)
+        .await
+        .is_ok_and(|value| page_has_text(&value));
+    if !drawn {
+        let _ = webview.eval(load_failure_script(host, &retry_url));
     }
 }
 
@@ -2473,6 +2538,23 @@ https://media.licdn.com/dms/image/c 800w";
         assert_eq!(super::title_bar_offset(1668, 1612, 2.0, Some(28.0)), 28.0);
         assert_eq!(super::title_bar_offset(1612, 1612, 2.0, None), 0.0);
         assert_eq!(super::title_bar_offset(1612, 1612, 2.0, Some(500.0)), 0.0);
+    }
+
+    #[test]
+    fn a_page_that_never_drew_shows_the_mockup_failure_with_a_retry() {
+        let script = super::load_failure_script("linkedin.com", "https://www.linkedin.com/login");
+        assert!(script.contains("Страница не открылась"));
+        assert!(script.contains("Нет связи с linkedin.com. Проверьте сеть и повторите."));
+        assert!(script.contains("Повторить"));
+        assert!(script.contains("location.replace(\"https://www.linkedin.com/login\")"));
+    }
+
+    #[test]
+    fn a_page_counts_as_drawn_once_it_has_text() {
+        assert!(super::page_has_text("\"12\""));
+        assert!(super::page_has_text("7"));
+        assert!(!super::page_has_text("\"0\""));
+        assert!(!super::page_has_text("null"));
     }
 
     #[test]
