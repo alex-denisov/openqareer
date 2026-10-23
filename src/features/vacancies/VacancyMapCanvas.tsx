@@ -6,6 +6,7 @@ import {
   buildMapMarkers,
   cityBounds,
   clampMarker,
+  type MapBlockedRect,
   formatCityDisplay,
   markerLabel,
   type MapNode,
@@ -46,10 +47,37 @@ interface PlacedNode {
   readonly y: number;
 }
 
-function placeNodes(map: MapLibreMap | undefined, cities: readonly CityFacet[], selected?: string) {
+/** B553 390: ± и карточка города в координатах холста — капсулы под ними не рисуются. */
+function blockedRects(map: MapLibreMap): MapBlockedRect[] {
+  const canvas = map.getCanvas().getBoundingClientRect();
+  const stage = map.getContainer().parentElement;
+  if (!stage) return [];
+  return [...stage.querySelectorAll('.career-map-zoom-controls, .career-map-city-card')].map(
+    (element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left - canvas.left,
+        top: rect.top - canvas.top,
+        right: rect.right - canvas.left,
+        bottom: rect.bottom - canvas.top,
+      };
+    },
+  );
+}
+
+function placeNodes(
+  map: MapLibreMap | undefined,
+  cities: readonly CityFacet[],
+  selected?: string,
+  avoidOverlays = false,
+) {
   if (!map) return [];
   const canvas = map.getCanvas();
-  const view = { width: canvas.clientWidth, height: canvas.clientHeight };
+  const view = {
+    width: canvas.clientWidth,
+    height: canvas.clientHeight,
+    ...(avoidOverlays ? { blocked: blockedRects(map) } : {}),
+  };
   return buildMapMarkers(cities, (point) => map.project([point.lng, point.lat]), selected).flatMap(
     (node): PlacedNode[] => {
       const place = clampMarker(node, `${markerLabel(node)} ${nodeCount(node)}`, view);
@@ -107,6 +135,12 @@ export default function VacancyMapCanvas({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [map, frame, cities, selectedCity],
   );
+  // 390: рисуются только капсулы вне ± и карточки; город карточки выбирается из всех.
+  const drawn = React.useMemo(
+    () => (compact ? placeNodes(map, cities, selectedCity, true) : placed),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placed, compact],
+  );
   const { animate, choose } = useMapActions(map, {
     compact,
     selectedCity,
@@ -120,11 +154,7 @@ export default function VacancyMapCanvas({
   return (
     <>
       <div ref={container} className="career-map-gl" />
-      <MapMarkers
-        placed={placed}
-        activeCity={compact ? cardCity : selectedCity}
-        onChoose={choose}
-      />
+      <MapMarkers placed={drawn} activeCity={compact ? cardCity : selectedCity} onChoose={choose} />
       <MapZoomControls
         onZoomIn={() => map?.zoomIn({ animate })}
         onZoomOut={() => map?.zoomOut({ animate })}

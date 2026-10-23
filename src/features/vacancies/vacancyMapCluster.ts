@@ -255,19 +255,38 @@ export function focusBounds(cities: readonly CityFacet[]): MapBounds | undefined
   return cityBounds(core.length ? core : placed);
 }
 
+/** Прямоугольник поверх карты в координатах холста: ± или карточка города (390). */
+export interface MapBlockedRect {
+  readonly left: number;
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+}
+
 /**
  * Капсула у края сдвигается внутрь, чтобы не обрезаться; точка за краем карты не рисуется.
+ * B553: капсула, что легла бы на ± или карточку города, тоже не рисуется — видна при сдвиге карты.
  */
 export function clampMarker(
   point: { readonly x: number; readonly y: number },
   text: string,
-  view: { readonly width: number; readonly height: number },
+  view: {
+    readonly width: number;
+    readonly height: number;
+    readonly blocked?: readonly MapBlockedRect[];
+  },
 ): { readonly x: number; readonly y: number } | undefined {
   if (point.x < 0 || point.y < 0 || point.x > view.width || point.y > view.height) return undefined;
   const half = capsuleWidth(text) / 2;
   const halfHeight = CAPSULE_HEIGHT / 2;
-  return {
-    x: Math.min(Math.max(point.x, half), view.width - half),
-    y: Math.min(Math.max(point.y, halfHeight), view.height - halfHeight),
-  };
+  const x = Math.min(Math.max(point.x, half), view.width - half);
+  const y = Math.min(Math.max(point.y, halfHeight), view.height - halfHeight);
+  const hidden = (view.blocked ?? []).some(
+    (rect) =>
+      x + half > rect.left &&
+      x - half < rect.right &&
+      y + halfHeight > rect.top &&
+      y - halfHeight < rect.bottom,
+  );
+  return hidden ? undefined : { x, y };
 }
