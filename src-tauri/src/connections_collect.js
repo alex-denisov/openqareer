@@ -32,10 +32,10 @@
         var url;
         try {
           url = new URL(links[j].getAttribute('href'), location.origin);
-        } catch (e) {
+        } catch (_error) {
           continue;
         }
-        if (!/^\/in\/[^\/]+\/?$/.test(url.pathname)) continue;
+        if (!/^\/in\/[^/]+\/?$/.test(url.pathname)) continue;
         var paragraphs = links[j].querySelectorAll('p');
         var lines = [];
         for (var k = 0; k < paragraphs.length && lines.length < 2; k++) {
@@ -60,7 +60,7 @@
       }
     }
     return JSON.stringify(out);
-  } catch (e) {
+  } catch (_error) {
     return '[]';
   }
 })();
