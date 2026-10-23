@@ -3,6 +3,8 @@ export interface VacancyMechanicsStats {
   requirementsDone: number;
   requirementsUnavailable: number;
   requirementsInvalid: number;
+  /** Jobs returned to the queue because the spend budget refused the call (B556): not an extraction failure. */
+  budgetPaused: number;
   /** Why model answers or their entries were not used (B510-r), by `ModelAnswerIssue`. */
   modelIssues: Record<string, number>;
   claimed: number;
@@ -23,6 +25,7 @@ export function emptyVacancyMechanicsStats(): VacancyMechanicsStats {
     requirementsDone: 0,
     requirementsUnavailable: 0,
     requirementsInvalid: 0,
+    budgetPaused: 0,
     modelIssues: {},
     claimed: 0,
     completed: 0,
@@ -59,7 +62,7 @@ function modelPart(stats: VacancyMechanicsStats): string {
     `llm_calls=${stats.llmCalls} llm_failed=${stats.llmFailed} ` +
     `llm_avg_ms=${Math.round(stats.llmMs / stats.llmCalls)} ` +
     `extract_unavailable=${stats.requirementsUnavailable} extract_invalid=${stats.requirementsInvalid} ` +
-    `extract_failed_share=${failedShare}%${issuesPart(stats.modelIssues)}`
+    `extract_failed_share=${failedShare}%${stats.budgetPaused ? ` extract_budget_paused=${stats.budgetPaused}` : ''}${issuesPart(stats.modelIssues)}`
   );
 }
 

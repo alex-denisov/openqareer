@@ -50,10 +50,25 @@ export function vacancyRequirementsCacheKey(input: VacancyRequirementsInput): st
   return JSON.stringify([input.vacancyId, input.clusterId ?? '', vacancyDescriptionHash(input.description), input.extractorVersion ?? VACANCY_REQUIREMENTS_EXTRACTOR_VERSION]);
 }
 
+const NAMED_ENTITIES: Readonly<Record<string, string>> = {
+  nbsp: ' ', amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“',
+  laquo: '«', raquo: '»', ndash: '–', mdash: '—', hellip: '…', bull: '•', middot: '·', shy: '', zwj: '', zwnj: '',
+};
+
+/**
+ * Sources send entities as text (`&rsquo;` in 10 of 36 rejected prod quotes, B556): decoded once here,
+ * so the model and the quote check read the same characters. Unknown names stay as they are.
+ */
+function decodeEntities(text: string): string {
+  return text.replace(/&(?:#(\d{1,7})|#x([\da-f]{1,6})|([a-z]{2,8}));/giu, (entity, decimal?: string, hex?: string, name?: string) => {
+    if (name) return NAMED_ENTITIES[name.toLowerCase()] ?? entity;
+    const code = decimal ? Number(decimal) : Number.parseInt(hex ?? '', 16);
+    return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+  });
+}
+
 function plainText(description: string): string {
-  return description.replace(/<\/(?:p|div|li|h[1-6]|ul|ol)>|<br\s*\/?\s*>/giu, '\n')
-    .replace(/<[^>]+>/gu, '').replace(/&nbsp;/gu, ' ').replace(/&amp;/gu, '&')
-    .replace(/&#39;/gu, "'").replace(/&quot;/gu, '"');
+  return decodeEntities(description.replace(/<\/(?:p|div|li|h[1-6]|ul|ol)>|<br\s*\/?\s*>/giu, '\n').replace(/<[^>]+>/gu, ''));
 }
 const SECTION = /^(?:requirements|(?:(?:basic|preferred|minimum) )?qualifications|what (?:you(?:(?:'|’)ll)? (?:need|bring)|we (?:expect|look for))|who you are|skills and experience|your (?:skills|profile)|требования|мы ожидаем|что (?:нужно|мы ожидаем)|(?:что )?(?:мы )?жд[её]м(?: от (?:вас|кандидата))?|нам важно|вы нам подходите)(?:\s*[:：].*)?$/iu;
 const STOP = /^(?:benefits|(?:key job )?responsibilities|what (?:we offer|you(?:(?:'|’)ll| will) do)|about (?:us|the (?:role|company|team))|why work with us|compensation|salary|additional information|equal opportunity|perks|мы предлагаем|условия|обязанности|задачи|что (?:предлагаем|вы будете делать)|о компании|почему мы)(?=\s|[:：]|$)/iu;
@@ -171,7 +186,10 @@ function parseModelJson(response: string): { readonly value: unknown; readonly t
   }
 }
 
-const TYPOGRAPHIC: Readonly<Record<string, string>> = { '’': "'", '‘': "'", '“': '"', '”': '"', '«': '"', '»': '"' };
+/** Non-breaking and Unicode hyphens are typed back as `-` by the model (8 of 36 rejected prod quotes, B556). */
+const TYPOGRAPHIC: Readonly<Record<string, string>> = {
+  '’': "'", '‘': "'", '“': '"', '”': '"', '«': '"', '»': '"', '\u2010': '-', '\u2011': '-', '\u2212': '-',
+};
 
 /**
  * The description span a model quote stands for. The model swaps typographic quotes, squeezes
@@ -194,7 +212,7 @@ function spanIgnoringSpacing(quote: string, description: string, space: string):
     } else normal.push(char);
     origin.push(index);
   }
-  const needle = quote.replace(/[’‘“”«»]/gu, (char) => TYPOGRAPHIC[char]).trim().replace(/\s+/gu, space).replace(/[.;,!]+$/u, '');
+  const needle = quote.replace(/[’‘“”«»\u2010\u2011\u2212]/gu, (char) => TYPOGRAPHIC[char]).trim().replace(/\s+/gu, space).replace(/[.;,!]+$/u, '');
   if (needle.length < 2) return null;
   const at = normal.join('').indexOf(needle);
   if (at < 0) return null;
@@ -232,6 +250,20 @@ function modelRequirement(entry: unknown, description: string, report: (issue: M
 }
 
 /**
+ * One short line without a sentence is a bare title ("Director, Software Engineering — 4 Locations",
+ * Workday stubs on prod, B556): the model can only invent requirements there.
+ */
+function isBareTitle(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length <= 160 && !/[\n.:;!?。：]/u.test(trimmed);
+}
+
+/** The spend budget refused the call: the job waits for the next budget day instead of failing (B556). */
+export class VacancyRequirementsPausedError extends Error {
+  constructor(readonly until: number) { super('requirements_budget_paused'); }
+}
+
+/**
  * B510: with a model, every description goes to it for short labels; the rules stay as the fallback.
  * A failed or invalid answer is retried by the job; meanwhile the reader shows older or rule results.
  */
@@ -247,10 +279,14 @@ export async function extractVacancyRequirementsWithFallback(
       : { ...rules, ...(status === 'empty' ? { method: 'model' as const } : {}), fallbackStatus: status };
   const invalid = (issue: ModelAnswerIssue): VacancyRequirementsResult => { report(issue); return fallback('invalid'); };
   const description = plainText(input.description ?? '').slice(0, 12000);
+  if (isBareTitle(description)) return rules;
   let response: string;
   try {
     response = await model.extract({ description, instructions: MODEL_INSTRUCTIONS });
-  } catch { return fallback('unavailable'); }
+  } catch (error) {
+    if (error instanceof VacancyRequirementsPausedError) throw error;
+    return fallback('unavailable');
+  }
   // From here the model answered: anything unusable is `invalid`, not `unavailable`.
   if (response.length > 60000) return invalid('shape');
   let parsed: ReturnType<typeof parseModelJson>;

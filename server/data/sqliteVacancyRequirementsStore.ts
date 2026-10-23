@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { addLateColumns } from './sqliteLateColumn';
 import {
   vacancyRequirementsCacheKey,
+  VacancyRequirementsPausedError,
   vacancyDescriptionHash,
   VACANCY_REQUIREMENTS_EXTRACTOR_VERSION,
   LEGACY_REQUIREMENTS_EXTRACTOR_VERSIONS,
@@ -173,6 +174,14 @@ export class SqliteVacancyRequirementsStore {
       .run(job.attempts >= 3 ? 'failed' : 'queued', now + 1000 * 2 ** job.attempts, safeCode, MECHANICS_REQUEUE_REVISION, now, job.id, job.leaseToken);
   }
 
+  /** A spend-budget refusal returns the claim: the attempt does not count and the job waits until `until` (B556). */
+  pause(job: VacancyRequirementsJob, until: number, now = Date.now()): void {
+    this.assertLease(job, now);
+    this.db.prepare(`UPDATE vacancy_requirements_jobs SET status='queued',attempts=MAX(attempts-1,0),available_at=?,
+      lease_token=NULL,lease_until=NULL,last_error='requirements_budget_paused',updated_at=? WHERE id=? AND lease_token=?`)
+      .run(until, now, job.id, job.leaseToken);
+  }
+
   /**
    * One requeue of model failures after a parser upgrade: rows that failed under an older
    * revision go back once, at most at the shown-page priority (1.5). Later failures carry the current
@@ -204,7 +213,10 @@ export class SqliteVacancyRequirementsStore {
       this.complete(job, result, now + (Date.now() - startedAt));
       return result;
     } catch (error) {
-      try { this.fail(job, error instanceof Error ? error.message : 'extraction_failed', now + (Date.now() - startedAt)); } catch { /* Another worker owns expired work. */ }
+      try {
+        if (error instanceof VacancyRequirementsPausedError) this.pause(job, error.until, now + (Date.now() - startedAt));
+        else this.fail(job, error instanceof Error ? error.message : 'extraction_failed', now + (Date.now() - startedAt));
+      } catch { /* Another worker owns expired work. */ }
       return null;
     }
   }
