@@ -10296,9 +10296,8 @@
   font-weight: 700;
 }
 
-/* Макет 390: название и число — по одной строке, длинное название обрезается. */
-.career-map-city-card strong,
-.career-map-city-card small {
+/* Макет 390: название города — одна строка, длинное обрезается; число может переноситься. */
+.career-map-city-card strong {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -10309,9 +10308,13 @@
   font-size: var(--career-text-xs);
 }
 
-/* Макет 390: подпись OSM видна под карточкой города. */
+/* Макет 390: подпись OSM видна под карточкой города, у нижнего края карты. */
 .career-map-push .career-map-city-card {
   inset-block-end: var(--career-space-5);
+}
+
+.career-map-push .career-map-gl .maplibregl-ctrl-bottom-right {
+  inset-block-end: 0;
 }
 
 /* Макет 390: ± нет — масштаб жестом. */
