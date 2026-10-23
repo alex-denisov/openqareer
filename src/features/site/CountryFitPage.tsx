@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { getCountryTaxData } from '../../../shared/taxData';
 import type { CountryCode } from '../../../shared/taxData/types';
-import { PublicFooter, PublicHeader } from './PublicSiteChrome';
+import { CountryChoice, MoneyInput } from './CountryFitFields';
 import {
-  COUNTRY_CODES,
-  calculateCountryFitScenario,
-  saveCountryFitScenario,
-} from './countryFitScenario';
+  CountryFitCurrent,
+  CountryFitDonut,
+  CountryFitModes,
+  CountryFitSticky,
+} from './CountryFitComparison';
+import { PublicFooter, PublicHeader } from './PublicSiteChrome';
+import { calculateCountryFitScenario, saveCountryFitScenario } from './countryFitScenario';
 
 export const COUNTRY_FIT_TITLE = 'Калькулятор налогов и чистой зарплаты 2026 | openqareer';
 export const COUNTRY_FIT_DESCRIPTION =
@@ -30,37 +33,6 @@ export const COUNTRY_FIT_FAQ = [
   ],
 ] as const;
 
-function MoneyInput({
-  label,
-  value,
-  onChange,
-  id,
-  invalid = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  id: string;
-  invalid?: boolean;
-}) {
-  return (
-    <label className="cf-field" htmlFor={id}>
-      {label}
-      <input
-        id={id}
-        inputMode="decimal"
-        type="number"
-        min="0"
-        max="1000000000"
-        step="any"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        aria-invalid={invalid || undefined}
-        aria-describedby={invalid ? 'cf-error' : undefined}
-      />
-    </label>
-  );
-}
 interface CountryFitPageProps {
   readonly onNavigate: (path: string) => void;
   readonly signedIn?: boolean;
@@ -130,25 +102,15 @@ function CountryInputs({ model }: { model: CountryFitModel }) {
   const { country, setCountry, setCosts, data, gross, setGross, result } = model;
   return (
     <div className="cf-inputs">
-      <fieldset className="cf-countries">
-        <legend>Страна работы</legend>
-        <div>
-          {COUNTRY_CODES.map((code) => (
-            <label key={code}>
-              <input
-                type="radio"
-                name="country"
-                checked={country === code}
-                onChange={() => {
-                  setCountry(code);
-                  setCosts(['', '', '']);
-                }}
-              />
-              <span>{getCountryTaxData(code).name}</span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      <CountryChoice
+        value={country}
+        name="target-country"
+        label="Целевая страна работы"
+        onChange={(code) => {
+          setCountry(code);
+          setCosts(['', '', '']);
+        }}
+      />
       <MoneyInput
         id="cf-income"
         label={`Годовая зарплата до налогов, ${data.currency}`}
@@ -157,8 +119,7 @@ function CountryInputs({ model }: { model: CountryFitModel }) {
         invalid={'error' in result}
       />
       <p className="cf-note">
-        Наёмный работник. Без конвертации валют. При смене страны проверьте сумму дохода; расходы
-        очищаются.
+        Наёмная зарплата. Смена страны очищает расходы. Валюты не конвертируются.
       </p>
     </div>
   );
@@ -340,6 +301,23 @@ function ScenarioHeading() {
     </header>
   );
 }
+function CountryFitCrumbs() {
+  return (
+    <nav className="ps-crumbs" aria-label="Навигационная цепочка">
+      <a href="/">openqareer</a> / <span aria-current="page">Country Fit</span>
+    </nav>
+  );
+}
+function CountryFitHeader(props: CountryFitPageProps) {
+  return (
+    <PublicHeader
+      onNavigate={props.onNavigate}
+      onLanding={false}
+      signedIn={Boolean(props.signedIn)}
+      isAdmin={props.isAdmin}
+    />
+  );
+}
 export function CountryFitPage({
   onNavigate,
   signedIn = false,
@@ -355,16 +333,9 @@ export function CountryFitPage({
         К содержимому
       </a>
       <ScenarioSchema />
-      <PublicHeader
-        onNavigate={onNavigate}
-        onLanding={false}
-        signedIn={signedIn}
-        isAdmin={isAdmin}
-      />
-      <main id="main" className="ps-wrap ps-page cf-page">
-        <nav className="ps-crumbs" aria-label="Навигационная цепочка">
-          <a href="/">openqareer</a> / <span aria-current="page">Country Fit</span>
-        </nav>
+      <CountryFitHeader onNavigate={onNavigate} signedIn={signedIn} isAdmin={isAdmin} />
+      <main id="main" className="ps-wrap ps-page cf-page ym-hide-content">
+        <CountryFitCrumbs />
         <ScenarioHeading />
         <section className="cf-calculator" aria-label="Калькулятор зарплаты">
           <CountryInputs model={model} />
@@ -375,6 +346,9 @@ export function CountryFitPage({
             {model.error}
           </p>
         )}
+        <CountryFitDonut payroll={model.payroll} />
+        <CountryFitCurrent />
+        <CountryFitModes />
         <ScenarioCosts model={model} />
         <ScenarioNext model={model} />
         <ScenarioSources model={model} />
@@ -384,6 +358,13 @@ export function CountryFitPage({
         </a>
       </main>
       <PublicFooter onNavigate={onNavigate} onLanding={false} signedIn={signedIn} />
+      <CountryFitSticky
+        payroll={model.payroll}
+        currency={model.data.currency}
+        signedIn={signedIn}
+        onContinue={model.continueToOnboarding}
+        storageError={model.storageError}
+      />
     </div>
   );
 }

@@ -479,9 +479,9 @@ function ContextFormFields({
   return (
     <div className="first-run-context-fields">
       {data.context.countryFitScenario && (
-        <p role="status">
-          Сценарий Country Fit: {data.context.countryFitScenario.countryCode}, годовая зарплата до налогов{' '}
-          {data.context.countryFitScenario.grossAnnualIncome}{' '}
+        <p className="ym-hide-content" role="status">
+          Сценарий Country Fit: {data.context.countryFitScenario.countryCode}, годовая зарплата до
+          налогов {data.context.countryFitScenario.grossAnnualIncome}{' '}
           {data.context.countryFitScenario.currency}. Сохраним в условиях карьерного поиска.
         </p>
       )}
