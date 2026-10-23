@@ -481,9 +481,21 @@ export const resumeImportSchema = z
       })
       .strict()
       .optional(),
+    /**
+     * One import source per profile (owner, 23.10.2026): a platform other than
+     * the profile's own only connects unless the candidate asks to replace.
+     */
+    importMode: z.enum(['profile', 'connect_only', 'replace_profile']).optional(),
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.importMode && value.importMode !== 'profile' && !value.sourceReceipt) {
+      context.addIssue({
+        code: 'custom',
+        path: ['importMode'],
+        message: 'importMode applies only to a native platform import',
+      });
+    }
     if (value.sourceReceipt && value.source !== value.sourceReceipt.platform) {
       context.addIssue({
         code: 'custom',
@@ -571,5 +583,7 @@ export const structuredResumeImportSchema = z
       }),
     // The shared profile schema repairs older flat language/level rows before import planning.
     profile: linkedinProfileV2Schema,
+    /** One import source per profile (owner, 23.10.2026); see `resumeImportSchema`. */
+    importMode: z.enum(['profile', 'connect_only', 'replace_profile']).optional(),
   })
   .strict();

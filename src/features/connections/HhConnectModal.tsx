@@ -47,6 +47,8 @@ const HH_LOGIN_URL = 'https://hh.ru/account/login';
 export interface HhConnectModalProps {
   readonly isOpen: boolean;
   readonly isReconnect?: boolean;
+  /** The profile is built from LinkedIn: hh.ru only connects (23.10.2026). */
+  readonly connectOnly?: boolean;
   readonly onClose: () => void;
   /**
    * The resume the candidate settled on, already read inside their own
@@ -68,6 +70,7 @@ export interface HhConnectModalProps {
 export function HhConnectModal({
   isOpen,
   isReconnect = false,
+  connectOnly = false,
   onClose,
   onConnectSuccess,
   onAuthenticatedEmpty,
@@ -519,9 +522,7 @@ export function HhConnectModal({
              its window went away separately (owner report, 2026-08-26). */
           <div className="career-hh-resumes-selector">
             <label htmlFor="hh-modal-resume-dropdown">
-              {choice.length > 1
-                ? 'Выберите резюме для импорта'
-                : 'Импортируйте резюме в профиль'}
+              {resumeChoiceLabel(choice.length, connectOnly)}
             </label>
             <div className="career-hh-resumes-row">
               <select
@@ -543,7 +544,7 @@ export function HhConnectModal({
                 onClick={() => void importChoice()}
                 disabled={importing}
               >
-                {importing ? 'Импортируем…' : 'Импортировать выбранное резюме'}
+                {resumeChoiceAction(importing, connectOnly)}
               </button>
             </div>
           </div>
@@ -566,4 +567,14 @@ export function HhConnectModal({
       )}
     </ImportModalShell>
   );
+}
+
+function resumeChoiceLabel(count: number, connectOnly: boolean): string {
+  if (connectOnly) return 'Резюме hh.ru для откликов';
+  return count > 1 ? 'Выберите резюме для импорта' : 'Импортируйте резюме в профиль';
+}
+
+function resumeChoiceAction(busy: boolean, connectOnly: boolean): string {
+  if (connectOnly) return busy ? 'Подключаем…' : 'Подключить hh.ru';
+  return busy ? 'Импортируем…' : 'Импортировать выбранное резюме';
 }

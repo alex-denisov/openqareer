@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { z } from 'zod';
 import { carriesProfileSubstance, newImportMemoryIdPrefix } from '../domain/resumeImport';
 import {
@@ -71,13 +72,18 @@ async function commitStructuredImport(
   body: StructuredImportBody,
   importDigest: string,
   plan: ReturnType<typeof planStructuredResumeImport>,
+  replaceProfile: boolean,
 ) {
   const mediaBySourceUrl = await resolveStructuredMedia(candidateId, body.profile, log);
-  const draft = keepFilledSections(
-    attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl),
-    deps.candidateStore.getSnapshot(candidateId)?.resume?.draft,
-  );
-  const committed = deps.candidateStore.commitResumeImport(candidateId, {
+  const withMedia = attachResumeMedia(plan.draft, body.profile, mediaBySourceUrl);
+  // Replacing the profile must not carry sections over from the old source.
+  const draft = replaceProfile
+    ? withMedia
+    : keepFilledSections(withMedia, deps.candidateStore.getSnapshot(candidateId)?.resume?.draft);
+  const commit = replaceProfile
+    ? deps.candidateStore.replaceProfileWithImport.bind(deps.candidateStore)
+    : deps.candidateStore.commitResumeImport.bind(deps.candidateStore);
+  const committed = commit(candidateId, {
     evidence: {
       sourceLabel: 'Импорт: профиль LinkedIn',
       sourceDigest: importDigest,
@@ -102,6 +108,28 @@ async function commitStructuredImport(
   };
 }
 
+/** An exact retry, or LinkedIn only connecting next to another profile source (23.10.2026). */
+function structuredImportShortcut(
+  candidateStore: Parameters<Handler>[0]['candidateStore'],
+  candidateId: string,
+  body: StructuredImportBody,
+  importDigest: string,
+  mode: NativeImportMode,
+) {
+  const replay = candidateStore.findNativeSourceConnectionByDigest(candidateId, 'linkedin', importDigest);
+  if (replay && !(mode === 'replace_profile' && replay.receipt.factCount === 0)) {
+    const data = { resume: resumeStudioView(candidateStore, candidateId), factCount: replay.receipt.factCount };
+    return { data, meta: { idempotentReplay: true } };
+  }
+  if (mode !== 'connect_only') return undefined;
+  const receipt = { ...body.sourceReceipt, importDigest };
+  const data = {
+    ...connectNativeOnly(candidateStore, candidateId, receipt),
+    resume: resumeStudioView(candidateStore, candidateId),
+  };
+  return { data, meta: {} };
+}
+
 export const handleImportStructuredResume: Handler = async (deps, request, reply) => {
   const { authService, candidateStore, config } = deps;
   if (!hasSafeMutationOrigin(request, config)) return csrfError(request, reply);
@@ -113,20 +141,9 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
   }
   const importDigest = structuredImportDigest(candidate.id, body.sourceReceipt, body.profile);
 
-  const replay = candidateStore.findNativeSourceConnectionByDigest(
-    candidate.id,
-    'linkedin',
-    importDigest,
-  );
-  if (replay) {
-    return {
-      data: {
-        resume: resumeStudioView(candidateStore, candidate.id),
-        factCount: replay.receipt.factCount,
-      },
-      meta: { requestId: request.id, idempotentReplay: true },
-    };
-  }
+  const mode = resolveNativeImportMode(candidateStore, candidate.id, 'linkedin', body.importMode);
+  const early = structuredImportShortcut(candidateStore, candidate.id, body, importDigest, mode);
+  if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
 
   const plan = planStructuredResumeImport(body.profile, {
     idPrefix: newImportMemoryIdPrefix(randomUUID()),
@@ -145,7 +162,15 @@ export const handleImportStructuredResume: Handler = async (deps, request, reply
     );
   }
 
-  const data = await commitStructuredImport(deps, request.log, candidate.id, body, importDigest, plan);
+  const data = await commitStructuredImport(
+    deps,
+    request.log,
+    candidate.id,
+    body,
+    importDigest,
+    plan,
+    mode === 'replace_profile',
+  );
   recordImportCompletedNotification(deps, request, candidate.id, 'structured_resume_import', importDigest);
   void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');

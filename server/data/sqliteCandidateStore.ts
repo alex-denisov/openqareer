@@ -117,7 +117,12 @@ import {
   type ConsultantStoreMethods,
 } from './sqliteCandidateStoreConsultantMethods';
 import { SourceConnectionController } from './store/sourceConnectionController';
-import { commitNewResumeImport as commitResumeImportWithDedupe } from './sqliteCandidateStoreResumeImport';
+import {
+  commitNewResumeImport as commitResumeImportWithDedupe,
+  commitSourceConnectionOnly,
+  findResumeImportReplay,
+  replaceProfileWithImport,
+} from './sqliteCandidateStoreResumeImport';
 import {
   CandidateDocumentRetentionError,
   CandidateNotFoundError,
@@ -699,49 +704,37 @@ export class SqliteCandidateStore implements CandidateStore {
     input: ResumeImportCommit,
   ): CommittedResumeImport {
     this.requireCandidate(candidateId);
-    const replay = this.resumeImportReplay(candidateId, input);
+    const replay = findResumeImportReplay(this.importDeps(), candidateId, input);
     return replay ?? this.transaction(() => this.commitNewResumeImport(candidateId, input));
   }
 
-  private resumeImportReplay(
+  replaceProfileWithImport(
     candidateId: string,
-    input: ResumeImportCommit,
-  ): CommittedResumeImport | null {
-    if (!input.sourceReceipt) return null;
-    const replay = this.sourceConnections.findByDigest(
-      candidateId,
-      input.sourceReceipt.platform,
-      input.sourceReceipt.importDigest,
-    );
-    if (!replay) return null;
-    const resume = this.resumeRepository.get(candidateId);
-    if (!resume) throw new CandidateStoreConflictError();
-    return {
-      evidence: {
-        messageId: replay.receipt.sourceMessageId,
-        memoryIds: [...replay.receipt.memoryIds],
-      },
-      resume,
-      sourceConnection: replay,
-      idempotentReplay: true,
-    };
+    input: ResumeImportCommit & { readonly sourceReceipt: NativeSourceReceiptInput },
+  ): CommittedResumeImport {
+    this.requireCandidate(candidateId);
+    return this.transaction(() => replaceProfileWithImport(this.importDeps(), candidateId, input));
   }
 
-  private commitNewResumeImport(
+  connectNativeSourceOnly(
     candidateId: string,
-    input: ResumeImportCommit,
-  ): CommittedResumeImport {
-    return commitResumeImportWithDedupe(
-      {
-        database: this.database,
-        conversations: this.conversations,
-        sourceConnections: this.sourceConnections,
-        resumeRepository: this.resumeRepository,
-        candidateMediaRepository: this.candidateMediaRepository,
-      },
-      candidateId,
-      input,
+    receipt: NativeSourceReceiptInput,
+    sourceLabel: string,
+  ): StoredNativeSourceConnection {
+    this.requireCandidate(candidateId);
+    return this.transaction(() =>
+      commitSourceConnectionOnly(this.importDeps(), candidateId, receipt, sourceLabel),
     );
+  }
+
+  private commitNewResumeImport(candidateId: string, input: ResumeImportCommit) {
+    return commitResumeImportWithDedupe(this.importDeps(), candidateId, input);
+  }
+
+  private importDeps() {
+    const { database, conversations, sourceConnections } = this;
+    const { resumeRepository, candidateMediaRepository } = this;
+    return { database, conversations, sourceConnections, resumeRepository, candidateMediaRepository };
   }
 
   listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[] {

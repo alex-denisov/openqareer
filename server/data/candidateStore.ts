@@ -534,6 +534,17 @@ export interface CandidateStore {
     candidateId: string,
     input: ResumeImportCommit,
   ): CommittedResumeImport;
+  /** Imports a platform as the profile's only source; other platforms stay connected without facts. */
+  replaceProfileWithImport(
+    candidateId: string,
+    input: ResumeImportCommit & { readonly sourceReceipt: NativeSourceReceiptInput },
+  ): CommittedResumeImport;
+  /** Connects a platform without importing anything into the profile. */
+  connectNativeSourceOnly(
+    candidateId: string,
+    receipt: NativeSourceReceiptInput,
+    sourceLabel: string,
+  ): StoredNativeSourceConnection;
   listNativeSourceConnections(candidateId: string): StoredNativeSourceConnection[];
   findNativeSourceConnectionByDigest(
     candidateId: string,

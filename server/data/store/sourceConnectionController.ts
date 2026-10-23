@@ -117,6 +117,36 @@ export class SourceConnectionController {
     };
   }
 
+  /**
+   * Keeps the connection but drops its claim on profile facts: the profile now
+   * comes from another platform (one import source per profile, 23.10.2026).
+   */
+  releaseFacts(candidateId: string, platform: NativeSourceReceiptInput['platform']): void {
+    const row = this.database
+      .prepare(
+        `SELECT id, candidate_id, platform, access_mode, receipt_cipher,
+                import_digest, connected_at, last_imported_at
+         FROM candidate_source_connections
+         WHERE candidate_id = ? AND platform = ?`,
+      )
+      .get(candidateId, platform) as SourceConnectionRow | undefined;
+    if (!row) return;
+    const { receipt } = this.fromRow(row);
+    const released: StoredReceipt = { ...receipt, memoryIds: [], factCount: 0 };
+    this.database
+      .prepare(
+        `UPDATE candidate_source_connections
+         SET receipt_cipher = ?, updated_at = ?
+         WHERE candidate_id = ? AND platform = ?`,
+      )
+      .run(
+        this.sealedText.seal(JSON.stringify(released), associatedData(candidateId, platform)),
+        new Date().toISOString(),
+        candidateId,
+        platform,
+      );
+  }
+
   private persist(context: {
     id: string;
     candidateId: string;
