@@ -10,10 +10,11 @@
  * ChatGPT) нужны факты и границы, а не маркетинг.
  */
 import { LEGAL_DOCS, legalPath } from './legalRegistry';
+import type { LandingStats } from './landingStats';
 import { TARIFF_LEVELS } from '../src/features/tariffs/tariffsData';
 
 /** Last factual update of this surface; bump with the texts. */
-export const AEO_UPDATED_AT = '2026-10-20';
+export const AEO_UPDATED_AT = '2026-10-23';
 
 export const SITE_ORIGIN = 'https://openqareer.com';
 
@@ -72,8 +73,22 @@ function bullet(lines: readonly string[]): string {
   return lines.map((line) => `- ${line}`).join('\n');
 }
 
+/** Source records are not deduplicated vacancies. Keep that distinction beside every count. */
+function poolEvidence(stats?: LandingStats): string[] {
+  if (!stats) return [];
+  return [
+    '## Срез пула',
+    '',
+    `Дата наблюдения: ${stats.updatedAt}.`,
+    `Активных записей источников: ${stats.activeCount}; удалённых записей: ${stats.remoteCount}; источников: ${stats.sourceCount}.`,
+    'Источник: vacancy_pool_index, is_active = 1 и expired = 0; плановый пересчёт фоновым заданием каждые 30 минут.',
+    'Одна вакансия может встречаться на нескольких площадках: записи могут повторяться. Это не число уникальных вакансий или результат проверки каждой позиции у работодателя.',
+    '',
+  ];
+}
+
 /** Короткий индекс витрины — то, что ответчик читает первым. */
-export function buildLlmsTxt(): string {
+export function buildLlmsTxt(stats?: LandingStats): string {
   const legal = LEGAL_DOCS.map(
     (doc) => `- [${doc.title}](${SITE_ORIGIN}${legalPath(doc.slug)})`,
   ).join('\n');
@@ -92,6 +107,7 @@ export function buildLlmsTxt(): string {
     `- Updated: ${AEO_UPDATED_AT}`,
     `- Full specification: ${SITE_ORIGIN}/llms-full.txt`,
     '',
+    ...poolEvidence(stats),
     '## Помощь',
     '',
     `- [Вопросы и ответы о поиске работы](${SITE_ORIGIN}/faq)`,
@@ -105,7 +121,7 @@ export function buildLlmsTxt(): string {
 }
 
 /** Полная спецификация: факты, границы и адреса, без пересказа маркетинга. */
-export function buildLlmsFullTxt(): string {
+export function buildLlmsFullTxt(stats?: LandingStats): string {
   const legal = LEGAL_DOCS.map(
     (doc) => `- [${doc.title}](${SITE_ORIGIN}${legalPath(doc.slug)}) — ${doc.description}`,
   ).join('\n');
@@ -116,6 +132,7 @@ export function buildLlmsFullTxt(): string {
     '',
     `Обновлено: ${AEO_UPDATED_AT}.`,
     '',
+    ...poolEvidence(stats),
     '## Что это',
     '',
     'openqareer — рабочее место кандидата, которым владеет сам кандидат. Оно превращает',

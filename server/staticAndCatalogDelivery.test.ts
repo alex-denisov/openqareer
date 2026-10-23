@@ -54,6 +54,21 @@ describe('B209: сервер поднимается с раздачей стат
     return app;
   }
 
+  it('B545: AEO routes override stale build files and do not receive immutable caching', async () => {
+    const app = await appWithStaticRoot({
+      'index.html': '<!doctype html><html><body>index</body></html>',
+      'llms.txt': 'STALE AEO FILE',
+      'llms-full.txt': 'STALE FULL AEO FILE',
+    });
+    for (const url of ['/llms.txt', '/llms-full.txt']) {
+      const response = await app.inject(url);
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('## Срез пула');
+      expect(response.body).not.toContain('STALE');
+      expect(response.headers['cache-control']).toBe('public, max-age=300');
+    }
+  });
+
   it('маршруты карты перекрывают файлы сборки для индекса и дочерних карт', async () => {
     setCatalogSitemaps(buildSitemapFiles({ listings: [], jobs: [] }));
     const app = await appWithStaticRoot({

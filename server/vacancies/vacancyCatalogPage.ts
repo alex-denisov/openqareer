@@ -12,6 +12,7 @@
  * (`seo/catalogIndexing`).
  */
 import { SITE_ORIGIN } from '../../shared/aeoSurface';
+import { isCountryName } from '../../shared/placeNames';
 import {
   CATALOG_ROOT,
   catalogPagePath,
@@ -274,29 +275,6 @@ export function buildCatalogPageFromEntries(
   };
 }
 
-/** hh.ru and a few boards still send pre-ISO codes; schema.org wants ISO 4217. */
-const LEGACY_CURRENCY: Readonly<Record<string, string>> = { RUR: 'RUB', BYR: 'BYN' };
-
-function isoCurrency(code: string): string {
-  const upper = code.trim().toUpperCase();
-  return LEGACY_CURRENCY[upper] ?? upper;
-}
-
-/**
- * The pool stores no pay period. Boards in these currencies publish annual
- * ranges (Workday, Greenhouse: «69 800 — 125 900 USD»); a monthly figure of
- * that size is implausible, so such a range is marked YEAR, everything else
- * keeps MONTH (hh.ru, regional boards).
- */
-const ANNUAL_RANGE_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'CHF']);
-const ANNUAL_RANGE_MIN = 20_000;
-
-function salaryUnit(salary: { from?: number; to?: number; currency?: string }): 'MONTH' | 'YEAR' {
-  const currency = salary.currency ? isoCurrency(salary.currency) : '';
-  const top = Math.max(salary.from ?? 0, salary.to ?? 0);
-  return ANNUAL_RANGE_CURRENCIES.has(currency) && top >= ANNUAL_RANGE_MIN ? 'YEAR' : 'MONTH';
-}
-
 /**
  * Google for Jobs `employmentType` enum from what the source passed: hh.ru ids
  * (`FULL`, `PART`, `PROJECT`) or ATS free text («Full-time», «Contract»).
@@ -320,8 +298,12 @@ export function googleEmploymentType(value?: string): string | undefined {
 /** Where the job is, with the ISO country Google asks for (B535). */
 function postingLocation(entry: CatalogEntry, isRemote: boolean): Record<string, unknown> {
   const country = countryCodeOf(entry.location);
+  // A remote country restriction is not a physical city or office.
+  const countryOnly =
+    isCountryName(entry.location) ||
+    (country !== undefined && entry.location?.trim().toUpperCase() === country);
   return {
-    ...(entry.location
+    ...(entry.location && !(isRemote && countryOnly)
       ? {
           jobLocation: {
             '@type': 'Place',
@@ -349,8 +331,6 @@ function jobPosting(
 ): StructuredNode {
   const withdrawnAt = vacancy?.archivedAt;
   const employmentType = googleEmploymentType(vacancy?.employmentType);
-  const salary = cluster.salary;
-  const hasSalary = salary && (salary.from !== undefined || salary.to !== undefined);
   const company = cluster.canonicalCompany.trim();
   const validThrough = validThroughOf(entry.publishedAt, withdrawnAt);
 
@@ -374,20 +354,9 @@ function jobPosting(
     ...postingLocation(entry, cluster.isRemote),
     ...(employmentType ? { employmentType } : {}),
     ...(entry.skills.length > 0 ? { skills: entry.skills.map(readableSkill).join(', ') } : {}),
-    ...(hasSalary
-      ? {
-          baseSalary: {
-            '@type': 'MonetaryAmount',
-            ...(salary.currency ? { currency: isoCurrency(salary.currency) } : {}),
-            value: {
-              '@type': 'QuantitativeValue',
-              ...(salary.from !== undefined ? { minValue: salary.from } : {}),
-              ...(salary.to !== undefined ? { maxValue: salary.to } : {}),
-              unitText: salaryUnit(salary),
-            },
-          },
-        }
-      : {}),
+    // VacancySalary has no source-backed pay period. Google baseSalary needs
+    // the actual amount per HOUR/DAY/WEEK/MONTH/YEAR; currency and magnitude
+    // cannot establish it. Keep the source range in the visible card only.
   };
 }
 

@@ -6,6 +6,7 @@ import { ZodError } from 'zod';
 import { legalSlugFromPath } from '../../shared/legalRegistry';
 import { applyLandingStats, deferEntryScript } from '../../shared/landingStats';
 import { getLandingStats } from '../landing/landingStatsCache';
+import { registerAeoRoutes } from '../seo/aeoRoutes';
 import { CoachProviderError } from '../providers/coachProvider';
 import { CandidateNotFoundError, CandidateStoreConflictError } from '../data/sqliteCandidateStore';
 import {
@@ -408,12 +409,16 @@ export async function registerStaticDelivery(
   serveStatic: boolean,
 ): Promise<void> {
   if (serveStatic) {
+    registerAeoRoutes(app);
     await app.register(fastifyStatic, {
       root: config.staticRoot,
       wildcard: false,
       // Sitemaps are generated in the maintenance process. Exclude the index
       // and child directory so files left in `dist` cannot shadow live routes.
-      globIgnore: ['server.mjs', 'health', 'sitemap.xml', 'sitemaps/**', ENTRY_DOCUMENT],
+      globIgnore: [
+        'server.mjs', 'health', 'sitemap.xml', 'sitemaps/**',
+        'llms.txt', 'llms-full.txt', ENTRY_DOCUMENT,
+      ],
       etag: false,
       lastModified: false,
       cacheControl: false,

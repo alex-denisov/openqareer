@@ -204,16 +204,42 @@ describe('страница публичного каталога ваканси�
     expect(buildVacancyDetail(cluster({ canonicalTitle: 'Специалист по щебню' }))).toBeNull();
   });
 
-  it('переводит вилку в baseSalary, когда она известна', () => {
+  it.each([
+    { from: 65, to: 90, currency: 'USD' },
+    { from: 70000, to: 115000, currency: 'USD' },
+    { from: 200000, to: 300000, currency: 'RUB' },
+  ])('не угадывает период оплаты по величине или валюте: %j', (salary) => {
     const detail = buildVacancyDetail(
-      cluster({ salary: { from: 200000, to: 300000, currency: 'RUB' } }),
+      cluster({ salary }),
+      'Compensation: $65–$90 per hour based upon experience. '.repeat(10),
     )!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
-    expect(posting.baseSalary).toMatchObject({
-      '@type': 'MonetaryAmount',
-      currency: 'RUB',
-      value: { '@type': 'QuantitativeValue', minValue: 200000, maxValue: 300000 },
+    expect(posting).not.toHaveProperty('baseSalary');
+    expect(detail.entry.salaryLabel).toContain(salary.from.toLocaleString('ru-RU'));
+    expect(detail.entry.salaryLabel).toContain(salary.to.toLocaleString('ru-RU'));
+    expect(detail.description).toContain('per hour');
+  });
+
+  it.each(['United States', 'USA', 'US', 'Россия', 'Germany'])(
+    'не выдаёт страну %s за город удалённой вакансии',
+    (canonicalLocation) => {
+      const detail = buildVacancyDetail(cluster({ canonicalLocation, isRemote: true }))!;
+      const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+      expect(posting).not.toHaveProperty('jobLocation');
+      expect(posting.jobLocationType).toBe('TELECOMMUTE');
+      expect(posting.applicantLocationRequirements).toMatchObject({ '@type': 'Country' });
+    },
+  );
+
+  it('сохраняет реальный город и страну гибридной вакансии', () => {
+    const detail = buildVacancyDetail(
+      cluster({ canonicalLocation: 'Berlin, Germany', isRemote: true }),
+    )!;
+    const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
+    expect(posting.jobLocation).toMatchObject({
+      address: { addressLocality: 'Berlin, Germany', addressCountry: 'DE' },
     });
+    expect(posting.applicantLocationRequirements).toEqual({ '@type': 'Country', name: 'DE' });
   });
 
   it('печатает одностороннюю вилку словами «от» и «до»', () => {
@@ -230,14 +256,11 @@ describe('страница публичного каталога ваканси�
     expect(detail.entry.salaryLabel).toBeUndefined();
   });
 
-  it('печатает вилку с одной границей и в baseSalary', () => {
+  it('сохраняет одностороннюю вилку в карточке без неподтверждённого baseSalary', () => {
     const detail = buildVacancyDetail(cluster({ salary: { from: 150000 } }))!;
     const posting = detail.jsonLd['@graph'].find((node) => node['@type'] === 'JobPosting')!;
-    expect(posting.baseSalary).toMatchObject({
-      value: { minValue: 150000 },
-    });
-    expect(JSON.stringify(posting.baseSalary)).not.toContain('maxValue');
-    expect(JSON.stringify(posting.baseSalary)).not.toContain('currency');
+    expect(detail.entry.salaryLabel).toBe(`от ${(150000).toLocaleString('ru-RU')}`);
+    expect(posting).not.toHaveProperty('baseSalary');
   });
 
   it('пустой каталог — одна страница, а не ноль', () => {
