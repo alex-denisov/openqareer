@@ -5,6 +5,7 @@ import type { VacancyFitView } from '../../shared/vacancyFit';
 import { createVacancyFitContextReader, readVacancyFitTarget } from './vacancyFitContext';
 import { vacancyFitProfileStamp } from '../domain/vacancyFitProfileStamp';
 import { createCandidateWindowCache } from './candidateWindowCache';
+import { wantedCompaniesFirst, wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 
 const FIT_ORDER_WINDOW_MS = 60_000;
 /** Столько точных разборов считается между уступками event loop при фоновом пересчёте. */
@@ -47,6 +48,22 @@ export function withVacancyFitOrder(
     if (known.stale && reader) void refreshFitViews(key, reader, items);
     return orderByFit(items, known.value, sort);
   };
+}
+
+/**
+ * B422: в порядке «по соответствию» вакансии компаний «Хочу» идут первыми,
+ * внутри групп — порядок разбора. Свежесть отметку не учитывает.
+ */
+export function withWantedCompanyOrder(
+  deps: RouteDeps,
+  candidateId: string,
+  sort: 'fit' | 'freshness' = 'fit',
+) {
+  const byFit = withVacancyFitOrder(deps, candidateId, sort);
+  if (sort !== 'fit') return byFit;
+  const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
+  return (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
+    wantedCompaniesFirst(byFit(items), wanted);
 }
 
 interface FitViewReader {

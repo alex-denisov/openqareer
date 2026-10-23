@@ -11,6 +11,8 @@ import {
 import { COVER_LETTER_BUDGET_MS, withinTimeBudget } from '../providers/coverLetterWriter';
 import type { PitchFactRankingContext } from '../domain/pitchFactRanking';
 import type { RouteDeps } from './deps';
+import { candidateCompanyKey } from '../domain/candidateCompanies';
+import { wantedCompanyKeys } from '../domain/wantedCompanyOrder';
 import {
   authenticateCandidate,
   candidateHasLlmAccess,
@@ -92,6 +94,12 @@ function toUsableCoverLetterFacts(facts: readonly VacancyPitchInputFact[]) {
   }));
 }
 
+/** B422: письмо знает, что кандидат отметил компанию «Хочу в эту компанию». */
+function isWantedCompany(deps: RouteDeps, candidateId: string, company: string | undefined): boolean {
+  if (!company) return false;
+  return wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId).has(candidateCompanyKey(company));
+}
+
 /** Model writing is bounded; the deterministic template remains the fallback. */
 async function writeCoverLetterBody(
   deps: RouteDeps,
@@ -121,6 +129,7 @@ async function writeCoverLetterBody(
       requirements: vacancy.requiredSkills,
       ...(rankingContext ? { rankingContext } : {}),
       ...(vacancy.recipient ? { recipient: vacancy.recipient } : {}),
+      ...(isWantedCompany(deps, candidateId, vacancy.company) ? { targetCompany: true as const } : {}),
     },
     language,
     tone,

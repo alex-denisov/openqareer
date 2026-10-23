@@ -12,9 +12,11 @@ vi.mock('./vacancyFitContext', () => ({
 }));
 vi.mock('../domain/vacancyFitProfileStamp', () => ({ vacancyFitProfileStamp: () => 'stamp' }));
 
-const { withVacancyFitOrder, withShownPageFitViews } = await import('./matchedVacancyFit');
+const { withVacancyFitOrder, withShownPageFitViews, withWantedCompanyOrder } =
+  await import('./matchedVacancyFit');
 import type { MatchedVacancyItem } from '../vacancies/multiSourceVacancyEngine';
 import type { RouteDeps } from './deps';
+import { candidateCompanyKey } from '../domain/candidateCompanies';
 
 function item(id: string): MatchedVacancyItem {
   return {
@@ -82,5 +84,30 @@ describe('pool fit order', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('B422: компании «Хочу» в порядке подборки', () => {
+  const withCompany = (id: string, company: string) =>
+    ({
+      ...item(id),
+      cluster: { ...item(id).cluster, canonicalCompany: company },
+    }) as MatchedVacancyItem;
+  const wantDeps = (scored: Record<string, number>) =>
+    ({
+      ...deps(scored),
+      candidateCompanyWantsRepo: { list: () => [{ companyKey: candidateCompanyKey('Acme') }] },
+    }) as unknown as RouteDeps;
+
+  it('«по соответствию»: вакансии отмеченной компании выше, внутри — порядок разбора', () => {
+    const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme'), withCompany('c', 'Acme')];
+    const ordered = withWantedCompanyOrder(wantDeps({ a: 90, c: 50 }), 'want-a', 'fit')(pool);
+    expect(ordered.map((entry) => entry.cluster.id)).toEqual(['c', 'b', 'a']);
+  });
+
+  it('«по свежести» отметку не учитывает', () => {
+    const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme')];
+    const ordered = withWantedCompanyOrder(wantDeps({}), 'want-b', 'freshness')(pool);
+    expect(ordered[0]?.cluster.id).toBe('a');
   });
 });

@@ -56,7 +56,11 @@ function companyMeta(company: CandidateCompanyOpportunity): string {
     .join(' · ');
 }
 
-function WantControls({
+/** B422: что меняет отметка — подсказка, видимая разметка как в макете. */
+export const WANT_COMPANY_EFFECT =
+  'Вакансии компании — первыми в подборке по соответствию, а письмо скажет, что вы хотите именно сюда';
+
+export function WantControls({
   company,
   busy,
   onToggle,
@@ -70,6 +74,7 @@ function WantControls({
       <button
         type="button"
         className="companies-people-want-button"
+        title={WANT_COMPANY_EFFECT}
         disabled={busy}
         onClick={onToggle}
       >
@@ -79,7 +84,7 @@ function WantControls({
   }
   return (
     <div className="companies-people-want-state">
-      <span className="companies-people-want-chip">
+      <span className="companies-people-want-chip" title={WANT_COMPANY_EFFECT}>
         <Target aria-hidden="true" /> Хочу в эту компанию
       </span>
       <button
