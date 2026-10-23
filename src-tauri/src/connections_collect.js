@@ -1,20 +1,18 @@
 /**
- * Collects the candidate's LinkedIn connections while the list is walked
- * (B448). The list virtualises long runs of rows: a card scrolled far away
- * keeps its frame but loses its text, so one read at the end saw text on a
- * few cards out of 1 519. Each scroll step runs `collect`, which keeps every
- * card seen with text in a page-local map keyed by profile path; `emit`
- * returns them as minimal HTML: one
- * `<div><a href="/in/…"><p>name</p><p>headline</p></a></div>` per person.
- * Only the profile path and the first two text lines of the profile link
- * leave the page, HTML-escaped.
+ * Reads the LinkedIn connection cards that show text right now (B448).
+ *
+ * The list virtualises long runs of rows, and over a walk of several minutes
+ * the page itself can reload or go blank (run 7), so nothing is kept in the
+ * page: the shell calls this after every scroll step and merges the batches
+ * by profile path on its own side.
+ *
+ * Returns `[path, html, lines]` per card, where `html` is the minimal
+ * `<div><a href="/in/…"><p>name</p><p>headline</p></a></div>`: only the
+ * profile path and the first two text lines of the profile link leave the
+ * page, HTML-escaped. A card without text is left out.
  */
-(function (mode) {
+(function () {
   try {
-    var KEY = '__openqareerConnections';
-    if (mode === 'reset' || !window[KEY]) window[KEY] = new Map();
-    var seen = window[KEY];
-    if (mode === 'reset') return 0;
     var esc = function (text) {
       return text
         .replace(/&/g, '&amp;')
@@ -22,6 +20,7 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     };
+    var out = [];
     var cards = document.querySelectorAll('[componentkey^="ConnectionCard_"]');
     for (var i = 0; i < cards.length; i++) {
       var links = cards[i].querySelectorAll('a[href]');
@@ -40,33 +39,24 @@
           if (text) lines.push(text.slice(0, 300));
         }
         if (!lines.length) continue;
-        var known = seen.get(url.pathname);
-        if (!known || known.lines < lines.length) {
-          seen.set(url.pathname, {
-            lines: lines.length,
-            html:
-              '<div><a href="' +
-              esc(url.pathname) +
-              '">' +
-              lines
-                .map(function (line) {
-                  return '<p>' + esc(line) + '</p>';
-                })
-                .join('') +
-              '</a></div>',
-          });
-        }
+        out.push([
+          url.pathname,
+          '<div><a href="' +
+            esc(url.pathname) +
+            '">' +
+            lines
+              .map(function (line) {
+                return '<p>' + esc(line) + '</p>';
+              })
+              .join('') +
+            '</a></div>',
+          lines.length,
+        ]);
         break;
       }
     }
-    if (mode !== 'emit') return seen.size;
-    if (!seen.size) return '';
-    var out = [];
-    seen.forEach(function (entry) {
-      out.push(entry.html);
-    });
-    return '<main>' + out.join('') + '</main>';
+    return out;
   } catch (e) {
-    return mode === 'emit' ? '' : -1;
+    return [];
   }
 });

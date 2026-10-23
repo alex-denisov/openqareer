@@ -1379,20 +1379,81 @@ fn next_quiet_readings(
     }
 }
 
-/// Returns the card count after each step, for the local diagnostics log.
+/// What one walk of a lazily loaded page saw.
+#[derive(Debug, Default)]
+struct LazyWalk {
+    /// Card count on the page after each step, for the diagnostics log.
+    cards_per_step: Vec<u32>,
+    /// Connections kept by the shell, merged from every step's batch.
+    collected: CollectedConnections,
+    /// The first path segment of a page the walk was moved to, if any.
+    left_for: Option<String>,
+}
+
+/// Connection cards kept across the walk, by profile path, in first-seen
+/// order. A reload or a blank page mid-walk loses nothing already read (B448).
+#[derive(Debug, Default)]
+struct CollectedConnections {
+    order: Vec<String>,
+    cards: std::collections::HashMap<String, (usize, String)>,
+}
+
+impl CollectedConnections {
+    /// Keeps each card's fullest reading: a row the list later empties or
+    /// trims never replaces one already read with more lines.
+    fn merge(&mut self, batch: Vec<(String, String, usize)>) {
+        for (path, html, lines) in batch {
+            match self.cards.get(&path) {
+                Some((known, _)) if *known >= lines => {}
+                Some(_) => {
+                    self.cards.insert(path, (lines, html));
+                }
+                None => {
+                    self.order.push(path.clone());
+                    self.cards.insert(path, (lines, html));
+                }
+            }
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.order.len()
+    }
+
+    /// The minimal card list the TS parser reads, or `None` when empty.
+    fn render(&self) -> Option<String> {
+        if self.order.is_empty() {
+            return None;
+        }
+        let cards: String = self
+            .order
+            .iter()
+            .filter_map(|path| self.cards.get(path).map(|(_, html)| html.as_str()))
+            .collect();
+        Some(format!("<main>{cards}</main>"))
+    }
+}
+
+/// Scrolls until the page stops growing, within the budget. On the
+/// connections list it also reads each step's cards into the shell and stops
+/// when the window is moved off the list, keeping what it already read.
 /// A script dropped by a LinkedIn navigation counts as a step, not the end.
-async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u32> {
+async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> LazyWalk {
+    let mut walk = LazyWalk::default();
     let mut last_height = -1.0;
     let mut last_cards = 0;
     let mut quiet = 0;
-    let mut cards_per_step = Vec::new();
-    if budget.compact_connections {
-        let _ = eval_json(window, &connections_collect_call("reset")).await;
-    }
     let deadline = tokio::time::Instant::now() + budget.max_duration;
     for _ in 0..budget.max_steps {
         if tokio::time::Instant::now() >= deadline {
             break;
+        }
+        if budget.compact_connections {
+            let current = window.url().map(|url| url.to_string()).unwrap_or_default();
+            if !is_connections_page_url(&current) {
+                walk.left_for = Some(first_path_segment(&current).to_string());
+                break;
+            }
         }
         let raw = match eval_json(window, LAZY_SCROLL_SCRIPT).await {
             Ok(raw) => raw,
@@ -1406,10 +1467,14 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u
         let Ok(state) = serde_json::from_str::<LazyScrollState>(&raw) else {
             break;
         };
-        cards_per_step.push(state.cards);
+        walk.cards_per_step.push(state.cards);
         if budget.compact_connections {
             // Before the list recycles the rows that just scrolled past.
-            let _ = eval_json(window, &connections_collect_call("collect")).await;
+            if let Ok(json) = eval_json(window, &connections_collect_call()).await {
+                if let Ok(batch) = serde_json::from_str::<Vec<(String, String, usize)>>(&json) {
+                    walk.collected.merge(batch);
+                }
+            }
         }
         quiet = next_quiet_readings(quiet, &state, last_height, last_cards);
         if quiet >= budget.quiet_readings {
@@ -1424,7 +1489,7 @@ async fn load_lazy_sections(window: &Webview, budget: LazyScrollBudget) -> Vec<u
     )
     .await;
     tokio::time::sleep(PAGE_SETTLE_DELAY).await;
-    cards_per_step
+    walk
 }
 
 /// The candidate's LinkedIn session is paced here, not only in the web layer
@@ -1456,6 +1521,7 @@ pub async fn read_session_page(
 ) -> Result<SessionPageReport, String> {
     let (label, url, _) = validate(request)?;
     let scroll_budget = lazy_scroll_budget(url.path());
+    let requested_url = url.to_string();
     let window = app
         .get_webview(&label)
         .ok_or_else(|| "session_window_missing".to_string())?;
@@ -1520,23 +1586,38 @@ pub async fn read_session_page(
 
     if request.platform == "linkedin" {
         let started = std::time::Instant::now();
-        let cards_per_step = load_lazy_sections(&window, scroll_budget).await;
+        let walk = load_lazy_sections(&window, scroll_budget).await;
         if scroll_budget.compact_connections {
             let millis = started.elapsed().as_millis().to_string();
             read_diagnostic(app, request, "walk_ms", Some(&millis));
-            for cards in &cards_per_step {
+            for cards in &walk.cards_per_step {
                 read_diagnostic(app, request, "cards", Some(&cards.to_string()));
             }
+            if let Some(segment) = walk.left_for.as_deref() {
+                read_diagnostic(app, request, "left", Some(segment));
+            }
+            let collected = walk.collected.len().to_string();
+            read_diagnostic(app, request, "collected", Some(&collected));
         }
-        let steps = cards_per_step.len().to_string();
+        let steps = walk.cards_per_step.len().to_string();
         read_diagnostic(app, request, "scrolled", Some(&steps));
+        // The cards were read on the connections list, even if the window
+        // has since moved; report them as that page (B448, run 7).
+        if let Some(body) = walk.collected.render() {
+            let body = validate_page_body(body)?;
+            read_diagnostic(app, request, "read", Some("mynetwork"));
+            return Ok(SessionPageReport {
+                ok: true,
+                url: requested_url,
+                body,
+            });
+        }
+        if scroll_budget.compact_connections {
+            read_diagnostic(app, request, "compact_empty", None);
+        }
     }
 
-    let body_json = if scroll_budget.compact_connections {
-        compact_connections_json(app, request, &window).await?
-    } else {
-        sanitized_page_json(app, request, &window).await?
-    };
+    let body_json = sanitized_page_json(app, request, &window).await?;
     let body = validate_page_body(
         serde_json::from_str::<String>(&body_json)
             .map_err(|error| format!("body_shape: {error}"))?,
@@ -1577,35 +1658,11 @@ async fn sanitized_page_json(
     Err(last_error)
 }
 
-/// Collects connection cards during the walk; see the script's own header.
+/// Reads the connection cards showing text now; see the script's own header.
 const CONNECTIONS_COLLECT_SCRIPT: &str = include_str!("connections_collect.js");
 
-fn connections_collect_call(mode: &str) -> String {
-    format!("({CONNECTIONS_COLLECT_SCRIPT})('{mode}')")
-}
-
-/// The cards collected during the walk, or the full sanitize when none was
-/// seen, so the zero-contacts capture still sees the page.
-async fn compact_connections_json(
-    app: &AppHandle,
-    request: &SessionWindowRequest,
-    window: &Webview,
-) -> Result<String, String> {
-    let compact = eval_json(window, &connections_collect_call("emit")).await;
-    let has_cards = compact
-        .as_deref()
-        .is_ok_and(|json| serde_json::from_str::<String>(json).is_ok_and(|body| !body.is_empty()));
-    if !has_cards {
-        read_diagnostic(app, request, "compact_empty", None);
-        return sanitized_page_json(app, request, window).await;
-    }
-    let collected = compact
-        .as_deref()
-        .map(|json| json.matches("<div><a href=").count())
-        .unwrap_or(0)
-        .to_string();
-    read_diagnostic(app, request, "collected", Some(&collected));
-    compact
+fn connections_collect_call() -> String {
+    format!("({CONNECTIONS_COLLECT_SCRIPT})()")
 }
 
 /// `eval_cancelled` / `eval_timeout`: the page moved under the script.
@@ -1802,10 +1859,31 @@ pub fn append_connector_diagnostic(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_collector_is_called_with_its_mode() {
-        let call = connections_collect_call("collect");
+    fn the_collector_is_a_plain_call() {
+        let call = connections_collect_call();
         assert!(call.starts_with("(/**"));
-        assert!(call.ends_with(")('collect')"));
+        assert!(call.ends_with(")()"));
+    }
+
+    #[test]
+    fn collected_cards_survive_rows_that_empty_or_trim_later() {
+        let mut collected = CollectedConnections::default();
+        collected.merge(vec![
+            ("/in/a/".into(), "<div>a2</div>".into(), 2),
+            ("/in/b/".into(), "<div>b1</div>".into(), 1),
+        ]);
+        collected.merge(vec![
+            ("/in/a/".into(), "<div>a1</div>".into(), 1),
+            ("/in/b/".into(), "<div>b2</div>".into(), 2),
+            ("/in/c/".into(), "<div>c2</div>".into(), 2),
+        ]);
+        collected.merge(Vec::new());
+        assert_eq!(collected.len(), 3);
+        assert_eq!(
+            collected.render().as_deref(),
+            Some("<main><div>a2</div><div>b2</div><div>c2</div></main>")
+        );
+        assert_eq!(CollectedConnections::default().render(), None);
     }
 
     #[test]

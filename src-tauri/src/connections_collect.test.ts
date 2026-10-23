@@ -9,45 +9,37 @@ const fixture = readFileSync(
   join(__dirname, '../../src/features/connections/__fixtures__/linkedin/connections.html'),
   'utf8',
 );
-const run = (mode: 'reset' | 'collect' | 'emit'): unknown => (0, eval)(source)(mode);
+type Card = [path: string, html: string, lines: number];
+const batch = (): Card[] => (0, eval)(source)() as Card[];
+/** What the shell builds from the batches it kept (connector_session.rs). */
+const emit = (cards: readonly Card[]) => `<main>${cards.map((card) => card[1]).join('')}</main>`;
 
-describe('compact LinkedIn connections collector (B448)', () => {
+describe('LinkedIn connections batch collector (B448)', () => {
   beforeEach(() => {
     document.documentElement.innerHTML = fixture;
-    run('reset');
   });
 
   it('agrees with the full-page parse on the real card structure', () => {
-    expect(run('collect')).toBe(4);
-    expect(extractLinkedInConnections(run('emit') as string)).toEqual(
-      extractLinkedInConnections(fixture),
-    );
+    const cards = batch();
+    expect(cards).toHaveLength(4);
+    expect(extractLinkedInConnections(emit(cards))).toEqual(extractLinkedInConnections(fixture));
   });
 
-  it('keeps cards the list later empties while scrolling (virtualised rows)', () => {
-    run('collect');
-    for (const card of Array.from(
-      document.querySelectorAll('[componentkey^="ConnectionCard_"] p'),
-    )) {
-      card.textContent = '';
+  it('reports a card that lost its text as absent, not empty', () => {
+    for (const p of Array.from(document.querySelectorAll('[componentkey^="ConnectionCard_"] p'))) {
+      p.textContent = '';
     }
-    run('collect');
-    expect(extractLinkedInConnections(run('emit') as string)).toEqual(
-      extractLinkedInConnections(fixture),
-    );
+    expect(batch()).toEqual([]);
+  });
+
+  it('keys each card by its profile path and counts its lines', () => {
+    expect(batch()[0]?.slice(0, 1)).toEqual(['/in/irina-kotova-test/']);
+    expect(batch()[0]?.[2]).toBe(2);
   });
 
   it('escapes markup in names and headlines', () => {
     const name = document.querySelector('[componentkey^="ConnectionCard_"] a[href] + div a p');
     if (name) name.textContent = '<b>Ирина</b> & "Ко"';
-    run('collect');
-    expect(run('emit')).not.toContain('<b>');
-  });
-
-  it('emits nothing before any card was seen', () => {
-    document.documentElement.innerHTML = '<main><p>No cards</p></main>';
-    run('reset');
-    expect(run('collect')).toBe(0);
-    expect(run('emit')).toBe('');
+    expect(batch()[0]?.[1]).not.toContain('<b>');
   });
 });
