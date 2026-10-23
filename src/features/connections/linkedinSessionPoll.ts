@@ -94,6 +94,11 @@ interface LinkedInSessionImportFlowDependencies {
   readonly readSessionPage: (url: string) => Promise<SessionPageResult>;
   readonly onAuthenticated: () => void | Promise<void>;
   readonly onProviderDataCaptured: () => void | Promise<void>;
+  /**
+   * Reads the candidate's connections while the window is still open (B448).
+   * Optional and never fatal: a failure here must not fail the import.
+   */
+  readonly importConnections?: () => Promise<unknown>;
   readonly onReady: (
     result: Extract<LinkedInSessionPollResult, { status: 'ready' }>,
   ) => void | Promise<void>;
@@ -171,6 +176,7 @@ async function runOnce(
     rawUrl: page.url,
     ...(current.accountMarker ? { accountMarker: current.accountMarker } : {}),
   };
+  await dependencies.importConnections?.().catch(() => undefined);
   await dependencies.onProviderDataCaptured();
   await dependencies.onReady(result);
   return result;

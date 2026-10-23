@@ -137,6 +137,41 @@ describe('LinkedIn session import flow', () => {
     await first;
   });
 
+  it('reads connections after the profile, before the window closes, and survives their failure (B448)', async () => {
+    const events: string[] = [];
+    const flow = createLinkedInSessionImportFlow({
+      inspectCurrentPage: async () => ({
+        ready: true,
+        url: 'https://www.linkedin.com/feed/',
+        signedInApplicant: true,
+        login: false,
+        otp: false,
+        captcha: false,
+      }),
+      readSessionPage: async () => ({
+        ok: true,
+        url: 'https://www.linkedin.com/in/alexey-test/',
+        body: '<main><h1>Alexey Test</h1><section>Product Director\nExample GmbH\n2022 — настоящее время</section></main>',
+      }),
+      pauseBetweenDetailReads: async () => {},
+      detailReadThrottle: freshThrottle(Date.now()),
+      onAuthenticated: () => {},
+      importConnections: async () => {
+        events.push('connections');
+        throw new Error('connections_failed');
+      },
+      onProviderDataCaptured: () => {
+        events.push('captured');
+      },
+      onReady: () => {
+        events.push('import');
+      },
+    });
+
+    await expect(flow.run()).resolves.toMatchObject({ status: 'ready' });
+    expect(events).toEqual(['connections', 'captured', 'import']);
+  });
+
   it('reports each detail section as it is read and closes the walk when it stops', async () => {
     const events: unknown[] = [];
     const profileUrl = 'https://www.linkedin.com/in/alexey-test/';

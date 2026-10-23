@@ -36,6 +36,8 @@ import {
   type LinkedInWaitingNotice,
   type StructuredFallbackReason,
 } from './linkedinSessionPoll';
+import { importLinkedInConnectionsFromSession } from './linkedinConnectionsImport';
+import { importLinkedInConnectionContacts } from '../outreach/connectionContactsApi';
 import {
   endLinkedInProtectedRoute,
   ProtectedRouteError,
@@ -244,6 +246,13 @@ export function LinkedInConnectModal({
         // and the step then reported the import as failed (B157).
         signedIn.current = true;
         setWaiting({ text: 'Вход выполнен — читаем ваш профиль…', stuck: false });
+      },
+      importConnections: () => {
+        setWaiting({ text: 'Профиль прочитан — читаем ваши контакты…', stuck: false });
+        return importLinkedInConnectionsFromSession({
+          readSessionPage: (url) => readSessionPage('linkedin', url),
+          upload: importLinkedInConnectionContacts,
+        });
       },
       onProviderDataCaptured: async () => {
         await closeConnectorSession('linkedin');
