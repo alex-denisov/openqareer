@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { vacancyMapNote } from './vacancyMapNote';
+import { vacancyMapNote, vacancyMapShortNote } from './vacancyMapNote';
 
 describe('заметка карты (B485)', () => {
   it('все без точки — удалённые: формулировка макета', () => {
@@ -58,5 +58,33 @@ describe('заметка карты (B485)', () => {
     ).toBe(
       'На карте 40 из 50 загруженных: у остальных 10 удалённая работа, без точки. Ещё 98 вакансий из 148 догружаются. Кластеры разбиваются при приближении.',
     );
+  });
+});
+
+describe('короткая заметка карты на 390 (B553)', () => {
+  it('одна строка: сколько на карте и сколько без точки', () => {
+    expect(
+      vacancyMapShortNote({
+        onMap: 449,
+        shown: 619,
+        total: 1635,
+        remoteOffMap: 48,
+        missingCity: 10,
+        unresolvedCity: 112,
+      }),
+    ).toBe('На карте 449 из 619 загруженных, без точки 170');
+  });
+
+  it('вся выдача загружена и всё на карте', () => {
+    expect(
+      vacancyMapShortNote({
+        onMap: 12,
+        shown: 12,
+        total: 12,
+        remoteOffMap: 0,
+        missingCity: 0,
+        unresolvedCity: 0,
+      }),
+    ).toBe('На карте 12 из 12');
   });
 });

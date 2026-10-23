@@ -10226,6 +10226,35 @@
   font-size: var(--career-text-xs);
 }
 
+.career-map-push-note p {
+  margin: 0;
+}
+
+.career-map-push-note p + p {
+  margin-block-start: var(--career-space-2);
+}
+
+/* Значок 16 px, зона касания 44 px без сдвига строки. */
+.career-map-push-note-info {
+  display: inline-grid;
+  place-items: center;
+  inline-size: var(--career-space-5);
+  block-size: var(--career-space-5);
+  margin-inline-start: var(--career-space-1);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--career-text-soft);
+  vertical-align: middle;
+  position: relative;
+}
+
+.career-map-push-note-info::after {
+  content: '';
+  position: absolute;
+  inset: calc((var(--career-space-5) - 44px) / 2);
+}
+
 /* Макет 390: капсула 25 px (6/10, радиус 16), без рамки; зона касания остаётся 44 px. */
 .career-map-push .career-map-capsule {
   min-block-size: 0;

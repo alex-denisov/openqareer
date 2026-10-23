@@ -3,7 +3,7 @@ import React from 'react';
 import type { MatchedVacancyItem } from '../coach/cabinetTypes';
 import { useCompactViewport } from './useCompactViewport';
 import { calculateVacancyFacets, hasMapCityCoordinates, vacancyCityName } from './vacancyFacets';
-import { vacancyMapNote, type VacancyMapNoteCounts } from './vacancyMapNote';
+import { vacancyMapNote, vacancyMapShortNote, type VacancyMapNoteCounts } from './vacancyMapNote';
 
 // B553: MapLibre (~1 МБ) грузится отдельным чанком только при открытии «Карты».
 const VacancyMapCanvas = React.lazy(() => import('./VacancyMapCanvas'));
@@ -123,12 +123,33 @@ function VacancyMapPush(props: VacancyMapViewProps) {
           <div className="career-map-canvas-container">
             <VacancyMapStage {...props} compact />
           </div>
-          <p className="career-map-push-note vacancy-map-note" aria-live="polite">
-            {vacancyMapNote(mapNoteCounts(props.items, props.total ?? props.items.length))}
-          </p>
+          <MapPushNote counts={mapNoteCounts(props.items, props.total ?? props.items.length)} />
         </div>
       </div>
     </>
+  );
+}
+
+/** 390: одна строка под картой (макет 4), разбивка причин — по кнопке «i». */
+function MapPushNote({ counts }: { counts: VacancyMapNoteCounts }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="career-map-push-note">
+      <p className="vacancy-map-note" aria-live="polite">
+        {vacancyMapShortNote(counts)}
+        <button
+          type="button"
+          className="career-map-push-note-info"
+          aria-label="Почему не все вакансии на карте"
+          aria-expanded={open}
+          aria-controls="vacancy-map-push-note-details"
+          onClick={() => setOpen((value) => !value)}
+        >
+          <Info size={16} aria-hidden="true" />
+        </button>
+      </p>
+      {open ? <p id="vacancy-map-push-note-details">{vacancyMapNote(counts)}</p> : null}
+    </div>
   );
 }
 
