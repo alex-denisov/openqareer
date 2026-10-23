@@ -28,6 +28,8 @@ export function sessionLayoutForHost(
 
 /** Mockup 12: the sign-in window sits this far inside the work area. */
 const WORK_AREA_INSET = 16;
+/** DESIGN.md: the desktop top bar band, kept even where a screen hides the bar (Аккаунт). */
+const DESKTOP_TOPBAR_HEIGHT = 64;
 
 /**
  * Where the native sign-in window opens (mockup 12, B464): the work area of
@@ -37,7 +39,12 @@ const WORK_AREA_INSET = 16;
 export function workAreaLayout(main: HTMLElement | null): SessionLayout | undefined {
   if (!main) return undefined;
   const area = main.getBoundingClientRect();
-  const top = main.querySelector('header')?.getBoundingClientRect().bottom ?? area.top;
+  // The first header can be the hidden mobile bar (0 px), and «Аккаунт» hides the
+  // desktop bar altogether: take a visible header, else the 64 px band (B464).
+  const header = [...main.querySelectorAll('header')]
+    .map((element) => element.getBoundingClientRect())
+    .find((rect) => rect.height > 0);
+  const top = header?.bottom ?? area.top + DESKTOP_TOPBAR_HEIGHT;
   const width = area.right - area.left - WORK_AREA_INSET * 2;
   const height = area.bottom - top - WORK_AREA_INSET * 2;
   if (width < MIN_SESSION_SIZE.width || height < MIN_SESSION_SIZE.height) return undefined;

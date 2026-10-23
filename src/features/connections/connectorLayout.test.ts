@@ -83,10 +83,10 @@ describe('workAreaLayout (B464, mockup 12)', () => {
   const rectOf = (rect: Partial<DOMRect>) => ({ getBoundingClientRect: () => rect as DOMRect });
 
   it('covers the work area below the section header with a 16 px inset', () => {
-    const header = rectOf({ bottom: 64 });
+    const header = rectOf({ bottom: 64, height: 64 });
     const main = {
       ...rectOf({ left: 76, top: 0, right: 1440, bottom: 900, width: 1364, height: 900 }),
-      querySelector: () => header,
+      querySelectorAll: () => [rectOf({ bottom: 0, height: 0 }), header],
     };
     expect(workAreaLayout(main as unknown as HTMLElement)).toEqual({
       x: 92,
@@ -94,6 +94,15 @@ describe('workAreaLayout (B464, mockup 12)', () => {
       width: 1332,
       height: 804,
     });
+  });
+
+  it('keeps the 64 px section band when the screen hides the top bar (Аккаунт, 24.10)', () => {
+    const hidden = rectOf({ bottom: 0, height: 0 });
+    const main = {
+      ...rectOf({ left: 76, top: 0, right: 1224, bottom: 778, width: 1148, height: 778 }),
+      querySelectorAll: () => [hidden],
+    };
+    expect(workAreaLayout(main as unknown as HTMLElement)?.y).toBe(80);
   });
 
   it('gives up without a work area, so the native default applies', () => {

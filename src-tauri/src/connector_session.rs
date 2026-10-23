@@ -690,6 +690,22 @@ pub async fn open_session_window(
         };
     };
     let screen_layout = screen_layout(&layout, &main_window);
+    let _ = append_connector_diagnostic(
+        app,
+        "session-window",
+        "open",
+        Some(&format!(
+            "cy{}_sy{}_in{}_out{}_sc{}_tb{}",
+            layout.y as i64,
+            screen_layout.y as i64,
+            main_window.inner_position().map(|p| p.y).unwrap_or(-1),
+            main_window.outer_position().map(|p| p.y).unwrap_or(-1),
+            (main_window.scale_factor().unwrap_or(0.0) * 10.0) as i64,
+            native_title_bar(&main_window)
+                .map(|bar| bar as i64)
+                .unwrap_or(-1)
+        )),
+    );
     let platform = request.platform.clone();
     let mut builder = WebviewWindowBuilder::new(app, label.clone(), WebviewUrl::External(url))
         .title(format!("OpenQareer · {}", platform_name(&request.platform)))
@@ -763,6 +779,18 @@ pub async fn open_session_window(
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
             if await_registered_window(app, &label).await {
+                if let Some(window) = app.get_webview_window(&label) {
+                    let _ = append_connector_diagnostic(
+                        app,
+                        "session-window",
+                        "placed",
+                        Some(&format!(
+                            "out{}_in{}",
+                            window.outer_position().map(|p| p.y).unwrap_or(-1),
+                            window.inner_position().map(|p| p.y).unwrap_or(-1)
+                        )),
+                    );
+                }
                 SessionWindowReport {
                     opened: true,
                     label: label.to_string(),
