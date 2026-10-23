@@ -115,6 +115,21 @@ describe('B375: vacancy map clustering and normalization', () => {
     expect(clampMarker({ x: -40, y: 150 }, 'Москва 74', view)).toBeUndefined();
   });
 
+  it('B553 390: капсулу, что легла бы на ± или карточку города, не рисует', () => {
+    const view = {
+      width: 358,
+      height: 520,
+      blocked: [
+        { left: 302, top: 12, right: 346, bottom: 108 },
+        { left: 12, top: 418, right: 346, bottom: 508 },
+      ],
+    };
+    // Ciudad de México на проде 23.10: центр капсулы в 22 px над карточкой.
+    expect(clampMarker({ x: 115, y: 413 }, 'Ciudad de México 6', view)).toBeUndefined();
+    expect(clampMarker({ x: 280, y: 40 }, 'Мурманск 1', view)).toBeUndefined();
+    expect(clampMarker({ x: 200, y: 250 }, 'New York 69', view)).toEqual({ x: 200, y: 250 });
+  });
+
   it('ширина капсулы растёт с подписью и не меньше зоны касания 44 px', () => {
     expect(capsuleWidth('Москва 74')).toBeGreaterThan(capsuleWidth('Уфа 1'));
     expect(capsuleWidth('A')).toBeGreaterThanOrEqual(44);
