@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
-    webview::PageLoadEvent, AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview,
-    WebviewUrl, WebviewWindowBuilder,
+    AppHandle, LogicalPosition, LogicalSize, Manager, Url, Webview, WebviewUrl,
+    WebviewWindowBuilder,
 };
 use uuid::Uuid;
 
@@ -141,6 +141,38 @@ fn starts_hidden_until_loaded(session_key: Option<&str>) -> bool {
 
 /// Shown anyway after this long, so a slow page never leaves the window hidden.
 const HIDDEN_WINDOW_SHOW_AFTER: Duration = Duration::from_secs(12);
+const PAINT_POLL_INTERVAL: Duration = Duration::from_millis(300);
+const PAINTED_PROBE: &str =
+    "JSON.stringify(((document.body && document.body.innerText) || '').trim().length)";
+
+/// The probe answers a text length, possibly JSON-quoted more than once.
+fn page_has_text(value: &str) -> bool {
+    value
+        .trim_matches(|c: char| c == '"' || c == '\\' || c.is_whitespace())
+        .parse::<usize>()
+        .is_ok_and(|length| length > 0)
+}
+
+/// hh.ru is a single-page app: «loaded» comes seconds before anything is drawn,
+/// so the window waits for text on the page, at most `HIDDEN_WINDOW_SHOW_AFTER`.
+async fn reveal_when_painted(app: &AppHandle, label: &str) {
+    let deadline = tokio::time::Instant::now() + HIDDEN_WINDOW_SHOW_AFTER;
+    while tokio::time::Instant::now() < deadline {
+        let Some(webview) = app.get_webview(label) else {
+            return;
+        };
+        if eval_json(&webview, PAINTED_PROBE)
+            .await
+            .is_ok_and(|value| page_has_text(&value))
+        {
+            break;
+        }
+        tokio::time::sleep(PAINT_POLL_INTERVAL).await;
+    }
+    if let Some(window) = app.get_webview_window(label) {
+        let _ = window.show();
+    }
+}
 
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
     let raw = session_key
@@ -772,20 +804,15 @@ pub async fn open_session_window(
 
     let hidden = starts_hidden_until_loaded(request.session_key.as_deref());
     if hidden {
-        builder = builder.visible(false).on_page_load(|window, payload| {
-            if matches!(payload.event(), PageLoadEvent::Finished) {
-                let _ = window.show();
-            }
-        });
+        builder = builder.visible(false);
     }
 
     match builder.build() {
-        Ok(window) => {
+        Ok(_) => {
             if hidden {
-                tauri::async_runtime::spawn(async move {
-                    tokio::time::sleep(HIDDEN_WINDOW_SHOW_AFTER).await;
-                    let _ = window.show();
-                });
+                let app = app.clone();
+                let label = label.clone();
+                tauri::async_runtime::spawn(async move { reveal_when_painted(&app, &label).await });
             }
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
@@ -1035,38 +1062,12 @@ fn platform_name(platform: &str) -> &'static str {
     }
 }
 
-/// Logical origin of the main window's content: the outer frame plus its title
-/// bar. `inner_position()` on macOS can report the frame itself, which put the
-/// sign-in window over the dialog's own «Отмена» row (B464).
-fn content_origin(
-    outer: (i32, i32),
-    outer_height: u32,
-    inner_height: u32,
-    scale: f64,
-) -> (f64, f64) {
-    let title_bar = f64::from(outer_height.saturating_sub(inner_height));
-    (
-        f64::from(outer.0) / scale,
-        (f64::from(outer.1) + title_bar) / scale,
-    )
-}
-
 fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> SessionLayout {
     let scale = main.scale_factor().unwrap_or(1.0);
-    let outer = main.outer_position().unwrap_or_default();
-    let outer_height = main
-        .outer_size()
-        .map(|size| size.height)
-        .unwrap_or_default();
-    let inner_height = main
-        .inner_size()
-        .map(|size| size.height)
-        .unwrap_or(outer_height);
-    let (origin_x, origin_y) =
-        content_origin((outer.x, outer.y), outer_height, inner_height, scale);
+    let origin = main.inner_position().unwrap_or_default();
     SessionLayout {
-        x: origin_x + layout.x,
-        y: origin_y + layout.y,
+        x: f64::from(origin.x) / scale + layout.x,
+        y: f64::from(origin.y) / scale + layout.y,
         width: layout.width,
         height: layout.height,
     }
@@ -1967,13 +1968,11 @@ pub fn append_connector_diagnostic(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn content_origin_skips_the_title_bar() {
-        // macOS: outer frame at (160, 60) px, 56 px of title bar at scale 2.
-        assert_eq!(
-            super::content_origin((160, 60), 1668, 1612, 2.0),
-            (80.0, 58.0)
-        );
-        assert_eq!(super::content_origin((80, 30), 806, 806, 1.0), (80.0, 30.0));
+    fn a_page_counts_as_painted_once_it_has_text() {
+        assert!(super::page_has_text("\"12\""));
+        assert!(super::page_has_text("7"));
+        assert!(!super::page_has_text("\"0\""));
+        assert!(!super::page_has_text("null"));
     }
 
     #[test]

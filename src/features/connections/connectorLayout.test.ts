@@ -1,21 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import { sessionLayoutForHost, MIN_SESSION_SIZE } from './connectorLayout';
+import { describe, expect, it, vi } from 'vitest';
+import { sessionLayoutForHost, MIN_SESSION_SIZE, watchConnectorHost } from './connectorLayout';
 import type { SessionLayout } from './connectorSession';
 
 function hostAt(rect: Partial<DOMRect>): HTMLElement {
   return {
-    getBoundingClientRect: () => ({
-      x: 0,
-      y: 0,
-      width: 0,
-      height: 0,
-      top: 0,
-      right: 0,
-      bottom: 0,
-      left: 0,
-      toJSON: () => rect,
-      ...rect,
-    } as DOMRect),
+    getBoundingClientRect: () =>
+      ({
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0,
+        toJSON: () => rect,
+        ...rect,
+      }) as DOMRect,
   } as unknown as HTMLElement;
 }
 
@@ -59,12 +60,8 @@ describe('sessionLayoutForHost', () => {
     );
     expect(layout?.width).toBeLessThanOrEqual(VIEWPORT.innerWidth);
     expect(layout?.height).toBeLessThanOrEqual(VIEWPORT.innerHeight);
-    expect((layout?.x ?? 0) + (layout?.width ?? 0)).toBeLessThanOrEqual(
-      VIEWPORT.innerWidth,
-    );
-    expect((layout?.y ?? 0) + (layout?.height ?? 0)).toBeLessThanOrEqual(
-      VIEWPORT.innerHeight,
-    );
+    expect((layout?.x ?? 0) + (layout?.width ?? 0)).toBeLessThanOrEqual(VIEWPORT.innerWidth);
+    expect((layout?.y ?? 0) + (layout?.height ?? 0)).toBeLessThanOrEqual(VIEWPORT.innerHeight);
   });
 
   it('never returns a layout smaller than the native minimum', () => {
@@ -79,5 +76,34 @@ describe('sessionLayoutForHost', () => {
 
   it('returns undefined without a host so the Rust default stays in charge', () => {
     expect(sessionLayoutForHost(null, 1440, 900)).toBeUndefined();
+  });
+});
+
+describe('watchConnectorHost (B464)', () => {
+  it('follows the host when it moves without resizing, e.g. under a toolbar that appeared', () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('window', {
+      innerWidth: 1224,
+      innerHeight: 778,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    });
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    let rect = { x: 36, y: 95, width: 1154, height: 484 };
+    const host = { getBoundingClientRect: () => ({ ...rect }) } as unknown as HTMLElement;
+    const layouts: SessionLayout[] = [];
+    const stop = watchConnectorHost('hh', host, (layout) => layouts.push(layout));
+    rect = { ...rect, y: 139 };
+    vi.advanceTimersByTime(1000);
+    stop();
+    expect(layouts.map((layout) => layout.y)).toEqual([95, 139]);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 });
