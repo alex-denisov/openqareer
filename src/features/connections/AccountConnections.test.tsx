@@ -81,6 +81,37 @@ describe('account connector import persistence', () => {
     expect(result.connection).toEqual(connection);
   });
 
+  it('passes the replace request through and reports a connect-only answer (one profile source, 23.10.2026)', async () => {
+    const connection = {
+      platform: 'hh' as const,
+      available: true,
+      status: 'connected' as const,
+      accessMode: 'native_session_snapshot' as const,
+      capabilities: ['resume_read'] as ['resume_read'],
+      importsCareerHistory: true,
+      connectedAt: '2026-10-23T08:00:00.000Z',
+      lastImportedAt: '2026-10-23T08:00:00.000Z',
+      factCount: 0,
+    };
+    const importResume = vi.fn().mockResolvedValue({ connection, connectOnly: true });
+    const loadConnections = vi.fn().mockResolvedValue([connection]);
+    const input = {
+      parsed: { rawText: 'Product Director\nLed a platform team.' } as ParsedResume,
+      sourceUrl: 'https://hh.ru/resume/resume-selected',
+      capturedAt: '2026-10-23T07:59:59.000Z',
+    };
+
+    const connected = await persistHhSessionImport(input, { importResume, loadConnections });
+    await persistHhSessionImport(
+      { ...input, importMode: 'replace_profile' },
+      { importResume, loadConnections },
+    );
+
+    expect(connected.connectOnly).toBe(true);
+    expect(importResume.mock.calls[0]?.[0]).not.toHaveProperty('importMode');
+    expect(importResume.mock.calls[1]?.[0]).toMatchObject({ importMode: 'replace_profile' });
+  });
+
   it('fails closed when the connection catalog does not confirm the imported receipt', async () => {
     await expect(
       persistHhSessionImport(

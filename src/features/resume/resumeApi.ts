@@ -58,7 +58,12 @@ export interface ResumeImportResult {
   readonly structuredBy: 'model' | 'rules';
   readonly factCount: number;
   readonly connection?: NativeSourceConnection;
+  /** The platform was only connected: the profile comes from another one (23.10.2026). */
+  readonly connectOnly?: true;
 }
+
+/** One import source per profile (owner, 23.10.2026). */
+export type NativeImportMode = 'profile' | 'connect_only' | 'replace_profile';
 
 type ResumeImportInput = {
   readonly text: string;
@@ -69,10 +74,12 @@ type ResumeImportInput = {
   | {
       readonly source: 'hh' | 'linkedin';
       readonly sourceReceipt?: NativeSourceReceipt;
+      readonly importMode?: NativeImportMode;
     }
   | {
       readonly source: Exclude<ResumeImportSource, 'hh' | 'linkedin'>;
       readonly sourceReceipt?: never;
+      readonly importMode?: never;
     }
 );
 
@@ -92,6 +99,7 @@ export async function importCandidateResume(input: ResumeImportInput): Promise<R
       ...(input.fileName ? { fileName: input.fileName } : {}),
       ...(input.sourceReceipt ? { sourceReceipt: input.sourceReceipt } : {}),
       ...(input.structuredFallback ? { structuredFallback: input.structuredFallback } : {}),
+      ...(input.importMode ? { importMode: input.importMode } : {}),
     }),
   });
   return readData<ResumeImportResult>(response);
@@ -104,12 +112,14 @@ export interface StructuredResumeImportInput {
   readonly capturedAt: string;
   /** Field paths the device removed to pass the schema — logged server-side (B266). */
   readonly droppedFields?: readonly string[];
+  readonly importMode?: NativeImportMode;
 }
 
 export interface StructuredResumeImportResult {
   readonly resume: ResumeStudioView;
   readonly factCount: number;
   readonly connection?: NativeSourceConnection;
+  readonly connectOnly?: true;
 }
 
 /**
@@ -135,6 +145,7 @@ export async function importStructuredLinkedInProfile(
       },
       profile: input.profile,
       ...(input.droppedFields?.length ? { droppedFields: input.droppedFields } : {}),
+      ...(input.importMode ? { importMode: input.importMode } : {}),
     }),
   });
   return readData<StructuredResumeImportResult>(response);

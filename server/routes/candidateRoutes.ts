@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { connectNativeOnly, resolveNativeImportMode, type NativeImportMode } from './nativeImportMode';
 import { materializeManualResumeEvidence } from './manualResumeEvidence';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -366,14 +367,13 @@ async function importResumeIntoDossier(
   const { authService, candidateStore, config } = deps;
   const candidate = authenticateCandidate(request, reply, candidateStore, authService, config);
   if (!candidate) return undefined;
-  const replay = nativeResumeImportReplay(candidateStore, candidate.id, body);
-  if (replay) {
-    return { data: replay, meta: { requestId: request.id, idempotentReplay: true } };
-  }
+  const mode = body.sourceReceipt
+    ? resolveNativeImportMode(candidateStore, candidate.id, body.sourceReceipt.platform, body.importMode)
+    : 'profile';
+  const early = nativeImportShortcut(candidateStore, candidate.id, body, mode);
+  if (early) return { data: early.data, meta: { requestId: request.id, ...early.meta } };
   const read = await readResume(body.text, resumeStructurerForCandidate(deps, candidate.id));
-  const plan = planResumeImport(read.resume, {
-    idPrefix: newImportMemoryIdPrefix(randomUUID()),
-  });
+  const plan = planResumeImport(read.resume, { idPrefix: newImportMemoryIdPrefix(randomUUID()) });
   if (plan.evidence.length === 0 || !carriesProfileSubstance(read.resume)) {
     return sendError(
       reply,
@@ -384,12 +384,13 @@ async function importResumeIntoDossier(
       false,
     );
   }
-  const committed = candidateStore.commitResumeImport(
-    candidate.id,
-    resumeImportCommit(candidate.id, body, plan, read.reader),
-  );
-  const documentDigest = resumeDocumentDigest(candidate.id, body.source, body.text);
-  recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', documentDigest);
+  const commit = resumeImportCommit(candidate.id, body, plan, read.reader);
+  const committed =
+    mode === 'replace_profile' && commit.sourceReceipt
+      ? candidateStore.replaceProfileWithImport(candidate.id, { ...commit, sourceReceipt: commit.sourceReceipt })
+      : candidateStore.commitResumeImport(candidate.id, commit);
+  const digest = resumeDocumentDigest(candidate.id, body.source, body.text);
+  recordImportCompletedNotification(deps, request, candidate.id, 'resume_import', digest);
   void rebuildCampaignRoles(deps, candidate.id).catch((error) => {
     request.log.error({ error }, 'campaign_roles_rebuild_failed');
   });
@@ -404,6 +405,35 @@ async function importResumeIntoDossier(
         : {}),
     },
     meta: { requestId: request.id },
+  };
+}
+
+/**
+ * Answers a native import without reading the document: an exact retry, or a
+ * platform that only connects (one import source per profile, 23.10.2026).
+ * A connect-only retry never stands in for an explicit «replace».
+ */
+function nativeImportShortcut(
+  candidateStore: CandidateStore,
+  candidateId: string,
+  body: z.infer<typeof resumeImportSchema>,
+  mode: NativeImportMode,
+) {
+  const replay = nativeResumeImportReplay(candidateStore, candidateId, body);
+  if (replay && !(mode === 'replace_profile' && replay.factCount === 0)) {
+    return { data: replay, meta: { idempotentReplay: true } };
+  }
+  if (mode !== 'connect_only' || !body.sourceReceipt) return undefined;
+  const receipt = {
+    ...body.sourceReceipt,
+    importDigest: nativeImportDigest(candidateId, body.sourceReceipt, body.text),
+  };
+  return {
+    data: {
+      ...connectNativeOnly(candidateStore, candidateId, receipt),
+      resume: resumeStudioView(candidateStore, candidateId),
+    },
+    meta: {},
   };
 }
 

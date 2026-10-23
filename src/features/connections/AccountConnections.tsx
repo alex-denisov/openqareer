@@ -14,6 +14,7 @@ import type { HhResumeItem } from './HhConnectModal';
 import {
   importCandidateResume,
   importStructuredLinkedInProfile,
+  type NativeImportMode,
   type ResumeImportResult,
   type StructuredResumeImportResult,
 } from '../resume/resumeApi';
@@ -29,6 +30,12 @@ import { resetConnectorSession } from './connectorSession';
 import { AccountConnectionsSection } from '../account/AccountDesktopSections';
 import { AccountHhModal, AccountLinkedInModal } from '../account/AccountDialogs';
 import { MobileAccountConnections } from '../account/AccountMobileSections';
+import { ProfileReplaceOffer } from './ProfileReplaceOffer';
+
+interface ReplaceOffer {
+  readonly platform: 'hh' | 'linkedin';
+  readonly replace: () => Promise<PersistedNativeImport>;
+}
 
 /**
  * The product has no platform authorisation flow: hh.ru and LinkedIn are read
@@ -70,6 +77,7 @@ export function AccountConnectionsManager({
   const [notice, setNotice] = useState<string>();
   const [importPlatform, setImportPlatform] = useState<ConnectionPlatform>();
   const [managePlatform, setManagePlatform] = useState<ConnectionPlatform>();
+  const [replaceOffer, setReplaceOffer] = useState<ReplaceOffer>();
   const publishConnections = useCallback((next: CandidateConnection[]) => {
     setConnections(next);
     setConnectionsReady(true);
@@ -112,17 +120,13 @@ export function AccountConnectionsManager({
   ) {
     setBusyPlatform('hh');
     setNotice(undefined);
+    setReplaceOffer(undefined);
     try {
-      const persisted = await persistHhSessionImport({
-        parsed,
-        sourceUrl,
-        capturedAt: new Date().toISOString(),
-      });
-      publishConnections(persisted.connections);
-      setNotice(
-        `Из ${PLATFORM_LABELS.hh} сохранено ${factNoun(persisted.connection.factCount)}.`,
+      const input = { parsed, sourceUrl, capturedAt: new Date().toISOString() };
+      const persisted = await persistHhSessionImport(input);
+      settleImport('hh', persisted, () =>
+        persistHhSessionImport({ ...input, importMode: 'replace_profile' }),
       );
-      onDataChanged?.();
     } catch (error) {
       setNotice(hhSessionImportError(error));
       throw error;
@@ -139,30 +143,66 @@ export function AccountConnectionsManager({
   ) {
     setBusyPlatform('linkedin');
     setNotice(undefined);
+    setReplaceOffer(undefined);
     try {
-      const persisted = structured
-        ? await persistStructuredLinkedInImport({
-            profile: structured.profile,
-            extractorVersion: structured.extractorVersion,
-            ...(structured.droppedFields ? { droppedFields: structured.droppedFields } : {}),
-            sourceUrl,
-            capturedAt: new Date().toISOString(),
-          })
-        : await persistNativeSessionImport({
-            platform: 'linkedin',
-            parsed,
-            ...(structuredFallback ? { structuredFallback } : {}),
-            sourceUrl,
-            capturedAt: new Date().toISOString(),
-          });
-      publishConnections(persisted.connections);
-      setNotice(
-        `Из ${PLATFORM_LABELS.linkedin} сохранено ${factNoun(persisted.connection.factCount)}.`,
-      );
-      onDataChanged?.();
+      const capturedAt = new Date().toISOString();
+      const persist = (importMode?: NativeImportMode) =>
+        structured
+          ? persistStructuredLinkedInImport({
+              profile: structured.profile,
+              extractorVersion: structured.extractorVersion,
+              ...(structured.droppedFields ? { droppedFields: structured.droppedFields } : {}),
+              sourceUrl,
+              capturedAt,
+              ...(importMode ? { importMode } : {}),
+            })
+          : persistNativeSessionImport({
+              platform: 'linkedin',
+              parsed,
+              ...(structuredFallback ? { structuredFallback } : {}),
+              sourceUrl,
+              capturedAt,
+              ...(importMode ? { importMode } : {}),
+            });
+      settleImport('linkedin', await persist(), () => persist('replace_profile'));
     } catch (error) {
       setNotice(nativeSessionImportError('linkedin', error));
       throw error;
+    } finally {
+      setBusyPlatform(undefined);
+    }
+  }
+
+  /** One import source per profile (23.10.2026): a second platform only connects. */
+  function settleImport(
+    platform: 'hh' | 'linkedin',
+    persisted: PersistedNativeImport,
+    replace: () => Promise<PersistedNativeImport>,
+  ) {
+    publishConnections(persisted.connections);
+    if (persisted.connectOnly) {
+      setNotice(`${PLATFORM_LABELS[platform]} подключён. Профиль не изменился.`);
+      setReplaceOffer({ platform, replace });
+      return;
+    }
+    setNotice(
+      `Из ${PLATFORM_LABELS[platform]} сохранено ${factNoun(persisted.connection.factCount)}.`,
+    );
+    onDataChanged?.();
+  }
+
+  async function handleReplaceProfile(offer: ReplaceOffer) {
+    setBusyPlatform(offer.platform);
+    try {
+      const persisted = await offer.replace();
+      setReplaceOffer(undefined);
+      publishConnections(persisted.connections);
+      setNotice(
+        `Профиль заменён данными с ${PLATFORM_LABELS[offer.platform]}: ${factNoun(persisted.connection.factCount)}.`,
+      );
+      onDataChanged?.();
+    } catch (error) {
+      setNotice(nativeSessionImportError(offer.platform, error));
     } finally {
       setBusyPlatform(undefined);
     }
@@ -243,6 +283,13 @@ export function AccountConnectionsManager({
   return (
     <>
       {connectionContent}
+      {replaceOffer ? (
+        <ProfileReplaceOffer
+          platform={replaceOffer.platform}
+          busy={busyPlatform === replaceOffer.platform}
+          onReplace={() => void handleReplaceProfile(replaceOffer)}
+        />
+      ) : null}
       {managedConnection?.platform === 'linkedin' && managedConnection.status === 'connected' ? (
         <AccountLinkedInModal
           connection={managedConnection}
@@ -276,6 +323,7 @@ export function AccountConnectionsManager({
       <HhConnectModal
         isOpen={importPlatform === 'hh'}
         isReconnect={Boolean(connections.some((connection) => connection.platform === 'hh' && connection.status === 'connected'))}
+        connectOnly={profileBuiltFrom(connections, 'linkedin')}
         onClose={() => setImportPlatform(undefined)}
         onConnectSuccess={handleHhSessionImport}
         onAuthenticatedEmpty={() => {
@@ -300,6 +348,7 @@ interface PersistHhSessionInput {
   readonly parsed: ParsedResume;
   readonly sourceUrl: string;
   readonly capturedAt: string;
+  readonly importMode?: NativeImportMode;
 }
 
 interface PersistNativeSessionInput {
@@ -308,6 +357,19 @@ interface PersistNativeSessionInput {
   readonly structuredFallback?: StructuredFallbackReason;
   readonly sourceUrl: string;
   readonly capturedAt: string;
+  readonly importMode?: NativeImportMode;
+}
+
+type ConnectedNativeSource = Extract<
+  CandidateConnection,
+  { status: 'connected'; accessMode: 'native_session_snapshot' }
+>;
+
+export interface PersistedNativeImport {
+  readonly connection: ConnectedNativeSource;
+  readonly connections: CandidateConnection[];
+  /** Only connected: the profile still comes from the other platform. */
+  readonly connectOnly: boolean;
 }
 
 interface PersistHhSessionDependencies {
@@ -321,13 +383,7 @@ export async function persistHhSessionImport(
     importResume: importCandidateResume,
     loadConnections: getConnections,
   },
-): Promise<{
-  readonly connection: Extract<
-    CandidateConnection,
-    { status: 'connected'; accessMode: 'native_session_snapshot' }
-  >;
-  readonly connections: CandidateConnection[];
-}> {
+): Promise<PersistedNativeImport> {
   return persistNativeSessionImport({ ...input, platform: 'hh' }, dependencies);
 }
 
@@ -337,13 +393,7 @@ async function persistNativeSessionImport(
     importResume: importCandidateResume,
     loadConnections: getConnections,
   },
-): Promise<{
-  readonly connection: Extract<
-    CandidateConnection,
-    { status: 'connected'; accessMode: 'native_session_snapshot' }
-  >;
-  readonly connections: CandidateConnection[];
-}> {
+): Promise<PersistedNativeImport> {
   const imported: ResumeImportResult = await dependencies.importResume({
     text: input.parsed.rawText,
     source: input.platform,
@@ -354,25 +404,31 @@ async function persistNativeSessionImport(
       sourceUrl: input.sourceUrl,
       capturedAt: input.capturedAt,
     },
+    ...(input.importMode ? { importMode: input.importMode } : {}),
   });
+  return confirmNativeConnection(input.platform, imported, dependencies.loadConnections);
+}
+
+async function confirmNativeConnection(
+  platform: 'hh' | 'linkedin',
+  imported: ResumeImportResult | StructuredResumeImportResult,
+  loadConnections: typeof getConnections,
+): Promise<PersistedNativeImport> {
   if (
     imported.connection?.status !== 'connected' ||
     imported.connection.accessMode !== 'native_session_snapshot'
   ) {
     throw new Error('native_connection_receipt_missing');
   }
-  const connections = await dependencies.loadConnections();
+  const connections = await loadConnections();
   const connection = connections.find(
-    (candidate): candidate is Extract<
-      CandidateConnection,
-      { status: 'connected'; accessMode: 'native_session_snapshot' }
-    > =>
-      candidate.platform === input.platform &&
+    (candidate): candidate is ConnectedNativeSource =>
+      candidate.platform === platform &&
       candidate.status === 'connected' &&
       candidate.accessMode === 'native_session_snapshot',
   );
   if (!connection) throw new Error('native_connection_not_persisted');
-  return { connection, connections };
+  return { connection, connections, connectOnly: imported.connectOnly === true };
 }
 
 interface PersistStructuredLinkedInInput {
@@ -381,6 +437,7 @@ interface PersistStructuredLinkedInInput {
   readonly droppedFields?: readonly string[];
   readonly sourceUrl: string;
   readonly capturedAt: string;
+  readonly importMode?: NativeImportMode;
 }
 
 interface PersistStructuredLinkedInDependencies {
@@ -400,38 +457,29 @@ export async function persistStructuredLinkedInImport(
     importStructuredProfile: importStructuredLinkedInProfile,
     loadConnections: getConnections,
   },
-): Promise<{
-  readonly connection: Extract<
-    CandidateConnection,
-    { status: 'connected'; accessMode: 'native_session_snapshot' }
-  >;
-  readonly connections: CandidateConnection[];
-}> {
+): Promise<PersistedNativeImport> {
   const imported: StructuredResumeImportResult = await dependencies.importStructuredProfile({
     profile: input.profile,
     extractorVersion: input.extractorVersion,
     ...(input.droppedFields ? { droppedFields: input.droppedFields } : {}),
     sourceUrl: input.sourceUrl,
     capturedAt: input.capturedAt,
+    ...(input.importMode ? { importMode: input.importMode } : {}),
   });
-  if (
-    imported.connection?.status !== 'connected' ||
-    imported.connection.accessMode !== 'native_session_snapshot'
-  ) {
-    throw new Error('native_connection_receipt_missing');
-  }
-  const connections = await dependencies.loadConnections();
-  const connection = connections.find(
-    (candidate): candidate is Extract<
-      CandidateConnection,
-      { status: 'connected'; accessMode: 'native_session_snapshot' }
-    > =>
-      candidate.platform === 'linkedin' &&
-      candidate.status === 'connected' &&
-      candidate.accessMode === 'native_session_snapshot',
+  return confirmNativeConnection('linkedin', imported, dependencies.loadConnections);
+}
+
+function profileBuiltFrom(
+  connections: readonly CandidateConnection[],
+  platform: 'hh' | 'linkedin',
+): boolean {
+  return connections.some(
+    (connection) =>
+      connection.platform === platform &&
+      connection.status === 'connected' &&
+      connection.accessMode === 'native_session_snapshot' &&
+      connection.factCount > 0,
   );
-  if (!connection) throw new Error('native_connection_not_persisted');
-  return { connection, connections };
 }
 
 function connectionManagementError(error: unknown): string {

@@ -496,3 +496,73 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(response.statusCode).toBe(404);
   });
 });
+
+describe('structured LinkedIn import keeps one profile source (owner decision 23.10.2026)', () => {
+  const HH_TEXT = `# Ivan Petrov
+
+Head of Platform Engineering
+
+## Опыт работы
+
+Contoso Freight Head of Platform Engineering January 2021 - Present
+
+- Built the internal developer platform for 40 teams.
+`;
+
+  async function importHhProfile(app: Awaited<ReturnType<typeof createApp>>['app'], authorization: string) {
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import',
+      headers: { authorization },
+      payload: {
+        text: HH_TEXT,
+        source: 'hh',
+        sourceReceipt: {
+          platform: 'hh',
+          accessMode: 'native_session_snapshot',
+          sourceUrl: 'https://hh.ru/resume/synthetic-resume-731',
+          capturedAt: '2026-09-23T12:00:00.000Z',
+        },
+      },
+    });
+    expect(response.statusCode).toBe(200);
+  }
+
+  it('only connects LinkedIn when the profile was built from hh.ru', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    await importHhProfile(app, authorization);
+    const before = store.getSnapshot(candidateId);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data).toMatchObject({ connectOnly: true, factCount: 0 });
+    expect(store.getSnapshot(candidateId).resume?.draft).toEqual(before.resume?.draft);
+  });
+
+  it('replaces an hh.ru profile with LinkedIn without carrying hh sections over', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    await importHhProfile(app, authorization);
+    const hhFacts = store.getSnapshot(candidateId).memory.map((memory) => memory.id);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/candidate/resume/import/structured',
+      headers: { authorization },
+      payload: structuredBody({ importMode: 'replace_profile' }),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json().data.factCount).toBeGreaterThan(0);
+    const after = store.getSnapshot(candidateId);
+    expect(after.memory.some((memory) => hhFacts.includes(memory.id))).toBe(false);
+    const draft = JSON.stringify(after.resume?.draft);
+    expect(draft).toContain('Northwind Labs');
+    expect(draft).not.toContain('Contoso Freight');
+  });
+});

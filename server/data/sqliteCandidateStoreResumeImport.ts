@@ -3,9 +3,11 @@ import { buildResumeStudioProjection } from '../domain/resumeStudio';
 import type {
   CommittedResumeImport,
   ImportedResumeEvidence,
+  NativeSourceReceiptInput,
   ResumeEvidenceImport,
   ResumeImportCommit,
   StoredMemory,
+  StoredNativeSourceConnection,
 } from './candidateStore';
 import { remapResumeImportDraftEvidence, resumeImportConflictKey, resumeImportFactKey } from '../domain/resumeImport';
 import { CandidateStoreConflictError } from './store/errors';
@@ -71,6 +73,84 @@ export function commitNewResumeImport(
     ? dependencies.sourceConnections.upsert(candidateId, input.sourceReceipt, evidence)
     : undefined;
   return { evidence, resume, sourceConnection, idempotentReplay: false };
+}
+
+/** A retried native import of the same document returns what it committed. */
+export function findResumeImportReplay(
+  dependencies: ResumeImportDependencies,
+  candidateId: string,
+  input: ResumeImportCommit,
+): CommittedResumeImport | null {
+  if (!input.sourceReceipt) return null;
+  const replay = dependencies.sourceConnections.findByDigest(
+    candidateId,
+    input.sourceReceipt.platform,
+    input.sourceReceipt.importDigest,
+  );
+  if (!replay) return null;
+  const resume = dependencies.resumeRepository.get(candidateId);
+  if (!resume) throw new CandidateStoreConflictError();
+  return {
+    evidence: {
+      messageId: replay.receipt.sourceMessageId,
+      memoryIds: [...replay.receipt.memoryIds],
+    },
+    resume,
+    sourceConnection: replay,
+    idempotentReplay: true,
+  };
+}
+
+/**
+ * Registers a platform session without touching the profile: no facts, no
+ * resume draft (one import source per profile, 23.10.2026). The receipt still
+ * points at a message so the conversation shows when the platform connected.
+ */
+export function commitSourceConnectionOnly(
+  dependencies: ResumeImportDependencies,
+  candidateId: string,
+  receipt: NativeSourceReceiptInput,
+  sourceLabel: string,
+): StoredNativeSourceConnection {
+  const evidence = dependencies.conversations.importResumeEvidenceInTransaction(candidateId, {
+    sourceLabel,
+    platform: receipt.platform,
+    entries: [],
+  });
+  return dependencies.sourceConnections.upsert(candidateId, receipt, {
+    messageId: evidence.messageId,
+    memoryIds: [],
+  });
+}
+
+/**
+ * Before a platform replaces the profile, every other platform gives up its
+ * untouched facts and stays only as a connection. Facts the candidate
+ * corrected keep their decision (`purgeReplacedImportedFacts`).
+ */
+export function replaceProfileWithImport(
+  dependencies: ResumeImportDependencies,
+  candidateId: string,
+  input: ResumeImportCommit & { readonly sourceReceipt: NativeSourceReceiptInput },
+): CommittedResumeImport {
+  releaseOtherImportSources(dependencies, candidateId, input.sourceReceipt.platform);
+  return commitNewResumeImport(dependencies, candidateId, input);
+}
+
+function releaseOtherImportSources(
+  dependencies: ResumeImportDependencies,
+  candidateId: string,
+  keptPlatform: NativeSourceReceiptInput['platform'],
+): void {
+  for (const connection of dependencies.sourceConnections.list(candidateId)) {
+    if (connection.platform === keptPlatform) continue;
+    dependencies.conversations.purgeReplacedImportedFacts(
+      candidateId,
+      connection.receipt.sourceMessageId,
+      connection.receipt.memoryIds,
+    );
+    dependencies.sourceConnections.releaseFacts(candidateId, connection.platform);
+  }
 }
 
 function writeResumeImportEvidence(
