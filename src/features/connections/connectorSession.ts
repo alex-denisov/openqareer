@@ -543,3 +543,13 @@ export async function saveLinkedInCaptureDump(kind: string): Promise<void> {
   if (!isTauriEnvironment()) return;
   await invokeDesktopCommand<string>('save_connector_capture_dump', { kind });
 }
+
+/** One code-only line in the shell's local connector diagnostics log (B448). */
+export function logConnectorDiagnostic(scope: string, event: string, detail?: string): void {
+  if (!isTauriEnvironment()) return;
+  void invokeDesktopCommand<void>('log_connector_diagnostic', {
+    scope,
+    event,
+    detail: detail ?? null,
+  }).catch(() => undefined);
+}

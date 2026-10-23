@@ -1526,8 +1526,91 @@ pub async fn save_session_capture_dump(app: &AppHandle, kind: &str) -> Result<St
     Ok(name)
 }
 
+/// Local diagnostics for background connector reads (B448): the candidate
+/// never sees it, the team can read it. Codes only, never page text.
+const DIAGNOSTICS_DIR: &str = "diagnostics";
+const DIAGNOSTICS_FILE: &str = "connector.log";
+const DIAGNOSTICS_MAX_BYTES: u64 = 256 * 1_024;
+
+fn diagnostic_token(value: &str, max_len: usize) -> Option<&str> {
+    let valid = !value.is_empty()
+        && value.len() <= max_len
+        && value
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-');
+    valid.then_some(value)
+}
+
+/// `<unix-ms> <scope> <event> [detail]`, or `None` when any part is not a plain code.
+fn diagnostic_line(millis: u128, scope: &str, event: &str, detail: Option<&str>) -> Option<String> {
+    let scope = diagnostic_token(scope, 40)?;
+    let event = diagnostic_token(event, 60)?;
+    let detail = match detail {
+        Some(value) => format!(" {}", diagnostic_token(value, 60)?),
+        None => String::new(),
+    };
+    Some(format!("{millis} {scope} {event}{detail}\n"))
+}
+
+pub fn append_connector_diagnostic(
+    app: &AppHandle,
+    scope: &str,
+    event: &str,
+    detail: Option<&str>,
+) -> Result<(), String> {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis())
+        .unwrap_or(0);
+    let line = diagnostic_line(millis, scope, event, detail).ok_or("diagnostic_invalid")?;
+    eprint!("[connector-diagnostic] {line}");
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("diagnostics_dir_unavailable: {error}"))?
+        .join(DIAGNOSTICS_DIR);
+    create_private_directory(&root)?;
+    let path = root.join(DIAGNOSTICS_FILE);
+    if std::fs::metadata(&path).is_ok_and(|meta| meta.len() > DIAGNOSTICS_MAX_BYTES) {
+        let _ = std::fs::rename(&path, root.join(format!("{DIAGNOSTICS_FILE}.1")));
+    }
+    use std::io::Write;
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut file| file.write_all(line.as_bytes()))
+        .map_err(|error| format!("diagnostics_write_failed: {error}"))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn diagnostic_line_keeps_codes_and_refuses_free_text() {
+        assert_eq!(
+            diagnostic_line(
+                5,
+                "linkedin-contacts",
+                "read_failed",
+                Some("page_load_timeout")
+            )
+            .as_deref(),
+            Some("5 linkedin-contacts read_failed page_load_timeout\n")
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "uploading", Some("42")).as_deref(),
+            Some("5 linkedin-contacts uploading 42\n")
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "Ирина Котова", None),
+            None
+        );
+        assert_eq!(
+            diagnostic_line(5, "linkedin-contacts", "ok", Some("a b")),
+            None
+        );
+    }
+
     #[test]
     fn capture_dump_name_accepts_only_a_plain_kind() {
         assert_eq!(

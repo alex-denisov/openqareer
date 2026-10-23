@@ -378,6 +378,17 @@ async fn save_connector_capture_dump(app: AppHandle, kind: String) -> Result<Str
     connector_session::save_session_capture_dump(&app, &kind).await
 }
 
+/// One code-only line in the local connector diagnostics log (B448).
+#[tauri::command]
+fn log_connector_diagnostic(
+    app: AppHandle,
+    scope: String,
+    event: String,
+    detail: Option<String>,
+) -> Result<(), String> {
+    connector_session::append_connector_diagnostic(&app, &scope, &event, detail.as_deref())
+}
+
 /// Inspects the current page without redirecting an in-progress login flow.
 #[tauri::command]
 async fn inspect_connector_session_page(
@@ -498,6 +509,7 @@ fn main() {
             resize_connector_session,
             read_connector_session_page,
             save_connector_capture_dump,
+            log_connector_diagnostic,
             inspect_connector_session_page,
             get_desktop_environment_info,
             read_session_token,

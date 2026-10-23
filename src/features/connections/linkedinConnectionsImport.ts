@@ -37,6 +37,8 @@ export type LinkedInConnectionsImportOutcome =
   | {
       readonly status: 'skipped';
       readonly reason: 'recently_read' | 'read_failed' | 'not_connections_page' | 'no_contacts';
+      /** A short code for the local diagnostics log; never page text. */
+      readonly detail?: string;
     };
 
 /**
@@ -54,15 +56,19 @@ export async function importLinkedInConnectionsFromSession(
     return { status: 'skipped', reason: 'recently_read' };
   }
   throttle.markRead(now);
-  const page = await dependencies.readSessionPage(LINKEDIN_CONNECTIONS_URL).catch(() => undefined);
-  if (!page) return { status: 'skipped', reason: 'read_failed' };
+  let page: SessionPageResult;
+  try {
+    page = await dependencies.readSessionPage(LINKEDIN_CONNECTIONS_URL);
+  } catch (error) {
+    return { status: 'skipped', reason: 'read_failed', detail: errorCode(error) };
+  }
   if (
     !page.ok ||
     !page.body ||
     page.body.length > MAX_CONNECTIONS_PAGE_BYTES ||
     !landedOnConnections(page.url)
   ) {
-    return { status: 'skipped', reason: 'not_connections_page' };
+    return { status: 'skipped', reason: 'not_connections_page', detail: landedSection(page) };
   }
   const contacts = toConnectionImportContacts(
     extractLinkedInConnections(page.body),
@@ -75,6 +81,24 @@ export async function importLinkedInConnectionsFromSession(
   // The server logs its own failures; a lost upload is retried on the next read.
   void dependencies.upload(contacts).catch(() => undefined);
   return { status: 'uploading', count: contacts.length };
+}
+
+/** The leading `snake_case` code of a shell error, e.g. `page_load_timeout`. */
+export function errorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  return /^[a-z][a-z0-9_]{0,59}/u.exec(message)?.[0] ?? 'unknown';
+}
+
+/** Where the read ended up, as a code only: `checkpoint`, `authwall`, `empty`. */
+function landedSection(page: SessionPageResult): string {
+  if (!page.ok || !page.body) return 'empty';
+  if (page.body.length > MAX_CONNECTIONS_PAGE_BYTES) return 'too_large';
+  try {
+    const segment = new URL(page.url ?? '').pathname.split('/').find(Boolean) ?? 'root';
+    return /^[a-z0-9-]{1,40}$/u.test(segment) ? segment : 'other';
+  } catch {
+    return 'no_url';
+  }
 }
 
 // A redirect to /checkpoint/ or /authwall still answers ok=true (B266).

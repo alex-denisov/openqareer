@@ -43,7 +43,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
       upload: vi.fn(),
       throttle: throttle(Date.now() - 60_000),
     });
-    expect(outcome).toEqual({ status: 'skipped', reason: 'recently_read' });
+    expect(outcome).toMatchObject({ status: 'skipped', reason: 'recently_read' });
     expect(readSessionPage).not.toHaveBeenCalled();
   });
 
@@ -58,7 +58,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
       upload,
       throttle: throttle(),
     });
-    expect(outcome).toEqual({ status: 'skipped', reason: 'not_connections_page' });
+    expect(outcome).toMatchObject({ status: 'skipped', reason: 'not_connections_page' });
     expect(upload).not.toHaveBeenCalled();
   });
 
@@ -68,7 +68,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
       upload: vi.fn(),
       throttle: throttle(),
     });
-    expect(outcome).toEqual({ status: 'skipped', reason: 'read_failed' });
+    expect(outcome).toMatchObject({ status: 'skipped', reason: 'read_failed' });
 
     const rejected = vi.fn().mockRejectedValue(new Error('500'));
     const uploading = await importLinkedInConnectionsFromSession({
@@ -92,7 +92,7 @@ describe('LinkedIn connections import from the session (B448)', () => {
       saveCaptureDump,
       throttle: throttle(),
     });
-    expect(outcome).toEqual({ status: 'skipped', reason: 'no_contacts' });
+    expect(outcome).toMatchObject({ status: 'skipped', reason: 'no_contacts' });
     expect(saveCaptureDump).toHaveBeenCalledWith(page);
     expect(upload).not.toHaveBeenCalled();
   });
