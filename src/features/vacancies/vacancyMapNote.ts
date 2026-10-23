@@ -44,3 +44,14 @@ export function vacancyMapNote(counts: VacancyMapNoteCounts): string {
     `${offMapReason(counts)} Ещё ${format(pending)} ${pluralWordRu(pending, ['вакансия', 'вакансии', 'вакансий'])} из ${format(counts.total)} ${pluralWordRu(pending, ['догружается', 'догружаются', 'догружаются'])}. ${CLUSTERS_HINT}`
   );
 }
+
+/**
+ * 390 (B553): под картой одна строка, как в макете; разбивка причин —
+ * по кнопке «i» (`vacancyMapNote`).
+ */
+export function vacancyMapShortNote(counts: VacancyMapNoteCounts): string {
+  const loaded = counts.total > counts.shown ? ' загруженных' : '';
+  const offMap = counts.shown - counts.onMap;
+  const rest = offMap > 0 ? `, без точки ${format(offMap)}` : '';
+  return `На карте ${format(counts.onMap)} из ${format(counts.shown)}${loaded}${rest}`;
+}

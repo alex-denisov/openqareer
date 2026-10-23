@@ -19,7 +19,18 @@ describe('B553: «Карта» на 390 — push-экран (макет 4 ?mv=ma
     expect(html).toContain('aria-label="Назад"');
     expect(html).toContain('<h1 id="vacancy-map-push-title">Карта</h1>');
     expect(html).toContain('aria-label="Спросить консультанта"');
-    expect(html).toContain('class="career-map-push-note vacancy-map-note"');
+    expect(html).toContain('class="career-map-push-note"');
     expect(html).not.toContain('career-map-header');
+  });
+
+  it('заметка — одна строка, подробности по кнопке «i» (свёрнуты)', () => {
+    const html = renderToStaticMarkup(
+      <VacancyMapView items={[]} onSelectCity={vi.fn()} onShowList={vi.fn()} />,
+    );
+
+    expect(html).toContain('На карте 0 из 0');
+    expect(html).toContain('aria-label="Почему не все вакансии на карте"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('Кластеры разбиваются');
   });
 });
