@@ -64,8 +64,8 @@ function VacancyScreenRoleCell({
       <span className="vac-sub">
         {item.cluster.canonicalCompany} · {source}
         {date ? `, ${date}` : ''}
+        <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} />
       </span>
-      <VacancyFitInline vacancyId={item.cluster.id} view={item.explanation.fitView} />
       {applicationStatus ? (
         <span className={`applied-note${applicationArchived ? ' is-archived' : ''}`}>
           {applicationStatus}

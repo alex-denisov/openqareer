@@ -210,3 +210,18 @@
 .vacancies-table-header:has(.vacancy-fit-sort) {
   align-items: center;
 }
+
+/* B525: inside the row subtitle the fit flows on the same line (V3). */
+.vac-sub .vacancy-fit-inline {
+  display: inline;
+  font-size: inherit;
+}
+
+.vac-sub .vacancy-fit-inline::before {
+  content: ' · ';
+}
+
+.vacancy-fit-inline.is-number {
+  color: var(--career-text);
+  font-weight: 600;
+}

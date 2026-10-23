@@ -18,6 +18,8 @@ const REASONS = {
   too_few_skills: 'Мало требований к навыкам для расчёта',
   assessed: 'Недостаточно подтверждённых данных для расчёта',
 };
+/** Mirrors the server's MIN_SKILL_REQUIREMENTS (B510-r): fewer skills never make a percent (A1). */
+const MIN_SKILL_REQUIREMENTS = 3;
 export function fitHasNumber(view?: VacancyFitView) {
   return (
     view?.state === 'ready' &&
@@ -26,7 +28,8 @@ export function fitHasNumber(view?: VacancyFitView) {
     typeof view.result.coveragePercent === 'number' &&
     Number.isFinite(view.result.coveragePercent) &&
     view.result.coveragePercent >= 0 &&
-    view.result.coveragePercent <= 100
+    view.result.coveragePercent <= 100 &&
+    (view.result.coverage?.total ?? 0) >= MIN_SKILL_REQUIREMENTS
   );
 }
 function fitDate(value?: string) {
@@ -52,7 +55,7 @@ export function VacancyFitSummary({
   const numeric = fitHasNumber(view);
   const reason =
     view?.state === 'ready' && result
-      ? REASONS[result.reason]
+      ? REASONS[result.reason === 'assessed' && !numeric ? 'too_few_skills' : result.reason]
       : STATE_LABELS[view?.state ?? 'not_requested'];
   return (
     <span
@@ -82,7 +85,20 @@ export function VacancyFitSummary({
   );
 }
 
-/** B446-g4: строка списка показывает процент только посчитанным; статусы — в раскрытой карточке. */
+const PENDING_STATES = new Set(['not_requested', 'processing', 'retrying', 'failed']);
+
+/** One short row label (B525): «уточняется», «нет требований», «недостаточно данных». */
+function fitInlineText(view: VacancyFitView): string {
+  if (fitHasNumber(view)) return `соответствие ${view.result!.coveragePercent}\u00a0%`;
+  if (PENDING_STATES.has(view.state)) return 'соответствие уточняется';
+  if (view.state === 'no_requirements' || view.state === 'no_description')
+    return 'соответствие: нет требований';
+  if (view.result?.reason === 'no_requirements') return 'соответствие: нет требований';
+  if (view.result?.reason === 'blocked_gate') return 'соответствие: условие не совпадает';
+  return 'соответствие: недостаточно данных';
+}
+
+/** The row keeps the fit inside its subtitle line, never as extra lines (V3). */
 export function VacancyFitInline({
   view: initialView,
   vacancyId,
@@ -91,11 +107,13 @@ export function VacancyFitInline({
   readonly vacancyId?: string;
 }) {
   const view = useLatestVacancyFitView(vacancyId, initialView);
-  if (!fitHasNumber(view)) return null;
+  if (!view) return null;
   return (
-    <span className="vacancy-fit-inline">
-      Соответствие {view!.result!.coveragePercent}
-      {'\u00a0%'}
+    <span
+      className={`vacancy-fit-inline${fitHasNumber(view) ? ' is-number' : ''}`}
+      data-fit-state={view.state}
+    >
+      {fitInlineText(view)}
     </span>
   );
 }

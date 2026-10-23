@@ -36,7 +36,7 @@ export function readyVacancyFit(vacancyId = 'fit-fixture'): VacancyFitView {
       gates: { role: gate, level: gate, region: gate, workAuthorization: gate, workFormat: gate },
       coveragePercent: 50,
       requiredCoverage: { matched: 1, total: 1, percent: 100 },
-      coverage: { matched: 1, total: 2, unknown: 0 },
+      coverage: { matched: 2, total: 4, unknown: 0 },
       assessments: [
         {
           requirementId: 'r-one',
