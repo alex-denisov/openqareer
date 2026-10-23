@@ -88,15 +88,17 @@ function PoolFacts({ c }: { c: Counts }) {
   return (
     <div className="ps-facts">
       <span>
-        <b>{c.active}</b> активных вакансий
+        <b>{c.active}</b> записей вакансий
       </span>
       <span>
         <b>{c.sources}</b> {c.sourcesWord}
       </span>
       <span>
-        <b>{c.remote}</b> удалённых
+        <b>{c.remote}</b> удалённых записей
       </span>
-      <small>Пул openqareer, обновлено {c.date}</small>
+      <small>
+        Пул openqareer, обновлено {c.date}. Одна вакансия может встречаться в нескольких источниках.
+      </small>
     </div>
   );
 }
@@ -105,7 +107,7 @@ function VacancyBoard({ stats, c }: { stats: LandingStats; c: Counts }) {
   return (
     <div className="ps-board" aria-label="Удалённые вакансии из пула">
       <div className="ps-board-head">
-        <h2>Свежие удалённые вакансии: {c.remote} в пуле</h2>
+        <h2>Удалённая работа: {c.remote} записей в пуле</h2>
         <span>зарплата</span>
       </div>
       {stats.vacancies.map((vacancy, index) => (
