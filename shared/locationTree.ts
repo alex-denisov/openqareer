@@ -4,6 +4,7 @@ import {
   COUNTRY_NAMES,
   HOME_COUNTRY,
   RUSSIAN_CITY_DISTRICT,
+  US_CITY_STATE,
   US_STATE_NAMES,
   US_STATES,
 } from './locationGazetteer';
@@ -92,7 +93,7 @@ function regionFor(country: string, city: string | undefined, middle: string | u
   if (country === HOME_COUNTRY) {
     return (city && RUSSIAN_CITY_DISTRICT[lower(city)]) ?? UNKNOWN_REGION;
   }
-  if (country === 'США') return usState(middle) ?? UNKNOWN_REGION;
+  if (country === 'США') return usState(middle) ?? (city && US_CITY_STATE[city]) ?? UNKNOWN_REGION;
   return middle && middle !== city ? middle : UNKNOWN_REGION;
 }
 

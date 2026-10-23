@@ -423,6 +423,18 @@ export const CITY_NAMES: Readonly<Record<string, string>> = {
   sydney: 'Сидней',
 };
 
+/** Штат для крупного города США, записанного без штата («New York, United States»). */
+export const US_CITY_STATE: Readonly<Record<string, string>> = {
+  'Сан-Франциско': US_STATES.CA!,
+  'Лос-Анджелес': US_STATES.CA!,
+  'Сан-Хосе': US_STATES.CA!,
+  'Нью-Йорк': US_STATES.NY!,
+  Сиэтл: US_STATES.WA!,
+  Остин: US_STATES.TX!,
+  Бостон: US_STATES.MA!,
+  Чикаго: US_STATES.IL!,
+};
+
 /** Страна для города, записанного без страны («Berlin», «Dubai»). */
 export const CITY_COUNTRY: Readonly<Record<string, string>> = {
   'Сан-Франциско': 'США',

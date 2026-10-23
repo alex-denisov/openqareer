@@ -48,6 +48,13 @@ describe('parseVacancyLocation', () => {
     });
   });
 
+  it('puts a well-known US city written without a state into its state (B547)', () => {
+    const withState = parseVacancyLocation({ location: 'New York, NY' });
+    expect(parseVacancyLocation({ location: 'New York, United States' })).toEqual(withState);
+    expect(parseVacancyLocation({ location: 'New York' })).toEqual(withState);
+    expect(withState).toEqual({ country: 'США', region: 'Нью-Йорк', city: 'Нью-Йорк' });
+  });
+
   it('keeps an unknown place unknown', () => {
     expect(parseVacancyLocation({ location: 'Remote' })).toBeUndefined();
   });
