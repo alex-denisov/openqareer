@@ -120,11 +120,16 @@ function matchedListKey(
   candidateStore: RouteDeps['candidateStore'],
   candidateId: string,
   filters: MatchedVacancyFilters,
+  order?: {
+    (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[];
+    readonly cacheKey?: string;
+  },
 ): string {
   const fingerprint = createHash('sha256')
     .update(
       JSON.stringify([
         { ...filters, offset: 0 },
+        order?.cacheKey ?? '',
         campaign.regions.value,
         campaign.suggestedRegions ?? [],
         campaign.remoteOnly,
@@ -194,7 +199,7 @@ function buildMatchedResponse(
   const pageAndExplanationsStartedAt = performance.now();
   let listCached = true;
   const list = matchedListCache.read(
-    matchedListKey(snapshot, campaign, candidateStore, candidateId, filters),
+    matchedListKey(snapshot, campaign, candidateStore, candidateId, filters, decorate),
     () => {
       listCached = false;
       return computeMatchedList(

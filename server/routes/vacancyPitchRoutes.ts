@@ -224,6 +224,7 @@ async function writeVacancyPitch(
     ...(rankingContext ? { rankingContext } : {}),
     ...(body?.language ? { language: body.language } : {}),
     ...(body?.recipient ? { recipient: body.recipient } : {}),
+    ...(isWantedCompany(deps, candidateId, vacancy.company) ? { targetCompany: true } : {}),
   });
   const contextMs = Date.now() - contextStart;
   const written = await writeCoverLetterBody(

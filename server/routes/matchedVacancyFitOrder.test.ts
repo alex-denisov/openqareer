@@ -105,6 +105,13 @@ describe('B422: компании «Хочу» в порядке подборки
     expect(ordered.map((entry) => entry.cluster.id)).toEqual(['c', 'b', 'a']);
   });
 
+  it('ключ кэша списка меняется вместе с отметками «Хочу»', () => {
+    const none = withWantedCompanyOrder(deps({}), 'want-c', 'fit').cacheKey;
+    const marked = withWantedCompanyOrder(wantDeps({}), 'want-c', 'fit').cacheKey;
+    expect(none).toBe('');
+    expect(marked).toBe(candidateCompanyKey('Acme'));
+  });
+
   it('«по свежести» отметку не учитывает', () => {
     const pool = [withCompany('a', 'Other'), withCompany('b', 'Acme')];
     const ordered = withWantedCompanyOrder(wantDeps({}), 'want-b', 'freshness')(pool);

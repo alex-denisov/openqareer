@@ -54,16 +54,26 @@ export function withVacancyFitOrder(
  * B422: в порядке «по соответствию» вакансии компаний «Хочу» идут первыми,
  * внутри групп — порядок разбора. Свежесть отметку не учитывает.
  */
+/** Порядок подборки и то, от чего он зависит помимо выдачи (ключ кэша списка). */
+export type MatchedOrder = ((items: readonly MatchedVacancyItem[]) => MatchedVacancyItem[]) & {
+  readonly cacheKey: string;
+};
+
 export function withWantedCompanyOrder(
   deps: RouteDeps,
   candidateId: string,
   sort: 'fit' | 'freshness' = 'fit',
-) {
+): MatchedOrder {
   const byFit = withVacancyFitOrder(deps, candidateId, sort);
-  if (sort !== 'fit') return byFit;
+  if (sort !== 'fit') return Object.assign(byFit, { cacheKey: '' });
   const wanted = wantedCompanyKeys(deps.candidateCompanyWantsRepo, candidateId);
-  return (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
-    wantedCompaniesFirst(byFit(items), wanted);
+  // Кэш списка держит уже упорядоченную подборку: новая отметка должна давать новый ключ.
+  const cacheKey = [...wanted].sort().join(',');
+  return Object.assign(
+    (items: readonly MatchedVacancyItem[]): MatchedVacancyItem[] =>
+      wantedCompaniesFirst(byFit(items), wanted),
+    { cacheKey },
+  );
 }
 
 interface FitViewReader {

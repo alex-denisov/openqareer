@@ -59,6 +59,8 @@ export interface GenerateVacancyPitchOptions {
   /** Контекст разбора роли сохраняет один порядок для шаблона и модели. */
   readonly rankingContext?: PitchFactRankingContext;
   readonly recipient?: PitchRecipient;
+  /** B422: кандидат отметил компанию вакансии «Хочу в эту компанию». */
+  readonly targetCompany?: boolean;
 }
 
 export interface VacancyPitchUsedFact {
@@ -171,6 +173,8 @@ function truncateSafely(text: string, maxLen: number): string {
 interface Copy {
   subject(title: string, candidateName: string, tone: PitchTone, hasMetric: boolean): string;
   intro(title: string, company: string | undefined, tone: PitchTone): string;
+  /** B422: кандидат отметил компанию «Хочу в эту компанию». */
+  targetCompany(company: string): string;
   evidenceIntro: string;
   stackEmpty: string;
   stackMatched(skills: string): string;
@@ -216,6 +220,7 @@ const RU_COPY: Copy = {
           : 'Буду рад узнать больше о целях и приоритетах роли.';
     return 'Здравствуйте! Заинтересовала вакансия ' + title + ' в ' + target + '. ' + opening;
   },
+  targetCompany: (company) => `${company} — компания, в которой я хочу работать.`,
   evidenceIntro: 'В профиле зафиксированы следующие факты:',
   stackEmpty: 'Требования вакансии не сопоставлены с фактами профиля.',
   stackMatched: (skills) => `В профиле подтверждён практический опыт работы со стеком: ${skills}`,
@@ -288,6 +293,7 @@ const EN_COPY: Copy = {
           : "I'd be glad to learn more about the role's goals and priorities.";
     return `Hello! I'm interested in the ${title} role at ${target}. ${opening}`;
   },
+  targetCompany: (company) => `${company} is a company I want to work for.`,
   evidenceIntro: 'My profile records the following facts:',
   stackEmpty: "The vacancy's requirements have not been matched against profile facts.",
   stackMatched: (skills) => `My profile confirms hands-on experience with: ${skills}`,
@@ -553,9 +559,11 @@ function assemblePitches(params: {
   usedIds: Set<string>;
   notices: string[];
   useRanking: boolean;
+  targetCompany?: boolean;
 }) {
   const { copy, vacancy, candidateName, usableFacts, tone, recipient, usedIds, notices, useRanking } = params;
-  const intro = copy.intro(vacancy.title, vacancy.company, tone);
+  const wish = params.targetCompany && vacancy.company ? ` ${copy.targetCompany(vacancy.company)}` : '';
+  const intro = copy.intro(vacancy.title, vacancy.company, tone) + wish;
   const evidence = buildEvidenceParagraph(copy, usableFacts, usedIds, notices, useRanking);
   const stack = buildStackParagraph(copy, vacancy, usableFacts, usedIds, notices);
   const closing = copy.closing(tone);
@@ -597,6 +605,7 @@ export function generateVacancyPitch(options: GenerateVacancyPitchOptions): Vaca
     usedIds: usedEvidenceIds,
     notices,
     useRanking,
+    ...(options.targetCompany ? { targetCompany: true } : {}),
   });
 
   return {
