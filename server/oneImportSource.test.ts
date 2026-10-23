@@ -252,4 +252,36 @@ describe('one import source per profile (owner decision 23.10.2026)', () => {
     expect(refreshed.json().data.connectOnly).toBeUndefined();
     expect(refreshed.json().data.factCount).toBeGreaterThan(0);
   });
+
+  it('keeps the facts a connection already owns when it is only connected again', async () => {
+    const { app, authorization } = await createApp();
+    await postImport(app, authorization, nativeLinkedInImportBody());
+    const before = (await connectionsOf(app, authorization)).find((c) => c.platform === 'linkedin');
+
+    const again = await postImport(app, authorization, {
+      ...nativeLinkedInImportBody(`${LINKEDIN_MARKDOWN}\n- Mentors two engineering managers.\n`),
+      sourceReceipt: { ...nativeLinkedInImportBody().sourceReceipt, capturedAt: '2026-09-02T12:00:00.000Z' },
+      importMode: 'connect_only',
+    });
+
+    expect(again.statusCode).toBe(200);
+    const after = (await connectionsOf(app, authorization)).find((c) => c.platform === 'linkedin');
+    expect(after?.factCount).toBe(before?.factCount);
+  });
+
+  it('leaves only the new platform in the profile, file imports included, when replacing', async () => {
+    const { app, store, candidateId, authorization } = await createApp();
+    await postImport(app, authorization, { text: LINKEDIN_MARKDOWN, source: 'pdf', fileName: 'cv.pdf' });
+    const fileFacts = store.getSnapshot(candidateId).memory.map((memory) => memory.id);
+    expect(fileFacts.length).toBeGreaterThan(0);
+
+    const replaced = await postImport(app, authorization, {
+      ...nativeHhImportBody(HH_MARKDOWN),
+      importMode: 'replace_profile',
+    });
+
+    expect(replaced.statusCode).toBe(200);
+    const remaining = store.getSnapshot(candidateId).memory.map((memory) => memory.id);
+    expect(remaining.some((id) => fileFacts.includes(id))).toBe(false);
+  });
 });
