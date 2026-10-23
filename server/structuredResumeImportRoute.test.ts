@@ -82,7 +82,9 @@ function fakeJpegFetch() {
   return vi.fn(async () => ({
     status: 200,
     type: 'basic',
-    headers: { get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/jpeg' : null) },
+    headers: {
+      get: (name: string) => (name.toLowerCase() === 'content-type' ? 'image/jpeg' : null),
+    },
     arrayBuffer: async () => JPEG.buffer.slice(JPEG.byteOffset, JPEG.byteOffset + JPEG.byteLength),
   }));
 }
@@ -233,7 +235,9 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
       method: 'POST',
       url: '/api/v1/candidate/resume/import/structured',
       headers: { authorization },
-      payload: structuredBody({ droppedFields: ['contact.email', 'skills', 'experience[].title', 'section:about'] }),
+      payload: structuredBody({
+        droppedFields: ['contact.email', 'skills', 'experience[].title', 'section:about'],
+      }),
     });
     expect(accepted.statusCode).toBe(200);
 
@@ -282,7 +286,10 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
       method: 'POST',
       url: '/api/v1/candidate/resume/import/structured',
       headers: { authorization },
-      payload: { ...body, profile: { ...body.profile, photoSourceUrl: 'https://evil.example/dms/image/x' } },
+      payload: {
+        ...body,
+        profile: { ...body.profile, photoSourceUrl: 'https://evil.example/dms/image/x' },
+      },
     });
 
     expect(response.statusCode).toBe(422);
@@ -368,7 +375,10 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
       method: 'POST',
       url: '/api/v1/candidate/resume/import/structured',
       headers: { authorization },
-      payload: { ...body, sourceReceipt: { ...body.sourceReceipt, capturedAt: '2026-09-23T13:00:00.000Z' } },
+      payload: {
+        ...body,
+        sourceReceipt: { ...body.sourceReceipt, capturedAt: '2026-09-23T13:00:00.000Z' },
+      },
     });
 
     expect(replay.statusCode).toBe(200);
@@ -381,7 +391,11 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     const body = structuredBody({
       profile: {
         ...structuredBody().profile,
-        openToWork: { roles: ['Product Manager'], locations: ['Berlin'], workplaceTypes: ['remote'] },
+        openToWork: {
+          roles: ['Product Manager'],
+          locations: ['Berlin'],
+          workplaceTypes: ['remote'],
+        },
       },
     });
 
@@ -451,7 +465,9 @@ describe('POST /api/v1/candidate/resume/import/structured (B265 slice 3)', () =>
     expect(asJson.statusCode).toBe(200);
     const payload = asJson.json().data;
     expect(payload.mime).toBe('image/jpeg');
-    expect(Buffer.from(payload.base64, 'base64').subarray(0, 3)).toEqual(Buffer.from([0xff, 0xd8, 0xff]));
+    expect(Buffer.from(payload.base64, 'base64').subarray(0, 3)).toEqual(
+      Buffer.from([0xff, 0xd8, 0xff]),
+    );
   });
 
   it("serves 404, not another candidate's media, to a foreign session", async () => {
@@ -509,7 +525,10 @@ Contoso Freight Head of Platform Engineering January 2021 - Present
 - Built the internal developer platform for 40 teams.
 `;
 
-  async function importHhProfile(app: Awaited<ReturnType<typeof createApp>>['app'], authorization: string) {
+  async function importHhProfile(
+    app: Awaited<ReturnType<typeof createApp>>['app'],
+    authorization: string,
+  ) {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/candidate/resume/import',
@@ -543,6 +562,24 @@ Contoso Freight Head of Platform Engineering January 2021 - Present
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toMatchObject({ connectOnly: true, factCount: 0 });
     expect(store.getSnapshot(candidateId).resume?.draft).toEqual(before.resume?.draft);
+  });
+
+  it('answers a repeated LinkedIn connect next to an hh.ru profile as connect only (24.10)', async () => {
+    const { app, authorization } = await createApp();
+    await importHhProfile(app, authorization);
+    const send = () =>
+      app.inject({
+        method: 'POST',
+        url: '/api/v1/candidate/resume/import/structured',
+        headers: { authorization },
+        payload: structuredBody(),
+      });
+    await send();
+
+    const again = await send();
+
+    expect(again.json().meta.idempotentReplay).toBe(true);
+    expect(again.json().data).toMatchObject({ connectOnly: true, factCount: 0 });
   });
 
   it('replaces an hh.ru profile with LinkedIn without carrying hh sections over', async () => {
