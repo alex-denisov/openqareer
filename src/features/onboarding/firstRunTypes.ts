@@ -1,3 +1,4 @@
+import type { CountryFitScenario } from '../site/countryFitScenario';
 import type { CandidateRegion } from '../workspace/candidateRegions';
 
 export type FirstRunStep = 'goal' | 'source' | 'context';
@@ -18,6 +19,7 @@ export interface FirstRunContext {
   readonly region?: CandidateRegion;
   readonly format: WorkFormat;
   readonly isRelocationReady: boolean;
+  readonly countryFitScenario?: CountryFitScenario;
 }
 
 export interface FirstRunData {

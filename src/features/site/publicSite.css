@@ -5,6 +5,19 @@
  * CSP is `style-src 'self'`.
  */
 .ps {
+  /* B350: shared public geometry, mapped to KIT spacing and existing public controls. */
+  --ps-space-1: 4px;
+  --ps-space-2: 8px;
+  --ps-space-3: 12px;
+  --ps-space-4: 16px;
+  --ps-space-6: 24px;
+  --ps-space-8: 32px;
+  --ps-text-sm: 0.875rem;
+  --ps-text-lg: 1.25rem;
+  --ps-text-display: 2.5rem;
+  --ps-radius-sm: 10px;
+  --ps-radius-md: 16px;
+  --ps-border-width: 1px;
   --ps-bg: oklch(98.4% 0.004 250);
   --ps-bg-2: oklch(96.2% 0.006 250);
   --ps-surface: oklch(99.6% 0.002 250);

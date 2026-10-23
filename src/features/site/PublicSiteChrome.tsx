@@ -93,6 +93,9 @@ function FooterHelpAndDocs({ onNavigate }: Pick<PublicChromeProps, 'onNavigate'>
     <>
       <div className="ps-footer-group">
         <b>Помощь</b>
+        <SiteLink to="/tools/country-fit" onNavigate={onNavigate}>
+          Калькулятор Country Fit
+        </SiteLink>
         <SiteLink to="/faq" onNavigate={onNavigate}>
           Вопросы и ответы
         </SiteLink>

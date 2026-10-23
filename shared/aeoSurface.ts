@@ -28,11 +28,13 @@ export const AEO_PUBLISHED_PATHS: readonly string[] = [
   '/vacancies/remote',
   '/faq',
   '/support',
+  '/tools/country-fit',
   ...LEGAL_DOCS.map((doc) => legalPath(doc.slug)),
 ];
 
 /** Что продукт делает — только то, что уже работает в выпущенной сборке. */
 const CAPABILITIES: readonly string[] = [
+  'Публикует /tools/country-fit: ориентировочный расчёт налогов и чистой зарплаты наёмного работника по набору ставок 2026 года; остаток считает из расходов, которые вводит пользователь.',
   'Проверяет резюме на ATS: показывает, что система отбора работодателя не прочитает, и предлагает правки.',
   'Подбирает вакансии по резюме с процентом совпадения и объясняет, каких требований не хватает.',
   'Готовит сопроводительное письмо и отклик под конкретную вакансию; отправляет кандидат сам или после его подтверждения.',
@@ -50,6 +52,7 @@ const CAPABILITIES: readonly string[] = [
 
 /** Границы. Ответчик, который их не знает, придумает их сам. */
 const BOUNDARIES: readonly string[] = [
+  'Country Fit не заменяет налоговую консультацию, не рассчитывает специальные режимы ИП и digital nomad и не содержит рыночных данных Numbeo.',
   'Не кадровое агентство и не работодатель: решение о найме принимает компания.',
   'Не обещает интервью, оффер, трудоустройство или визу.',
   'Не рассылает отклики массово и не действует в аккаунтах кандидата без его подтверждения.',
@@ -103,6 +106,7 @@ export function buildLlmsTxt(stats?: LandingStats): string {
     '- Product boundary: openqareer не обещает интервью, оффер, трудоустройство или визу',
     `- Vacancy catalogue: ${SITE_ORIGIN}/vacancies`,
     `- Remote vacancies: ${SITE_ORIGIN}/vacancies/remote`,
+    `- Country Fit employee payroll calculator: ${SITE_ORIGIN}/tools/country-fit (2026 data; user-entered expenses; not tax advice)`,
     `- Pricing: ${tariffLine()}`,
     `- Updated: ${AEO_UPDATED_AT}`,
     `- Full specification: ${SITE_ORIGIN}/llms-full.txt`,
