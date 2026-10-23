@@ -43,12 +43,15 @@ export function MapCapsuleButton({
       }}
       aria-label={capsuleAccessibleName(node)}
       aria-pressed={node.isCluster ? undefined : active}
-      title={tooltip}
       onClick={onClick}
     >
       <span className="career-map-capsule">
         <span>{markerLabel(node)}</span>
         <span className="career-map-label-count">{count}</span>
+      </span>
+      {/* B553: свой элемент вместо title — нативная подсказка в окне Tauri без фона. Текст уже в aria-label. */}
+      <span className="career-map-tip" aria-hidden="true">
+        {tooltip}
       </span>
     </button>
   );

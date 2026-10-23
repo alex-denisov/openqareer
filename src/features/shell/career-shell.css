@@ -10045,6 +10045,53 @@
   background: var(--career-accent-soft);
 }
 
+/* B553: подсказка капсулы — по образцу .career-tooltip-content, под капсулой, при наведении и фокусе. */
+.career-map-tip {
+  position: absolute;
+  inset-block-start: calc(100% + var(--career-space-1));
+  inset-inline-start: 50%;
+  z-index: 2;
+  inline-size: max-content;
+  max-inline-size: var(--career-tooltip-max);
+  padding: var(--career-space-2) var(--career-space-3);
+  border: var(--career-border-width) solid var(--career-line-strong);
+  border-radius: var(--career-radius-sm);
+  color: var(--career-text);
+  background: var(--career-surface-raised);
+  box-shadow: var(--career-shadow-tooltip);
+  font-size: var(--career-text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: start;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, var(--career-space-1));
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 150ms ease;
+}
+
+.career-map-marker:hover,
+.career-map-marker:focus-visible {
+  z-index: 3;
+}
+
+.career-map-marker:hover .career-map-tip,
+.career-map-marker:focus-visible .career-map-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .career-map-tip {
+    transition: none;
+  }
+}
+
 .career-map-label-count {
   color: var(--career-accent);
   font-family: var(--font-main);
