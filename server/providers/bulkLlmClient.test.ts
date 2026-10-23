@@ -1,4 +1,4 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -215,4 +215,31 @@ it('routes through an ordered list of pinned providers so one price change or ra
     quantizations: ['fp8'],
   });
   runtime.close();
+});
+it('expires a hold left by a call that never settled after the TTL at the dearest settled call of its task, not at the cap (B556)', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(Date.parse('2026-10-22T03:00:00.000Z'));
+    let mode: 'ok' | 'timeout' = 'ok';
+    const opts = options((async () => {
+      if (mode === 'timeout') throw new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+      return response(0.004);
+    }) as typeof fetch);
+    const runtime = createBulkLlmRuntime(opts);
+    await runtime.client!.complete(req);
+    mode = 'timeout';
+    await expect(runtime.client!.complete(req)).rejects.toThrow('timeout');
+    expect(runtime.status().heldUsd).toBe(0.06);
+    mode = 'ok';
+    // Inside the TTL the hold still blocks: the charge may yet be real.
+    await expect(runtime.client!.complete(req)).rejects.toThrow('budget');
+    vi.setSystemTime(Date.parse('2026-10-22T03:16:00.000Z'));
+    await runtime.client!.complete(req);
+    const status = runtime.status();
+    expect(status.heldUsd).toBe(0);
+    expect(status.spentUsd).toBeCloseTo(0.012, 6);
+    runtime.close();
+  } finally {
+    vi.useRealTimers();
+  }
 });

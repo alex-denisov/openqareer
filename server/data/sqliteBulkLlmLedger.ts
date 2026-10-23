@@ -2,6 +2,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID } from 'node:crypto';
 import { runSqliteTransaction } from './sqliteTransaction';
 import type { BulkLlmConfig } from '../providers/bulkLlmConfig';
+
+/** Longer than one call's full retry window (3 x 60 s plus pauses), so a live call is never expired. */
+const STALE_HOLD_TTL_MS = 15 * 60_000;
 export class SqliteBulkLlmLedger {
   readonly db: DatabaseSync;
   constructor(path: string) {
@@ -26,12 +29,32 @@ export class SqliteBulkLlmLedger {
       ).total,
     );
   }
+  /**
+   * A call that threw before settle (timeout, 5xx, worker stopped mid-call) left its hold at the
+   * per-request cap, ~60x a real call; on prod 22.10 such holds took $0.54 of the $1 run (B556).
+   * After the TTL the hold is charged at the dearest settled call of its task in the last day: an
+   * upper bound of what the provider can have billed, never zero. Batch rows are left alone.
+   */
+  expireStaleHolds(now = Date.now()) {
+    const cutoff = new Date(now - STALE_HOLD_TTL_MS).toISOString();
+    const since = new Date(now - 86_400_000).toISOString();
+    return Number(
+      this.db
+        .prepare(
+          `UPDATE bulk_llm_spend AS hold SET status='expired',cost=MIN(hold.reserved,COALESCE((SELECT MAX(done.cost) FROM bulk_llm_spend AS done
+            WHERE done.task=hold.task AND done.status='settled' AND done.created_at>=?),hold.reserved))
+          WHERE hold.status='reserved' AND hold.cost IS NULL AND hold.batch_id IS NULL AND hold.created_at<?`,
+        )
+        .run(since, cutoff).changes,
+    );
+  }
   reserve(
     input: { runId: string; task: string; model: string; provider: string },
     config: BulkLlmConfig,
     amount = config.perRequestUsd,
   ) {
     return runSqliteTransaction(this.db, () => {
+      this.expireStaleHolds();
       const day = new Date().toISOString().slice(0, 10);
       if (
         this.db
@@ -107,6 +130,7 @@ export class SqliteBulkLlmLedger {
     return this.db.prepare('SELECT * FROM bulk_llm_spend WHERE id=?').get(id);
   }
   status(config: BulkLlmConfig | null) {
+    this.expireStaleHolds();
     const row = this.db
       .prepare(
         'SELECT COALESCE(SUM(cost),0) spent,COALESCE(SUM(CASE WHEN cost IS NULL THEN reserved ELSE 0 END),0) held FROM bulk_llm_spend',
