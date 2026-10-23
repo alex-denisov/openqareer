@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { ResumeIngestionState } from '../journey/useResumeIngestion';
 import {
-  DEFAULT_FIRST_RUN_DATA,
+  initialFirstRunData,
   restoreSourceStep,
   selectCity,
   setGoal,
@@ -89,7 +89,7 @@ function useFirstRunFileUpload(setData: React.Dispatch<React.SetStateAction<Firs
 
 export function useFirstRunWizardState(initialStep: FirstRunStep = 'source') {
   const [step, setStep] = useState<FirstRunStep>(initialStep);
-  const [data, setData] = useState<FirstRunData>(DEFAULT_FIRST_RUN_DATA);
+  const [data, setData] = useState<FirstRunData>(initialFirstRunData);
   const dialogs = useFirstRunDialogState();
   const upload = useFirstRunFileUpload(setData);
 

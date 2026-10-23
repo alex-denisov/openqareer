@@ -54,6 +54,10 @@ async function createStaticApp(
   );
   writeFileSync(join(directory, 'faq.html'), '<!doctype html><title>faq document</title>');
   writeFileSync(join(directory, 'support.html'), '<!doctype html><title>support document</title>');
+  writeFileSync(
+    join(directory, 'country-fit.html'),
+    '<!doctype html><title>country fit document</title>',
+  );
   writeFileSync(join(directory, 'login.html'), '<!doctype html><title>login document</title>');
   writeFileSync(join(directory, 'signup.html'), '<!doctype html><title>signup document</title>');
   writeFileSync(
@@ -171,6 +175,7 @@ describe('static release delivery', () => {
     for (const [url, marker] of [
       ['/faq', 'faq document'],
       ['/support', 'support document'],
+      ['/tools/country-fit', 'country fit document'],
     ] as const) {
       const response = await app.inject({ method: 'GET', url });
       expect(response.statusCode, url).toBe(200);

@@ -112,6 +112,7 @@ export function staticSitemapUrls(catalogLastmod?: string): SitemapUrl[] {
     // B535: help pages next to the landing.
     { path: '/faq', lastmod: PUBLIC_PAGES_UPDATED_AT },
     { path: '/support', lastmod: PUBLIC_PAGES_UPDATED_AT },
+    { path: '/tools/country-fit', lastmod: '2026-10-23' },
     ...LEGAL_DOCS.map((doc) => ({ path: legalPath(doc.slug), lastmod: LEGAL_PACK_PUBLISHED_AT })),
     { path: CATALOG_ROOT, ...(catalogLastmod ? { lastmod: catalogLastmod } : {}) },
   ];

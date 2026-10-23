@@ -1,0 +1,200 @@
+.cf-page {
+  display: grid;
+  gap: var(--ps-space-6);
+}
+.cf-heading {
+  display: grid;
+  gap: var(--ps-space-3);
+}
+.ps .cf-heading h1 {
+  font-size: var(--ps-text-display);
+  max-inline-size: 24ch;
+}
+.cf-heading > p {
+  max-inline-size: 65ch;
+}
+.cf-calculator {
+  display: grid;
+  gap: var(--ps-space-6);
+}
+.cf-inputs,
+.cf-result,
+.cf-section {
+  display: grid;
+  gap: var(--ps-space-4);
+  min-inline-size: 0;
+}
+.cf-countries {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-inline-size: 0;
+}
+.cf-countries legend {
+  margin-block-end: var(--ps-space-2);
+  font-weight: 600;
+}
+.cf-countries > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ps-space-2);
+}
+.cf-countries label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--ps-space-2);
+  padding: var(--ps-space-3);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-sm);
+  background: var(--ps-surface);
+}
+.cf-countries label:has(:checked) {
+  background: var(--ps-blue-soft);
+  border-color: var(--ps-blue);
+}
+.cf-countries label:hover {
+  background: var(--ps-bg-2);
+}
+.cf-countries label:active {
+  background: var(--ps-blue-soft);
+}
+.cf-field {
+  display: grid;
+  gap: var(--ps-space-2);
+  font-weight: 600;
+}
+.cf-field input {
+  color-scheme: light;
+  inline-size: 100%;
+  min-inline-size: 0;
+  padding: var(--ps-space-3);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-sm);
+  color: var(--ps-ink);
+  background: var(--ps-surface);
+  font: inherit;
+}
+.cf-field input:hover {
+  border-color: var(--ps-soft);
+}
+.cf-page :is(input, button):focus-visible {
+  outline: var(--ps-space-1) solid var(--ps-blue);
+  outline-offset: var(--ps-space-1);
+}
+.cf-field input[aria-invalid='true'] {
+  border-color: var(--ps-ink);
+  outline: var(--ps-border-width) solid var(--ps-ink);
+}
+.cf-note {
+  font-size: var(--ps-text-sm);
+  color: var(--ps-soft);
+}
+.cf-result {
+  background: var(--ps-blue-soft);
+  padding: var(--ps-space-6);
+  border-radius: var(--ps-radius-md);
+  align-content: start;
+}
+.cf-net {
+  font-size: var(--ps-text-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.cf-result dl {
+  margin: 0;
+  display: grid;
+  gap: var(--ps-space-3);
+}
+.cf-result dl > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--ps-space-3);
+  flex-wrap: wrap;
+}
+.cf-result dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.cf-costs {
+  display: grid;
+  gap: var(--ps-space-4);
+}
+.cf-remainder {
+  font-size: var(--ps-text-lg);
+}
+.cf-section ul {
+  margin: 0;
+  padding-inline-start: var(--ps-space-6);
+}
+.cf-section a {
+  color: var(--ps-blue);
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.cf-next {
+  padding: var(--ps-space-6);
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  border-radius: var(--ps-radius-md);
+}
+.cf-next button {
+  justify-self: start;
+  white-space: normal;
+  text-align: start;
+}
+.cf-next button:hover {
+  filter: brightness(0.95);
+}
+.cf-next button:active {
+  filter: brightness(0.9);
+}
+.cf-next button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.cf-faq {
+  border: var(--ps-border-width) solid var(--ps-line-2);
+  padding: var(--ps-space-4);
+  border-radius: var(--ps-radius-sm);
+}
+.cf-faq summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.cf-faq summary:hover {
+  color: var(--ps-blue);
+}
+.cf-faq p {
+  padding-block-start: var(--ps-space-3);
+}
+@media (min-width: 48rem) {
+  .cf-calculator {
+    grid-template-columns: 1fr 1fr;
+  }
+  .cf-costs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.cf-countries input {
+  color-scheme: light;
+  accent-color: var(--ps-blue);
+}
+
+.cf-public .ps-footer-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.cf-public .ps-footer-grid > * {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+@media (min-width: 48rem) {
+  .cf-public .ps-footer-grid {
+    grid-template-columns: 1.6fr repeat(4, minmax(0, 1fr));
+  }
+}
+
+.cf-page .ps-crumbs {
+  margin-block-end: 0;
+}

@@ -1,3 +1,4 @@
+import { countryFitConstraint, readCountryFitScenario } from '../site/countryFitScenario';
 import {
   CITY_DIRECTORY,
   DEFAULT_FIRST_RUN_DATA,
@@ -11,6 +12,18 @@ import type { WorkspaceInput } from '../workspace/workspaceStorage';
 import type { IngestedResume } from '../journey/useResumeIngestion';
 
 export { CITY_DIRECTORY, DEFAULT_FIRST_RUN_DATA, POPULAR_CITIES, type FirstRunCity };
+
+export function initialFirstRunData(): FirstRunData {
+  const scenario = readCountryFitScenario();
+  if (!scenario) return DEFAULT_FIRST_RUN_DATA;
+  return {
+    ...DEFAULT_FIRST_RUN_DATA,
+    context: {
+      ...DEFAULT_FIRST_RUN_DATA.context,
+      countryFitScenario: scenario,
+    },
+  };
+}
 
 export function filterCities(
   query: string,
@@ -54,6 +67,8 @@ export function firstRunDataToWorkspaceInput(
     constraints: [
       data.context.format,
       data.context.city,
+      data.context.country,
+      data.context.countryFitScenario ? countryFitConstraint(data.context.countryFitScenario) : '',
       data.context.isRelocationReady ? 'Готов к релокации' : '',
     ]
       .filter(Boolean)

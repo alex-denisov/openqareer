@@ -183,7 +183,8 @@ describe('buildSitemapFiles', () => {
     expect(urls).toContain('https://openqareer.com/support');
     expect(urls).toContain('https://openqareer.com/legal/privacy');
     expect(urls).toContain('https://openqareer.com/vacancies');
-    expect(urls).toHaveLength(8);
+    expect(urls).toContain('https://openqareer.com/tools/country-fit');
+    expect(urls).toHaveLength(9);
   });
 
   it('splits 0, 1, 10,000, 10,001 and 25,000 URLs without truncation', () => {

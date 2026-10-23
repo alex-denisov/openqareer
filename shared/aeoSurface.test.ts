@@ -81,3 +81,12 @@ describe('B545: dated pool evidence', () => {
     expect(buildLlmsFullTxt()).not.toContain('## Срез пула');
   });
 });
+
+describe('Country Fit public discovery', () => {
+  it('publishes the calculator with its actual payroll and expense boundaries', () => {
+    expect(AEO_PUBLISHED_PATHS).toContain('/tools/country-fit');
+    expect(buildLlmsTxt()).toContain('/tools/country-fit');
+    expect(buildLlmsFullTxt()).toContain('которые вводит пользователь');
+    expect(buildLlmsFullTxt()).toContain('не содержит рыночных данных Numbeo');
+  });
+});

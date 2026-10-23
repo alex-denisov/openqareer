@@ -1,3 +1,7 @@
+import {
+  clearCountryFitScenario,
+  saveWithCountryFitTransfer,
+} from './features/site/countryFitScenario';
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   getCandidateWorkspace,
@@ -49,6 +53,9 @@ const CareerWorkspaceShell = lazy(async () => {
   return { default: module.CareerWorkspaceShell };
 });
 const LandingPage = lazy(loadLandingPage);
+const CountryFitPage = lazy(() =>
+  import('./features/site/CountryFitPage').then((module) => ({ default: module.CountryFitPage })),
+);
 const FaqPage = lazy(() => loadHelpPage('FaqPage'));
 const SupportPage = lazy(() => loadHelpPage('SupportPage'));
 const NotFoundPage = lazy(() => loadHelpPage('NotFoundPage'));
@@ -339,7 +346,10 @@ export default function App() {
   function persist(workspace: CandidateWorkspace) {
     try {
       if (state.session?.candidateId) {
-        saveWorkspace(window.localStorage, workspace, state.session.candidateId);
+        saveWithCountryFitTransfer(
+          () => saveWorkspace(window.localStorage, workspace, state.session!.candidateId!),
+          workspaceInputOf(workspace).constraints,
+        );
         // Write through, so the answers survive this browser.
         void putCandidateWorkspace(workspaceInputOf(workspace)).catch(() => {
           setStorageError(
@@ -418,6 +428,7 @@ export default function App() {
   }
 
   function handleSessionChange(session: AuthUser | null) {
+    if (session === null) clearCountryFitScenario();
     // A delayed restore must never replace a login/logout completed after it.
     const revision = ++sessionRevision.current;
     const emailVerificationPending = session?.emailVerified === false;
@@ -590,6 +601,19 @@ export default function App() {
   }
 
   const helpPath = currentPath.replace(/\/$/u, '');
+  if (helpPath === '/tools/country-fit' && !isDesktop) {
+    return (
+      <AppErrorBoundary>
+        <Suspense fallback={null}>
+          <CountryFitPage
+            onNavigate={navigate}
+            signedIn={Boolean(state.session)}
+            isAdmin={state.session?.role === 'admin'}
+          />
+        </Suspense>
+      </AppErrorBoundary>
+    );
+  }
   if ((helpPath === '/faq' || helpPath === '/support') && !isDesktop) {
     const HelpPage = helpPath === '/faq' ? FaqPage : SupportPage;
     return (

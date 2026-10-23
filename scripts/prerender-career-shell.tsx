@@ -3,6 +3,11 @@ import { pathToFileURL } from 'node:url';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminConsole } from '../src/features/admin/AdminConsole';
+import {
+  CountryFitPage,
+  COUNTRY_FIT_TITLE,
+  COUNTRY_FIT_DESCRIPTION,
+} from '../src/features/site/CountryFitPage';
 import { LandingPage } from '../src/features/site/LandingPage';
 import {
   FAQ_DESCRIPTION,
@@ -105,6 +110,7 @@ export function buildSitemap(): string {
       loc: `${SITE_ORIGIN}${page.path}`,
       lastmod: undefined as string | undefined,
     })),
+    { loc: `${SITE_ORIGIN}/tools/country-fit`, lastmod: '2026-10-23' },
     ...LEGAL_DOCS.map((doc) => ({
       loc: `${SITE_ORIGIN}${legalPath(doc.slug)}`,
       lastmod: LEGAL_PACK_PUBLISHED_AT,
@@ -157,6 +163,22 @@ function bootstrapRoot(markup: string, options: { inert?: boolean } = {}): strin
   );
 }
 
+async function writeCountryFitPage(html: string, distDirectory: string): Promise<void> {
+  await writeFile(
+    `${distDirectory}/country-fit.html`,
+    deferEntryScript(
+      pageHead(html, {
+        path: '/tools/country-fit',
+        title: COUNTRY_FIT_TITLE,
+        description: COUNTRY_FIT_DESCRIPTION,
+      }),
+    ).replace(
+      EMPTY_ROOT,
+      bootstrapRoot(renderToStaticMarkup(<CountryFitPage onNavigate={() => {}} />)),
+    ),
+  );
+}
+
 /** B535: /faq and /support are indexed documents with their own first paint. */
 async function writeHelpPages(html: string, distDirectory: string): Promise<void> {
   await writeFile(
@@ -189,7 +211,8 @@ export const AUTH_PAGES = [
     path: '/login',
     file: 'login.html',
     title: 'Вход в кабинет | openqareer',
-    description: 'Войдите в кабинет openqareer: профиль, подобранные вакансии, отклики и консультант.',
+    description:
+      'Войдите в кабинет openqareer: профиль, подобранные вакансии, отклики и консультант.',
   },
   {
     path: '/signup',
@@ -279,6 +302,7 @@ export async function prerenderShells(
     );
   }
   await writeHelpPages(html, distDirectory);
+  await writeCountryFitPage(html, distDirectory);
   await writeNotFoundPage(html, distDirectory);
   await writeAuthPages(html, distDirectory);
 
