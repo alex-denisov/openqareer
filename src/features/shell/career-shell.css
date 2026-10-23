@@ -7295,18 +7295,12 @@
 }
 
 .career-connector-webview-placeholder {
-  display: grid;
-  gap: var(--career-space-2);
   margin: 0;
   padding: 24px;
   max-width: 42ch;
   font-size: var(--career-text-xs);
   line-height: 1.5;
   color: #4a5568;
-}
-
-.career-connector-webview-placeholder p {
-  margin: 0;
 }
 
 .career-modal-error svg {

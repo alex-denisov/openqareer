@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { sessionLayoutForHost, MIN_SESSION_SIZE, watchConnectorHost } from './connectorLayout';
+import { describe, expect, it } from 'vitest';
+import { sessionLayoutForHost, MIN_SESSION_SIZE, workAreaLayout } from './connectorLayout';
 import type { SessionLayout } from './connectorSession';
 
 function hostAt(rect: Partial<DOMRect>): HTMLElement {
@@ -79,31 +79,24 @@ describe('sessionLayoutForHost', () => {
   });
 });
 
-describe('watchConnectorHost (B464)', () => {
-  it('follows the host when it moves without resizing, e.g. under a toolbar that appeared', () => {
-    vi.useFakeTimers();
-    vi.stubGlobal('window', {
-      innerWidth: 1224,
-      innerHeight: 778,
-      addEventListener: () => undefined,
-      removeEventListener: () => undefined,
+describe('workAreaLayout (B464, mockup 12)', () => {
+  const rectOf = (rect: Partial<DOMRect>) => ({ getBoundingClientRect: () => rect as DOMRect });
+
+  it('covers the work area below the section header with a 16 px inset', () => {
+    const header = rectOf({ bottom: 64 });
+    const main = {
+      ...rectOf({ left: 76, top: 0, right: 1440, bottom: 900, width: 1364, height: 900 }),
+      querySelector: () => header,
+    };
+    expect(workAreaLayout(main as unknown as HTMLElement)).toEqual({
+      x: 92,
+      y: 80,
+      width: 1332,
+      height: 804,
     });
-    vi.stubGlobal(
-      'ResizeObserver',
-      class {
-        observe() {}
-        disconnect() {}
-      },
-    );
-    let rect = { x: 36, y: 95, width: 1154, height: 484 };
-    const host = { getBoundingClientRect: () => ({ ...rect }) } as unknown as HTMLElement;
-    const layouts: SessionLayout[] = [];
-    const stop = watchConnectorHost('hh', host, (layout) => layouts.push(layout));
-    rect = { ...rect, y: 139 };
-    vi.advanceTimersByTime(1000);
-    stop();
-    expect(layouts.map((layout) => layout.y)).toEqual([95, 139]);
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
+  });
+
+  it('gives up without a work area, so the native default applies', () => {
+    expect(workAreaLayout(null)).toBeUndefined();
   });
 });

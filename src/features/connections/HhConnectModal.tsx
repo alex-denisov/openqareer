@@ -13,20 +13,18 @@ import {
   openConnectorSession,
   platformRouteNotice,
   readSessionPage,
-  resizeConnectorSession,
   sessionCheckFailure,
   showConnectorSession,
   type ConnectorSessionStep,
 } from './connectorSession';
 import { ConnectorSessionToolbar } from './ConnectorSessionToolbar';
-import { ConnectorWindowPlaceholder } from './ConnectorWindowPlaceholder';
 import {
   nextAnimationFrame,
   shouldOpenSessionAutomatically,
   shouldPollConnectorSession,
   startConnectorSession,
 } from './connectorSessionStart';
-import { sessionLayoutForHost, watchConnectorHost } from './connectorLayout';
+import { workAreaLayout } from './connectorLayout';
 import { sessionUnreadableNotice } from './sessionWaitingStage';
 import {
   createHhSessionImportFlow,
@@ -89,7 +87,6 @@ export function HhConnectModal({
   const [choice, setChoice] = useState<readonly HhResumeItem[]>();
   const [selectedResumeId, setSelectedResumeId] = useState('');
   const [importing, setImporting] = useState(false);
-  const webviewHost = useRef<HTMLDivElement>(null);
   const sessionFlow = useRef<HhSessionImportFlow>();
   /** What the profile page stated, kept for the resume the candidate picks. */
   const hhProfile = useRef<HhProfileIdentity>();
@@ -124,16 +121,7 @@ export function HhConnectModal({
   );
 
   useEffect(() => {
-    if (!isOpen || !isTauriEnvironment() || step === 'idle') return;
-    const host = webviewHost.current;
-    if (!host) return;
-    return watchConnectorHost('hh', host, (layout) => {
-      void resizeConnectorSession('hh', layout);
-    });
-  }, [isOpen, step]);
-
-  useEffect(() => {
-    if (!isOpen || isTauriEnvironment() || step !== 'session_open') return;
+    if (!isOpen || step !== 'session_open') return;
     let cancelled = false;
     const checkPopup = async () => {
       if (await isConnectorSessionOpen('hh')) return;
@@ -141,9 +129,7 @@ export function HhConnectModal({
       sessionOpened.current = false;
       setWaiting(undefined);
       setStep('idle');
-      setError(
-        'Окно входа hh.ru закрыто. Браузер не подтвердил вход и резюме не обновлено. Подключите снова, чтобы повторить попытку.',
-      );
+      setError('Окно закрыто, вход не завершён. Подключение не изменилось.');
     };
     const timer = window.setInterval(() => void checkPopup(), SESSION_POLL_INTERVAL_MS);
     return () => {
@@ -213,8 +199,7 @@ export function HhConnectModal({
     const started = await startConnectorSession({
       platform: 'hh',
       url: HH_LOGIN_URL,
-      measureLayout: () =>
-        sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+      measureLayout: () => workAreaLayout(document.getElementById('career-main')),
       waitForFrame: nextAnimationFrame,
       isDesktop: isTauriEnvironment(),
       onStep: setStep,
@@ -361,7 +346,7 @@ export function HhConnectModal({
               await openConnectorSession(
                 'hh',
                 url,
-                sessionLayoutForHost(webviewHost.current, window.innerWidth, window.innerHeight),
+                workAreaLayout(document.getElementById('career-main')),
               )
             ).opened,
         },
@@ -433,7 +418,7 @@ export function HhConnectModal({
       titleId="hh-modal-title"
       title="Подключение hh.ru"
       icon={<PlatformLogo platform="hh" size={26} />}
-      wide={isTauriEnvironment() && sessionActive}
+      wide={false}
       detail={!isTauriEnvironment() && sessionActive}
     >
       <div className={`career-modal-body${sessionActive ? ' is-connector-session' : ''}`}>
@@ -487,17 +472,6 @@ export function HhConnectModal({
             Войдите в hh.ru в отдельном окне. Веб-версия не может прочитать страницу и не обновит
             резюме.
           </p>
-        ) : null}
-
-        {isTauriEnvironment() && step !== 'idle' ? (
-          <div
-            ref={webviewHost}
-            className="career-connector-webview-host"
-            role="group"
-            aria-label="Вход в hh.ru"
-          >
-            <ConnectorWindowPlaceholder platform="hh" />
-          </div>
         ) : null}
 
         {choice && choice.length > 0 ? (

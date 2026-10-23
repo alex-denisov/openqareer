@@ -118,60 +118,17 @@ pub fn session_window_label(platform: &str) -> Option<&'static str> {
 
 const MANAGED_LINKEDIN_LABEL_PREFIX: &str = "connector-linkedin-pool-";
 
-fn session_window_chrome(managed: bool) -> (bool, bool, bool) {
-    if managed {
-        // Pool accounts need native close/resize controls because there is no
-        // candidate wizard shell behind their standalone window.
-        (true, true, false)
-    } else {
-        // Candidate sessions are visually hosted by the wizard modal.
-        (false, false, true)
-    }
+/// Mockup 12 (B464): every sign-in window — candidate or pool — is a native
+/// macOS window with its frame, close/minimise/full-screen controls and a Dock
+/// entry; nothing of ours is drawn around the platform's page.
+fn session_window_chrome(_managed: bool) -> (bool, bool, bool) {
+    (true, true, false)
 }
 
-fn should_parent_session_window(session_key: Option<&str>) -> bool {
-    session_key.is_none()
-}
-
-/// A candidate's sign-in window stays hidden until its page has loaded, so the
-/// dialog's «Загружаем страницу…» shows instead of a blank dark rectangle (B464).
-fn starts_hidden_until_loaded(session_key: Option<&str>) -> bool {
-    session_key.is_none()
-}
-
-/// Shown anyway after this long, so a slow page never leaves the window hidden.
-const HIDDEN_WINDOW_SHOW_AFTER: Duration = Duration::from_secs(12);
-const PAINT_POLL_INTERVAL: Duration = Duration::from_millis(300);
-const PAINTED_PROBE: &str =
-    "JSON.stringify(((document.body && document.body.innerText) || '').trim().length)";
-
-/// The probe answers a text length, possibly JSON-quoted more than once.
-fn page_has_text(value: &str) -> bool {
-    value
-        .trim_matches(|c: char| c == '"' || c == '\\' || c.is_whitespace())
-        .parse::<usize>()
-        .is_ok_and(|length| length > 0)
-}
-
-/// hh.ru is a single-page app: «loaded» comes seconds before anything is drawn,
-/// so the window waits for text on the page, at most `HIDDEN_WINDOW_SHOW_AFTER`.
-async fn reveal_when_painted(app: &AppHandle, label: &str) {
-    let deadline = tokio::time::Instant::now() + HIDDEN_WINDOW_SHOW_AFTER;
-    while tokio::time::Instant::now() < deadline {
-        let Some(webview) = app.get_webview(label) else {
-            return;
-        };
-        if eval_json(&webview, PAINTED_PROBE)
-            .await
-            .is_ok_and(|value| page_has_text(&value))
-        {
-            break;
-        }
-        tokio::time::sleep(PAINT_POLL_INTERVAL).await;
-    }
-    if let Some(window) = app.get_webview_window(label) {
-        let _ = window.show();
-    }
+/// Parenting a decorated WebView on macOS can keep it from showing at all, so
+/// sign-in windows stay top-level (B464).
+fn should_parent_session_window(_session_key: Option<&str>) -> bool {
+    false
 }
 
 fn managed_session_uuid(session_key: &str) -> Result<Uuid, String> {
@@ -782,9 +739,8 @@ pub async fn open_session_window(
             .data_store_identifier(identifier);
     }
 
-    // Candidate sessions are borderless overlays hosted by the wizard. A pool
-    // session is a real standalone operator window; parenting a decorated
-    // WebView on macOS can prevent it from being shown at all.
+    // Sign-in windows are standalone native windows (mockup 12); parenting a
+    // decorated WebView on macOS can prevent it from being shown at all.
     if should_parent_session_window(request.session_key.as_deref()) {
         builder = match builder.parent(&main_window) {
             Ok(parented) => parented,
@@ -802,18 +758,8 @@ pub async fn open_session_window(
         builder = builder.proxy_url(proxy);
     }
 
-    let hidden = starts_hidden_until_loaded(request.session_key.as_deref());
-    if hidden {
-        builder = builder.visible(false);
-    }
-
     match builder.build() {
         Ok(_) => {
-            if hidden {
-                let app = app.clone();
-                let label = label.clone();
-                tauri::async_runtime::spawn(async move { reveal_when_painted(&app, &label).await });
-            }
             // Reporting "opened" before the window is inspectable is what threw
             // the whole step back to idle on the very first poll (B157).
             if await_registered_window(app, &label).await {
@@ -1062,12 +1008,72 @@ fn platform_name(platform: &str) -> &'static str {
     }
 }
 
+/// Logical title-bar height above the page. On macOS tao reports the frame as
+/// the content origin (23.10: inner == outer, 0 pt), which placed the window
+/// 28 pt too high (B464); the NSWindow's own layout rect fills in.
+/// Implausible values (over 100 pt) are ignored.
+fn title_bar_offset(outer_height: u32, inner_height: u32, scale: f64, native: Option<f64>) -> f64 {
+    let reported = f64::from(outer_height.saturating_sub(inner_height)) / scale;
+    if reported > 0.0 {
+        return reported;
+    }
+    native
+        .filter(|top| (0.0..=100.0).contains(top))
+        .unwrap_or(0.0)
+}
+
+/// Title bar read from the NSWindow: frame height minus the area the title bar
+/// leaves uncovered. AppKit answers only on the main thread, so the read is
+/// posted there and awaited briefly.
+#[cfg(target_os = "macos")]
+fn native_title_bar(main: &tauri::WebviewWindow) -> Option<f64> {
+    fn read(window: &tauri::WebviewWindow) -> Option<f64> {
+        objc2::MainThreadMarker::new()?;
+        let pointer = window.ns_window().ok()?.cast::<objc2_app_kit::NSWindow>();
+        // SAFETY: Tauri hands out the live NSWindow of this window; only geometry is read.
+        let ns_window = unsafe { pointer.as_ref() }?;
+        Some(ns_window.frame().size.height - ns_window.contentLayoutRect().size.height)
+    }
+    if objc2::MainThreadMarker::new().is_some() {
+        return read(main);
+    }
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let window = main.clone();
+    main.run_on_main_thread(move || {
+        let _ = sender.send(read(&window));
+    })
+    .ok()?;
+    receiver
+        .recv_timeout(Duration::from_millis(300))
+        .ok()
+        .flatten()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn native_title_bar(_main: &tauri::WebviewWindow) -> Option<f64> {
+    None
+}
+
 fn screen_layout(layout: &SessionLayout, main: &tauri::WebviewWindow) -> SessionLayout {
     let scale = main.scale_factor().unwrap_or(1.0);
     let origin = main.inner_position().unwrap_or_default();
+    let outer = main.outer_position().unwrap_or_default();
+    let title_bar = if origin == outer {
+        let outer_height = main
+            .outer_size()
+            .map(|size| size.height)
+            .unwrap_or_default();
+        let inner_height = main
+            .inner_size()
+            .map(|size| size.height)
+            .unwrap_or(outer_height);
+        title_bar_offset(outer_height, inner_height, scale, native_title_bar(main))
+    } else {
+        0.0
+    };
     SessionLayout {
         x: f64::from(origin.x) / scale + layout.x,
-        y: f64::from(origin.y) / scale + layout.y,
+        y: f64::from(origin.y) / scale + title_bar + layout.y,
         width: layout.width,
         height: layout.height,
     }
@@ -1968,20 +1974,6 @@ pub fn append_connector_diagnostic(
 #[cfg(test)]
 mod tests {
     #[test]
-    fn a_page_counts_as_painted_once_it_has_text() {
-        assert!(super::page_has_text("\"12\""));
-        assert!(super::page_has_text("7"));
-        assert!(!super::page_has_text("\"0\""));
-        assert!(!super::page_has_text("null"));
-    }
-
-    #[test]
-    fn candidate_window_waits_for_its_page_before_showing() {
-        assert!(super::starts_hidden_until_loaded(None));
-        assert!(!super::starts_hidden_until_loaded(Some("profile_x")));
-    }
-
-    #[test]
     fn error_codes_stop_at_the_first_non_code_character() {
         assert_eq!(first_code("eval_failed: boom"), "eval_failed");
         assert_eq!(first_code("collect_shape"), "collect_shape");
@@ -2441,14 +2433,23 @@ https://media.licdn.com/dms/image/c 800w";
     }
 
     #[test]
-    fn gives_managed_windows_native_controls_without_changing_candidate_chrome() {
+    fn every_sign_in_window_is_a_native_macos_window() {
+        // Mockup 12: frame, close/minimise/full screen, resizable, in the Dock.
         assert_eq!(session_window_chrome(true), (true, true, false));
-        assert_eq!(session_window_chrome(false), (false, false, true));
+        assert_eq!(session_window_chrome(false), (true, true, false));
     }
 
     #[test]
-    fn keeps_managed_pool_windows_top_level_but_parents_candidate_overlays() {
-        assert!(should_parent_session_window(None));
+    fn title_bar_comes_from_the_nswindow_when_tao_reports_none() {
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, Some(28.0)), 28.0);
+        assert_eq!(super::title_bar_offset(1668, 1612, 2.0, Some(28.0)), 28.0);
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, None), 0.0);
+        assert_eq!(super::title_bar_offset(1612, 1612, 2.0, Some(500.0)), 0.0);
+    }
+
+    #[test]
+    fn sign_in_windows_are_top_level_not_overlays() {
+        assert!(!should_parent_session_window(None));
         assert!(!should_parent_session_window(Some(
             "profile_123e4567-e89b-12d3-a456-426614174000"
         )));

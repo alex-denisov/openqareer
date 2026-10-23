@@ -26,43 +26,48 @@ export function sessionLayoutForHost(
   return { x, y, width, height };
 }
 
+/** Mockup 12: the sign-in window sits this far inside the work area. */
+const WORK_AREA_INSET = 16;
+
+/**
+ * Where the native sign-in window opens (mockup 12, B464): the work area of
+ * the main window — right of the navigation rail, below the section header —
+ * with a small inset. Without a work area the native default applies.
+ */
+export function workAreaLayout(main: HTMLElement | null): SessionLayout | undefined {
+  if (!main) return undefined;
+  const area = main.getBoundingClientRect();
+  const top = main.querySelector('header')?.getBoundingClientRect().bottom ?? area.top;
+  const width = area.right - area.left - WORK_AREA_INSET * 2;
+  const height = area.bottom - top - WORK_AREA_INSET * 2;
+  if (width < MIN_SESSION_SIZE.width || height < MIN_SESSION_SIZE.height) return undefined;
+  return { x: area.left + WORK_AREA_INSET, y: top + WORK_AREA_INSET, width, height };
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
-
-/** How often the host is re-measured: it can move without resizing (B464). */
-const HOST_POLL_MS = 250;
 
 /**
  * Keeps the native webview glued to its host. Resize alone was never enough:
  * the wizard page scrolls while the sign-in window stays put, which is exactly
  * the drift the owner saw. Scroll events do not bubble, so capture is required.
- * A toolbar that appears above the host moves it without a resize, and the
- * window then covered «Отмена» (B464) — so the host is also re-measured on a
- * short interval, and only a changed layout is sent.
  */
 export function watchConnectorHost(
   platform: 'hh' | 'linkedin',
   host: HTMLElement,
   onLayout: (layout: SessionLayout) => void,
 ): () => void {
-  let last = '';
   const update = () => {
     const layout = sessionLayoutForHost(host, window.innerWidth, window.innerHeight);
-    if (!layout) return;
-    const key = `${layout.x},${layout.y},${layout.width},${layout.height}`;
-    if (key === last) return;
-    last = key;
-    onLayout(layout);
+    if (layout) onLayout(layout);
   };
   update();
-  const poll = setInterval(update, HOST_POLL_MS);
   const observer = new ResizeObserver(update);
   observer.observe(host);
   window.addEventListener('resize', update);
   window.addEventListener('scroll', update, true);
   return () => {
-    clearInterval(poll);
     observer.disconnect();
     window.removeEventListener('resize', update);
     window.removeEventListener('scroll', update, true);
